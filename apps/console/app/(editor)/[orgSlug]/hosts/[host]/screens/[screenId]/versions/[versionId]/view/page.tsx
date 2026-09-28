@@ -144,6 +144,7 @@ import {
 } from '../../../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../../../constants/docs-links'
 import UsedByCard from '../../../../../../../../../../components/used-by-card.component'
+import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from '../../../../../../../../../../components/artifacts/artifact-delete-confirm.component'
@@ -1405,6 +1406,13 @@ function ScreenDetails() {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Held or flagged by the page review (AGL-3374): what visitors
+              see, and what the owner can do about it. */}
+          <PageHoldBanner
+            hostId={hostId}
+            target={{ type: 'screen', id: screenId }}
+            sx={{ mb: 2 }}
+          />
           {/* MASONRY (AGL-2486). Without `masonry` this is a twelve-column
               flex ROW, in which every item is as tall as the tallest one
               beside it — measured here, `Page Activity` sits in a 741px row

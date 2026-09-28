@@ -57,7 +57,10 @@ import { readOrgBilling } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { planFromPriceId } from '@aglyn/tenant-data-admin/server/billing-addons'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
-import type { SubscriptionCancelWhen } from '../../constants/subscription-cancel'
+import {
+  STAFF_CANCELLATION_COMMENT_MARKER,
+  type SubscriptionCancelWhen,
+} from '../../constants/subscription-cancel'
 
 /**
  * The statuses a subscription never leaves. Everything else — live, in
@@ -138,13 +141,13 @@ export interface OrgSubscriptionCancelResult {
   readAtMs: number
 }
 
-interface StripeReply {
+export interface StripeReply {
   ok: boolean
   status: number
   body: any
 }
 
-async function stripe(
+export async function stripe(
   secretKey: string,
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
@@ -297,7 +300,7 @@ export function cancellationComment(options: {
 }): string {
   const note = options.note?.trim()
   return (
-    `${PLATFORM_BRAND_NAME} staff cancellation via ${options.via}: ${options.reason}` +
+    `${PLATFORM_BRAND_NAME} ${STAFF_CANCELLATION_COMMENT_MARKER} ${options.via}: ${options.reason}` +
     `${note ? ` — ${note}` : ''} (actor ${options.actorUid}; no refund)`
   ).slice(0, STRIPE_COMMENT_MAX)
 }

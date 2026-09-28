@@ -94,6 +94,8 @@ import {
   restampCrmListFieldsAt,
   settleCompanyContactsCounts,
 } from '@aglyn/tenant-data-admin'
+// The leaf, so a spec that stands a partial barrel in still reaches it.
+import { scheduleCapturedEmailCheck } from '@aglyn/tenant-data-admin/server/capture-email-check'
 import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 // The leaf, not the barrel: the console's API specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
@@ -3250,6 +3252,9 @@ async function createContact(
     // What the console's Contacts list searches and filters by (AGL-3321),
     // from the row as it was created, nested facet and all.
     await restampCrmListFieldsAt(collection.doc(id), 'contacts')
+    // The address's domain, checked after the response (AGL-3328): a domain
+    // that takes no mail makes the new contact read "Would bounce".
+    scheduleCapturedEmailCheck({ orgId: ctx.orgId, email })
     // The company the body named has one more contact naming it (AGL-2613);
     // a fresh row's plan is the trivial one, and `crmRefErrors` has already
     // required the company to exist.

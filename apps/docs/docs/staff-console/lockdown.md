@@ -1047,6 +1047,76 @@ If you need the counters frozen as well — a reconciliation of the analytics
 documents themselves — use a **full** lock on that site. "Read-only, but also
 stop the meter" is not a mode we offer.
 
+## Owner notices: every lock emails the people it locked {#owner-notices}
+
+Every lock and every lift at the org, host, domain and user scopes — and a
+feature lock placed for one workspace — emails the people it affects, from the
+platform's own sender. That sender is the point: a full lock stops the
+workspace sending anything, and it signs its members out, so our mail is the
+only thing that can still reach them.
+
+| Lock | Who is emailed |
+| --- | --- |
+| Org | The workspace's owners and admins. |
+| Host, custom domain | The owning workspace's owners and admins, and the site's managers. |
+| User | The person, at their sign-in address. With **Also lock and cancel workspaces this user solely owns**, each of those workspaces gets its own workspace notice too. |
+| Feature (one workspace) | The workspace's owners and admins. |
+| Platform, platform-wide feature | Nobody: it names no workspace. |
+
+The email carries, and only carries:
+
+- the lock's **customer-facing message** — the same words the lock serves on
+  its notice page (your message, or the per-reason default beneath it);
+- **what it affects**: the sites, whether everyone was signed out, a canceled
+  subscription, paused renewals and payouts;
+- **how to appeal**: reply, or write to the support address with the reference.
+
+It never says why. Anything you want recorded about the reason belongs in the
+audit row, not the message.
+
+A lift sends the matching "restored" notice to the same people, saying what
+happens now (renewals resumed, payouts restored, a canceled subscription stays
+canceled).
+
+### Email the owners {#email-the-owners}
+
+The checkbox is on for every reason and resets to on when you change the
+reason. Untick it only for a legal hold. Either way, the outcome is its own
+line in **Actions taken in this session** — `Emailed … the workspace-locked
+notice — 2 of 2` (verified), `NOT sent — Staff chose not to email the owners`
+(verified, because that is what was asked), or `FAILED` / `NOT sent — nobody
+to email` (NOT CONFIRMED). A lock never skips its email silently.
+
+### Resend owner notice {#resend-owner-notice}
+
+For locks that already stand — placed before owner notices existed, or whose
+email failed — the **Resend owner notice** card sends the lock email the lock
+would have sent, with its stored message. Super role only, audited as
+`lockdown.resend-notice`.
+
+- Enter one `scope:id` per line (`org`, `host`, `domain` or `user`), or press
+  **Add the target above**.
+- Each distinct person gets ONE email listing everything locked for them: a
+  user lock and the workspace that user owns are one email.
+- A (lock, person) pair already sent is reported as "already sent at …" and
+  not emailed again, unless you tick **Send again**. A lock that was lifted
+  and placed again is a new lock, and is sent afresh.
+
+```bash
+# The same action outside the console (super role).
+curl -X POST "$CONSOLE/api/admin/lockdown" \
+  -H "Authorization: Bearer $ID_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"action":"resend-notice","sendAgain":false,
+       "targets":[{"scope":"user","targetId":"UID"},{"scope":"org","targetId":"ORG_ID"}]}'
+# → { ok, confirmed,
+#     targets:    [{ scope, targetId, locked, recipients, error }],
+#     recipients: [{ uid, email, lockKeys, outcome: 'sent'|'already-sent'|'failed',
+#                    sentLockKeys, alreadySentAtMs, error }] }
+```
+
+`confirmed` is true only when every target was locked and every person was
+either emailed now or had been already.
+
 ## Stopping billing: cancel the subscription {#cancel-billing}
 
 A lock does not touch Stripe. A locked workspace keeps its subscription, and
@@ -1088,6 +1158,9 @@ reason resets them to that reason's default. You can still untick them for a
 | Workspace (org) | cancels (box on) | does not (box off) | does not (box off) | does not (box off) |
 | Account (user) | locks and cancels owned workspaces (box on) | does not (box off) | does not (box off) | does not (box off) |
 | Platform, site, domain, feature | never | never | never | never |
+
+The renewal and payout pauses follow the same rule for workspace and site
+locks; see [Stopping a tenant's money](#pause-site-money).
 
 Billing, maintenance and manual locks must never end a subscription unless
 someone chooses to. A billing lock exists so the customer can fix their card
@@ -1156,6 +1229,126 @@ changing anything. Any staff role can call it.
 Each cancellation writes an `adminAudit` row: `action: org.subscription-cancel`,
 `target: orgs/{id}`, the reason and note, `via`, `when`, `refunded: false`, and
 the outcome for each subscription. The row is written for a failed attempt too.
+
+## Stopping a tenant's money: renewals and payouts {#pause-site-money}
+
+A locked site takes money from its own customers as well as paying us. Its
+membership renewals keep charging, and the seller's connected account keeps
+paying out. For a workspace or site lock, two more checkboxes stop both:
+
+- **Also pause the membership renewals it sells.**
+- **Also pause the seller's payouts.**
+
+Both start **on** for `security` and **off** for every other reason, and reset
+when you change the reason. The API infers nothing: without
+`pauseRenewals: true` or `pausePayouts: true` in the request, nothing is
+paused. Both run after the lock is written and audited, and neither can undo
+it.
+
+### What pausing renewals does {#pause-renewals}
+
+- **It finds the subscriptions from the plugin's own records.** Each plugin
+  that sells subscriptions tells the lockdown which live ones a site sells.
+  Commerce reads its `hosts/{hostId}/subscriptions` records. A workspace lock
+  covers every site of the workspace (up to 200). Nothing is searched in
+  Stripe.
+- **It pauses collection, with `void`.** Each live subscription gets
+  `pause_collection[behavior]=void`. While paused, every invoice is voided, so
+  no charge goes through. Nothing is canceled or refunded, and the customer is
+  not emailed. We chose `void` over `keep_as_draft` because these subscriptions
+  live on Aglyn's platform account, where the merchant cannot see or act on a
+  draft invoice. A security lock usually means the cards may be stolen, and a
+  draft is a charge waiting for someone to finalize it later. A voided invoice
+  is a final "not charged" record.
+- **It leaves a merchant's own pause alone.** A subscription that is already
+  paused when the lock lands is reported as `already-paused`. It is not
+  recorded, so the lift never resumes it.
+- **It records what it paused.** Each pause is written to
+  `lockdownBillingPauses` (Admin SDK only; no client can read it), naming the
+  lock that holds it.
+
+### What pausing payouts does {#pause-payouts}
+
+- **It finds the seller's account.** This is the connected account on the
+  workspace owner's profile, the one every sale of that owner's sites pays
+  into. If the owner runs several workspaces, their payouts pause too.
+- **It saves the schedule, then switches to manual.** The account's current
+  payout schedule (interval, anchor, delay) is saved in
+  `lockdownBillingPauses`, and the account is set to
+  `settings[payouts][schedule][interval]=manual`. Money stays in the account
+  balance and is not paid out.
+- **A Standard account is not controllable.** Aglyn creates Express accounts,
+  and the platform can set payouts only for Express and Custom accounts. For a
+  Standard account the result says **not controllable — pause them in the
+  Stripe Dashboard**. That is not a failure of the lock. Pause the payouts by
+  hand in the Dashboard: **Connect → Accounts → the account → Payouts**.
+- **A workspace lock pauses every account the workspace is paid through.**
+  Besides the storefront account, a plugin can declare other connected
+  accounts it pays the workspace through. The marketplace declares the
+  publisher's payout account. Each account gets its own record, its own saved
+  schedule and its own line in the result (`storefront`,
+  `marketplace publisher`). A site lock pauses only the storefront account,
+  because a workspace's marketplace payouts do not belong to one site.
+- **A new publisher's payout delay waits for the lock.** A publisher in its
+  first 30 days has its payouts held 14 days. That hold is never changed while
+  a lock holds the account. The lift restores the delay the lock saved, and the
+  publisher's next sale moves it on from there.
+
+### What a workspace lock does to its marketplace listings {#lock-listings}
+
+A workspace lock of **any** reason takes the workspace's marketplace listings
+out of browse and search, and their pages read as unavailable. Anything
+already installed from them keeps working. A new sale is refused under any
+lock, and a new install or update is refused under a `security` lock. The
+result shows one line, for example `marketplace: Hid 4 marketplace
+listing(s) of 4`.
+
+The lock marks each listing without changing its own state, so the lift
+restores exactly what was visible before. A listing the publisher had
+unpublished or made private, or one staff had taken down, stays that way.
+
+### What the lift restores {#pause-site-money-lift}
+
+Unlocking the workspace or site resumes **exactly** the renewals that lock
+paused, and restores **exactly** the payout schedule it saved. It does not
+resume anything it did not pause.
+
+If two locks cover the same subscription or account (for example the
+workspace and one of its sites), each lock joins the hold instead of pausing
+again. The money is restored only when the **last** of those locks is lifted.
+Lifting the site while the workspace is still locked leaves everything
+paused.
+
+A lift that fails to resume keeps its record, so lifting again retries exactly
+what is left.
+
+### Reading the result
+
+**Actions taken in this session** shows each step on its own line, apart from
+the lock:
+
+- `Paused N membership renewal(s)`, with counts of any already held by another
+  lock or already paused by the merchant;
+- `Payouts for acct_… set to manual (was weekly; saved for the lift)`, or
+  `not controllable (Standard account) — pause them in the Stripe Dashboard`;
+- on a lift, `Resumed N membership renewal(s)` and
+  `Payouts for acct_… restored to weekly`.
+
+A step that failed shows as `NOT CONFIRMED` and the lock still stands. Each
+step writes its own `adminAudit` row (`lockdown.renewals-pause`,
+`lockdown.payouts-pause`, `lockdown.renewals-resume`,
+`lockdown.payouts-restore`) with `refunded: false` and `canceled: false`, and
+failed attempts are recorded too.
+
+```bash
+# The same lock outside the console (super role).
+curl -X POST https://app.aglyn.com/api/admin/lockdown \
+  -H "Authorization: Bearer $STAFF_ID_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"action":"lock","scope":"org","targetId":"<org id>","reason":"security",
+       "pauseRenewals":true,"pausePayouts":true}'
+# → { confirmed, verified, renewalsPause: { confirmed, subscriptions: [...] },
+#     payoutsPause: { outcome, accountId, schedule, confirmed, error } }
+```
 
 ## Operating it
 

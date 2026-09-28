@@ -33,6 +33,7 @@ import {
   crmSectionHref,
   type CrmRecordKind,
 } from './console-record-links'
+import { PLATFORM_BRAND_NAME } from './platform-brand'
 import { hostEventLabel } from './workflows'
 import { duplicateActivityActionLabel } from './duplicate-resource'
 import {
@@ -58,8 +59,23 @@ export interface ActivityEntryLike {
   // than nested under `target` — tolerate both so no entry renders blank.
   type?: string
   targetId?: string
+  /**
+   * The acting uid: a person's, the literal `'api'` for a key, a
+   * `system:` id for a platform process, or null when no person acted.
+   */
+  actorId?: string | null
   /** The address the actor had when the entry was written; null for a key. */
   actorEmail?: string | null
+  /**
+   * The address `actorId` holds TODAY, looked up on read by a route with the
+   * Admin SDK, for an entry that recorded a uid and no address.
+   */
+  actorEmailNow?: string | null
+  /**
+   * For a STAFF reader only: the staff member behind an entry the workspace
+   * did not perform (a staff cancellation), resolved by the route.
+   */
+  staffActorEmail?: string | null
   /** The name of the API key that wrote the entry, when a key did (AGL-2632). */
   apiKeyName?: string | null
 }
@@ -205,14 +221,38 @@ export function apiKeyActorLabel(name: string): string {
 }
 
 /**
- * The "who" line for an entry: the actor's address, else the key that wrote
- * it by name, else `Someone` — for an entry that recorded neither, which
- * every key-written entry was before the name was carried.
+ * The "who" line for an entry — always someone a reader can narrow down.
+ *
+ * In order: the address recorded when the entry was written; the key that
+ * wrote it, by name; the address the recorded uid holds now, when the writer
+ * held a uid and no address (the billing webhook, before it carried the
+ * address stamped at the console act); else the uid itself, for an account
+ * that no longer resolves.
+ *
+ * An entry with no uid at all is not an anonymous one. Every writer that
+ * leaves `actorId` null is a platform process, so the feed names it: a
+ * workflow run by its workflow, anything else — the billing webhook,
+ * inbound CRM mail, a background AI job, a staff cancellation — as the
+ * platform; a staff reader is also told which staff member. Never "Someone", which read as a person nobody could identify
+ * (AGL-3369).
  */
 export function activityActorLabel(entry: ActivityEntryLike): string {
   if (entry.actorEmail) return entry.actorEmail
   if (entry.apiKeyName) return apiKeyActorLabel(entry.apiKeyName)
-  return 'Someone'
+  const actorId = entry.actorId?.trim()
+  if (actorId === 'api') return 'API key'
+  if (actorId && !actorId.startsWith('system:')) {
+    return entry.actorEmailNow || `Account ${actorId}`
+  }
+  const target = entry.target ?? undefined
+  if ((target?.type ?? entry.type) === 'workflow') {
+    const name = target?.name?.trim()
+    return name ? `Workflow ${name}` : 'Workflow'
+  }
+  if (entry.staffActorEmail) {
+    return `${PLATFORM_BRAND_NAME} staff (${entry.staffActorEmail})`
+  }
+  return PLATFORM_BRAND_NAME
 }
 
 /**

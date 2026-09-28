@@ -33,7 +33,6 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import {
   collection,
-  getDocs,
   limit,
   query,
   startAfter,
@@ -42,6 +41,8 @@ import {
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
+import { useResolvedActivityActors } from '@aglyn/tenant-feature-instance/hooks/use-resolved-activity-actors'
 import {
   activityActionLabel,
   activityActorLabel,
@@ -91,6 +92,8 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const { orgSlug, host } = useParams<{ orgSlug?: string; host?: string }>()
   const firestore = useFirestore()
   const [rows, setRows] = useState<any[]>([])
+  // A uid recorded without an address, named by the address it holds now.
+  const shownRows = useResolvedActivityActors(hostId, rows)
   // The console's shared default and the console's shared menu, so this feed
   // is the same control as every other list (AGL-2501).
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
@@ -132,7 +135,10 @@ export function HostActivityTable(props: HostActivityTableProps) {
       try {
         const base = collection(firestore, 'hosts', hostId, 'activity')
         // One extra row detects whether a next page exists.
-        const snapshot = await getDocs(
+        // Bounded (AGL-3373): a stalled client answers from the cache after
+        // a few seconds and is asked to recover, instead of holding `loading`
+        // forever.
+        const { snapshot } = await getDocsBounded(
           query(
             base,
             // Every predicate, then the plan's one order.
@@ -228,7 +234,8 @@ export function HostActivityTable(props: HostActivityTableProps) {
         minWidth: 160,
         description:
           'The address this account had when the entry was written. It is ' +
-          'not updated if the address changes later.',
+          'not updated if the address changes later. An entry that recorded ' +
+          'only the account shows the address that account has now.',
         valueGetter: (_value, row: any) => activityActorLabel(row),
       },
       {
@@ -309,7 +316,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         ) : (
           <ListTable
             aria-label="Activity"
-            rows={rows}
+            rows={shownRows}
             columns={filterColumns}
             /*
              * NO `onOpen`. An audit row is not a record you open: what is worth

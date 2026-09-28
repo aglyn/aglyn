@@ -15,12 +15,18 @@
  * limitations under the License.
  */
 
+import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { checkoutRecoveryState } from '../model/checkout-recovery'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import {
+  consumeRateLimit,
+  firebaseAdmin,
+  getOrgForHost,
+  isYoungWorkspace,
+} from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { readCartId } from './cart-cookie'
@@ -162,6 +168,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     let itemsCents = 0
     /** Per-line values for scoped discount pricing. */
     const discountLines: { productId: string; amountCents: number }[] = []
+    // Gift-card value in the basket, for the cash-out ceiling (AGL-3363).
+    let giftCardCents = 0
     let feeCents = 0
     /** Whether any line carries a fee rate above zero (AGL-2232). */
     let feeApplies = false
@@ -248,6 +256,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
+      if (product.giftCard) giftCardCents += unitCents * line.quantity
       // What THIS line is worth, so a product-scoped discount can be priced
       // against the lines it actually covers rather than the whole basket
       //.
@@ -297,6 +306,33 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         }`.slice(0, 120),
       )
     })
+
+    // GIFT CARDS ARE A CASH-OUT (AGL-3363): a ceiling per order, and per
+    // visitor per day, lower while the workspace is young. Above the claim,
+    // like the line refusals, so a refusal keeps the key.
+    if (giftCardCents > 0) {
+      const young = isYoungWorkspace(ownerOrg.org as { createdAt?: unknown })
+      const overCeiling = CommerceModel.giftCardPurchaseRefusal({ giftCardCents, young })
+      if (overCeiling) {
+        throw Object.assign(new Error('unavailable'), { visible: overCeiling })
+      }
+      const buys = await consumeRateLimit(
+        `giftcard:buy:${hostId}:${String(req.socket?.remoteAddress ?? '') || 'no-address'}`,
+        {
+          limit: young
+            ? CommerceModel.GIFT_CARD_PURCHASE_LIMITS.perVisitorDailyYoung
+            : CommerceModel.GIFT_CARD_PURCHASE_LIMITS.perVisitorDaily,
+          windowMs: 24 * 60 * 60 * 1000,
+        },
+      )
+      if (!buys.allowed) {
+        throw Object.assign(new Error('unavailable'), {
+          visible:
+            'Gift cards can only be bought a few times a day from one place. ' +
+            'Please try again tomorrow, or contact the shop.',
+        })
+      }
+    }
 
     // Shipping (AGL-1707), from the settings document tax is also read from.
     // This is the ONLY thing that makes Stripe charge shipping: without
@@ -931,9 +967,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
-    const referer = String(req.headers.referer ?? '')
-    const origin = `https://${req.headers.host}`
-    const backUrl = referer.startsWith('http') ? referer : origin
+    // The site's own page, never a header's say-so (AGL-3363): a caller
+    // writes `Referer` and `Host`, and this URL is where Stripe sends the
+    // payer — and what the receipt's download links are built from.
+    const backUrl = siteReturnUrl({
+      candidates: [String(req.headers.referer ?? ''), `https://${req.headers.host}`],
+      site: await readSiteReturnHost(hostRef),
+      requestHost: String(req.headers.host ?? ''),
+    })
     const separator = backUrl.includes('?') ? '&' : '?'
     // `{CHECKOUT_SESSION_ID}` is substituted by Stripe on redirect (AGL-1641).
     // Without it the return URL said only that SOMETHING succeeded, so the

@@ -247,6 +247,13 @@ const sendEmail = jest.fn<
   [Record<string, unknown>]
 >(async () => ({ sent: true }))
 
+// No template published: the batch loader answers nothing, as the stubbed
+// `loadHostEmail` below always did (AGL-3370 moved the batch onto the leaf).
+jest.mock('@aglyn/tenant-data-admin/server/host-email-tokens', () => ({
+  loadHostEmailWithTokens: async () => null,
+  renderLoadedHostEmailWithTokens: () => null,
+}))
+
 jest.mock('@aglyn/shared-util-email', () => ({
   // The REAL classifier, not a double. It is what decides whether the sweep
   // stamps `notifiedAtMs` or leaves the alert for the next beat, so a stub

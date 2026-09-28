@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import { escapeEmailHtml } from './email-render'
+import { linkifyEscapedText } from './email-linkify'
+import {
+  escapeEmailHtml,
+  renderEmailHtml,
+  type EmailChrome,
+  type EmailTheme,
+  type RenderedEmail,
+} from './email-render'
 
 /**
  * THE HTML PART EVERY MESSAGE GETS.
@@ -57,61 +64,6 @@ import { escapeEmailHtml } from './email-render'
  */
 
 /**
- * Trailing characters stripped from a matched URL.
- *
- * A sentence that ends "…see {@link https://example.com/billing}." puts the
- * period inside the match, because a period is a legal URL character and the
- * regex cannot tell prose from path. Closing brackets are handled separately
- * below, since a URL may legitimately end in one.
- *
- * `;` is deliberately absent: by the time this runs the text is already
- * escaped, so a query string reads `?a=1&amp;b=2` and trimming `;` would cut
- * an entity in half and corrupt the link.
- */
-const URL_TRAILING_PUNCTUATION = /[.,!?'"]+$/
-
-/**
- * Bare absolute URLs in already-escaped text.
- *
- * Matched AFTER escaping, not before, so the href and the visible label are
- * the same string and neither can reintroduce markup: `&` inside a query
- * string is `&amp;` by then, which is what an href attribute is supposed to
- * carry and parses back to `&` in the client.
- *
- * `http`/`https` only. Every URL our system copy emits is absolute — the
- * senders share one `consoleOrigin()` precisely because a mail client has no
- * page to resolve a relative path against — and matching bare `www.` or
- * addresses would turn ordinary prose into links nobody wrote.
- */
-const BARE_URL = /https?:\/\/[^\s<>"]+/g
-
-/**
- * Links the bare URLs in one escaped line.
- *
- * Balanced closing parens are kept, because a URL can genuinely end in one
- * and a wrapping "(see https://…/a_(b))" is the rarer case. Anything the
- * paren count says is unbalanced belongs to the prose.
- */
-function linkifyEscaped(escaped: string): string {
-  return escaped.replace(BARE_URL, (match) => {
-    let url = match.replace(URL_TRAILING_PUNCTUATION, '')
-    while (
-      url.endsWith(')') &&
-      url.split(')').length > url.split('(').length
-    ) {
-      url = url.slice(0, -1)
-    }
-    if (!url) return match
-    const trailer = match.slice(url.length)
-    return (
-      `<a href="${url}" target="_blank" ` +
-      `style="color:#1a73e8;text-decoration:underline;word-break:break-word;">` +
-      `${url}</a>${trailer}`
-    )
-  })
-}
-
-/**
  * Renders a plain-text body as the HTML part of the same message.
  *
  * Blank-line-separated blocks become paragraphs and single newlines become
@@ -147,7 +99,7 @@ export function renderTextEmailHtml(
     .map(
       (block) =>
         `<p style="margin:0 0 16px;">` +
-        linkifyEscaped(escapeEmailHtml(block)).replace(/\n/g, '<br />') +
+        linkifyEscapedText(escapeEmailHtml(block)).replace(/\n/g, '<br />') +
         `</p>`,
     )
     .join('')
@@ -168,6 +120,64 @@ export function renderTextEmailHtml(
     paragraphs +
     `</td></tr></table></td></tr></table></body></html>`
   )
+}
+
+/**
+ * A plain-text message in a sender's header and footer (AGL-3370).
+ *
+ * For mail whose body is text somebody typed or a sender composed, sent
+ * under a brand: a workflow's email step, a typed campaign, a member post a
+ * site has not designed. {@link renderTextEmailHtml} is the unbranded card
+ * for text nobody made a brand decision about; this is the same words, one
+ * paragraph per blank-line-separated block and their links live, drawn
+ * inside the chrome the caller chose. The plain-text part carries the
+ * footer's lines too.
+ *
+ * Merge tokens are not substituted: the text arrives resolved, no merge map
+ * is passed, and a `{{…}}` left in it is the author's own and stays as typed.
+ */
+export function renderFramedTextEmail(input: {
+  text: string
+  subject?: string
+  preheader?: string
+  chrome: EmailChrome
+  /** The sender's theme: the links take its accent. */
+  theme?: EmailTheme
+  /** The sender's origin and host, which a logo stored as a media reference resolves against. */
+  mediaOrigin?: string
+  mediaHostId?: string
+}): RenderedEmail {
+  const blocks = String(input.text ?? '')
+    .trim()
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+  const nodes: Record<string, unknown> = {
+    root: { componentId: 'div', nodes: ['section'] },
+    section: {
+      componentId: 'emailSection',
+      props: { padding: 24 },
+      nodes: blocks.map((_, index) => `p${index}`),
+    },
+  }
+  blocks.forEach((block, index) => {
+    nodes[`p${index}`] = {
+      componentId: 'emailText',
+      props: { children: block, variant: 'body' },
+    }
+  })
+  const rendered = renderEmailHtml({
+    nodes: nodes as never,
+    subject: input.subject ?? '',
+    preheader: input.preheader ?? '',
+    // No author markup reaches a text block, so no policy is exercised.
+    sanitize: (html: string) => html,
+    chrome: input.chrome,
+    ...input.theme,
+    ...(input.mediaOrigin ? { mediaOrigin: input.mediaOrigin } : {}),
+    ...(input.mediaHostId ? { mediaHostId: input.mediaHostId } : {}),
+  })
+  return rendered
 }
 
 export default renderTextEmailHtml

@@ -94,6 +94,22 @@ notification an intake phishing report raises, once per row.
 | Outreach sequences (connected mailboxes) | Before the step is claimed | The enrollment is paused with the reason. A member resumes it once the row is released. |
 | Published pages | When the page is put together for a visitor | The page serves the last version it served clean, or nothing if it has none. |
 
+A page row names the page by what it is and the route it serves, never by the
+site's root address:
+
+- a page, such as `the "Pricing" page (/pricing)`;
+- a collection list template, such as `(/blog)`;
+- a collection or product entry template, such as `(/videos/:slug)`, with the entry
+  address that was being shown;
+- an experiment variant, together with its page;
+- an error page.
+
+When the flagged content comes from a shared layout or component rather than the page
+itself, the row names that layout or component and how many pages use it. **Open in
+console** opens the held version of the page, or the layout or component, on this origin.
+The owners see the same name and a banner on the page in their console. They can request
+a review, but they cannot release the page.
+
 Pages are screened when they are served rather than when Publish is clicked.
 Publishing is a pointer move made from the browser in several places, and an
 author can edit a live version in place. Every one of those paths reaches a
@@ -237,13 +253,143 @@ they were for, with links to the workspace and to the account in the Stripe
 Dashboard. **Nothing is refunded, canceled or paused.** If the seller is the
 fraudster:
 
-- Lock the workspace at [Lockdown](./lockdown.md). A locked site's checkout,
-  bookings and memberships stop taking payments.
-- Pause the connected account's payouts in the Stripe Dashboard
-  (**Connect → Accounts → the account → Payouts**). Aglyn does not create
-  payouts, so Stripe pays out on the account's schedule until you do.
+- Lock the workspace at [Lockdown](./lockdown.md) with the `security`
+  reason. A locked site's checkout, bookings and memberships stop taking new
+  payments, and the two boxes that start ticked for `security` also pause its
+  membership renewals and switch the seller to manual payouts
+  ([Stopping a tenant's money](./lockdown.md#pause-site-money)). Unlocking
+  restores exactly what the lock paused.
+- If the lock result says the payouts are **not controllable** (a Standard
+  account), pause them in the Stripe Dashboard
+  (**Connect → Accounts → the account → Payouts**).
 
 Then close the row with a note saying what you did.
+
+## Card-testing velocity {#card-testing-velocity}
+
+A public checkout is where a card tester learns which stolen cards still work:
+a script opens payment after payment, from one address or from many, against
+one shop or across many. Every visitor payment door on a published site (buy
+now, cart checkout, reservation deposit, booking deposit) is held to three
+counters. The numbers live in `card-payment-velocity.ts` and are not repeated
+here:
+
+- **One address on one site.** Past it, the shopper is told to wait a few
+  minutes. A young workspace's site has a tighter limit.
+- **One address across every site.** Past it, the same refusal.
+- **One site, every address together.** This one **refuses nothing**, because
+  a site-wide refusal would let any stranger switch a merchant's checkout off,
+  and a busy launch looks the same. Crossing it files one row per site per
+  day.
+
+The row's source is `payment-velocity`, the category is `phishing`, the
+severity is urgent and the reference is `PV-…`. Staff are notified once a day
+per site. It can mean a script testing cards against the shop, a merchant
+testing stolen cards through their own storefront, or a real launch. Look at
+the site and its recent orders. If it is card testing, lock the workspace and
+pause the connected account's payouts as for a
+[seller fraud pattern](#seller-fraud-pattern).
+
+The counters cannot see the card, because Stripe's hosted Checkout page takes
+it. A limit per card is Radar's job. Stripe's card-testing protection is on
+for every Checkout Session by default. Velocity rules live in the platform
+account's Radar, since every tenant sale is a destination charge on it. They
+need Radar for Fraud Teams; check each attribute's exact name in the rule
+editor before saving:
+
+- **Block** when one address has many declined charges in an hour
+  (`:declined_charges_per_ip_address_hourly:`).
+- **Review** when one card is charged many times in a day
+  (`:total_charges_per_card_number_daily:`).
+- **Request 3D Secure** when `:risk_level:` is `elevated`.
+
+## The marketplace {#marketplace}
+
+Marketplace publishers get the same screens, applied where a listing is
+submitted and where a sale is recorded.
+
+**Held submissions.** Every publish, listing edit and publisher-profile save
+goes through the phishing screen before anything is listed. The title,
+description, readme, changelog and links are read as a message from the
+publisher. A template's, layout's or component's content is read as the page it
+will become, and an email template's as mail. The tiers are the ones above. A
+hold refuses the submission and files a row with source `outbound-screen`,
+reference `HS-…` and kind **Marketplace submission**. **Dismiss** releases it
+and the publisher submits again. **Actioned** rejects it. The publisher's owners
+and admins are told that it is held and how to ask about it, never which rule
+held it.
+
+A publisher name or handle that uses the platform's name, and a name or listing
+title that claims to speak for a brand ("PayPal Support"), are refused outright
+and file nothing. Staff accounts are exempt, which is how the platform's own
+listings are published.
+
+**Plugin network origins.** The plugin verifier asks the reviewer about any
+origin a manifest declares that wears a brand without being the brand's own
+domain (`paypal-verify.net`, `aglyn-billing.com`). This is a question for the
+reviewer, not a refusal.
+
+**Sales.** A buyer who is a member of the publishing workspace cannot check out,
+and a workspace under any lock sells nothing. Each recorded sale is also read
+for a publisher paying itself. A row with source `marketplace-sale-risk` and
+reference `MR-…` is filed when any of these hold:
+
+- the buying and publishing workspaces share a member;
+- the same card bought from the same publisher for another workspace;
+- a publisher in its first 30 days made a single sale of $100 or more.
+
+Payouts from a publisher in its first 30 days are held 14 days on its connected
+account, so a stolen-card sale can still be refunded with the publisher's share
+taken back. **Nothing is refunded or paused by the row.** If it is the publisher,
+lock the workspace with the `security` reason and refund the sale, which
+reverses the publisher's share. The lock takes the publisher's listings out of
+browse, and a security lock stops every install and update of them. With
+**pause payouts** ticked, the lock also pauses the publisher's payout account
+([Lockdown](./lockdown.md#lock-listings)).
+
+Early fraud warnings and disputes on marketplace sales count toward the
+[seller fraud pattern](#seller-fraud-pattern) under the **publisher's**
+workspace, never the buyer's.
+
+## Risk notices: what the workspace is told {#risk-notices}
+
+Every row a risk source files — a held email, page or marketplace submission, a
+flagged or blocked domain or link, a Stripe fraud signal, a seller or
+marketplace-sale pattern, card-testing velocity — also tells the workspace's
+owners and admins, through one seam (`notifyRiskEvent`) and one catalog of
+words (`risk-notice-catalog.ts`). Locks, lifts and staff cancellations use the
+same seam; see [Lockdown](./lockdown.md#owner-notices).
+
+- **What owners read.** What happened, on what, and when; what it means for
+  them; numbered next steps; and actions that open the real control (the held
+  email, the order, billing, support). They are never told the rule, the brand
+  matched, or a number — a fraud actor reads the same notice. The customer help
+  page is [Why was something on my account held or flagged?](/help/holds-and-reviews).
+- **What staff read.** Each row shows the catalog's staff title and summary
+  above the evidence, and its actions: **Open in abuse queue**, **Waive /
+  release** and **Reject** (which set the status below to Dismissed or
+  Actioned — nothing changes until you save), **Lock workspace** / **Lock site**
+  (opens Lockdown pre-filled; it still waits for you to press Lock), **Cancel
+  subscription** (the org's Subscription card), **Open in Stripe**, and **View
+  workspace**. A staff alert links straight to its row:
+  `/admin/abuse-reports?report=<id>`.
+- **Owners cannot release anything.** Their only lever is **Request a review**
+  (on the notice, or under Settings → Holds & reviews). It appends a note to
+  THIS row — shown under "Review requested by the workspace" — and alerts staff
+  with a link here. It never changes the row's status or its held send.
+- **Closing a row tells them how it ended.** Dismissed sends the "released"
+  notice, Actioned sends "not approved"; a review with no held item sends
+  "complete, no action" or "found a problem". Put anything more you want them
+  to know in "What you did".
+- **Bursts.** Past five notices in an hour for one workspace (ten staff alerts),
+  the rest are folded into one summary sent when the hour closes, so a
+  workspace under attack gets a digest, not five hundred emails. Locks, lifts
+  and cancellations are never folded.
+- **Email.** Notices that stop someone's work are emailed as account mail from
+  the platform's sender — they ignore notification settings and reach a locked
+  workspace. Each kind is its own template on the **System emails** page
+  (`risk-…` keys). Notices about a workspace's own customers' payments wear the
+  workspace's brand; everything the platform does wears the platform's.
 
 ## Triage by severity {#triage-by-severity}
 

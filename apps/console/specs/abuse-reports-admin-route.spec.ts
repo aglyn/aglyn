@@ -38,6 +38,12 @@
  */
 
 const mockDecideHeldOutboundSend = jest.fn(async (..._args: unknown[]) => 'released')
+// The closing notice to the owners (AGL-3368).
+const mockCloseRiskNotice = jest.fn(async (..._args: unknown[]) => ({
+  duplicate: false,
+  owners: { emailed: 2, recipients: 2 },
+  error: null,
+}))
 const mockRevalidateEntireHost = jest.fn(async (..._args: unknown[]) => ({ attempted: true }))
 jest.mock('../utils/server/tenant-revalidate', () => ({
   __esModule: true,
@@ -205,6 +211,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // The held-send decision (AGL-3356) is proven against its own store in
   // `tenant-data-admin`; here the route's contract with it is what is asked.
   decideHeldOutboundSend: (...args: unknown[]) => mockDecideHeldOutboundSend(...args),
+  closeRiskNotice: (...args: unknown[]) => mockCloseRiskNotice(...args),
 }))
 
 // The REAL catalog and status helpers are spread in below — stubbing them
@@ -735,6 +742,51 @@ describe('a send the phishing screen held (AGL-3356)', () => {
     asSuper()
     await post({ id: REPORT_ID, status: 'dismissed', resolution: 'Not phishing.' })
     expect(mockDecideHeldOutboundSend).not.toHaveBeenCalled()
+  })
+
+  it('tells the owners how it ended, once the row is closed (AGL-3368)', async () => {
+    asSuper()
+    mockCloseRiskNotice.mockClear()
+    await post({ id: HELD_ID, status: 'reviewing' })
+    expect(mockCloseRiskNotice).not.toHaveBeenCalled()
+    const response = await post({ id: HELD_ID, status: 'dismissed', resolution: 'Their promo.' })
+    expect(mockCloseRiskNotice).toHaveBeenCalledWith({ reviewId: HELD_ID, decision: 'released' })
+    expect((await response.json()).ownerNotice).toMatchObject({ emailed: 2 })
+    await post({ id: HELD_ID, status: 'actioned', resolution: 'Phishing.' })
+    expect(mockCloseRiskNotice).toHaveBeenLastCalledWith({ reviewId: HELD_ID, decision: 'rejected' })
+  })
+
+  it('shows the catalog text and every staff action as a working deep link (AGL-3368)', async () => {
+    asSupport()
+    const response = await get(`?id=${HELD_ID}`)
+    expect(response.status).toBe(200)
+    const { report } = await response.json()
+    expect(report.riskNotice).toMatchObject({
+      kind: 'email-held',
+      title: expect.stringContaining('held for review'),
+      reviewable: true,
+    })
+    const hrefs = Object.fromEntries(
+      report.riskNotice.actions.map((action: any) => [action.id, action.href]),
+    )
+    expect(hrefs).toMatchObject({
+      'staff-open-row': `/admin/abuse-reports?report=${HELD_ID}`,
+      'staff-release': `/admin/abuse-reports?report=${HELD_ID}&decide=dismissed`,
+      'staff-reject': `/admin/abuse-reports?report=${HELD_ID}&decide=actioned`,
+      'staff-lock-workspace': '/admin/lockdown?scope=org&targetId=org-9',
+      'staff-view-workspace': '/admin/orgs/org-9',
+    })
+  })
+
+  it('shows the owners’ review requests as notes on the row (AGL-3368)', async () => {
+    asSupport()
+    state.reports[HELD_ID]['ownerReviewRequests'] = [
+      { atMs: 5000, uid: 'owner-1', email: 'avery@example.com', note: 'This is our own resale shop.' },
+    ]
+    const { report } = await (await get(`?id=${HELD_ID}`)).json()
+    expect(report.ownerReviewRequests).toEqual([
+      { atMs: 5000, email: 'avery@example.com', note: 'This is our own resale shop.' },
+    ])
   })
 
   it('drops the site’s cache when it decides a held PAGE, and only then', async () => {

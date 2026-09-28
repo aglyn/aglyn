@@ -34,6 +34,7 @@ import {
   scheduleRefusedReopen,
   subscribeFirestoreSessionHeal,
 } from './firestore-denial-reporter'
+import { armFirestoreStallWatch } from './firebase/firestore-stall-recovery'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -177,6 +178,17 @@ export function useFirestoreCollection<T = DocumentData>(
      */
     let terminal = false
     const denialLabel = denialLabelForQuery(q)
+    /**
+     * A listen the server has not confirmed within `FIRESTORE_STALL_MS`,
+     * while the browser is online and the tab is visible, is the multi-tab
+     * wedge (AGL-3373): no tab is syncing, so an empty cache raises no first
+     * snapshot at all and a warm one never confirms. The client is asked to
+     * recover — a network cycle that forces the lease election — and this
+     * listener then hears from the server like any other. Disarmed by the
+     * first server-confirmed snapshot, by an error (a refusal is not a
+     * stall) and by cleanup.
+     */
+    const disarmStall = armFirestoreStallWatch(q.firestore)
     // Disappearance tracking (AGL-1196); inert unless opted in.
     const seen = new Set<string>()
     const confirmedGone = new Set<string>()
@@ -252,6 +264,7 @@ export function useFirestoreCollection<T = DocumentData>(
            */
           // Only the SERVER answering is evidence the session can read.
           if (!snapshot.metadata.fromCache) {
+            disarmStall()
             attempt = 0
             deniedStreak = 0
             denialReported = false
@@ -303,6 +316,7 @@ export function useFirestoreCollection<T = DocumentData>(
         },
         (err) => {
           if (cancelled) return
+          disarmStall()
           unsubscribe?.()
           // Say so once per outage, and only for a refusal — a lost network
           // produces no error callback at all, so this cannot fire offline.
@@ -402,6 +416,7 @@ export function useFirestoreCollection<T = DocumentData>(
 
     return () => {
       cancelled = true
+      disarmStall()
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
       cancelRefusedReopen?.()

@@ -184,6 +184,12 @@ export interface CrmTaskReminderEmailInput {
   settingsUrl: string
   /** The brand's support line, already prefixed, or empty. */
   supportLine?: string
+  /**
+   * Leave out the closing paragraph and the support line (AGL-3367), for the
+   * copy that goes inside a system email: its footer says why the mail came
+   * and where to get help, and its body links the settings page.
+   */
+  omitClosing?: boolean
 }
 
 /**
@@ -207,6 +213,7 @@ export function composeCrmTaskReminderEmailText(input: CrmTaskReminderEmailInput
     lines.push(`- ${composeCrmTaskReminderBody(task, timeZone)}`)
     lines.push(`  ${input.taskUrl(task)}`)
   }
+  if (input.omitClosing) return lines.join('\n').trimEnd()
   lines.push(
     '',
     'You get task reminders because the Forms & bookings category is on in ' +

@@ -171,7 +171,10 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       await firestore.collection('hostIndex').doc(hostId).get()
     ).get('subdomain') as string | undefined
     const consoleOrgSlug = ownerOrg?.org?.slug as string | undefined
-    const origin = req.headers.origin ?? `https://${req.headers.host}`
+    // The console's own host, as the POS door reads it — never the `Origin`
+    // header (AGL-3363). The CUSTOMER lands here after paying the link, so a
+    // caller-written origin would send a merchant's customer anywhere.
+    const origin = `https://${req.headers.host}`
     const consoleProductsUrl =
       consoleOrgSlug && consoleSubdomain
         ? `${origin}${buildRoute(Route.HOST_PLUGIN, {

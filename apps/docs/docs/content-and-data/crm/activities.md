@@ -201,7 +201,14 @@ The send is refused, and the dialog says why, when:
 - the organization has reached its **one-to-one email** allowance for the day —
   see [the cap](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email),
   which resets at midnight UTC;
-- you have sent more than twenty emails in the last minute.
+- you have sent more than twenty emails in the last minute;
+- the address's domain has no mail server, so the message could only bounce.
+
+Before you send, the dialog warns when the address's domain has no mail
+server, or when the mail gateway in front of it has refused your site's
+sending address twice in the last 30 days and delivered nothing. The second
+is a warning only: a one-to-one email still goes, but it is likely to be
+refused too.
 
 Every sent email counts toward the organization's email usage like any other
 message.

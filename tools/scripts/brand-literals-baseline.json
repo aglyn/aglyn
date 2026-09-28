@@ -36,6 +36,7 @@
   "libs/shared/ui/jsx/src/lib/const/aglyn-logo-full.tsx": 1,
   "libs/shared/ui/jsx/src/lib/const/svg-icons.tsx": 3,
   "libs/shared/ui/theme/src/lib/util/generate-component-class-keys.ts": 2,
+  "libs/shared/util/email/src/lib/outbound-phishing-screen.ts": 1,
   "libs/shared/util/email/src/lib/send-email.ts": 1,
   "libs/shared/util/email/src/lib/sending-domain.ts": 3
 }

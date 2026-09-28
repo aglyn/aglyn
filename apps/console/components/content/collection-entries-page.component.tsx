@@ -79,6 +79,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useDeclareDocumentSubject } from '../document-subject'
+import PageHoldBanner from '../page-holds/page-hold-banner.component'
 import HostDisplayNameComponent from '../host-display-name.component'
 import HubTabs from '../hub-tabs.component'
 import DashboardLayout from '../layouts/dashboard.layout'
@@ -1916,6 +1917,28 @@ export function CollectionEntriesPage() {
                                     ))}
                                   </TextField>
                                 </Box>
+                                {/* A template held or flagged by the page
+                                    review (AGL-3374), where its collection is
+                                    set up — the first place an owner looks
+                                    when the entries stop showing it. */}
+                                {[
+                                  ...new Set(
+                                    [
+                                      selected?.listScreenId,
+                                      selected?.entryScreenId ??
+                                        selected?.templateScreenId,
+                                    ].filter(
+                                      (id): id is string =>
+                                        typeof id === 'string' && Boolean(id),
+                                    ),
+                                  ),
+                                ].map((templateId) => (
+                                  <PageHoldBanner
+                                    key={templateId}
+                                    hostId={hostId}
+                                    target={{ type: 'screen', id: templateId }}
+                                  />
+                                ))}
                                 {/*
                                   What KIND of article this collection
                                   publishes (AGL-2536).

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { type SiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
@@ -271,6 +272,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .status(403)
         .json({ error: 'Gift cards require a Business plan' })
     }
+    // A gift card is issued only by the cart's completion (AGL-3363): the
+    // buy-now order branch mints no code, so a buy-now of one took the money
+    // and delivered nothing — and bypassed the cart's cash-out ceilings.
+    if (product.giftCard) {
+      return res.status(409).json({
+        error: 'Add this gift card to your cart to buy it.',
+        code: 'gift_card_needs_cart',
+      })
+    }
     const accountId = ownerProfile.get('stripeAccountId')
     if (
       !connectLinkageIsReady(
@@ -390,9 +400,14 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // per-plan ladder (AGL-284, AGL-278) is read inside the two resolvers
     // called after the shipping plan — `resolveTransactionFeeCents` for a
     // one-time sale and `resolveSubscriptionFeePercent` for a subscription.
-    const referer = String(req.headers.referer ?? '')
-    const origin = `https://${req.headers.host}`
-    const backUrl = referer.startsWith('http') ? referer : origin
+    // The site's own page, never a header's say-so (AGL-3363): a caller
+    // writes `Referer` and `Host`, and this URL is where Stripe sends the
+    // payer — and what the receipt's download links are built from.
+    const backUrl = siteReturnUrl({
+      candidates: [String(req.headers.referer ?? ''), `https://${req.headers.host}`],
+      site: hostSnapshot.data?.() as SiteReturnHost | undefined,
+      requestHost: String(req.headers.host ?? ''),
+    })
     const separator = backUrl.includes('?') ? '&' : '?'
 
     // Taxes (AGL-285): Stripe Tax when the host opted in; manual mode

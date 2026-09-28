@@ -69,6 +69,8 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
+import PageHoldChips from '../../../../../../components/page-holds/page-hold-chips.component'
+import usePageHolds from '../../../../../../components/page-holds/use-page-holds'
 import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
 import { type GridColDef } from '@mui/x-data-grid'
@@ -432,6 +434,8 @@ function Layouts(props) {
    * read as "already in the one you are about to open".
    */
   const { peopleIn } = usePresenceSummary(hostId)
+  // A page rendering this layout is held or flagged (AGL-3374).
+  const { holds: pageHolds } = usePageHolds(hostId)
 
   const columns: GridColDef[] = [
     {
@@ -452,6 +456,7 @@ function Layouts(props) {
           >
             {value || (id as string)}
           </AppLink>
+          <PageHoldChips holds={pageHolds} target={{ type: 'layout', id: id as string }} />
           <DocumentPresenceChips people={peopleIn('layout', id as string)} />
         </Stack>
       ),

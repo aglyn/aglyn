@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { flagLookalikeDomain } from '@aglyn/tenant-data-admin/server/hosted-page-review'
 import {
   MEDIA_CDN_RENDITION_AUTO,
   MEDIA_CDN_RENDITION_PARAM,
@@ -198,6 +199,16 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
         '[commerce/stream] gated video not delivered',
         JSON.stringify({ hostId, productId, video, refusal: delivery.refusal }),
       )
+      // A lookalike hotlink is filed for staff and the merchant (AGL-3363).
+      if (delivery.refusal === 'lookalike' && delivery.host) {
+        await flagLookalikeDomain({
+          kind: 'link',
+          hostId,
+          orgId: null,
+          domain: delivery.host,
+          where: "a product's video link",
+        })
+      }
       return delivery.refusal === 'not-private'
         ? res.status(409).send('This video is not ready to play yet')
         : res.status(404).send('No video')

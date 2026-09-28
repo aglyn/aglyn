@@ -47,6 +47,7 @@ import { resolveOrgPermissions } from '@aglyn/aglyn'
 import { ACTOR_ACTIVITY_MAX_PAGE } from '../utils/server/actor-activity'
 
 const mockVerifyIdToken = jest.fn()
+const mockGetUsers = jest.fn()
 /** The member document `resolveOrgMembership` answers with. */
 let member: Record<string, unknown> | null = null
 /** Entries in `orgs/org-1/activity`, and the query the route built. */
@@ -96,6 +97,12 @@ function activityQuery(): any {
   }
 }
 
+const mockFindAcrossPools = jest.fn()
+jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
+  __esModule: true,
+  findUserByUidAcrossPools: (...args: unknown[]) => mockFindAcrossPools(...args),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -104,6 +111,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
+        getUsers: (...args: unknown[]) => mockGetUsers(...args),
       }),
       firestore: () => ({
         collection: () => ({
@@ -167,6 +175,7 @@ const get = (orgId = 'org-1', params: Record<string, string> = {}) => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockFindAcrossPools.mockResolvedValue(null)
   ordering = []
   capped = null
   wheres = []
@@ -180,6 +189,7 @@ beforeEach(() => {
     email_verified: true,
     staff: false,
   })
+  mockGetUsers.mockResolvedValue({ users: [], notFound: [] })
   member = { $id: 'u1', role: 'admin' }
   ;(global as any).__member = member
 })
@@ -350,5 +360,68 @@ describe('the feed pages', () => {
     // route that always filtered, which would render every feed empty.
     await get()
     expect(wheres).toEqual([])
+  })
+})
+
+describe('every row names someone a reader can narrow down', () => {
+  it('resolves a uid recorded without an address to the address it holds now', async () => {
+    // The billing webhook held a uid and no address; the feed printed
+    // "Someone" for a signed-in person it could have named.
+    activity = [
+      { $id: 'c', actorId: 'uid-7', actorEmail: null, action: 'Started the pro subscription', createdAt: { seconds: 300 } },
+      { $id: 'b', actorId: 'uid-8', actorEmail: 'then@example.test', action: 'Added a payment method', createdAt: { seconds: 200 } },
+      { $id: 'a', actorId: null, actorEmail: null, action: 'Canceled the subscription', createdAt: { seconds: 100 } },
+    ]
+    mockGetUsers.mockResolvedValue({
+      users: [{ uid: 'uid-7', email: 'owner@example.test' }],
+      notFound: [],
+    })
+
+    const payload = await (await get()).json()
+
+    // Only the uid that lacked an address is looked up.
+    expect(mockGetUsers).toHaveBeenCalledWith([{ uid: 'uid-7' }])
+    expect(payload.entries.map((entry: any) => entry.actorEmailNow ?? null)).toEqual([
+      'owner@example.test',
+      null,
+      null,
+    ])
+    // The snapshot is left as written.
+    expect(payload.entries[0].actorEmail).toBeNull()
+  })
+
+  it('still answers the page when the account lookup fails', async () => {
+    activity = [
+      { $id: 'c', actorId: 'uid-7', actorEmail: null, action: 'x', createdAt: { seconds: 300 } },
+    ]
+    mockGetUsers.mockRejectedValue(new Error('auth down'))
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await get()
+
+    expect(response.status).toBe(200)
+    expect((await response.json()).entries[0].actorEmailNow).toBeUndefined()
+    spy.mockRestore()
+  })
+
+  it('shows STAFF which staff member acted, and nobody else', async () => {
+    activity = [
+      { $id: 'c', actorId: null, actorEmail: null, staffActorId: 'staff-1', action: 'Subscription canceled by Aglyn', createdAt: { seconds: 300 } },
+    ]
+    mockGetUsers.mockResolvedValue({
+      users: [{ uid: 'staff-1', email: 'staff@example.test' }],
+      notFound: [],
+    })
+
+    // A workspace admin: the staff uid is removed and never looked up.
+    const member = (await (await get()).json()).entries[0]
+    expect(member.staffActorId).toBeUndefined()
+    expect(member.staffActorEmail).toBeUndefined()
+    expect(mockGetUsers).not.toHaveBeenCalled()
+
+    // Staff: named.
+    mockVerifyIdToken.mockResolvedValue({ uid: 's', email_verified: true, staff: true })
+    const staff = (await (await get()).json()).entries[0]
+    expect(staff.staffActorEmail).toBe('staff@example.test')
   })
 })

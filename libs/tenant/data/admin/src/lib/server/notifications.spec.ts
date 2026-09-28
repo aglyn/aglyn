@@ -68,9 +68,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // not a stub: a stubbed `buildRoute` would let this spec keep passing while
   // the link in the message pointed at a page that does not exist.
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/console-routes'),
+  // And the brand resolver, which decides whose header and footer the email
+  // wears (AGL-3367).
+  ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/plan-entitlements'),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
+  // The real catalog and renderer, so the email is the one that ships
+  // (AGL-3367); only the wire is replaced.
+  ...jest.requireActual('@aglyn/shared-util-email'),
   isEmailConfigured: () => emailConfigured,
   sendEmail: async (options: Record<string, unknown>) => {
     sends.push(options)
@@ -114,6 +120,7 @@ function fakeFirestore(): any {
           id,
           exists: hostDocs.has(`${name}/${id}`),
           get: (field: string) => hostDocs.get(`${name}/${id}`)?.[field],
+          data: () => hostDocs.get(`${name}/${id}`),
         }),
         collection: (sub: string) => ({
           doc: () => ({ path: `${name}/${id}/${sub}` }),
@@ -364,5 +371,108 @@ describe('the notification email channel (AGL-3224)', () => {
     userDocs.set('uid-a', { notificationPrefs: { content: false } })
     await notifyUsers(['uid-a'], FORM)
     expect(written).toHaveLength(0)
+  })
+})
+
+/**
+ * The notification email wears the system chrome (AGL-3367): it renders as
+ * the `notification` system email, in the brand of whoever it speaks for.
+ */
+describe('the notification email is a system email (AGL-3367)', () => {
+  const ON = { notificationSettings: { account: { content: { email: true }, staff: { email: true } } } }
+
+  beforeEach(() => {
+    written.length = 0
+    hostDocs.clear()
+    userDocs.clear()
+    sends.length = 0
+    metered.length = 0
+    suppressed.clear()
+    directory.clear()
+    emailConfigured = true
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.example.com'
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => jest.restoreAllMocks())
+
+  it('sends an HTML part with the header, the button and the footer', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    await notifyUsers(['uid-a'], {
+      type: 'content.formSubmission',
+      title: 'New form submission',
+      body: 'Someone filled in Contact us.',
+      link: '/manage/notifications',
+    })
+    expect(sends).toHaveLength(1)
+    const html = String(sends[0]['html'])
+    expect(html).toContain('New form submission')
+    expect(html).toContain('Someone filled in Contact us.')
+    expect(html).toContain('href="https://app.example.com/manage/notifications"')
+    expect(html).toContain('You’re receiving this because you turned on email')
+    // The text part carries the same copy, and the way out.
+    expect(sends[0]['text']).toContain('https://app.example.com/manage/notifications/settings')
+  })
+
+  it('opens a stored host link on the page it names today, not the dead legacy path', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('orgs/org-1', { slug: 'acme' })
+    hostDocs.set('hosts/host-1', { subdomain: 'shop' })
+    await notifyUsers(['uid-a'], {
+      type: 'content.formSubmission',
+      title: 'New form submission',
+      link: '/host-1/inbox',
+      orgId: 'org-1',
+      hostId: 'host-1',
+    })
+    expect(sends[0]['text']).toContain('https://app.example.com/acme/hosts/shop/inbox')
+    expect(String(sends[0]['text'])).not.toContain('/host-1/inbox')
+  })
+
+  it('speaks in a white-label org’s own name to that org’s people', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('orgs/org-1', {
+      plan: 'agency',
+      name: 'Client Co',
+      brandingProfile: { productName: 'Acme Sites', fromName: 'Acme Sites' },
+    })
+    await notifyUsers(['uid-a'], {
+      type: 'content.formSubmission',
+      title: 'New form submission',
+      orgId: 'org-1',
+    })
+    expect(sends[0]['fromName']).toBe('Acme Sites')
+    const html = String(sends[0]['html'])
+    expect(html).toContain('Open in Acme Sites')
+    expect(html).not.toContain('Aglyn')
+    expect(metered).toEqual(['org:org-1'])
+  })
+
+  it('speaks as the platform to staff, and bills the platform, whatever org it is about', async () => {
+    userDocs.set('uid-s', ON)
+    directory.set('uid-s', 's@example.com')
+    hostDocs.set('orgs/org-1', {
+      plan: 'agency',
+      brandingProfile: { productName: 'Acme Sites', fromName: 'Acme Sites' },
+    })
+    await notifyUsers(
+      ['uid-s'],
+      {
+        type: 'staff.subscriptionCanceled',
+        title: 'Subscription canceled',
+        body: 'Client Co canceled, leaving the Advanced plan.',
+        link: '/admin/orgs/org-1',
+        orgId: 'org-1',
+      },
+      { audience: 'staff' },
+    )
+    expect(sends).toHaveLength(1)
+    expect(sends[0]['fromName']).toBeUndefined()
+    expect(String(sends[0]['html'])).not.toContain('Acme Sites')
+    expect(String(sends[0]['html'])).toContain('href="https://app.example.com/admin/orgs/org-1"')
+    expect(metered).toEqual(['platform'])
   })
 })

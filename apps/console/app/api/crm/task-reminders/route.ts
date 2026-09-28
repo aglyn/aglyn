@@ -52,6 +52,13 @@ import {
 // through the barrel would be silently replaced by whatever the factory
 // lists. Same reasoning as the digest beside this route.
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
+import {
+  loadSystemEmail,
+  renderLoadedSystemEmail,
+  systemEmailBrand,
+  systemEmailContent,
+  type LoadedSystemEmail,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { brandSupportLine } from '../../_lib/brand-support-line'
@@ -301,6 +308,8 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   }
   const settingsUrl = `${ctx.origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
   const supportLine = brandSupportLine(branding)
+  const brand = systemEmailBrand(org)
+  let reminderEmail: Promise<LoadedSystemEmail | null> | undefined
   let poolLookups = 0
 
   for (const uid of uids) {
@@ -351,16 +360,36 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
     if (!recipients.length) {
       emailReason = address.includes('@') ? 'suppressed' : 'no-recipient'
     } else {
+      const reminderInput = {
+        tasks,
+        timeZone,
+        productName: branding.productName,
+        taskUrl,
+        settingsUrl,
+        supportLine,
+      }
+      const subject = composeCrmTaskReminderSubject(tasks)
+      // The `crm-task-reminder` system email (AGL-3367), in the org's brand,
+      // read once per org and rendered per member.
+      reminderEmail ??= loadSystemEmail('crm-task-reminder').catch(() => null)
+      const loaded = await reminderEmail
+      const rendered = loaded
+        ? renderLoadedSystemEmail(
+            loaded,
+            {
+              ...brand.merge,
+              'reminder.subject': subject,
+              'reminder.body': composeCrmTaskReminderEmailText({ ...reminderInput, omitClosing: true }),
+              settingsUrl,
+            },
+            brand.options,
+          )
+        : null
       const result = await sendEmail({
         to: recipients,
-        subject: composeCrmTaskReminderSubject(tasks),
-        text: composeCrmTaskReminderEmailText({
-          tasks,
-          timeZone,
-          productName: branding.productName,
-          taskUrl,
-          settingsUrl,
-          supportLine,
+        ...systemEmailContent(rendered, {
+          subject,
+          text: composeCrmTaskReminderEmailText(reminderInput),
         }),
         fromName: branding.fromName,
         context: 'crm-task-reminder',

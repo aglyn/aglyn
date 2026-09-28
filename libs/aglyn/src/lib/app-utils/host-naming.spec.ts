@@ -60,12 +60,14 @@ describe('isBlockedSubdomain', () => {
 describe('generateSubdomain', () => {
   it('slugifies display names', () => {
     expect(generateSubdomain('My Great Bakery!')).toBe('my-great-bakery')
-    expect(generateSubdomain('Café Aglyn & Co.')).toBe('cafe-aglyn-co')
+    expect(generateSubdomain('Café Lumen & Co.')).toBe('cafe-lumen-co')
   })
 
   it('returns empty for unusable or blocked names', () => {
     expect(generateSubdomain('!!')).toBe('')
     expect(generateSubdomain('Admin')).toBe('')
+    // The platform's own name, on its own apex, is a disguise (AGL-3365).
+    expect(generateSubdomain('Aglyn Support')).toBe('')
   })
 
   it('caps at 30 chars and stays valid', () => {

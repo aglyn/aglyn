@@ -18,6 +18,10 @@
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { firebaseAdmin, meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  renderSystemEmailContent,
+  systemEmailBrand,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
 
 /**
  * The named success manager an Enterprise org is promised (AGL-2332).
@@ -168,25 +172,36 @@ export async function copyManagerOnTicket(
   const link = `${origin}/admin/support?ticketId=${details.ticketId}`
   const opened = details.kind === 'opened'
   const who = details.orgName || details.orgId
+  const subject = `${opened ? 'New ticket' : 'Ticket reply'} — ${who}: ${details.subject}`
+  const opening = opened
+    ? `${who} opened a support ticket.`
+    : `${who} replied on a support ticket.`
+  const from = details.fromEmail ? `From: ${details.fromEmail}` : ''
+  // The `support-ticket-alert` system email (AGL-3367), in the platform's
+  // brand: this is Aglyn writing to its own success manager.
+  const content = await renderSystemEmailContent(
+    'support-ticket-alert',
+    {
+      'ticket.heading': opened ? 'New ticket' : 'Ticket reply',
+      'ticket.subject': details.subject,
+      'ticket.body': [[opening, from].filter(Boolean).join('\n'), details.subject, details.body]
+        .filter(Boolean)
+        .join('\n\n'),
+      'ticket.url': link,
+      'manager.name': manager.name,
+      'org.name': who,
+    },
+    systemEmailBrand(null),
+    {
+      subject,
+      text: [`${manager.name},`, '', opening, from, '', details.subject, '', details.body, '', link]
+        .filter((line) => line !== '')
+        .join('\n'),
+    },
+  )
   const result = await sendEmail({
     to: manager.email,
-    subject: `${opened ? 'New ticket' : 'Ticket reply'} — ${who}: ${details.subject}`,
-    text: [
-      `${manager.name},`,
-      '',
-      opened
-        ? `${who} opened a support ticket.`
-        : `${who} replied on a support ticket.`,
-      details.fromEmail ? `From: ${details.fromEmail}` : '',
-      '',
-      details.subject,
-      '',
-      details.body,
-      '',
-      link,
-    ]
-      .filter((line) => line !== '')
-      .join('\n'),
+    ...content,
     context: `support-manager-${details.kind}`,
   })
   if (result.sent) await meterPlatformEmail()

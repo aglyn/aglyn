@@ -16,6 +16,9 @@
  */
 
 jest.mock('@aglyn/shared-util-email', () => ({
+  // The real catalog, chrome and palette (AGL-3370); only the render is a
+  // double, so what reaches it can be read back.
+  ...jest.requireActual('@aglyn/shared-util-email'),
   renderHostEmail: jest.fn(async () => ({ subject: 'ok' })),
 }))
 jest.mock('./firebase-admin', () => ({ firebaseAdmin: {} }))
@@ -169,5 +172,29 @@ describe('renderHostEmailWithTokens (AGL-1022)', () => {
     )
     const options = renderMock.mock.calls[0][4] as { origin?: string }
     expect(options.origin).toBe('https://example.test')
+  })
+
+  it('hands the renderer the site frame, with the email kind’s reason, and the site theme (AGL-3370)', async () => {
+    await renderHostEmailWithTokens(
+      firestoreWith({
+        ...site,
+        theme: {
+          colorSchemes: { light: { primary: { main: '#6d4c41' } } },
+          shape: { borderRadius: 12 },
+        },
+      }),
+      'host-1',
+      'order-receipt',
+    )
+    const options = renderMock.mock.calls[0][4] as {
+      chrome?: { header?: { logoAlt?: string }; footer?: { reason?: string } }
+      theme?: { palette?: { primary?: { main?: string } }; buttonRadius?: number }
+    }
+    expect(options.chrome?.header?.logoAlt).toBe('Northwind Coffee')
+    expect(options.chrome?.footer?.reason).toBe(
+      'You’re receiving this because you placed an order with Northwind Coffee.',
+    )
+    expect(options.theme?.palette?.primary?.main).toBe('#6d4c41')
+    expect(options.theme?.buttonRadius).toBe(12)
   })
 })

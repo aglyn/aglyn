@@ -19,6 +19,7 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import SenderReadinessPanel from '@aglyn/tenant-feature-instance/components/sender-readiness-panel'
 import {
   Alert,
   Autocomplete,
@@ -51,6 +52,7 @@ import {
   validateDisplayName,
   validateSendWindow,
 } from '../mailboxes/mailbox-settings'
+import type { OutreachMailboxReadinessResponse } from '../mailboxes/mailbox-api'
 import type {
   OutreachMailbox,
   OutreachMailboxStatus,
@@ -105,6 +107,7 @@ export const MAILBOX_ACTION_LABELS = {
   warmUp: 'Warm up gradually',
   disconnect: 'Disconnect',
   reconnect: 'Reconnect',
+  recheckReadiness: 'Check DNS again',
 } as const
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -170,6 +173,40 @@ export function MailboxCard(props: MailboxCardProps) {
   // Where a test goes when not to the member themself (AGL-3228): a test to
   // one's own address never leaves Google and shows no authentication result.
   const [testAddress, setTestAddress] = useState('')
+
+  /*
+   * SPF, DKIM and DMARC for the address this mailbox sends as (AGL-3328),
+   * read by the server and remembered there briefly. Re-read when the
+   * send-as address changes; a failed read shows nothing rather than a
+   * verdict nobody made.
+   */
+  const sendAsAddress = mailbox.sendAs || mailbox.email
+  const [readiness, setReadiness] = useState<OutreachMailboxReadinessResponse | null>(null)
+  const [readinessBusy, setReadinessBusy] = useState(false)
+  useEffect(() => {
+    let active = true
+    api
+      .readiness(mailbox.id)
+      .then((answer) => {
+        if (active) setReadiness(answer)
+      })
+      .catch(() => {
+        if (active) setReadiness(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [api, mailbox.id, sendAsAddress])
+  const recheckReadiness = async () => {
+    setReadinessBusy(true)
+    try {
+      setReadiness(await api.readiness(mailbox.id, true))
+    } catch (error) {
+      enqueueSnackbar((error as Error).message, { variant: 'error', allowDuplicate: true })
+    } finally {
+      setReadinessBusy(false)
+    }
+  }
 
   // A save here, a change made from another tab, or a reconnect rewrites the
   // stored settings; the form follows them, unless the member has unsaved
@@ -377,6 +414,22 @@ export function MailboxCard(props: MailboxCardProps) {
             {outreachPacingNote(mailbox, nowMs)}
           </Typography>
         </Box>
+
+        {readiness?.readiness ? (
+          <Stack spacing={1}>
+            <SenderReadinessPanel readiness={readiness.readiness} />
+            <Box>
+              <Button size="small" disabled={readinessBusy} onClick={() => void recheckReadiness()}>
+                {MAILBOX_ACTION_LABELS.recheckReadiness}
+              </Button>
+            </Box>
+          </Stack>
+        ) : readiness ? (
+          <Typography variant="caption" color="text.secondary">
+            {`Google authenticates mail from ${readiness.sendAs.slice(readiness.sendAs.lastIndexOf('@') + 1)} ` +
+              'itself, so there are no records to publish for this address.'}
+          </Typography>
+        ) : null}
 
         {canManage ? (
           <Stack spacing={2} component="form" onSubmit={(event) => event.preventDefault()}>

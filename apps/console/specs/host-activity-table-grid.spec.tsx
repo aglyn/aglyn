@@ -55,6 +55,12 @@ jest.mock('next/navigation', () => ({
 
 /** Held: a Firestore handle minted per render would re-run every read. */
 const mockFirestore = {}
+// The resolver has its own spec; here it passes rows through untouched.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-resolved-activity-actors', () => ({
+  __esModule: true,
+  useResolvedActivityActors: (_hostId: unknown, rows: unknown) => rows,
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => mockFirestore,

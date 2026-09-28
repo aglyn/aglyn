@@ -56,6 +56,7 @@ import {
   customImportTargetKey,
   type ImportChunkResult,
   type ImportSkippedRow,
+  importNoMailServerSentence,
   LIST_IMPORT_MAX_CHARACTERS,
   parseCsv,
 } from '@aglyn/aglyn'
@@ -812,6 +813,9 @@ function ImportResultPanel<F extends string, S extends ImportSkippedRow<string>>
               ? ` and ${result.ownersUnresolved.length - 5} more.`
               : '.')}
         </Alert>
+      ) : null}
+      {importNoMailServerSentence(result.noMailServer) ? (
+        <Alert severity="warning">{importNoMailServerSentence(result.noMailServer)}</Alert>
       ) : null}
       {vocabulary.resultExtras?.(result)}
       <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>

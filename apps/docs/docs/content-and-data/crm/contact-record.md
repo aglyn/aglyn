@@ -61,9 +61,12 @@ campaigns, and — for a buyer — how many orders they have placed and what the
 have spent; the order count is a link to the site's orders list narrowed to the
 person's address. When a sender has given a verdict on the address — a
 bounce, a gateway block, an unsubscribe, a spam complaint, a do-not-contact
-mark — it leads the chip row, with the date and the server's words on
+mark — or the address's domain has no mail server (**Would bounce**), it
+leads the chip row, with the date and the server's words on
 hover, and **Send email** is disabled with the reason; the Contacts list
-carries the same verdict in its **Email** column and filter. It is the
+carries the same verdict in its **Email** column and filter. Beside it, a
+chip names the mail gateway in front of the address, when its domain names
+one. It is the
 [lead's email state](./leads.md#email-state), on the contact the lead became
 or was always. Beside **Send email** it carries **Call**, which dials the
 person's number, and **Log a call** — see

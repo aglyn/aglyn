@@ -15,19 +15,27 @@
  * limitations under the License.
  */
 
+import {
+  type SiteReturnHost,
+  siteReturnOrigin,
+} from '@aglyn/aglyn/app-utils/site-return-url'
 import { checkEntitlement,
   type PluginJobHostGate,
   registerPluginConfigSchema,
   registerPluginJob,
   resolveBrandingProfile,
   resolveTransactionFeeCents,
-  sanitizeAuthorHtml,
 } from '@aglyn/aglyn/server'
 // The leaf, not the barrel: the console's `x-cron-secret` door asks the
 // site's lockdown directly (AGL-3356) — core's registry has no resolver in
 // the console process — and a spec that substitutes the barrel must still
 // reach the real verdict.
 import { siteLockdownJobGate } from '@aglyn/tenant-data-admin/server/tenant-write-lockdown'
+import {
+  loadHostEmailWithTokens,
+  renderLoadedHostEmailWithTokens,
+  type LoadedHostEmailWithTokens,
+} from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import {
   registerBillingWebhookHandler,
@@ -121,17 +129,13 @@ import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import {
   isEmailConfigured,
-  loadHostEmail,
-  renderLoadedHostEmail,
   sendEmail,
-  type LoadedHostEmail,
 } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
 } from '@aglyn/aglyn/app-utils/request-ip'
-import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 
 const BOOKING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -603,7 +607,16 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     })
 
     if (paid) {
-      const origin = req.headers.origin ?? `https://${req.headers.host}`
+      // The site's own origin, never a header's say-so (AGL-3363): a
+      // caller writes `Origin` and `Host`, and Stripe sends the payer here.
+      const origin = siteReturnOrigin({
+        candidates: [
+          typeof req.headers.origin === 'string' ? req.headers.origin : '',
+          `https://${req.headers.host}`,
+        ],
+        site: hostSnapshot.data?.() as SiteReturnHost | undefined,
+        requestHost: String(req.headers.host ?? ''),
+      })
       // TAX ON A PAID BOOKING: the merchant's own service rate, resolved
       // above and default OFF (AGL-2028, answering AGL-2000).
       //
@@ -875,7 +888,7 @@ export async function scanBookingReminders(
   let skippedLocked = 0
   // Resolve each host's designed reminder template once per run (AGL-770),
   // not once per booking — a busy site has many bookings in the window.
-  const templateCache = new Map<string, LoadedHostEmail | null>()
+  const templateCache = new Map<string, LoadedHostEmailWithTokens | null>()
   // White-label brand per host (White-Label Phase 3): resolved once per host
   // from the owning org doc through the one shared resolver, so a reminder
   // reads as the store's brand.
@@ -933,11 +946,9 @@ export async function scanBookingReminders(
     let loaded = templateCache.get(hostId)
     if (loaded === undefined) {
       loaded = hostId
-        ? await loadHostEmail(firestore, hostId, 'booking-reminder', {
-            // The site's header and footer blocks, grafted once per site
-            // for the whole batch (AGL-3287).
-            compose: composeHostComponentNodes,
-          })
+        ? await // The template, or the built-in copy in the site's header and
+        // footer, once per site for the whole batch (AGL-3287, AGL-3370).
+        loadHostEmailWithTokens(firestore, hostId, 'booking-reminder')
         : null
       templateCache.set(hostId, loaded)
       brandingByHost.set(
@@ -952,14 +963,13 @@ export async function scanBookingReminders(
     }
     const serviceName = String(data['serviceName'] ?? 'your booking')
     const designed = loaded
-      ? renderLoadedHostEmail(
+      ? renderLoadedHostEmailWithTokens(
           loaded,
           {
             name: String(data['name'] ?? ''),
             'service.name': serviceName,
             when,
           },
-          sanitizeAuthorHtml,
         )
       : null
     const result = await sendEmail({
@@ -1062,7 +1072,9 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
 /** Registers the bookings plugin's public (site-facing) API routes (AGL-396). */
 export function registerBookingsApi(): void {
   registerPluginApiRoute('bookings/slots', slotsHandler)
-  registerPluginApiRoute('bookings/book', bookHandler)
+  // A deposit opens a Stripe Checkout Session for whoever books, so the
+  // dispatcher holds this door to the card-testing counters (AGL-3363).
+  registerPluginApiRoute('bookings/book', bookHandler, { cardPayment: true })
 }
 
 /** Registers the bookings plugin's console-side API routes (AGL-396). */

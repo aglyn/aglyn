@@ -16,6 +16,7 @@
  */
 
 import {
+  brandClaimedByName,
   brandForSubdomainLabel,
   describePhishingScreenSignals,
   linkHostsIn,
@@ -356,5 +357,93 @@ describe('the From address is read like a link (AGL-3362)', () => {
     for (const fromAddress of ['hello@harborviewhotel.com', 'service@paypal.com', 'hi@mail.acme.co.uk']) {
       expect(screenOutboundEmail({ subject: 'Hi', fromAddress, bodies: ['Hello.'], ...OWN }).hold).toBe(false)
     }
+  })
+})
+
+describe('the platform is a brand too (AGL-3365)', () => {
+  it('reads a host that wears the platform name as a lookalike', () => {
+    expect(lookalikeBrandForHost('aglyn-billing.com')?.id).toBe('aglyn')
+    expect(lookalikeBrandForHost('secure-aglyn.net')?.id).toBe('aglyn')
+    expect(lookalikeBrandForHost('aglyn.com.account-review.top')?.id).toBe('aglyn')
+    expect(lookalikeBrandForHost('agiyn.com')).toBeNull()
+  })
+
+  it("never reads the platform's own domains, or a site on its tenant apex, as one", () => {
+    expect(lookalikeBrandForHost('app.aglyn.com')).toBeNull()
+    expect(lookalikeBrandForHost('mail.aglyn.io')).toBeNull()
+    expect(lookalikeBrandForHost('harborview.aglyn.app')).toBeNull()
+    // Another brand's disguise on the apex is still that brand's.
+    expect(lookalikeBrandForHost('paypal.aglyn.app')?.id).toBe('paypal')
+  })
+
+  it('still counts a neighbor site on the tenant apex as elsewhere for a lure', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Your Aglyn account is on hold',
+      bodies: ['Verify your account now: https://other-site.aglyn.app/verify'],
+      ...OWN,
+    })
+    expect(verdict.signals).toContainEqual(
+      expect.objectContaining({ code: 'brand-lure-link', brand: 'aglyn', host: 'other-site.aglyn.app' }),
+    )
+  })
+
+  it('holds mail sent as the platform from a workspace that is not it', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Action required',
+      fromName: 'Aglyn Support',
+      bodies: ['Hello'],
+      ...OWN,
+    })
+    expect(verdict.signals).toContainEqual(
+      expect.objectContaining({ code: 'brand-sender', brand: 'aglyn' }),
+    )
+  })
+
+  it("lets the platform's own workspace, and a site that says what built it, pass", () => {
+    expect(
+      screenOutboundEmail({
+        subject: 'Verify your account',
+        fromName: 'Aglyn',
+        bodies: ['Sign in: https://app.aglyn.com/verify'],
+        ownNames: ['Aglyn'],
+        ownDomains: ['aglyn.com'],
+      }).hold,
+    ).toBe(false)
+    expect(
+      screenOutboundEmail({
+        subject: 'Our new menu',
+        bodies: ['Built with Aglyn. See it: https://harborview.aglyn.app/menu'],
+        ...OWN,
+      }).hold,
+    ).toBe(false)
+  })
+
+  it('reads a NAME that speaks for a brand, and passes one that only mentions it', () => {
+    expect(brandClaimedByName('PayPal Support')?.id).toBe('paypal')
+    expect(brandClaimedByName('Official Aglyn Plugins')?.id).toBe('aglyn')
+    expect(brandClaimedByName('Checkout for PayPal')).toBeNull()
+    expect(brandClaimedByName('Team Northwind')).toBeNull()
+    expect(brandClaimedByName('Apple Orchard Support Co')).toBeNull()
+  })
+
+  it('refuses a subdomain that wears the platform name', () => {
+    expect(brandForSubdomainLabel('aglyn')?.id).toBe('aglyn')
+    expect(brandForSubdomainLabel('aglyn-support')?.id).toBe('aglyn')
+    expect(brandForSubdomainLabel('harborview')).toBeNull()
+  })
+})
+
+describe('a lookalike on a vendor account subdomain (2026-09-28 aglyn.com outage)', () => {
+  it('is SOFT: `aglyn.zendesk.com` holds only a young workspace, never an established one', () => {
+    const vendor = { code: 'lookalike-link', brand: 'aglyn', host: 'aglyn.zendesk.com' }
+    expect(phishingSignalTier(vendor)).toBe('soft')
+    expect(signalsThatHold([vendor], { ageDays: 80 })).toEqual([])
+    expect(signalsThatHold([vendor], { ageDays: 2 })).toEqual([vendor])
+  })
+
+  it('stays STRONG on any other host: `poshmark.id63835663.shop` holds everyone', () => {
+    const lure = { code: 'lookalike-link', brand: 'poshmark', host: 'poshmark.id63835663.shop' }
+    expect(phishingSignalTier(lure)).toBe('strong')
+    expect(signalsThatHold([lure], { ageDays: 400 })).toEqual([lure])
   })
 })

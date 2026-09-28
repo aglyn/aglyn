@@ -95,6 +95,12 @@ function stripComments(source: string): string {
  */
 const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   {
+    file: 'libs/shared/util/email/src/lib/email-palette.ts',
+    count: 2,
+    reason:
+      "AGL-3370. The email twin of the tenant.theme.ts row below: which hosts' mail wears the OPERATOR's own palette rather than the site's. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them; a self-host operator points that variable at their own domain, and on a self-hosted instance no sending host ever equals the defaults, so every site's mail correctly takes its own palette.",
+  },
+  {
     file: 'libs/shared/ui/theme/src/lib/tenant.theme.ts',
     count: 2,
     reason:
@@ -167,7 +173,15 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "The same shape as `auth-action-url.ts` above, and modelled on it by name: `DEFAULT_CONSOLE_ORIGIN` is the `??` default of NEXT_PUBLIC_CONSOLE_URL and nothing else reads the literal, so an operator who sets that variable never evaluates it. It matters more here than for an auth email, because a mailbox's OAuth callback must be an address the operator REGISTERED with the provider — a self-hoster who left the variable unset would send Google to a console that is not theirs, and Google would refuse it as an unregistered redirect_uri rather than leak anything. That is the right failure: loud, at connect time, on a deployment that has not been configured. AGL-3228 added the fallback; this row is the decision it implies.",
   },
   {
-    file: 'apps/console/app/api/_lib/render-system-email.ts',
+    file: 'libs/shared/util/email/src/lib/outbound-phishing-screen.ts',
+    count: 3,
+    reason:
+      'A recognition list, not a destination: the phishing screen compares ' +
+      'link hosts against the platform brand’s official domains to catch a ' +
+      'lookalike (AGL-3365). Nothing is fetched, linked or sent there.',
+  },
+  {
+    file: 'libs/tenant/data/admin/src/lib/server/render-system-email.ts',
     count: 1,
     reason:
       'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',

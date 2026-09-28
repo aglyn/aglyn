@@ -81,6 +81,7 @@ import {
   MAIL_GATEWAY_DAILY_DELIVERY_CAP,
   mailGatewayDay,
   mailGatewayHolds,
+  MAIL_GATEWAY_WINDOW_DAYS,
   normalizeDeliverabilityEmail,
   normalizeLedgerSendingDomain,
   readBounceText,
@@ -675,34 +676,59 @@ export interface MailGatewayLedgerRow extends MailGatewayLedger {
   holds: boolean
 }
 
-/** The platform ledger, most recently moved first. */
-export async function listMailGatewayLedgers(
+/** One stored top-level ledger as a staff row; `null` for an unreadable one. */
+export function mailGatewayLedgerRow(
+  id: string,
+  data: Record<string, unknown> | null | undefined,
+  nowMs: number,
+): MailGatewayLedgerRow | null {
+  const ledger = readStoredMailGatewayLedger(id, data)
+  if (!ledger) return null
+  const standing = mailGatewayStanding(ledger.gateway, ledger, nowMs)
+  return {
+    ...ledger,
+    id,
+    shared: data?.['shared'] === true || isSharedMailSendingDomain(ledger.sendingDomain),
+    standing,
+    holds: mailGatewayHolds(standing),
+  }
+}
+
+/** The first instant of the hold's window: midnight UTC of its oldest day. */
+export function mailGatewayWindowStartMs(nowMs: number): number {
+  return Date.parse(`${mailGatewayDay(nowMs - (MAIL_GATEWAY_WINDOW_DAYS - 1) * 86_400_000)}T00:00:00.000Z`)
+}
+
+/** The most rows the refused-lately read returns; past it the answer says it was cut. */
+export const MAIL_GATEWAY_REFUSED_READ_LIMIT = 500
+
+/**
+ * Every top-level ledger with a refusal inside the hold's window, most
+ * recent refusal first — the complete set a hold can come from, since a
+ * hold needs refusals in that window and `lastBlockedAtMs` is the latest of
+ * them. One range on one field, which the automatic index serves; nothing
+ * is filtered after the read. `truncated` when there were more than `limit`.
+ */
+export async function listRecentlyRefusedMailGatewayLedgers(
   options: { limit?: number } = {},
   deps: MailDeliverabilityDeps = {},
-): Promise<MailGatewayLedgerRow[]> {
+): Promise<{ rows: MailGatewayLedgerRow[]; sinceMs: number; truncated: boolean }> {
   const nowMs = deps.nowMs ?? Date.now()
   const firestore = deps.firestore ?? defaultFirestore()
-  const limit = Math.min(Math.max(1, Math.floor(Number(options.limit) || 100)), 500)
+  const limit = Math.min(Math.max(1, Math.floor(Number(options.limit) || MAIL_GATEWAY_REFUSED_READ_LIMIT)), MAIL_GATEWAY_REFUSED_READ_LIMIT)
+  const sinceMs = mailGatewayWindowStartMs(nowMs)
   const snapshot = await firestore
     .collection(MAIL_GATEWAY_LEDGER_COLLECTION)
-    .orderBy('updatedAtMs', 'desc')
-    .limit(limit)
+    .where('lastBlockedAtMs', '>=', sinceMs)
+    .orderBy('lastBlockedAtMs', 'desc')
+    .limit(limit + 1)
     .get()
   const rows: MailGatewayLedgerRow[] = []
-  for (const doc of snapshot.docs) {
-    const data = doc.data() as Record<string, unknown>
-    const ledger = readStoredMailGatewayLedger(doc.id, data)
-    if (!ledger) continue
-    const standing = mailGatewayStanding(ledger.gateway, ledger, nowMs)
-    rows.push({
-      ...ledger,
-      id: doc.id,
-      shared: data['shared'] === true || isSharedMailSendingDomain(ledger.sendingDomain),
-      standing,
-      holds: mailGatewayHolds(standing),
-    })
+  for (const doc of snapshot.docs.slice(0, limit)) {
+    const row = mailGatewayLedgerRow(doc.id, doc.data() as Record<string, unknown>, nowMs)
+    if (row) rows.push(row)
   }
-  return rows
+  return { rows, sinceMs, truncated: snapshot.docs.length > limit }
 }
 
 installEmailDeliverabilityPreflight()

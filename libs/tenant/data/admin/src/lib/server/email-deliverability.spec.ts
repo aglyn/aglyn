@@ -49,7 +49,9 @@ jest.mock('./firebase-admin', () => ({
 
 import {
   filterDeliverableRecipients,
-  listMailGatewayLedgers,
+  listRecentlyRefusedMailGatewayLedgers,
+  mailGatewayLedgerRow,
+  mailGatewayWindowStartMs,
   readMailDomains,
   readMailGatewayLedgers,
   recordDeliverabilityFromDeliveryEvents,
@@ -191,9 +193,45 @@ describe('the ledger', () => {
     )
     expect(store.docs('mailGatewayLedger')['aglyn.com~barracuda']).toMatchObject({ blocked: 2, shared: true })
     expect(store.docs('mailGatewayLedger')['mail.acme.example~google']).toMatchObject({ delivered: 1, shared: false })
-    const rows = await listMailGatewayLedgers({}, deps())
+    const { rows, truncated } = await listRecentlyRefusedMailGatewayLedgers({}, deps())
     expect(rows.find((row) => row.id === 'aglyn.com~barracuda')).toMatchObject({ shared: true, holds: true })
+    expect(truncated).toBe(false)
     delete process.env.USAGE_EMAIL_FROM
+  })
+
+  it('reads a stored ledger as a staff row with its standing and whether it holds', () => {
+    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+    const held = mailGatewayLedgerRow(
+      'acme.example~proofpoint',
+      {
+        sendingDomain: 'acme.example',
+        gateway: 'proofpoint',
+        blocked: 2,
+        lastBlockedAtMs: NOW,
+        lastBlockedDetail: '550 5.7.1 rejected by policy',
+        days: { [day(NOW)]: { blocked: 1 }, [day(NOW - 3 * DAY)]: { blocked: 1 } },
+        updatedAtMs: NOW,
+      },
+      NOW,
+    )
+    expect(held).toMatchObject({
+      shared: false,
+      holds: true,
+      lastBlockedDetail: '550 5.7.1 rejected by policy',
+      standing: { blocked30: 2, delivered30: 0 },
+    })
+    const cleared = mailGatewayLedgerRow(
+      'acme.example~proofpoint',
+      { gateway: 'proofpoint', days: { [day(NOW)]: { blocked: 2, delivered: 1 } } },
+      NOW,
+    )
+    expect(cleared?.holds).toBe(false)
+    expect(mailGatewayLedgerRow('nonsense', {}, NOW)).toBeNull()
+  })
+
+  it('starts the window at midnight UTC of its oldest day, so every refusal a hold counts is inside it', () => {
+    const since = mailGatewayWindowStartMs(NOW)
+    expect(new Date(since).toISOString()).toBe('2026-08-26T00:00:00.000Z')
   })
 
   it('keeps an organization’s mailbox ledger under the organization', async () => {

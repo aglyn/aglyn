@@ -478,7 +478,11 @@ async function handler(request: Request): Promise<Response> {
               'member.role': role,
               signInUrl: origin,
             },
-            { brandLogoUrl: branding.emailLogoUrl, brandHomeUrl: branding.homeUrl },
+            {
+              brandLogoUrl: branding.emailLogoUrl,
+              brandHomeUrl: branding.homeUrl,
+              brandPrimaryColor: branding.primaryColor,
+            },
           )
           await sendEmail({
             to: email,

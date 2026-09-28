@@ -33,6 +33,7 @@ export type CrmApiRoute =
   | 'company-delete'
   | 'contacts-merge'
   | 'email-send'
+  | 'email-check'
   | 'erase-person'
   | 'org-activity'
   | 'recipe-install'

@@ -119,6 +119,12 @@ describe('listingIsMissing (AGL-2700)', () => {
     ).toBe(true)
   })
 
+  it('reads as unavailable while its publishing workspace is locked (AGL-3365)', () => {
+    expect(
+      listingIsMissing({ $id: 'abc', deletedAt: null, workspaceLockedAt: 'NOW' }, 'success'),
+    ).toBe(true)
+  })
+
   it('holds off while the read is still loading', () => {
     expect(listingIsMissing(undefined, 'loading')).toBe(false)
   })

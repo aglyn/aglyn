@@ -129,6 +129,13 @@ const DOCUMENTED_COPIES: Record<string, string> = {
     "the checkout duplicate guard would have made a third. They now all import " +
     '`isTenantSubscriptionLive` from here, so the tenant side has one copy ' +
     'exactly as the org side does.',
+  'libs/plugins/commerce/src/lib/server/recurring-charges.ts':
+    'A deliberate SUPERSET — it adds `unpaid` and `incomplete`. The question ' +
+    'is "can this tenant subscription still produce a charge", so a security ' +
+    'lock can pause every schedule Stripe could still bill (AGL-3364); an ' +
+    'unpaid or incomplete subscription is retried and would charge through ' +
+    'the lock. Answering with the "may this org subscribe" triple would leave ' +
+    'exactly those running. Pinned by recurring-charges.spec.ts.',
   'tools/scripts/lib/money-back-book.mjs':
     'A deliberate SUPERSET — it adds `unpaid`. The question is "will this ' +
     'subscription bill AGAIN", so the set is forward exposure rather than ' +

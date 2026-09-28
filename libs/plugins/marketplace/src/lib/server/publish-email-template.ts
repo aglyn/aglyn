@@ -38,6 +38,7 @@ import {
 } from '../model'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { listingSubmissionRefusal } from './listing-screen'
 import { refreshListingQueryFields } from './listing-query-fields'
 
 /**
@@ -197,6 +198,20 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
       ? 1
       : Number(existing.docs[0].get('latestVersion') ?? 0) + 1
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
+
+    // The phishing screen, before anything is listed (AGL-3365).
+    const screened = await listingSubmissionRefusal({
+      publisherOrgId: publisher.orgId,
+      content: {
+        displayName,
+        publisherName: publisher.displayName,
+        description,
+        emailNodes: sanitized.nodes,
+      },
+      official: decoded['staff'] === true,
+      org: orgForHost.org ?? null,
+    })
+    if (screened) return res.status(screened.status).json(screened.body)
 
     await listingRef.set(
       {

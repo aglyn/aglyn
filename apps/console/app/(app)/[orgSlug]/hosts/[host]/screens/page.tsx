@@ -122,6 +122,8 @@ import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
+import PageHoldChips from '../../../../../../components/page-holds/page-hold-chips.component'
+import usePageHolds from '../../../../../../components/page-holds/use-page-holds'
 import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { resolveScreenLiveUrl } from '../../../../../../constants/tenant-links'
@@ -838,11 +840,17 @@ function Screens(props) {
    * copy says so; it must never imply the reader would land beside them.
    */
   const { peopleIn } = usePresenceSummary(hostId)
+  // Held or flagged by the page review (AGL-3374) — pages and collection
+  // templates alike — beside who is in it.
+  const { holds: pageHolds } = usePageHolds(hostId)
   const renderRowPresence = useCallback(
     (row: { $id: string }) => (
-      <DocumentPresenceChips people={peopleIn('screen', row.$id)} />
+      <>
+        <PageHoldChips holds={pageHolds} target={{ type: 'screen', id: row.$id }} />
+        <DocumentPresenceChips people={peopleIn('screen', row.$id)} />
+      </>
     ),
-    [peopleIn],
+    [peopleIn, pageHolds],
   )
 
   const handleRowOpen = useCallback(

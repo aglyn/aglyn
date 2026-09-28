@@ -39,6 +39,10 @@ See [What each plan includes](./overview.md#what-each-plan-includes).
    contacts were **updated**, and how many rows were **skipped** — with a
    **Download skipped rows** button that gives you those rows back as a CSV, with
    a last column saying why, so you can fix them and import that file again.
+   When some of the imported addresses are on a domain with no mail server, the
+   result says how many: those records read **Would bounce** (see
+   [the lead's email state](./leads.md#email-state)), and campaigns and
+   sequences skip them.
 
 Closing the drawer during an import stops it after the batch in progress. Rows
 already imported stay imported; run the same file again to finish, and the rows

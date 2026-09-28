@@ -185,6 +185,17 @@ export async function composeAuthorTemplatePage(options: {
       // The designated screen's host variables, and its layout's, fill in
       // from this site, as the built-in author page's already do (AGL-2883).
       host: host as Aglyn.HostTokenSource,
+      // Named as the author template it is if the page review holds it
+      // (AGL-3374); without it the site's built-in author page serves.
+      page: {
+        template: {
+          role: 'entry',
+          route: '/author/:slug',
+          collectionName: 'Authors',
+          entryPath: `/author/${content.slug}`,
+          fallback: 'built-in-design',
+        },
+      },
     })
     if (!nodes) return null
     /*

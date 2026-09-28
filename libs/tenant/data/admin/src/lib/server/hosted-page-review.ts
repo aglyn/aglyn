@@ -72,17 +72,26 @@
  *=========================================*/
 
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
-import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import {
+  heldPageConsolePath,
+  heldPageDetails,
+  heldPageLabel,
+  heldPageVisitorSentence,
+  type HeldPageSubject,
+} from '@aglyn/shared-util-email/held-page'
 import { screenHostedPage } from '@aglyn/shared-util-email/hosted-page-screen'
 import {
   lookalikeBrandForHost,
   phishingScreenBrandLabel,
   type PhishingScreenSignal,
+  describePhishingScreenSignals,
+  isYoungWorkspaceAge,
   signalsThatHold,
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
-import { notifyStaff } from './notifications'
+import { describeHeldPage, type HostedPageContext } from './held-page-subject'
+import { notifyRiskEvent } from './risk-notice'
 import { orgAgeDays } from './org-age'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
 import {
@@ -110,6 +119,13 @@ export interface HostedPageReviewRequest {
   org?: Record<string, unknown> | null
   orgId?: string | null
   nowMs?: number
+  /**
+   * What the composer knows about the page (AGL-3374): the screen document,
+   * the template route it is rendering, the variant, and a way to read the
+   * layouts and components composed into it. Read only when a row is filed,
+   * to name the page — never to decide whether it serves.
+   */
+  page?: HostedPageContext | null
 }
 
 export type HostedPageReviewOutcome =
@@ -134,23 +150,46 @@ const PAGE_MEMO_TTL_MS = 60_000
 const pageMemo = new Map<string, { state: HeldOutboundSendState; atMs: number }>()
 /** The version each page last served clean, as this process last wrote it. */
 const servedMemo = new Map<string, string>()
+/** Lookalike hosts this process already flagged for an established page, and when. */
+const flaggedMemo = new Map<string, number>()
+const FLAGGED_MEMO_TTL_MS = 60 * 60_000
 
 /** Test seam: forget what this process learned. */
 export function resetHostedPageReviewMemoForTests(): void {
   pageMemo.clear()
   servedMemo.clear()
+  flaggedMemo.clear()
 }
 
-/** The page's public URL, for the review row. Best effort; the row stands without it. */
-function pageUrl(host: Record<string, unknown> | null, screenId: string): string | null {
-  const subdomain = typeof host?.['subdomain'] === 'string' ? (host['subdomain'] as string) : ''
-  const cname = typeof host?.['cname'] === 'string' ? (host['cname'] as string) : ''
-  const origin = cname ? `https://${cname}` : subdomain ? `https://${subdomain}.${TENANT_APEX}` : ''
-  if (!origin) return null
-  const screens = (host?.['screens'] ?? {}) as Record<string, unknown>
-  const path = typeof screens[screenId] === 'string' ? (screens[screenId] as string) : ''
-  const clean = path.replace(/^\/+|\/+$/g, '')
-  return `${origin}/${clean === 'index' ? '' : clean}`
+/**
+ * The subject a row already stored, or a fresh description (AGL-3374). A row
+ * that names its page is not described again, so the reads the description
+ * may make are paid once per row, not once per render.
+ */
+async function subjectForRow(
+  reviewId: string,
+  describe: () => Promise<HeldPageSubject>,
+): Promise<HeldPageSubject> {
+  const stored = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection(ABUSE_REPORT_COLLECTION)
+    .doc(reviewId)
+    .get()
+    .then((row) => storedSubject(row.get('heldPage')))
+    .catch(() => null)
+  return stored ?? describe()
+}
+
+/** A row's stored subject, when it has one. */
+function storedSubject(heldPage: unknown): HeldPageSubject | null {
+  const subject = (heldPage as { subject?: HeldPageSubject } | null | undefined)?.subject
+  return subject && typeof subject === 'object' && subject.screenId ? subject : null
+}
+
+/** The row's first line, naming the page and where it was seen. */
+function pageHeadline(subject: HeldPageSubject, siteName: string): string {
+  return [`${heldPageLabel(subject)} of ${siteName}.`, ...heldPageDetails(subject)].join(' ')
 }
 
 /**
@@ -164,7 +203,6 @@ export async function reviewHostedPage(
   if (!found.signals.length) return { outcome: 'serve' }
 
   const nowMs = request.nowMs ?? Date.now()
-  let reviewId = ''
   try {
     const [host, owner] = await Promise.all([
       request.host !== undefined ? request.host : getHostDocAdmin(request.hostId),
@@ -179,10 +217,40 @@ export async function reviewHostedPage(
     const identity = workspaceScreenIdentity({ org, host })
     const verdict = screenHostedPage({ nodes: request.nodes, ...identity })
     const ageDays = orgAgeDays((org as { createdAt?: unknown } | null)?.createdAt, nowMs)
+    // Every workspace is screened, however old: an established account can
+    // be compromised, and a compromised account publishing a lure is the
+    // same harm as a new one. What differs is what a hold may take DOWN.
+    // Holding content that is already live serves its last clean version or
+    // nothing, and on a real business's home page that is an outage the
+    // screen caused (aglyn.com, 2026-09-28, a page that had served clean
+    // until a rule changed). So for an established workspace:
+    //   - NEW content (a new version of a live page, or a page that has
+    //     never been live) holds, exactly as for a young workspace; the live
+    //     page keeps serving its last clean version, or the new page waits;
+    //   - content ALREADY LIVE keeps serving, and is flagged to staff as
+    //     urgent, who lock the site if it is impersonation.
+    if (!isYoungWorkspaceAge(ageDays)) {
+      const strong = signalsThatHold(verdict.signals, { ageDays })
+      if (!strong.length) return { outcome: 'serve' }
+      if (await isAlreadyLive(request.hostId, request.screenId, request.versionId, nowMs)) {
+        await flagLivePage({
+          hostId: request.hostId,
+          screenId: request.screenId,
+          versionId: request.versionId,
+          orgId,
+          host,
+          signals: strong,
+          nowMs,
+          page: request.page ?? null,
+          identity,
+        })
+        return { outcome: 'serve' }
+      }
+    }
     const signals = signalsThatHold(verdict.signals, { ageDays })
     if (!signals.length) return { outcome: 'serve' }
 
-    reviewId = pageReviewId(request.hostId, request.screenId, signals)
+    const reviewId = pageReviewId(request.hostId, request.screenId, signals)
     const reference = heldOutboundReference(reviewId)
     const memo = pageMemo.get(reviewId)
     if (memo && nowMs - memo.atMs < PAGE_MEMO_TTL_MS) {
@@ -190,10 +258,26 @@ export async function reviewHostedPage(
         ? { outcome: 'serve' }
         : { outcome: memo.state === 'rejected' ? 'rejected' : 'held', reviewId, reference }
     }
-    const url = pageUrl(host, request.screenId)
+    // The page by its real name and route (AGL-3374): a template, a list,
+    // a variant, or a page whose flagged content lives in its layout.
+    const subject = await subjectForRow(reviewId, async () =>
+      describeHeldPage({
+        hostId: request.hostId,
+        screenId: request.screenId,
+        versionId: request.versionId,
+        host,
+        page: request.page,
+        signals,
+        identity,
+        live: false,
+        previousVersionId: await servedPageVersion(request.hostId, request.screenId),
+      }),
+    )
+    const url = subject.entryUrl ?? subject.url
     const flagged = flaggedHostOf(signals)
-    const pageName =
+    const siteName =
       typeof host?.['name'] === 'string' && host['name'] ? `"${host['name']}"` : 'a site'
+    const label = heldPageLabel(subject)
     const state = await fileOutboundHold({
       reviewId,
       heldSend: {
@@ -202,20 +286,24 @@ export async function reviewHostedPage(
         hostId: request.hostId,
         orgId,
         contentHash: outboundContentHash([signals]),
-        subject: (url ?? `screen ${request.screenId}`).slice(0, 300),
+        subject: label.slice(0, 300),
         fromName: null,
         signals,
         state: 'held',
         heldAtMs: nowMs,
         ageDays,
       },
-      extra: { heldPage: { screenId: request.screenId, versionId: request.versionId, url } },
+      extra: {
+        heldPage: { screenId: request.screenId, versionId: request.versionId, url, subject },
+      },
       headline:
-        `Held a published page of ${pageName}${url ? ` (${url})` : ''}, version ` +
-        `${request.versionId}, from a workspace ${ageDays ?? '?'} day(s) old. The page ` +
-        'serves its last clean version, or nothing, until this is decided.',
+        `Held ${pageHeadline(subject, siteName)} Version ${request.versionId}, from a ` +
+        `workspace ${ageDays ?? '?'} day(s) old. ${heldPageVisitorSentence(subject)}`,
       alertTitle: 'Published page held for review — possible phishing',
-      alertBody: `A page ${url ? `at ${url} ` : ''}was held before it went live.`,
+      alertBody: `${label.charAt(0).toUpperCase()}${label.slice(1)} was held before it went live.`,
+      // The owners' words for it, and where they fix it (AGL-3368, AGL-3374).
+      item: { label, path: heldPageConsolePath(subject, request.hostId) },
+      page: subject,
       // The page itself is what was reported; the flagged host, when there
       // is one, is named in the details and on `reportedHostname`.
       url,
@@ -226,18 +314,10 @@ export async function reviewHostedPage(
       ? { outcome: 'serve' }
       : { outcome: state === 'rejected' ? 'rejected' : 'held', reviewId, reference }
   } catch (error) {
-    // Closed only for what holds whoever the workspace is: a soft signal
-    // needs the workspace's age to hold at all, and that is what failed.
-    if (!signalsThatHold(found.signals, { ageDays: null }).length) {
-      console.error('[page-review] a page could not be reviewed — serving it', error)
-      return { outcome: 'serve' }
-    }
-    console.error('[page-review] a flagged page could not be reviewed — not serving it', error)
-    return {
-      outcome: 'held',
-      reviewId,
-      reference: reviewId ? heldOutboundReference(reviewId) : '',
-    }
+    // Open: a review that could not run must not take a live page down —
+    // the screen failing is not evidence about the page.
+    console.error('[page-review] a flagged page could not be reviewed — serving it', error)
+    return { outcome: 'serve' }
   }
 }
 
@@ -249,6 +329,132 @@ function pageReviewRef(hostId: string, screenId: string) {
     .doc(hostId)
     .collection(PAGE_REVIEW_SUBCOLLECTION)
     .doc(screenId)
+}
+
+/**
+ * Is this version of the page already what visitors receive? It is when it
+ * is the version the page last served clean, or when the page has no record
+ * at all and is not new: it went live before the screen existed. A page
+ * created in the last {@link NEW_PAGE_DAYS} days with no record has never
+ * been live, so holding it takes nothing down.
+ */
+const NEW_PAGE_DAYS = 7
+async function isAlreadyLive(
+  hostId: string,
+  screenId: string,
+  versionId: string,
+  nowMs: number,
+): Promise<boolean> {
+  const lastClean = await servedPageVersion(hostId, screenId)
+  if (lastClean) return lastClean === versionId
+  try {
+    const screen = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostId)
+      .collection('screens')
+      .doc(screenId)
+      .get()
+    const created = screen.get('createdAt') as { toMillis?: () => number } | number | undefined
+    const createdMs =
+      typeof created === 'number' ? created : typeof created?.toMillis === 'function' ? created.toMillis() : null
+    // No readable creation time: an old page, so live.
+    return createdMs === null || nowMs - createdMs >= NEW_PAGE_DAYS * 24 * 60 * 60 * 1000
+  } catch {
+    return true
+  }
+}
+
+/**
+ * A page ALREADY LIVE carries a strong signal: file one urgent abuse row for
+ * it (keyed on the page and its signals, so a busy page is one row) and, the
+ * first time, tell staff and the owners through the `page-flagged` notice.
+ * The page keeps serving; staff lock the site if it is impersonation or the
+ * account looks compromised. Once per page and signal set per process.
+ */
+async function flagLivePage(input: {
+  hostId: string
+  screenId: string
+  versionId: string
+  orgId: string | null
+  host: Record<string, unknown> | null
+  signals: readonly PhishingScreenSignal[]
+  nowMs: number
+  page?: HostedPageContext | null
+  identity?: ReturnType<typeof workspaceScreenIdentity>
+}): Promise<void> {
+  const key = `${input.hostId}\n${input.screenId}\n${input.signals.map((signal) => canonicalJson(signal)).sort().join('\n')}`
+  const at = flaggedMemo.get(key)
+  if (at !== undefined && input.nowMs - at < FLAGGED_MEMO_TTL_MS) return
+  flaggedMemo.set(key, input.nowMs)
+  try {
+    const reviewId = pageReviewId(input.hostId, `${input.screenId}/live`, input.signals)
+    const reference = heldOutboundReference(reviewId)
+    const evidence = describePhishingScreenSignals(input.signals).join(' ')
+    const flagged = flaggedHostOf(input.signals)
+    const ref = firebaseAdmin.app().firestore().collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
+    const existing = await ref.get()
+    const first = !existing.exists
+    // Named once, when the row is new (AGL-3374).
+    const subject =
+      (existing.exists ? storedSubject(existing.get('heldPage')) : null) ??
+      (await describeHeldPage({
+        hostId: input.hostId,
+        screenId: input.screenId,
+        versionId: input.versionId,
+        host: input.host,
+        page: input.page,
+        signals: input.signals,
+        identity: input.identity ?? workspaceScreenIdentity({ host: input.host }),
+        live: true,
+        previousVersionId: null,
+      }))
+    const url = subject.entryUrl ?? subject.url
+    const siteName =
+      typeof input.host?.['name'] === 'string' && input.host['name']
+        ? `"${input.host['name']}"`
+        : 'a site'
+    await ref.set(
+      {
+        reference,
+        category: 'phishing',
+        severity: 'urgent',
+        source: 'outbound-screen',
+        url,
+        reportedHostname: flagged,
+        hostId: input.hostId,
+        orgId: input.orgId,
+        details: [
+          `LIVE: ${pageHeadline(subject, siteName)} It was flagged by the phishing screen and is still serving.`,
+          evidence,
+          'Lock the site if it is impersonation or the account looks compromised; dismiss this if the content is theirs.',
+        ].join('\n'),
+        reporterEmail: null,
+        reporterName: null,
+        dmca: null,
+        heldPage: { screenId: input.screenId, versionId: input.versionId, url, subject },
+        riskNotice: { kind: 'page-flagged' },
+        reportCount: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(first ? { status: 'open', createdAt: FieldValue.serverTimestamp() } : {}),
+      },
+      { merge: true },
+    )
+    if (!first) return
+    await notifyRiskEvent({
+      kind: 'page-flagged',
+      orgId: input.orgId,
+      hostId: input.hostId,
+      reviewId,
+      reference,
+      item: { label: heldPageLabel(subject), path: heldPageConsolePath(subject, input.hostId) },
+      page: subject,
+      staffEvidence: [...heldPageDetails(subject), evidence].join(' '),
+    })
+  } catch (error) {
+    console.error('[page-review] a live page could not be flagged', error)
+  }
 }
 
 /**
@@ -297,7 +503,11 @@ export async function recordServedPageVersion(
  *
  * - `site` — a custom domain a site is served on (the attach route);
  * - `sending` — a custom domain a workspace sends email as, when it is
- *   added and again when it verifies (`sending-domains.ts`).
+ *   added and again when it verifies (`sending-domains.ts`);
+ * - `link` — a link a merchant configured that a buyer or a server would
+ *   follow: a product's paid download or video hotlink, a supplier's order
+ *   webhook (AGL-3363). The link itself is refused where it is followed; this
+ *   files it, and tells the site's managers once ({@link notifyLookalikeLink}).
  *
  * Not refused, because the domain is the merchant's own registration and
  * the platform cannot tell a brand's own agency attaching `paypal-promo.com`
@@ -312,19 +522,26 @@ export async function recordServedPageVersion(
  * Never throws: the write it rides on has already happened.
  */
 export async function flagLookalikeDomain(input: {
-  kind: 'site' | 'sending'
+  kind: 'site' | 'sending' | 'link'
   hostId: string | null
   orgId: string | null
   domain: string
+  /** For a `link`: where it was configured, as staff read it. */
+  where?: string
 }): Promise<'flagged' | 'clean' | 'failed'> {
   const domain = String(input.domain ?? '').trim().toLowerCase()
   const brand = lookalikeBrandForHost(domain)
   if (!brand) return 'clean'
   const label = phishingScreenBrandLabel(brand.id)
   const sending = input.kind === 'sending'
+  const link = input.kind === 'link'
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const owner = sending ? `orgs/${input.orgId ?? ''}/sendingDomains` : `hosts/${input.hostId ?? ''}/cname`
+    const owner = sending
+      ? `orgs/${input.orgId ?? ''}/sendingDomains`
+      : link
+        ? `hosts/${input.hostId ?? ''}/links`
+        : `hosts/${input.hostId ?? ''}/cname`
     const reviewId = heldOutboundReviewId(owner, domain)
     const reference = heldOutboundReference(reviewId)
     const ref = firestore.collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
@@ -342,13 +559,18 @@ export async function flagLookalikeDomain(input: {
         details: [
           sending
             ? `A workspace added ${domain} as a domain to send email from.`
-            : `A site attached the custom domain ${domain}.`,
+            : link
+              ? `A site configured a link to ${domain} (${input.where ?? 'a commerce link'}).`
+              : `A site attached the custom domain ${domain}.`,
           `${domain} wears the ${label} name but is not ${label}'s domain.`,
           sending
             ? 'Email from it is held at the send seam for every workspace. Mark this actioned ' +
               'and lock the workspace if it is impersonation; dismiss it if the brand is theirs.'
-            : 'Its pages are still screened as they are served. Mark this actioned ' +
-              'and lock the site if it is impersonation; dismiss it if the brand is theirs.',
+            : link
+              ? 'Nobody is sent to it: the link is refused wherever it is followed. Mark this ' +
+                'actioned and lock the site if it is impersonation.'
+              : 'Its pages are still screened as they are served. Mark this actioned ' +
+                'and lock the site if it is impersonation; dismiss it if the brand is theirs.',
         ].join('\n'),
         reporterEmail: null,
         reporterName: null,
@@ -359,16 +581,32 @@ export async function flagLookalikeDomain(input: {
       },
       { merge: true },
     )
-    if (first) {
-      await notifyStaff({
-        type: 'system.abuseReportUrgent',
-        title: sending
-          ? 'Sending domain flagged — possible brand impersonation'
-          : 'Custom domain flagged — possible brand impersonation',
-        body:
-          `A ${sending ? 'workspace added the sending domain' : 'site attached'} ${domain}, ` +
-          `which looks like ${label}. Reference ${reference}.`,
-        link: '/admin/abuse-reports',
+    if (first && link) {
+      await notifyLookalikeLink({
+        hostId: input.hostId,
+        orgId: input.orgId,
+        domain,
+        label,
+        where: input.where ?? 'a commerce link',
+        reference,
+        reviewId,
+      })
+    } else if (first) {
+      // The owners hear that the domain is waiting on a routine review — not
+      // which name it resembles; staff get the brand and a link to the row.
+      await notifyRiskEvent({
+        kind: 'domain-flagged',
+        orgId: input.orgId,
+        hostId: input.hostId,
+        reviewId,
+        reference,
+        item: {
+          label: sending ? `the sending domain ${domain}` : `the custom domain ${domain}`,
+          // Emails → Sending, or the site's Domain settings.
+          path: sending ? '/org/emails/sending' : input.hostId ? `/${input.hostId}/admin/domain` : null,
+        },
+        staffEvidence:
+          `${sending ? 'Sending domain' : 'Custom domain'} ${domain} looks like ${label}.`,
       })
     }
     return 'flagged'
@@ -376,6 +614,39 @@ export async function flagLookalikeDomain(input: {
     console.error('[page-review] a lookalike domain could not be flagged', error)
     return 'failed'
   }
+}
+
+/**
+ * Tell staff and the site's managers and the workspace's owners, once per
+ * (site, domain), that a link the merchant configured was refused because it
+ * wears another brand's name (AGL-3363), through the risk notice seam
+ * (AGL-3368). The merchant reads the catalog's `link-blocked` words — what
+ * was refused and how to fix it, never how the check works; staff get the
+ * brand and a link to the row. Never throws.
+ */
+export async function notifyLookalikeLink(input: {
+  hostId: string | null
+  orgId?: string | null
+  domain: string
+  label: string
+  where: string
+  reference: string
+  reviewId?: string | null
+}): Promise<void> {
+  await notifyRiskEvent({
+    kind: 'link-blocked',
+    orgId: input.orgId ?? null,
+    hostId: input.hostId,
+    reviewId: input.reviewId ?? null,
+    reference: input.reference,
+    item: {
+      label: `${input.where} pointing to ${input.domain}`,
+      path: input.hostId ? `/${input.hostId}/products` : null,
+    },
+    staffEvidence:
+      `A site configured ${input.where} to ${input.domain}, which looks like ${input.label}. ` +
+      'It is refused wherever it is followed.',
+  }).catch(() => undefined)
 }
 
 /** A site's custom domain, through {@link flagLookalikeDomain}. */

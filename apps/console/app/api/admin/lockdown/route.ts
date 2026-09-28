@@ -43,9 +43,13 @@
  * A lock can also stop BILLING (AGL-3359): `cancelSubscription: true` on an
  * org lock cancels the workspace's subscriptions now, no refund, and
  * `lockOwnedWorkspaces: true` on a user lock locks and cancels every
- * workspace that account owns. Both run after the lock is written, report as
- * their own step, and can never undo or hide the lock. No flag is implied by
- * a reason — the console defaults them on for `security` only.
+ * workspace that account owns. An org or host lock can also stop the SITES'
+ * money (AGL-3364): `pauseRenewals: true` pauses the membership renewals
+ * they sell and `pausePayouts: true` switches the seller to manual payouts;
+ * the lift resumes and restores exactly what that lock paused. All of them
+ * run after the lock is written, report as their own step, and can never
+ * undo or hide the lock. No flag is implied by a reason — the console
+ * defaults them on for `security` only.
  *
  * Every action also ANSWERS WITH A FRESH READ of what it wrote (AGL-1571).
  * A click is a request, and a request that never left the pointer looks
@@ -92,7 +96,9 @@ import {
   invalidateTokenRevocationCache,
   invalidateUserLockdownCache,
   isImpersonationSession,
+  listOrgMembers,
   lockdownJsonResponse,
+  notifyRiskEvent,
   readSignupsCreationTriggerStatus,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -101,6 +107,20 @@ import {
   applyHostLockdown,
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
+import {
+  LOCKDOWN_RESEND_MAX_TARGETS,
+  type LockdownNoticeEffects,
+  lockRecipientsFor,
+  resendLockdownOwnerNotices,
+  sendLockdownOwnerNotice,
+  type StandingLock,
+  standingLockFrom,
+} from '../../../../utils/server/lockdown-owner-notice'
+import { listRecurringChargeSources } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
+import {
+  listPayoutAccountSources,
+  runOrgLockdownParticipants,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-lockdown'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export const dynamic = 'force-dynamic'
@@ -585,6 +605,50 @@ interface LockRequest {
 type OrgSnapshot = FirebaseFirestore.DocumentSnapshot
 
 /**
+ * The owners' notice for one lock or lift (AGL-3368), reported as its own
+ * step beside the billing ones so a lock can never skip its email silently.
+ * Runs after the lock is durable and never able to undo it.
+ */
+async function ownerNoticeStep(options: {
+  firestore: AdminFirestore
+  action: 'lock' | 'unlock'
+  scope: string
+  targetId: string
+  orgId?: string | null
+  emailOwners: boolean
+  lock: LockRequest
+  effects?: LockdownNoticeEffects
+}): Promise<{ ownerNotice?: Record<string, unknown> }> {
+  const step = await sendLockdownOwnerNotice({
+    firestore: options.firestore,
+    notifyRisk: notifyRiskEvent,
+    action: options.action,
+    scope: options.scope,
+    targetId: options.targetId,
+    orgId: options.orgId ?? null,
+    emailOwners: options.emailOwners,
+    lock: options.lock,
+    effects: options.effects,
+  })
+  return step ? { ownerNotice: { ...step } } : {}
+}
+
+/**
+ * Whether a money step confirmed a change, read off its reported result: a
+ * confirmed step that touched nothing (no subscription to pause, no payout
+ * schedule held) did not happen, as far as the owners' notice is concerned.
+ */
+function stepConfirmed(step: unknown): boolean {
+  const result = step as
+    | { confirmed?: unknown; changed?: unknown; subscriptions?: unknown; outcome?: unknown }
+    | undefined
+  if (result?.confirmed !== true) return false
+  if (typeof result.changed === 'number') return result.changed > 0
+  if (Array.isArray(result.subscriptions)) return result.subscriptions.length > 0
+  return result.outcome !== 'nothing-held' && result.outcome !== 'not-live'
+}
+
+/**
  * One workspace lock or lift, with its audit row — the org scope's whole
  * write path. A function so the user scope's "and the workspaces they own"
  * (AGL-3359) runs the very same path rather than a second copy of it.
@@ -648,7 +712,39 @@ async function lockOrgAndAudit(options: {
       ...auditRotationShape(result.downloadTokensRotated),
     },
   })
-  return result
+  // What the workspace owns inside plugins (AGL-3365) — the marketplace
+  // takes its listings out of browse on a lock, whatever the reason, and
+  // puts back exactly those on the lift. After the lock is durable and
+  // audited; a participant that fails is an unconfirmed line, never an
+  // undone lock.
+  const orgLockParticipants = await orgLockParticipantsAfter({
+    orgId,
+    locked: action === 'lock',
+    reason: action === 'lock' ? lock.reason : null,
+  })
+  return { ...result, ...(orgLockParticipants.length ? { orgLockParticipants } : {}) }
+}
+
+/** The plugins' part in a workspace lock or lift (AGL-3365). Never throws. */
+async function orgLockParticipantsAfter(input: {
+  orgId: string
+  locked: boolean
+  reason: string | null
+}): Promise<Array<{ pluginId: string | null; summary: string; confirmed: boolean }>> {
+  try {
+    const { serverPluginLoader } = await import('../../../../utils/server-plugin-loader')
+    await serverPluginLoader.ensureAll(['consoleApi'])
+    return await runOrgLockdownParticipants(input)
+  } catch (error) {
+    console.error('[admin/lockdown] org lock participants failed', error)
+    return [
+      {
+        pluginId: null,
+        summary: `The plugins were not told: ${(error as Error)?.message ?? String(error)}`,
+        confirmed: false,
+      },
+    ]
+  }
 }
 
 /**
@@ -711,6 +807,191 @@ async function cancelBillingAfterLock(options: {
   }
 }
 
+/**
+ * A tenant lock's money steps (AGL-3364): pause the membership renewals the
+ * locked sites sell, and switch the seller's connected account to manual
+ * payouts. Each is asked for by its own explicit flag — the console ticks
+ * both for `security` only — and runs after the lock is durable. Neither
+ * can throw here: a failure is an unconfirmed step beside a lock that
+ * stands. Loaded on demand, with the plugins that declare what a site
+ * sells, so a lock that asks for neither pays for none of it.
+ */
+async function pauseMoneyAfterLock(options: {
+  firestore: AdminFirestore
+  actor: LockActor
+  scope: 'org' | 'host'
+  targetId: string
+  reason: string
+  renewals: boolean
+  payouts: boolean
+}): Promise<Record<string, unknown>> {
+  if (!options.renewals && !options.payouts) return {}
+  const steps: Record<string, unknown> = {}
+  try {
+    const billing = await import('../../../../utils/server/lockdown-billing-pause')
+    // The plugins declare what a site sells and which other accounts pay a
+    // workspace out (AGL-3365), so they are loaded before the target is read.
+    const { serverPluginLoader } = await import('../../../../utils/server-plugin-loader')
+    await serverPluginLoader.ensureAll(['consoleApi'])
+    const target = await billing.resolveLockdownBillingTarget(
+      options.firestore,
+      options.scope,
+      options.targetId,
+      options.payouts ? listPayoutAccountSources() : [],
+    )
+    const secretKey = process.env.STRIPE_SECRET_KEY
+    if (options.renewals) {
+      const renewals = await billing.pauseMembershipRenewals({
+        firestore: options.firestore,
+        scope: options.scope,
+        targetId: options.targetId,
+        hostIds: target.hostIds,
+        sources: listRecurringChargeSources(),
+        secretKey,
+        actorUid: options.actor.actorUid,
+      })
+      const withLookups = {
+        ...renewals,
+        lookupErrors: [...target.lookupErrors, ...renewals.lookupErrors],
+        confirmed: renewals.confirmed && target.lookupErrors.length === 0,
+      }
+      steps['renewalsPause'] = withLookups
+      await billing
+        .auditLockdownBillingStep(options.firestore, {
+          ...options.actor,
+          scope: options.scope,
+          targetId: options.targetId,
+          reason: options.reason,
+          action: 'lockdown.renewals-pause',
+          result: withLookups,
+        })
+        .catch((error: unknown) =>
+          console.error('[admin/lockdown] renewals audit write failed', error),
+        )
+    }
+    if (options.payouts) {
+      // Every connected account the workspace or its owner is paid through
+      // (AGL-3365): the storefront's, then the marketplace publisher's.
+      // Each on its own record, so the lift restores each exactly.
+      const [primary, ...others] = await billing.pauseAllSellerPayouts({
+        firestore: options.firestore,
+        scope: options.scope,
+        targetId: options.targetId,
+        accounts: target.accounts,
+        secretKey,
+        actorUid: options.actor.actorUid,
+      })
+      steps['payoutsPause'] = primary
+      if (others.length) steps['payoutsPauseOthers'] = others
+      for (const payouts of [primary, ...others]) {
+        await billing
+          .auditLockdownBillingStep(options.firestore, {
+            ...options.actor,
+            scope: options.scope,
+            targetId: options.targetId,
+            reason: options.reason,
+            action: 'lockdown.payouts-pause',
+            result: { ...payouts },
+          })
+          .catch((error: unknown) =>
+            console.error('[admin/lockdown] payouts audit write failed', error),
+          )
+      }
+    }
+  } catch (error) {
+    console.error('[admin/lockdown] money pause failed', error)
+    const failed = {
+      attempted: true,
+      confirmed: false,
+      error: `The pause did not run: ${(error as Error)?.message ?? String(error)}`,
+    }
+    if (options.renewals && !steps['renewalsPause']) {
+      steps['renewalsPause'] = { ...failed, subscriptions: [], lookupErrors: [failed.error] }
+    }
+    if (options.payouts && !steps['payoutsPause']) steps['payoutsPause'] = failed
+  }
+  return steps
+}
+
+/**
+ * A lift's half (AGL-3364): resume exactly the renewals and restore exactly
+ * the payout schedule THIS lock paused, and nothing it did not. Always runs
+ * on an org or host lift — it touches only what this lock recorded, so a
+ * lock that paused nothing costs one read and reports nothing.
+ */
+async function resumeMoneyAfterLift(options: {
+  firestore: AdminFirestore
+  actor: LockActor
+  scope: 'org' | 'host'
+  targetId: string
+}): Promise<Record<string, unknown>> {
+  try {
+    const billing = await import('../../../../utils/server/lockdown-billing-pause')
+    const secretKey = process.env.STRIPE_SECRET_KEY
+    const renewals = await billing.resumeMembershipRenewals({
+      firestore: options.firestore,
+      scope: options.scope,
+      targetId: options.targetId,
+      secretKey,
+    })
+    const payouts = await billing.restoreSellerPayouts({
+      firestore: options.firestore,
+      scope: options.scope,
+      targetId: options.targetId,
+      secretKey,
+    })
+    const steps: Record<string, unknown> = {}
+    if (renewals.subscriptions.length || renewals.lookupErrors.length) {
+      steps['renewalsResume'] = renewals
+      await billing
+        .auditLockdownBillingStep(options.firestore, {
+          ...options.actor,
+          scope: options.scope,
+          targetId: options.targetId,
+          reason: null,
+          action: 'lockdown.renewals-resume',
+          result: { ...renewals },
+        })
+        .catch((error: unknown) =>
+          console.error('[admin/lockdown] renewals audit write failed', error),
+        )
+    }
+    // One restore per account the lock paused (AGL-3365), each to the
+    // schedule saved for it.
+    if (payouts.length) {
+      steps['payoutsRestore'] = payouts[0]
+      if (payouts.length > 1) steps['payoutsRestoreOthers'] = payouts.slice(1)
+      for (const restore of payouts) {
+        await billing
+          .auditLockdownBillingStep(options.firestore, {
+            ...options.actor,
+            scope: options.scope,
+            targetId: options.targetId,
+            reason: null,
+            action: 'lockdown.payouts-restore',
+            result: { ...restore },
+          })
+          .catch((error: unknown) =>
+            console.error('[admin/lockdown] payouts audit write failed', error),
+          )
+      }
+    }
+    return steps
+  } catch (error) {
+    console.error('[admin/lockdown] money resume failed', error)
+    return {
+      renewalsResume: {
+        attempted: true,
+        confirmed: false,
+        subscriptions: [],
+        lookupErrors: [
+          `The resume did not run: ${(error as Error)?.message ?? String(error)}`,
+        ],
+      },
+    }
+  }
+}
+
 /** How many owned workspaces one user lock will lock and cancel. */
 const OWNED_WORKSPACES_MAX = 25
 
@@ -728,6 +1009,8 @@ async function lockOwnedWorkspaces(options: {
   actor: LockActor
   uid: string
   lock: LockRequest
+  /** Email each locked workspace's owners (AGL-3368). */
+  emailOwners: boolean
 }): Promise<Record<string, unknown>> {
   const { firestore, actor, uid, lock } = options
   let owned: OrgSnapshot[]
@@ -776,6 +1059,22 @@ async function lockOwnedWorkspaces(options: {
       orgId,
       reason: lock.reason,
     })
+    // Each workspace locked here is told in its own notice (AGL-3368) —
+    // one this lock did not place was told when it was.
+    const notice = alreadyLocked
+      ? {}
+      : await ownerNoticeStep({
+          firestore,
+          action: 'lock',
+          scope: 'org',
+          targetId: orgId,
+          emailOwners: options.emailOwners,
+          lock,
+          effects: {
+            sessionsRevoked: true,
+            subscriptionCanceled: stepConfirmed(subscriptionCancel),
+          },
+        })
     workspaces.push({
       orgId,
       slug,
@@ -784,6 +1083,7 @@ async function lockOwnedWorkspaces(options: {
       verified,
       confirmed: verified.locked,
       subscriptionCancel,
+      ...notice,
     })
   }
   return {
@@ -928,6 +1228,82 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const action = String(body?.action ?? '')
+
+    /*==========================================
+     * RESEND OWNER NOTICE (AGL-3368)
+     *
+     * For locks that already stand — placed before owner notices existed,
+     * or whose email failed. `{ action: 'resend-notice', targets: [{ scope,
+     * targetId }], sendAgain?: boolean }`: each distinct person gets ONE
+     * email listing everything locked for them, and a (lock, person) pair
+     * already sent is reported, not re-sent, unless `sendAgain`. Super only
+     * (above), and audited.
+     *=========================================*/
+    if (action === 'resend-notice') {
+      const targets = Array.isArray(body?.targets)
+        ? (body.targets as unknown[])
+            .map((entry) => ({
+              scope: String((entry as { scope?: unknown })?.scope ?? ''),
+              targetId: String((entry as { targetId?: unknown })?.targetId ?? '').trim(),
+            }))
+            .filter((entry) => entry.scope && entry.targetId)
+        : []
+      if (!targets.length) {
+        return Response.json({ error: 'Name at least one target' }, { status: 400 })
+      }
+      if (targets.length > LOCKDOWN_RESEND_MAX_TARGETS) {
+        return Response.json(
+          { error: `At most ${LOCKDOWN_RESEND_MAX_TARGETS} targets per resend` },
+          { status: 400 },
+        )
+      }
+      const sendAgain = body?.sendAgain === true
+      const result = await resendLockdownOwnerNotices({
+        firestore,
+        targets,
+        sendAgain,
+        notifyRisk: notifyRiskEvent,
+        readLock: async (lockScope, lockTarget) =>
+          standingLockFrom(
+            firestore,
+            lockScope,
+            lockTarget,
+            (await readLockState(firestore, lockScope, lockTarget)) as never,
+          ),
+        recipientsFor: (lock: StandingLock) =>
+          lockRecipientsFor(firestore, lock, {
+            listOwners: async (orgId) =>
+              (await listOrgMembers(orgId))
+                .filter((member) => member.role === 'owner' || member.role === 'admin')
+                .map((member) => ({
+                  uid: String(member.$id),
+                  email: (member as { email?: string | null }).email ?? null,
+                })),
+            lookupEmail: async (uid) =>
+              String((await findUserByUidAcrossPools(uid))?.record?.email ?? '') || null,
+          }),
+      })
+      await audit({
+        actorUid: decoded.uid,
+        actorEmail: decoded.email ? String(decoded.email) : null,
+        action: 'lockdown.resend-notice',
+        scope: 'lockdown',
+        target: `lockdowns/resend-notice`,
+        before: { targets },
+        after: {
+          sendAgain,
+          confirmed: result.confirmed,
+          sent: result.recipients.filter((entry) => entry.outcome === 'sent').length,
+          alreadySent: result.recipients.filter((entry) => entry.outcome === 'already-sent').length,
+          failed: result.recipients.filter((entry) => entry.outcome === 'failed').length,
+        },
+      })
+      return Response.json(
+        { ok: true, action, sendAgain, ...result },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
     const scope = String(body?.scope ?? '')
     const targetId = String(body?.targetId ?? '').trim()
     if (action !== 'lock' && action !== 'unlock') {
@@ -1084,6 +1460,9 @@ async function handler(request: Request): Promise<Response> {
       )
     }
     const lock = { reason: String(reason), message, untilMs, mode, enforcement }
+    // "Email the owners" (AGL-3368): on unless staff unticked it — a legal
+    // hold. Absent means on, so every existing caller emails.
+    const emailOwners = body?.emailOwners !== false
     const actor = {
       actorUid: decoded.uid,
       actorEmail: decoded.email ? String(decoded.email) : null,
@@ -1207,6 +1586,17 @@ async function handler(request: Request): Promise<Response> {
           ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
+      const featureNotice = featureOrgId
+        ? await ownerNoticeStep({
+            firestore,
+            action,
+            scope,
+            targetId,
+            orgId: featureOrgId,
+            emailOwners,
+            lock,
+          })
+        : {}
       return actionResponse({
         firestore,
         scope,
@@ -1216,6 +1606,7 @@ async function handler(request: Request): Promise<Response> {
         extra: {
           feature: targetId,
           ...(featureOrgId ? { orgId: featureOrgId } : {}),
+          ...featureNotice,
         },
       })
     }
@@ -1278,7 +1669,17 @@ async function handler(request: Request): Promise<Response> {
         scope,
         targetId: hostname,
         action,
-        extra: { domain: hostname },
+        extra: {
+          domain: hostname,
+          ...(await ownerNoticeStep({
+            firestore,
+            action,
+            scope,
+            targetId: hostname,
+            emailOwners,
+            lock,
+          })),
+        },
       })
     }
 
@@ -1363,14 +1764,29 @@ async function handler(request: Request): Promise<Response> {
               actor,
               uid: targetId,
               lock,
+              emailOwners,
             })
           : undefined
+      // The account's own person, at their sign-in address (AGL-3368).
+      const userNotice = await ownerNoticeStep({
+        firestore,
+        action,
+        scope,
+        targetId,
+        emailOwners,
+        lock,
+        effects: {
+          ownedWorkspacesLocked: Array.isArray(ownedWorkspaces?.['workspaces'])
+            ? (ownedWorkspaces['workspaces'] as unknown[]).length
+            : 0,
+        },
+      })
       return actionResponse({
         firestore,
         scope,
         targetId,
         action,
-        ...(ownedWorkspaces ? { extra: { ownedWorkspaces } } : {}),
+        extra: { ...(ownedWorkspaces ? { ownedWorkspaces } : {}), ...userNotice },
       })
     }
 
@@ -1402,12 +1818,49 @@ async function handler(request: Request): Promise<Response> {
               reason: lock.reason,
             })
           : undefined
+      // The workspace's SITES' money (AGL-3364): their members' renewals and
+      // the seller's payouts, paused after the lock, restored by the lift.
+      const money =
+        action === 'lock'
+          ? await pauseMoneyAfterLock({
+              firestore,
+              actor,
+              scope: 'org',
+              targetId,
+              reason: lock.reason,
+              renewals: body?.pauseRenewals === true,
+              payouts: body?.pausePayouts === true,
+            })
+          : await resumeMoneyAfterLift({ firestore, actor, scope: 'org', targetId })
+      // The owners and admins, last: the notice says what every step above
+      // actually did (AGL-3368).
+      const orgNotice = await ownerNoticeStep({
+        firestore,
+        action,
+        scope,
+        targetId,
+        emailOwners,
+        lock,
+        effects: {
+          sessionsRevoked: Number((result as { tokensRevoked?: unknown }).tokensRevoked ?? 0) > 0,
+          subscriptionCanceled: stepConfirmed(subscriptionCancel),
+          renewalsPaused: stepConfirmed(money['renewalsPause']),
+          payoutsPaused: stepConfirmed(money['payoutsPause']),
+          renewalsResumed: stepConfirmed(money['renewalsResume']),
+          payoutsRestored: stepConfirmed(money['payoutsRestore']),
+        },
+      })
       return actionResponse({
         firestore,
         scope,
         targetId,
         action,
-        extra: { ...result, ...(subscriptionCancel ? { subscriptionCancel } : {}) },
+        extra: {
+          ...result,
+          ...(subscriptionCancel ? { subscriptionCancel } : {}),
+          ...money,
+          ...orgNotice,
+        },
       })
     }
 
@@ -1444,7 +1897,40 @@ async function handler(request: Request): Promise<Response> {
         ...auditRotationShape(result.downloadTokensRotated),
       },
     })
-    return actionResponse({ firestore, scope, targetId, action, extra: result })
+    // The site's money (AGL-3364), after the lock is durable and audited.
+    const money =
+      action === 'lock'
+        ? await pauseMoneyAfterLock({
+            firestore,
+            actor,
+            scope: 'host',
+            targetId,
+            reason: lock.reason,
+            renewals: body?.pauseRenewals === true,
+            payouts: body?.pausePayouts === true,
+          })
+        : await resumeMoneyAfterLift({ firestore, actor, scope: 'host', targetId })
+    const hostNotice = await ownerNoticeStep({
+      firestore,
+      action,
+      scope,
+      targetId,
+      emailOwners,
+      lock,
+      effects: {
+        renewalsPaused: stepConfirmed(money['renewalsPause']),
+        payoutsPaused: stepConfirmed(money['payoutsPause']),
+        renewalsResumed: stepConfirmed(money['renewalsResume']),
+        payoutsRestored: stepConfirmed(money['payoutsRestore']),
+      },
+    })
+    return actionResponse({
+      firestore,
+      scope,
+      targetId,
+      action,
+      extra: { ...result, ...money, ...hostNotice },
+    })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

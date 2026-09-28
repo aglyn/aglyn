@@ -3808,6 +3808,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     () => ({
       columns: listColumns,
       filterMode: 'server' as const,
+      // A server-filtered grid hides its search box unless asked; the
+      // library's search is on the query, so the box is shown.
+      quickFilter: true,
       filterModel: gridFilter.filterModel,
       onFilterModelChange: gridFilter.onFilterModelChange,
       columnVisibilityModel,

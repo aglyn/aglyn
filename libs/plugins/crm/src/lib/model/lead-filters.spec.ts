@@ -86,6 +86,19 @@ describe('leadQueryClause', () => {
     })
   })
 
+  it('offers "Would bounce" and asks it as a query on emailStatus (AGL-3328)', () => {
+    expect(LEAD_EMAIL_FILTERS).toContain('undeliverable')
+    expect(LEAD_EMAIL_FILTER_LABELS.undeliverable).toBe('Would bounce')
+    expect(leadQueryClause({ field: 'emailState', op: 'equals', value: 'undeliverable' })).toEqual({
+      field: 'emailStatus',
+      op: 'equals',
+      value: 'undeliverable',
+    })
+    // "Cannot be emailed" includes it: a prediction is still a reason not to write.
+    const problem = leadQueryClause({ field: 'emailState', op: 'equals', value: 'problem' }) as { value?: unknown }
+    expect(String(problem.value).split(',')).toContain('undeliverable')
+  })
+
   it('asks a lead source by the key its writer stores, and "none" as a null', () => {
     const stored = crmLeadListFields({ leadSource: 'Website  form' }).leadSourceKey
     expect(leadQueryClause({ field: 'leadSource', op: 'equals', value: 'website FORM' })).toEqual({

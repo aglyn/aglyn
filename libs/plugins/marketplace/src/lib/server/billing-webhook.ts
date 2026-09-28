@@ -26,14 +26,18 @@
 import { after } from 'next/server'
 
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
+import { paymentRiskEventFrom } from '@aglyn/aglyn/app-utils/payment-risk'
+import { recordPaymentRiskOnRecord } from '@aglyn/tenant-data-admin/server/payment-risk-record'
 import {
   firebaseAdmin,
+  notifyRiskEvent,
   sendGa4Purchase,
   sendGa4Refund,
   clearConnectPayoutFailure,
   recordConnectPayoutFailure,
   syncConnectAccountStatus,
 } from '@aglyn/tenant-data-admin'
+import { screenMarketplaceSale } from './sale-risk'
 
 /** Stripe failures a redelivery can actually fix. */
 function isTransientStripeStatus(status: number): boolean {
@@ -924,6 +928,49 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   // Recorded and surfaced, never retried: Stripe runs its own retry schedule
   // and a second transfer against an account that just refused one is how a
   // duplicate lands.
+  // A CARD FRAUD SIGNAL ON A MARKETPLACE SALE (AGL-3365).
+  //
+  // An issuer's early fraud warning or a Radar review, landing on a charge
+  // that paid a publisher. The purchase carries the signal (the same
+  // `paymentRisk` field an order or booking carries), and the claim names the
+  // PUBLISHER's workspace, so the platform route counts it on the seller's
+  // ledger against the org that was paid — never the buyer's workspace,
+  // whose card it may have been. The publisher's owners are told, as a shop
+  // is told about its own sale (AGL-3368), in the words for a sale they
+  // cannot refund themselves — the platform is merchant of record — and
+  // staff hear through the seller pattern and the sale-risk row.
+  // Disputes keep their own section below, which claims them the same way.
+  if (type === 'radar.early_fraud_warning.created' || type === 'review.opened') {
+    const risk = paymentRiskEventFrom(type, object)
+    if (!risk?.paymentIntentId) return
+    const firestore = firebaseAdmin.app().firestore()
+    const purchases = await firestore
+      .collection('marketplacePurchases')
+      .where('paymentIntentId', '==', risk.paymentIntentId)
+      .limit(1)
+      .get()
+    if (purchases.empty) return
+    const purchase = purchases.docs[0]
+    const sellerOrgId = String(purchase.get('sellerOrgId') ?? '')
+    await recordPaymentRiskOnRecord(
+      {
+        ref: purchase.ref,
+        signal: risk.signal,
+        hostId: '',
+        orgId: sellerOrgId || null,
+        noticeKind: 'marketplace-sale-warning',
+        subjectLabel: 'a recent marketplace sale',
+        amount: Number.isFinite(Number(purchase.get('amountCents')))
+          ? `$${(Number(purchase.get('amountCents')) / 100).toFixed(2)}`
+          : null,
+        link: '/org/marketplace/payouts',
+        notificationType: 'marketplace.review',
+      },
+      { firestore, notifyRisk: notifyRiskEvent },
+    )
+    return { claimed: true, ...(sellerOrgId ? { orgId: sellerOrgId } : {}) }
+  }
+
   if (type === 'payout.failed' || type === 'transfer.failed') {
     const failedAccountId =
       type === 'payout.failed'
@@ -1131,6 +1178,28 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         clientId: object?.metadata?.ga_client_id,
         stripeCustomerId: String(object?.customer ?? '') || String(buyerUid),
       }).catch(() => undefined))
+      // The sale's fraud shape (AGL-3365): the publisher paying itself, one
+      // card buying for several workspaces, a brand-new publisher's large
+      // sale — and a young publisher's payouts held. Once per sale, after the
+      // response like the GA hit: it reads and files, and the sale it reads
+      // is already recorded. `screenMarketplaceSale` never throws.
+      if (!alreadyRecorded) {
+        after(() =>
+          screenMarketplaceSale(
+            {
+              purchaseRef,
+              sessionId: String(object.id),
+              buyerUid: String(buyerUid),
+              buyerOrgId: buyerOrgId ? String(buyerOrgId) : null,
+              sellerOrgId: String(sellerOrgId),
+              amountCents: grossCents - taxCents,
+              paymentIntentId: String(object?.payment_intent ?? ''),
+              livemode: event?.livemode === true,
+            },
+            { stripeKey: process.env.STRIPE_SECRET_KEY, notifyRisk: notifyRiskEvent },
+          ).catch(() => undefined),
+        )
+      }
       // A refund or a lost dispute that arrived before this document existed
       // is applied NOW (AGL-2148) — revocation, GA and the transfer reversal,
       // by the same function the refund door uses. Last on this path, and
@@ -1274,6 +1343,8 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
     // purpose: a dispute carrying no payment intent cannot be joined to a
     // purchase, which is a fault, not a routine miss.
     let claimed = false
+    // The publisher the disputed sale paid (AGL-3365), for the seller ledger.
+    let sellerOrgId = ''
     if (disputeId && paymentIntentId) {
       const firestore = firebaseAdmin.app().firestore()
       const purchases = await firestore
@@ -1284,6 +1355,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       if (!purchases.empty) {
         claimed = true
         const purchase = purchases.docs[0]
+        sellerOrgId = String(purchase.get('sellerOrgId') ?? '')
         const status = String(object?.status ?? '')
         if (type === 'charge.dispute.created') {
           await purchase.ref.set(
@@ -1338,6 +1410,6 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         )
       }
     }
-    return { claimed }
+    return { claimed, ...(claimed && sellerOrgId ? { orgId: sellerOrgId } : {}) }
   }
 }

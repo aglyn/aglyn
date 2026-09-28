@@ -17,6 +17,11 @@
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
+import {
+  googleMailboxSenderExpectation,
+  type SenderReadiness,
+  type SenderReadinessExpectation,
+} from '@aglyn/shared-util-email'
 import type {
   OutreachMailbox,
   OutreachMailboxStatus,
@@ -42,6 +47,7 @@ import {
   type OutreachMailboxAvailability,
   type OutreachMailboxAvailabilityGate,
   type OutreachMailboxDisconnectResponse,
+  type OutreachMailboxReadinessResponse,
 } from './mailbox-api'
 import {
   mailboxCredentialsRef,
@@ -155,6 +161,8 @@ export interface OutreachMailboxRouteDeps {
     firestore: FirebaseFirestore.Firestore,
     input: { orgId: string; uid: string; addresses: readonly string[]; nowMs: number },
   ): Promise<{ ok: boolean; confirmed?: string[] }>
+  /** SPF, DKIM and DMARC for one sender, looked up and briefly remembered. */
+  readSenderReadiness(expectation: SenderReadinessExpectation, options: { fresh?: boolean }): Promise<SenderReadiness>
 }
 
 export interface OutreachMailboxRoutes {
@@ -166,6 +174,7 @@ export interface OutreachMailboxRoutes {
   status: PluginWebApiHandler
   test: PluginWebApiHandler
   disconnect: PluginWebApiHandler
+  readiness: PluginWebApiHandler
 }
 
 /** Test sends one mailbox may make in an hour. */
@@ -756,7 +765,30 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     return ok({ ok: true, revocation } satisfies OutreachMailboxDisconnectResponse)
   }
 
-  return { availability, connect, oauthCallback, connectComplete, settings, status, test, disconnect }
+  /**
+   * How receivers judge mail from the address a mailbox sends as. Any member
+   * who can see the mailbox can read it: it is a reading of public DNS about
+   * the organization's own domain, and changes nothing.
+   */
+  const readiness: PluginWebApiHandler = async (request) => {
+    if (request.method !== 'POST') return methodNotAllowed('POST')
+    const body = await readBody(request)
+    const gate = await outreachMemberGate(request, body['orgId'], deps.gate)
+    if (gate instanceof Response) return gate
+    const mailboxId = typeof body['mailboxId'] === 'string' ? body['mailboxId'] : ''
+    if (!MAILBOX_ID.test(mailboxId)) return refusal(400, 'invalid-request', 'Name the mailbox.')
+    const snapshot = await mailboxRef(deps.firestore(), gate.orgId, mailboxId).get()
+    const mailbox = readMailbox(mailboxId, snapshot.exists ? snapshot.data() : undefined)
+    if (!mailbox) return refusal(404, 'mailbox-not-found', 'That mailbox is not connected to this organization.')
+    const sendAs = mailbox.sendAs || mailbox.email
+    const expectation = googleMailboxSenderExpectation(sendAs)
+    const read = expectation
+      ? await deps.readSenderReadiness(expectation, { fresh: body['fresh'] === true }).catch(() => null)
+      : null
+    return ok({ ok: true, sendAs, readiness: read } satisfies OutreachMailboxReadinessResponse)
+  }
+
+  return { availability, connect, oauthCallback, connectComplete, settings, status, test, disconnect, readiness }
 }
 
 function googleUnavailable(error: unknown): Response {

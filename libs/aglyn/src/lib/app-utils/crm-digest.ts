@@ -311,6 +311,12 @@ export interface CrmDigestEmailInput {
   hostName: (hostId: string) => string
   /** The brand's support line, already prefixed, or empty. */
   supportLine?: string
+  /**
+   * Leave out the closing paragraph and the support line (AGL-3367), for the
+   * copy that goes inside a system email: its footer says why the mail came
+   * and where to get help, and its body links the settings page.
+   */
+  omitClosing?: boolean
 }
 
 function whenInZone(ms: number, timeZone: string): string {
@@ -389,6 +395,7 @@ export function composeCrmDigestEmailText(input: CrmDigestEmailInput): string {
   for (const hostId of leadHosts) {
     lines.push(`Leads on ${input.hostName(hostId)}: ${input.leadsUrl(hostId)}`)
   }
+  if (input.omitClosing) return lines.join('\n').trimEnd()
   lines.push(
     '',
     'You get this each morning because the Daily CRM digest is on in your ' +

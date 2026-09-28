@@ -39,6 +39,7 @@ import { isEmailConfigured } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCommerceMediaPublishGuard } from './server/media-publish-guard'
+import { registerCommerceRecurringCharges } from './server/recurring-charges'
 import { registerProductCardReader } from './server/product-card'
 import { registerCommerceTaxProfile } from './server/tax-profile'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
@@ -228,6 +229,14 @@ registerPluginJob({
   },
 })
 
+/**
+ * A visitor's payment door: it opens a Stripe Checkout Session for whoever
+ * calls it, so the dispatcher holds it to the card-testing counters
+ * (AGL-3363). Declared here, beside the registration, so the door cannot
+ * exist without it.
+ */
+const CARD_PAYMENT_DOOR = { cardPayment: true } as const
+
 /** Registers the commerce plugin's storefront API routes. */
 export function registerCommerceApi(): void {
   registerProductCardReader()
@@ -244,10 +253,10 @@ export function registerCommerceApi(): void {
   // only covers /products/* and /collections/*, so /products itself, and any
   // designed page with a grid on it, needed this to render server-side.
   registerSitePageEnricher(commerceSitePageEnricher)
-  registerPluginApiRoute('commerce/cart-checkout', cartCheckoutHandler)
+  registerPluginApiRoute('commerce/cart-checkout', cartCheckoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/cart', cartHandler)
   registerPluginApiRoute('commerce/catalog', catalogHandler)
-  registerPluginApiRoute('commerce/checkout', checkoutHandler)
+  registerPluginApiRoute('commerce/checkout', checkoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/download', downloadHandler)
   registerPluginApiRoute('commerce/feed', feedHandler)
   registerPluginApiRoute('commerce/newsletter', newsletterHandler)
@@ -257,7 +266,7 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/product', productHandler)
   registerPluginApiRoute('commerce/related', relatedHandler)
   registerPluginApiRoute('commerce/reservation-availability', reservationAvailabilityHandler)
-  registerPluginApiRoute('commerce/reserve', reserveHandler)
+  registerPluginApiRoute('commerce/reserve', reserveHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/gate', gateHandler)
   registerPluginApiRoute('commerce/member-feed', memberFeedHandler)
   registerPluginApiRoute('commerce/stream', streamHandler)
@@ -294,6 +303,9 @@ export function registerCommerceConsoleApi(): void {
   // back; what a product is, and which of its fields hold paid media, is
   // this plugin's to know.
   registerCommerceMediaPublishGuard()
+  // …and which memberships a site sells, for a security lockdown to pause
+  // (AGL-3364). The lockdown route runs on this surface.
+  registerCommerceRecurringCharges()
   // …and the tax rule, for the webhook that confirms what they charged.
   registerCommerceTaxProfile()
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/

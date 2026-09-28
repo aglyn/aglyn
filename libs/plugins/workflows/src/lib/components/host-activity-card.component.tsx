@@ -37,6 +37,7 @@ import {
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
+import { useResolvedActivityActors } from '@aglyn/tenant-feature-instance/hooks/use-resolved-activity-actors'
 import {
   activityActorLabel,
   activityHref,
@@ -199,10 +200,12 @@ export function HostActivityCard(props: HostActivityCardProps) {
   // otherwise a previous screen's page three opens the next one three pages
   // in, over a history that may not have three.
   useEffect(() => setPage(0), [targetId, hostId])
-  const items = useMemo(
+  const pageItems = useMemo(
     () => sorted.slice(page * pageSize, page * pageSize + pageSize),
     [sorted, page, pageSize],
   )
+  // The page's rows only: a uid off the page is not asked about.
+  const items = useResolvedActivityActors(hostId, pageItems)
   // Three states, not two: a read that never happened must not be reported as
   // an empty history.
   const unreadable = status === 'error' || !hostId

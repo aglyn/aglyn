@@ -88,6 +88,7 @@ export const DOCS_HELP_EXCERPTS = {
   datasets: 'Model structured content with typed fields and relations, then bind it into repeatable components.',
   datasetsAndSchema: 'Field ids vs display names, the typed model, per-plan record quotas, import/export, repeatables with item bindings, and every writer that can append records.',
   deals: 'Every open deal by stage — with an amount, an owner and an expected close — as a board you drag across or a table you page through, and the won and lost history behind it.',
+  deliverabilityChecks: 'Why an email is not sent to a domain that takes no mail, when bulk mail waits behind a gateway refusing your sender, and how sender readiness reads SPF, DKIM and DMARC.',
   designedEmails: 'Build campaign emails in the besigner with email-safe blocks and merge tokens — no separate editor.',
   domainProviders: 'Make hostnames actually resolve on a self-hosted install — choose a domain driver, run the wildcard path end to end, or implement the webhook contract against your own proxy.',
   downgradingAndCanceling: 'What happens when you downgrade, cancel, or delete — when each takes effect, what the cancel dialog offers you, and how to export first.',

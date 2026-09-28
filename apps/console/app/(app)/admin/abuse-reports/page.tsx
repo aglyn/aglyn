@@ -211,10 +211,50 @@ interface AbuseReportRow {
   source: string | null
   /** The held send, when the screen filed this row (AGL-3356). */
   heldSend: HeldSendRow | null
+  /** The page a held or flagged page row is about, by name (AGL-3374). */
+  heldPage: HeldPageRow | null
   /** A Stripe fraud signal, when the billing webhook filed this row (AGL-3356). */
   paymentSignal: PaymentSignalRow | null
   /** A seller's fraud pattern across its sales (AGL-3360). */
   sellerPattern: SellerPatternRow | null
+  /**
+   * The risk notice catalog's staff half (AGL-3368): what the staff alert
+   * said, and every action as a deep link to its real control. Null for a
+   * row from the public report form.
+   */
+  riskNotice: RiskNoticeRow | null
+  /** What the workspace's owners asked, when they requested a review. */
+  ownerReviewRequests: OwnerReviewRequestRow[]
+  reviewRequestedAtMs: number | null
+}
+
+/** `riskNoticePayload()` in /api/admin/abuse-reports (AGL-3368). */
+interface RiskNoticeRow {
+  kind: string
+  noticeId: string | null
+  /** When the owners were told; null for a row filed before they were. */
+  ownersNotifiedAtMs: number | null
+  title: string
+  summary: string
+  reviewable: boolean
+  actions: Array<{ id: string; label: string; hint: string; href: string }>
+}
+
+/** One owner review request, as a note on the row (AGL-3368). */
+interface OwnerReviewRequestRow {
+  atMs: number | null
+  email: string | null
+  note: string
+}
+
+/**
+ * The staff actions that ARE this page's own status control. They are
+ * rendered as buttons that set the row's status draft — Dismiss releases,
+ * Actioned rejects — rather than as links back to the page.
+ */
+const RISK_DECISION_ACTIONS: Record<string, string> = {
+  'staff-release': 'dismissed',
+  'staff-reject': 'actioned',
 }
 
 /**
@@ -288,9 +328,31 @@ interface HeldSendRow {
   reasons: string[]
 }
 
+/**
+ * The page a held or flagged row is about, as `heldPagePayload()` hands it
+ * over (AGL-3374): its name and route, the entry it was showing, where its
+ * flagged content lives, and the console page to open it on.
+ */
+interface HeldPageRow {
+  label: string
+  kind: string | null
+  route: string | null
+  url: string | null
+  entryUrl: string | null
+  details: string[]
+  visitorSentence: string | null
+  consolePath: string | null
+  consoleHref: string | null
+}
+
 /** What a held send's state means, in the words the reviewer acts on. */
 function heldSendStateLine(held: HeldSendRow): string {
   const by = held.decidedBy ? ` by ${held.decidedBy}` : ''
+  if (held.kind === 'listing') {
+    if (held.state === 'released') return `Released${by} — the publisher's next submission of it goes through.`
+    if (held.state === 'rejected') return `Rejected${by} — the marketplace refuses it.`
+    return 'Held — nothing was listed. Dismiss this report (with a note) to release it (the publisher submits it again), or mark it Actioned to reject it. Reviewing leaves it held.'
+  }
   if (held.kind === 'page') {
     if (held.state === 'released') return `Released${by} — the page serves as published.`
     if (held.state === 'rejected') return `Rejected${by} — the page stays unserved.`
@@ -314,6 +376,8 @@ function heldSendKindLabel(kind: string | null): string {
       return 'Outbound campaign'
     case 'page':
       return 'Published page'
+    case 'listing':
+      return 'Marketplace submission'
     case 'message':
       return 'Outbound email'
     default:
@@ -725,6 +789,44 @@ function AdminAbuseReports() {
     onError: onListError,
   })
   const { refresh: refreshReports } = reportList
+
+  /**
+   * THE DEEP LINK (AGL-3368): `?report=<id>` opens one row — the one a staff
+   * alert or a risk notice names — pinned above the queue, since the queue
+   * is paged and that row may be on no page the list has loaded.
+   * `&decide=dismissed|actioned` pre-selects the decision the link was for;
+   * nothing is saved until Save status is pressed. Read from
+   * `window.location` in an effect, as the support queue's `?ticketId=` is,
+   * to stay clear of `useSearchParams`'s Suspense requirement.
+   */
+  const [linkedReport, setLinkedReport] = useState<AbuseReportRow | null>(null)
+  const [linkedMissing, setLinkedMissing] = useState<string | null>(null)
+  const loadLinkedReport = useCallback(
+    async (id: string, decide: string | null) => {
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/admin/abuse-reports?id=${encodeURIComponent(id)}`,
+        )
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || !payload.report) {
+          setLinkedMissing(payload.error ?? `Report ${id} could not be read`)
+          return
+        }
+        const report = payload.report as AbuseReportRow
+        setLinkedReport(report)
+        if (decide) {
+          setDrafts((entries) => ({
+            ...entries,
+            [report.id]: { status: decide, resolution: report.resolution ?? '' },
+          }))
+        }
+      } catch (error: any) {
+        setLinkedMissing(error?.message ?? `Report ${id} could not be read`)
+      }
+    },
+    [user],
+  )
   const { refresh: refreshCounterNotices } = counterList
 
   const loadSummary = useCallback(async () => {
@@ -762,6 +864,20 @@ function AdminAbuseReports() {
   }, [user, enqueueSnackbar])
 
   const signedInUid = (user as any)?.uid
+  useEffect(() => {
+    if (!signedInUid || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('report')
+    if (!id) return
+    const decide = params.get('decide')
+    void loadLinkedReport(
+      id,
+      decide === 'dismissed' || decide === 'actioned' ? decide : null,
+    )
+    // Once per signed-in reader, like the summary below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedInUid])
+
   useEffect(() => {
     if (!signedInUid) return
     void loadSummary()
@@ -1002,6 +1118,13 @@ function AdminAbuseReports() {
   )
 
   const reports = reportList.rows
+  // The linked row first and once, fresher from the list when it is there.
+  const shownReports = linkedReport
+    ? [
+        reports.find((report) => report.id === linkedReport.id) ?? linkedReport,
+        ...reports.filter((report) => report.id !== linkedReport.id),
+      ]
+    : reports
   const counterNotices = counterList.rows
   const loading = reportList.loading || counterList.loading
   // Urgent rows still sitting at `open` are the ones with a clock on them, and
@@ -1188,7 +1311,13 @@ function AdminAbuseReports() {
               </Stack>
             </CardDisplay>
 
-            {reports.map((report) => {
+            {linkedMissing ? (
+              <Alert severity="warning" onClose={() => setLinkedMissing(null)}>
+                {linkedMissing}
+              </Alert>
+            ) : null}
+            {shownReports.map((report) => {
+              const linked = linkedReport?.id === report.id
               const draft = draftFor(report)
               const closing = isClosingStatus(draft.status)
               const needsNote = closing && !draft.resolution.trim()
@@ -1406,7 +1535,7 @@ function AdminAbuseReports() {
                         </Stack>
                         <Typography variant="caption" color="text.secondary">
                           {
-                            'Lockdown suspends the site or the whole workspace; Disabled files stops one uploaded file being served and leaves the site serving. NEITHER is a recall: both stop new delivery, and neither reaches bytes a browser, a downstream CDN, a scraper or an archive already holds — so treat a public file as already distributed when you decide what to promise a complainant. Copy the ids above — neither page is pre-filled from here, deliberately, so the target is typed by the person who decided on it.'
+                            'Lockdown suspends the site or the whole workspace; Disabled files stops one uploaded file being served and leaves the site serving. NEITHER is a recall: both stop new delivery, and neither reaches bytes a browser, a downstream CDN, a scraper or an archive already holds — so treat a public file as already distributed when you decide what to promise a complainant. Copy the ids above — these two buttons open their pages empty, so the target is typed by the person who decided on it. A risk row’s own Lock action pre-fills Lockdown, which still shows the target and waits for you to press Lock.'
                           }
                         </Typography>
                       </Stack>
@@ -1419,6 +1548,112 @@ function AdminAbuseReports() {
                     )}
 
                     <Divider />
+
+                    {report.riskNotice ? (
+                      <Alert
+                        severity={urgent ? 'warning' : 'info'}
+                        variant={linked ? 'filled' : 'standard'}
+                      >
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle2">
+                            {linked
+                              ? `${report.riskNotice.title} — opened from a notice`
+                              : report.riskNotice.title}
+                          </Typography>
+                          <Typography variant="body2">
+                            {report.riskNotice.summary}
+                          </Typography>
+                          <Typography variant="caption">
+                            {report.riskNotice.ownersNotifiedAtMs
+                              ? `The workspace's owners and admins were told on ${new Date(
+                                  report.riskNotice.ownersNotifiedAtMs,
+                                ).toLocaleString()}, in the risk notice's own words — never the evidence below.`
+                              : 'Filed before owner notices existed: the workspace was not told about this row.'}
+                          </Typography>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ flexWrap: 'wrap', rowGap: 1 }}
+                          >
+                            {report.riskNotice.actions.map((action) =>
+                              RISK_DECISION_ACTIONS[action.id] ? (
+                                <Button
+                                  key={action.id}
+                                  size="small"
+                                  variant="outlined"
+                                  color="inherit"
+                                  title={action.hint}
+                                  onClick={() =>
+                                    patchDraft(report, {
+                                      status: RISK_DECISION_ACTIONS[action.id],
+                                    })
+                                  }
+                                >
+                                  {action.label}
+                                </Button>
+                              ) : action.href.startsWith('https://') ? (
+                                <Button
+                                  key={action.id}
+                                  size="small"
+                                  variant="outlined"
+                                  color="inherit"
+                                  title={action.hint}
+                                  href={action.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {action.label}
+                                </Button>
+                              ) : action.id === 'staff-open-row' ? null : (
+                                <AppLink
+                                  key={action.id}
+                                  componentVariant="button"
+                                  size="small"
+                                  variant="outlined"
+                                  color="inherit"
+                                  title={action.hint}
+                                  href={action.href}
+                                >
+                                  {action.label}
+                                </AppLink>
+                              ),
+                            )}
+                          </Stack>
+                          <Typography variant="caption">
+                            {
+                              'Waive / release sets the status below to Dismissed and Reject sets it to Actioned; nothing changes until you save it. An owner can never release a hold or lift a lock themselves — their only lever is a review request.'
+                            }
+                          </Typography>
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
+                    {report.ownerReviewRequests?.length ? (
+                      <Alert severity="info" variant="outlined">
+                        <Stack spacing={0.75}>
+                          <Typography variant="subtitle2">
+                            {`Review requested by the workspace (${report.ownerReviewRequests.length})`}
+                          </Typography>
+                          {report.ownerReviewRequests.map((request, index) => (
+                            <Stack key={`${request.atMs ?? index}`} spacing={0.25}>
+                              <Typography variant="caption" color="text.secondary">
+                                {`${request.atMs ? new Date(request.atMs).toLocaleString() : 'Unknown time'}${
+                                  request.email ? ` · ${request.email}` : ''
+                                }`}
+                              </Typography>
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                {request.note}
+                              </Typography>
+                            </Stack>
+                          ))}
+                          <Typography variant="caption" color="text.secondary">
+                            {
+                              'Answer by deciding the row: the owners get the closing notice (released or not approved) automatically. Put anything more you want them to know in "What you did".'
+                            }
+                          </Typography>
+                        </Stack>
+                      </Alert>
+                    ) : null}
 
                     {report.paymentSignal ? (
                       <Alert severity="error">
@@ -1502,6 +1737,43 @@ function AdminAbuseReports() {
                       </Alert>
                     ) : null}
 
+                    {report.heldPage ? (
+                      <Stack spacing={0.5}>
+                        <Typography variant="caption" color="text.secondary">
+                          {'The page'}
+                        </Typography>
+                        <Typography variant="body2">{report.heldPage.label}</Typography>
+                        {/* Addresses as TEXT: the page may be the lure. */}
+                        {report.heldPage.details.map((line) => (
+                          <Typography key={line} variant="body2" sx={{ wordBreak: 'break-all' }}>
+                            {line}
+                          </Typography>
+                        ))}
+                        {report.heldPage.visitorSentence ? (
+                          <Typography variant="body2" color="text.secondary">
+                            {report.heldPage.visitorSentence}
+                          </Typography>
+                        ) : null}
+                        {report.heldPage.consoleHref ? (
+                          <Stack direction="row" spacing={1}>
+                            {/* A console route on this origin, never the reported address. */}
+                            <AppLink
+                              componentVariant="button"
+                              size="small"
+                              variant="outlined"
+                              href={report.heldPage.consoleHref}
+                            >
+                              {'Open in console'}
+                            </AppLink>
+                          </Stack>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">
+                            {'Its console page could not be resolved — the site or workspace may be gone.'}
+                          </Typography>
+                        )}
+                      </Stack>
+                    ) : null}
+
                     {report.heldSend ? (
                       <Alert
                         severity={
@@ -1515,7 +1787,7 @@ function AdminAbuseReports() {
                             )} held by the phishing screen`}
                           </Typography>
                           <Typography variant="body2">
-                            {`${report.heldSend.kind === 'page' ? 'Page' : 'Subject'}: ${
+                            {`${report.heldSend.kind === 'page' ? 'Page' : report.heldSend.kind === 'listing' ? 'Listing' : 'Subject'}: ${
                               report.heldSend.subject ?? '—'
                             }`}
                             {report.heldSend.fromName
@@ -1547,10 +1819,14 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {report.source === 'outbound-screen'
                           ? 'What the screen recorded'
+                          : report.source === 'marketplace-sale-risk'
+                            ? 'What the marketplace recorded'
                           : report.source === 'stripe-fraud-signal' ||
                               report.source === 'stripe-seller-fraud-pattern'
                             ? 'What Stripe reported'
-                            : 'What the reporter said'}
+                            : report.source === 'payment-velocity'
+                              ? 'What the payment counters recorded'
+                              : 'What the reporter said'}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -1572,9 +1848,17 @@ function AdminAbuseReports() {
                         <Typography variant="body2">
                           {'Filed by the Stripe billing webhook from the seller’s own sales, not by a person. There is no reporter to reply to; the seller is the subject.'}
                         </Typography>
+                      ) : report.source === 'marketplace-sale-risk' ? (
+                        <Typography variant="body2">
+                          {'Filed by the marketplace when the sale was recorded, not by a person. There is no reporter to reply to; the publisher is the subject.'}
+                        </Typography>
                       ) : report.source === 'outbound-screen' ? (
                         <Typography variant="body2">
                           {'Filed by the outbound phishing screen, not a person. There is no reporter to reply to; the workspace that composed the email is the subject.'}
+                        </Typography>
+                      ) : report.source === 'payment-velocity' ? (
+                        <Typography variant="body2">
+                          {'Filed by the card-testing counters on the site’s payment doors, not a person. There is no reporter to reply to; the site and its shoppers are the subject.'}
                         </Typography>
                       ) : report.identityVisible ? (
                         <Typography variant="body2">

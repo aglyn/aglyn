@@ -29,6 +29,7 @@ import {
   hostSendingIdentity,
   meterHostEmail,
   notifyHostManagers,
+  notifyRiskEvent,
   renderHostEmailWithTokens,
   sendGa4Purchase,
 } from '@aglyn/tenant-data-admin'
@@ -37,6 +38,10 @@ import {
   recordPaymentRiskOnRecord,
   settlePaymentRiskDisputeOnRecord,
 } from '@aglyn/tenant-data-admin/server/payment-risk-record'
+import {
+  reverseDestinationTransfer,
+  type TransferReversalFailure,
+} from '@aglyn/tenant-data-admin/server/stripe-transfer-reversal'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 import {
   bookingPlatformNetCents,
@@ -86,6 +91,95 @@ async function findBookingForPayment(
   return matches && matches.docs.length === 1 ? matches.docs[0] : null
 }
 
+/** What a booking records once its lost dispute's reversal is settled. */
+interface BookingDisputeReversal {
+  disputeId: string
+  reversedTransferCents: number
+  transferReversalId?: string
+  /** Why nothing was pulled back, when nothing was. */
+  failedReason?: TransferReversalFailure
+  owedCents?: number
+  atMs: number
+}
+
+/**
+ * The merchant's share of a LOST booking dispute, pulled back from the
+ * connected account (AGL-3363), by the AGL-1794 policy a store order follows:
+ * the Stripe half is the shared `reverseDestinationTransfer`, this is only
+ * the booking's own record.
+ *
+ * IDEMPOTENT BY THE BOOKING: `disputeReversal` for this dispute, present,
+ * means settled and a redelivery returns before any Stripe call. A delivery
+ * that died after the POST is healed by the seam adopting the reversal the
+ * transfer already carries. A transient Stripe failure THROWS (the seam
+ * does), leaving the marker unset so Stripe's redelivery retries it. A final
+ * failure is settled with its reason and the owed amount, so it is findable.
+ *
+ * `cents` is non-zero only for the delivery that wrote the reversal, which
+ * is the one that tells the merchant.
+ */
+async function reverseBookingSellerShare(
+  bookingRef: FirebaseFirestore.DocumentReference,
+  dispute: any,
+): Promise<{ cents: number; settled: 'reversed' | 'failed' | 'pending' }> {
+  const disputeId = String(dispute?.id ?? '')
+  const amountCents = Math.max(0, Math.round(Number(dispute?.amount ?? 0)))
+  if (!disputeId || !(amountCents > 0)) return { cents: 0, settled: 'failed' }
+  const firestore = firebaseAdmin.app().firestore()
+  const prior = (await bookingRef.get()).get('disputeReversal') as
+    | BookingDisputeReversal
+    | undefined
+  if (prior?.disputeId === disputeId) {
+    return { cents: 0, settled: prior.failedReason ? 'failed' : 'reversed' }
+  }
+  const outcome = await reverseDestinationTransfer({
+    kind: 'dispute',
+    id: disputeId,
+    amountCents,
+    chargeId:
+      typeof dispute?.charge === 'string' ? dispute.charge : String(dispute?.charge?.id ?? ''),
+    metadata: { bookingId: bookingRef.id },
+  })
+  if (outcome.kind === 'skipped') {
+    console.error('Booking transfer reversal skipped: STRIPE_SECRET_KEY is not set (AGL-3363)')
+    return { cents: 0, settled: 'pending' }
+  }
+  const record: BookingDisputeReversal =
+    outcome.kind === 'reversed'
+      ? {
+          disputeId,
+          reversedTransferCents: outcome.cents,
+          ...(outcome.reversalId ? { transferReversalId: outcome.reversalId } : {}),
+          atMs: Date.now(),
+        }
+      : {
+          disputeId,
+          reversedTransferCents: 0,
+          failedReason: outcome.reason,
+          ...(outcome.owedCents != null ? { owedCents: outcome.owedCents } : {}),
+          atMs: Date.now(),
+        }
+  if (outcome.kind === 'not-reversed') {
+    console.error('Booking seller share NOT reversed — recorded on the booking', {
+      bookingId: bookingRef.id,
+      disputeId,
+      reason: outcome.reason,
+    })
+  }
+  const wrote = await firestore.runTransaction(async (transaction) => {
+    const fresh = await transaction.get(bookingRef)
+    if (!fresh.exists) return false
+    const current = fresh.get('disputeReversal') as BookingDisputeReversal | undefined
+    if (current?.disputeId === disputeId) return false
+    transaction.set(bookingRef, { disputeReversal: record }, { merge: true })
+    return true
+  })
+  return {
+    cents: wrote && outcome.kind === 'reversed' ? outcome.cents : 0,
+    settled: outcome.kind === 'reversed' ? 'reversed' : 'failed',
+  }
+}
+
 export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
@@ -106,18 +200,25 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           ref: booking.ref,
           signal: risk.signal,
           hostId,
-          subjectLabel: `Booking ${String(booking.get('serviceName') ?? booking.id)}`,
+          subjectLabel: `the booking for ${String(booking.get('serviceName') ?? booking.id)}`,
           link: `/${hostId}/bookings`,
           notificationType: 'content.booking',
+          amount: Number.isFinite(Number(booking.get('paidAmountCents')))
+            ? `$${(Number(booking.get('paidAmountCents')) / 100).toFixed(2)}`
+            : null,
+          evidenceDueByMs:
+            Number((object as { evidence_details?: { due_by?: unknown } })?.evidence_details?.due_by ?? 0) * 1000 || null,
         },
-        { firestore: firebaseAdmin.app().firestore(), notify: notifyHostManagers },
+        { firestore: firebaseAdmin.app().firestore(), notifyRisk: notifyRiskEvent },
       )
       return { claimed: true, hostId }
     }
-    // A dispute's outcome, on the signal `created` stamped. Claimed only when
-    // it was NOT lost: a lost booking dispute takes money back that nothing
-    // here reverses or records, which is exactly what the route's
-    // unattributed-dispute alert is for, so staff still hear about it.
+    // A dispute's outcome, on the signal `created` stamped. A LOST one pulls
+    // the merchant's share back from the connected account (AGL-3363), through
+    // the same seam a lost store order uses, so the platform no longer absorbs
+    // a booking chargeback. Claimed when the share came back; a reversal that
+    // could not be made stays unclaimed, so the route's unattributed-dispute
+    // alert still tells staff about money nothing recovered.
     if (type === 'charge.dispute.closed') {
       const paymentIntentId =
         typeof object?.payment_intent === 'string'
@@ -132,9 +233,21 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
         outcome,
         { firestore: firebaseAdmin.app().firestore() },
       )
-      return outcome === 'lost'
-        ? undefined
-        : { claimed: true, hostId: String(booking.ref.parent.parent?.id ?? '') }
+      const hostId = String(booking.ref.parent.parent?.id ?? '')
+      if (outcome !== 'lost') return { claimed: true, hostId }
+      const recovered = await reverseBookingSellerShare(booking.ref, object)
+      if (recovered.cents > 0 && hostId) {
+        await notifyHostManagers(hostId, {
+          type: 'content.booking',
+          title: `Payout adjusted — $${(recovered.cents / 100).toFixed(2)} recovered for a lost chargeback`,
+          body:
+            `A booking deposit was charged back and the dispute was lost, so the amount ` +
+            `transferred to you for it has been reversed. If your balance does not cover ` +
+            `it, Stripe recovers the remainder from your future payouts.`,
+          link: `/${hostId}/bookings`,
+        })
+      }
+      return recovered.settled === 'reversed' ? { claimed: true, hostId } : undefined
     }
     // Paid bookings (AGL-170): payment confirms the pendingPayment hold.
     if (

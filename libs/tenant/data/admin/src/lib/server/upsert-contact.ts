@@ -39,6 +39,7 @@ import { firebaseAdmin } from './firebase-admin'
 import { countCrmRecords, restampCrmListFieldsAt } from './crm-records'
 import { attributeOrderToEmail } from './email-revenue-attribution'
 import { hostRefusesCaptureForErasure } from './email-suppression'
+import { scheduleCapturedEmailCheck } from './capture-email-check'
 import {
   attributeCampaignConversion,
   type ResolvedCampaignTouch,
@@ -823,6 +824,13 @@ export async function upsertHostContact(
       // The merged facet, name and scope are what the Contacts list
       // searches and filters by (AGL-3321): restamped from the stored row.
       await restampCrmListFieldsAt(docSnapshot.ref, 'contacts')
+      // The address's domain, checked after the response (AGL-3328).
+      scheduleCapturedEmailCheck({
+        orgId: contactsRef.parent?.id ?? null,
+        hostId: options.hostId,
+        email,
+        predicted: docSnapshot.get('emailStatus') === 'undeliverable',
+      })
       return { contactId: docSnapshot.id, created: false }
     }
 
@@ -1034,6 +1042,13 @@ export async function upsertHostContact(
         console.error('upsertHostContact onCreated failed', error)
       })
     }
+    // A new person's address, checked after the response (AGL-3328): a
+    // domain that takes no mail reads "Would bounce" on the record.
+    scheduleCapturedEmailCheck({
+      orgId: contactsRef.parent?.id ?? null,
+      hostId: options.hostId,
+      email,
+    })
     return { contactId: created.id, created: true }
   } catch (error) {
     console.error('upsertHostContact failed', error)

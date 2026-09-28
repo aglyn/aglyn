@@ -196,6 +196,12 @@ jest.mock('firebase/firestore', () => ({
 /** Every cap the card asked for, so a read that stopped probing is visible. */
 const caps: number[] = []
 
+// The resolver has its own spec; here it passes rows through untouched.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-resolved-activity-actors', () => ({
+  __esModule: true,
+  useResolvedActivityActors: (_hostId: unknown, rows: unknown) => rows,
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreCollection: (build: () => any) => {

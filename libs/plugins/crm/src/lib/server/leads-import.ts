@@ -99,6 +99,14 @@ import {
   restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+// The leaf, for the reason the webhook imports the delivery log from its
+// leaf: a spec that stands a partial barrel in must still reach it.
+import {
+  countUndeliverableEmails,
+  findUndeliverableEmails,
+  IMPORT_MAIL_CHECK_GRACE_MS,
+  settleWithin,
+} from '@aglyn/tenant-data-admin/server/capture-email-check'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   ownerDirectory,
@@ -235,6 +243,15 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
       normalized.push({ index, row: verdict.row, key })
     })
 
+    /*
+     * THE ADDRESSES' MAIL SERVERS (AGL-3328), asked now so the answers
+     * arrive while the rows are written, and read after the last one for
+     * the result's "N addresses have no mail server". The records
+     * themselves are stamped by the check `addHostLead` queues.
+     */
+    const mailServers = findUndeliverableEmails(normalized.map((entry) => entry.row.email))
+    const imported: string[] = []
+
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(context.hostId)
     const leadsRef = await orgLeadsForHost(context.hostId)
@@ -339,6 +356,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
         // Leads list searches and filters by (AGL-3321).
         await restampCrmListFieldsAt(leadsRef.doc(key), 'leads')
       }
+      imported.push(row.email)
       if (isNew) {
         created += 1
         createdHere += 1
@@ -346,6 +364,10 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
         merged += 1
       }
     }
+    const noMailServer = countUndeliverableEmails(
+      imported,
+      await settleWithin(mailServers, IMPORT_MAIL_CHECK_GRACE_MS),
+    )
 
     const result: LeadImportChunkResult = {
       received: read.rows.length,
@@ -354,6 +376,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
       skipped: skipped.sort((a, b) => a.index - b.index),
       dropped,
       ownersUnresolved: [...ownersUnresolved],
+      ...(noMailServer !== undefined ? { noMailServer } : {}),
     }
     return res.status(200).json(result)
   } catch (error) {

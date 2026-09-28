@@ -16,6 +16,7 @@
  */
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
+import { buildRoute, Route } from './console-routes'
 
 /**
  * In-app notifications (AGL-259): per-user docs at
@@ -153,6 +154,16 @@ export type AglynNotificationType =
   // fan-out in apps/tenant/app/api/report-abuse/route.ts for why: a flood of
   // alerts IS the flood, and the alert it would cost us is the phishing one.
   | 'system.abuseReportUrgent'
+  // Something on the recipient's OWN workspace was held, flagged, locked or
+  // paused (AGL-3368): an email or page held for review, a flagged domain,
+  // a fraud signal on a payment, a lock and its lift. Written by
+  // `notifyRiskEvent` from the risk notice catalog, which says what happened,
+  // what it means and how to request a review. `system.` for the AGL-1088
+  // reason: it is the one message saying the owner's work has STOPPED, and a
+  // category muted to quieten routine chatter must not swallow it. It sends
+  // its own email, transactional and preference-free, so it is also in
+  // NOTIFICATION_SELF_SENT_EMAIL_TYPES.
+  | 'system.riskNotice'
   // The §512(g) counter-notice (AGL-1983), and the one place the "only urgent
   // categories raise a notification" restraint above is deliberately not
   // applied. Every counter-notice carries a statutory deadline that is
@@ -291,6 +302,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'system.formSubmissionsPaused': 'Form submissions paused',
   'system.visitorRecordsPaused': 'Sign-ups or leads paused',
   'system.abuseReportUrgent': 'Urgent abuse report',
+  'system.riskNotice': 'Held, flagged or locked on your workspace',
   'system.dmcaCounterNotice': 'DMCA counter-notice',
   'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
   'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
@@ -596,6 +608,8 @@ export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
   new Set<AglynNotificationType>([
     'content.crmDailyDigest',
     'content.insightsDigest',
+    // Emailed by `notifyRiskEvent` itself, as account mail (AGL-3368).
+    'system.riskNotice',
   ])
 
 /**
@@ -803,4 +817,72 @@ export function notificationOverriddenScopes(
     orgIds: named(settings?.orgs, settings?.orgTypes),
     hostIds: named(settings?.hosts, settings?.hostTypes),
   }
+}
+
+/**
+ * Rewrites a stored notification link onto the current URL scheme (AGL-644).
+ *
+ * A notification's `link` is frozen at write time — `notifyUsers` persists
+ * whatever string the emitter passed and never normalizes it. So every
+ * notification written before the org-slug migration (AGL-621) and the
+ * subdomain migration (AGL-622) still points at a route that no longer
+ * exists, and fixing the emitters alone would leave that whole backlog dead.
+ * Normalizing when the link is FOLLOWED repairs old and new alike, and keeps
+ * working for emitters that haven't been migrated yet.
+ *
+ * Rewrites, in order:
+ * - `/{hostDocId}` or `/{hostDocId}/rest` → `/{orgSlug}/hosts/{subdomain}/rest`
+ * - `/org` or `/org/rest`                 → `/{orgSlug}/rest`
+ * - `/hosts` (exactly)                    → `/{orgSlug}/hosts`
+ *
+ * Anything already canonical, user-scoped (`/manage/...`), staff (`/admin/...`)
+ * or absolute is returned untouched. Every rewrite is gated on having the
+ * context it needs, so an unresolvable link degrades to its stored value
+ * rather than to a wrong destination.
+ *
+ * The host rewrite is keyed on the notification's own `hostId` rather than
+ * guessing from the path shape, so it can never mistake a real first segment
+ * for a doc id.
+ *
+ * The email copy of a notification goes through it too (AGL-3367): a button
+ * in an inbox is a followed link with no console around it to repair it.
+ */
+export function normalizeNotificationLink(
+  link: string | undefined | null,
+  context: {
+    orgSlug?: string | null
+    /** The notification's `hostId` (a Firestore doc id). */
+    hostId?: string | null
+    /** That host's subdomain, which the current routes are keyed by. */
+    hostSubdomain?: string | null
+  },
+): string | undefined {
+  if (!link) return undefined
+  // Absolute URLs (staff broadcasts can carry them) are not ours to rewrite.
+  if (!link.startsWith('/')) return link
+
+  const { orgSlug, hostId, hostSubdomain } = context
+
+  if (orgSlug && hostId && hostSubdomain) {
+    const prefix = `/${hostId}`
+    if (link === prefix || link.startsWith(`${prefix}/`)) {
+      return `${buildRoute(Route.HOST_DASHBOARD, {
+        orgSlug,
+        host: hostSubdomain,
+      })}${link.slice(prefix.length)}`
+    }
+  }
+
+  if (orgSlug) {
+    if (link === '/org' || link.startsWith('/org/')) {
+      return `${buildRoute(Route.ORG_HOME, { orgSlug })}${link.slice(
+        '/org'.length,
+      )}`
+    }
+    // Only the bare list — `/hosts/{docId}` would still need a subdomain, and
+    // guessing one is worse than leaving the link alone.
+    if (link === '/hosts') return buildRoute(Route.HOST_LIST, { orgSlug })
+  }
+
+  return link
 }
