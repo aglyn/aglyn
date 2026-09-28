@@ -591,8 +591,9 @@ monthly invoice as a usage line. See
   headline price (annual billing costs less per month than month-to-month; the two
   figures for your plan are on [pricing](https://aglyn.com/pricing)).
 - **Plan switches** on an active subscription apply in place (no second checkout), and
-  show you what's due before you confirm. **Upgrades** apply immediately and preview a
-  **prorated** charge for the rest of the period. **Downgrades** take effect at the
+  show you what's due before you confirm. **Upgrades** charge the **prorated**
+  difference for the rest of the period when you confirm, and apply as soon as that
+  payment goes through. **Downgrades** take effect at the
   **end of the current period** and preview **$0 due today** plus the effective date —
   see [when each change takes effect](./downgrading-and-canceling.md#when-changes-take-effect).
 - **Cancel any time** — the subscription runs to the end of the paid period; a warning
