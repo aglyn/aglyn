@@ -629,6 +629,31 @@ describe('plan entitlements', () => {
     expect(capped.upgradeRequired).toBe(true)
   })
 
+  it('a staff override of the included seats is not clamped back to the plan max', () => {
+    // Free's band is 1..1: a comp of two Team seats must resolve to two, and
+    // the refusal stays "upgrade", since Free still sells no seats.
+    const org = { entitlements: { managersPerOrg: 2 } } as any
+    const quota = checkSeatQuota(org, 'managers', 1)
+    expect(quota.limit).toBe(2)
+    expect(quota.maxSeats).toBe(2)
+    expect(quota.allowed).toBe(true)
+    expect(checkSeatQuota(org, 'managers', 2).allowed).toBe(false)
+    expect(resolveOrgEntitlements(org).maxManagersPerOrg).toBe(2)
+
+    const collaborators = { entitlements: { membersPerHost: 3 } } as any
+    expect(checkSeatQuota(collaborators, 'members', 0).limit).toBe(3)
+    const datasets = { entitlements: { datasetsPerOrg: 4 } } as any
+    expect(resolveOrgEntitlements(datasets).maxDatasetsPerOrg).toBe(4)
+
+    // A max raised above the override still bounds purchases, as before.
+    const band = {
+      plan: 'starter',
+      entitlements: { managersPerOrg: 3, maxManagersPerOrg: 8 },
+      seatAddons: { managers: 50 },
+    } as any
+    expect(checkSeatQuota(band, 'managers', 0).limit).toBe(8)
+  })
+
   it('checkSeatQuota requires upgrading on plans without seat addons', () => {
     const result = checkSeatQuota({ plan: 'free' } as any, 'members', 1)
     expect(result.allowed).toBe(false)
