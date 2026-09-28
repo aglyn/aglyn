@@ -157,6 +157,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ),
   ...jest.requireActual('../../../../aglyn/src/lib/app-utils/workflows'),
+  // The REAL lockdown carriers, so the suspension gate (AGL-3356) is the
+  // product's own decision under this harness too.
+  ...jest.requireActual('../../../../aglyn/src/lib/app-utils/lockdown'),
   registerPluginApiRoute: (
     _path: string,
     handler: (req: any, res: any) => unknown,
@@ -351,5 +354,36 @@ describe('POSITIVE CONTROL: the cap is the only thing refusing', () => {
     }
     expect(mockStore.runCounter[MONTH]).toBe(3)
     expect(mockStore.activity).toHaveLength(3)
+  })
+})
+
+describe('a suspended workspace takes no inbound run (AGL-3356)', () => {
+  it('answers 423 and runs, logs and counts nothing', async () => {
+    mockGetOrgForHost.mockResolvedValue({
+      org: {
+        plan: 'business',
+        subscription: { status: 'active' },
+        suspendedAt: { seconds: 1 },
+        suspendedReasonCode: 'security',
+      },
+    })
+    const response = await callHook(nextHookId())
+    expect(response.status).toBe(423)
+    expect(response.body).toMatchObject({ error: 'locked', scope: 'org' })
+    expect(mockStore.activity).toHaveLength(0)
+    expect(mockStore.runCounter[MONTH]).toBeUndefined()
+  })
+
+  it('still runs through a read-only maintenance window', async () => {
+    mockGetOrgForHost.mockResolvedValue({
+      org: {
+        plan: 'business',
+        subscription: { status: 'active' },
+        suspendedAt: { seconds: 1 },
+        suspendedMode: 'read-only',
+      },
+    })
+    const response = await callHook(nextHookId())
+    expect(response.status).toBe(200)
   })
 })

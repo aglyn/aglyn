@@ -30,10 +30,13 @@
  * confirm dialog, one click later, overstating it by a full billing period —
  * in the exact place a customer commits.
  *
- * The timing was independently wrong. `proration_behavior: create_prorations`
- * charges NOTHING at the switch; Stripe writes the adjustment onto the
- * upcoming invoice. "Prorated charge today" was false whatever number stood
- * beside it.
+ * The timing is pinned too, and it moved (AGL-3358). An upgrade used to be
+ * `create_prorations`, which took nothing at the switch and parked the
+ * difference on the renewal — so a customer could pay for Pro once and run
+ * Advanced for a month before a cent of the difference was billed. An upgrade
+ * is now invoiced and charged when it is confirmed, and applies once paid, so
+ * a positive proration is quoted as a charge NOW. A credit still lands on the
+ * next invoice.
  *
  * Asserted on the NUMBER and on the field read, never on the prose.
  */
@@ -60,14 +63,35 @@ describe('the number the confirm dialog quotes', () => {
     expect(quote).not.toContain('129.00')
   })
 
-  it('says the money lands on the NEXT invoice, not today', () => {
-    // `create_prorations` takes nothing at the switch. A customer told
-    // "charge today" watches for a charge that never arrives, then finds it
-    // on an invoice they were not expecting it on.
+  it('says an upgrade is charged NOW, not parked on the next invoice (AGL-3358)', () => {
+    // The upgrade is invoiced and charged the moment it is confirmed, and the
+    // plan moves only once that payment goes through. A quote still saying
+    // "next invoice" would describe the pay-later behavior that was the leak.
     const quote = prorationQuote(SWITCH, EFFECTIVE).toLowerCase()
+    expect(quote).toContain('charged $30.00 usd now')
+    expect(quote).toContain('payment goes through')
+    expect(quote).not.toContain('next invoice')
+  })
+
+  it('quotes the amount TAKEN when the server sends it, not the bare proration', () => {
+    // `chargedNowCents` is the `always_invoice` preview's `amount_due`: the
+    // proration plus its tax, less any account credit. It is the figure that
+    // leaves the card, so it is the figure the confirm names.
+    const quote = prorationQuote(
+      { ...SWITCH, chargesNow: true, chargedNowCents: 3248 },
+      EFFECTIVE,
+    )
+    expect(quote).toContain('$32.48 USD now')
+    expect(quote).not.toContain('129.00')
+  })
+
+  it('a credit still lands on the next invoice — nothing is charged for it', () => {
+    const quote = prorationQuote(
+      { ...SWITCH, prorationCents: -3000, chargesNow: false, chargedNowCents: 0 },
+      EFFECTIVE,
+    ).toLowerCase()
     expect(quote).toContain('next invoice')
-    expect(quote).not.toContain('charge today')
-    expect(quote).not.toContain('charged today')
+    expect(quote).not.toContain('charged')
   })
 
   it('reads a credit as a credit', () => {
@@ -105,18 +129,20 @@ describe('the number the confirm dialog quotes', () => {
     expect(prorationQuote(SWITCH, EFFECTIVE)).toContain('USD')
   })
 
-  it('CONTROL — the effective date reaches the sentence', () => {
+  it('CONTROL — the effective date reaches a credit\'s sentence', () => {
     // The date is what makes "next invoice" actionable rather than vague.
-    expect(prorationQuote(SWITCH, EFFECTIVE)).toContain(EFFECTIVE)
+    expect(
+      prorationQuote({ ...SWITCH, prorationCents: -3000 }, EFFECTIVE),
+    ).toContain(EFFECTIVE)
   })
 })
 
-describe('the third place the same claim lived', () => {
-  it('the customer docs no longer say a plan change is charged today', () => {
-    // A bug that survived one fix in a second location had a third: the
-    // published "When each change takes effect" table told customers an
-    // upgrade and an add-on are "Charged today". Same mechanic, same
-    // falsehood, and the one customers read without opening the console.
+describe('the third place the same claim lives', () => {
+  it('the customer docs say an upgrade is charged when it is confirmed (AGL-3358)', () => {
+    // The published "When each change takes effect" table is the copy
+    // customers read without opening the console, so it has to describe the
+    // same mechanic the confirm does: an upgrade and an added add-on are
+    // charged today, and a downgrade or a removal charges nothing.
     const source = require('node:fs').readFileSync(
       require('node:path').join(
         __dirname,
@@ -135,9 +161,10 @@ describe('the third place the same claim lived', () => {
     // CONTROL: the file read is the right one.
     expect(source).toContain('When each change takes effect')
     expect(source).toContain('Upgrading')
-    // The claim itself.
-    expect(source).not.toMatch(/\|\s*Charged today\s*\|/)
-    expect(source).toContain('next invoice')
+    // The claim itself: no row may still promise an upgrade costs nothing
+    // today.
+    expect(source).not.toMatch(/Upgrading.*Nothing today/)
+    expect(source).toMatch(/\*\*Upgrading\*\*.*\*\*Today\.\*\*.*charged when you confirm/)
   })
 })
 
@@ -166,8 +193,10 @@ describe('the tax on a mid-cycle change', () => {
   }
 
   it('is quoted, not omitted', () => {
+    // Charged now, so the tax is part of the amount taken ($30.00 + $2.48)
+    // and named inside it rather than added on top.
     const quote = prorationQuote(TAXED, EFFECTIVE)
-    expect(quote).toContain('30.00')
+    expect(quote).toContain('32.48')
     expect(quote).toContain('2.48')
   })
 

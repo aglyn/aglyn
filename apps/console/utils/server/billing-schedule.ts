@@ -22,9 +22,13 @@ import {
   addonPriceId,
   findPlanItem,
   isMeteredPriceId,
+  meteredPriceId,
+  planAndIntervalFromPriceId,
+  planPriceId,
   type AddonKind,
   type BillingInterval,
 } from '@aglyn/tenant-data-admin/server/billing-addons'
+import type { StripeCall } from './immediate-charge'
 
 /** One item as a `subscription_schedules` phase wants it. */
 export interface PhaseItem {
@@ -357,4 +361,98 @@ export function restateExistingPhase(
     }
   }
   preservePhaseTerms(params, index, phase, { current: true })
+}
+
+/**
+ * Re-derives a pending downgrade schedule's TARGET phase from the
+ * subscription's items as they are RIGHT NOW (AGL-2150).
+ *
+ * A subscription schedule's phases are ABSOLUTE item lists, snapshotted when
+ * the downgrade was requested. The add-ons route changes the subscription's
+ * items and knew nothing about `subscription.schedule`, so the sequence "schedule a
+ * downgrade, then buy five more seats" charged for the seats, prorated them,
+ * and then deleted them at the period end when phase 1 applied its stale list.
+ * Recurring revenue, gone on a timer, with nothing on any screen saying so.
+ *
+ * Refreshing from the subscription's CURRENT items is correct whatever Stripe
+ * does with a schedule mid-phase, which is the point: it makes the snapshot
+ * match reality at the one moment reality changed, rather than depending on an
+ * answer only a live account could give. Phase 0 is restated from the live
+ * subscription for the same reason — if Stripe already amended it the write is
+ * a no-op, and if it did not, the schedule stops disagreeing with the
+ * subscription the customer is actually being billed for.
+ *
+ * The target phase's PLAN comes from its own `metadata[plan]` (written by the
+ * downgrade path, and what the webhook mirror reads at the flip), falling back
+ * to whichever plan its base price sells. An unclassifiable phase is left
+ * strictly alone: a schedule this does not understand is safer stale than
+ * rewritten wrong.
+ *
+ * Two callers: the add-ons route, right after an increase it was paid for
+ * applies; and the billing webhook, when an increase that was HELD for its
+ * payment (AGL-3358) applies later, after the customer's bank confirmed it.
+ */
+export async function refreshScheduleTargetPhase(options: {
+  /** The caller's own Stripe request function; this module holds no key. */
+  stripe: StripeCall
+  scheduleId: string
+  /** The subscription's items AFTER the add-on change. */
+  items: any[]
+}): Promise<void> {
+  const { stripe, scheduleId, items } = options
+  const schedule = await stripe(
+    'GET',
+    `subscription_schedules/${encodeURIComponent(scheduleId)}`,
+  )
+  const phases: any[] = Array.isArray(schedule?.phases) ? schedule.phases : []
+  // Nothing pending: a released/canceled schedule, or one with no future
+  // phase, has no snapshot to go stale.
+  if (phases.length < 2) return
+  if (schedule?.status !== 'active' && schedule?.status !== 'not_started') return
+  const targetIndex = phases.length - 1
+  const targetPhase = phases[targetIndex]
+  const basePrice = (targetPhase?.items ?? [])
+    .map((item: any) =>
+      typeof item?.price === 'string' ? item.price : item?.price?.id,
+    )
+    .map((priceId: string) => planAndIntervalFromPriceId(priceId))
+    .find((match: unknown) => match) as
+    | ReturnType<typeof planAndIntervalFromPriceId>
+    | undefined
+  const targetPlan = (targetPhase?.metadata?.plan ?? basePrice?.plan) as
+    | Parameters<typeof planPriceId>[0]
+    | undefined
+  const targetInterval: BillingInterval = basePrice?.interval ?? 'month'
+  if (!targetPlan) return
+  const targetPlanPrice = planPriceId(targetPlan, targetInterval)
+  if (!targetPlanPrice) return
+  const rebuilt = buildTargetItems(items, {
+    targetPlan,
+    targetInterval,
+    targetPlanPrice,
+    meteredPrice: meteredPriceId(targetInterval),
+  })
+  const params = new URLSearchParams({
+    end_behavior: String(schedule?.end_behavior ?? 'release'),
+    // The items already match the live subscription, so there is nothing to
+    // prorate — and a downgrade schedule never prorates by design (AGL-1862).
+    proration_behavior: 'none',
+  })
+  phases.forEach((phase, index) => {
+    restateExistingPhase(
+      params,
+      index,
+      phase,
+      index === targetIndex
+        ? rebuilt.items
+        : index === 0
+          ? subscriptionItemsAsPhaseItems(items)
+          : undefined,
+    )
+  })
+  await stripe(
+    'POST',
+    `subscription_schedules/${encodeURIComponent(scheduleId)}`,
+    params,
+  )
 }
