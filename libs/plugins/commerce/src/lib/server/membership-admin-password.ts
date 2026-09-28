@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile, validateNewPassword } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { renderHostEmailWithTokens } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import {
   consumePasswordResetSend,
   firebaseAdmin,
@@ -167,15 +168,27 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
         await readMemberPasswordHash(hostRef, memberSnapshot),
       )
       const resetUrl = `${siteBase}/recover?token=${encodeURIComponent(token)}`
+      const intro = `An administrator of ${siteName} started a password reset for your account.`
+      const note =
+        'The link works once and expires in 1 hour. Your current ' +
+        'password keeps working until you use it.'
+      // The `member-password-reset` site email (AGL-3370), as the member's
+      // own request sends it, with the words for who started it.
+      const designed = await renderHostEmailWithTokens(
+        firestore,
+        hostId,
+        'member-password-reset',
+        { 'site.name': siteName, 'reset.intro': intro, resetUrl, 'reset.note': note },
+        siteBase ? { origin: siteBase } : {},
+      ).catch(() => null)
       const result = await sendEmail({
         to: email,
-        subject: `Reset your ${siteName} password`,
+        subject: designed?.subject || `Reset your ${siteName} password`,
         text:
-          `An administrator of ${siteName} started a password reset for ` +
-          'your account. Set a new password here:\n\n' +
-          `${resetUrl}\n\n` +
-          'The link works once and expires in 1 hour. Your current ' +
-          'password keeps working until you use it.',
+          designed?.text ||
+          `${intro.replace(/\.$/, '')}. Set a new password here:\n\n` +
+            `${resetUrl}\n\n${note}`,
+        ...(designed?.html ? { html: designed.html } : {}),
         fromName: branding.fromName,
         sendingIdentity: await hostSendingIdentity(hostId),
         audience: 'tenant',
@@ -223,14 +236,24 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
     // they know to reach the member another way.
     let notified = false
     if (isEmailConfigured()) {
+      // The `member-password-changed` site email (AGL-3370).
+      const designed = await renderHostEmailWithTokens(
+        firestore,
+        hostId,
+        'member-password-changed',
+        { 'site.name': siteName, signInUrl: siteBase },
+        siteBase ? { origin: siteBase } : {},
+      ).catch(() => null)
       const result = await sendEmail({
         to: email,
-        subject: `Your ${siteName} password was changed`,
+        subject: designed?.subject || `Your ${siteName} password was changed`,
         text:
+          designed?.text ||
           `An administrator of ${siteName} set a new password on your ` +
-          'account. You have been signed out on every device and will need ' +
-          `the new password to sign back in at ${siteBase}.\n\n` +
-          'If you did not expect this, contact the site owner.',
+            'account. You have been signed out on every device and will need ' +
+            `the new password to sign back in at ${siteBase}.\n\n` +
+            'If you did not expect this, contact the site owner.',
+        ...(designed?.html ? { html: designed.html } : {}),
         fromName: branding.fromName,
         sendingIdentity: await hostSendingIdentity(hostId),
         audience: 'tenant',

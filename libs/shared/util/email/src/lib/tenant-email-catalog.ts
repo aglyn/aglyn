@@ -51,6 +51,13 @@ export interface TenantEmailEntry {
   /** `besigner`: starting content the editor seeds and the default renders. */
   defaultBody?: readonly SystemEmailDefaultBlock[]
   /**
+   * The footer's "why am I getting this" line (AGL-3370), under the built-in
+   * copy and under every text-only send of this kind, in the site's header
+   * and footer. Names the site by `{{host.businessName}}`, which every site
+   * email resolves; never the platform, which the reader has not heard of.
+   */
+  footerReason?: string
+  /**
    * Entitlement flag the SEND is gated on, when one is (AGL-2081).
    *
    * `enabledPlugins` decides whether a template appears at all; this is the
@@ -121,6 +128,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       { block: 'text', text: 'Reference: {{booking.ref}}', variant: 'caption' },
     ],
+    footerReason:
+      'You’re receiving this because you booked with {{host.businessName}}.',
   },
   {
     key: 'booking-reminder',
@@ -152,6 +161,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
         variant: 'body',
       },
     ],
+    footerReason:
+      'You’re receiving this because you have a booking with {{host.businessName}}.',
   },
   // ── Commerce (fixed for now; flips to `besigner` when the send site is
   //    wired to renderHostEmail — AGL-770) ────────────────────────────────
@@ -190,6 +201,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
         variant: 'caption',
       },
     ],
+    footerReason:
+      'You’re receiving this because you placed an order with {{host.businessName}}.',
   },
   {
     key: 'sale-notification',
@@ -237,6 +250,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
         variant: 'caption',
       },
     ],
+    footerReason:
+      'You’re receiving this because you manage {{host.businessName}}.',
   },
   {
     key: 'reservation-confirmed',
@@ -288,6 +303,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
         variant: 'caption',
       },
     ],
+    footerReason:
+      'You’re receiving this because you made a reservation with {{host.businessName}}.',
   },
   {
     key: 'gift-card',
@@ -323,6 +340,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
         variant: 'body',
       },
     ],
+    footerReason:
+      'You’re receiving this because a gift card from {{host.businessName}} was sent to this address.',
   },
   {
     key: 'supplier-fulfillment',
@@ -361,6 +380,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       { block: 'button', label: 'View product', href: '{{product.url}}' },
     ],
+    footerReason:
+      'You’re receiving this because you asked {{host.businessName}} to tell you when this was back.',
   },
   {
     key: 'abandoned-cart',
@@ -394,6 +415,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
         variant: 'caption',
       },
     ],
+    footerReason:
+      'You’re receiving this because you started a checkout with {{host.businessName}}.',
   },
   {
     key: 'member-post',
@@ -401,17 +424,143 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
     description: 'Notifies members when new members-only content is posted.',
     pluginId: 'commerce',
     plugin: 'Commerce',
-    control: 'fixed',
+    control: 'besigner',
+    defaultSubject: '{{post.title}}',
+    mergeTokens: [
+      { name: 'post.title', description: 'The post’s title', sample: 'This month in the studio' },
+      {
+        name: 'post.body',
+        description: 'The post, as its author wrote it',
+        sample: 'Three new pieces are up for members first.',
+      },
+    ],
+    defaultBody: [
+      { block: 'text', text: '{{post.title}}', variant: 'heading' },
+      { block: 'text', text: '{{post.body}}', variant: 'body' },
+    ],
+    footerReason: 'You’re receiving this because you’re a member of {{host.businessName}}.',
   },
   {
     key: 'member-password-reset',
     name: 'Member password reset',
     description:
       "Resets a site member's password — a store-member account, separate " +
-      'from a console login.',
+      'from a console login. Sent when the member asks, and when a site ' +
+      'administrator starts a reset for them.',
     pluginId: 'commerce',
     plugin: 'Commerce',
-    control: 'fixed',
+    control: 'besigner',
+    defaultSubject: 'Reset your {{site.name}} password',
+    mergeTokens: [
+      { name: 'site.name', description: 'The site’s name', sample: 'Northwind Coffee' },
+      {
+        name: 'reset.intro',
+        description: 'Who started the reset',
+        sample: 'Someone asked to reset the password for your Northwind Coffee account.',
+      },
+      {
+        name: 'resetUrl',
+        description: 'The one-time reset link',
+        sample: 'https://shop.example.com/recover?token=…',
+      },
+      {
+        name: 'reset.note',
+        description: 'How long the link lasts, and what to do if unexpected',
+        sample:
+          'The link works once and expires in 1 hour. If you did not ask for ' +
+          'this, you can safely ignore this email — your password is unchanged.',
+      },
+    ],
+    defaultBody: [
+      { block: 'text', text: 'Reset your password', variant: 'heading' },
+      { block: 'text', text: '{{reset.intro}}', variant: 'body' },
+      { block: 'button', label: 'Set a new password', href: '{{resetUrl}}' },
+      { block: 'text', text: '{{reset.note}}', variant: 'caption' },
+    ],
+    footerReason:
+      'You’re receiving this because a password reset was started for your ' +
+      '{{host.businessName}} account.',
+  },
+  {
+    key: 'member-password-changed',
+    name: 'Member password changed',
+    description:
+      'Tells a site member that a site administrator set a new password on ' +
+      'their account.',
+    pluginId: 'commerce',
+    plugin: 'Commerce',
+    control: 'besigner',
+    defaultSubject: 'Your {{site.name}} password was changed',
+    mergeTokens: [
+      { name: 'site.name', description: 'The site’s name', sample: 'Northwind Coffee' },
+      {
+        name: 'signInUrl',
+        description: 'Where the member signs back in',
+        sample: 'https://shop.example.com',
+      },
+    ],
+    defaultBody: [
+      { block: 'text', text: 'Your password was changed', variant: 'heading' },
+      {
+        block: 'text',
+        text:
+          'An administrator of {{site.name}} set a new password on your ' +
+          'account. You have been signed out on every device and will need ' +
+          'the new password to sign back in.',
+        variant: 'body',
+      },
+      { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
+      {
+        block: 'text',
+        text: 'If you did not expect this, contact the site owner.',
+        variant: 'caption',
+      },
+    ],
+    footerReason:
+      'You’re receiving this because the password on your ' +
+      '{{host.businessName}} account was changed.',
+  },
+  {
+    key: 'newsletter-confirmation',
+    name: 'Subscription confirmation',
+    description:
+      'Asks someone who signed up for a site’s emails to confirm the address ' +
+      'before anything is sent to it.',
+    pluginId: 'commerce',
+    plugin: 'Commerce',
+    control: 'besigner',
+    defaultSubject: 'Confirm your subscription',
+    mergeTokens: [
+      {
+        name: 'stream.name',
+        description: 'What they signed up for',
+        sample: 'our newsletter',
+      },
+      {
+        name: 'confirmUrl',
+        description: 'The confirmation link',
+        sample: 'https://shop.example.com/subscribe/confirm?token=…',
+      },
+    ],
+    defaultBody: [
+      { block: 'text', text: 'Confirm your subscription', variant: 'heading' },
+      {
+        block: 'text',
+        text: 'Please confirm that you want to receive {{stream.name}} at this address.',
+        variant: 'body',
+      },
+      { block: 'button', label: 'Confirm my subscription', href: '{{confirmUrl}}' },
+      {
+        block: 'text',
+        text:
+          'The link works for three days. If you did not sign up, ignore this ' +
+          'message — nothing will be sent.',
+        variant: 'caption',
+      },
+    ],
+    footerReason:
+      'You’re receiving this because this address was entered on ' +
+      '{{host.businessName}}’s signup form.',
   },
   // ── Marketing / Workflows (authored in their own UIs) ──────────────────
   {
@@ -422,6 +571,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
     plugin: 'Marketing',
     control: 'external',
     authoredIn: 'Marketing → Campaigns',
+    footerReason:
+      'You’re receiving this email from {{host.businessName}}.',
   },
   {
     key: 'workflow-email',
@@ -433,6 +584,8 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
     plugin: 'Workflows',
     control: 'external',
     authoredIn: 'the workflow that sends it',
+    footerReason:
+      'You’re receiving this because you’re in touch with {{host.businessName}}.',
   },
 ]
 

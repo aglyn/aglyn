@@ -29,6 +29,7 @@ import {
   RECOVER_MIN_MEMBER_AGE_MS,
 } from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { renderHostEmailWithTokens } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { mintPasswordResetToken } from './membership'
 import { readMemberPasswordHash } from './member-credentials'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
@@ -230,16 +231,28 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
       })
       return res.status(200).json({ ok: true })
     }
+    const intro = `Someone asked to reset the password for your ${siteName} account.`
+    const note =
+      'The link works once and expires in 1 hour. If you did not ' +
+      'ask for this, you can safely ignore this email — your ' +
+      'password is unchanged.'
+    // The `member-password-reset` site email (AGL-3370): the site's design,
+    // or the built-in copy in its header and footer.
+    const designed = await renderHostEmailWithTokens(
+      firestore,
+      hostId,
+      'member-password-reset',
+      { 'site.name': siteName, 'reset.intro': intro, resetUrl, 'reset.note': note },
+      siteBase ? { origin: siteBase } : {},
+    ).catch(() => null)
     await sendEmail({
       to: email,
-      subject: `Reset your ${siteName} password`,
+      subject: designed?.subject || `Reset your ${siteName} password`,
       text:
-        `Someone asked to reset the password for your ${siteName} ` +
-        'account. If that was you, set a new password here:\n\n' +
-        `${resetUrl}\n\n` +
-        'The link works once and expires in 1 hour. If you did not ' +
-        'ask for this, you can safely ignore this email — your ' +
-        'password is unchanged.',
+        designed?.text ||
+        `${intro.replace(/\.$/, '')}. If that was you, set a new password here:\n\n` +
+          `${resetUrl}\n\n${note}`,
+      ...(designed?.html ? { html: designed.html } : {}),
       fromName: branding.fromName,
       sendingIdentity: await hostSendingIdentity(hostId),
       audience: 'tenant',

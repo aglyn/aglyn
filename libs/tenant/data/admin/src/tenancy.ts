@@ -96,6 +96,8 @@ export * from './lib/server/tenant-write-lockdown'
 export * from './lib/server/outbound-send-review'
 // The same review for a published page, read where it is composed (AGL-3356).
 export * from './lib/server/hosted-page-review'
+// Every hold, flag, lock and pause tells owners and staff through one seam (AGL-3368).
+export * from './lib/server/risk-notice'
 export * from './lib/server/host-email-tokens'
 export * from './lib/server/notifications'
 export * from './lib/server/org-billing'

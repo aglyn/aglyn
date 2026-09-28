@@ -50,7 +50,6 @@
  *=========================================*/
 
 import { screenHostedPage } from '@aglyn/shared-util-email/hosted-page-screen'
-import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
 import {
   brandClaimedByName,
   brandForSubdomainLabel,
@@ -60,7 +59,7 @@ import {
   screenOutboundEmail,
   signalsThatHold,
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
-import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { orgAgeDays } from '@aglyn/tenant-data-admin/server/org-age'
 import {
   canonicalJson,
@@ -176,27 +175,6 @@ export function screenListingSubmission(input: ListingScreenInput): ListingScree
   return { impersonation, signals }
 }
 
-/**
- * Tell the publisher's owners and admins a submission is held (AGL-3365). The
- * outcome and the way forward only — which rule held it stays with staff.
- * Staff hear from `fileOutboundHold`, the same alert a held email or page
- * raises. Never throws.
- */
-export async function notifyPublisherSubmissionHeld(
-  publisherOrgId: string,
-  held: { title: string; reference: string },
-): Promise<void> {
-  await notifyOrgAdmins(publisherOrgId, {
-    type: 'marketplace.review',
-    title: 'A marketplace submission is held for review',
-    body:
-      `"${held.title}" was not listed yet: it is waiting for a review by our team. If it is ` +
-      'released, submit it again and it will go through. To ask about it, contact support ' +
-      `with reference ${held.reference}.`,
-    link: '/manage/marketplace',
-  }).catch(() => undefined)
-}
-
 /** The review row a publisher's held submission files, keyed on the publisher and the signals. */
 export function listingReviewId(
   publisherOrgId: string,
@@ -254,11 +232,10 @@ export async function listingSubmissionRefusal(input: {
     if (!holding.length) return null
     reviewId = listingReviewId(input.publisherOrgId, holding)
     const title = String(input.content.displayName ?? '').slice(0, 300) || 'a listing'
-    // Whether this hold is new, so the publisher is told once, not on every
-    // resubmission while it waits.
-    const firstHold = !(
-      await firebaseAdmin.app().firestore().collection(ABUSE_REPORT_COLLECTION).doc(reviewId).get()
-    ).exists
+    // The publisher's owners and staff are told once, by `fileOutboundHold`
+    // through the risk notice seam (AGL-3368): the owners in the catalog's
+    // `listing-held` words — the outcome and the review path, never the rule
+    // — and staff with the evidence and a link to the row.
     const state = await fileOutboundHold({
       reviewId,
       heldSend: {
@@ -284,9 +261,6 @@ export async function listingSubmissionRefusal(input: {
     })
     if (state === 'released') return null
     const reference = heldOutboundReference(reviewId)
-    if (state === 'held' && firstHold) {
-      await notifyPublisherSubmissionHeld(input.publisherOrgId, { title, reference })
-    }
     return {
       status: 409,
       body: {

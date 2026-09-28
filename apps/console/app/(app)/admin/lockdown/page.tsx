@@ -359,6 +359,37 @@ function siteMoneyLogLines(
 }
 
 /**
+ * The owners' email a lock or lift reported (AGL-3368), as a line of its own
+ * with its own verified/NOT CONFIRMED chip — a lock can never skip its email
+ * silently. Unticked "Email the owners" reads as a deliberate, verified
+ * "not sent", never as silence.
+ */
+function ownerNoticeLine(
+  notice: Record<string, any> | undefined,
+  label: string,
+): { text: string; confirmed: boolean } | null {
+  if (!notice) return null
+  const emailed = Number(notice['emailed'] ?? 0)
+  const recipients = Number(notice['recipients'] ?? 0)
+  const failed = Number(notice['emailFailed'] ?? 0)
+  if (notice['error']) {
+    return { text: `Owner email for ${label} FAILED — ${notice['error']}`, confirmed: false }
+  }
+  if (emailed === 0) {
+    return {
+      text: `Owner email for ${label} NOT sent — ${notice['skipped'] ?? 'nobody was emailed'}`,
+      confirmed: notice['confirmed'] === true,
+    }
+  }
+  return {
+    text:
+      `Emailed ${label}'s owners the ${String(notice['kind'] ?? 'lock')} notice — ${emailed} of ${recipients}` +
+      (failed ? `, ${failed} FAILED` : ''),
+    confirmed: notice['confirmed'] === true,
+  }
+}
+
+/**
  * The billing steps a lock reported (AGL-3359), as log lines of their own.
  *
  * Separate lines, never folded into the lock's: a lock that landed and a
@@ -402,6 +433,12 @@ function billingLogLines(
     )
   }
   lines.push(...siteMoneyLogLines(payload))
+  lines.push(
+    ownerNoticeLine(
+      payload['ownerNotice'],
+      `${payload['ownerNotice']?.['scope'] ?? 'target'} ${payload['ownerNotice']?.['targetId'] ?? ''}`.trim(),
+    ),
+  )
   const owned = payload['ownedWorkspaces'] as Record<string, any> | undefined
   if (owned) {
     if (owned['error']) {
@@ -425,6 +462,7 @@ function billingLogLines(
         confirmed: workspace['confirmed'] === true,
       })
       lines.push(cancelLine(workspace['subscriptionCancel'], label))
+      lines.push(ownerNoticeLine(workspace['ownerNotice'], label))
     }
     if (owned['truncated']) {
       lines.push({
@@ -526,8 +564,22 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [pausePayouts, setPausePayouts] = useState(
     lockdownPausesSiteMoneyByDefault('manual'),
   )
+  /**
+   * Email the owners (AGL-3368). On for EVERY reason, and reset to on when
+   * the reason changes: the one case for unticking it is a legal hold, and
+   * that is a decision somebody makes, never a default.
+   */
+  const [emailOwners, setEmailOwners] = useState(true)
+  /**
+   * Resend owner notice (AGL-3368): standing locks to announce, one
+   * `scope:targetId` per line, and whether to send a (lock, person) pair
+   * that already went out.
+   */
+  const [resendTargets, setResendTargets] = useState('')
+  const [resendAgain, setResendAgain] = useState(false)
   const changeReason = (next: string) => {
     setReason(next)
+    setEmailOwners(true)
     setCancelBilling(lockdownCancelsBillingByDefault(next))
     setLockOwned(lockdownCancelsBillingByDefault(next))
     setPauseRenewals(lockdownPausesSiteMoneyByDefault(next))
@@ -647,6 +699,22 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
     if (isStaff) void refresh()
   }, [isStaff, refresh])
 
+  /**
+   * Pre-filled from a risk notice's Lock action (AGL-3368):
+   * `?scope=org|host|domain|user&targetId=…`. It only fills the form; the
+   * lock still waits for someone to read the target and press Lock.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const linkedScope = params.get('scope')
+    const linkedTarget = params.get('targetId')
+    if (linkedScope && ['org', 'host', 'domain', 'user'].includes(linkedScope)) {
+      setScope(linkedScope)
+    }
+    if (linkedTarget) setTargetId(linkedTarget)
+  }, [])
+
   const act = useCallback(
     async (
       body: Record<string, unknown>,
@@ -683,7 +751,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
         )
         if (billing.some((line) => !line.confirmed)) {
           enqueueSnackbar(
-            'The lock is in place, but a billing step did NOT confirm — read "Actions taken in this session".',
+            'The lock is in place, but a billing or owner-email step did NOT confirm — read "Actions taken in this session".',
             { variant: 'error', allowDuplicate: true },
           )
         }
@@ -710,6 +778,70 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
     },
     [user, enqueueSnackbar, refresh],
   )
+
+  /**
+   * Announce standing locks to the people they locked (AGL-3368): one email
+   * per person listing every lock of theirs, each outcome its own line.
+   */
+  const resendNotices = useCallback(async () => {
+    const targets = resendTargets
+      .split(/\n|,/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const at = line.indexOf(':')
+        return at > 0
+          ? { scope: line.slice(0, at).trim(), targetId: line.slice(at + 1).trim() }
+          : { scope: scope, targetId: line }
+      })
+    if (!targets.length) return
+    setBusy(true)
+    try {
+      const response = await authorizedFetch(user, '/api/admin/lockdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend-notice', targets, sendAgain: resendAgain }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error ?? `Failed (${response.status})`)
+      const atMs = Date.now()
+      const lines: Array<{ text: string; confirmed: boolean }> = [
+        ...((payload.targets as Array<Record<string, any>>) ?? [])
+          .filter((target) => target['error'])
+          .map((target) => ({
+            text: `Resend for ${target['scope']} ${target['targetId']}: ${target['error']}`,
+            confirmed: false,
+          })),
+        ...((payload.recipients as Array<Record<string, any>>) ?? []).map((recipient) => ({
+          text:
+            recipient['outcome'] === 'sent'
+              ? `Owner notice sent to ${recipient['email']} for ${(recipient['sentLockKeys'] as string[]).length} lock(s)`
+              : recipient['outcome'] === 'already-sent'
+                ? `Owner notice for ${recipient['email']} already sent at ${new Date(
+                    Number(recipient['alreadySentAtMs'] ?? 0),
+                  ).toLocaleString()} — tick "Send again" to resend`
+                : `Owner notice to ${recipient['email']} FAILED — ${recipient['error'] ?? 'unknown'}`,
+          confirmed: recipient['outcome'] !== 'failed',
+        })),
+      ]
+      setLog((entries) =>
+        [...lines.map((line) => ({ atMs, ...line })).reverse(), ...entries].slice(0, 25),
+      )
+      enqueueSnackbar(
+        payload.confirmed
+          ? 'Owner notices resent — read "Actions taken in this session"'
+          : 'Some owner notices did NOT confirm — read "Actions taken in this session"',
+        { variant: payload.confirmed ? 'success' : 'error', allowDuplicate: true },
+      )
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'Resending the owner notices failed', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }, [resendTargets, resendAgain, scope, user, enqueueSnackbar])
 
   const untilMsOf = (value: string): number | undefined => {
     if (!value) return undefined
@@ -1247,6 +1379,26 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                   </Stack>
                 ) : null}
+                {/* The owners' email (AGL-3368): every lock and lift tells
+                    the people it locked, from the platform's own sender,
+                    with the message above. Reported on its own line. */}
+                <Stack spacing={0.5}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={emailOwners}
+                        onChange={(event) => setEmailOwners(event.target.checked)}
+                      />
+                    }
+                    label="Email the owners"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {
+                      'On for every reason. Emails the workspace’s owners and admins (a site or domain lock: its workspace’s, and the site’s managers; an account lock: the person, at their sign-in address) from the platform’s own sender — it arrives even though the lock stops the workspace sending. It carries the message above, what the lock affects, and how to appeal; never why. Untick it only for a legal hold. Unlock sends the “restored” notice the same way.'
+                    }
+                  </Typography>
+                </Stack>
                 {scope === 'user' ? (
                   <Stack spacing={0.5}>
                     <FormControlLabel
@@ -1300,6 +1452,8 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           ...(scope === 'org' || scope === 'host'
                             ? { pauseRenewals, pausePayouts }
                             : {}),
+                          // Explicit on every lock, like the billing flags.
+                          emailOwners,
                         },
                         // The id STAYS. Clearing it used to disable both
                         // buttons the moment a lock landed, so the obvious
@@ -1317,7 +1471,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     disabled={busy || notSuper || !targetId.trim()}
                     onClick={() =>
                       void act(
-                        { action: 'unlock', scope, targetId: targetId.trim() },
+                        {
+                          action: 'unlock',
+                          scope,
+                          targetId: targetId.trim(),
+                          emailOwners,
+                        },
                         (payload) => setScopedState(payload.verified ?? null),
                       )
                     }
@@ -1608,6 +1767,67 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                   </Stack>
                 ) : null}
+              </Stack>
+            </CardDisplay>
+
+            <CardDisplay
+              header={'Resend owner notice'}
+              help={docsHelp('lockdown', { anchor: '#owner-notices' })}
+              HeaderProps={{
+                action: (
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={busy || !targetId.trim()}
+                      onClick={() =>
+                        setResendTargets((current) =>
+                          [current.trim(), `${scope}:${targetId.trim()}`].filter(Boolean).join('\n'),
+                        )
+                      }
+                    >
+                      {'Add the target above'}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={busy || notSuper || !resendTargets.trim()}
+                      onClick={() => void resendNotices()}
+                    >
+                      {'Resend owner notice'}
+                    </Button>
+                  </Stack>
+                ),
+              }}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={1.5}>
+                <Typography variant="body2" color="text.secondary">
+                  {
+                    'For locks that already stand — placed before owner notices existed, or whose email failed. Sends the lock email the lock would have sent, with its stored message. Each person gets ONE email listing everything locked for them. A person already told about a lock is reported, not emailed again, unless you tick Send again.'
+                  }
+                </Typography>
+                <TextField
+                  label="Locks to announce"
+                  placeholder={'org:ORG_ID\nhost:HOST_ID\ndomain:shop.example.com\nuser:UID'}
+                  helperText="One scope:id per line (org, host, domain or user)."
+                  multiline
+                  minRows={3}
+                  size="small"
+                  value={resendTargets}
+                  onChange={(event) => setResendTargets(event.target.value)}
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={resendAgain}
+                      onChange={(event) => setResendAgain(event.target.checked)}
+                    />
+                  }
+                  label="Send again to people already told"
+                />
               </Stack>
             </CardDisplay>
 

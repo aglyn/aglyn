@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { renderTextEmailHtml } from './text-email-html'
+import { renderFramedTextEmail, renderTextEmailHtml } from './text-email-html'
 
 describe('renderTextEmailHtml', () => {
   describe('links', () => {
@@ -120,5 +120,44 @@ describe('renderTextEmailHtml', () => {
       expect(renderTextEmailHtml('   \n  ')).toBe('')
       expect(renderTextEmailHtml(null as never)).toBe('')
     })
+  })
+})
+
+describe('renderFramedTextEmail (AGL-3370)', () => {
+  const CHROME = {
+    header: { logoAlt: 'Northwind Coffee', href: 'https://northwind.test' },
+    footer: {
+      reason: 'You’re receiving this because you’re in touch with Northwind Coffee.',
+      legal: '© 2026 Northwind Coffee',
+    },
+  }
+
+  it('draws the message in the sender’s header and footer, one paragraph per block', () => {
+    const { html, text } = renderFramedTextEmail({
+      text: 'Thanks for writing.\n\nWe will reply within a day: https://northwind.test/help',
+      subject: 'Thanks',
+      chrome: CHROME,
+    })
+    expect(html).toContain('Northwind Coffee')
+    expect(html).toContain('Thanks for writing.')
+    expect(html).toContain('<a href="https://northwind.test/help"')
+    expect(html).toContain('You’re receiving this because you’re in touch with Northwind Coffee.')
+    // The text part carries the footer's lines as well as the message.
+    expect(text).toContain('We will reply within a day: https://northwind.test/help')
+    expect(text).toContain('© 2026 Northwind Coffee')
+  })
+
+  it('links in the theme’s accent text color', () => {
+    const { html } = renderFramedTextEmail({
+      text: 'See https://northwind.test',
+      chrome: CHROME,
+      theme: { palette: { primary: { main: '#00b0ff', dark: '#0077ad', contrastText: '#fff' } } },
+    })
+    expect(html).toContain('style="color:#0077ad;text-decoration:underline;')
+  })
+
+  it('leaves a brace pair the author typed exactly as typed', () => {
+    const { text } = renderFramedTextEmail({ text: 'Use {{code}} at checkout', chrome: CHROME })
+    expect(text).toContain('Use {{code}} at checkout')
   })
 })

@@ -21,8 +21,19 @@ import {
   type HostTokenSource,
 } from '@aglyn/aglyn/app-utils/host-tokens'
 import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
+import { buildSiteEmailChrome } from '@aglyn/aglyn/app-utils/site-email-chrome'
 import {
+  buildEmailPalette,
+  emailPaletteBaseForHost,
+  getTenantEmail,
+  hostEmailOrigin,
+  loadHostEmail,
+  renderFramedTextEmail,
   renderHostEmail,
+  renderLoadedHostEmail,
+  type EmailChrome,
+  type EmailTheme,
+  type LoadedHostEmail,
   type RenderedHostEmail,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from './firebase-admin'
@@ -60,16 +71,7 @@ export async function renderHostEmailWithTokens(
   merge: Record<string, string> = {},
   options: { origin?: string } = {},
 ): Promise<RenderedHostEmail | null> {
-  let host: HostTokenSource | null
-  try {
-    const snapshot = await firestore.collection('hosts').doc(hostId).get()
-    host = snapshot.exists ? (snapshot.data() as HostTokenSource) : null
-  } catch {
-    // A failed read must not stop the send. Every token then resolves to its
-    // empty behaviour, which is the same outcome as a site that set nothing —
-    // an email with a gap where the address would be, rather than no email.
-    host = null
-  }
+  const host = await readHostTokenSource(firestore, hostId)
   return renderHostEmail(
     firestore as never,
     hostId,
@@ -92,12 +94,155 @@ export async function renderHostEmailWithTokens(
     // having to know it exists. Style overrides do not survive into mail —
     // they land in `sx`, which `renderEmailHtml` never reads — but property
     // values and attribute overrides do.
+    //
+    // And the site's header and footer (AGL-3370), which the built-in copy is
+    // drawn inside; a design the owner published goes out as they built it.
     {
       ...options,
       sanitize: sanitizeAuthorHtml,
       compose: composeHostComponentNodes,
+      chrome: siteChromeFor(host, templateKey),
+      theme: siteThemeFor(host),
     },
   )
+}
+
+/**
+ * The site's host document as the token and chrome readers see it, or null.
+ *
+ * A failed read must not stop the send. Every token then resolves to its
+ * empty behaviour, which is the same outcome as a site that set nothing —
+ * an email with a gap where the address would be, rather than no email.
+ */
+async function readHostTokenSource(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+): Promise<SiteEmailHost | null> {
+  try {
+    const snapshot = await firestore.collection('hosts').doc(hostId).get()
+    return snapshot.exists ? (snapshot.data() as SiteEmailHost) : null
+  } catch {
+    return null
+  }
+}
+
+/** What a site email reads off the host document: its tokens and its theme. */
+type SiteEmailHost = HostTokenSource & {
+  theme?: {
+    colorSchemes?: { light?: Record<string, unknown> | null }
+    shape?: { borderRadius?: unknown }
+  } | null
+}
+
+/**
+ * The site's theme as its email draws it (AGL-3370): the palette the
+ * published site renders with, light scheme, since an inbox has one, and its
+ * corner radius for buttons. A site with no theme of its own resolves the
+ * same base the site itself does.
+ */
+function siteThemeFor(host: SiteEmailHost | null): EmailTheme {
+  const radius = host?.theme?.shape?.borderRadius
+  return {
+    palette: buildEmailPalette({
+      base: emailPaletteBaseForHost(host),
+      colors: host?.theme?.colorSchemes?.light ?? null,
+    }),
+    ...(typeof radius === 'number' ? { buttonRadius: radius } : {}),
+  }
+}
+
+/** The site's chrome for one kind of email, with that kind's footer reason. */
+function siteChromeFor(
+  host: HostTokenSource | null,
+  templateKey: string,
+): EmailChrome {
+  return buildSiteEmailChrome({
+    host,
+    reason: getTenantEmail(templateKey)?.footerReason,
+  })
+}
+
+/** A site email loaded once for a batch, with the site's tokens beside it. */
+export interface LoadedHostEmailWithTokens {
+  loaded: LoadedHostEmail
+  hostMerge: Record<string, string>
+}
+
+/**
+ * {@link loadHostEmail} for a batch (AGL-3370): the template, or the built-in
+ * copy in the site's header and footer, read ONCE, with the site's `host.*`
+ * tokens beside it for {@link renderLoadedHostEmailWithTokens}. `null` only
+ * for a key with neither, so the batch keeps its own copy.
+ */
+export async function loadHostEmailWithTokens(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  templateKey: string,
+  options: { origin?: string } = {},
+): Promise<LoadedHostEmailWithTokens | null> {
+  const host = await readHostTokenSource(firestore, hostId)
+  const loaded = await loadHostEmail(firestore as never, hostId, templateKey, {
+    ...options,
+    compose: composeHostComponentNodes,
+    chrome: siteChromeFor(host, templateKey),
+    theme: siteThemeFor(host),
+  })
+  return loaded ? { loaded, hostMerge: hostTokenMerge(host) } : null
+}
+
+/** One recipient's copy of a batch-loaded site email; no reads. */
+export function renderLoadedHostEmailWithTokens(
+  bundle: LoadedHostEmailWithTokens,
+  merge: Record<string, string> = {},
+): RenderedHostEmail | null {
+  return renderLoadedHostEmail(
+    bundle.loaded,
+    { ...bundle.hostMerge, ...merge },
+    sanitizeAuthorHtml,
+  )
+}
+
+/**
+ * The site's header and footer for one kind of email, its theme, and the
+ * origin and host a stored logo reference resolves against (AGL-3370): for a sender
+ * that renders per recipient itself, such as a typed campaign.
+ */
+export async function siteEmailFrame(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  templateKey: string,
+): Promise<{
+  chrome: EmailChrome
+  theme: EmailTheme
+  mediaOrigin?: string
+  mediaHostId: string
+}> {
+  const host = await readHostTokenSource(firestore, hostId)
+  const origin = host
+    ? hostEmailOrigin({ cname: host.cname, subdomain: host.subdomain })
+    : undefined
+  return {
+    chrome: siteChromeFor(host, templateKey),
+    theme: siteThemeFor(host),
+    ...(origin ? { mediaOrigin: origin } : {}),
+    mediaHostId: hostId,
+  }
+}
+
+/**
+ * A text-only site email in the site's header and footer (AGL-3370): a
+ * workflow's email step, or a message a site sends in words nobody designed.
+ * The text arrives resolved; the footer's reason is the kind's, by key.
+ */
+export async function renderSiteTextEmail(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  templateKey: string,
+  message: { subject: string; text: string; preheader?: string },
+): Promise<{ subject: string; html: string; text: string }> {
+  const frame = await siteEmailFrame(firestore, hostId, templateKey)
+  const rendered = renderFramedTextEmail({ ...message, ...frame })
+  return { subject: message.subject, html: rendered.html, text: rendered.text }
 }
 
 export default renderHostEmailWithTokens

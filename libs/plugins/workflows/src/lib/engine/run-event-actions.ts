@@ -83,6 +83,7 @@ import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-emai
 // The leaf again, for the phishing screen's hold (AGL-3356): the control
 // that stops a send must be the real one under a spec that mocks the barrel.
 import { screenOutboundSend } from '@aglyn/tenant-data-admin/server/outbound-send-review'
+import { renderSiteTextEmail } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
@@ -968,10 +969,19 @@ async function runServerStep(
             payload,
           )
         : null
+      // In the site's header and footer (AGL-3370): a workflow's email is the
+      // site writing to its contact, in words the site owner typed.
+      const framed = await renderSiteTextEmail(
+        firebaseAdmin.app().firestore(),
+        hostId,
+        'workflow-email',
+        { subject: emailSubject, text: emailText },
+      ).catch(() => null)
       const result = await sendEmail({
         to,
         subject: emailSubject,
-        text: emailText,
+        text: framed?.text || emailText,
+        ...(framed?.html ? { html: framed.html } : {}),
         sendingIdentity: await hostSendingIdentity(hostId),
         ...(emailActivity ? { tags: emailActivity.tags } : {}),
         audience: 'tenant',
