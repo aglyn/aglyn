@@ -52,6 +52,8 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The owners' notice (AGL-3368); what it sends is proved in risk-notice.spec.ts.
+  notifyRiskEvent: async () => ({ duplicate: false, error: null, owners: { recipients: 1, emailed: 1, emailFailed: 0 } }),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({

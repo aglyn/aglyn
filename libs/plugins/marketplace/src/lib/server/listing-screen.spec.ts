@@ -32,12 +32,7 @@ const NOW = Date.parse('2026-09-28T12:00:00Z')
 let mockOrg: Record<string, unknown> | null = null
 const mockFiled: Array<Record<string, unknown>> = []
 let mockHoldState: 'held' | 'released' | 'rejected' = 'held'
-const mockPublisherNotices: Array<{ orgId: string; body: string }> = []
-
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  notifyOrgAdmins: async (orgId: string, payload: { body: string }) => {
-    mockPublisherNotices.push({ orgId, body: payload.body })
-  },
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -71,6 +66,7 @@ jest.mock('@aglyn/tenant-data-admin/server/outbound-send-review', () => {
   }
 })
 
+import { renderOwnerRiskNotice } from '@aglyn/shared-util-email/risk-notice-catalog'
 import {
   listingSubmissionRefusal,
   publisherIdentityImpersonation,
@@ -80,7 +76,6 @@ import {
 beforeEach(() => {
   mockOrg = { name: 'Northwind Labs', createdAt: NOW - 3 * DAY }
   mockFiled.length = 0
-  mockPublisherNotices.length = 0
   mockHoldState = 'held'
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
@@ -184,13 +179,14 @@ describe('the submission gate', () => {
     expect(mockFiled[0]).toMatchObject({
       heldSend: { kind: 'listing', orgId: 'org-pub', path: 'publisherProfiles/org-pub', state: 'held' },
     })
-    // The publisher hears the outcome and the way forward, never the rule.
-    expect(mockPublisherNotices).toEqual([
-      { orgId: 'org-pub', body: expect.stringContaining(String(refusal?.body['reference'])) },
-    ])
-    for (const text of [String(refusal?.body['error']), mockPublisherNotices[0].body]) {
-      expect(text).not.toMatch(/poshmark|lure|day|young|brand/i)
-    }
+    // The publisher's owners are told by the hold itself, through the risk
+    // notice seam (AGL-3368): the outcome and the way forward, never the rule.
+    expect(String(refusal?.body['error'])).not.toMatch(/poshmark|lure|day|young|brand/i)
+    const told = renderOwnerRiskNotice('listing-held', {
+      'item.label': 'the marketplace submission "Order Alerts"',
+      reference: String(refusal?.body['reference']),
+    })
+    expect(Object.values(told).flat().join(' ')).not.toMatch(/poshmark|lure|young|brand|\d+ days?/i)
   })
 
   it('does not hold an established publisher on a soft signal', async () => {

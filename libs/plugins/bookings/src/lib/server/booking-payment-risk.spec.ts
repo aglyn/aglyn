@@ -100,6 +100,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({ firestore: () => fakeFirestore }),
     firestore: { FieldValue: { serverTimestamp: () => '<now>' } },
   },
+  // The risk notice seam (AGL-3368) tells the site's managers and the
+  // workspace's owners; the booking only hands it the facts.
+  notifyRiskEvent: async (input: any) => {
+    managerNotices.push(input)
+  },
+  // A lost dispute's payout adjustment is not a risk notice; it still goes
+  // to the site's managers directly (AGL-3363).
   notifyHostManagers: async (hostId: string, payload: any) => {
     managerNotices.push({ hostId, ...payload })
   },
@@ -155,13 +162,12 @@ describe('fraud signals on a paid booking (AGL-3360)', () => {
     })
     expect(managerNotices).toEqual([
       expect.objectContaining({
+        kind: 'sale-fraud-warning',
         hostId: 'host-1',
-        type: 'content.booking',
-        link: '/host-1/bookings',
+        amount: '$90.00',
+        item: { label: 'the booking for Deep tissue massage', path: '/host-1/bookings' },
       }),
     ])
-    expect(managerNotices[0].body).toContain('Booking Deep tissue massage')
-    expect(managerNotices[0].body).toContain('has not refunded or canceled')
     // Nothing moved.
     expect(booking()).toMatchObject({ status: 'confirmed', paidAmountCents: 9000 })
     expect(booking()).not.toHaveProperty('refundedCents')
@@ -179,7 +185,7 @@ describe('fraud signals on a paid booking (AGL-3360)', () => {
     await deliver('charge.dispute.created', dispute)
     await deliver('charge.dispute.created', dispute)
     expect(managerNotices).toHaveLength(1)
-    expect(managerNotices[0]).toMatchObject({ title: 'A payment was disputed' })
+    expect(managerNotices[0]).toMatchObject({ kind: 'sale-dispute' })
 
     await expect(
       deliver('charge.dispute.closed', { ...dispute, status: 'won' }),

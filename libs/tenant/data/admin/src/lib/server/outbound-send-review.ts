@@ -74,7 +74,7 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import { orgAgeDays } from './org-age'
 import firebaseAdmin from './firebase-admin'
-import { notifyStaff } from './notifications'
+import { notifyRiskEvent, type RiskEventItem } from './risk-notice'
 
 /** A workspace younger than this many days has the soft rules applied. */
 export { OUTBOUND_REVIEW_YOUNG_DAYS }
@@ -266,6 +266,53 @@ export interface OutboundHoldFiling {
   /** The URL the row reports: the flagged host, or the held page. */
   url: string | null
   reportedHostname: string | null
+  /**
+   * What the workspace's owners are told the first time (AGL-3368): the held
+   * item in their words and its console page. The alert title and body above
+   * are the STAFF half; the owners read the catalog's own words, which never
+   * name the signals.
+   */
+  item?: RiskEventItem | null
+}
+
+/**
+ * The held item as the owners see it, from the surface and the source path
+ * (AGL-3368): the campaign's own email page, the automation list, or nothing
+ * for a message the send seam held (the notice then leads to Holds & reviews).
+ */
+export function heldSendItem(input: {
+  kind: HeldOutboundSendKind
+  path: string
+  hostId: string
+  subject: string
+  context?: string | null
+}): RiskEventItem {
+  const subject = input.subject.slice(0, 120)
+  const id = input.path.split('/').pop() ?? ''
+  switch (input.kind) {
+    case 'campaign':
+      return {
+        label: `the campaign "${subject}"`,
+        path: id ? `/org/emails/messages/${encodeURIComponent(id)}` : null,
+      }
+    case 'orgAutomation':
+      return { label: `the automated email "${subject}"`, path: '/org/automation' }
+    case 'workflow':
+    case 'action':
+      return { label: `the automated email "${subject}"`, path: `/${input.hostId}/automation` }
+    case 'page':
+      return { label: `the page ${subject}`, path: null }
+    case 'listing':
+      // The publisher's own Listings section of the Marketplace hub.
+      return { label: `the marketplace submission "${subject}"`, path: '/org/marketplace/listings' }
+    default:
+      return {
+        label: input.context
+          ? `the email "${subject}" (${input.context})`
+          : `the email "${subject}"`,
+        path: null,
+      }
+  }
 }
 
 /**
@@ -340,11 +387,32 @@ export async function fileOutboundHold(
     )
   })
   if (first && state === 'held') {
-    await notifyStaff({
-      type: 'system.abuseReportUrgent',
-      title: filing.alertTitle,
-      body: `${filing.alertBody} Reference ${reference}.`,
-      link: '/admin/abuse-reports',
+    // The owners learn what was held and how to ask for a review; staff get
+    // the alert with the evidence and a link to this row. One seam, once.
+    await notifyRiskEvent({
+      kind:
+        filing.heldSend.kind === 'page'
+          ? 'page-held'
+          : filing.heldSend.kind === 'listing'
+            ? 'listing-held'
+            : 'email-held',
+      orgId: filing.heldSend.orgId,
+      hostId: filing.heldSend.hostId,
+      reviewId: filing.reviewId,
+      reference,
+      occurredAtMs: filing.heldSend.heldAtMs,
+      item:
+        filing.item ??
+        heldSendItem({
+          kind: filing.heldSend.kind,
+          path: filing.heldSend.path,
+          hostId: filing.heldSend.hostId,
+          subject: filing.heldSend.subject,
+        }),
+      staffEvidence: [
+        filing.alertBody,
+        ...describePhishingScreenSignals(filing.heldSend.signals),
+      ].join(' '),
     })
   }
   return state
@@ -537,6 +605,7 @@ export async function screenSeamMessage(
       ageDays: workspace.ageDays,
     },
     extra: { heldContext: context },
+    item: heldSendItem({ kind: 'message', path: `hosts/${workspace.hostId}`, hostId: workspace.hostId, subject, context }),
     headline:
       `Held ${context ? `"${context}" ` : ''}email "${subject}" from a workspace ` +
       `${workspace.ageDays ?? '?'} day(s) old. Every later message from this site ` +

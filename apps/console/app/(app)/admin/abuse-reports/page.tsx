@@ -215,6 +215,44 @@ interface AbuseReportRow {
   paymentSignal: PaymentSignalRow | null
   /** A seller's fraud pattern across its sales (AGL-3360). */
   sellerPattern: SellerPatternRow | null
+  /**
+   * The risk notice catalog's staff half (AGL-3368): what the staff alert
+   * said, and every action as a deep link to its real control. Null for a
+   * row from the public report form.
+   */
+  riskNotice: RiskNoticeRow | null
+  /** What the workspace's owners asked, when they requested a review. */
+  ownerReviewRequests: OwnerReviewRequestRow[]
+  reviewRequestedAtMs: number | null
+}
+
+/** `riskNoticePayload()` in /api/admin/abuse-reports (AGL-3368). */
+interface RiskNoticeRow {
+  kind: string
+  noticeId: string | null
+  /** When the owners were told; null for a row filed before they were. */
+  ownersNotifiedAtMs: number | null
+  title: string
+  summary: string
+  reviewable: boolean
+  actions: Array<{ id: string; label: string; hint: string; href: string }>
+}
+
+/** One owner review request, as a note on the row (AGL-3368). */
+interface OwnerReviewRequestRow {
+  atMs: number | null
+  email: string | null
+  note: string
+}
+
+/**
+ * The staff actions that ARE this page's own status control. They are
+ * rendered as buttons that set the row's status draft — Dismiss releases,
+ * Actioned rejects — rather than as links back to the page.
+ */
+const RISK_DECISION_ACTIONS: Record<string, string> = {
+  'staff-release': 'dismissed',
+  'staff-reject': 'actioned',
 }
 
 /**
@@ -732,6 +770,44 @@ function AdminAbuseReports() {
     onError: onListError,
   })
   const { refresh: refreshReports } = reportList
+
+  /**
+   * THE DEEP LINK (AGL-3368): `?report=<id>` opens one row — the one a staff
+   * alert or a risk notice names — pinned above the queue, since the queue
+   * is paged and that row may be on no page the list has loaded.
+   * `&decide=dismissed|actioned` pre-selects the decision the link was for;
+   * nothing is saved until Save status is pressed. Read from
+   * `window.location` in an effect, as the support queue's `?ticketId=` is,
+   * to stay clear of `useSearchParams`'s Suspense requirement.
+   */
+  const [linkedReport, setLinkedReport] = useState<AbuseReportRow | null>(null)
+  const [linkedMissing, setLinkedMissing] = useState<string | null>(null)
+  const loadLinkedReport = useCallback(
+    async (id: string, decide: string | null) => {
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/admin/abuse-reports?id=${encodeURIComponent(id)}`,
+        )
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || !payload.report) {
+          setLinkedMissing(payload.error ?? `Report ${id} could not be read`)
+          return
+        }
+        const report = payload.report as AbuseReportRow
+        setLinkedReport(report)
+        if (decide) {
+          setDrafts((entries) => ({
+            ...entries,
+            [report.id]: { status: decide, resolution: report.resolution ?? '' },
+          }))
+        }
+      } catch (error: any) {
+        setLinkedMissing(error?.message ?? `Report ${id} could not be read`)
+      }
+    },
+    [user],
+  )
   const { refresh: refreshCounterNotices } = counterList
 
   const loadSummary = useCallback(async () => {
@@ -769,6 +845,20 @@ function AdminAbuseReports() {
   }, [user, enqueueSnackbar])
 
   const signedInUid = (user as any)?.uid
+  useEffect(() => {
+    if (!signedInUid || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('report')
+    if (!id) return
+    const decide = params.get('decide')
+    void loadLinkedReport(
+      id,
+      decide === 'dismissed' || decide === 'actioned' ? decide : null,
+    )
+    // Once per signed-in reader, like the summary below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedInUid])
+
   useEffect(() => {
     if (!signedInUid) return
     void loadSummary()
@@ -1009,6 +1099,13 @@ function AdminAbuseReports() {
   )
 
   const reports = reportList.rows
+  // The linked row first and once, fresher from the list when it is there.
+  const shownReports = linkedReport
+    ? [
+        reports.find((report) => report.id === linkedReport.id) ?? linkedReport,
+        ...reports.filter((report) => report.id !== linkedReport.id),
+      ]
+    : reports
   const counterNotices = counterList.rows
   const loading = reportList.loading || counterList.loading
   // Urgent rows still sitting at `open` are the ones with a clock on them, and
@@ -1195,7 +1292,13 @@ function AdminAbuseReports() {
               </Stack>
             </CardDisplay>
 
-            {reports.map((report) => {
+            {linkedMissing ? (
+              <Alert severity="warning" onClose={() => setLinkedMissing(null)}>
+                {linkedMissing}
+              </Alert>
+            ) : null}
+            {shownReports.map((report) => {
+              const linked = linkedReport?.id === report.id
               const draft = draftFor(report)
               const closing = isClosingStatus(draft.status)
               const needsNote = closing && !draft.resolution.trim()
@@ -1413,7 +1516,7 @@ function AdminAbuseReports() {
                         </Stack>
                         <Typography variant="caption" color="text.secondary">
                           {
-                            'Lockdown suspends the site or the whole workspace; Disabled files stops one uploaded file being served and leaves the site serving. NEITHER is a recall: both stop new delivery, and neither reaches bytes a browser, a downstream CDN, a scraper or an archive already holds — so treat a public file as already distributed when you decide what to promise a complainant. Copy the ids above — neither page is pre-filled from here, deliberately, so the target is typed by the person who decided on it.'
+                            'Lockdown suspends the site or the whole workspace; Disabled files stops one uploaded file being served and leaves the site serving. NEITHER is a recall: both stop new delivery, and neither reaches bytes a browser, a downstream CDN, a scraper or an archive already holds — so treat a public file as already distributed when you decide what to promise a complainant. Copy the ids above — these two buttons open their pages empty, so the target is typed by the person who decided on it. A risk row’s own Lock action pre-fills Lockdown, which still shows the target and waits for you to press Lock.'
                           }
                         </Typography>
                       </Stack>
@@ -1426,6 +1529,112 @@ function AdminAbuseReports() {
                     )}
 
                     <Divider />
+
+                    {report.riskNotice ? (
+                      <Alert
+                        severity={urgent ? 'warning' : 'info'}
+                        variant={linked ? 'filled' : 'standard'}
+                      >
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle2">
+                            {linked
+                              ? `${report.riskNotice.title} — opened from a notice`
+                              : report.riskNotice.title}
+                          </Typography>
+                          <Typography variant="body2">
+                            {report.riskNotice.summary}
+                          </Typography>
+                          <Typography variant="caption">
+                            {report.riskNotice.ownersNotifiedAtMs
+                              ? `The workspace's owners and admins were told on ${new Date(
+                                  report.riskNotice.ownersNotifiedAtMs,
+                                ).toLocaleString()}, in the risk notice's own words — never the evidence below.`
+                              : 'Filed before owner notices existed: the workspace was not told about this row.'}
+                          </Typography>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ flexWrap: 'wrap', rowGap: 1 }}
+                          >
+                            {report.riskNotice.actions.map((action) =>
+                              RISK_DECISION_ACTIONS[action.id] ? (
+                                <Button
+                                  key={action.id}
+                                  size="small"
+                                  variant="outlined"
+                                  color="inherit"
+                                  title={action.hint}
+                                  onClick={() =>
+                                    patchDraft(report, {
+                                      status: RISK_DECISION_ACTIONS[action.id],
+                                    })
+                                  }
+                                >
+                                  {action.label}
+                                </Button>
+                              ) : action.href.startsWith('https://') ? (
+                                <Button
+                                  key={action.id}
+                                  size="small"
+                                  variant="outlined"
+                                  color="inherit"
+                                  title={action.hint}
+                                  href={action.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {action.label}
+                                </Button>
+                              ) : action.id === 'staff-open-row' ? null : (
+                                <AppLink
+                                  key={action.id}
+                                  componentVariant="button"
+                                  size="small"
+                                  variant="outlined"
+                                  color="inherit"
+                                  title={action.hint}
+                                  href={action.href}
+                                >
+                                  {action.label}
+                                </AppLink>
+                              ),
+                            )}
+                          </Stack>
+                          <Typography variant="caption">
+                            {
+                              'Waive / release sets the status below to Dismissed and Reject sets it to Actioned; nothing changes until you save it. An owner can never release a hold or lift a lock themselves — their only lever is a review request.'
+                            }
+                          </Typography>
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
+                    {report.ownerReviewRequests?.length ? (
+                      <Alert severity="info" variant="outlined">
+                        <Stack spacing={0.75}>
+                          <Typography variant="subtitle2">
+                            {`Review requested by the workspace (${report.ownerReviewRequests.length})`}
+                          </Typography>
+                          {report.ownerReviewRequests.map((request, index) => (
+                            <Stack key={`${request.atMs ?? index}`} spacing={0.25}>
+                              <Typography variant="caption" color="text.secondary">
+                                {`${request.atMs ? new Date(request.atMs).toLocaleString() : 'Unknown time'}${
+                                  request.email ? ` · ${request.email}` : ''
+                                }`}
+                              </Typography>
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                {request.note}
+                              </Typography>
+                            </Stack>
+                          ))}
+                          <Typography variant="caption" color="text.secondary">
+                            {
+                              'Answer by deciding the row: the owners get the closing notice (released or not approved) automatically. Put anything more you want them to know in "What you did".'
+                            }
+                          </Typography>
+                        </Stack>
+                      </Alert>
+                    ) : null}
 
                     {report.paymentSignal ? (
                       <Alert severity="error">

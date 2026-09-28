@@ -23,6 +23,7 @@ import {
   getOrgForHost,
   meterHostEmail,
   notifyHostManagers,
+  notifyRiskEvent,
   notifyStaff,
   renderHostEmailWithTokens,
   clearConnectPayoutFailure,
@@ -4677,11 +4678,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         await notifyGiftCardHold(
           {
             hostId,
-            orderLabel: `Order ${snapshot.id}`,
+            orderLabel: `order ${snapshot.id}`,
+            orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
+            orderId: snapshot.id,
             cards: outcome.cards,
             reason: 'refund-review',
           },
-          notifyHostManagers,
+          notifyRiskEvent,
         )
       }
     }
@@ -4711,8 +4714,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         ref: snapshot.ref,
         signal: risk.signal,
         hostId,
-        subjectLabel: `Order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
-        link: `/${hostId}/orders`,
+        subjectLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        // The Orders section of the Products hub, with this order's dialog
+        // open — where Refund lives (`siteRecordLinks().order`).
+        link: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
         notificationType: 'content.order',
         extraUpdate: (data) => ({
           timeline: CommerceModel.appendOrderEvent(
@@ -4728,7 +4733,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           ),
         }),
       },
-      { firestore: firebaseAdmin.app().firestore(), notify: notifyHostManagers },
+      { firestore: firebaseAdmin.app().firestore(), notifyRisk: notifyRiskEvent },
     )
     // The cards this order bought are frozen until the merchant releases them
     // (AGL-3363): a warning or review is the moment a stolen-card gift card
@@ -4736,14 +4741,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     await notifyGiftCardHold(
       {
         hostId,
-        orderLabel: `Order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        orderLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
+        orderId: snapshot.id,
         cards: await applyOrderGiftCardRisk(snapshot, {
           kind: 'freeze',
           reason: risk.signal.kind,
         }),
         reason: risk.signal.kind,
       },
-      notifyHostManagers,
+      notifyRiskEvent,
     )
     return { claimed: true, hostId }
   }
@@ -4803,34 +4810,39 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         await notifyGiftCardHold(
           {
             hostId,
-            orderLabel: `Order ${snapshot.id}`,
+            orderLabel: `order ${snapshot.id}`,
+            orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
+            orderId: snapshot.id,
             cards: await applyOrderGiftCardRisk(snapshot, {
               kind: 'freeze',
               reason: 'dispute',
             }),
             reason: 'dispute',
           },
-          notifyHostManagers,
+          notifyRiskEvent,
         )
         const { opened, record } = await recordDisputeOpened(snapshot, dispute)
         if (opened && hostId) {
           // Time-critical — Stripe's evidence window is days, not weeks — so
           // this is awaited rather than fired off with `void`: the handler is
           // serverless and work left running past the response is work the
-          // container may be frozen before it finishes. `notifyHostManagers`
-          // never throws.
-          await notifyHostManagers(hostId, {
-            type: 'content.order',
-            title: `Chargeback opened — $${(record.amountCents / 100).toFixed(2)}`,
-            body:
-              `Order ${snapshot.id} was disputed` +
-              (record.reason ? ` (${record.reason.replace(/_/g, ' ')})` : '') +
-              (record.evidenceDueByMs
-                ? `. Evidence is due ${new Date(record.evidenceDueByMs)
-                    .toISOString()
-                    .slice(0, 10)}.`
-                : '. Respond in Stripe.'),
-            link: `/${hostId}/orders`,
+          // container may be frozen before it finishes. The risk notice
+          // (AGL-3368) tells the site's managers and the workspace's owners
+          // what a dispute means and when the evidence is due; it never
+          // throws.
+          const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
+          await notifyRiskEvent({
+            kind: 'sale-dispute',
+            orgId: null,
+            hostId,
+            item: {
+              label: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+              path: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
+            },
+            amount: `$${(record.amountCents / 100).toFixed(2)}`,
+            evidenceDueByMs: record.evidenceDueByMs ?? null,
+            dedupeKey: `sale:${String(dispute?.id ?? snapshot.id)}`,
+            staffEvidence: record.reason ? `Reason: ${record.reason.replace(/_/g, ' ')}.` : null,
           })
         }
       } else {
