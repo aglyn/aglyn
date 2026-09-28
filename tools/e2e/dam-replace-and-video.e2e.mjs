@@ -398,6 +398,8 @@ async function publish(screenId, slug, children) {
     displayName: slug,
     slug,
     versionId,
+    // Stored, as every screen create stamps it (AGL-3321).
+    deletedAt: null,
     createdAt: FieldValue.serverTimestamp(),
   })
   // The tenant resolves a path through the host's `screens` map, not the

@@ -17,7 +17,7 @@
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { uniqueDuplicateName } from '@aglyn/aglyn/app-utils/duplicate-resource'
-import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import {
   NON_PAGE_SCREEN_MAX_PER_HOST,
@@ -429,8 +429,14 @@ export function createEmailDesignDraftWriter(
         })
         const stamps = { createdAt: request.now, updatedAt: request.now, createdBy: request.uid }
         const copy = copyFields(read.value)
-        // The keys the email templates list finds it by (AGL-3321).
-        tx.create(screenRef, { ...screen, ...displayNameSearchFields(name), ...copy, ...stamps })
+        // The keys the email templates list finds it by, and the stored
+        // `deletedAt: null` a campaign's screens list asks for (AGL-3321).
+        tx.create(screenRef, {
+          ...screen,
+          ...artifactCreateListKeys('screens', { displayName: name }),
+          ...copy,
+          ...stamps,
+        })
         tx.create(screenRef.collection('versions').doc(versionId), {
           ...version,
           nodes: Buffer.from(packed),

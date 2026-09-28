@@ -21,10 +21,19 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import {
+  LIST_QUERY_ID_PATH,
   listQueryIndexes,
   missingListQueryIndexes,
+  planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  CAMPAIGN_MEMBERS_QUERY,
+  campaignMembersBase,
+  campaignMembersSearchClause,
+  type CampaignMemberCollection,
+} from './campaign-members-query'
 import { EXPERIMENT_LIST_QUERY } from './experiment-list-query'
 
 /**
@@ -91,5 +100,92 @@ describe('the Conversions lists (hosts/{hostId}/campaignAttributions)', () => {
     expect(
       missingListQueryIndexes(INDEXES, 'campaignAttributions', [shape('kind', 'nothing')], 'COLLECTION'),
     ).toHaveLength(1)
+  })
+})
+
+describe('a campaign’s screens and forms (hosts/{hostId}/screens, /forms)', () => {
+  /*
+   * Two shapes per collection: unsearched, the membership (and for screens
+   * `deletedAt == null`) walked by document name, which merges on the
+   * single-field indexes; searched, the same base beside a prefix range on
+   * `nameLower`, ordered by it. The searched shape is served by ONE
+   * composite per collection holding the whole base and the range — named
+   * here by hand rather than as `listQueryIndexes`' merged pairs, which
+   * would spend three composites where two serve (AGL-3321, the fewest).
+   */
+  const plan = (collection: CampaignMemberCollection, words: string[]) => {
+    const search = campaignMembersSearchClause(words)
+    return planListQuery(
+      CAMPAIGN_MEMBERS_QUERY,
+      {
+        clauses: search ? [search] : [],
+        base: campaignMembersBase(collection, 'spring-2026'),
+      },
+      nameSearchNormalizers,
+    )
+  }
+
+  /** The composite a searched plan needs: every predicate, then its order. */
+  const composite = (collection: CampaignMemberCollection) => {
+    const searched = plan(collection, ['Spring'])
+    const fields: Array<{ fieldPath: string; order?: 'ASCENDING'; arrayConfig?: 'CONTAINS' }> = []
+    for (const filter of searched.filters) {
+      if (filter.path === searched.orderBy.path) continue
+      if (fields.some((field) => field.fieldPath === filter.path)) continue
+      fields.push(
+        filter.op === 'array-contains'
+          ? { fieldPath: filter.path, arrayConfig: 'CONTAINS' }
+          : { fieldPath: filter.path, order: 'ASCENDING' },
+      )
+    }
+    fields.push({ fieldPath: searched.orderBy.path, order: 'ASCENDING' })
+    return { fields }
+  }
+
+  it('walks the document name unsearched, which needs no composite', () => {
+    for (const collection of ['screens', 'forms'] as const) {
+      const unsearched = plan(collection, [])
+      expect(unsearched.orderBy).toEqual({ path: LIST_QUERY_ID_PATH, direction: 'asc' })
+      expect(unsearched.filters.every((filter) => filter.op === '==' || filter.op === 'array-contains')).toBe(true)
+    }
+  })
+
+  it('searches the start of the name beside the membership, refusing nothing', () => {
+    for (const collection of ['screens', 'forms'] as const) {
+      const searched = plan(collection, ['Spring', 'sale'])
+      expect(searched.refused).toEqual([])
+      expect(searched.orderBy).toEqual({ path: 'nameLower', direction: 'asc' })
+    }
+  })
+
+  it('holds the one composite each searched shape needs', () => {
+    expect(composite('screens')).toEqual({
+      fields: [
+        { fieldPath: 'campaignIds', arrayConfig: 'CONTAINS' },
+        { fieldPath: 'deletedAt', order: 'ASCENDING' },
+        { fieldPath: 'nameLower', order: 'ASCENDING' },
+      ],
+    })
+    expect(composite('forms')).toEqual({
+      fields: [
+        { fieldPath: 'campaignIds', arrayConfig: 'CONTAINS' },
+        { fieldPath: 'nameLower', order: 'ASCENDING' },
+      ],
+    })
+    expect(missingListQueryIndexes(INDEXES, 'screens', [composite('screens')], 'COLLECTION')).toEqual([])
+    expect(missingListQueryIndexes(INDEXES, 'forms', [composite('forms')], 'COLLECTION')).toEqual([])
+  })
+
+  it('declares nothing listQueryIndexes would add beyond the search range', () => {
+    // No column filter, so the only order a declared field adds is the
+    // search's: the merged pairs are the three this spends two in place of.
+    const merged = listQueryIndexes(CAMPAIGN_MEMBERS_QUERY, [
+      { path: 'campaignIds', array: true },
+      { path: 'deletedAt' },
+    ])
+    expect(merged.map((index) => index.fields[1])).toEqual([
+      { fieldPath: 'nameLower', order: 'ASCENDING' },
+      { fieldPath: 'nameLower', order: 'ASCENDING' },
+    ])
   })
 })

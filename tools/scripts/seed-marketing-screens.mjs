@@ -238,6 +238,8 @@ if (apply) {
       slug: p.slug,
       // The keys the screen switcher and lists find it by (AGL-835, AGL-3321).
       ...displayNameSearchFields(p.name),
+      // Stored, not absent: a campaign's screens list asks `deletedAt == null`.
+      deletedAt: null,
       versionId: p.versionId,
       layoutId: LAYOUT,
       createdAt: now,

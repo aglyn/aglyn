@@ -218,8 +218,10 @@ describe('the email design writer', () => {
     })
     expect(store.get('hosts/host-1/screens/job-1')).toEqual({
       ...screen,
-      // The keys the email templates list finds it by (AGL-3321).
+      // The keys the email templates list finds it by, and the stored null
+      // a campaign's screens list asks for (AGL-3321).
       ...displayNameSearchFields('Weekend buns'),
+      deletedAt: null,
       emailSubject: CONTENT.subject,
       emailPreheader: CONTENT.preheader,
       emailSubjectVariants: CONTENT.subjectVariants,
