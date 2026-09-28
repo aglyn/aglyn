@@ -17,6 +17,7 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { canActAsPublisher } from './publisher-profile'
 import { isOrgMember } from './sale-risk'
 
@@ -96,7 +97,8 @@ export const REVIEW_MIN_ACCOUNT_AGE_DAYS = 7
  */
 export async function isNewAccount(uid: string, nowMs = Date.now()): Promise<boolean> {
   try {
-    const user = await firebaseAdmin.app().auth().getUser(uid)
+    // Across pools (AGL-1122): an SSO reviewer is not in the project pool.
+    const user = (await findUserByUidAcrossPools(uid))?.record
     const createdMs = Date.parse(String(user?.metadata?.creationTime ?? ''))
     if (!Number.isFinite(createdMs)) return false
     return nowMs - createdMs < REVIEW_MIN_ACCOUNT_AGE_DAYS * 86_400_000
