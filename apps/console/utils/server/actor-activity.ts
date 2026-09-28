@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
@@ -575,6 +576,7 @@ export async function resolveAccountEmails(
   const uids = [...new Set(candidates.filter((uid): uid is string => Boolean(uid)))]
   const emails = new Map<string, string>()
   if (!uids.length) return emails
+  const missing: string[] = []
   try {
     const auth = firebaseAdmin.app().auth()
     for (let start = 0; start < uids.length; start += GET_USERS_BATCH) {
@@ -585,5 +587,19 @@ export async function resolveAccountEmails(
   } catch (error) {
     console.error('activity actor lookup failed', error)
   }
+  // The batch read sees the project pool only; an SSO member lives in their
+  // organization's tenant pool (AGL-1122), so whoever it did not name is
+  // looked up across pools, one at a time — a page holds few.
+  for (const uid of uids) if (!emails.has(uid)) missing.push(uid)
+  await Promise.all(
+    missing.map(async (uid) => {
+      try {
+        const email = (await findUserByUidAcrossPools(uid))?.record.email
+        if (email) emails.set(uid, email)
+      } catch {
+        // Left unnamed; the presenter shows the uid.
+      }
+    }),
+  )
   return emails
 }

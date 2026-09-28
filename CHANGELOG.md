@@ -9,6 +9,40 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.202 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.201...v1.0.0-beta.202)
+
+### Added
+
+- **email:** every platform email wears the brand-aware header and footer ([AGL-3367](https://linear.app/aglyn/issue/AGL-3367), [AGL-3322](https://linear.app/aglyn/issue/AGL-3322))
+- **marketplace:** a publisher cannot pay itself, and a young one's payouts wait ([AGL-3365](https://linear.app/aglyn/issue/AGL-3365))
+- **marketplace:** screen every submission for phishing, and the platform is a brand ([AGL-3365](https://linear.app/aglyn/issue/AGL-3365))
+- **commerce:** gift cards bought with a questioned payment are frozen or voided ([AGL-3363](https://linear.app/aglyn/issue/AGL-3363))
+- **payments:** card-testing velocity and site-own return URLs on visitor payment doors ([AGL-3363](https://linear.app/aglyn/issue/AGL-3363))
+- **lockdown:** a security lock pauses a site's renewals and payouts; the lift undoes it ([AGL-3364](https://linear.app/aglyn/issue/AGL-3364), [AGL-3359](https://linear.app/aglyn/issue/AGL-3359), [AGL-3366](https://linear.app/aglyn/issue/AGL-3366))
+
+### Fixed
+
+- **activity:** site feeds and staff cancels name who acted too ([AGL-3369](https://linear.app/aglyn/issue/AGL-3369))
+- **activity:** every feed row names who acted, never "Someone" ([AGL-3369](https://linear.app/aglyn/issue/AGL-3369))
+- **console:** the lockdown route imports the recurring-charge registry statically ([AGL-3364](https://linear.app/aglyn/issue/AGL-3364))
+- **email:** a usage alert whose org cannot be read still goes, in the platform's brand ([AGL-3367](https://linear.app/aglyn/issue/AGL-3367))
+- **commerce:** paid files, supplier webhooks and the feed stay on honest hosts ([AGL-3363](https://linear.app/aglyn/issue/AGL-3363))
+- **payments:** the card-testing alarm tells the merchant too, and names no threshold ([AGL-3363](https://linear.app/aglyn/issue/AGL-3363))
+
+### Documentation
+
+- **marketplace:** the abuse queue's marketplace rows, and the rules fit their limit ([AGL-3365](https://linear.app/aglyn/issue/AGL-3365), [AGL-3321](https://linear.app/aglyn/issue/AGL-3321), [AGL-503](https://linear.app/aglyn/issue/AGL-503))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **linear-ids:** raise the ceiling to AGL-3370, read from Linear ([AGL-3370](https://linear.app/aglyn/issue/AGL-3370), [AGL-3369](https://linear.app/aglyn/issue/AGL-3369))
+- **tenant:** the card-velocity dispatcher spec imports its reset by package path ([AGL-3363](https://linear.app/aglyn/issue/AGL-3363))
+
+</details>
+
 ## v1.0.0-beta.201 — 2026-09-28
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.200...v1.0.0-beta.201)
