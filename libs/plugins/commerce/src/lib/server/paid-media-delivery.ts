@@ -28,6 +28,7 @@ import {
   type MediaDeliveryProvider,
   mediaDeliveryProvider,
 } from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
+import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { mediaDeliveryRedirect } from '@aglyn/tenant-data-admin/server/media-delivery'
 import {
   assertMediaSignatureTtl,
@@ -72,7 +73,17 @@ import {
  *    runs against the site actually selling it.
  * 4. **A hotlink to somebody else's server passes through unchanged.** No code
  *    of ours runs there and nothing here can make its URL expire. That is the
- *    author's hosting decision, and the docs say so.
+ *    author's hosting decision, and the docs say so. EXCEPT a hotlink whose
+ *    host wears a brand it is not (`lookalikeBrandForHost`, the phishing
+ *    screen's rule): the redirect leaves from the merchant's own domain, so a
+ *    lure behind it is one no screen of the page or the receipt ever saw. It
+ *    is refused for every workspace, like a lookalike link in an email
+ *    (AGL-3363), and the caller files it.
+ * 5. **A signed Storage read is a download when it is one.** A download, or
+ *    an object whose type a browser would run (HTML, SVG, XML), is signed
+ *    with `response-content-disposition: attachment`, so the file is saved
+ *    rather than rendered (AGL-3363). The CDN already does this for its own
+ *    deliveries; a V4 URL carried nothing.
  *
  * ## A video with a copy at the delivery provider (AGL-2824)
  *
@@ -96,6 +107,8 @@ export type PaidMediaRefusal =
   | 'foreign-storage'
   /** Not a value any delivery can be built from. */
   | 'malformed'
+  /** A hotlink to a host that wears another brand's name (AGL-3363). */
+  | 'lookalike'
 
 export type PaidMediaDelivery =
   | {
@@ -124,7 +137,12 @@ export type PaidMediaDelivery =
       scope: string
       mediaId: string
     }
-  | { ok: false; refusal: PaidMediaRefusal }
+  | {
+      ok: false
+      refusal: PaidMediaRefusal
+      /** For a `lookalike`: the host it wears a brand in, for the caller to file. */
+      host?: string
+    }
 
 /** A document read, reduced to what this module asks of one. */
 export interface PaidMediaDocument {
@@ -143,8 +161,29 @@ export interface PaidMediaDeliveryIo {
   ): Promise<PaidMediaDocument>
   /** The org a site belongs to, or null for an unindexed site. */
   orgIdForHost(hostId: string): Promise<string | null>
-  /** A V4 signed read URL for one object in {@link bucketName}. */
-  signStorageRead(objectPath: string, expiresAtMs: number): Promise<string>
+  /**
+   * A V4 signed read URL for one object in {@link bucketName}. `attachment`
+   * signs `response-content-disposition: attachment` into it (AGL-3363).
+   */
+  signStorageRead(
+    objectPath: string,
+    expiresAtMs: number,
+    options?: { attachment?: boolean },
+  ): Promise<string>
+}
+
+/** Object types a browser runs rather than shows: always saved, never rendered. */
+const ACTIVE_OBJECT_EXTENSION = /\.(html?|xhtml|xht|svgz?|xml|xsl|xslt|mht|mhtml|js|mjs)$/i
+
+/** Is this signed read a download, by the caller's ask or by what the object is? */
+export function storageReadIsAttachment(
+  objectPath: string,
+  cdnParams: ReadonlyArray<readonly [string, string]> | undefined,
+): boolean {
+  if ((cdnParams ?? []).some(([key, value]) => key === 'download' && value === '1')) {
+    return true
+  }
+  return ACTIVE_OBJECT_EXTENSION.test(objectPath)
 }
 
 /**
@@ -308,8 +347,18 @@ export async function resolvePaidMediaDelivery(options: {
   switch (source.kind) {
     case 'malformed':
       return refuse('malformed')
-    case 'external':
+    case 'external': {
+      let externalHost: string
+      try {
+        externalHost = new URL(source.url).hostname
+      } catch {
+        return refuse('malformed')
+      }
+      if (lookalikeBrandForHost(externalHost)) {
+        return { ok: false, refusal: 'lookalike', host: externalHost }
+      }
       return { ok: true, via: 'external', location: source.url }
+    }
     case 'asset':
       return deliverAsset(source.scope, source.mediaId)
     case 'storage-object': {
@@ -339,7 +388,9 @@ export async function resolvePaidMediaDelivery(options: {
       return {
         ok: true,
         via: 'signed-storage',
-        location: await io.signStorageRead(objectPath, expiresAtMs),
+        location: await io.signStorageRead(objectPath, expiresAtMs, {
+          attachment: storageReadIsAttachment(objectPath, options.cdnParams),
+        }),
         expiresAtMs,
         objectPath,
       }
@@ -369,6 +420,7 @@ export function createPaidMediaDeliveryIo(options: {
         version: 'v4'
         action: 'read'
         expires: number
+        responseDisposition?: string
       }): Promise<[string] | string[]>
     }
   }
@@ -388,11 +440,12 @@ export function createPaidMediaDeliveryIo(options: {
       const orgId = index.exists ? index.get('orgId') : undefined
       return typeof orgId === 'string' && orgId ? orgId : null
     },
-    signStorageRead: async (objectPath, expiresAtMs) => {
+    signStorageRead: async (objectPath, expiresAtMs, signOptions) => {
       const [url] = await bucket.file(objectPath).getSignedUrl({
         version: 'v4',
         action: 'read',
         expires: expiresAtMs,
+        ...(signOptions?.attachment ? { responseDisposition: 'attachment' } : {}),
       })
       return String(url)
     },

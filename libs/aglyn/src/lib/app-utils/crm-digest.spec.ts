@@ -255,6 +255,55 @@ describe('what the digest says', () => {
     expect(text.endsWith('Need help? https://help.example')).toBe(true)
   })
 
+  it('ends at the links inside a system email, whose footer carries the rest (AGL-3367)', () => {
+    const now = Date.parse('2026-09-05T13:00:00.000Z')
+    const text = composeCrmDigestEmailText({
+      nowMs: now,
+      timeZone: 'America/Chicago',
+      productName: 'Aglyn',
+      tasksUrl: 'https://app.example/acme/hosts/main/crm/tasks',
+      leadsUrl: (hostId) => `https://app.example/acme/hosts/${hostId}/crm/leads`,
+      settingsUrl: 'https://app.example/manage/notifications',
+      hostName: (hostId) => `Site ${hostId}`,
+      supportLine: '\n\nNeed help? https://help.example',
+      omitClosing: true,
+      digest: {
+        overdue: [
+          {
+            id: 't1',
+            title: 'Call Jane',
+            kind: 'call',
+            dueAtMs: Date.parse('2026-09-01T14:00:00.000Z'),
+            assigneeUid: 'ann',
+            hostId: 'main',
+          },
+        ],
+        today: [
+          {
+            id: 't2',
+            title: 'Send proposal',
+            kind: 'email',
+            dueAtMs: Date.parse('2026-09-05T20:30:00.000Z'),
+            assigneeUid: 'ann',
+            hostId: 'main',
+          },
+        ],
+        leads: [
+          {
+            id: 'l1',
+            hostId: 'main',
+            email: 'jane@acme.com',
+            name: 'Jane Doe',
+            firstSeenAtMs: Date.parse('2026-09-02T12:00:00.000Z'),
+          },
+        ],
+      },
+    })
+    expect(text).not.toContain('You get this each morning')
+    expect(text).not.toContain('https://help.example')
+    expect(text).toMatch(/https:\/\/app\.example\/acme\/hosts\/\w+\/crm\/leads$/)
+  })
+
   it('caps each section and says how many it left out', () => {
     const now = Date.parse('2026-09-05T13:00:00.000Z')
     const overdue = Array.from({ length: CRM_DIGEST_LIST_MAX + 5 }, (_, index) => ({

@@ -259,6 +259,26 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
     [confirm, post],
   )
 
+  // A card frozen by a fraud signal on its purchase (AGL-3363).
+  const handleRelease = useCallback(
+    async (card: any) => {
+      const confirmed = await confirm({
+        title: `Release ${card.$id}?`,
+        description:
+          'The payment that bought this card was questioned by the card ' +
+          'issuer, held for review, or disputed. Release it only if you are ' +
+          'satisfied the payment is genuine: the holder can then spend the ' +
+          `${usd(card.balanceCents)} left on it.`,
+        confirmationText: 'Release gift card',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      await post({ action: 'release', code: card.$id }, () => `${card.$id} released`)
+    },
+    [confirm, post],
+  )
+
   return (
     <EntitlementGatedCard
       help={giftCardsHelp}
@@ -372,8 +392,35 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
                   {card.orderId ? null : (
                     <Chip size="small" variant="outlined" label={'Issued by hand'} />
                   )}
+                  {!card.voidedAtMs && Number(card.frozenAtMs) > 0 ? (
+                    <>
+                      <Chip
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        label={'On hold: payment questioned'}
+                      />
+                      <Button
+                        size="small"
+                        disabled={busy}
+                        onClick={() => handleRelease(card)}
+                      >
+                        {'Release'}
+                      </Button>
+                    </>
+                  ) : null}
                   {card.voidedAtMs ? (
-                    <Chip size="small" variant="outlined" label={'Voided'} />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={
+                        card.voidedReason === 'refund'
+                          ? 'Voided: order refunded'
+                          : card.voidedReason === 'dispute-lost'
+                            ? 'Voided: chargeback lost'
+                            : 'Voided'
+                      }
+                    />
                   ) : Number(card.balanceCents ?? 0) > 0 ? (
                     <Button
                       size="small"

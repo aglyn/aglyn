@@ -1768,7 +1768,9 @@ function AdminAbuseReports() {
                           : report.source === 'stripe-fraud-signal' ||
                               report.source === 'stripe-seller-fraud-pattern'
                             ? 'What Stripe reported'
-                            : 'What the reporter said'}
+                            : report.source === 'payment-velocity'
+                              ? 'What the payment counters recorded'
+                              : 'What the reporter said'}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -1797,6 +1799,10 @@ function AdminAbuseReports() {
                       ) : report.source === 'outbound-screen' ? (
                         <Typography variant="body2">
                           {'Filed by the outbound phishing screen, not a person. There is no reporter to reply to; the workspace that composed the email is the subject.'}
+                        </Typography>
+                      ) : report.source === 'payment-velocity' ? (
+                        <Typography variant="body2">
+                          {'Filed by the card-testing counters on the site’s payment doors, not a person. There is no reporter to reply to; the site and its shoppers are the subject.'}
                         </Typography>
                       ) : report.identityVisible ? (
                         <Typography variant="body2">

@@ -301,15 +301,19 @@ function subscription(options: {
   plan?: string
   status?: string
   actorUid?: string
+  actorEmail?: string
   actorAction?: string
   cancellationReason?: string | null
+  cancellationComment?: string
 }) {
   const {
     plan = 'pro',
     status = 'active',
     actorUid,
+    actorEmail,
     actorAction,
     cancellationReason,
+    cancellationComment,
   } = options
   return {
     id: 'sub_1',
@@ -322,10 +326,16 @@ function subscription(options: {
       orgId: 'org-real',
       plan,
       ...(actorUid ? { actorUid } : {}),
+      ...(actorEmail ? { actorEmail } : {}),
       ...(actorAction ? { actorAction } : {}),
     },
     ...(cancellationReason !== undefined
-      ? { cancellation_details: { reason: cancellationReason } }
+      ? {
+          cancellation_details: {
+            reason: cancellationReason,
+            ...(cancellationComment ? { comment: cancellationComment } : {}),
+          },
+        }
       : {}),
     items: {
       data: [
@@ -385,8 +395,8 @@ describe('what a subscription event earns in the feed', () => {
     expect(entries()).toHaveLength(1)
     expect(entries()[0]).toEqual({
       orgId: 'org-real',
-      // No email: the webhook holds a uid at best, and resolving an address
-      // would answer with whoever holds that uid TODAY.
+      // No email stamped, so none written: resolving an address would
+      // answer with whoever holds that uid TODAY.
       actor: { uid: 'uid-7', email: null },
       action: 'Changed the plan from starter to pro',
       target: { type: 'subscription', id: 'sub_1', name: 'pro' },
@@ -447,6 +457,56 @@ describe('what a subscription event earns in the feed', () => {
     expect(entries()).toHaveLength(1)
     expect(entries()[0].actor.uid).toBe('uid-7')
     expect(entries()[0].action).toBe('Canceled the subscription')
+  })
+
+  it('writes the address stamped beside the uid at the console act', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(
+        event(
+          subscription({
+            plan: 'pro',
+            actorUid: 'uid-7',
+            actorEmail: 'owner@example.test',
+            actorAction: 'switch',
+          }),
+          'customer.subscription.updated',
+        ),
+      ),
+    )
+
+    expect(entries()).toHaveLength(1)
+    expect(entries()[0].actor).toEqual({
+      uid: 'uid-7',
+      email: 'owner@example.test',
+    })
+  })
+
+  it('names Aglyn, not the customer, on a staff cancellation', async () => {
+    // Stripe calls a staff cancel `cancellation_requested`, the same word as
+    // a customer's, and a `cancel` stamp the customer left earlier would
+    // otherwise sign it with their name.
+    const post = loadWebhook()
+    await post(
+      signed(
+        event(
+          subscription({
+            status: 'canceled',
+            actorUid: 'uid-7',
+            actorEmail: 'owner@example.test',
+            actorAction: 'cancel',
+            cancellationReason: 'cancellation_requested',
+            cancellationComment:
+              'Aglyn staff cancellation via staff-console: fraud (actor staff-1; no refund)',
+          }),
+          'customer.subscription.deleted',
+        ),
+      ),
+    )
+
+    expect(entries()).toHaveLength(1)
+    expect(entries()[0].actor).toEqual({ uid: null, email: null })
+    expect(entries()[0].action).toBe('Subscription canceled by Aglyn')
   })
 
   it('writes NOTHING for a renewal that moves no plan', async () => {
@@ -544,6 +604,7 @@ describe('subscriptionActivityEntry — which stamp may sign which event', () =>
       kind: 'plan-changed',
       action: 'Changed the plan from starter to pro',
       actorUid: 'uid-7',
+      actorEmail: null,
       plan: 'pro',
     })
   })

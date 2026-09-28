@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  type SiteReturnHost,
+  siteReturnOrigin,
+} from '@aglyn/aglyn/app-utils/site-return-url'
 import { checkEntitlement,
   type PluginJobHostGate,
   registerPluginConfigSchema,
@@ -603,7 +607,16 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     })
 
     if (paid) {
-      const origin = req.headers.origin ?? `https://${req.headers.host}`
+      // The site's own origin, never a header's say-so (AGL-3363): a
+      // caller writes `Origin` and `Host`, and Stripe sends the payer here.
+      const origin = siteReturnOrigin({
+        candidates: [
+          typeof req.headers.origin === 'string' ? req.headers.origin : '',
+          `https://${req.headers.host}`,
+        ],
+        site: hostSnapshot.data?.() as SiteReturnHost | undefined,
+        requestHost: String(req.headers.host ?? ''),
+      })
       // TAX ON A PAID BOOKING: the merchant's own service rate, resolved
       // above and default OFF (AGL-2028, answering AGL-2000).
       //
@@ -1062,7 +1075,9 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
 /** Registers the bookings plugin's public (site-facing) API routes (AGL-396). */
 export function registerBookingsApi(): void {
   registerPluginApiRoute('bookings/slots', slotsHandler)
-  registerPluginApiRoute('bookings/book', bookHandler)
+  // A deposit opens a Stripe Checkout Session for whoever books, so the
+  // dispatcher holds this door to the card-testing counters (AGL-3363).
+  registerPluginApiRoute('bookings/book', bookHandler, { cardPayment: true })
 }
 
 /** Registers the bookings plugin's console-side API routes (AGL-396). */

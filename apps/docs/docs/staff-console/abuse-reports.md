@@ -249,6 +249,44 @@ fraudster:
 
 Then close the row with a note saying what you did.
 
+## Card-testing velocity {#card-testing-velocity}
+
+A public checkout is where a card tester learns which stolen cards still work:
+a script opens payment after payment, from one address or from many, against
+one shop or across many. Every visitor payment door on a published site (buy
+now, cart checkout, reservation deposit, booking deposit) is held to three
+counters. The numbers live in `card-payment-velocity.ts` and are not repeated
+here:
+
+- **One address on one site.** Past it, the shopper is told to wait a few
+  minutes. A young workspace's site has a tighter limit.
+- **One address across every site.** Past it, the same refusal.
+- **One site, every address together.** This one **refuses nothing**, because
+  a site-wide refusal would let any stranger switch a merchant's checkout off,
+  and a busy launch looks the same. Crossing it files one row per site per
+  day.
+
+The row's source is `payment-velocity`, the category is `phishing`, the
+severity is urgent and the reference is `PV-…`. Staff are notified once a day
+per site. It can mean a script testing cards against the shop, a merchant
+testing stolen cards through their own storefront, or a real launch. Look at
+the site and its recent orders. If it is card testing, lock the workspace and
+pause the connected account's payouts as for a
+[seller fraud pattern](#seller-fraud-pattern).
+
+The counters cannot see the card, because Stripe's hosted Checkout page takes
+it. A limit per card is Radar's job. Stripe's card-testing protection is on
+for every Checkout Session by default. Velocity rules live in the platform
+account's Radar, since every tenant sale is a destination charge on it. They
+need Radar for Fraud Teams; check each attribute's exact name in the rule
+editor before saving:
+
+- **Block** when one address has many declined charges in an hour
+  (`:declined_charges_per_ip_address_hourly:`).
+- **Review** when one card is charged many times in a day
+  (`:total_charges_per_card_number_daily:`).
+- **Request 3D Secure** when `:risk_level:` is `elevated`.
+
 ## The marketplace {#marketplace}
 
 Marketplace publishers get the same screens, applied where a listing is

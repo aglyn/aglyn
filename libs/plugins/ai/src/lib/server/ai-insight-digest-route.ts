@@ -26,6 +26,10 @@ import { meterPlatformEmail } from '@aglyn/tenant-data-admin/server/email-meteri
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { featureLockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
 import { notifyUsers } from '@aglyn/tenant-data-admin/server/notifications'
+import {
+  renderSystemEmailContent,
+  systemEmailBrand,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
 import { listOrgMembers, memberHasPermissionOnHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { getServerReleaseFlagValues } from '@aglyn/tenant-data-admin/server/release-flags'
 import { safeEqual } from '@aglyn/tenant-data-admin/server/safe-equal'
@@ -93,10 +97,16 @@ export async function POST(request: Request): Promise<Response> {
       send: async (email) => {
         const recipients = await filterSuppressedEmails([email.to], firestore)
         if (!recipients.length) return { sent: false, rateLimited: false }
+        // The `ai-insights-digest` system email (AGL-3367), in the org's brand.
+        const content = await renderSystemEmailContent(
+          'ai-insights-digest',
+          { 'site.name': email.siteName, 'digest.body': email.text },
+          systemEmailBrand(email.org),
+          { subject: email.subject, text: email.text },
+        )
         const result = await sendEmail({
           to: recipients,
-          subject: email.subject,
-          text: email.text,
+          ...content,
           fromName: email.fromName,
           context: 'ai-insights-digest',
           priority: 'bulk',

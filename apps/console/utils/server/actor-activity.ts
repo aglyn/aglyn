@@ -71,6 +71,8 @@ export interface ActorActivityEntry {
   scopeId: string
   action?: string
   target?: Record<string, unknown> | null
+  /** The acting uid, `'api'` for a key, or null when no person acted. */
+  actorId?: string | null
   actorEmail?: string | null
   /** The API key that wrote the entry, when an integration did (AGL-2632). */
   apiKeyName?: string
@@ -146,6 +148,7 @@ function flattenEntry(
     ...describeScope(scopePath),
     action: typeof data['action'] === 'string' ? data['action'] : undefined,
     target: (data['target'] as Record<string, unknown> | null) ?? null,
+    actorId: typeof data['actorId'] === 'string' ? data['actorId'] : null,
     actorEmail: typeof data['actorEmail'] === 'string' ? data['actorEmail'] : null,
     ...(typeof data['apiKeyName'] === 'string' ? { apiKeyName: data['apiKeyName'] } : {}),
     createdAt: seconds === null ? null : { seconds },
@@ -421,7 +424,7 @@ export async function readOrgWideActivity(
         query: applyListQuery(
           firestore.collection(collection).doc(id).collection('activity'),
           plan,
-        ).select('action', 'target', 'actorEmail', 'apiKeyName', 'createdAt'),
+        ).select('action', 'target', 'actorId', 'actorEmail', 'apiKeyName', 'createdAt'),
       },
     ]
   })
@@ -495,4 +498,52 @@ export async function readOrgWideActivity(
     refused: plan.refused,
     notices: plan.notices,
   }
+}
+
+/** `getUsers` answers at most this many identifiers per call. */
+const GET_USERS_BATCH = 100
+
+/**
+ * The page's entries, each one a person wrote without an address given the
+ * address that uid holds now, as `actorEmailNow`.
+ *
+ * A writer that holds a uid and no address — the billing webhook, before it
+ * carried the address stamped at the console act — left rows the feed could
+ * only call "a member", which names nobody. The uid is the durable identity,
+ * so it is resolved here, on read, and the snapshot field is left alone: the
+ * reader can tell an address recorded at the time from one looked up since.
+ *
+ * Never throws. An account that no longer exists, or an Auth read that
+ * fails, leaves the entry as it was and the presenter names the uid.
+ */
+export async function withResolvedActors<T extends object>(
+  entries: T[],
+): Promise<Array<T & { actorEmailNow?: string }>> {
+  // Read defensively: the org feed's own branch hands over stored data.
+  const unaddressedUid = (entry: T): string | null => {
+    const { actorId, actorEmail } = entry as { actorId?: unknown; actorEmail?: unknown }
+    if (typeof actorEmail === 'string' && actorEmail) return null
+    const uid = typeof actorId === 'string' ? actorId.trim() : ''
+    return uid && uid !== 'api' && !uid.startsWith('system:') ? uid : null
+  }
+  const uids = [
+    ...new Set(entries.map(unaddressedUid).filter((uid): uid is string => Boolean(uid))),
+  ]
+  if (!uids.length) return entries
+  const emails = new Map<string, string>()
+  try {
+    const auth = firebaseAdmin.app().auth()
+    for (let start = 0; start < uids.length; start += GET_USERS_BATCH) {
+      const batch = uids.slice(start, start + GET_USERS_BATCH)
+      const { users } = await auth.getUsers(batch.map((uid) => ({ uid })))
+      for (const user of users) if (user.email) emails.set(user.uid, user.email)
+    }
+  } catch (error) {
+    console.error('activity actor lookup failed', error)
+  }
+  return entries.map((entry) => {
+    const uid = unaddressedUid(entry)
+    const now = uid ? emails.get(uid) : undefined
+    return now ? { ...entry, actorEmailNow: now } : entry
+  })
 }

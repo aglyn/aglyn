@@ -26,15 +26,20 @@ import {
   runPluginApiMatch,
 } from '@aglyn/aglyn/server'
 import {
+  cardPaymentVelocityRefusal,
   filterEnabledPluginsByReleaseFlags,
   getHostDisabledPlugins,
   getOrgForHost,
+  isYoungWorkspace,
   visitorWriteRateLimitRefusal,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 // The leaf, not the barrel: the dispatcher's specs substitute the barrel,
 // and a route's own registration must still be read where it was made.
-import { isPluginRecipientLinkRoute } from '@aglyn/aglyn/app-utils/api-plugins'
+import {
+  isPluginCardPaymentRoute,
+  isPluginRecipientLinkRoute,
+} from '@aglyn/aglyn/app-utils/api-plugins'
 import {
   conflictingHostIdResponse,
   pluginApiRequestHost,
@@ -91,6 +96,10 @@ async function dispatch(
   // time (a request body can only be cloned so many times, and two
   // resolutions of "which site is this" is one too many).
   let hostId = ''
+  // The workspace behind the site, when the enablement gate read it — the
+  // card-testing counters below read its age and never read it again.
+  let siteOrgId: string | null = null
+  let siteOrg: { createdAt?: unknown } | null = null
   if (pluginId) {
     // THE SITE GATED MUST BE THE SITE CHARGED (AGL-3360). This read took
     // `?hostId=` over the body and parsed JSON only, while every storefront,
@@ -118,6 +127,8 @@ async function dispatch(
           getHostDisabledPlugins(hostId),
         ])
         orgId = resolved?.orgId ?? null
+        siteOrgId = orgId
+        siteOrg = (resolved?.org as { createdAt?: unknown } | undefined) ?? null
         if (
           resolved &&
           !resolveHostEnabledPlugins(resolved.org, { disabledPlugins }).includes(
@@ -210,6 +221,22 @@ async function dispatch(
     request,
   })
   if (limited) return limited
+
+  // Card-testing velocity (AGL-3363). A route that opens a card payment
+  // declared so at registration, and meets three more counters: per visitor
+  // on the site, per address across every site, and a site-wide one that
+  // refuses nothing and tells staff. After the ordinary limit, so a flood is
+  // refused by the cheaper gate first.
+  if (isPluginCardPaymentRoute(path)) {
+    const velocity = await cardPaymentVelocityRefusal({
+      path,
+      hostId,
+      orgId: siteOrgId,
+      young: isYoungWorkspace(siteOrg),
+      request,
+    })
+    if (velocity) return velocity
+  }
 
   return runPluginApiMatch(match, request, { pluginApi: pluginApi ?? [] }, runLegacyHandler)
 }

@@ -256,7 +256,9 @@ function rowPayload(
     resolvedAtMs: asMillis(data['resolvedAt']),
     /**
      * Who filed the row: `outbound-screen` for a send the phishing screen
-     * held (AGL-3356), absent for the public intake.
+     * held (AGL-3356), `payment-velocity` for a site whose payment doors
+     * crossed the card-testing alarm (AGL-3363), absent for the public
+     * intake.
      */
     source: asString(data['source']),
     heldSend: heldSendPayload(data['heldSend']),

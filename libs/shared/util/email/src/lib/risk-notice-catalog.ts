@@ -79,6 +79,13 @@ export const RISK_EVENT_KINDS = [
   'domain-rejected',
   // A fraud signal on the workspace's own subscription payment.
   'billing-payment-flagged',
+  // A link a merchant configured (a download, a feed, a supplier hook) that
+  // wears another brand's name, refused wherever it is followed.
+  'link-blocked',
+  // A burst of card payments on one site: possibly card testing.
+  'card-testing',
+  // Gift cards an order bought, frozen while its payment is in question.
+  'gift-card-hold',
   // A fraud signal on a sale the workspace took from its own customer.
   'sale-fraud-warning',
   'sale-payment-review',
@@ -132,6 +139,7 @@ export const RISK_OWNER_ACTION_IDS = [
   'view-billing',
   'view-holds',
   'view-marketplace-sales',
+  'release-gift-cards',
   'contact-support',
 ] as const
 export type RiskOwnerActionId = (typeof RISK_OWNER_ACTION_IDS)[number]
@@ -210,6 +218,11 @@ export const RISK_OWNER_ACTIONS: Record<RiskOwnerActionId, RiskActionDefinition>
     label: 'View billing',
     hint: 'Opens your plan and subscription.',
     href: '/org/billing',
+  },
+  'release-gift-cards': {
+    label: 'Review gift cards',
+    hint: 'Opens Gift cards under Promotions, where a held card can be released once you trust the payment.',
+    href: '/{hostId}/products/promotions',
   },
   'view-marketplace-sales': {
     label: 'View marketplace payouts',
@@ -741,6 +754,105 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
         'staff-release',
         'staff-reject',
       ],
+    },
+  },
+  'link-blocked': {
+    kind: 'link-blocked',
+    severity: 'warning',
+    emailOwners: true,
+    alertStaff: true,
+    neverDigest: false,
+    reviewable: true,
+    closesWith: { released: 'review-cleared', rejected: 'review-upheld' },
+    includeSiteManagers: true,
+    helpAnchor: 'link-blocked',
+    owner: {
+      title: 'A link on your store was blocked',
+      summary:
+        'On {{occurredAt}}, we stopped sending anyone to {{item.label}}, because the address looks like another company\'s website.',
+      meaning: 'Nobody who follows that link is sent there. Everything else on your store works as normal.',
+      steps: [
+        'Replace it with a file from your media library or a link on your own domain.',
+        'If the address really is yours, choose Request a review and tell us about it.',
+      ],
+      actions: ['view-details', 'request-review', 'contact-support'],
+    },
+    staff: {
+      title: 'Commerce link flagged — possible brand impersonation',
+      summary:
+        '{{item.label}} on {{workspace.name}}. {{staff.evidence}} Reference {{reference}}.',
+      actions: [
+        'staff-open-row',
+        'staff-release',
+        'staff-reject',
+        'staff-lock-site',
+        'staff-view-workspace',
+      ],
+    },
+  },
+  'card-testing': {
+    kind: 'card-testing',
+    severity: 'urgent',
+    emailOwners: true,
+    alertStaff: true,
+    neverDigest: false,
+    reviewable: true,
+    closesWith: { released: 'review-cleared', rejected: 'review-upheld' },
+    includeSiteManagers: true,
+    helpAnchor: 'card-testing',
+    owner: {
+      title: 'Unusual checkout activity on your site',
+      summary:
+        'On {{occurredAt}}, the checkout on {{item.label}} saw an unusual burst of payment attempts, which can be someone testing stolen cards.',
+      meaning:
+        'Checkout is still open. Repeated attempts from one source are being slowed. Payments from stolen cards may be reversed by the cardholder\'s bank later.',
+      steps: [
+        'Review your recent orders before you fulfill them.',
+        'Refund any order you do not recognize.',
+        'If this was a launch or a sale, nothing is needed; you can tell us with Request a review.',
+      ],
+      actions: ['view-details', 'request-review', 'contact-support'],
+    },
+    staff: {
+      title: 'Card-testing velocity on a site',
+      summary:
+        '{{item.label}} of {{workspace.name}}. {{staff.evidence}} Nothing has been refused site-wide or refunded. Reference {{reference}}.',
+      actions: [
+        'staff-open-row',
+        'staff-lock-site',
+        'staff-lock-workspace',
+        'staff-view-workspace',
+        'staff-release',
+        'staff-reject',
+      ],
+    },
+  },
+  'gift-card-hold': {
+    kind: 'gift-card-hold',
+    severity: 'warning',
+    emailOwners: true,
+    alertStaff: true,
+    neverDigest: false,
+    reviewable: false,
+    includeSiteManagers: true,
+    helpAnchor: 'gift-card-hold',
+    owner: {
+      title: 'Gift cards from an order are on hold',
+      summary:
+        'On {{occurredAt}}, the gift cards bought with {{item.label}} were put on hold because the payment for it is in question.',
+      meaning:
+        'They cannot be redeemed for now. Their balance is kept. If the payment is refunded or the dispute is lost, the balance is voided for you.',
+      steps: [
+        'Check the order and the buyer.',
+        'If you are satisfied the payment is genuine, release the cards from Gift cards under Promotions.',
+        'If you are not, refund the order.',
+      ],
+      actions: ['release-gift-cards', 'refund-order', 'contact-support'],
+    },
+    staff: {
+      title: 'Gift cards frozen on a questioned payment',
+      summary: '{{item.label}} on {{workspace.name}}. {{staff.evidence}}',
+      actions: ['staff-view-workspace', 'staff-lock-site'],
     },
   },
   'sale-fraud-warning': {
@@ -1549,6 +1661,8 @@ export function riskKindForAbuseRow(row: {
       return 'seller-review'
     case 'marketplace-sale-risk':
       return 'marketplace-sale-review'
+    case 'payment-velocity':
+      return 'card-testing'
     default:
       return null
   }

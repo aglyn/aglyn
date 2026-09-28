@@ -82,6 +82,8 @@ jest.mock('./risk-notice', () => ({
   notifyRiskEvent: (input: unknown) => mockNotifyRisk(input),
 }))
 
+import { renderOwnerRiskNotice } from '@aglyn/shared-util-email/risk-notice-catalog'
+
 const DAY = 24 * 60 * 60 * 1000
 const NOW = Date.UTC(2026, 8, 28)
 let mockOrg: Doc = { name: 'Harbor View', createdAt: NOW - 400 * DAY }
@@ -269,5 +271,39 @@ describe('a sending domain that wears a brand (AGL-3362)', () => {
       flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: 'org-1', domain: 'mail.harborviewhotel.com' }),
     ).resolves.toBe('clean')
     expect(store.size).toBe(0)
+  })
+})
+
+describe('a commerce link that wears a brand (AGL-3363)', () => {
+  it('is flagged once, and staff and the site’s managers are both told, with no rule in it', async () => {
+    mockNotifyRisk.mockClear()
+    const link = {
+      kind: 'link' as const,
+      hostId: 'host-1',
+      orgId: null,
+      domain: 'paypal-account-verify.com',
+      where: "a product's download link",
+    }
+    await expect(flagLookalikeDomain(link)).resolves.toBe('flagged')
+    await flagLookalikeDomain(link)
+    // One notice through the seam (AGL-3368): staff and the site's managers.
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
+    const input = mockNotifyRisk.mock.calls[0][0] as {
+      kind: 'link-blocked'
+      hostId: string
+      item: { label: string }
+      staffEvidence: string
+    }
+    expect(input).toMatchObject({ kind: 'link-blocked', hostId: 'host-1', item: { path: '/host-1/products' } })
+    expect(input.staffEvidence).toMatch(/looks like PayPal/)
+    const told = renderOwnerRiskNotice('link-blocked', { 'item.label': input.item.label })
+    expect(told.steps.join(' ')).toMatch(/Replace it/)
+    expect(Object.values(told).flat().join(' ')).not.toMatch(/lookalike|screen|rule/i)
+  })
+
+  it('leaves the shop’s own file host alone (false-positive guard)', async () => {
+    await expect(
+      flagLookalikeDomain({ kind: 'link', hostId: 'host-1', orgId: null, domain: 'files.harborviewhotel.com' }),
+    ).resolves.toBe('clean')
   })
 })

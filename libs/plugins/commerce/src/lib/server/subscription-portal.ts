@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { requireActiveMember } from './membership'
@@ -53,8 +54,12 @@ export const subscriptionPortalHandler: PluginApiHandler = async (req, res) => {
     if (!customerId) {
       return res.status(404).json({ error: 'No subscription found' })
     }
-    const referer = String(req.headers.referer ?? '')
-    const origin = `https://${req.headers.host}`
+    // The site's own page, never a header's say-so (AGL-3363).
+    const returnUrl = siteReturnUrl({
+      candidates: [String(req.headers.referer ?? ''), `https://${req.headers.host}`],
+      site: await readSiteReturnHost(hostRef),
+      requestHost: String(req.headers.host ?? ''),
+    })
     const response = await fetch(
       'https://api.stripe.com/v1/billing_portal/sessions',
       {
@@ -65,7 +70,7 @@ export const subscriptionPortalHandler: PluginApiHandler = async (req, res) => {
         },
         body: new URLSearchParams({
           customer: String(customerId),
-          return_url: referer.startsWith('http') ? referer : origin,
+          return_url: returnUrl,
         }).toString(),
       },
     )
