@@ -157,4 +157,36 @@ describe('ListTable row opening', () => {
 
     expect(onOpen).not.toHaveBeenCalled()
   })
+
+  it('opens the record from Enter on a focused cell', () => {
+    const onOpen = jest.fn()
+    render(<ListTable rows={rows} columns={withActions} hideFooter onOpen={onOpen} />)
+    const cell = screen.getByRole('gridcell', { name: 'Account B' })
+
+    fireEvent.keyDown(cell, { key: 'Enter' })
+
+    expect(onOpen).toHaveBeenCalledWith('row-b', rows[1])
+  })
+
+  it('leaves Enter on the actions cell, and on a control inside a cell, to what is focused', () => {
+    const onOpen = jest.fn()
+    const { container } = render(
+      <ListTable rows={rows} columns={withActions} hideFooter onOpen={onOpen} />,
+    )
+    const actions = container.querySelector(
+      `[role="row"][data-id="row-a"] [data-field="${LIST_ACTIONS_FIELD}"]`,
+    ) as HTMLElement
+    const menu = within(actions).getByRole('button', { name: 'More actions for Account A' })
+
+    fireEvent.keyDown(actions, { key: 'Enter' })
+    fireEvent.keyDown(menu, { key: 'Enter' })
+    // Nor does any other key on a plain cell.
+    const plain = screen.getByRole('gridcell', { name: 'Account A' })
+    fireEvent.keyDown(plain, { key: ' ' })
+    expect(onOpen).not.toHaveBeenCalled()
+
+    // The positive control, on the same grid: Enter on that cell does.
+    fireEvent.keyDown(plain, { key: 'Enter' })
+    expect(onOpen).toHaveBeenCalledWith('row-a', rows[0])
+  })
 })

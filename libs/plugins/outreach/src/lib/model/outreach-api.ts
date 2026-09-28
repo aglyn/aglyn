@@ -512,3 +512,28 @@ export interface OutreachCurateSaveResponse {
   ok: true
   enrollment: OutreachEnrollment
 }
+
+/**
+ * `POST outreach/enrollments/gateway` (AGL-3332): the mail gateway in front
+ * of one enrolled person's domain, for their page's Details.
+ *
+ * Read on the server because both halves are: the domain's MX lives in the
+ * platform's `mailDomains` cache (AGL-3328), which no member reads, and its
+ * standing is the ledger of the sequence mailbox's sending domain.
+ */
+export interface OutreachEnrollmentGatewayResponse {
+  ok: true
+  /** The person's domain; `null` for an address without one. */
+  domain: string | null
+  /** The domain the enrollment's mailbox sends from, whose ledger `standing` reads. */
+  sendingDomain: string | null
+  /** The domain's MX, classified; `null` when it could not be looked up. */
+  intel: {
+    status: 'mx' | 'implicit_mx' | 'null_mx' | 'no_mx'
+    mx: string[]
+    gateway: OutreachGatewayStanding['gateway']
+    resolvedAtMs: number
+  } | null
+  /** What that gateway did with mail from the sending domain; `null` when unread. */
+  standing: OutreachGatewayStanding | null
+}

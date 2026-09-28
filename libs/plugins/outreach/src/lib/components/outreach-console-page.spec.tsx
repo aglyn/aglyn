@@ -27,8 +27,8 @@ import { OutreachConsolePage } from './outreach-console-page'
  */
 
 jest.mock('@aglyn/shared-ui-next', () => ({
-  HubSections: ({ children }: { children: ReactNode }) => (
-    <main>{children}</main>
+  HubSections: ({ children, wide }: { children: ReactNode; wide?: boolean }) => (
+    <main data-wide={wide ? 'yes' : 'no'}>{children}</main>
   ),
 }))
 jest.mock('./sequences-section', () => ({
@@ -107,5 +107,22 @@ describe('the Sequences hub (AGL-2980)', () => {
   it('mounts Mailboxes', () => {
     render(<OutreachConsolePage {...page('mailboxes', ['mailboxes'])} />)
     expect(screen.getByText('mailboxes')).toBeTruthy()
+  })
+
+  it('gives a page below the sequence list the whole row, and keeps the lists beside the rail (AGL-3332)', () => {
+    const wide = (segments: string[]) => {
+      const { container, unmount } = render(
+        <OutreachConsolePage {...page(segments[0], segments)} />,
+      )
+      const answer = container.querySelector('main')?.getAttribute('data-wide')
+      unmount()
+      return answer
+    }
+    expect(wide(['sequences', 'seq-1', 'enrollments', 'seq-1_c-1'])).toBe('yes')
+    expect(wide(['sequences', 'seq-1', 'enrollments'])).toBe('yes')
+    expect(wide(['sequences', 'seq-1'])).toBe('yes')
+    expect(wide(['sequences'])).toBe('no')
+    expect(wide(['mailboxes'])).toBe('no')
+    expect(wide(['compliance'])).toBe('no')
   })
 })
