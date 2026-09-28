@@ -28,6 +28,7 @@ import {
   decodeStoredNodes,
   emailStarterSendBlock,
   resolveBrandingProfile,
+  siteLockdownFromDocs,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import type { PluginRevocation } from '@aglyn/aglyn/server'
@@ -315,10 +316,23 @@ export class CampaignSendDeferredError extends CampaignSendError {
     message: string,
     /** When the hourly window rolls. */
     public readonly retryAtMs: number,
+    /**
+     * `429` for a rate, `423` for a suspension (AGL-3356). The subclass is
+     * what a caller acts on; the number is only what the API answers.
+     */
+    status = 429,
   ) {
-    super(message, 429)
+    super(message, status)
   }
 }
+
+/**
+ * How long a suspended site's scheduled campaign waits before it is asked
+ * about again (AGL-3356). An hour keeps a locked workspace's due sends from
+ * crowding the processor's read on every fifteen-minute beat, and is short
+ * enough that a lifted suspension resumes the same afternoon.
+ */
+export const CAMPAIGN_SUSPENDED_RETRY_MS = 60 * 60 * 1000
 
 export interface CampaignSendOptions {
   hostId: string
@@ -945,6 +959,43 @@ export async function performCampaignSend(
       'This site is not part of an organization, so it cannot send campaigns.',
       409,
     )
+  }
+  /*
+   * A SUSPENDED SITE SENDS NO CAMPAIGN (AGL-3356).
+   *
+   * The console dispatcher refuses a locked caller, but the scheduled
+   * processor and a resumed batch arrive with no caller at all, so the
+   * suspension is asked here, off the two documents this send already holds
+   * — no read is added. The incident behind this was a workspace locked for
+   * phishing whose deferred batches were still queued to go.
+   *
+   * A deferral rather than a failure: a suspension is a pause, and lifting
+   * it must leave the campaign where it was. Thrown before anything is
+   * claimed, counted or sent, so the scheduled processor puts the row back
+   * to `scheduled` and asks again after the delay. Any active lock pauses a
+   * campaign, a read-only maintenance window included, because a campaign is
+   * the one sender that can always wait.
+   */
+  {
+    const nowMs = Date.now()
+    const lock = siteLockdownFromDocs(
+      {
+        org: orgForHost?.org as never,
+        host: hostSnapshot.data() as never,
+      },
+      nowMs,
+    )
+    if (lock) {
+      throw new CampaignSendDeferredError(
+        lock.scope === 'org'
+          ? 'This workspace is suspended, so its email is paused. Nothing ' +
+            'has been sent or counted; it resumes when the suspension is lifted.'
+          : 'This site is suspended, so its email is paused. Nothing has ' +
+            'been sent or counted; it resumes when the suspension is lifted.',
+        nowMs + CAMPAIGN_SUSPENDED_RETRY_MS,
+        423,
+      )
+    }
   }
   const sends = orgCampaignSends(firestore, orgId)
 

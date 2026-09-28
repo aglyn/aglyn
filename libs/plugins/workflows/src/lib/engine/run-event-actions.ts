@@ -83,6 +83,7 @@ import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-emai
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
+import { eventRunSuspension } from './site-suspension'
 import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
@@ -1659,6 +1660,8 @@ export async function runEventActions(
     // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
     // the rest of the run so the dataset caps below cost no second read.
     const owner = await getOrgForHost(hostId)
+    // A suspended site runs nothing (AGL-3356): see `eventRunSuspension`.
+    if (await eventRunSuspension(hostRef, owner?.org)) return alerts
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts

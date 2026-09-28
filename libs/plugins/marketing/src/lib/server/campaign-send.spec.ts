@@ -280,7 +280,11 @@ import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
 import { registerPluginRecordCardReader } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { CampaignSendError, performCampaignSend } from './campaign-send'
+import {
+  CampaignSendDeferredError,
+  CampaignSendError,
+  performCampaignSend,
+} from './campaign-send'
 
 /**
  * A plugin that keeps products, standing in for the one that does. The sender
@@ -832,6 +836,50 @@ describe('reusable blocks placed in a designed campaign (AGL-3287)', () => {
  * asserted here: it still enforces, and it now counts through the shared meter
  * instead of writing the counter itself.
  */
+/*
+ * A suspended site sends no campaign (AGL-3356). The scheduled processor and
+ * a resumed batch reach the send core with no caller for the dispatcher to
+ * refuse, so the core asks — and answers with a DEFERRAL, so lifting the
+ * suspension leaves the campaign where it was.
+ */
+describe('a suspended site', () => {
+  const host = () => mockState.store['hosts/host-1'] as Record<string, unknown>
+
+  it('defers the send with a 423 and mails nobody', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    host().suspendedReasonCode = 'security'
+    const attempt = send()
+    await expect(attempt).rejects.toBeInstanceOf(CampaignSendDeferredError)
+    await expect(attempt).rejects.toMatchObject({ status: 423 })
+    expect(mockState.sent).toEqual([])
+    expect(mockState.metered).toEqual([])
+  })
+
+  it('retries no sooner than the suspension delay', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    const before = Date.now()
+    const error = (await send().catch((caught) => caught)) as CampaignSendDeferredError
+    expect(error.retryAtMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000)
+  })
+
+  it('pauses under a read-only maintenance window too', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    host().suspendedMode = 'read-only'
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendDeferredError)
+    expect(mockState.sent).toEqual([])
+  })
+
+  it('sends once the suspension has expired', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    host().suspendedUntilMs = Date.now() - 1_000
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+})
+
 describe('the campaign cap and the cost meter (AGL-1438)', () => {
   /*
    * The band the fixture org actually has, read from the entitlements

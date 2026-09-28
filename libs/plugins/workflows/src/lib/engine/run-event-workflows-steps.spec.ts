@@ -518,6 +518,65 @@ describe('one run, metered once', () => {
   })
 })
 
+/*
+ * A suspended site runs nothing (AGL-3356). The incident: a workspace locked
+ * for phishing whose `contactCreated` workflow with a `sendEmail` step could
+ * still fire, because the event runner never asked. Each case pins the whole
+ * of "nothing": no mail, no history row, no run billed.
+ */
+describe('a suspended site', () => {
+  it('runs no workflow when the WORKSPACE is suspended', async () => {
+    seedWorkflow(INTAKE_STEPS)
+    mockOrg = { plan: 'business', suspendedAt: { seconds: 1 }, suspendedReasonCode: 'security' }
+
+    await runEventWorkflows(HOST_ID, 'formSubmission', {
+      ...SUBMISSION,
+      contactId: 'contact-ada',
+    })
+
+    expect(sentMessages).toEqual([])
+    expect(history()).toEqual([])
+    expect(counter('workflowRuns')).toBeUndefined()
+  })
+
+  it('runs no workflow when the SITE is suspended', async () => {
+    seedWorkflow(INTAKE_STEPS)
+    seed(hostPath, { name: 'Site', suspendedAt: { seconds: 1 } })
+
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+
+    expect(sentMessages).toEqual([])
+    expect(history()).toEqual([])
+  })
+
+  it('runs no action either', async () => {
+    seed(hostPath, { name: 'Site', suspendedAt: { seconds: 1 } })
+    seed(`${hostPath}/actions/act-1`, {
+      name: 'On submit',
+      enabled: true,
+      trigger: { event: 'formSubmission' },
+      steps: [{ type: 'sendEmail', subject: 'Hi', body: 'Hello' }],
+    })
+
+    await runEventActions(HOST_ID, 'formSubmission', SUBMISSION)
+
+    expect(sentMessages).toEqual([])
+    expect(counter('actionRuns')).toBeUndefined()
+  })
+
+  it('keeps running through a read-only maintenance window', async () => {
+    seedWorkflow(INTAKE_STEPS)
+    mockOrg = { plan: 'business', suspendedAt: { seconds: 1 }, suspendedMode: 'read-only' }
+
+    await runEventWorkflows(HOST_ID, 'formSubmission', {
+      ...SUBMISSION,
+      contactId: 'contact-ada',
+    })
+
+    expect(sentMessages).toHaveLength(1)
+  })
+})
+
 describe('a workflow of function calls', () => {
   it('runs exactly as it always has', async () => {
     seedWorkflow([{ functionName: 'score', args: ['budget'], resultName: 'score' }])

@@ -951,6 +951,38 @@ export function normalizeHostLockdown(
   }
 }
 
+/**
+ * The active org/host lock on one site, from documents the caller already
+ * holds, or null (AGL-3356).
+ *
+ * For a sender deep in a plugin — the campaign core, the workflow engine,
+ * the outreach runtime — that has the org and host documents in hand and
+ * must refuse to mail for a suspended workspace. The server verdict
+ * (`getSiteLockdown`) adds the platform scope and the takedown ledger on
+ * top; this is the pure part both share, so neither restates what an
+ * org/host lock is. Unlike the verdict it reads nothing and cannot fail, so
+ * a caller that could not read the documents has already failed on its own.
+ *
+ * Returns the state whatever its mode; a caller that lets a read-only
+ * maintenance window through asks `lockdownMode(state)`.
+ */
+export function siteLockdownFromDocs(
+  docs: {
+    org?: Parameters<typeof normalizeOrgLockdown>[0]
+    host?: Parameters<typeof normalizeHostLockdown>[0]
+  },
+  nowMs: number,
+): LockdownState | null {
+  const state = resolveLockdown(
+    {
+      org: normalizeOrgLockdown(docs.org),
+      host: normalizeHostLockdown(docs.host),
+    },
+    nowMs,
+  )
+  return isLockdownActive(state, nowMs) ? state : null
+}
+
 /** `lockdowns/{id}` doc → state; refuses malformed docs rather than guess. */
 export function normalizeLockdownDoc(
   doc: Partial<LockdownDoc> | null | undefined,
