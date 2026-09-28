@@ -116,6 +116,7 @@ import {
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import {
@@ -622,6 +623,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // wiring.
       const params = new URLSearchParams({
         mode: 'payment',
+        // 3-D Secure, from the one seam every card payment shares (AGL-3360).
+        ...checkoutSessionCardAuthenticationParams('payment'),
         'line_items[0][quantity]': '1',
         'line_items[0][price_data][currency]': 'usd',
         'line_items[0][price_data][unit_amount]': String(

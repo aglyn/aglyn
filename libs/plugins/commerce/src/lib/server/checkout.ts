@@ -21,6 +21,7 @@ import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { readActiveMemberSession } from './membership'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
@@ -821,6 +822,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // `isSubscription` resolved above (AGL-545).
     const params = new URLSearchParams({
       mode: isSubscription ? 'subscription' : 'payment',
+      // 3-D Secure, from the one seam every card payment shares (AGL-3360).
+      ...checkoutSessionCardAuthenticationParams(
+        isSubscription ? 'subscription' : 'payment',
+      ),
       'line_items[0][quantity]': String(chargedQuantity),
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': String(chargedUnitAmountCents),

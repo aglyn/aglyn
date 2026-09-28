@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
   type PromotionSlotHold,
@@ -640,6 +641,8 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     }
     const params = new URLSearchParams({
       mode: 'payment',
+      // 3-D Secure, from the one seam every card payment shares (AGL-3360).
+      ...checkoutSessionCardAuthenticationParams('payment'),
       ...(useStripeTax ? { 'automatic_tax[enabled]': 'true' } : {}),
       ...(draftTaxRateId ? { 'line_items[0][tax_rates][0]': draftTaxRateId } : {}),
       'line_items[0][quantity]': String(chargedQuantity),

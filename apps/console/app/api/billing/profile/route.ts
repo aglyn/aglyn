@@ -38,6 +38,7 @@ import {
   LIVE_SUBSCRIPTION_STATUSES,
 } from '../../_lib/stripe-payment-method'
 import { deploymentLivemode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
+import { cardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { platformPaymentsConfigured } from '../../../../utils/server/payments-platform'
 import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
 import { taxIdTypeLabel } from '../../../../utils/stripe-tax-id-types'
@@ -583,7 +584,8 @@ async function handler(request: Request): Promise<Response> {
         customer: customerId,
         usage: 'off_session',
         'automatic_payment_methods[enabled]': 'true',
-        'payment_method_options[card][request_three_d_secure]': 'any',
+        // `any`, through the seam every card payment shares (AGL-3360).
+        ...cardAuthenticationParams('off-session'),
         'metadata[orgId]': orgId,
       })
       const result = await stripeRequest(
