@@ -81,6 +81,8 @@ import {
   MAIL_GATEWAY_DAILY_DELIVERY_CAP,
   mailGatewayDay,
   mailGatewayHolds,
+  mailGatewayHoldSentence,
+  MAIL_GATEWAY_LABELS,
   MAIL_GATEWAY_WINDOW_DAYS,
   normalizeDeliverabilityEmail,
   normalizeLedgerSendingDomain,
@@ -414,6 +416,23 @@ export async function recordMailGatewayOutcome(
       return next
     })
     rememberLedger(path, written ?? null, input.atMs)
+    // A named gateway that now holds a SHARED domain stops every site on it
+    // from reaching everyone behind that gateway, and no single workspace
+    // owns the problem to notice it (AGL-3377). Once a day per pair.
+    if (!scope && input.outcome !== 'delivered' && written && isSharedMailSendingDomain(sendingDomain)) {
+      const standing = mailGatewayStanding(input.gateway, written, input.atMs)
+      if (mailGatewayHolds(standing)) {
+        const { raiseOperatorAlert } = await import('./operator-alerts')
+        await raiseOperatorAlert('deliverability.gatewayBlocking', {
+          dedupeKey: key,
+          context: {
+            gateway: MAIL_GATEWAY_LABELS[input.gateway] ?? input.gateway,
+            domain: sendingDomain,
+            detail: mailGatewayHoldSentence(input.gateway, standing.blocked30),
+          },
+        })
+      }
+    }
   } catch (error) {
     console.error(`[deliverability] the ledger could not count a ${input.outcome} for ${sendingDomain} at ${input.gateway}`, error)
   }

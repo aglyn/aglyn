@@ -177,6 +177,26 @@ export async function POST(request: Request): Promise<Response> {
     recordPluginJobRuns(keys, now)
   }
 
+  // A plugin job that threw answers nothing to anybody: the beat still
+  // returns 200. Each is told to the operator once per window (AGL-3377),
+  // loaded only when one failed.
+  const failures = results.filter((result) => !result.ok)
+  if (failures.length) {
+    try {
+      const { raiseOperatorAlert } = await import(
+        '@aglyn/tenant-data-admin/server/operator-alerts'
+      )
+      for (const failure of failures) {
+        await raiseOperatorAlert('ops.pluginJobFailed', {
+          dedupeKey: `plugin-job:${failure.key}`,
+          context: { job: failure.key, error: String(failure.error ?? 'unknown').slice(0, 200) },
+        })
+      }
+    } catch (error) {
+      console.error('[run-jobs] plugin job failures could not be raised', error)
+    }
+  }
+
   return Response.json(
     {
       registered: listPluginJobs().map(pluginJobKey),

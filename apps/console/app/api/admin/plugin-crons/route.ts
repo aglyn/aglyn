@@ -25,6 +25,7 @@ import { registerPluginServerDeclarations } from '../../../../constants/plugins.
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 /**
  * EVERY PLUGIN'S CONSOLE JOBS, ON ONE TICK (AGL-2981): `POST /api/admin/plugin-crons`.
@@ -113,6 +114,14 @@ async function handler(request: Request): Promise<Response> {
     .filter(([, report]) => report === null)
     .map(([jobId]) => jobId)
   if (failed.length) console.error(`[plugin-crons] ${failed.length} job(s) failed: ${failed.join(', ')}`)
+  // Each failed job is told once per window (AGL-3377); the runner logged
+  // why, and the job id names the plugin that owns it.
+  for (const jobId of failed) {
+    await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
+      dedupeKey: `plugin-crons:${jobId}`,
+      context: { job: jobId, error: 'it threw; the console log has the error' },
+    })
+  }
   return Response.json(
     { ok: failed.length === 0, ms: Date.now() - startedAt, jobs: reports, failed },
     { status: failed.length ? 207 : 200, headers: { 'Cache-Control': 'no-store' } },

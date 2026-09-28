@@ -517,12 +517,12 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     type: 'deliverability.sendRateUnavailable',
     label: 'Email send-rate governor unavailable',
     description:
-      'The send-rate governor could not read its counters, so it is refusing sends to stay safe.',
+      'The send-rate governor could not read its counters, so mail is going out unmetered: nothing is holding the shared domains under their hourly ceiling.',
     tier: 'should',
     category: 'deliverability',
     title: 'Email send-rate governor unavailable',
     body:
-      'The send-rate governor could not read its counters ({{error}}) and is failing closed.',
+      'The send-rate governor could not read its counters ({{error}}), so sends are being allowed unmetered until it can.',
     link: '/admin/emails',
     delivery: 'immediate',
     dedupeWindowMinutes: 6 * 60,

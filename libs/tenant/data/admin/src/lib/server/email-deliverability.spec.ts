@@ -39,6 +39,15 @@ jest.mock('./email-suppression', () => ({
     return { key: 'k', created: true }
   },
 }))
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+// The operator alert a held shared domain raises (AGL-3377): what, not how.
+jest.mock('./operator-alerts', () => ({
+  raiseOperatorAlert: async (type: string, options: any) => {
+    mockOperatorAlerts.push({ type, options })
+    return { outcome: 'delivered', type }
+  },
+}))
+
 jest.mock('./firebase-admin', () => ({
   firebaseAdmin: {
     app: () => {
@@ -85,6 +94,7 @@ const deps = () => ({ firestore: store as unknown as FirebaseFirestore.Firestore
 beforeEach(() => {
   store = fakeFirestore()
   asked = []
+  mockOperatorAlerts.length = 0
   mockSuppressions.length = 0
   mx = {
     'lifespire.example': [{ exchange: 'd78608a.ess.barracudanetworks.com', priority: 10 }],
@@ -232,6 +242,42 @@ describe('the ledger', () => {
   it('starts the window at midnight UTC of its oldest day, so every refusal a hold counts is inside it', () => {
     const since = mailGatewayWindowStartMs(NOW)
     expect(new Date(since).toISOString()).toBe('2026-08-26T00:00:00.000Z')
+  })
+
+  it('tells the operator when a gateway holds a SHARED domain, and only then (AGL-3377)', async () => {
+    process.env.USAGE_EMAIL_FROM = 'Aglyn <noreply@aglyn.com>'
+    await recordMailGatewayOutcome(
+      null,
+      { sendingDomain: 'aglyn.com', gateway: 'barracuda', outcome: 'blocked', atMs: NOW - 2 * DAY },
+      deps(),
+    )
+    // One refusal is not a hold yet.
+    expect(mockOperatorAlerts).toEqual([])
+    await recordMailGatewayOutcome(
+      null,
+      { sendingDomain: 'aglyn.com', gateway: 'barracuda', outcome: 'blocked', atMs: NOW },
+      deps(),
+    )
+    expect(mockOperatorAlerts).toEqual([
+      {
+        type: 'deliverability.gatewayBlocking',
+        options: {
+          dedupeKey: 'aglyn.com~barracuda',
+          context: expect.objectContaining({ gateway: 'Barracuda', domain: 'aglyn.com' }),
+        },
+      },
+    ])
+    // A workspace's own domain held by the same gateway is its own problem.
+    mockOperatorAlerts.length = 0
+    for (const atMs of [NOW - 2 * DAY, NOW]) {
+      await recordMailGatewayOutcome(
+        null,
+        { sendingDomain: 'mail.acme.example', gateway: 'barracuda', outcome: 'blocked', atMs },
+        deps(),
+      )
+    }
+    expect(mockOperatorAlerts).toEqual([])
+    delete process.env.USAGE_EMAIL_FROM
   })
 
   it('keeps an organization’s mailbox ledger under the organization', async () => {

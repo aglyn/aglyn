@@ -33,6 +33,16 @@ const mockBeats: string[] = []
 let mockDeclareJobs: () => void = () => undefined
 const mockEnsureAll = jest.fn(async (..._args: unknown[]) => undefined)
 
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+// The operator alert a failed job raises (AGL-3377): what, not how.
+jest.mock('../utils/server/raise-operator-alert', () => ({
+  __esModule: true,
+  raiseConsoleOperatorAlert: async (type: string, options: any) => {
+    mockOperatorAlerts.push({ type, options })
+    return null
+  },
+}))
+
 jest.mock('../utils/cron-beat', () => ({
   __esModule: true,
   recordCronBeat: async (jobId: string) => {
@@ -164,6 +174,13 @@ describe('POST /api/admin/plugin-crons (AGL-2981)', () => {
     expect(body.jobs).toEqual({ 'acme-mail-send': null, 'acme-mail-sync': { read: 5 } })
     // A job that threw was still scheduled: its mark is there.
     expect(mockBeats).toContain('acme-mail-send')
+    // And the operator is told which one, once per window.
+    expect(mockOperatorAlerts).toEqual([
+      expect.objectContaining({
+        type: 'ops.pluginJobFailed',
+        options: expect.objectContaining({ dedupeKey: 'plugin-crons:acme-mail-send' }),
+      }),
+    ])
   })
 
   it('runs only the job a manual re-run names, by body or by query', async () => {

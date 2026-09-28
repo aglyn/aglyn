@@ -96,6 +96,7 @@ import {
   type UnverifiedOrgFacts,
 } from '../../../../utils/server/reap-unverified-orgs'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 export const dynamic = 'force-dynamic'
 
@@ -407,6 +408,13 @@ async function handler(request: Request): Promise<Response> {
               `(${result.skippedReason ?? 'unknown'}) — its address ` +
               `${candidate.slug ?? '(none)'} is still held.`,
           )
+          await raiseConsoleOperatorAlert('ops.reaperStuck', {
+            dedupeKey: `reap-unverified-orgs:${candidate.orgId}`,
+            context: {
+              job: 'The unverified-workspace reaper',
+              detail: `workspace ${candidate.orgId} was not erased (${result.skippedReason ?? 'unknown'}), so its address ${candidate.slug ?? '(none)'} is still held.`,
+            },
+          })
           continue
         }
         erased += 1
@@ -469,6 +477,13 @@ async function handler(request: Request): Promise<Response> {
       '[reap-unverified-orgs] sweep failed',
       (error as { name?: string })?.name ?? 'unknown',
     )
+    await raiseConsoleOperatorAlert('ops.reaperStuck', {
+      dedupeKey: 'reap-unverified-orgs:sweep',
+      context: {
+        job: 'The unverified-workspace reaper',
+        detail: `the sweep failed (${(error as { name?: string })?.name ?? 'unknown'}).`,
+      },
+    })
     return Response.json(
       { error: 'Unverified-org reaping failed' },
       { status: 500 },

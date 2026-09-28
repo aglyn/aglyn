@@ -24,6 +24,7 @@ import { advanceDueConsentGroupChanges } from '@aglyn/tenant-data-admin'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 /**
  * EVERY CONSENT GROUP CHANGE IN FLIGHT, FINISHED (AGL-3320):
@@ -80,12 +81,31 @@ async function handler(request: Request): Promise<Response> {
       dryRun,
     })
     const failed = changes.filter((change) => change.error || change.status?.progress.stalled)
+    // A change that failed or stalled holds every later change off its
+    // workspace (AGL-3377). Once per change per window.
+    for (const change of failed) {
+      await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
+        dedupeKey: `consent-group-change:${change.orgId}:${change.changeId}`,
+        context: {
+          job: `Consent group change ${change.changeId} on workspace ${change.orgId}`,
+          error: change.error ? String(change.error).slice(0, 200) : 'it has stalled',
+        },
+        orgId: change.orgId,
+      })
+    }
     return Response.json(
       { ok: failed.length === 0, dryRun, ms: Date.now() - startedAt, changes },
       { status: failed.length ? 207 : 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
     console.error('[consent-group-changes] tick failed', error)
+    await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
+      dedupeKey: 'consent-group-changes:tick',
+      context: {
+        job: 'The consent group change runner',
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error),
+      },
+    })
     return Response.json({ error: 'Consent group changes could not be advanced' }, { status: 500 })
   }
 }
