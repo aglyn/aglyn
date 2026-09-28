@@ -96,13 +96,28 @@ import { getHostDocAdmin, getOrgForHost } from './organizations'
 export async function getSiteLockdown(
   hostId: string,
   nowMs = Date.now(),
+  /**
+   * The org and host documents, when the caller has already read them — a
+   * sender resolving its identity holds both, and outside a request scope
+   * `React.cache` dedupes nothing, so reading them again here would double
+   * the reads on every message. `undefined` for either one means "not
+   * loaded, read it"; `null` means "read, and there is none".
+   */
+  loaded?: {
+    org?: Record<string, unknown> | null
+    host?: Record<string, unknown> | null
+  },
 ): Promise<LockdownState | null> {
   if (!hostId) return null
   try {
     const [platform, resolved, host] = await Promise.all([
       getPlatformLockdown(),
-      getOrgForHost(hostId),
-      getHostDocAdmin(hostId),
+      loaded?.org !== undefined
+        ? Promise.resolve(loaded.org ? { org: loaded.org } : null)
+        : getOrgForHost(hostId),
+      loaded?.host !== undefined
+        ? Promise.resolve(loaded.host)
+        : getHostDocAdmin(hostId),
     ])
     const org = normalizeOrgLockdown(resolved?.org as never)
     const hostState = normalizeHostLockdown(host as never)

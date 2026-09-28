@@ -91,9 +91,11 @@ import {
   type SendingIdentityVerdict,
   type SendingVerification,
 } from '@aglyn/shared-util-email'
+import { lockdownMode } from '@aglyn/aglyn/server'
 import firebaseAdmin from './firebase-admin'
 import { lookupCaa, lookupMx, lookupTxt } from './dns-probe'
 import { getOrgForHost } from './organizations'
+import { getSiteLockdown } from './tenant-write-lockdown'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -833,6 +835,39 @@ export async function hostSendingIdentity(
     .catch(() => null)
   const owner = await getOrgForHost(id).catch(() => null)
 
+  /*
+   * A SUSPENDED SITE SENDS NOTHING (AGL-3356).
+   *
+   * This is the door every tenant sender but the campaign core uses, so it
+   * is where one check covers them all — workflow and automation steps, the
+   * CRM's one-off mail, inbox replies, member posts, receipts, reminders.
+   * Refusing here rather than at each caller is the same argument this
+   * function's own docblock makes about identities: nineteen call sites
+   * asked to remember produce a twentieth that does not, and the incident
+   * behind this was exactly that — a locked workspace whose workflow could
+   * still mail for it.
+   *
+   * FULL locks only. A read-only lock is a maintenance window whose point
+   * is that the site keeps serving and earning, and a receipt for an order
+   * taken before it began must still arrive. Staff suspensions for abuse,
+   * fraud and billing are full locks, which is the case this closes.
+   *
+   * The documents read above are handed to the verdict, so the check costs
+   * the TTL-cached platform read and nothing else. It inherits the
+   * verdict's fail-open posture and its takedown ratchet.
+   */
+  const lock = await getSiteLockdown(id, Date.now(), {
+    org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+    host: snapshot?.exists
+      ? ((snapshot.data() as Record<string, unknown>) ?? null)
+      : null,
+  })
+  if (lock && lockdownMode(lock) === 'full') {
+    const suspended = suspendedSendingIdentity(lock.scope)
+    cache?.set(id, suspended)
+    return suspended
+  }
+
   const verdict = await resolveHostSendingIdentity({
     orgId: owner?.orgId ?? null,
     selectedDomain: snapshot?.get('sendingDomain') ?? '',
@@ -843,6 +878,35 @@ export async function hostSendingIdentity(
 
   cache?.set(id, verdict)
   return verdict
+}
+
+/**
+ * The verdict a suspended site's mail gets: a refusal, whatever identity the
+ * site would otherwise have sent on. `sendEmail` reads it and answers
+ * `suspended` without calling the provider.
+ */
+export function suspendedSendingIdentity(
+  scope: string | null | undefined,
+): SendingIdentityVerdict {
+  const what =
+    scope === 'platform'
+      ? 'Sending is paused platform-wide'
+      : scope === 'org'
+        ? 'This workspace is suspended'
+        : 'This site is suspended'
+  const message = `${what}, so no email is sent on its behalf until the suspension is lifted.`
+  return {
+    from: null,
+    source: null,
+    domain: null,
+    summary: message,
+    refusal: {
+      code: 'workspace-suspended',
+      domain: null,
+      message,
+      missing: [],
+    },
+  }
 }
 
 /** The record keys a surface highlights as outstanding. */

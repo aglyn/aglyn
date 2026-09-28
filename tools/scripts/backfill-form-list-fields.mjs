@@ -27,7 +27,13 @@
  *    `nameReversed` (the name keys every `displayName`-named document
  *    carries) and `searchTokens` (the search box's name, slug and id words);
  *  - `retired`, the boolean mirror of `archivedAt` the Status filter asks;
- *  - `routing.lead` as a boolean, which Lead routing asks by equality;
+ *  - `routing.lead` as a boolean, which Lead routing asks by equality — and
+ *    the whole `routing` map on a form holding none, or a value that is not
+ *    a map, which a dotted update cannot reach inside;
+ *  - `inCampaign`, whether `campaignIds` names any campaign, which "In a
+ *    campaign" asks by equality (AGL-3330);
+ *  - `updatedAt`, from `createdAt`, on a form holding none, since Updated
+ *    orders the list and a query never finds a document missing its order;
  *  - `stats.submissions`, `stats.leads` and `stats.lastSubmissionAtMs` as
  *    `null` where nothing was ever counted, which "is empty" asks.
  *
@@ -36,8 +42,9 @@
  * lacks. Each value is what the document already means: `retired` is
  * `isFormArchived` (truthy `archivedAt`), a missing lead switch is off, and a
  * null counter reads as the dash an absent one did. Nothing a merchant sees
- * changes. A counter that holds a number is never touched, and neither is
- * `updatedAt`, which the list's Updated filter reads.
+ * changes. A counter that holds a number is never touched — what the
+ * counters say is `recount-form-stats.mjs`'s — and neither is an `updatedAt`
+ * a form already holds, which the list's Updated filter reads.
  *
  * ## The keys come from the shared script twins
  *
@@ -72,15 +79,19 @@
  */
 import { readFileSync } from 'node:fs'
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
-import { formListFields, planFormListFields } from './lib/site-form-list-fields.mjs'
+import {
+  formListFields,
+  planFormListFields,
+  UPDATED_AT_FALLBACK,
+} from './lib/site-form-list-fields.mjs'
 
 const args = parseDeployArgs({
   command: 'backfill-form-list-fields',
   summary:
-    'Stamp the Forms list search keys, `retired`, the lead switch and null counters onto ' +
-    'forms that carry none. Writes to the live project with --apply.',
+    'Stamp the Forms list search keys, `retired`, the lead switch, `inCampaign`, a missing ' +
+    '`updatedAt` and null counters onto forms that carry none. Writes to the live project with --apply.',
   effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
   flags: [
     { flag: '--apply', key: 'apply', describe: 'Write. Without it, a dry run.' },
@@ -109,6 +120,8 @@ function selfTest() {
       ...formListFields(form),
       retired: false,
       routing: { lead: false },
+      inCampaign: false,
+      updatedAt: 1,
       stats: { submissions: null, leads: null, lastSubmissionAtMs: null },
     })
     const ok =
@@ -138,6 +151,8 @@ async function main() {
     search: 0,
     retired: 0,
     lead: 0,
+    campaign: 0,
+    updated: 0,
     counters: 0,
     written: 0,
     raced: 0,
@@ -160,7 +175,13 @@ async function main() {
       if (!args.apply) continue
       try {
         // Only if nothing wrote the form since it was read — see the header.
-        await doc.ref.update(plan.patch, { lastUpdateTime: doc.updateTime })
+        const patch = Object.fromEntries(
+          Object.entries(plan.patch).map(([key, value]) => [
+            key,
+            value === UPDATED_AT_FALLBACK ? FieldValue.serverTimestamp() : value,
+          ]),
+        )
+        await doc.ref.update(patch, { lastUpdateTime: doc.updateTime })
         counts.written += 1
       } catch (error) {
         if (error?.code === 9 || /FAILED_PRECONDITION/i.test(String(error?.message))) {
@@ -183,6 +204,8 @@ async function main() {
   console.log(`  search keys to stamp                  ${counts.search}`)
   console.log(`  retired to mirror                     ${counts.retired}`)
   console.log(`  lead switch to stamp                  ${counts.lead}`)
+  console.log(`  inCampaign to mirror                  ${counts.campaign}`)
+  console.log(`  missing updatedAt to stamp            ${counts.updated}`)
   console.log(`  null counters to stamp                ${counts.counters}`)
   console.log(`  not hosts/*/forms (left alone)        ${counts.otherCollections}`)
   if (args.apply) {

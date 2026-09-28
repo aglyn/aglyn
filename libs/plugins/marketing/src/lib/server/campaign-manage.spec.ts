@@ -195,6 +195,9 @@ function collectionRef(path: string): any {
     },
   })
   return {
+    // The collection's own name, as a `CollectionReference` carries it: the
+    // detach restamps what a collection's list asks by it.
+    id: path.split('/').pop() as string,
     doc: (id: string) => docRef(`${path}/${id}`),
     // A projection changes which fields come back, not which rows; this
     // double hands back whole documents either way.
@@ -275,6 +278,7 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
       FieldValue: {
         delete: deleteSentinel,
         arrayRemove: arrayRemoveSentinel,
+        serverTimestamp: () => 'SERVER_TIME',
       },
     },
   },
@@ -914,6 +918,23 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     expect(hostMember('forms', 'signup')?.['campaignIds']).toEqual([CAMPAIGN])
   })
 
+  it("restamps each form's In a campaign flag and moves its Updated (AGL-3330)", async () => {
+    // `arrayRemove` cannot say whether it emptied the array, so the pass
+    // reads each form back: the one left in no campaign answers "In a
+    // campaign = No", and the one still in another answers Yes.
+    store.set(`hosts/${HOST}/forms/only`, { campaignIds: [CAMPAIGN], inCampaign: true })
+    store.set(`hosts/${HOST}/forms/both`, { campaignIds: [CAMPAIGN, OTHER], inCampaign: true })
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(result.status).toBe(200)
+    expect(store.get(`hosts/${HOST}/forms/only`)).toMatchObject({ campaignIds: [], inCampaign: false })
+    expect(store.get(`hosts/${HOST}/forms/both`)).toMatchObject({ campaignIds: [OTHER], inCampaign: true })
+    expect(store.get(`hosts/${HOST}/forms/only`)?.['updatedAt']).toBeDefined()
+    // A screen is edited by no Forms list, and keeps its own stamps.
+    seedHostMember('screens', 'page', [CAMPAIGN])
+    await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(hostMember('screens', 'page')).not.toHaveProperty('inCampaign')
+  })
+
   it('reports how many records it cleared', async () => {
     seedHostMember('forms', 'a', [CAMPAIGN])
     seedHostMember('forms', 'b', [CAMPAIGN])
@@ -940,7 +961,10 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     seedHostMember('leads', 'lead-key', [CAMPAIGN, OTHER])
     const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
     expect(result.status).toBe(200)
-    expect(store.get(`orgs/${ORG}/leads/org-lead`)).toEqual({ name: 'Org lead', campaignIds: [OTHER] })
+    expect(store.get(`orgs/${ORG}/leads/org-lead`)).toMatchObject({ name: 'Org lead', campaignIds: [OTHER] })
+    // Restamped from the lead as it now stands (AGL-3321): the double carries
+    // the collection's name now, so the restamp this pass always made runs here.
+    expect(store.get(`orgs/${ORG}/leads/org-lead`)).toHaveProperty('scopedCampaignIds')
     expect(hostMember('leads', 'lead-key')?.['campaignIds']).toEqual([OTHER])
     expect(hostMember('leads', 'lead-key')?.['displayName']).toBe('leads lead-key')
   })

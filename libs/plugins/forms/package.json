@@ -35,6 +35,7 @@
     "@aglyn/shared-util-http": "1.0.0-beta.200",
     "@aglyn/shared-util-timestamp": "1.0.0-beta.200",
     "@aglyn/shared-util-tools": "1.0.0-beta.200",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.200",
     "@aglyn/tenant-feature-instance": "1.0.0-beta.200",
     "@swc/helpers": "0.5.23"
   },

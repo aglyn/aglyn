@@ -625,6 +625,49 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
     expect((await memberRef.get()).get('orgSuspended')).toBe(false)
   }, 180_000)
 
+  it('org: a lock that asks to cancel billing still locks when the cancel cannot run (AGL-3359)', async () => {
+    // Against REAL Firestore, the property the mocked suite cannot fully
+    // show: the lock is durable before billing is touched, so a cancel that
+    // fails leaves a locked workspace behind, not a half-applied one.
+    //
+    // Stripe is deliberately unconfigured for this case. Local runs have
+    // been recorded carrying the LIVE key, and a drill must never be the
+    // thing that cancels a real subscription; with no key the helper
+    // reports "not configured" without making a single request.
+    await clearAllDrillState(db)
+    const savedKey = process.env.STRIPE_SECRET_KEY
+    delete process.env.STRIPE_SECRET_KEY
+    try {
+      const locked = await post(route, superToken, {
+        action: 'lock',
+        scope: 'org',
+        targetId: DRILL_ORG_ID,
+        reason: 'security',
+        cancelSubscription: true,
+      })
+      expect(locked.status).toBe(200)
+      const body = locked.body as {
+        confirmed: boolean
+        subscriptionCancel: { confirmed: boolean; configured: boolean }
+      }
+      // The lock's verdict and the cancel's are separate facts.
+      expect(body.confirmed).toBe(true)
+      expect(body.subscriptionCancel.configured).toBe(false)
+      expect(body.subscriptionCancel.confirmed).toBe(false)
+      const orgAfter = await readDoc(db, 'orgs', DRILL_ORG_ID)
+      expect(orgAfter?.['suspendedAt']).toBeTruthy()
+      expect(await admin.getLockdownVerdict({ org: orgAfter })).not.toBeNull()
+    } finally {
+      if (savedKey === undefined) delete process.env.STRIPE_SECRET_KEY
+      else process.env.STRIPE_SECRET_KEY = savedKey
+      await post(route, superToken, {
+        action: 'unlock',
+        scope: 'org',
+        targetId: DRILL_ORG_ID,
+      })
+    }
+  }, 120_000)
+
   it('domain: locks one name without taking the site down', async () => {
     await clearAllDrillState(db)
     admin.invalidateDomainLockdownCache()

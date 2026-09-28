@@ -40,6 +40,13 @@
  *
  * Every action — lock AND unlock — writes an `adminAudit` row.
  *
+ * A lock can also stop BILLING (AGL-3359): `cancelSubscription: true` on an
+ * org lock cancels the workspace's subscriptions now, no refund, and
+ * `lockOwnedWorkspaces: true` on a user lock locks and cancels every
+ * workspace that account owns. Both run after the lock is written, report as
+ * their own step, and can never undo or hide the lock. No flag is implied by
+ * a reason — the console defaults them on for `security` only.
+ *
  * Every action also ANSWERS WITH A FRESH READ of what it wrote (AGL-1571).
  * A click is a request, and a request that never left the pointer looks
  * exactly like one that succeeded — the drill's missed lift was caught only
@@ -560,6 +567,237 @@ async function actionResponse(options: {
     },
     { status: 200 },
   )
+}
+
+interface LockActor {
+  actorUid: string
+  actorEmail: string | null
+}
+
+interface LockRequest {
+  reason: string
+  message?: string
+  untilMs?: number
+  mode: LockdownMode
+  enforcement: LockdownEnforcement
+}
+
+type OrgSnapshot = FirebaseFirestore.DocumentSnapshot
+
+/**
+ * One workspace lock or lift, with its audit row — the org scope's whole
+ * write path. A function so the user scope's "and the workspaces they own"
+ * (AGL-3359) runs the very same path rather than a second copy of it.
+ */
+async function lockOrgAndAudit(options: {
+  firestore: AdminFirestore
+  actor: LockActor
+  orgId: string
+  orgSnapshot: OrgSnapshot
+  action: 'lock' | 'unlock'
+  lock: LockRequest
+  /** Set when the lock was placed as part of another scope's action. */
+  via?: string
+}) {
+  const { firestore, actor, orgId, orgSnapshot, action, lock } = options
+  const result = await applyOrgLockdown({
+    firestore,
+    orgId,
+    action,
+    lock,
+    // Security/manual mean "everyone out NOW". Billing/maintenance keep
+    // sessions so members can reach billing settings and fix it — the
+    // org's sites and writes are locked server-side either way.
+    //
+    // READ-ONLY NEVER REVOKES (AGL-1511), whatever the reason. Logging
+    // everyone out is a full lockdown's effect; doing it here would
+    // deliver "your sites keep serving and you can keep reading" by
+    // signing every member out of the console. The write freeze is
+    // enforced at the chokepoints, which is where it belongs — the
+    // session is not the mechanism.
+    revokeMemberTokens:
+      lock.mode !== 'read-only' &&
+      (lock.reason === 'security' || lock.reason === 'manual'),
+  })
+  await audit({
+    ...actor,
+    action: `lockdown.${action}`,
+    scope: 'org',
+    target: `orgs/${orgId}`,
+    before: {
+      locked: orgSnapshot.get('suspendedAt') != null,
+      // The org scope carries the lock on the org doc's `suspended*`
+      // family, not in `lockdowns/*` — same three facts, other names.
+      ...auditLockShape({
+        reason: orgSnapshot.get('suspendedReasonCode'),
+        message: orgSnapshot.get('suspendedMessage'),
+        untilMs: orgSnapshot.get('suspendedUntilMs'),
+        mode: orgSnapshot.get('suspendedMode'),
+      }),
+    },
+    after: {
+      locked: action === 'lock',
+      ...(action === 'lock' ? auditLockShape(lock) : {}),
+      ...(options.via ? { via: options.via } : {}),
+      tokensRevoked: result.tokensRevoked,
+      // AGL-1526 completion, on the row: how many raw
+      // `firebasestorage.googleapis.com?...&token=` URLs this lock
+      // actually killed. Recorded even when it is zero, because
+      // "rotation ran and found nothing" and "rotation never ran" are
+      // different facts to an incident reviewer.
+      ...auditRotationShape(result.downloadTokensRotated),
+    },
+  })
+  return result
+}
+
+/**
+ * The billing half of a lock (AGL-3359): cancel every subscription of the
+ * workspace NOW, no refund, through the same helper as the staff org page.
+ *
+ * Runs only after the lock is written and audited, and cannot throw: any
+ * failure comes back as an unconfirmed step, so the response still reports a
+ * lock that landed. Lifting the lock later never recreates a subscription.
+ *
+ * Loaded on demand. Only a lock that asks for it pays for the Stripe and
+ * price-map modules, and the rest of this route keeps no dependency on them.
+ */
+async function cancelBillingAfterLock(options: {
+  firestore: AdminFirestore
+  actor: LockActor
+  orgId: string
+  reason: string
+}): Promise<Record<string, unknown>> {
+  try {
+    const {
+      auditOrgSubscriptionCancel,
+      cancellationComment,
+      cancelOrgSubscriptions,
+    } = await import('../../../../utils/server/org-subscription-cancel')
+    const result = await cancelOrgSubscriptions({
+      orgId: options.orgId,
+      when: 'now',
+      comment: cancellationComment({
+        reason: options.reason,
+        actorUid: options.actor.actorUid,
+        via: 'lockdown',
+      }),
+    })
+    await auditOrgSubscriptionCancel(options.firestore, {
+      ...options.actor,
+      reason: options.reason,
+      note: null,
+      via: 'lockdown',
+      result,
+    }).catch((error: unknown) => {
+      // The cancel already happened or did not; a lost audit row cannot
+      // change that, so it is logged rather than reported as a failed cancel.
+      console.error('[admin/lockdown] cancel audit write failed', error)
+    })
+    return { attempted: true, ...result }
+  } catch (error) {
+    console.error('[admin/lockdown] subscription cancel failed', error)
+    return {
+      attempted: true,
+      orgId: options.orgId,
+      when: 'now',
+      confirmed: false,
+      changed: 0,
+      subscriptions: [],
+      lookupErrors: [
+        `The cancel did not run: ${(error as Error)?.message ?? String(error)}`,
+      ],
+    }
+  }
+}
+
+/** How many owned workspaces one user lock will lock and cancel. */
+const OWNED_WORKSPACES_MAX = 25
+
+/**
+ * A user lock's "and the workspaces they solely own" (AGL-3359).
+ *
+ * Owned means `orgs.ownerUid` — the owner seat is single, so every workspace
+ * it names is this account's alone; workspaces they are merely a MEMBER of
+ * are never touched. Each one goes through the org scope's own path: locked
+ * (unless it already is, whose lock is left exactly as it was set) and
+ * audited as its own row, then its billing cancelled.
+ */
+async function lockOwnedWorkspaces(options: {
+  firestore: AdminFirestore
+  actor: LockActor
+  uid: string
+  lock: LockRequest
+}): Promise<Record<string, unknown>> {
+  const { firestore, actor, uid, lock } = options
+  let owned: OrgSnapshot[]
+  try {
+    const snapshot = await firestore
+      .collection('orgs')
+      .where('ownerUid', '==', uid)
+      .limit(OWNED_WORKSPACES_MAX + 1)
+      .get()
+    owned = snapshot.docs as OrgSnapshot[]
+  } catch (error) {
+    return {
+      confirmed: false,
+      workspaces: [],
+      error: `Finding the workspaces this account owns failed: ${
+        (error as Error)?.message ?? String(error)
+      }`,
+    }
+  }
+  const truncated = owned.length > OWNED_WORKSPACES_MAX
+  const workspaces: Array<Record<string, unknown>> = []
+  for (const orgSnapshot of owned.slice(0, OWNED_WORKSPACES_MAX)) {
+    const orgId = orgSnapshot.id
+    const slug = orgSnapshot.get('slug') ?? null
+    const alreadyLocked = orgSnapshot.get('suspendedAt') != null
+    let lockError: string | null = null
+    if (!alreadyLocked) {
+      try {
+        await lockOrgAndAudit({
+          firestore,
+          actor,
+          orgId,
+          orgSnapshot,
+          action: 'lock',
+          lock,
+          via: `user-lock:${uid}`,
+        })
+      } catch (error) {
+        lockError = (error as Error)?.message ?? String(error)
+      }
+    }
+    const verified = await readLockState(firestore, 'org', orgId)
+    const subscriptionCancel = await cancelBillingAfterLock({
+      firestore,
+      actor,
+      orgId,
+      reason: lock.reason,
+    })
+    workspaces.push({
+      orgId,
+      slug,
+      alreadyLocked,
+      lockError,
+      verified,
+      confirmed: verified.locked,
+      subscriptionCancel,
+    })
+  }
+  return {
+    workspaces,
+    truncated,
+    confirmed:
+      !truncated &&
+      workspaces.every(
+        (workspace) =>
+          workspace['confirmed'] === true &&
+          (workspace['subscriptionCancel'] as { confirmed?: boolean })
+            ?.confirmed === true,
+      ),
+  }
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -1114,7 +1352,26 @@ async function handler(request: Request): Promise<Response> {
           ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
-      return actionResponse({ firestore, scope, targetId, action })
+      // AGL-3359: the account's own workspaces, locked and their billing
+      // stopped, after the account lock is durable. Reported beside it and
+      // never able to undo it. A lift never touches them — each workspace
+      // is lifted on its own, and no lift recreates a subscription.
+      const ownedWorkspaces =
+        action === 'lock' && body?.lockOwnedWorkspaces === true
+          ? await lockOwnedWorkspaces({
+              firestore,
+              actor,
+              uid: targetId,
+              lock,
+            })
+          : undefined
+      return actionResponse({
+        firestore,
+        scope,
+        targetId,
+        action,
+        ...(ownedWorkspaces ? { extra: { ownedWorkspaces } } : {}),
+      })
     }
 
     /*==========================================
@@ -1125,54 +1382,33 @@ async function handler(request: Request): Promise<Response> {
       if (!orgSnapshot.exists) {
         return Response.json({ error: 'No such workspace' }, { status: 404 })
       }
-      const result = await applyOrgLockdown({
+      const result = await lockOrgAndAudit({
         firestore,
+        actor,
         orgId: targetId,
+        orgSnapshot,
         action,
         lock,
-        // Security/manual mean "everyone out NOW". Billing/maintenance keep
-        // sessions so members can reach billing settings and fix it — the
-        // org's sites and writes are locked server-side either way.
-        //
-        // READ-ONLY NEVER REVOKES (AGL-1511), whatever the reason. Logging
-        // everyone out is a full lockdown's effect; doing it here would
-        // deliver "your sites keep serving and you can keep reading" by
-        // signing every member out of the console. The write freeze is
-        // enforced at the chokepoints, which is where it belongs — the
-        // session is not the mechanism.
-        revokeMemberTokens:
-          mode !== 'read-only' &&
-          (lock.reason === 'security' || lock.reason === 'manual'),
       })
-      await audit({
-        ...actor,
-        action: `lockdown.${action}`,
-        scope: 'org',
-        target: `orgs/${targetId}`,
-        before: {
-          locked: orgSnapshot.get('suspendedAt') != null,
-          // The org scope carries the lock on the org doc's `suspended*`
-          // family, not in `lockdowns/*` — same three facts, other names.
-          ...auditLockShape({
-            reason: orgSnapshot.get('suspendedReasonCode'),
-            message: orgSnapshot.get('suspendedMessage'),
-            untilMs: orgSnapshot.get('suspendedUntilMs'),
-            mode: orgSnapshot.get('suspendedMode'),
-          }),
-        },
-        after: {
-          locked: action === 'lock',
-          ...(action === 'lock' ? auditLockShape(lock) : {}),
-          tokensRevoked: result.tokensRevoked,
-          // AGL-1526 completion, on the row: how many raw
-          // `firebasestorage.googleapis.com?...&token=` URLs this lock
-          // actually killed. Recorded even when it is zero, because
-          // "rotation ran and found nothing" and "rotation never ran" are
-          // different facts to an incident reviewer.
-          ...auditRotationShape(result.downloadTokensRotated),
-        },
+      // AFTER the lock is durable and audited, and never able to undo it
+      // (AGL-3359). A lock that fails to cancel billing is still a lock; the
+      // cancel is reported as its own step with its own `confirmed`.
+      const subscriptionCancel =
+        action === 'lock' && body?.cancelSubscription === true
+          ? await cancelBillingAfterLock({
+              firestore,
+              actor,
+              orgId: targetId,
+              reason: lock.reason,
+            })
+          : undefined
+      return actionResponse({
+        firestore,
+        scope,
+        targetId,
+        action,
+        extra: { ...result, ...(subscriptionCancel ? { subscriptionCancel } : {}) },
       })
-      return actionResponse({ firestore, scope, targetId, action, extra: result })
     }
 
     /*==========================================

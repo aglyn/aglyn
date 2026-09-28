@@ -39,6 +39,8 @@
 const mockDocs = new Map<string, Record<string, unknown>>()
 
 let mockScopes: string[] = ['forms:read', 'forms:write']
+/** What the delete told the plugins it removed (AGL-3330). */
+const mockRemoved: Array<Record<string, unknown>> = []
 
 const tick = () => Promise.resolve()
 
@@ -223,6 +225,10 @@ jest.mock('firebase-admin/firestore', () => {
   }
 })
 
+import {
+  registerPluginEventHandler,
+  resetPluginEventHandlersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
 
 const SUBMISSIONS = 'hosts/host-1/formSubmissions'
@@ -281,6 +287,11 @@ function seed(id: string, extra: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   mockDocs.clear()
+  mockRemoved.length = 0
+  resetPluginEventHandlersForTests()
+  registerPluginEventHandler('host.records.removed', (payload) => {
+    mockRemoved.push(payload as unknown as Record<string, unknown>)
+  }, { pluginId: 'forms' })
   mockScopes = ['forms:read', 'forms:write']
 })
 
@@ -416,6 +427,26 @@ describe('DELETE /v1/sites/{id}/form-submissions/{submissionId} (AGL-2127)', () 
       deleted: true,
     })
     expect(mockDocs.has(`${SUBMISSIONS}/sub_1`)).toBe(false)
+  })
+
+  it('tells the plugins what it removed, once it is gone (AGL-3330)', async () => {
+    // The form counted this row when it arrived; an increment cannot see a
+    // delete, so the forms plugin recounts it from what the event names.
+    seed('sub_1', { formId: 'form-1' })
+    expect((await remove('sub_1')).status).toBe(200)
+    expect(mockRemoved).toEqual([
+      {
+        orgId: 'org-1',
+        hostIds: ['host-1'],
+        collection: 'formSubmissions',
+        records: [{ id: 'sub_1', data: expect.objectContaining({ formId: 'form-1' }) }],
+      },
+    ])
+  })
+
+  it('tells nobody about a delete that found nothing', async () => {
+    expect((await remove('sub_missing')).status).toBe(404)
+    expect(mockRemoved).toEqual([])
   })
 
   it('replays the receipt on a retry instead of 404-ing', async () => {

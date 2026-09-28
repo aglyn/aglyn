@@ -33,6 +33,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
+import { eventRunSuspension } from './site-suspension'
 import {
   deferFlowEnrollment,
   endFlowEnrollment,
@@ -193,6 +194,9 @@ export async function runEventWorkflows(
     // read of it here would be billed on every host event and used for
     // nothing.
     const owner = await getOrgForHost(hostId)
+    // A suspended site runs nothing (AGL-3356): see `eventRunSuspension`.
+    // Asked before the cap so a locked site's events bill no runs.
+    if (await eventRunSuspension(hostRef, owner?.org)) return alerts
     {
       const org = owner?.org
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.

@@ -206,6 +206,39 @@ interface AbuseReportRow {
    * never to be rendered as zero.
    */
   strikeUnknown: boolean
+  /** `outbound-screen` for a send the phishing screen held; null for intake. */
+  source: string | null
+  /** The held send, when the screen filed this row (AGL-3356). */
+  heldSend: HeldSendRow | null
+}
+
+/**
+ * A campaign or automated email the outbound phishing screen held for review
+ * (AGL-3356), as `heldSendPayload()` hands it over. Closing the row decides
+ * it: dismissed releases the send, actioned rejects it.
+ */
+interface HeldSendRow {
+  kind: string | null
+  path: string | null
+  subject: string | null
+  fromName: string | null
+  state: string
+  ageDays: number | null
+  heldAtMs: number | null
+  decidedBy: string | null
+  decidedAtMs: number | null
+  reasons: string[]
+}
+
+/** What a held send's state means, in the words the reviewer acts on. */
+function heldSendStateLine(held: HeldSendRow): string {
+  if (held.state === 'released') {
+    return `Released${held.decidedBy ? ` by ${held.decidedBy}` : ''} — it sends as composed.`
+  }
+  if (held.state === 'rejected') {
+    return `Rejected${held.decidedBy ? ` by ${held.decidedBy}` : ''} — it will not be sent.`
+  }
+  return 'Held — nothing has been sent. Dismiss this report (with a note) to release it, or mark it Actioned to reject it. Reviewing leaves it held.'
 }
 
 /**
@@ -1307,9 +1340,52 @@ function AdminAbuseReports() {
 
                     <Divider />
 
+                    {report.heldSend ? (
+                      <Alert
+                        severity={
+                          report.heldSend.state === 'held' ? 'warning' : 'info'
+                        }
+                      >
+                        <Stack spacing={0.5}>
+                          <Typography variant="subtitle2">
+                            {`Outbound ${
+                              report.heldSend.kind === 'campaign'
+                                ? 'campaign'
+                                : 'automated email'
+                            } held by the phishing screen`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`Subject: ${report.heldSend.subject ?? '—'}`}
+                            {report.heldSend.fromName
+                              ? ` · Sender name: ${report.heldSend.fromName}`
+                              : ''}
+                            {report.heldSend.ageDays !== null
+                              ? ` · Workspace age: ${report.heldSend.ageDays} day(s)`
+                              : ''}
+                          </Typography>
+                          {report.heldSend.reasons.map((reason) => (
+                            <Typography key={reason} variant="body2">
+                              {`• ${reason}`}
+                            </Typography>
+                          ))}
+                          <Typography
+                            variant="caption"
+                            sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                          >
+                            {report.heldSend.path ?? ''}
+                          </Typography>
+                          <Typography variant="body2">
+                            {heldSendStateLine(report.heldSend)}
+                          </Typography>
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
                     <Stack spacing={0.5}>
                       <Typography variant="caption" color="text.secondary">
-                        {'What the reporter said'}
+                        {report.source === 'outbound-screen'
+                          ? 'What the screen recorded'
+                          : 'What the reporter said'}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -1323,7 +1399,11 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {'Who reported it'}
                       </Typography>
-                      {report.identityVisible ? (
+                      {report.source === 'outbound-screen' ? (
+                        <Typography variant="body2">
+                          {'Filed by the outbound phishing screen, not a person. There is no reporter to reply to; the workspace that composed the email is the subject.'}
+                        </Typography>
+                      ) : report.identityVisible ? (
                         <Typography variant="body2">
                           {report.hasReporterContact
                             ? `${report.reporterName ?? 'no name given'} — ${report.reporterEmail ?? 'no address recorded'}`

@@ -275,12 +275,33 @@ jest.mock('@aglyn/shared-util-email', () => ({
   },
 }))
 
+/*
+ * The phishing screen's hold (AGL-3356), answered by a double so these cases
+ * decide the verdict; the screen and the review queue are proven against
+ * their own store in `tenant-data-admin`. Every other case gets `send`,
+ * which is what the fixture org — no creation date, so an established
+ * workspace — would get from the real one.
+ */
+const mockScreenOutboundSend = jest.fn(async (_request: unknown): Promise<unknown> => ({
+  outcome: 'send',
+}))
+jest.mock('@aglyn/tenant-data-admin/server/outbound-send-review', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/outbound-send-review'),
+  screenOutboundSend: (request: unknown) => mockScreenOutboundSend(request),
+}))
+
 import { compress } from '@aglyn/aglyn/server'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
 import { registerPluginRecordCardReader } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { CampaignSendError, performCampaignSend } from './campaign-send'
+import {
+  CampaignSendDeferredError,
+  CampaignSendError,
+  CampaignSendHeldError,
+  performCampaignSend,
+} from './campaign-send'
+import { HELD_SEND_AT_MS } from '@aglyn/tenant-data-admin/server/outbound-send-review'
 
 /**
  * A plugin that keeps products, standing in for the one that does. The sender
@@ -832,6 +853,120 @@ describe('reusable blocks placed in a designed campaign (AGL-3287)', () => {
  * asserted here: it still enforces, and it now counts through the shared meter
  * instead of writing the counter itself.
  */
+/*
+ * A suspended site sends no campaign (AGL-3356). The scheduled processor and
+ * a resumed batch reach the send core with no caller for the dispatcher to
+ * refuse, so the core asks — and answers with a DEFERRAL, so lifting the
+ * suspension leaves the campaign where it was.
+ */
+describe('a suspended site', () => {
+  const host = () => mockState.store['hosts/host-1'] as Record<string, unknown>
+
+  it('defers the send with a 423 and mails nobody', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    host().suspendedReasonCode = 'security'
+    const attempt = send()
+    await expect(attempt).rejects.toBeInstanceOf(CampaignSendDeferredError)
+    await expect(attempt).rejects.toMatchObject({ status: 423 })
+    expect(mockState.sent).toEqual([])
+    expect(mockState.metered).toEqual([])
+  })
+
+  it('retries no sooner than the suspension delay', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    const before = Date.now()
+    const error = (await send().catch((caught) => caught)) as CampaignSendDeferredError
+    expect(error.retryAtMs).toBeGreaterThanOrEqual(before + 60 * 60 * 1000)
+  })
+
+  it('pauses under a read-only maintenance window too', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    host().suspendedMode = 'read-only'
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendDeferredError)
+    expect(mockState.sent).toEqual([])
+  })
+
+  it('sends once the suspension has expired', async () => {
+    seed(NODES)
+    host().suspendedAt = { seconds: 1 }
+    host().suspendedUntilMs = Date.now() - 1_000
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+})
+
+describe('the phishing screen (AGL-3356)', () => {
+  const hold = {
+    outcome: 'held',
+    reviewId: 'a'.repeat(40),
+    reference: 'HS-AAAAAAAAAA',
+    contentHash: 'h',
+  }
+  const composed = () =>
+    performCampaignSend({
+      hostId: 'host-1',
+      campaignId: 'send-9',
+      subject: 'Shared feedback regarding your property',
+      body: 'A guest complaint was filed on Booking.com: https://guest-portal-review.top/c',
+      audience: 'leads',
+      fromName: 'PropertyAssistant',
+      replyTo: 'support@throwaway-mailer.xyz',
+      preheader: 'hidden preheader',
+      senderUid: 'uid-1',
+    })
+
+  afterEach(() => {
+    mockScreenOutboundSend.mockReset()
+    mockScreenOutboundSend.mockImplementation(async () => ({ outcome: 'send' }))
+  })
+
+  it('hands the screen everything the recipient reads', async () => {
+    seed(NODES)
+    await send()
+    expect(mockScreenOutboundSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'campaign',
+        hostId: 'host-1',
+        orgId: 'org-1',
+        subject: 'Spring sale',
+        path: expect.stringMatching(/^orgs\/org-1\/campaigns\//),
+        // The design, serialized, so a link inside a custom-HTML block is read.
+        bodies: expect.arrayContaining([expect.stringContaining('emailProduct')]),
+      }),
+    )
+  })
+
+  it('parks a held send as a scheduled email nobody sends, and mails no one', async () => {
+    seed(NODES)
+    mockScreenOutboundSend.mockImplementation(async () => hold)
+    const attempt = composed()
+    await expect(attempt).rejects.toBeInstanceOf(CampaignSendHeldError)
+    // A deferral to the processor, so a scheduled send is parked, not failed.
+    await expect(attempt).rejects.toBeInstanceOf(CampaignSendDeferredError)
+    expect(mockState.sent).toEqual([])
+    expect(mockState.metered).toEqual([])
+    expect(mockState.store['orgs/org-1/campaigns/send-9']).toMatchObject({
+      status: 'scheduled',
+      sendAtMs: HELD_SEND_AT_MS,
+      subject: 'Shared feedback regarding your property',
+      fromName: 'PropertyAssistant',
+      replyTo: 'support@throwaway-mailer.xyz',
+      audience: 'leads',
+      staffReview: { reviewId: hold.reviewId, state: 'held', reference: 'HS-AAAAAAAAAA' },
+    })
+  })
+
+  it('refuses a send staff rejected, without parking it again', async () => {
+    seed(NODES)
+    mockScreenOutboundSend.mockImplementation(async () => ({ ...hold, outcome: 'rejected' }))
+    await expect(composed()).rejects.toMatchObject({ status: 403 })
+    expect(mockState.sent).toEqual([])
+    expect(mockState.store['orgs/org-1/campaigns/send-9']).toBeUndefined()
+  })
+})
+
 describe('the campaign cap and the cost meter (AGL-1438)', () => {
   /*
    * The band the fixture org actually has, read from the entitlements

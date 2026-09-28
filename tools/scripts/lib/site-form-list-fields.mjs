@@ -54,19 +54,60 @@ export function formListFields(form) {
 }
 
 /**
- * `newFormListFields`: what a form is CREATED with — its search keys,
- * `retired: false`, `routing.lead` as a boolean and a null for each counter.
+ * `normalizeCampaignIds`: a stored membership as a clean list — deduped,
+ * trimmed, non-strings dropped, at most twenty.
  *
- * @param {{ id: string, displayName?: unknown, slug?: unknown, routing?: Record<string, unknown> | null }} form
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+export function normalizeCampaignIds(raw) {
+  if (!Array.isArray(raw)) return []
+  const seen = []
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue
+    const id = entry.trim()
+    if (!id || seen.includes(id)) continue
+    seen.push(id)
+    if (seen.length >= 20) break
+  }
+  return seen
+}
+
+/**
+ * `formCampaignFields`: the ids, and `inCampaign`, the boolean the list's
+ * "In a campaign" filter asks.
+ *
+ * @param {unknown} selected
+ */
+export function formCampaignFields(selected) {
+  const campaignIds = normalizeCampaignIds(selected)
+  return { campaignIds, inCampaign: campaignIds.length > 0 }
+}
+
+/**
+ * `newFormListFields`: what a form is CREATED with — its search keys,
+ * `retired: false`, `routing.lead` as a boolean, `inCampaign`, and a null
+ * for each counter except `leads` on a form that routes leads, which starts
+ * at 0.
+ *
+ * @param {{ id: string, displayName?: unknown, slug?: unknown, routing?: Record<string, unknown> | null, campaignIds?: unknown }} form
  */
 export function newFormListFields(form) {
+  const routesLeads = form.routing?.lead === true
   return {
     ...formListFields(form),
     retired: false,
-    routing: { ...(form.routing ?? {}), lead: form.routing?.lead === true },
-    stats: { submissions: null, leads: null, lastSubmissionAtMs: null },
+    routing: { ...(form.routing ?? {}), lead: routesLeads },
+    inCampaign: formCampaignFields(form.campaignIds).inCampaign,
+    stats: { submissions: null, leads: routesLeads ? 0 : null, lastSubmissionAtMs: null },
   }
 }
+
+/**
+ * What `planFormListFields` stamps as `updatedAt` on a form with neither it
+ * nor `createdAt`: a sentinel the backfill turns into the server's time.
+ */
+export const UPDATED_AT_FALLBACK = Symbol.for('aglyn.backfill.serverTimestamp')
 
 /** The counters `/api/forms/submit` keeps, which a form carries as null until it counts one. */
 export const FORM_LIST_COUNTERS = ['submissions', 'leads', 'lastSubmissionAtMs']
@@ -78,8 +119,11 @@ const same = (left, right) => JSON.stringify(left) === JSON.stringify(right)
  * it is left alone — what the backfill writes. Pure.
  *
  * Each value is what the document already means: `retired` is a truthy
- * `archivedAt`, a missing lead switch is off, and a counter nobody wrote is
- * null. A counter that holds a number is never touched.
+ * `archivedAt`, a missing lead switch (or a routing that is no map) is off,
+ * `inCampaign` is whether `campaignIds` names any campaign, a missing
+ * `updatedAt` is the form's creation, and a counter nobody wrote is null. A
+ * counter that holds a number is never touched — `recount-form-stats.mjs`
+ * owns what the counters say, including the 0 a lead-routing form holds.
  *
  * @param {string} path the document path
  * @param {Record<string, any>} data the document
@@ -104,9 +148,27 @@ export function planFormListFields(path, data) {
     patch.retired = retired
     reasons.push('retired')
   }
-  if (typeof data.routing?.lead !== 'boolean') {
-    patch['routing.lead'] = data.routing?.lead === true
+  const routing = data.routing
+  if (routing === undefined || routing === null || typeof routing !== 'object' || Array.isArray(routing)) {
+    // No routing map at all — or a value that is not one, which a dotted
+    // update cannot reach inside. The whole map, with the switch off.
+    patch.routing = { lead: false }
     reasons.push('lead')
+  } else if (typeof routing.lead !== 'boolean') {
+    patch['routing.lead'] = routing.lead === true
+    reasons.push('lead')
+  }
+  const { inCampaign } = formCampaignFields(data.campaignIds)
+  if (data.inCampaign !== inCampaign) {
+    patch.inCampaign = inCampaign
+    reasons.push('campaign')
+  }
+  if (data.updatedAt === undefined || data.updatedAt === null) {
+    // Updated is a range the list orders by, and a query never finds a
+    // document missing the field it orders on. The form's own creation is
+    // the last edit anyone can vouch for.
+    patch.updatedAt = data.createdAt ?? UPDATED_AT_FALLBACK
+    reasons.push('updated')
   }
   for (const counter of FORM_LIST_COUNTERS) {
     if (data.stats?.[counter] === undefined) {

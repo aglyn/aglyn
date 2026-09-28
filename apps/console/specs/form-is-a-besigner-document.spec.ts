@@ -241,7 +241,11 @@ describe('the rules let a form version be written at all', () => {
   it('still refuses a client write to the stats counters', () => {
     // The pre-existing protection, re-asserted because the nested blocks were
     // added inside this same matcher and a careless edit could widen it.
-    expect(formsBlock()).toContain("affectedKeys().hasAny(['stats'])")
+    // Through the block's `formEdit()` since AGL-3330, which binds the
+    // update's changed keys once and asks them every question.
+    expect(formsBlock()).toContain('let k = d.diff(resource.data).affectedKeys();')
+    expect(formsBlock()).toContain("!k.hasAny(['stats'])")
+    expect(formsBlock()).toContain('formEdit());')
   })
 
   it('still denies a client-direct create of the form itself', () => {
