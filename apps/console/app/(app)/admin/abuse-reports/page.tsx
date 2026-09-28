@@ -1516,7 +1516,7 @@ function AdminAbuseReports() {
                         </Stack>
                         <Typography variant="caption" color="text.secondary">
                           {
-                            'Lockdown suspends the site or the whole workspace; Disabled files stops one uploaded file being served and leaves the site serving. NEITHER is a recall: both stop new delivery, and neither reaches bytes a browser, a downstream CDN, a scraper or an archive already holds — so treat a public file as already distributed when you decide what to promise a complainant. Copy the ids above — these two buttons open their pages empty, so the target is typed by the person who decided on it. A risk row's own Lock action pre-fills Lockdown, which still shows the target and waits for you to press Lock.'
+                            'Lockdown suspends the site or the whole workspace; Disabled files stops one uploaded file being served and leaves the site serving. NEITHER is a recall: both stop new delivery, and neither reaches bytes a browser, a downstream CDN, a scraper or an archive already holds — so treat a public file as already distributed when you decide what to promise a complainant. Copy the ids above — these two buttons open their pages empty, so the target is typed by the person who decided on it. A risk row’s own Lock action pre-fills Lockdown, which still shows the target and waits for you to press Lock.'
                           }
                         </Typography>
                       </Stack>

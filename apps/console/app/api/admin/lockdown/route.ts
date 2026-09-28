@@ -97,6 +97,7 @@ import {
   invalidateUserLockdownCache,
   isImpersonationSession,
   lockdownJsonResponse,
+  notifyRiskEvent,
   readSignupsCreationTriggerStatus,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -105,6 +106,10 @@ import {
   applyHostLockdown,
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
+import {
+  type LockdownNoticeEffects,
+  sendLockdownOwnerNotice,
+} from '../../../../utils/server/lockdown-owner-notice'
 import { listRecurringChargeSources } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
@@ -590,6 +595,50 @@ interface LockRequest {
 type OrgSnapshot = FirebaseFirestore.DocumentSnapshot
 
 /**
+ * The owners' notice for one lock or lift (AGL-3368), reported as its own
+ * step beside the billing ones so a lock can never skip its email silently.
+ * Runs after the lock is durable and never able to undo it.
+ */
+async function ownerNoticeStep(options: {
+  firestore: AdminFirestore
+  action: 'lock' | 'unlock'
+  scope: string
+  targetId: string
+  orgId?: string | null
+  emailOwners: boolean
+  lock: LockRequest
+  effects?: LockdownNoticeEffects
+}): Promise<{ ownerNotice?: Record<string, unknown> }> {
+  const step = await sendLockdownOwnerNotice({
+    firestore: options.firestore,
+    notifyRisk: notifyRiskEvent,
+    action: options.action,
+    scope: options.scope,
+    targetId: options.targetId,
+    orgId: options.orgId ?? null,
+    emailOwners: options.emailOwners,
+    lock: options.lock,
+    effects: options.effects,
+  })
+  return step ? { ownerNotice: { ...step } } : {}
+}
+
+/**
+ * Whether a money step confirmed a change, read off its reported result: a
+ * confirmed step that touched nothing (no subscription to pause, no payout
+ * schedule held) did not happen, as far as the owners' notice is concerned.
+ */
+function stepConfirmed(step: unknown): boolean {
+  const result = step as
+    | { confirmed?: unknown; changed?: unknown; subscriptions?: unknown; outcome?: unknown }
+    | undefined
+  if (result?.confirmed !== true) return false
+  if (typeof result.changed === 'number') return result.changed > 0
+  if (Array.isArray(result.subscriptions)) return result.subscriptions.length > 0
+  return result.outcome !== 'nothing-held' && result.outcome !== 'not-live'
+}
+
+/**
  * One workspace lock or lift, with its audit row — the org scope's whole
  * write path. A function so the user scope's "and the workspaces they own"
  * (AGL-3359) runs the very same path rather than a second copy of it.
@@ -904,6 +953,8 @@ async function lockOwnedWorkspaces(options: {
   actor: LockActor
   uid: string
   lock: LockRequest
+  /** Email each locked workspace's owners (AGL-3368). */
+  emailOwners: boolean
 }): Promise<Record<string, unknown>> {
   const { firestore, actor, uid, lock } = options
   let owned: OrgSnapshot[]
@@ -952,6 +1003,22 @@ async function lockOwnedWorkspaces(options: {
       orgId,
       reason: lock.reason,
     })
+    // Each workspace locked here is told in its own notice (AGL-3368) —
+    // one this lock did not place was told when it was.
+    const notice = alreadyLocked
+      ? {}
+      : await ownerNoticeStep({
+          firestore,
+          action: 'lock',
+          scope: 'org',
+          targetId: orgId,
+          emailOwners: options.emailOwners,
+          lock,
+          effects: {
+            sessionsRevoked: true,
+            subscriptionCanceled: stepConfirmed(subscriptionCancel),
+          },
+        })
     workspaces.push({
       orgId,
       slug,
@@ -960,6 +1027,7 @@ async function lockOwnedWorkspaces(options: {
       verified,
       confirmed: verified.locked,
       subscriptionCancel,
+      ...notice,
     })
   }
   return {
@@ -1260,6 +1328,9 @@ async function handler(request: Request): Promise<Response> {
       )
     }
     const lock = { reason: String(reason), message, untilMs, mode, enforcement }
+    // "Email the owners" (AGL-3368): on unless staff unticked it — a legal
+    // hold. Absent means on, so every existing caller emails.
+    const emailOwners = body?.emailOwners !== false
     const actor = {
       actorUid: decoded.uid,
       actorEmail: decoded.email ? String(decoded.email) : null,
@@ -1383,6 +1454,17 @@ async function handler(request: Request): Promise<Response> {
           ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
+      const featureNotice = featureOrgId
+        ? await ownerNoticeStep({
+            firestore,
+            action,
+            scope,
+            targetId,
+            orgId: featureOrgId,
+            emailOwners,
+            lock,
+          })
+        : {}
       return actionResponse({
         firestore,
         scope,
@@ -1392,6 +1474,7 @@ async function handler(request: Request): Promise<Response> {
         extra: {
           feature: targetId,
           ...(featureOrgId ? { orgId: featureOrgId } : {}),
+          ...featureNotice,
         },
       })
     }
@@ -1454,7 +1537,17 @@ async function handler(request: Request): Promise<Response> {
         scope,
         targetId: hostname,
         action,
-        extra: { domain: hostname },
+        extra: {
+          domain: hostname,
+          ...(await ownerNoticeStep({
+            firestore,
+            action,
+            scope,
+            targetId: hostname,
+            emailOwners,
+            lock,
+          })),
+        },
       })
     }
 
@@ -1539,14 +1632,29 @@ async function handler(request: Request): Promise<Response> {
               actor,
               uid: targetId,
               lock,
+              emailOwners,
             })
           : undefined
+      // The account's own person, at their sign-in address (AGL-3368).
+      const userNotice = await ownerNoticeStep({
+        firestore,
+        action,
+        scope,
+        targetId,
+        emailOwners,
+        lock,
+        effects: {
+          ownedWorkspacesLocked: Array.isArray(ownedWorkspaces?.['workspaces'])
+            ? (ownedWorkspaces['workspaces'] as unknown[]).length
+            : 0,
+        },
+      })
       return actionResponse({
         firestore,
         scope,
         targetId,
         action,
-        ...(ownedWorkspaces ? { extra: { ownedWorkspaces } } : {}),
+        extra: { ...(ownedWorkspaces ? { ownedWorkspaces } : {}), ...userNotice },
       })
     }
 
@@ -1592,6 +1700,24 @@ async function handler(request: Request): Promise<Response> {
               payouts: body?.pausePayouts === true,
             })
           : await resumeMoneyAfterLift({ firestore, actor, scope: 'org', targetId })
+      // The owners and admins, last: the notice says what every step above
+      // actually did (AGL-3368).
+      const orgNotice = await ownerNoticeStep({
+        firestore,
+        action,
+        scope,
+        targetId,
+        emailOwners,
+        lock,
+        effects: {
+          sessionsRevoked: Number((result as { tokensRevoked?: unknown }).tokensRevoked ?? 0) > 0,
+          subscriptionCanceled: stepConfirmed(subscriptionCancel),
+          renewalsPaused: stepConfirmed(money['renewalsPause']),
+          payoutsPaused: stepConfirmed(money['payoutsPause']),
+          renewalsResumed: stepConfirmed(money['renewalsResume']),
+          payoutsRestored: stepConfirmed(money['payoutsRestore']),
+        },
+      })
       return actionResponse({
         firestore,
         scope,
@@ -1601,6 +1727,7 @@ async function handler(request: Request): Promise<Response> {
           ...result,
           ...(subscriptionCancel ? { subscriptionCancel } : {}),
           ...money,
+          ...orgNotice,
         },
       })
     }
@@ -1651,12 +1778,26 @@ async function handler(request: Request): Promise<Response> {
             payouts: body?.pausePayouts === true,
           })
         : await resumeMoneyAfterLift({ firestore, actor, scope: 'host', targetId })
+    const hostNotice = await ownerNoticeStep({
+      firestore,
+      action,
+      scope,
+      targetId,
+      emailOwners,
+      lock,
+      effects: {
+        renewalsPaused: stepConfirmed(money['renewalsPause']),
+        payoutsPaused: stepConfirmed(money['payoutsPause']),
+        renewalsResumed: stepConfirmed(money['renewalsResume']),
+        payoutsRestored: stepConfirmed(money['payoutsRestore']),
+      },
+    })
     return actionResponse({
       firestore,
       scope,
       targetId,
       action,
-      extra: { ...result, ...money },
+      extra: { ...result, ...money, ...hostNotice },
     })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

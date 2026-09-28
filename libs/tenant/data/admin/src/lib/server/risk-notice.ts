@@ -80,6 +80,7 @@ import {
   RISK_NOTICE_CATALOG,
   RISK_NOTICE_DIGEST_EMAIL_KEY,
   RISK_NOTICE_HELP_PATH,
+  RISK_NOTICE_WORKSPACE_BRANDED,
   riskNoticeEmailKey,
   type ResolvedRiskAction,
   type RiskActionParams,
@@ -101,6 +102,13 @@ import {
   type NotifyUsersOptions,
 } from './notifications'
 import { listOrgMembers } from './organizations'
+import {
+  orgSystemEmailBrand,
+  renderSystemEmailContent,
+  type SystemEmailBrand,
+  systemEmailBrand,
+} from './render-system-email'
+import { RISK_REVIEW_REQUESTED_EMAIL_KEY } from '@aglyn/shared-util-email/risk-notice-emails'
 
 /** Admin-SDK only; no client rule opens it. One document per notice. */
 export const RISK_NOTICE_COLLECTION = 'riskNotices'
@@ -373,19 +381,50 @@ async function readContext(
   return { orgId, orgName, orgSlug, hostSubdomain, siteManagerUids }
 }
 
+/** What one notice email sends. */
+export interface RenderedRiskNoticeEmail {
+  key: string
+  subject: string
+  text: string
+  html?: string
+  /** The display name to send under; absent sends under the platform's. */
+  fromName?: string
+}
+
 /**
- * Renders one notice email. ONE function, so the switch to the System
- * emails renderer (a published design for each `risk-…` key, platform
- * branded for enforcement notices) is made in exactly one place.
- *
- * Today it composes the catalog's default content as plain text, which
- * `sendEmail` gives an HTML part; the keys are registered in the System
- * emails catalog with the same content (`risk-notice-emails.ts`).
+ * The brand a kind's email is sent in: the workspace's own for a routine
+ * notice about its customers' payments, the platform's for everything the
+ * platform does (holds, locks, lifts, cancellations, reviews).
+ */
+export async function riskNoticeEmailBrand(
+  kind: RiskEventKind | null,
+  orgId: string | null,
+): Promise<SystemEmailBrand> {
+  return kind && RISK_NOTICE_WORKSPACE_BRANDED.has(kind)
+    ? orgSystemEmailBrand(orgId)
+    : systemEmailBrand(null)
+}
+
+/**
+ * Renders one notice email through the System emails seam (AGL-3367): the
+ * published design for the kind's own `risk-…` key, or its built-in copy,
+ * inside the header and footer every platform email wears. The plain-text
+ * composition below is the last resort for a render that produced nothing.
+ * ONE function, so every notice renders the same way.
  */
 export async function renderRiskNoticeEmail(
   key: string,
   merge: Record<string, string>,
-): Promise<{ subject: string; text: string; html?: string; key: string }> {
+  brand: SystemEmailBrand = systemEmailBrand(null),
+): Promise<RenderedRiskNoticeEmail> {
+  const content = await renderSystemEmailContent(key, merge, brand, riskNoticeFallback(merge)).catch(
+    () => riskNoticeFallback(merge),
+  )
+  return { key, ...content, ...(brand.fromName ? { fromName: brand.fromName } : {}) }
+}
+
+/** The notice as plain text, when no design renders. */
+function riskNoticeFallback(merge: Record<string, string>): { subject: string; text: string } {
   const lines = [
     merge['notice.summary'],
     merge['notice.meaning'],
@@ -394,7 +433,7 @@ export async function renderRiskNoticeEmail(
     merge['reference'] ? `Reference: ${merge['reference']}` : '',
     merge['help.url'] ? `Why was something held or flagged? ${merge['help.url']}` : '',
   ].filter((line) => Boolean(line && line.trim()))
-  return { key, subject: merge['notice.title'] ?? '', text: lines.join('\n\n') }
+  return { subject: merge['notice.title'] ?? '', text: lines.join('\n\n') }
 }
 
 function numbered(steps: readonly string[]): string {
@@ -684,7 +723,11 @@ export async function notifyRiskEvent(
           workspaceName: context.orgName,
           lockMessage: input.lock?.message ?? null,
         })
-        const rendered = await renderRiskNoticeEmail(riskNoticeEmailKey(input.kind), merge)
+        const rendered = await renderRiskNoticeEmail(
+          riskNoticeEmailKey(input.kind),
+          merge,
+          await riskNoticeEmailBrand(input.kind, orgId),
+        )
         const delivery = await emailPeople(deps, recipients, rendered, supportEmail)
         result.owners.emailed = delivery.sent
         result.owners.emailFailed = delivery.failed
@@ -794,7 +837,7 @@ function emailMerge(input: {
 async function emailPeople(
   deps: RiskNoticeDeps,
   recipients: { uids: string[]; emails: Record<string, string | null> },
-  rendered: { subject: string; text: string; html?: string },
+  rendered: RenderedRiskNoticeEmail,
   supportEmail: string,
 ): Promise<{ sent: number; failed: number }> {
   let sent = 0
@@ -814,6 +857,7 @@ async function emailPeople(
         subject: rendered.subject,
         text: rendered.text,
         ...(rendered.html ? { html: rendered.html } : {}),
+        ...(rendered.fromName ? { fromName: rendered.fromName } : {}),
         ...(supportEmail ? { replyTo: supportEmail } : {}),
         context: 'risk-notice',
         owedFor: 'account',
@@ -1088,6 +1132,29 @@ export async function requestRiskReview(
     body: `A workspace owner or admin asked for a review: "${note.slice(0, 280)}"`,
     link: staffAbuseRowPath(reviewId),
   })
+  // The person who asked is told it arrived — account mail, platform brand.
+  if (input.email) {
+    const rendered = await renderRiskNoticeEmail(RISK_REVIEW_REQUESTED_EMAIL_KEY, {
+      'notice.title': 'We received your review request',
+      'notice.summary':
+        'Your request reached our review team' +
+        (outcome.reference ? ` under the reference ${outcome.reference}` : '') +
+        '. A person reads every request.',
+      'notice.meaning': 'Nothing changes until the review is done; you will get a notice either way.',
+      'notice.steps': numbered([
+        'Nothing more is needed.',
+        'You can follow the item\'s status on Holds & reviews.',
+      ]),
+      reference: outcome.reference ?? '',
+      'help.url': riskNoticeHelpUrl('requesting-a-review'),
+    })
+    await emailPeople(
+      deps,
+      { uids: [input.uid], emails: { [input.uid]: input.email } },
+      rendered,
+      abuseReportContactEmail('support') ?? '',
+    ).catch(() => undefined)
+  }
   return { ok: true, reference: outcome.reference, requestedAtMs: nowMs }
 }
 

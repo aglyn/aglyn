@@ -339,6 +339,37 @@ function siteMoneyLogLines(
 }
 
 /**
+ * The owners' email a lock or lift reported (AGL-3368), as a line of its own
+ * with its own verified/NOT CONFIRMED chip — a lock can never skip its email
+ * silently. Unticked "Email the owners" reads as a deliberate, verified
+ * "not sent", never as silence.
+ */
+function ownerNoticeLine(
+  notice: Record<string, any> | undefined,
+  label: string,
+): { text: string; confirmed: boolean } | null {
+  if (!notice) return null
+  const emailed = Number(notice['emailed'] ?? 0)
+  const recipients = Number(notice['recipients'] ?? 0)
+  const failed = Number(notice['emailFailed'] ?? 0)
+  if (notice['error']) {
+    return { text: `Owner email for ${label} FAILED — ${notice['error']}`, confirmed: false }
+  }
+  if (emailed === 0) {
+    return {
+      text: `Owner email for ${label} NOT sent — ${notice['skipped'] ?? 'nobody was emailed'}`,
+      confirmed: notice['confirmed'] === true,
+    }
+  }
+  return {
+    text:
+      `Emailed ${label}'s owners the ${String(notice['kind'] ?? 'lock')} notice — ${emailed} of ${recipients}` +
+      (failed ? `, ${failed} FAILED` : ''),
+    confirmed: notice['confirmed'] === true,
+  }
+}
+
+/**
  * The billing steps a lock reported (AGL-3359), as log lines of their own.
  *
  * Separate lines, never folded into the lock's: a lock that landed and a
@@ -382,6 +413,12 @@ function billingLogLines(
     )
   }
   lines.push(...siteMoneyLogLines(payload))
+  lines.push(
+    ownerNoticeLine(
+      payload['ownerNotice'],
+      `${payload['ownerNotice']?.['scope'] ?? 'target'} ${payload['ownerNotice']?.['targetId'] ?? ''}`.trim(),
+    ),
+  )
   const owned = payload['ownedWorkspaces'] as Record<string, any> | undefined
   if (owned) {
     if (owned['error']) {
@@ -405,6 +442,7 @@ function billingLogLines(
         confirmed: workspace['confirmed'] === true,
       })
       lines.push(cancelLine(workspace['subscriptionCancel'], label))
+      lines.push(ownerNoticeLine(workspace['ownerNotice'], label))
     }
     if (owned['truncated']) {
       lines.push({
@@ -506,8 +544,15 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [pausePayouts, setPausePayouts] = useState(
     lockdownPausesSiteMoneyByDefault('manual'),
   )
+  /**
+   * Email the owners (AGL-3368). On for EVERY reason, and reset to on when
+   * the reason changes: the one case for unticking it is a legal hold, and
+   * that is a decision somebody makes, never a default.
+   */
+  const [emailOwners, setEmailOwners] = useState(true)
   const changeReason = (next: string) => {
     setReason(next)
+    setEmailOwners(true)
     setCancelBilling(lockdownCancelsBillingByDefault(next))
     setLockOwned(lockdownCancelsBillingByDefault(next))
     setPauseRenewals(lockdownPausesSiteMoneyByDefault(next))
@@ -627,6 +672,22 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
     if (isStaff) void refresh()
   }, [isStaff, refresh])
 
+  /**
+   * Pre-filled from a risk notice's Lock action (AGL-3368):
+   * `?scope=org|host|domain|user&targetId=…`. It only fills the form; the
+   * lock still waits for someone to read the target and press Lock.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const linkedScope = params.get('scope')
+    const linkedTarget = params.get('targetId')
+    if (linkedScope && ['org', 'host', 'domain', 'user'].includes(linkedScope)) {
+      setScope(linkedScope)
+    }
+    if (linkedTarget) setTargetId(linkedTarget)
+  }, [])
+
   const act = useCallback(
     async (
       body: Record<string, unknown>,
@@ -663,7 +724,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
         )
         if (billing.some((line) => !line.confirmed)) {
           enqueueSnackbar(
-            'The lock is in place, but a billing step did NOT confirm — read "Actions taken in this session".',
+            'The lock is in place, but a billing or owner-email step did NOT confirm — read "Actions taken in this session".',
             { variant: 'error', allowDuplicate: true },
           )
         }
@@ -1227,6 +1288,26 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                   </Stack>
                 ) : null}
+                {/* The owners' email (AGL-3368): every lock and lift tells
+                    the people it locked, from the platform's own sender,
+                    with the message above. Reported on its own line. */}
+                <Stack spacing={0.5}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={emailOwners}
+                        onChange={(event) => setEmailOwners(event.target.checked)}
+                      />
+                    }
+                    label="Email the owners"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {
+                      'On for every reason. Emails the workspace’s owners and admins (a site or domain lock: its workspace’s, and the site’s managers; an account lock: the person, at their sign-in address) from the platform’s own sender — it arrives even though the lock stops the workspace sending. It carries the message above, what the lock affects, and how to appeal; never why. Untick it only for a legal hold. Unlock sends the “restored” notice the same way.'
+                    }
+                  </Typography>
+                </Stack>
                 {scope === 'user' ? (
                   <Stack spacing={0.5}>
                     <FormControlLabel
@@ -1280,6 +1361,8 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           ...(scope === 'org' || scope === 'host'
                             ? { pauseRenewals, pausePayouts }
                             : {}),
+                          // Explicit on every lock, like the billing flags.
+                          emailOwners,
                         },
                         // The id STAYS. Clearing it used to disable both
                         // buttons the moment a lock landed, so the obvious
@@ -1297,7 +1380,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     disabled={busy || notSuper || !targetId.trim()}
                     onClick={() =>
                       void act(
-                        { action: 'unlock', scope, targetId: targetId.trim() },
+                        {
+                          action: 'unlock',
+                          scope,
+                          targetId: targetId.trim(),
+                          emailOwners,
+                        },
                         (payload) => setScopedState(payload.verified ?? null),
                       )
                     }

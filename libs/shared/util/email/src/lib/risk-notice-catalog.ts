@@ -114,12 +114,11 @@ export const RISK_EVENT_KINDS = [
   // One capability switched off for one workspace (AI, uploads, checkout…).
   'feature-locked',
   'feature-unlocked',
-  // Money stopped or restarted by a lock or by staff.
+  // Staff canceled the workspace's subscription from its staff page. (A
+  // lock's own cancellation, and the renewals and payouts a lock pauses and
+  // its lift resumes, are told in the lock and lift notices themselves, as
+  // what the lock affects — one email per staff action, not four.)
   'subscription-canceled',
-  'renewals-paused',
-  'renewals-resumed',
-  'payouts-paused',
-  'payouts-resumed',
 ] as const
 
 export type RiskEventKind = (typeof RISK_EVENT_KINDS)[number]
@@ -1382,7 +1381,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'subscription-canceled',
     owner: {
       title: 'The subscription for {{workspace.name}} was canceled',
-      summary: 'On {{occurredAt}}, our team canceled the subscription for {{workspace.name}}. {{lock.message}}',
+      summary: 'On {{occurredAt}}, our team canceled the subscription for {{workspace.name}}.',
       meaning: 'What changes: {{lock.affected}}',
       steps: [
         'Export anything you need from your workspace.',
@@ -1396,101 +1395,21 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       actions: ['staff-cancel-subscription', 'staff-view-workspace'],
     },
   },
-  'renewals-paused': {
-    kind: 'renewals-paused',
-    severity: 'warning',
-    emailOwners: true,
-    alertStaff: false,
-    neverDigest: true,
-    reviewable: false,
-    includeSiteManagers: true,
-    helpAnchor: 'renewals-and-payouts',
-    owner: {
-      title: 'Customer renewals are paused on {{item.label}}',
-      summary: 'On {{occurredAt}}, our team paused the recurring charges your customers pay on {{item.label}}.',
-      meaning: 'Your customers are not charged while this is paused: {{lock.affected}}',
-      steps: [
-        'Nothing you need to do for your customers yet; they keep what they already paid for.',
-        'Contact support with the reference {{reference}} if you have questions.',
-      ],
-      actions: ['contact-support'],
-    },
-    staff: {
-      title: 'Site renewals paused',
-      summary: '{{item.label}} of {{workspace.name}}: {{lock.affected}}',
-      actions: ['staff-unlock', 'staff-view-workspace'],
-    },
-  },
-  'renewals-resumed': {
-    kind: 'renewals-resumed',
-    severity: 'info',
-    emailOwners: true,
-    alertStaff: false,
-    neverDigest: true,
-    reviewable: false,
-    includeSiteManagers: true,
-    helpAnchor: 'renewals-and-payouts',
-    owner: {
-      title: 'Customer renewals have resumed on {{item.label}}',
-      summary: 'On {{occurredAt}}, our team resumed the recurring charges on {{item.label}}.',
-      meaning: 'What happens now: {{lock.affected}}',
-      steps: ['Nothing to do. Renewals continue on their normal schedule.'],
-      actions: ['contact-support'],
-    },
-    staff: {
-      title: 'Site renewals resumed',
-      summary: '{{item.label}} of {{workspace.name}}: {{lock.affected}}',
-      actions: ['staff-view-workspace'],
-    },
-  },
-  'payouts-paused': {
-    kind: 'payouts-paused',
-    severity: 'urgent',
-    emailOwners: true,
-    alertStaff: false,
-    neverDigest: true,
-    reviewable: false,
-    includeSiteManagers: true,
-    helpAnchor: 'renewals-and-payouts',
-    owner: {
-      title: 'Payouts are paused for {{item.label}}',
-      summary: 'On {{occurredAt}}, our team paused payouts to your bank account for {{item.label}}.',
-      meaning: 'Money from your sales is kept safe in your balance and is not paid out while this is paused: {{lock.affected}}',
-      steps: [
-        'Contact support with the reference {{reference}} to find out what we need from you.',
-        'You will get a notice when payouts resume.',
-      ],
-      actions: ['contact-support'],
-    },
-    staff: {
-      title: 'Site payouts paused',
-      summary: '{{item.label}} of {{workspace.name}}: {{lock.affected}}',
-      actions: ['staff-unlock', 'staff-open-stripe', 'staff-view-workspace'],
-    },
-  },
-  'payouts-resumed': {
-    kind: 'payouts-resumed',
-    severity: 'info',
-    emailOwners: true,
-    alertStaff: false,
-    neverDigest: true,
-    reviewable: false,
-    includeSiteManagers: true,
-    helpAnchor: 'renewals-and-payouts',
-    owner: {
-      title: 'Payouts have resumed for {{item.label}}',
-      summary: 'On {{occurredAt}}, our team resumed payouts for {{item.label}}.',
-      meaning: 'What happens now: {{lock.affected}}',
-      steps: ['Nothing to do. Your balance pays out on your normal schedule.'],
-      actions: ['contact-support'],
-    },
-    staff: {
-      title: 'Site payouts resumed',
-      summary: '{{item.label}} of {{workspace.name}}: {{lock.affected}}',
-      actions: ['staff-view-workspace'],
-    },
-  },
 }
+
+/**
+ * The kinds whose email wears the WORKSPACE's brand: routine notices about
+ * the workspace's own customers' payments, which read as the workspace's own
+ * operations. Every other kind — a hold, a lock, a lift, a cancellation, a
+ * review — is the platform acting, and is sent in the platform's brand.
+ */
+export const RISK_NOTICE_WORKSPACE_BRANDED: ReadonlySet<RiskEventKind> = new Set<RiskEventKind>([
+  'sale-fraud-warning',
+  'sale-payment-review',
+  'sale-dispute',
+  'gift-card-hold',
+  'marketplace-sale-warning',
+])
 
 /** The catalog entry for a kind. */
 export function riskNoticeDefinition(kind: RiskEventKind): RiskNoticeDefinition {

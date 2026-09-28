@@ -237,7 +237,7 @@ describe('a purchase has a ceiling', () => {
 
 describe('notifyGiftCardHold', () => {
   it('tells the managers what happened and what to do, with no rule or number', async () => {
-    const notify = jest.fn(async (_input: Record<string, unknown>) => undefined)
+    const notify = jest.fn(async (_input: { kind: string; hostId?: string | null }) => undefined)
     await notifyGiftCardHold(
       { hostId: 'host-1', orderLabel: 'your order', cards: 2, reason: 'early-fraud-warning' },
       notify,
