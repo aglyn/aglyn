@@ -72,6 +72,11 @@ import {
   backfillMeteredItem,
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
+import { refreshScheduleTargetPhase } from '../../../../utils/server/billing-schedule'
+import {
+  heldUpdateApplied,
+  stripeCallWithKey,
+} from '../../../../utils/server/immediate-charge'
 import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
 import { describeStripePaymentMethod } from '../../_lib/stripe-payment-method'
 // The annual-mix metric's only input (AGL-1640) — three-state on purpose, and
@@ -1142,6 +1147,47 @@ async function handler(request: Request): Promise<Response> {
               priceId: decision.priceId,
               orgId: String(orgId),
             })
+          }
+        }
+
+        // A HELD change that just applied must reach the pending downgrade
+        // (AGL-3358).
+        //
+        // An add-on increase is sent with `pending_if_incomplete`, and when
+        // the charge needs the customer's bank the add-ons route answers before
+        // anything has changed — so it cannot refresh a pending downgrade's
+        // snapshotted item list the way it does for an increase paid on the
+        // spot (AGL-2150). The change applies here instead, minutes or hours
+        // later, and without this the schedule's target phase still carries
+        // the OLD quantity: the customer pays for the seats and loses them at
+        // the period end when the phase flips (measured in test mode — phase
+        // 1 kept quantity 1 after a held 1 → 4 increase was paid).
+        //
+        // Same helper the synchronous path uses, fed the subscription's items
+        // as they are NOW. Best-effort like the Stripe writes around it: a
+        // throw would 500 the delivery and re-run every mirror above, and the
+        // failure is logged loudly because its consequence is deferred.
+        const heldScheduleId =
+          typeof object?.schedule === 'string'
+            ? object.schedule
+            : object?.schedule?.id
+        if (
+          !canceled &&
+          heldScheduleId &&
+          process.env.STRIPE_SECRET_KEY &&
+          heldUpdateApplied(object, event?.data?.previous_attributes)
+        ) {
+          try {
+            await refreshScheduleTargetPhase({
+              stripe: stripeCallWithKey(process.env.STRIPE_SECRET_KEY),
+              scheduleId: String(heldScheduleId),
+              items,
+            })
+          } catch (error) {
+            console.error(
+              '[billing/webhook] pending plan change NOT refreshed after a held update applied — its item list is stale and will drop the purchase at the period end',
+              { orgId, subscriptionId: object?.id, scheduleId: heldScheduleId, error },
+            )
           }
         }
 

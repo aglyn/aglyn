@@ -112,6 +112,25 @@ export interface PluginEventPayloads {
     orgId: string
     defaultType: string | null
   }
+  /**
+   * Records were REMOVED from a collection, by a path that is not the
+   * owning plugin's own (AGL-3330): a deletion through the public API, a
+   * person's erasure.
+   *
+   * Raised after the delete has landed, with each removed document's data
+   * as it stood, so a plugin that keeps a figure over those rows — a counter
+   * no increment can take back — can recount what they fed. Core names the
+   * collection and takes no view of what it holds.
+   *
+   * `hostIds` are the sites the records were on: the one site for a site's
+   * collection, every site of the organization for an organization row.
+   */
+  'host.records.removed': {
+    orgId: string | null
+    hostIds: readonly string[]
+    collection: string
+    records: ReadonlyArray<{ id: string; data: Readonly<Record<string, unknown>> }>
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string

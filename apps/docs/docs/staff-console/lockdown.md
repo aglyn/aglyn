@@ -1065,7 +1065,7 @@ write the same audit row.
     (`orgs.ownerUid`) with the same reason, through the same org-lock path,
     and then cancels each one's subscriptions. Workspaces the account only
     belongs to are not touched. A workspace that is already locked keeps its
-    existing lock and still has its billing cancelled. One account lock
+    existing lock and still has its billing canceled. One account lock
     covers at most 25 owned workspaces. Lock any beyond that by org id.
 - **On the staff org page (Staff → Organizations → the org).** The
   **Subscription** card lists every subscription with its plan, status and next
@@ -1100,7 +1100,7 @@ lock cancels anything.
 - **It finds every subscription.** It lists the org's stored Stripe customer
   (`status=all`) and also searches `metadata['orgId']`. The search finds a
   subscription created against a different customer. If either lookup fails,
-  the result is **not confirmed**: "we cancelled what we found" is not the
+  the result is **not confirmed**: "we canceled what we found" is not the
   same as "nothing is billing any more".
 - **Now:** Stripe deletes the subscription with `invoice_now=false` and
   `prorate=false`. There is no final invoice, no proration credit and **no

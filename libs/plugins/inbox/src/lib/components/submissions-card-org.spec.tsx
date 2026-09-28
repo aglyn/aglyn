@@ -49,7 +49,10 @@ let rows: Array<Record<string, unknown>>
 /** The list query the card opened last: its collection and its plan. */
 let mockListQuery: { source: string; plan: any } | null = null
 
+const mockRecountFormStats = jest.fn(async (_path: string, _body: unknown) => true)
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The form counters' recount (AGL-3330); `form-stats.spec.ts` owns what it writes.
+  usePluginApiPost: () => mockRecountFormStats,
   useFirestore: () => ({}),
   useFirestoreCollection: (factory: () => unknown) => ({
     data: factory() === null ? undefined : [],

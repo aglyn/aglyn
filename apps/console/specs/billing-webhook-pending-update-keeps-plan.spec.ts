@@ -143,6 +143,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   observeWrites: jest.requireActual(
     '@aglyn/aglyn/app-utils/webhook-delivery',
   ).observeWrites,
+  // The REAL plan model: a schedule refresh re-derives the target phase with
+  // the same add-on ceilings the product sells.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // Real, for the metered-backfill decision the Stripe-keyed cases reach.
+  isLiveSubscriptionStatus: jest.requireActual(
+    '@aglyn/aglyn/app-utils/org-billing-doc',
+  ).isLiveSubscriptionStatus,
   buildRoute: () => '/acme/manage/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   runBillingWebhookHandlers: async () => undefined,
@@ -173,6 +180,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   findOrgIdByStripeCustomer: async () => null,
   notifyOrgAdmins: async () => undefined,
+  notifyStaff: async () => undefined,
   sendGa4Purchase: async (): Promise<Ga4SendResult> => ({
     sent: true,
     synthesizedClientId: true,
@@ -306,5 +314,189 @@ describe('a held upgrade projects no plan (AGL-3358)', () => {
       ),
     )
     expect(mockOrgPatches.map((patch) => patch.plan)).toEqual(['advanced'])
+  })
+})
+
+/**
+ * A held add-on increase that APPLIES reaches the pending downgrade
+ * (AGL-3358).
+ *
+ * The add-ons route refreshes a pending downgrade's snapshotted item list
+ * right after an increase paid on the spot (AGL-2150). An increase held for
+ * the customer's bank applies later, here, and until this the schedule kept
+ * the old quantity — measured in test mode, phase 1 still read quantity 1
+ * after a held 1 → 4 increase was paid — so the seats were paid for and then
+ * dropped at the period end.
+ */
+describe('a held add-on increase that applies refreshes the pending downgrade (AGL-3358)', () => {
+  const PERIOD_START = 1_790_000_000
+  const PERIOD_END = 1_792_592_000
+  let stripeCalls: Array<{ href: string; method: string; body: string }>
+
+  /** The live subscription AFTER the held 1 → 4 dataset increase applied. */
+  const applied = {
+    id: 'sub_held',
+    object: 'subscription',
+    customer: 'cus_held',
+    status: 'active',
+    schedule: 'sub_sched_down',
+    current_period_start: PERIOD_START,
+    current_period_end: PERIOD_END,
+    metadata: { orgId: 'org-real', plan: 'pro' },
+    pending_update: null,
+    items: {
+      data: [
+        item('price_pro_monthly'),
+        { ...item('price_pro_dataset'), quantity: 4 },
+      ],
+    },
+  }
+
+  /** The event, with the `previous_attributes` Stripe sent in test mode. */
+  function withPrevious(
+    object: Record<string, unknown>,
+    previousAttributes: Record<string, unknown>,
+  ) {
+    const event = subscriptionEvent(object)
+    return {
+      ...event,
+      data: { object, previous_attributes: previousAttributes },
+    }
+  }
+
+  function scheduleWrite(): URLSearchParams | null {
+    const call = stripeCalls.find(
+      (entry) =>
+        entry.method === 'POST' &&
+        entry.href.includes('/subscription_schedules/sub_sched_down'),
+    )
+    return call ? new URLSearchParams(call.body) : null
+  }
+
+  /** A phase's quantity for one price, or null when it has no such line. */
+  function phaseQuantity(
+    body: URLSearchParams | null,
+    phase: number,
+    price: string,
+  ): string | null {
+    for (let i = 0; body?.get(`phases[${phase}][items][${i}][price]`); i += 1) {
+      if (body?.get(`phases[${phase}][items][${i}][price]`) === price) {
+        return body.get(`phases[${phase}][items][${i}][quantity]`)
+      }
+    }
+    return null
+  }
+
+  function loadWithStripe() {
+    jest.resetModules()
+    process.env = {
+      ...CLEAN_ENV,
+      ...BASE_ENV,
+      STRIPE_SECRET_KEY: 'sk_test_fake',
+      STRIPE_PRICE_STARTER: 'price_starter_monthly',
+      STRIPE_PRICE_PRO_EXTRA_DATASET: 'price_pro_dataset',
+      STRIPE_PRICE_STARTER_EXTRA_DATASET: 'price_starter_dataset',
+    } as NodeJS.ProcessEnv
+    return require('../app/api/billing/webhook/route').POST as (
+      request: Request,
+    ) => Promise<Response>
+  }
+
+  beforeEach(() => {
+    docs = new Map()
+    docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'pro' })
+    mockOrgPatches.length = 0
+    mockBillingWrites.length = 0
+    mockActivityRows.length = 0
+    stripeCalls = []
+    global.fetch = jest.fn(async (url: unknown, init: any) => {
+      const href = String(url)
+      stripeCalls.push({
+        href,
+        method: String(init?.method ?? 'GET'),
+        body: String(init?.body ?? ''),
+      })
+      // The pending downgrade as the console writes one: phase 0 is the
+      // present, phase 1 is Starter from the period end — still carrying the
+      // ONE dataset it was snapshotted with.
+      if (href.includes('/subscription_schedules/sub_sched_down')) {
+        return {
+          ok: true,
+          json: async () => ({
+            id: 'sub_sched_down',
+            status: 'active',
+            end_behavior: 'release',
+            phases: [
+              {
+                start_date: PERIOD_START,
+                end_date: PERIOD_END,
+                items: [
+                  { price: 'price_pro_monthly', quantity: 1 },
+                  { price: 'price_pro_dataset', quantity: 1 },
+                ],
+              },
+              {
+                start_date: PERIOD_END,
+                end_date: PERIOD_END + 2_592_000,
+                metadata: { plan: 'starter', orgId: 'org-real' },
+                items: [
+                  { price: 'price_starter_monthly', quantity: 1 },
+                  { price: 'price_starter_dataset', quantity: 1 },
+                ],
+              },
+            ],
+          }),
+        }
+      }
+      return { ok: true, json: async () => ({}) }
+    }) as never
+  })
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV
+    jest.restoreAllMocks()
+  })
+
+  it('rewrites the target phase with the quantity that was paid for', async () => {
+    const post = loadWithStripe()
+    const response = await post(
+      signed(
+        withPrevious(applied, {
+          items: { data: [] },
+          pending_update: {
+            expires_at: 1_790_685_512,
+            subscription_items: [{ id: 'si_price_pro_dataset', quantity: 4 }],
+          },
+        }),
+      ),
+    )
+    expect(response.status).toBe(200)
+    const body = scheduleWrite()
+    expect(body).not.toBeNull()
+    // The purchase survives the flip, re-priced to the target plan.
+    expect(phaseQuantity(body, 1, 'price_starter_dataset')).toBe('4')
+    // The present is restated from the live subscription.
+    expect(phaseQuantity(body, 0, 'price_pro_dataset')).toBe('4')
+    expect(body?.get('phases[1][metadata][plan]')).toBe('starter')
+    expect(body?.get('proration_behavior')).toBe('none')
+  })
+
+  it('CONTROL: an ordinary update (no held change applied) leaves the schedule alone', async () => {
+    const post = loadWithStripe()
+    await post(signed(withPrevious(applied, { items: { data: [] } })))
+    expect(scheduleWrite()).toBeNull()
+  })
+
+  it('CONTROL: a change still HELD refreshes nothing', async () => {
+    const post = loadWithStripe()
+    await post(
+      signed(
+        withPrevious(
+          { ...applied, pending_update: { expires_at: 1_790_685_512 } },
+          { latest_invoice: 'in_old', pending_update: null },
+        ),
+      ),
+    )
+    expect(scheduleWrite()).toBeNull()
   })
 })

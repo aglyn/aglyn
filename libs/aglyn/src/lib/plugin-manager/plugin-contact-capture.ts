@@ -200,7 +200,20 @@ export type PluginContactCaptured =
    * workspace does not hold as a contact, or a touch reached an open lead.
    * `leadId` is the person key the lead is filed under on `hostId`.
    */
-  | { ok: true; record: 'lead'; leadId: string; created: boolean }
+  | {
+      ok: true
+      record: 'lead'
+      leadId: string
+      created: boolean
+      /**
+       * Whether this capture's surface was new on the lead — a new person,
+       * or one first met through another door. A form counts its leads by
+       * it (AGL-3330): the people it filed, not the times they came back.
+       * Absent from a writer that does not say, which a caller reads as
+       * `created`.
+       */
+      sourceAdded?: boolean
+    }
   | {
       ok: false
       /**

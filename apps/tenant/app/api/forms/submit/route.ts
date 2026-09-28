@@ -38,6 +38,7 @@ import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dat
 // and the verification must be the real one under them.
 import { verifyFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
 import { FieldValue } from 'firebase-admin/firestore'
+import { incrementFormStats } from '../../../../utils/increment-form-stats'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
@@ -652,16 +653,19 @@ export async function POST(request: Request): Promise<Response> {
     /*
      * Whether this submission was filed to the site's Leads.
      *
-     * A CAPTURE, not a person. The lead silo keys one person to one document,
-     * so a returning visitor's second submission updates the lead it created
-     * the first time — and both submissions did route. The counter this feeds
-     * is therefore "submissions this form filed as a lead", which is the
-     * numerator the form's own lead rate needs; how many distinct people are
-     * on the list is the Leads list's count and is a different number. A
-     * routed submission by somebody the workspace already holds as a contact
-     * lands on the contact and files no lead (AGL-3232), and is not counted.
+     * The form counts PEOPLE (AGL-3330). The lead silo keys one person to one
+     * document, so a returning visitor's second submission updates the lead
+     * it created the first time; the form's lead count moves only when the
+     * capture puts this form's source on a lead for the first time
+     * (`leadCounted`), which is exactly what a recount of the leads'
+     * `sources` finds — so the increment and the recount agree, and a lead
+     * erased later can be taken back off. A routed submission by somebody
+     * the workspace already holds as a contact lands on the contact and files
+     * no lead (AGL-3232), and is not counted.
      */
     let leadStored = false
+    /** Whether that lead is one more person on this form's lead count. */
+    let leadCounted = false
     /*
      * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
      *
@@ -773,6 +777,16 @@ export async function POST(request: Request): Promise<Response> {
         },
       })
       leadStored = captured?.ok === true && captured.record === 'lead'
+      /*
+       * A form counts the PEOPLE it filed (AGL-3330): the capture says
+       * whether this one was new to the form, and a writer that does not
+       * say is read as whether the lead itself was new.
+       */
+      leadCounted =
+        leadStored &&
+        captured?.ok === true &&
+        captured.record === 'lead' &&
+        (captured.sourceAdded ?? captured.created) === true
     }
     /*
      * THE DATASET A SUBMISSION ALSO WRITES A RECORD TO (AGL-141/556), decided
@@ -931,48 +945,23 @@ export async function POST(request: Request): Promise<Response> {
     }
     await counterRef.set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
     /*
-     * Per-form counters (`docs/specs/reusable-forms.md` §5a).
+     * Per-form counters (`docs/specs/reusable-forms.md` §5a), through the
+     * one writer that retries and REPORTS a failure rather than swallowing
+     * it (AGL-3330) — see `incrementFormStats`.
      *
-     * ⛔ The alternative — counting `formSubmissions` when a console surface
-     * renders — is the expensive-read defect this product has created
-     * repeatedly, on the one collection that grows without bound and the one
-     * the customer is billed on. An increment on a write that is already
-     * happening costs one field.
-     *
-     * `update`, never `set`: a submission from a stale cached page carrying a
-     * deleted form's id must not resurrect it as a stats-only stray document.
-     * That is the `overlays` stats rule, and a form needs it for the same
-     * reason. A missing document makes this throw, which the catch swallows —
-     * bookkeeping must not turn a stored submission into a 500.
-     *
-     * The PER-MONTH keys ride the same update and cost nothing extra: a
-     * document write is priced per write, not per field, so a lifetime total
-     * and a month series are the same one write. `monthKey` is the key the
-     * site-wide counter above was just incremented under, reused rather than
-     * re-derived — a per-form series keyed differently from the site's would
-     * put a submission in one month on one surface and the next month on the
-     * other.
-     *
-     * `stats.leads` is here rather than beside `addHostLead` for the same
-     * reason: a second write to say a lead was filed would be a second write
-     * per submission on the collection the customer is billed against.
+     * `stats.leads` is here rather than beside the lead writer for the same
+     * reason the submission counters are: a second write to say a lead was
+     * filed would be a second write per submission on the collection the
+     * customer is billed against.
      */
     if (form) {
-      try {
-        await form.ref.update({
-          'stats.submissions': FieldValue.increment(1),
-          'stats.lastSubmissionAtMs': Date.now(),
-          [`stats.periods.${monthKey}.submissions`]: FieldValue.increment(1),
-          ...(leadStored
-            ? {
-                'stats.leads': FieldValue.increment(1),
-                [`stats.periods.${monthKey}.leads`]: FieldValue.increment(1),
-              }
-            : {}),
-        })
-      } catch (error) {
-        console.error('form stats increment failed', error)
-      }
+      await incrementFormStats({
+        formRef: form.ref,
+        hostId,
+        monthKey,
+        submittedAtMs,
+        leadCounted,
+      })
     }
     // Event trigger (AGL-128/148): field values join the automation
     // scope; action-produced site alerts ride back to the visitor.

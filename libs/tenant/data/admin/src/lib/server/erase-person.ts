@@ -25,6 +25,7 @@ import {
   runPluginPersonErasers,
   type PluginPersonErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { companyContactsCountFields } from './contact-company-link'
 import { eraseEmailDeliveriesForAddresses } from './email-delivery-log'
 import { suppressEmailForHostErasure } from './email-suppression'
@@ -290,9 +291,18 @@ export async function erasePerson(
    * leave that copy behind. So both are swept, and `counts.leads` is what was
    * actually destroyed rather than how many places were looked at.
    */
+  /*
+   * Every lead row this erasure removes, as it stood (AGL-3330). A plugin
+   * that keeps a figure over leads — a form counts the people it filed —
+   * is told once the rows are gone, through `host.records.removed`, so its
+   * figure drops by the person this erasure removed and by nothing else.
+   */
+  const erasedLeads: Array<{ id: string; data: Record<string, unknown> }> = []
   try {
     const orgLead = orgRef.collection('leads').doc(key)
-    if ((await orgLead.get()).exists) {
+    const orgLeadSnapshot = await orgLead.get()
+    if (orgLeadSnapshot.exists) {
+      erasedLeads.push({ id: key, data: orgLeadSnapshot.data() ?? {} })
       await orgLead.delete()
       counts.leads += 1
     }
@@ -303,7 +313,9 @@ export async function erasePerson(
     const hostRef = db.collection('hosts').doc(hostId)
     try {
       const lead = hostRef.collection('leads').doc(key)
-      if ((await lead.get()).exists) {
+      const leadSnapshot = await lead.get()
+      if (leadSnapshot.exists) {
+        erasedLeads.push({ id: key, data: leadSnapshot.data() ?? {} })
         await lead.delete()
         counts.leads += 1
       }
@@ -312,6 +324,16 @@ export async function erasePerson(
     }
     counts.orders += await updateWhere(db, hostRef.collection('orders'), 'customerEmail', email, erasedOrderFor)
     counts.bookings += await updateWhere(db, hostRef.collection('bookings'), 'email', email, erasedBooking)
+  }
+
+  if (erasedLeads.length) {
+    // Isolated per plugin by the seam, and never the erasure's failure.
+    await runPluginEventHandlers('host.records.removed', {
+      orgId: options.orgId,
+      hostIds,
+      collection: 'leads',
+      records: erasedLeads,
+    }).catch((error) => console.error('erasePerson: records-removed event failed', error))
   }
 
   try {
