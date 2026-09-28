@@ -30,6 +30,14 @@ let mockCreatedMs = Date.now() - 400 * DAY
 
 jest.mock('./publisher-profile', () => ({ canActAsPublisher: async () => false }))
 
+// The account's age is read across pools (AGL-1122): an SSO reviewer is
+// not in the project pool.
+jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
+  findUserByUidAcrossPools: async () => ({
+    tenantId: null,
+    record: { metadata: { creationTime: new Date(mockCreatedMs).toUTCString() } },
+  }),
+}))
 jest.mock('@aglyn/tenant-data-admin', () => {
   const snapshot = (path: string) => {
     const data = mockDocs.get(path)

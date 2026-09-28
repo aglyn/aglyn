@@ -96,6 +96,8 @@ export interface ListingQuerySource {
   profileId?: unknown
   deletedAt?: unknown
   hiddenAt?: unknown
+  /** The publishing workspace is locked (AGL-3365). */
+  workspaceLockedAt?: unknown
   visibility?: string
   reviewStatus?: string
   artifactType?: string

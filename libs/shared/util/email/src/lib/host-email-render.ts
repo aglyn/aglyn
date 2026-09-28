@@ -21,8 +21,11 @@ import {
   EMAIL_NODE_ROOT_ID,
   renderEmailHtml,
   substituteMergeTokens,
+  type EmailChrome,
   type EmailRenderOptions,
+  type EmailTheme,
 } from './email-render'
+import { buildDefaultEmailNodeMap } from './system-email-catalog'
 import {
   getTenantEmail,
   isTenantEmailEditable,
@@ -87,6 +90,20 @@ export interface LoadHostEmailOptions {
   origin?: string
   /** See {@link HostEmailComposer} — required, deliberately. */
   compose: HostEmailComposer
+  /**
+   * The site's header and footer (AGL-3370), drawn around the built-in copy.
+   * Never around a design the site owner published: that one is theirs,
+   * placed header and footer included, and goes out as they built it. Built
+   * by the caller because it is read off the site document, which this
+   * `scope:shared` module has no brand vocabulary for.
+   */
+  chrome?: EmailChrome
+  /**
+   * The site's theme (AGL-3370), on EVERY copy, the owner's design included:
+   * a color they picked is a palette token only the theme can resolve, and a
+   * button they left alone wears the site's accent.
+   */
+  theme?: EmailTheme
 }
 
 /**
@@ -107,6 +124,16 @@ export interface LoadedHostEmail {
    * in which case those images are dropped rather than sent broken.
    */
   origin?: string
+  /**
+   * `designed` when the site owner published one; `default` for the
+   * catalog's built-in copy, which a site with nothing published sends
+   * (AGL-3370).
+   */
+  source: 'designed' | 'default'
+  /** The site's header and footer, on the built-in copy only. */
+  chrome?: EmailChrome
+  /** The site's theme, on every copy. */
+  theme?: EmailTheme
 }
 
 /** Blanks any `{{token}}` the caller did not supply, so a customer never
@@ -116,10 +143,12 @@ function blankUnresolvedTokens(value: string): string {
 }
 
 /**
- * Loads a site's published email template, or `null` when there is nothing
- * usable (no document, no published version, an empty node map, an unknown or
- * non-designable key). The host-scoped mirror of the platform
- * `loadSystemEmail`: `hosts/{hostId}/emailTemplates/{key}`.
+ * Loads what a site sends for a key: its published template, or the
+ * catalog's built-in copy when there is none to use (no document, no
+ * published version, an empty node map, a failed read) (AGL-3370). `null`
+ * only for an unknown or non-designable key, or one with no built-in copy.
+ * The host-scoped mirror of the platform `loadSystemEmail`:
+ * `hosts/{hostId}/emailTemplates/{key}`.
  *
  * The caller passes its own Admin Firestore, so this reads through the Admin
  * SDK — the send path runs as the server, not a signed-in user.
@@ -146,16 +175,47 @@ export async function loadHostEmail(
   if (!entry || !isTenantEmailEditable(entry)) return null
   if (!hostId) return null
 
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  /** The site's origin: the caller's, else one read of the host document. */
+  const siteOrigin = async (): Promise<string | undefined> => {
+    if (options.origin) return options.origin
+    const hostSnapshot = await hostRef.get()
+    return hostEmailOrigin({
+      cname: hostSnapshot.get('cname') as string | undefined,
+      subdomain: hostSnapshot.get('subdomain') as string | undefined,
+    })
+  }
+  /**
+   * The built-in copy (AGL-3370), in the site's header and footer: what a
+   * site with nothing published sends, and what a template that cannot be
+   * read falls back to, so a customer never gets the bare text card.
+   * `null` only for an entry with no built-in copy to render.
+   */
+  const builtIn = async (): Promise<LoadedHostEmail | null> => {
+    if (!entry.defaultBody?.length) return null
+    const origin = await siteOrigin().catch(() => options.origin)
+    return {
+      entry,
+      nodes: buildDefaultEmailNodeMap(entry),
+      hostId,
+      origin,
+      subjectTemplate: entry.defaultSubject ?? '',
+      preheaderTemplate: '',
+      source: 'default',
+      ...(options.chrome ? { chrome: options.chrome } : {}),
+      ...(options.theme ? { theme: options.theme } : {}),
+    }
+  }
+
   try {
-    const hostRef = firestore.collection('hosts').doc(hostId)
     const templateRef = hostRef
       .collection(TENANT_EMAIL_COLLECTION)
       .doc(templateKey)
     const templateSnapshot = await templateRef.get()
-    if (!templateSnapshot.exists) return null
+    if (!templateSnapshot.exists) return builtIn()
 
     const versionId = templateSnapshot.get('versionId')
-    if (!versionId) return null
+    if (!versionId) return builtIn()
 
     const versionSnapshot = await templateRef
       .collection('versions')
@@ -173,27 +233,22 @@ export async function loadHostEmail(
     const stored = decodeEmailNodes<Record<string, unknown>>(
       versionSnapshot.get('nodes'),
     )
-    if (!stored || !Object.keys(stored).length) return null
+    if (!stored || !Object.keys(stored).length) return builtIn()
     // Reusable blocks (AGL-3287), BEFORE anything reads the tree: a header or
     // footer the site owner placed is a component reference until this runs.
     // A failed component read throws into the catch below and falls back to
     // the built-in copy — never a send with half its design missing.
     const nodes = await options.compose(stored, { firestore, hostId })
 
-    let origin = options.origin
-    if (!origin) {
-      const hostSnapshot = await hostRef.get()
-      origin = hostEmailOrigin({
-        cname: hostSnapshot.get('cname') as string | undefined,
-        subdomain: hostSnapshot.get('subdomain') as string | undefined,
-      })
-    }
+    const origin = await siteOrigin()
 
     return {
       entry,
       nodes,
       hostId,
       origin,
+      source: 'designed',
+      ...(options.theme ? { theme: options.theme } : {}),
       subjectTemplate:
         String(templateSnapshot.get('subject') ?? '') ||
         entry.defaultSubject ||
@@ -201,10 +256,10 @@ export async function loadHostEmail(
       preheaderTemplate: String(templateSnapshot.get('preheader') ?? ''),
     }
   } catch (error) {
-    // Never let a template problem block the send — the caller falls back to
-    // its built-in copy and the customer still gets their email.
+    // Never let a template problem block the send, or strip it bare: the
+    // customer gets the built-in copy, in the site's header and footer.
     console.error(`host email template ${templateKey} failed to load`, error)
-    return null
+    return builtIn().catch(() => null)
   }
 }
 
@@ -234,6 +289,8 @@ export function renderLoadedHostEmail(
     // makes it fetchable from a recipient's inbox (AGL-1224).
     mediaOrigin: loaded.origin,
     mediaHostId: loaded.hostId,
+    ...(loaded.chrome ? { chrome: loaded.chrome } : {}),
+    ...loaded.theme,
   })
   if (!rendered?.html) return null
   return {
@@ -246,8 +303,9 @@ export function renderLoadedHostEmail(
 }
 
 /**
- * Renders a site's designed email, or `null` when nothing usable is published
- * so the send site keeps its built-in copy (AGL-770). Single-recipient
+ * Renders what a site sends for a key: its designed email, or the catalog's
+ * built-in copy in the site's header and footer (AGL-770, AGL-3370). `null`
+ * when the key has neither, so the send site keeps its own copy. Single-recipient
  * convenience over {@link loadHostEmail} + {@link renderLoadedHostEmail}; a
  * batch should call those two so it reads the template once.
  */

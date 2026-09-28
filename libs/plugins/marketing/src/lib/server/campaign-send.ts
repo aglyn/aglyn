@@ -66,6 +66,7 @@ import {
 // The leaf, not the barrel: this plugin's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { siteEmailFrame } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 /*
  * The LEAF for the phishing screen's hold (AGL-3356), for the reason every
@@ -2110,6 +2111,13 @@ export async function performCampaignSend(
   // batch from the owning org doc through the one shared resolver.
   const branding = resolveBrandingProfile(orgForHost?.org as never)
 
+  // The site's header, footer and theme (AGL-3370), once for the batch: a
+  // typed message is drawn inside them, and a design's picked colors resolve
+  // against the theme. A failed read sends what it sent before.
+  const siteFrame = await siteEmailFrame(firestore, hostId, 'campaign').catch(
+    () => undefined,
+  )
+
   const campaignId = options.campaignId || createResourceUid()
   /*
    * Whether this send MINTS the record or writes onto one that already
@@ -2652,6 +2660,7 @@ export async function performCampaignSend(
         siteBase,
         hostId,
         unsubscribeUrl,
+        ...(siteFrame ? { frame: siteFrame } : {}),
       })
       await paceProviderRequest()
       const result = await sendEmail({
@@ -4179,6 +4188,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         // address into a page they are only reading. The footer's presence,
         // and its wording, is what the preview is showing.
         unsubscribeUrl: `${siteBase}/api/email/preferences`,
+        // The site's header, footer and theme, as the send draws them.
+        ...(await siteEmailFrame(firestore, hostId, 'campaign')
+          .then((frame) => ({ frame }))
+          .catch(() => ({}))),
       })
       return res.status(200).json({
         ...rendered,

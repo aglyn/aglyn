@@ -115,9 +115,9 @@ describe('renderHostEmail (AGL-770)', () => {
   it('returns null for a non-designable (fixed/external) key without reading', async () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore(null, null, reads)
-    // member-post is `fixed`, campaign is `external` — neither is besigner.
+    // supplier-fulfillment is `fixed`, campaign is `external` — neither is besigner.
     expect(
-      await renderHostEmail(fs, 'h1', 'member-post', {}, {
+      await renderHostEmail(fs, 'h1', 'supplier-fulfillment', {}, {
         sanitize: SANITIZE,
         compose: COMPOSE,
       }),
@@ -131,15 +131,18 @@ describe('renderHostEmail (AGL-770)', () => {
     expect(reads.templates).toBe(0)
   })
 
-  it('falls back (null) when no version is published', async () => {
+  it('sends the built-in copy when no version is published (AGL-3370)', async () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore({ versionId: null }, null, reads)
-    expect(
-      await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
-        sanitize: SANITIZE,
-        compose: COMPOSE,
-      }),
-    ).toBeNull()
+    const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {
+      name: 'Alex',
+      'service.name': 'Consultation',
+    }, {
+      sanitize: SANITIZE,
+      compose: COMPOSE,
+    })
+    expect(result?.subject).toBe('Booking confirmed: Consultation')
+    expect(result?.html).toContain('Hi Alex, your booking for')
   })
 
   it('renders a published designable template', async () => {
@@ -279,19 +282,19 @@ describe('renderHostEmail (AGL-770)', () => {
       expect(reads.hosts).toBe(1)
     })
 
-    it('costs no host read when nothing is published', async () => {
-      // The origin is only needed for something to render, so an unpublished
-      // template still settles in a single read (AGL-770).
+    it('costs no host read for the built-in copy when the caller knows the origin', async () => {
+      // An unpublished template renders the built-in copy (AGL-3370), whose
+      // images need the origin like any other; a caller that has it pays
+      // nothing more than the template read.
       const reads = { templates: 0, versions: 0, hosts: 0 }
       const fs = fakeFirestore({ versionId: null }, null, reads, {
         subdomain: 'acme',
       })
-      expect(
-        await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
-          sanitize: SANITIZE,
-          compose: COMPOSE,
-        }),
-      ).toBeNull()
+      const loaded = await loadHostEmail(fs, 'h1', 'booking-confirmed', {
+        compose: COMPOSE,
+        origin: 'https://acme.example',
+      })
+      expect(loaded?.source).toBe('default')
       expect(reads.hosts).toBe(0)
     })
   })
@@ -395,12 +398,12 @@ describe('renderHostEmail (AGL-770)', () => {
           { nodes: Buffer.from([0xc1, 0xc1, 0xc1]) },
           reads,
         )
-        expect(
-          await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
-            sanitize: SANITIZE,
-            compose: COMPOSE,
-          }),
-        ).toBeNull()
+        // The built-in copy, never an empty design (AGL-3370).
+        const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+          sanitize: SANITIZE,
+          compose: COMPOSE,
+        })
+        expect(result?.subject).toBe('Booking confirmed: ')
         // Silence is how an undecodable design becomes an empty send.
         expect(spy).toHaveBeenCalled()
       } finally {
@@ -495,9 +498,9 @@ describe('reusable blocks go through the composer (AGL-3287)', () => {
         throw new Error('unavailable')
       },
     })
-    // Null is the sender's cue to send its own copy: the customer gets an
-    // email, just not one missing half its design.
-    expect(loaded).toBeNull()
+    // The built-in copy (AGL-3370): the customer gets an email, just not one
+    // missing half its design.
+    expect(loaded?.source).toBe('default')
   })
 
   it('does not compile without a composer', async () => {
@@ -505,18 +508,72 @@ describe('reusable blocks go through the composer (AGL-3287)', () => {
     const fs = fakeFirestore(published, { nodes: PLACED }, reads)
     // A composer a sender may leave out is one the next sender leaves out, so
     // leaving it out is a type error. At runtime, anything that got around the
-    // type still falls back rather than mailing the design without its blocks.
+    // type still never mails the design without its blocks: it falls back to
+    // the built-in copy (AGL-3370), or to nothing at all.
     // @ts-expect-error — `compose` is required
-    expect(await loadHostEmail(fs, 'h1', 'booking-reminder', {})).toBeNull()
+    const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder', {})
+    expect(loaded?.source ?? null).not.toBe('designed')
     expect(
       // @ts-expect-error — and so are the options that carry it
-      await loadHostEmail(fs, 'h1', 'booking-reminder'),
-    ).toBeNull()
-    expect(
-      // @ts-expect-error — the one-shot renderer asks for it too
-      await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
-        sanitize: SANITIZE,
-      }),
-    ).toBeNull()
+      (await loadHostEmail(fs, 'h1', 'booking-reminder'))?.source ?? null,
+    ).not.toBe('designed')
+    // @ts-expect-error — the one-shot renderer asks for it too
+    const rendered = await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, { sanitize: SANITIZE })
+    expect(rendered?.subject ?? null).not.toBe('Hi')
+  })
+})
+
+/**
+ * The site's header, footer and theme (AGL-3370): the frame goes around the
+ * built-in copy only, since a published design is the owner's; the theme goes
+ * on both, since a design's picked colors are palette tokens.
+ */
+describe('the site frame and theme (AGL-3370)', () => {
+  const CHROME = {
+    header: { logoAlt: 'Northwind Coffee' },
+    footer: { reason: 'You’re receiving this because you booked with Northwind Coffee.' },
+  }
+  const THEME = {
+    palette: { primary: { main: '#00b0ff', dark: '#0077ad', contrastText: '#FFFFFF' } },
+    buttonRadius: 8,
+  }
+  const TOKEN_BUTTON = {
+    '_@_': { $id: '_@_', componentId: 'div', nodes: ['b'] },
+    b: {
+      $id: 'b',
+      componentId: 'emailButton',
+      pluginId: 'email',
+      parentId: '_@_',
+      props: { children: 'Go', href: 'https://x.test', backgroundColor: 'primary.main' },
+    },
+  }
+
+  it('draws the frame around the built-in copy, in the site theme', async () => {
+    const fs = fakeFirestore({ versionId: null }, null, { templates: 0, versions: 0 })
+    const result = await renderHostEmail(fs, 'h1', 'back-in-stock', {
+      'product.name': 'House Blend',
+      'product.url': 'https://x.test/p',
+    }, { sanitize: SANITIZE, compose: COMPOSE, chrome: CHROME, theme: THEME })
+    expect(result?.html).toContain('Northwind Coffee')
+    expect(result?.html).toContain('You’re receiving this because you booked with Northwind Coffee.')
+    // The button nobody colored wears the site's accent, at the site's radius.
+    expect(result?.html).toContain('border-radius:8px;background-color:#00b0ff;color:#ffffff;')
+  })
+
+  it('sends a published design as the owner built it, but resolves its picked colors', async () => {
+    const fs = fakeFirestore(
+      { versionId: 'v1', subject: 'Hi' },
+      { nodes: TOKEN_BUTTON },
+      { templates: 0, versions: 0 },
+    )
+    const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+      sanitize: SANITIZE,
+      compose: COMPOSE,
+      chrome: CHROME,
+      theme: THEME,
+    })
+    expect(result?.html).not.toContain('Northwind Coffee')
+    expect(result?.html).toContain('background-color:#00b0ff;')
+    expect(result?.html).not.toContain('primary.main')
   })
 })

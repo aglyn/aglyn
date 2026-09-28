@@ -275,7 +275,11 @@ async function handler(request: Request): Promise<Response> {
               'org.name': String(orgName),
               'usage.summary': usageSummary,
             },
-            { brandLogoUrl: branding.emailLogoUrl, brandHomeUrl: branding.homeUrl },
+            {
+              brandLogoUrl: branding.emailLogoUrl,
+              brandHomeUrl: branding.homeUrl,
+              brandPrimaryColor: branding.primaryColor,
+            },
           )
         : null
       const result = await sendEmail({

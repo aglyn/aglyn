@@ -364,6 +364,35 @@
         "browseTokens": [],
         "takenDown": false
       }
+    },
+    {
+      "name": "a listing whose publishing workspace is locked (AGL-3365)",
+      "listing": {
+        "displayName": "Ab",
+        "profileId": "org1",
+        "artifactType": "component",
+        "deletedAt": null,
+        "workspaceLockedAt": 1790000000000
+      },
+      "expected": {
+        "nameLower": "ab",
+        "nameTokens": [
+          "a",
+          "ab"
+        ],
+        "nameReversed": "ba",
+        "browseAudience": [
+          "org1",
+          "org1|org1"
+        ],
+        "browseTokens": [
+          "org1~a",
+          "org1~ab",
+          "org1|org1~a",
+          "org1|org1~ab"
+        ],
+        "takenDown": false
+      }
     }
   ]
 }

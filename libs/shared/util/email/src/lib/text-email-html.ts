@@ -16,7 +16,13 @@
  */
 
 import { linkifyEscapedText } from './email-linkify'
-import { escapeEmailHtml } from './email-render'
+import {
+  escapeEmailHtml,
+  renderEmailHtml,
+  type EmailChrome,
+  type EmailTheme,
+  type RenderedEmail,
+} from './email-render'
 
 /**
  * THE HTML PART EVERY MESSAGE GETS.
@@ -114,6 +120,64 @@ export function renderTextEmailHtml(
     paragraphs +
     `</td></tr></table></td></tr></table></body></html>`
   )
+}
+
+/**
+ * A plain-text message in a sender's header and footer (AGL-3370).
+ *
+ * For mail whose body is text somebody typed or a sender composed, sent
+ * under a brand: a workflow's email step, a typed campaign, a member post a
+ * site has not designed. {@link renderTextEmailHtml} is the unbranded card
+ * for text nobody made a brand decision about; this is the same words, one
+ * paragraph per blank-line-separated block and their links live, drawn
+ * inside the chrome the caller chose. The plain-text part carries the
+ * footer's lines too.
+ *
+ * Merge tokens are not substituted: the text arrives resolved, no merge map
+ * is passed, and a `{{…}}` left in it is the author's own and stays as typed.
+ */
+export function renderFramedTextEmail(input: {
+  text: string
+  subject?: string
+  preheader?: string
+  chrome: EmailChrome
+  /** The sender's theme: the links take its accent. */
+  theme?: EmailTheme
+  /** The sender's origin and host, which a logo stored as a media reference resolves against. */
+  mediaOrigin?: string
+  mediaHostId?: string
+}): RenderedEmail {
+  const blocks = String(input.text ?? '')
+    .trim()
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+  const nodes: Record<string, unknown> = {
+    root: { componentId: 'div', nodes: ['section'] },
+    section: {
+      componentId: 'emailSection',
+      props: { padding: 24 },
+      nodes: blocks.map((_, index) => `p${index}`),
+    },
+  }
+  blocks.forEach((block, index) => {
+    nodes[`p${index}`] = {
+      componentId: 'emailText',
+      props: { children: block, variant: 'body' },
+    }
+  })
+  const rendered = renderEmailHtml({
+    nodes: nodes as never,
+    subject: input.subject ?? '',
+    preheader: input.preheader ?? '',
+    // No author markup reaches a text block, so no policy is exercised.
+    sanitize: (html: string) => html,
+    chrome: input.chrome,
+    ...input.theme,
+    ...(input.mediaOrigin ? { mediaOrigin: input.mediaOrigin } : {}),
+    ...(input.mediaHostId ? { mediaHostId: input.mediaHostId } : {}),
+  })
+  return rendered
 }
 
 export default renderTextEmailHtml

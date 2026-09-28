@@ -484,6 +484,27 @@ The **Styles** tab has nothing to change on a block in an email. Mail apps only 
 element's own settings, so change a block's look with its settings in the **Attributes**
 tab. If the block has [properties](#properties), fill them in there too, just like on a page.
 
+### Emails you haven't designed {#emails-you-have-not-designed}
+
+Every email your site sends to its customers goes out branded, whether or not you have
+designed it:
+
+- **Header:** your site's logo (or its name when you haven't set a logo), linking to your
+  site. An SVG logo is shown as your site's name instead, because Gmail and Outlook can't
+  display SVG images in email.
+- **Footer:** why the reader is getting the email, your support email address, and your
+  business name and postal address.
+
+These come from your site's settings. Once you design an email, it goes out exactly as you
+built it, so add your **Header** and **Footer** blocks to it.
+
+### Your theme's colors {#email-theme-colors}
+
+Emails use your site's theme colors. A color you pick from the theme in the Besigner, such
+as **Primary**, goes out as that color. A button you haven't colored uses your theme's
+primary color, and links use its accent text color. Change your theme, and your emails
+follow.
+
 ## Copy & paste vs. reusable components
 
 | You want | Use |

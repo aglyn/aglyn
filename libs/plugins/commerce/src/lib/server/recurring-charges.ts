@@ -39,6 +39,9 @@ import { BUNDLE_ID } from '../constants/bundle-common'
  * no payment method) does not bill until a card is added, which the lock's
  * pause would then catch on the next lock anyway.
  */
+// AGL-1715-EXEMPT: "can this still charge", a superset of the live triple
+// that adds `unpaid` and `incomplete` — a lock must pause every schedule
+// Stripe could still bill, not only the ones that grant access.
 export const LIVE_SUBSCRIPTION_STATUSES = [
   'active',
   'trialing',

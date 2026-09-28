@@ -49,6 +49,7 @@ function listingArtifactType(listing) {
 /** `isListingBrowsable`: not taken down, not private, and reviewed if a plugin. */
 function isListingBrowsable(listing) {
   if (listing.hiddenAt) return false
+  if (listing.workspaceLockedAt) return false
   if (listing.visibility === 'private') return false
   if (listingArtifactType(listing) !== 'plugin') return true
   return (

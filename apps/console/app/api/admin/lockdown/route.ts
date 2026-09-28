@@ -117,6 +117,10 @@ import {
   standingLockFrom,
 } from '../../../../utils/server/lockdown-owner-notice'
 import { listRecurringChargeSources } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
+import {
+  listPayoutAccountSources,
+  runOrgLockdownParticipants,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-lockdown'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export const dynamic = 'force-dynamic'
@@ -708,7 +712,39 @@ async function lockOrgAndAudit(options: {
       ...auditRotationShape(result.downloadTokensRotated),
     },
   })
-  return result
+  // What the workspace owns inside plugins (AGL-3365) — the marketplace
+  // takes its listings out of browse on a lock, whatever the reason, and
+  // puts back exactly those on the lift. After the lock is durable and
+  // audited; a participant that fails is an unconfirmed line, never an
+  // undone lock.
+  const orgLockParticipants = await orgLockParticipantsAfter({
+    orgId,
+    locked: action === 'lock',
+    reason: action === 'lock' ? lock.reason : null,
+  })
+  return { ...result, ...(orgLockParticipants.length ? { orgLockParticipants } : {}) }
+}
+
+/** The plugins' part in a workspace lock or lift (AGL-3365). Never throws. */
+async function orgLockParticipantsAfter(input: {
+  orgId: string
+  locked: boolean
+  reason: string | null
+}): Promise<Array<{ pluginId: string | null; summary: string; confirmed: boolean }>> {
+  try {
+    const { serverPluginLoader } = await import('../../../../utils/server-plugin-loader')
+    await serverPluginLoader.ensureAll(['consoleApi'])
+    return await runOrgLockdownParticipants(input)
+  } catch (error) {
+    console.error('[admin/lockdown] org lock participants failed', error)
+    return [
+      {
+        pluginId: null,
+        summary: `The plugins were not told: ${(error as Error)?.message ?? String(error)}`,
+        confirmed: false,
+      },
+    ]
+  }
 }
 
 /**
@@ -793,15 +829,18 @@ async function pauseMoneyAfterLock(options: {
   const steps: Record<string, unknown> = {}
   try {
     const billing = await import('../../../../utils/server/lockdown-billing-pause')
+    // The plugins declare what a site sells and which other accounts pay a
+    // workspace out (AGL-3365), so they are loaded before the target is read.
+    const { serverPluginLoader } = await import('../../../../utils/server-plugin-loader')
+    await serverPluginLoader.ensureAll(['consoleApi'])
     const target = await billing.resolveLockdownBillingTarget(
       options.firestore,
       options.scope,
       options.targetId,
+      options.payouts ? listPayoutAccountSources() : [],
     )
     const secretKey = process.env.STRIPE_SECRET_KEY
     if (options.renewals) {
-      const { serverPluginLoader } = await import('../../../../utils/server-plugin-loader')
-      await serverPluginLoader.ensureAll(['consoleApi'])
       const renewals = await billing.pauseMembershipRenewals({
         firestore: options.firestore,
         scope: options.scope,
@@ -831,27 +870,33 @@ async function pauseMoneyAfterLock(options: {
         )
     }
     if (options.payouts) {
-      const payouts = await billing.pauseSellerPayouts({
+      // Every connected account the workspace or its owner is paid through
+      // (AGL-3365): the storefront's, then the marketplace publisher's.
+      // Each on its own record, so the lift restores each exactly.
+      const [primary, ...others] = await billing.pauseAllSellerPayouts({
         firestore: options.firestore,
         scope: options.scope,
         targetId: options.targetId,
-        accountId: target.accountId,
+        accounts: target.accounts,
         secretKey,
         actorUid: options.actor.actorUid,
       })
-      steps['payoutsPause'] = payouts
-      await billing
-        .auditLockdownBillingStep(options.firestore, {
-          ...options.actor,
-          scope: options.scope,
-          targetId: options.targetId,
-          reason: options.reason,
-          action: 'lockdown.payouts-pause',
-          result: { ...payouts },
-        })
-        .catch((error: unknown) =>
-          console.error('[admin/lockdown] payouts audit write failed', error),
-        )
+      steps['payoutsPause'] = primary
+      if (others.length) steps['payoutsPauseOthers'] = others
+      for (const payouts of [primary, ...others]) {
+        await billing
+          .auditLockdownBillingStep(options.firestore, {
+            ...options.actor,
+            scope: options.scope,
+            targetId: options.targetId,
+            reason: options.reason,
+            action: 'lockdown.payouts-pause',
+            result: { ...payouts },
+          })
+          .catch((error: unknown) =>
+            console.error('[admin/lockdown] payouts audit write failed', error),
+          )
+      }
     }
   } catch (error) {
     console.error('[admin/lockdown] money pause failed', error)
@@ -911,20 +956,25 @@ async function resumeMoneyAfterLift(options: {
           console.error('[admin/lockdown] renewals audit write failed', error),
         )
     }
-    if (payouts.outcome !== 'nothing-held') {
-      steps['payoutsRestore'] = payouts
-      await billing
-        .auditLockdownBillingStep(options.firestore, {
-          ...options.actor,
-          scope: options.scope,
-          targetId: options.targetId,
-          reason: null,
-          action: 'lockdown.payouts-restore',
-          result: { ...payouts },
-        })
-        .catch((error: unknown) =>
-          console.error('[admin/lockdown] payouts audit write failed', error),
-        )
+    // One restore per account the lock paused (AGL-3365), each to the
+    // schedule saved for it.
+    if (payouts.length) {
+      steps['payoutsRestore'] = payouts[0]
+      if (payouts.length > 1) steps['payoutsRestoreOthers'] = payouts.slice(1)
+      for (const restore of payouts) {
+        await billing
+          .auditLockdownBillingStep(options.firestore, {
+            ...options.actor,
+            scope: options.scope,
+            targetId: options.targetId,
+            reason: null,
+            action: 'lockdown.payouts-restore',
+            result: { ...restore },
+          })
+          .catch((error: unknown) =>
+            console.error('[admin/lockdown] payouts audit write failed', error),
+          )
+      }
     }
     return steps
   } catch (error) {

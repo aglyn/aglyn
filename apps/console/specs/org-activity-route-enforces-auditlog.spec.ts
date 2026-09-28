@@ -97,6 +97,12 @@ function activityQuery(): any {
   }
 }
 
+const mockFindAcrossPools = jest.fn()
+jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
+  __esModule: true,
+  findUserByUidAcrossPools: (...args: unknown[]) => mockFindAcrossPools(...args),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -169,6 +175,7 @@ const get = (orgId = 'org-1', params: Record<string, string> = {}) => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockFindAcrossPools.mockResolvedValue(null)
   ordering = []
   capped = null
   wheres = []
@@ -395,5 +402,26 @@ describe('every row names someone a reader can narrow down', () => {
     expect(response.status).toBe(200)
     expect((await response.json()).entries[0].actorEmailNow).toBeUndefined()
     spy.mockRestore()
+  })
+
+  it('shows STAFF which staff member acted, and nobody else', async () => {
+    activity = [
+      { $id: 'c', actorId: null, actorEmail: null, staffActorId: 'staff-1', action: 'Subscription canceled by Aglyn', createdAt: { seconds: 300 } },
+    ]
+    mockGetUsers.mockResolvedValue({
+      users: [{ uid: 'staff-1', email: 'staff@example.test' }],
+      notFound: [],
+    })
+
+    // A workspace admin: the staff uid is removed and never looked up.
+    const member = (await (await get()).json()).entries[0]
+    expect(member.staffActorId).toBeUndefined()
+    expect(member.staffActorEmail).toBeUndefined()
+    expect(mockGetUsers).not.toHaveBeenCalled()
+
+    // Staff: named.
+    mockVerifyIdToken.mockResolvedValue({ uid: 's', email_verified: true, staff: true })
+    const staff = (await (await get()).json()).entries[0]
+    expect(staff.staffActorEmail).toBe('staff@example.test')
   })
 })
