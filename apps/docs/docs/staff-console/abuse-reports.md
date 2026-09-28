@@ -245,6 +245,44 @@ fraudster:
 
 Then close the row with a note saying what you did.
 
+## Card-testing velocity {#card-testing-velocity}
+
+A public checkout is where a card tester learns which stolen cards still work:
+a script opens payment after payment, from one address or from many, against
+one shop or across many. Every visitor payment door on a published site (buy
+now, cart checkout, reservation deposit, booking deposit) is held to three
+counters:
+
+- **One address on one site:** 10 payments opened in 10 minutes, or 5 when the
+  workspace is under 14 days old. The next is refused with "Too many payment
+  attempts".
+- **One address across every site:** 30 in 10 minutes, then refused.
+- **One site, every address together:** 150 in 10 minutes. This one **refuses
+  nothing**, because a site-wide refusal would let any stranger switch a
+  merchant's checkout off and a busy launch looks the same. Crossing it files
+  one row per site per day.
+
+The row's source is `payment-velocity`, the category is `phishing`, the
+severity is urgent and the reference is `PV-…`. Staff are notified once a day
+per site. It can mean a script testing cards against the shop, a merchant
+testing stolen cards through their own storefront, or a real launch. Look at
+the site and its recent orders. If it is card testing, lock the workspace and
+pause the connected account's payouts as for a
+[seller fraud pattern](#seller-fraud-pattern).
+
+The counters cannot see the card, because Stripe's hosted Checkout page takes
+it. A limit per card is Radar's job. Stripe's card-testing protection is on
+for every Checkout Session by default. Velocity rules live in the platform
+account's Radar, since every tenant sale is a destination charge on it. They
+need Radar for Fraud Teams; check each attribute's exact name in the rule
+editor before saving:
+
+- **Block** when one address has many declined charges in an hour
+  (`:declined_charges_per_ip_address_hourly:`).
+- **Review** when one card is charged many times in a day
+  (`:total_charges_per_card_number_daily:`).
+- **Request 3D Secure** when `:risk_level:` is `elevated`.
+
 ## Triage by severity {#triage-by-severity}
 
 Every category carries a severity. It is not a mood — it says how fast a human

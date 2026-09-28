@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
@@ -931,9 +932,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
-    const referer = String(req.headers.referer ?? '')
-    const origin = `https://${req.headers.host}`
-    const backUrl = referer.startsWith('http') ? referer : origin
+    // The site's own page, never a header's say-so (AGL-3363): a caller
+    // writes `Referer` and `Host`, and this URL is where Stripe sends the
+    // payer — and what the receipt's download links are built from.
+    const backUrl = siteReturnUrl({
+      candidates: [String(req.headers.referer ?? ''), `https://${req.headers.host}`],
+      site: await readSiteReturnHost(hostRef),
+      requestHost: String(req.headers.host ?? ''),
+    })
     const separator = backUrl.includes('?') ? '&' : '?'
     // `{CHECKOUT_SESSION_ID}` is substituted by Stripe on redirect (AGL-1641).
     // Without it the return URL said only that SOMETHING succeeded, so the

@@ -142,3 +142,106 @@ describe('stripe-card-authentication', () => {
     })
   })
 })
+
+/*==========================================
+ * EVERY PAYMENT DOOR IS CLASSIFIED (AGL-3363).
+ *
+ * A file that creates a card payment is either a VISITOR door — anyone on a
+ * published site can open it — or a door only a signed-in merchant, member
+ * or the platform reaches. A visitor door must be registered with
+ * `{ cardPayment: true }`, so the tenant dispatcher holds it to the
+ * card-testing counters, and must build Stripe's return URL through
+ * `siteReturnUrl`/`siteReturnOrigin`, never from a `Referer` or `Origin`
+ * header. A new creator fails here until it is classified.
+ *=========================================*/
+
+interface VisitorDoor {
+  surface: 'visitor'
+  /** The plugin barrel that registers the door, and the door's path. */
+  barrel: string
+  paths: string[]
+}
+
+type DoorClass = VisitorDoor | { surface: 'signed-in'; why: string }
+
+const PAYMENT_DOORS: Record<string, DoorClass> = {
+  'libs/plugins/commerce/src/lib/server/checkout.ts': {
+    surface: 'visitor',
+    barrel: 'libs/plugins/commerce/src/lib/server.ts',
+    paths: ['commerce/checkout'],
+  },
+  'libs/plugins/commerce/src/lib/server/cart-checkout.ts': {
+    surface: 'visitor',
+    barrel: 'libs/plugins/commerce/src/lib/server.ts',
+    paths: ['commerce/cart-checkout'],
+  },
+  'libs/plugins/commerce/src/lib/server/reserve.ts': {
+    surface: 'visitor',
+    barrel: 'libs/plugins/commerce/src/lib/server.ts',
+    paths: ['commerce/reserve'],
+  },
+  'libs/plugins/bookings/src/lib/server.ts': {
+    surface: 'visitor',
+    barrel: 'libs/plugins/bookings/src/lib/server.ts',
+    paths: ['bookings/book'],
+  },
+  'libs/plugins/commerce/src/lib/server/draft-order.ts': {
+    surface: 'signed-in',
+    why: 'a site editor creates the draft on the console surface',
+  },
+  'libs/plugins/commerce/src/lib/server/pos-order.ts': {
+    surface: 'signed-in',
+    why: 'a register operator rings it up on the console surface',
+  },
+  'libs/plugins/marketplace/src/lib/server/checkout.ts': {
+    surface: 'signed-in',
+    why: 'a workspace member buys a listing on the console surface',
+  },
+  'apps/console/app/api/billing/profile/route.ts': {
+    surface: 'signed-in',
+    why: "the workspace's own card, behind the console session",
+  },
+}
+
+/**
+ * The two shapes a door used to take its return URL from the caller in: a
+ * `Referer` accepted because it starts with `http`, and an `Origin` header
+ * preferred over the site. Reading the header as a CANDIDATE for
+ * `siteReturnUrl` is fine; trusting it is not.
+ */
+const HEADER_RETURN_URL = /referer\.startsWith\(['"]http|headers\.origin\s*\?\?/
+
+describe('every payment door is classified, and a visitor door is guarded (AGL-3363)', () => {
+  it('classifies exactly the files that create a card payment', () => {
+    expect(creators()).toEqual(Object.keys(PAYMENT_DOORS).sort())
+  })
+
+  const visitorDoors = Object.entries(PAYMENT_DOORS).filter(
+    (entry): entry is [string, VisitorDoor] => entry[1].surface === 'visitor',
+  )
+
+  it.each(visitorDoors)('%s is registered as a card-payment door', (_file, door) => {
+    const barrel = readFileSync(resolve(REPO_ROOT, door.barrel), 'utf8')
+    for (const path of door.paths) {
+      const registration = new RegExp(
+        `registerPluginApiRoute\\(\\s*'${path}',\\s*\\w+,\\s*(CARD_PAYMENT_DOOR|\\{\\s*cardPayment:\\s*true\\s*\\})`,
+      )
+      expect(barrel).toMatch(registration)
+    }
+  })
+
+  it.each(visitorDoors)('%s returns the shopper to the site, not to a header', (file) => {
+    const source = readFileSync(resolve(REPO_ROOT, file), 'utf8')
+    expect(source).toMatch(/\bsiteReturn(Url|Origin)\(/)
+    expect(source).not.toMatch(HEADER_RETURN_URL)
+  })
+
+  it('the subscription portal returns the member to the site, not to a header', () => {
+    const source = readFileSync(
+      resolve(REPO_ROOT, 'libs/plugins/commerce/src/lib/server/subscription-portal.ts'),
+      'utf8',
+    )
+    expect(source).toMatch(/\bsiteReturnUrl\(/)
+    expect(source).not.toMatch(HEADER_RETURN_URL)
+  })
+})

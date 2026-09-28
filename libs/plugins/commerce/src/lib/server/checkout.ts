@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { type SiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
@@ -390,9 +391,14 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // per-plan ladder (AGL-284, AGL-278) is read inside the two resolvers
     // called after the shipping plan — `resolveTransactionFeeCents` for a
     // one-time sale and `resolveSubscriptionFeePercent` for a subscription.
-    const referer = String(req.headers.referer ?? '')
-    const origin = `https://${req.headers.host}`
-    const backUrl = referer.startsWith('http') ? referer : origin
+    // The site's own page, never a header's say-so (AGL-3363): a caller
+    // writes `Referer` and `Host`, and this URL is where Stripe sends the
+    // payer — and what the receipt's download links are built from.
+    const backUrl = siteReturnUrl({
+      candidates: [String(req.headers.referer ?? ''), `https://${req.headers.host}`],
+      site: hostSnapshot.data?.() as SiteReturnHost | undefined,
+      requestHost: String(req.headers.host ?? ''),
+    })
     const separator = backUrl.includes('?') ? '&' : '?'
 
     // Taxes (AGL-285): Stripe Tax when the host opted in; manual mode
