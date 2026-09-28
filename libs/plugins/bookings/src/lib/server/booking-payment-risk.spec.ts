@@ -87,6 +87,9 @@ const fakeFirestore = {
       update: (ref: any, value: any) => {
         void ref.update(value)
       },
+      set: (ref: any, value: any) => {
+        docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...value })
+      },
     }),
 }
 
@@ -187,7 +190,7 @@ describe('fraud signals on a paid booking (AGL-3360)', () => {
     })
   })
 
-  it('a LOST booking dispute is recorded but left unclaimed, so staff still hear of it', async () => {
+  it('a LOST booking dispute with no Stripe key is recorded but left unclaimed, so staff still hear of it', async () => {
     const dispute = { id: 'du_b2', payment_intent: 'pi_booking_1', amount: 9000 }
     await deliver('charge.dispute.created', dispute)
     await expect(
@@ -235,5 +238,119 @@ describe('fraud signals on a paid booking (AGL-3360)', () => {
       queryScope: 'COLLECTION_GROUP',
       order: 'ASCENDING',
     })
+  })
+})
+
+/*
+ * A lost booking chargeback pulls the merchant's share back (AGL-3363), by the
+ * seam a lost store order uses: before this the platform absorbed the whole
+ * deposit. A Stripe double stands in for the API; the key is a throwaway
+ * test-mode string and nothing leaves this process.
+ */
+describe('the merchant share of a LOST booking dispute (AGL-3363)', () => {
+  const ORIGINAL_KEY = process.env.STRIPE_SECRET_KEY
+  const dispute = {
+    id: 'du_lost',
+    charge: 'ch_b1',
+    payment_intent: 'pi_booking_1',
+    amount: 9000,
+    status: 'lost',
+  }
+  let reversals: { url: string; body: string; idempotencyKey: string }[]
+  let transfer: Record<string, any>
+
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_booking_reversal_double'
+    reversals = []
+    transfer = { id: 'tr_b1', amount: 8500, amount_reversed: 0, reversals: { data: [] } }
+    fetchMock.mockImplementation((async (url: string, init?: any) => {
+      expect(url.startsWith('https://api.stripe.com/v1/')).toBe(true)
+      const json = (body: unknown, status = 200) => ({
+        ok: status < 400,
+        status,
+        json: async () => body,
+      })
+      if (url.endsWith('/charges/ch_b1')) return json({ id: 'ch_b1', amount: 9000, transfer: 'tr_b1' })
+      if (url.endsWith('/transfers/tr_b1')) return json(transfer)
+      if (url.endsWith('/transfers/tr_b1/reversals')) {
+        reversals.push({
+          url,
+          body: String(init?.body),
+          idempotencyKey: String(init?.headers?.['Idempotency-Key']),
+        })
+        const amount = Number(new URLSearchParams(String(init?.body)).get('amount'))
+        return json({ id: 'trr_b1', amount })
+      }
+      throw new Error(`unexpected ${url}`)
+    }) as never)
+  })
+
+  afterEach(() => {
+    if (ORIGINAL_KEY === undefined) delete process.env.STRIPE_SECRET_KEY
+    else process.env.STRIPE_SECRET_KEY = ORIGINAL_KEY
+    fetchMock.mockImplementation(async () => {
+      throw new Error('no Stripe call is allowed here')
+    })
+  })
+
+  it('reverses the share proportionally, records it, claims it and tells the merchant', async () => {
+    await expect(deliver('charge.dispute.closed', dispute)).resolves.toEqual({
+      claimed: true,
+      hostId: 'host-1',
+    })
+    // 9000 disputed × 8500 transferred ÷ 9000 charged: the whole transfer.
+    expect(reversals).toHaveLength(1)
+    const params = new URLSearchParams(reversals[0].body)
+    expect(params.get('amount')).toBe('8500')
+    expect(params.get('metadata[disputeId]')).toBe('du_lost')
+    expect(params.get('metadata[bookingId]')).toBe('booking-1')
+    expect(params.has('refund_application_fee')).toBe(false)
+    expect(reversals[0].idempotencyKey).toBe('dispute-reversal-du_lost')
+    expect(booking().disputeReversal).toMatchObject({
+      disputeId: 'du_lost',
+      reversedTransferCents: 8500,
+      transferReversalId: 'trr_b1',
+    })
+    expect(managerNotices.filter((notice) => /Payout adjusted/.test(notice.title))).toHaveLength(1)
+  })
+
+  it('a redelivery reverses nothing twice and tells nobody twice', async () => {
+    await deliver('charge.dispute.closed', dispute)
+    await deliver('charge.dispute.closed', dispute)
+    expect(reversals).toHaveLength(1)
+    expect(managerNotices.filter((notice) => /Payout adjusted/.test(notice.title))).toHaveLength(1)
+  })
+
+  it('adopts a reversal a dead delivery already made, instead of making a second', async () => {
+    transfer.reversals.data = [{ id: 'trr_prior', amount: 8500, metadata: { disputeId: 'du_lost' } }]
+    await deliver('charge.dispute.closed', dispute)
+    expect(reversals).toHaveLength(0)
+    expect(booking().disputeReversal).toMatchObject({ transferReversalId: 'trr_prior' })
+  })
+
+  it('records a transfer with nothing left, and leaves it unclaimed for staff', async () => {
+    transfer.amount_reversed = 8500
+    await expect(deliver('charge.dispute.closed', dispute)).resolves.toBeUndefined()
+    expect(reversals).toHaveLength(0)
+    expect(booking().disputeReversal).toMatchObject({
+      reversedTransferCents: 0,
+      failedReason: 'transfer-fully-reversed',
+    })
+  })
+
+  it('a WON dispute reverses nothing (false-positive guard)', async () => {
+    await deliver('charge.dispute.closed', { ...dispute, status: 'won' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(booking()).not.toHaveProperty('disputeReversal')
+  })
+
+  it('a transient Stripe failure throws, so the redelivery retries', async () => {
+    fetchMock.mockImplementation((async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    })) as never)
+    await expect(deliver('charge.dispute.closed', dispute)).rejects.toThrow(/503/)
+    expect(booking()).not.toHaveProperty('disputeReversal')
   })
 })
