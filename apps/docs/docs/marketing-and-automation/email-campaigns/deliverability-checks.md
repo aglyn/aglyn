@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Deliverability checks
-description: "How Aglyn keeps mail from bouncing: every send refuses an address whose domain takes no mail, bulk mail waits behind a gateway that keeps refusing the sender, addresses are checked when they arrive, and sender readiness shows SPF, DKIM and DMARC."
+description: "Why an email is not sent to a domain that takes no mail, when bulk mail waits behind a gateway refusing your sender, and how sender readiness reads SPF, DKIM and DMARC."
 ---
 
 # Deliverability checks
