@@ -379,6 +379,7 @@ idempotent, so running it twice changes nothing the second time.
 | AGL-3321 | the Outreach lists' filters and search read fields older records lack: a sequence's `nameLower`, `nameTokens` and `nameReversed`, an enrollment's `searchTokens` and `target`, and a do-not-contact domain's `searchTokens` | `node tools/scripts/backfill-outreach-list-search.mjs --apply` |
 | AGL-3321 | a site's A/B testing list's Experiment filter and search read `nameLower` and `nameTokens` fields older experiments lack | `node tools/scripts/backfill-experiments-name-search.mjs --apply` |
 | AGL-3321 | the Marketing Campaigns list, a campaign's emails and the Emails list order on `createdAtMs` and search `subjectTokens` / `nameTokens` (and `nameLower`), and list single sends as `emailCampaignId == null` — fields older email sends and campaigns lack | `node tools/scripts/backfill-campaign-list-fields.mjs --apply` |
+| AGL-3354 | the public Event List asks for `status == 'published'` on its query; an event deleted before the delete also wrote `status: 'deleted'` still reads `published`, so it takes one of the listing's fifty places until marked; deploy the two `events (status, startsAtMs)` composites first | `node tools/scripts/backfill-events-deleted-status.mjs --apply` |
 
 Each uses Application Default Credentials against the project in
 `GOOGLE_CLOUD_PROJECT`.
