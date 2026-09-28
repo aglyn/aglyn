@@ -168,14 +168,6 @@ export function registerMarketingConsole(): void {
      * blank, and its header links straight into `/marketing/campaigns`.
      */
     widgets: [
-      // The staff organization page's sends and campaigns (AGL-3380), read
-      // only: staff see what the organization sent without joining it.
-      {
-        slot: Aglyn.CONSOLE_WIDGET_SLOTS.adminOrgDetail,
-        widgetId: 'marketing-staff-org-email',
-        title: 'Email campaigns',
-        Component: StaffOrgEmailCard,
-      },
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         // The id a reader's dashboard preferences already name — it is what
@@ -220,6 +212,14 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-inbox-record-attribution',
         title: 'Campaign attribution',
         Component: RecordAttributionWidget,
+      },
+      // The staff organization page's sends and campaigns (AGL-3380), read
+      // only: staff see what the organization sent without joining it.
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.adminOrgDetail,
+        widgetId: 'marketing-staff-org-email',
+        title: 'Email campaigns',
+        Component: StaffOrgEmailCard,
       },
     ],
     navItems: [
