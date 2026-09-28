@@ -32,7 +32,8 @@
  * normally and is invisible to every filter and to search.
  *
  * Each key is derived from what the document already says — `kind` from
- * `contentType`, the name keys from `fileName`, `hasAlt` from `alt`,
+ * `contentType`, the name keys from `fileName` and then from the details read
+ * from inside the file (`embeddedMetadata`, AGL-3339), `hasAlt` from `alt`,
  * `orientation` from the stored pixel size — through `lib/media-filter-keys.mjs`,
  * which is held to the fixtures the TypeScript function's spec runs
  * (`npm run test:media-filter-keys`, which runs this `--self-test` too).
@@ -48,6 +49,8 @@
  * derived keys and a missing `folderId`, in batches of 400. Nothing is
  * deleted. Run it again after a deploy that changes a writer: a document
  * written by the old code between the two runs is stamped by the second.
+ * Run it AFTER `backfill-media-embedded-metadata.mjs`, which writes the
+ * details this folds into the search keys.
  *
  * ## Running it
  *
@@ -123,6 +126,12 @@ function selfTest() {
     height: 900,
   }
   const current = { ...legacy, ...mediaFilterKeys(legacy), folderId: null }
+  const detailed = {
+    version: 1,
+    format: 'jpeg',
+    contentSha256: 's1',
+    fields: [{ key: 'title', label: 'Title', group: 'description', value: 'Harbor at dawn' }],
+  }
   const planCases = [
     ['a legacy document', legacy, { update: { ...mediaFilterKeys(legacy), folderId: null } }],
     ['a current document', current, { skip: 'current' }],
@@ -133,6 +142,11 @@ function selfTest() {
       { update: mediaFilterKeys({ fileName: 'notes.txt', contentType: 'text/plain' }) },
     ],
     ['a foldered legacy document keeps its folder', { ...legacy, folderId: 'f1' }, { update: mediaFilterKeys(legacy) }],
+    [
+      'a document whose details were read after its keys gains their words (AGL-3339)',
+      { ...current, contentSha256: 's1', embeddedMetadata: detailed },
+      { update: { nameTokens: mediaFilterKeys({ ...legacy, contentSha256: 's1', embeddedMetadata: detailed }).nameTokens } },
+    ],
   ]
   for (const [name, data, expected] of planCases) {
     const got = planMedia(data)

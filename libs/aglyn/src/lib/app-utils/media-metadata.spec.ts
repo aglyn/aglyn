@@ -24,6 +24,7 @@ import {
   MEDIA_ALT_MAX_LENGTH,
   MEDIA_TAG_MAX_COUNT,
   mediaFilterKeys,
+  mediaNameTokens,
   mediaKindOf,
   mediaOrientationOf,
   mediaSearchToken,
@@ -426,5 +427,53 @@ describe('mediaFilterKeys (AGL-3327)', () => {
     const stored = mediaFilterKeys({ fileName: 'supercalifragilistic.jpg' }).nameTokens
     expect(stored).toContain(mediaSearchToken('supercalifragilistic'))
     expect(mediaSearchToken('   ')).toBe('')
+  })
+})
+
+describe('a file is found by what it says about itself (AGL-3339)', () => {
+  const details = (sha: string, fields: Array<Record<string, unknown>>) => ({
+    version: 1,
+    format: 'jpeg',
+    contentSha256: sha,
+    fields,
+  })
+  const harbor = details('s1', [
+    { key: 'title', label: 'Title', group: 'description', value: 'Harbor at dawn' },
+    { key: 'keywords', label: 'Keywords', group: 'description', values: ['boats', 'fog'] },
+    { key: 'gpsLatitude', label: 'Latitude', group: 'location', value: '41.2' },
+  ])
+
+  it('searches the title and keywords after the name, and never the GPS', () => {
+    const tokens = mediaNameTokens('IMG_2041.jpg', harbor, 's1')
+    expect(tokens.slice(0, 3)).toEqual(['i', 'im', 'img'])
+    expect(tokens).toEqual(expect.arrayContaining(['harbor', 'dawn', 'boats', 'fog']))
+    expect(tokens).not.toContain('41')
+  })
+
+  it('reads nothing from details that describe other bytes', () => {
+    expect(mediaNameTokens('IMG_2041.jpg', harbor, 'another-digest')).toEqual(
+      mediaNameTokens('IMG_2041.jpg', null, 'another-digest'),
+    )
+  })
+
+  it('keeps the name whole when the details would overrun the budget', () => {
+    const long = details('s2', [
+      {
+        key: 'description',
+        label: 'Description',
+        group: 'description',
+        value: Array.from({ length: 80 }, (_, at) => `w${at}xyzq`).join(' '),
+      },
+    ])
+    const name = mediaNameTokens('quarterly-report.pdf')
+    const tokens = mediaNameTokens('quarterly-report.pdf', long, 's2')
+    expect(tokens).toHaveLength(120)
+    expect(tokens.slice(0, name.length)).toEqual(name)
+  })
+
+  it('is what mediaFilterKeys stores', () => {
+    expect(
+      mediaFilterKeys({ fileName: 'IMG_2041.jpg', embeddedMetadata: harbor, contentSha256: 's1' }).nameTokens,
+    ).toEqual(mediaNameTokens('IMG_2041.jpg', harbor, 's1'))
   })
 })

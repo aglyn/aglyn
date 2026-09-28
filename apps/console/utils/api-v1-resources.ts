@@ -2309,6 +2309,9 @@ async function createMedia(
         contentType,
         alt: body.alt ? String(body.alt).slice(0, 500) : '',
         ...dimensions,
+        // The details read at ingress join the search (AGL-3339).
+        embeddedMetadata,
+        contentSha256,
       }),
       contentHash,
       contentSha256,

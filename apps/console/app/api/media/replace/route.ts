@@ -786,6 +786,10 @@ async function handler(request: Request): Promise<Response> {
           width: dimensions?.width,
           height: dimensions?.height,
           video: videoFields['video'],
+          // The new file's own details join the search, the old file's leave
+          // it (AGL-3339).
+          embeddedMetadata,
+          contentSha256,
         }),
         sizeBytes: uploadedBytes,
         url,
