@@ -175,6 +175,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   )
   return {
     __esModule: true,
+    // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+    restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
     firebaseAdmin: {
       app: () => ({
         auth: () => ({ verifyIdToken: (token: string) => verifyIdToken(token) }),

@@ -196,12 +196,14 @@ const documentCeiling = () =>
  *                       are more
  *    1  `forms#count`   the total, a server aggregate
  *    1  `forms#count`   the tombstones, subtracted from it
+ *    1  `forms#count`   the retired forms, for the "keep their slot" line,
+ *                       now that the page reads no retired row (AGL-3330)
  *
  * A number rather than "no more than before": what is guarded is what
  * Firestore is asked to RETURN, and a list that walks the collection to draw
  * ten rows is buying the collection.
  */
-const CATALOG_DOCUMENT_CEILING = 13
+const CATALOG_DOCUMENT_CEILING = 14
 
 /**
  * One form's ceiling, in documents: its own document, and its version
@@ -267,14 +269,17 @@ describe('forms console read cost', () => {
     expect(paths()).toContain('hosts/site1/forms')
   })
 
-  it('the catalog takes the two aggregates its quota readout is built on', async () => {
+  it('the catalog takes the two aggregates its quota readout is built on, and the retired count', async () => {
     await renderConsole([])
-    // Two, not one. A single count over the whole collection would quote a cap
-    // usage the resources route does not enforce; the second subtracts the
-    // tombstones. Their ABSENCE is the failure this catches — the readout then
-    // falls back to the length of one page, which reads as room to spare on a
-    // site that is already at the ceiling.
+    // Two for the readout, not one. A single count over the whole collection
+    // would quote a cap usage the resources route does not enforce; the
+    // second subtracts the tombstones. Their ABSENCE is the failure this
+    // catches — the readout then falls back to the length of one page, which
+    // reads as room to spare on a site that is already at the ceiling. The
+    // third is how many forms are retired, which the page can no longer tell
+    // by looking at its own rows (AGL-3330).
     expect(paths().filter((path) => path.endsWith('#count'))).toEqual([
+      'hosts/site1/forms#count',
       'hosts/site1/forms#count',
       'hosts/site1/forms#count',
     ])
@@ -286,6 +291,14 @@ describe('forms console read cost', () => {
     // list would pay for a hundred version documents of a form they have not
     // chosen yet.
     expect(paths().some((path) => path.includes('/versions'))).toBe(false)
+  })
+
+  it('the catalog reads no campaign while no loaded form is filed under one', async () => {
+    await renderConsole([])
+    // The Campaign filter's names are the org's campaign documents. A catalog
+    // with no filed form has nothing for that filter to find, so it must not
+    // pay for them on every visit (AGL-3330).
+    expect(paths().some((path) => path.includes('emailCampaigns'))).toBe(false)
   })
 
   it('the catalog’s paged query is BOUNDED, and the whole load has a ceiling', async () => {

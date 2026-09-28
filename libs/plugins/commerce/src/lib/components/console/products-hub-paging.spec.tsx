@@ -16,29 +16,26 @@
  */
 
 /**
- * The products table gets a footer, and its header stops counting the rows in
- * hand (AGL-2501).
+ * The products table pages ITS QUERY, and its header stops counting the rows
+ * in hand (AGL-2501, AGL-3321).
  *
- * Two things, and the second is the one that keeps recurring across this
- * sweep: A COUNT BESIDE A LIST WAS THE LENGTH OF THE LIST. The card's header
- * read `Products (${products.length})` — the filtered, ceilinged view — so a
+ * A COUNT BESIDE A LIST WAS THE LENGTH OF THE LIST. The card's header read
+ * `Products (${products.length})` — the filtered, ceilinged view — so a
  * merchant with 3,000 products was told they had 500, and once the table paged
  * they would have been told 10. The quota readout beside it already asked the
  * server (AGL-1716); the header did not, one line away.
  *
- * ## Why the READ is not paged
- *
- * Three other things on this card consume the same window and every one of
- * them needs it whole: the CSV export writes these rows, the importer builds
- * `existingSlugs` from them to refuse a duplicate slug, and the reserved-stock
- * clock arms off them. A ten-row page would silently export ten products and
- * stop the importer seeing the clash it exists to prevent. So the footer pages
- * what the card holds, and the ceiling keeps bounding what it reads.
+ * The table is one page of `useListQuery` now (answered here by the list
+ * query double, which evaluates the plan the way Firestore does). The export
+ * walks the same query and the slug checks ask the store, so nothing on the
+ * card needs a window of rows any more.
  */
 
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
+import { productSearchFields } from '../../model/commerce'
 
 jest.setTimeout(30_000)
 
@@ -49,15 +46,24 @@ const SERVER_PRODUCTS = 3_000
 /** What the listener hands back. Smaller than the ceiling, so no truncation. */
 const LOADED_PRODUCTS = 60
 
-const productDocs = Array.from({ length: LOADED_PRODUCTS }, (_, index) => ({
-  $id: `prod-${index}`,
-  name: `Product ${String(index).padStart(4, '0')}`,
-  slug: `product-${index}`,
-  status: 'active',
-  // Digital, so the license-key dialog is reachable from the first row.
-  type: 'digital',
-  variants: [{ id: 'v1', priceUsd: 10, inventory: 1 }],
-}))
+const productDocs = Array.from({ length: LOADED_PRODUCTS }, (_, index) => {
+  const name = `Product ${String(index).padStart(4, '0')}`
+  const variants = [{ id: 'v1', priceUsd: 10, inventory: 1 }]
+  return {
+    $id: `prod-${index}`,
+    // As the writers store it: live, with the keys the query orders by.
+    ...productSearchFields({ name, variants }),
+    deletedAt: null,
+    slug: `product-${index}`,
+    status: 'active',
+    // Digital, so the license-key dialog is reachable from the first row.
+    type: 'digital',
+    variants,
+  }
+})
+
+/** What the list query double answers from. */
+const mockProductRows = () => productDocs
 
 /**
  * License keys for TWO products.
@@ -90,6 +96,16 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 let mockQueries: Array<{ name: string; constraints: any[] }> = []
 
 const FIRESTORE = {}
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(mockProductRows, options),
+  }
+})
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
@@ -228,13 +244,13 @@ describe('the products table pages, and its header counts the catalog', () => {
     ).toBeNull()
   })
 
-  it('the footer counts the ROWS THE CARD HOLDS, which the export writes', async () => {
+  it('the footer counts the PAGE, and says only that more exist', async () => {
     await mount()
-    // Not the catalog: the export, the slug check and the clock all read this
-    // window, and the count line is the one place the reader is told how big
-    // it is. A footer that claimed 3,000 would be describing rows the card
-    // does not have.
-    expect(countLine()).toContain(`of ${LOADED_PRODUCTS}`)
+    // A cursor-paged query knows the page and whether another follows —
+    // not how many match. A footer that claimed 60 or 3,000 would be
+    // describing a number nobody read.
+    expect(countLine()).toContain(`1–${TABLE_PAGE_SIZE_DEFAULT} of more than`)
+    expect(countLine()).not.toContain(`of ${LOADED_PRODUCTS}`)
   })
 
   it('paging reaches a product past the first page', async () => {
@@ -254,16 +270,19 @@ describe('the products table pages, and its header counts the catalog', () => {
       target: { value: 'Product 0003' },
     })
     await waitFor(() =>
-      expect(
-        mockQueries.some(
-          (built) =>
-            built.name === 'products' &&
-            built.constraints.some(
-              (item: any) => item?.field === 'nameTokens' && item.op === 'array-contains',
-            ),
-        ),
-      ).toBe(true),
+      expect(lastListQueryPlan()?.filters).toContainEqual({
+        path: 'nameTokens',
+        op: 'array-contains',
+        value: 'product',
+      }),
     )
+    // Under the live scope, in the one order the list offers.
+    expect(lastListQueryPlan()?.filters).toContainEqual({
+      path: 'deletedAt',
+      op: '==',
+      value: null,
+    })
+    expect(lastListQueryPlan()?.orderBy.path).toBe('nameLower')
   })
 
   it('a FILTERED header carries no number at all', async () => {

@@ -1,0 +1,241 @@
+{
+  "//": "Worked examples for orgMemberListFields (libs/tenant/data/admin/src/lib/server/org-member-list-fields.ts) and its script-side twin tools/scripts/lib/org-member-list-fields.mjs. Asserted by org-member-list-fields.spec.ts and by backfill-org-member-list-fields.mjs --self-test (AGL-3321).",
+  "cases": [
+    {
+      "name": "an owner with a name, an address and a title",
+      "member": {
+        "role": "owner",
+        "allHosts": true,
+        "displayName": "Ada Lovelace",
+        "email": "ada@example.com",
+        "title": "Head of Ops"
+      },
+      "expected": {
+        "consoleUserType": "manager",
+        "searchTokens": [
+          "a",
+          "ad",
+          "ada",
+          "l",
+          "lo",
+          "lov",
+          "love",
+          "lovel",
+          "lovela",
+          "lovelac",
+          "lovelace",
+          "ada@",
+          "ada@e",
+          "ada@ex",
+          "ada@exa",
+          "ada@exam",
+          "ada@examp",
+          "ada@exampl",
+          "ada@example",
+          "ada@example.",
+          "e",
+          "ex",
+          "exa",
+          "exam",
+          "examp",
+          "exampl",
+          "example",
+          "example.",
+          "example.c",
+          "example.co",
+          "example.com",
+          "c",
+          "co",
+          "com",
+          "h",
+          "he",
+          "hea",
+          "head",
+          "o",
+          "of",
+          "op",
+          "ops"
+        ]
+      }
+    },
+    {
+      "name": "an admin is a manager whatever allHosts says",
+      "member": {
+        "role": "admin",
+        "allHosts": false,
+        "hostAccess": {
+          "h1": "editor"
+        },
+        "email": "ops+alerts@mail.acme.io"
+      },
+      "expected": {
+        "consoleUserType": "manager",
+        "searchTokens": [
+          "o",
+          "op",
+          "ops",
+          "ops+",
+          "ops+a",
+          "ops+al",
+          "ops+ale",
+          "ops+aler",
+          "ops+alert",
+          "ops+alerts",
+          "ops+alerts@",
+          "ops+alerts@m",
+          "m",
+          "ma",
+          "mai",
+          "mail",
+          "mail.",
+          "mail.a",
+          "mail.ac",
+          "mail.acm",
+          "mail.acme",
+          "mail.acme.",
+          "mail.acme.i",
+          "mail.acme.io",
+          "a",
+          "al",
+          "ale",
+          "aler",
+          "alert",
+          "alerts",
+          "ac",
+          "acm",
+          "acme",
+          "i",
+          "io"
+        ]
+      }
+    },
+    {
+      "name": "an editor on every site",
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "displayName": "  Grace   Hopper "
+      },
+      "expected": {
+        "consoleUserType": "manager",
+        "searchTokens": [
+          "g",
+          "gr",
+          "gra",
+          "grac",
+          "grace",
+          "h",
+          "ho",
+          "hop",
+          "hopp",
+          "hoppe",
+          "hopper"
+        ]
+      }
+    },
+    {
+      "name": "a site collaborator",
+      "member": {
+        "role": "viewer",
+        "allHosts": false,
+        "hostAccess": {
+          "h1": "viewer"
+        },
+        "displayName": "Rae",
+        "email": "rae@shop.test"
+      },
+      "expected": {
+        "consoleUserType": "collaborator",
+        "searchTokens": [
+          "r",
+          "ra",
+          "rae",
+          "rae@",
+          "rae@s",
+          "rae@sh",
+          "rae@sho",
+          "rae@shop",
+          "rae@shop.",
+          "rae@shop.t",
+          "rae@shop.te",
+          "rae@shop.tes",
+          "s",
+          "sh",
+          "sho",
+          "shop",
+          "shop.",
+          "shop.t",
+          "shop.te",
+          "shop.tes",
+          "shop.test",
+          "t",
+          "te",
+          "tes",
+          "test"
+        ]
+      }
+    },
+    {
+      "name": "a legacy member with neither flag nor map is a manager",
+      "member": {
+        "role": "viewer",
+        "email": "old@legacy.test"
+      },
+      "expected": {
+        "consoleUserType": "manager",
+        "searchTokens": [
+          "o",
+          "ol",
+          "old",
+          "old@",
+          "old@l",
+          "old@le",
+          "old@leg",
+          "old@lega",
+          "old@legac",
+          "old@legacy",
+          "old@legacy.",
+          "old@legacy.t",
+          "l",
+          "le",
+          "leg",
+          "lega",
+          "legac",
+          "legacy",
+          "legacy.",
+          "legacy.t",
+          "legacy.te",
+          "legacy.tes",
+          "legacy.test",
+          "t",
+          "te",
+          "tes",
+          "test"
+        ]
+      }
+    },
+    {
+      "name": "a scoped member with an empty map is not legacy",
+      "member": {
+        "role": "editor",
+        "allHosts": false,
+        "hostAccess": {}
+      },
+      "expected": {
+        "consoleUserType": "collaborator",
+        "searchTokens": []
+      }
+    },
+    {
+      "name": "nothing to search",
+      "member": {
+        "role": "viewer",
+        "allHosts": true
+      },
+      "expected": {
+        "consoleUserType": "manager",
+        "searchTokens": []
+      }
+    }
+  ]
+}

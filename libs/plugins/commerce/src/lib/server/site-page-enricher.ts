@@ -135,9 +135,9 @@ export const commerceSitePageEnricher: SitePageEnricher = async ({
   if (!grids.length) return undefined
 
   const seeds: Record<string, PublicCatalogResult> = {}
-  // One scope for this render, so four grids on a page cost one catalog read
-  // instead of four identical ones. Each grid still filters and sorts that
-  // snapshot for itself — the seeds stay keyed by node id.
+  // One scope for this render, so grids asking the same question share one
+  // catalog query, and each different question reads only its own page
+  // (AGL-3321) — the seeds stay keyed by node id.
   const reads = createCatalogReadScope()
   await Promise.all(
     grids.map(async (node) => {

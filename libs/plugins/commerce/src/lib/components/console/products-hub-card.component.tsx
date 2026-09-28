@@ -18,26 +18,33 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
-import { PRODUCT_LIST_FILTER_FIELDS } from '../../constants/product-filters'
+import {
+  PRODUCT_LIST_BASE,
+  PRODUCT_LIST_FIELDS,
+  PRODUCT_LIST_HEADERS,
+  PRODUCT_LIST_OPTIONS,
+  PRODUCT_LIST_QUERY,
+  PRODUCT_LIST_SELECT_FIELDS,
+  productListRequestClauses,
+} from '../../constants/product-list-query'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
-import {
-  filterListRows,
-  inMemoryListField,
-  listFilterGridColumns,
-} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -56,9 +63,12 @@ import {
   doc,
   documentId,
   getCountFromServer,
+  getDocs,
   limit,
   orderBy,
   query,
+  type QueryDocumentSnapshot,
+  startAfter,
   updateDoc,
   where,
 } from 'firebase/firestore'
@@ -66,27 +76,35 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
-  listFilterConstraints,
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  listQueryConstraints,
+  useListQuery,
+} from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
+import { productSlugLedger } from './product-slugs'
+import { productCollectionFields, readSmartCollections } from './smart-collections'
 import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 
+/** Products read per request of the CSV export's walk. */
+const EXPORT_PAGE = 500
+
 /**
- * How many catalog documents the table's listener holds.
+ * The most products one CSV export writes (AGL-3321).
  *
- * A CEILING, not a page size: a 25,000-product catalog does not belong in a
- * table, and three other readers on this card — the CSV export, the importer's
- * duplicate-slug check and the reserved-stock clock — need the window whole.
- * The footer pages what this holds; the query is what bounds it.
+ * The export walks the table's own query page by page, so it writes what the
+ * filters and search match across the whole catalog rather than the rows on
+ * screen. It stops here because the file is built in the browser, and says
+ * so when it does.
  */
-const CATALOG_CEILING = 500
+const EXPORT_CEILING = 10_000
 
 /**
  * How many of ONE product's license keys the dialog reads.
@@ -108,28 +126,13 @@ const STATUS_COLOR: Record<string, 'default' | 'success' | 'warning'> = {
   archived: 'default',
 }
 
-/*
- * What the products grid's Filters panel offers: Status, a select. The
- * query serves it whenever no search is typed; under a search the query is
- * the search, and Status narrows its matches over the rows the card holds.
- */
-const PRODUCT_GRID_FILTER_FIELDS = [inMemoryListField('status', 'select')]
-const PRODUCT_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  status: 'Status',
-}
-const PRODUCT_GRID_FILTER_OPTIONS = {
-  status: [
-    { value: 'active', label: 'Active' },
-    { value: 'draft', label: 'Draft' },
-    { value: 'archived', label: 'Archived' },
-  ],
-}
-const PRODUCT_GRID_SELECT_FIELDS = Object.keys(PRODUCT_GRID_FILTER_OPTIONS)
+/** The grid's own columns; every other declared field is a hidden filter column. */
+const PRODUCT_VISIBLE_COLUMNS = ['name', 'status', 'type', 'priceUsd', 'stock', 'variants']
 
 /**
  * Products hub v1 (AGL-279): the catalog manager replacing the Commerce
- * Starter card — search + status filter over `hosts/{hostId}/products`,
- * full editor dialog, duplicate, archive/activate, soft delete (past
+ * Starter card — a table over `hosts/{hostId}/products` whose search and
+ * filters are its Firestore query (AGL-3321), full editor dialog, duplicate, archive/activate, soft delete (past
  * order rows keep resolving). Product cap (`productsPerHost`, AGL-278)
  * gated here on create/duplicate/import (AGL-471); server-side
  * enforcement of the client-write path rides AGL-473.
@@ -144,46 +147,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const { org, ready: planReady } = useOrgPlan(hostId)
   const { confirm } = useConfirmationContext()
   /*
-   * The grid's quick search IS the served search: its words go to the query,
-   * never matched again over the rows (see the query below).
+   * The grid's Filters panel and quick search, bound to the clauses the
+   * query below serves (AGL-3321). Every clause and the search word go on
+   * that query; see `constants/product-list-query.ts` for what is offered.
    */
-  const [searchWords, setSearchWords] = useState<string[]>([])
-  const search = searchWords.join(' ').trim()
   const gridFilter = useListGridFilter({
-    selectFields: PRODUCT_GRID_SELECT_FIELDS,
-    search: { words: searchWords, onChange: setSearchWords },
+    selectFields: PRODUCT_LIST_SELECT_FIELDS,
   })
-  const filterClauses = gridFilter.clauses
-  /*
-   * The Status clause the query can serve — only while no search is typed,
-   * because the query carries one predicate.
-   */
-  const servedStatus = search
-    ? null
-    : (filterClauses.find(
-        (clause) =>
-          clause.field === 'status' &&
-          listFilterConstraints(PRODUCT_LIST_FILTER_FIELDS, clause) !== null,
-      ) ?? null)
-  /*
-   * WHICH field the search box searches (AGL-2501). A SCOPE of the search,
-   * not a filter: it picks which served query the search runs, so it stays
-   * beside the grid rather than in its panel.
-   *
-   * The box used to compare four fields at once — name, slug, tag, SKU — over
-   * the rows the listener had already fetched. Server-side that is not one
-   * query: Firestore allows a single `array-contains` per query and cannot OR
-   * across fields, so four fields at once means four queries and a merge, and
-   * a merged result cannot be paged or capped coherently.
-   *
-   * Naming the field is the honest trade. It buys a search that reaches the
-   * WHOLE catalog instead of an arbitrary five hundred rows of it, which is
-   * the case the old box got wrong — and a merchant looking for a SKU knows
-   * they are looking for a SKU.
-   */
-  const [searchField, setSearchField] = useState<'name' | 'skus' | 'barcodes'>(
-    'name',
-  )
+  const filtering =
+    gridFilter.clauses.length > 0 ||
+    gridFilter.searchWords.some((word) => word.trim())
   const [editing, setEditing] = useState<ProductRow | null>(null)
   const [creating, setCreating] = useState(false)
   const [adjusting, setAdjusting] = useState<{
@@ -210,7 +183,14 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const WidgetSlot = useConsoleWidgetSlot()
 
   const {
-    data: productDocs,
+    rows: productDocs,
+    data: productWindow,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    plan,
     status: productsStatus,
     /**
      * The product rows the stock dialog is seeded from are unconfirmed by
@@ -221,62 +201,41 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
      * variant and every location.
      */
     fromCache: productsFromCache,
-  } = useFirestoreCollection<any>(
-    () => {
-      /*
-       * FILTERED BY THE QUERY, and ordered rather than merely capped
-       * (AGL-2501, AGL-2292).
-       *
-       * `limit(500)` with no `orderBy` returns documents in ID order, and
-       * products are created at `createResourceUid()` — so that was a
-       * pseudo-random SAMPLE of five hundred, which the client `.sort()` by
-       * name below dressed up as a reliable alphabetical page. The search then
-       * ran over that sample, so a product on the wrong side of the cap
-       * answered "no products match": the one answer a search must never get
-       * wrong, on the list a merchant uses to find one item in their catalog.
-       *
-       * The cap STAYS — a 25,000-product catalog does not belong in a table,
-       * and the head-count has been a server aggregate since AGL-1716. What
-       * changes is that a filter now reaches the whole collection BEFORE the
-       * cap applies.
-       *
-       * ONE request, because Firestore allows one `array-contains` and the
-       * shared translator builds one predicate. Whichever control is set alone
-       * is answered entirely by the server; with BOTH set the name reaches the
-       * whole catalog and the status narrows those matches client-side below,
-       * which is complete unless a single name matches more than five hundred
-       * products.
-       *
-       * ⚠️ The default ordering is by DOCUMENT ID, not by `nameLower`.
-       * Ordering by a denormalized key drops every document that lacks it, and
-       * an unfiltered list must not be able to hide a product — a catalog
-       * imported before the search keys existed, or written by a path that
-       * forgot them, would simply stop appearing. Under a name filter the
-       * ordering does move to `nameLower`, and there it is safe: a document
-       * without the key has no `nameTokens` either, so the `array-contains`
-       * has already excluded it.
-       */
-      const constraints = listFilterConstraints(
-        PRODUCT_LIST_FILTER_FIELDS,
-        search
-          ? { field: searchField, op: 'contains', value: search }
-          : servedStatus,
-      )
-      return query(
-        collection(firestore, 'hosts', hostId, 'products'),
-        ...(constraints ?? [orderBy(documentId())]),
-        /*
-         * `CATALOG_CEILING + 1` is a PROBE (AGL-2501). One document past the
-         * ceiling turns "this catalog is larger than the table" into a fact.
-         * The probe row is dropped below and never rendered, exported or
-         * counted.
-         */
-        limit(CATALOG_CEILING + 1),
-      )
+  } = useListQuery<any>({
+    /*
+     * PAGED BY THE QUERY, and every filter ON it (AGL-3321).
+     *
+     * The table read a five-hundred-product window and put ONE predicate on
+     * it — the search or the Status clause — then matched Status beside a
+     * search, dropped soft-deleted products and sorted by name over the rows
+     * it held, and paged that. Past five hundred products, a match past the
+     * window answered "no products match", and a page came back short by
+     * however many deleted products it had held.
+     *
+     * Now the plan puts the search word and every clause on one query under
+     * the `deletedAt == null` scope, ordered by `nameLower`, and each page is
+     * a page of that query — one page plus a probe row, widened as the reader
+     * pages forward. Nothing is matched over the rows afterwards; a clause
+     * the query cannot hold is refused by name (`ListQueryNotices` below).
+     */
+    collection: collection(firestore, 'hosts', hostId, 'products'),
+    declaration: PRODUCT_LIST_QUERY,
+    request: {
+      clauses: productListRequestClauses(gridFilter.clauses),
+      search: gridFilter.searchWords,
+      base: PRODUCT_LIST_BASE,
     },
-    [firestore, hostId, search, searchField, servedStatus?.op, servedStatus?.value],
-    { idField: '$id' },
-  )
+    deps: [firestore, hostId],
+    idField: '$id',
+    /*
+     * The scope and the filters read MUTABLE fields — a delete sets
+     * `deletedAt`, Archive moves `status`, a rename moves the tokens — so a
+     * product can leave this query mid-session, and the SDK can cache that
+     * departure as a tombstone at the product's own path (AGL-1196). A
+     * disappearance is confirmed against the server before it is believed.
+     */
+    confirmDisappearances: true,
+  })
   /*
    * License key pool (AGL-308) for the open dialog's product — asked FOR that
    * product, and ordered (AGL-2501).
@@ -320,69 +279,19 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  /** The read went past the ceiling, so the catalog is larger than the window. */
-  const catalogTruncated = (productDocs?.length ?? 0) > CATALOG_CEILING
-  const products = useMemo(() => {
-    /*
-     * The SEARCH is gone from here — it is the query's job now, and running it
-     * twice would be worse than redundant. A server `contains` matches a word
-     * PREFIX ("cof" finds "Coffee"), while the old `includes` matched a raw
-     * substring, so a two-word search would have been sent to the server as
-     * its first word and then dropped again here by a whole-string compare
-     * that the matching row never satisfies: rows found, then hidden.
-     *
-     * The panel's clauses are matched here, and Status only earns its keep
-     * when a search is also active — that is the one combination the single
-     * predicate above cannot express, and here it runs over rows the server
-     * already matched across the whole catalog rather than over an arbitrary
-     * window. No search words are passed: the query answered them.
-     *
-     * Soft-deleted products are still dropped here rather than in the query:
-     * `deletedAt` is absent on a live product, and Firestore cannot ask for
-     * documents that LACK a field.
-     */
-    const live: ProductRow[] = (productDocs ?? [])
-      .slice(0, CATALOG_CEILING)
-      .filter((product: any) => !product.deletedAt)
-      .map((product: any) => ({
+  /*
+   * The PAGE on screen, lifted from legacy shapes. It is what the table
+   * draws, the reserved-stock clock watches and the zone hands its widgets,
+   * and nothing narrows it: the query already answered every filter, and
+   * soft-deleted products are outside its scope.
+   */
+  const products = useMemo<ProductRow[]>(
+    () =>
+      (productDocs ?? []).map((product: any) => ({
         ...CommerceModel.liftLegacyProduct(product),
         $id: product.$id,
-      }))
-    return filterListRows(live, PRODUCT_GRID_FILTER_FIELDS, filterClauses, {
-      paths: [],
-      words: [],
-    }).sort((a, b) => a.name.localeCompare(b.name))
-  }, [productDocs, filterClauses])
-
-  /*==========================================
-   * THE TABLE PAGES, and the READ deliberately does not (AGL-2501).
-   *
-   * The card rendered every row of a five-hundred-document window in one wall
-   * with no footer under it — the shape this sweep is about. What it must not
-   * become is a server-paged query, because three other things in this file
-   * read the same window and every one of them needs it whole:
-   *
-   *  * `handleExport` writes the CSV from these rows. A ten-row page would
-   *    silently export ten products under a filename that claims the catalog.
-   *  * the CSV importer builds `existingSlugs` from them to refuse a
-   *    duplicate slug. Narrowed to a page, it would stop seeing the clash and
-   *    create the duplicate it exists to prevent.
-   *  * the reserved-stock clock arms off them.
-   *
-   * The window is also already correct: `orderBy(documentId())` unfiltered,
-   * `nameLower` under a name filter, and the filters themselves reach the
-   * whole collection through the query. So the fix here is the CONTROL, not
-   * the read — and the head-count beside it has been a server aggregate since
-   * AGL-1716.
-   *=========================================*/
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  // A filter narrows the list under the reader's feet, and page four of the
-  // unfiltered catalog is not a position in the filtered one.
-  useEffect(() => setPage(0), [search, searchField, filterClauses])
-  const visibleProducts = useMemo(
-    () => products.slice(page * pageSize, page * pageSize + pageSize),
-    [products, page, pageSize],
+      })),
+    [productDocs],
   )
 
   /**
@@ -397,7 +306,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
    *
    * Only runs while something is actually held, so an ordinary catalog costs
    * no timer. A NEW hold arrives as a document change, which re-renders, which
-   * re-arms this.
+   * re-arms this. It watches the page on screen, which is every row whose
+   * caption it keeps true.
    */
   const [nowMs, setNowMs] = useState(() => Date.now())
   const anyHeld = useMemo(
@@ -434,10 +344,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
    * excluded them. The card now asks the enforcing route's question, in the
    * enforcing route's terms.
    *
-   * THE LIST KEEPS ITS CAP, and the filtered `products` view above still
-   * drives the table, the export and the slug set. A one-shot goes stale
-   * where a listener refreshed for free, so the count is re-read after any
-   * mutation that moves it.
+   * The table pages its own query (AGL-3321) and answers a different
+   * question — which products match — so it never stands in for this. A
+   * one-shot goes stale where a listener refreshed for free, so the count is
+   * re-read after any mutation that moves it.
    *
    * No counting RULE moves: `checkQuota` is untouched and `report-usage`
    * meters contacts, storage and API requests — never the catalog.
@@ -462,13 +372,11 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       active = false
     }
   }, [firestore, hostId, productCountEpoch])
-  // Cap against ALL live products, not the filtered view (AGL-471). This is
-  // the fallback now: pending or denied, it can only UNDERSTATE, never
-  // overstate, so nothing it gates fires on a count larger than the truth.
-  const loadedProductCount = useMemo(
-    () => (productDocs ?? []).filter((product: any) => !product.deletedAt).length,
-    [productDocs],
-  )
+  // The fallback, pending or denied: the live products the table's query has
+  // read, probe row included. Each is a product the site has, so it can only
+  // UNDERSTATE, never overstate, and nothing it gates fires on a count larger
+  // than the truth (AGL-471).
+  const loadedProductCount = productWindow?.length ?? 0
   const productCount = serverProductCount ?? loadedProductCount
   // Gate only once the org doc has loaded: an unresolved org reads as the
   // free tier's 0-product cap, which swallowed every Add/Duplicate click.
@@ -499,16 +407,37 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           { variant: 'info', persist: false },
         )
       }
-      const { $id: _sourceId, ...copy } = product
+      // The source's SKU and barcode keys are not copied: the copy's own are
+      // derived below, and a copy of a product with none must have none.
+      const { $id: _sourceId, skus: _skus, barcodes: _barcodes, ...copy } =
+        product as ProductRow & { skus?: string[]; barcodes?: string[] }
       try {
+        /*
+         * The copy's slug is asked of the store, so a second Duplicate of
+         * the same product does not mint a second `-copy` (AGL-3321), and
+         * its search keys are the COPY's: spreading the source's would sort
+         * and find it by the source's name.
+         */
+        const slug = await productSlugLedger(firestore, hostId).claim(
+          CommerceModel.commerceSlug(`${product.slug}-copy`),
+        )
         // Duplicate is a create — rides the quota-enforcing API (AGL-473).
         await createHostResource({
           hostId,
           resource: 'product',
           data: {
             ...copy,
-            name: `${product.name} (copy)`,
-            slug: CommerceModel.commerceSlug(`${product.slug}-copy`),
+            ...CommerceModel.productSearchFields({
+              name: `${product.name} (copy)`,
+              variants: product.variants,
+            }),
+            ...CommerceModel.productStockFields(product),
+            // The COPY's smart collections: its name differs from the source's.
+            ...(await productCollectionFields(firestore, hostId, {
+              ...product,
+              name: `${product.name} (copy)`,
+            })),
+            slug,
             status: 'draft',
             createdAtMs: Date.now(),
             updatedAtMs: Date.now(),
@@ -529,7 +458,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         })
       }
     },
-    [hostId, createHostResource, enqueueSnackbar, productQuota],
+    [firestore, hostId, createHostResource, enqueueSnackbar, productQuota],
   )
 
   const handleStatus = useCallback(
@@ -572,16 +501,71 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     [confirm, firestore, hostId, enqueueSnackbar],
   )
 
-  // CSV import/export (AGL-282): Shopify-dialect columns, dry-run first.
-  const handleExport = useCallback(() => {
-    const csv = CommerceModel.productsToCsv(products)
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const anchor = document.createElement('a')
-    anchor.href = URL.createObjectURL(blob)
-    anchor.download = `products-${hostId}.csv`
-    anchor.click()
-    URL.revokeObjectURL(anchor.href)
-  }, [products, hostId])
+  /*
+   * CSV import/export (AGL-282): Shopify-dialect columns, dry-run first.
+   *
+   * The export writes what the table's filters and search MATCH, across the
+   * whole catalog (AGL-3321): it walks the table's own query — the same plan,
+   * so the same scope, predicates and order — a page of `EXPORT_PAGE` at a
+   * time from a cursor, rather than writing the rows on screen. A walk that
+   * reaches `EXPORT_CEILING` stops, asks once whether anything is left, and
+   * says so when something is.
+   */
+  const [exporting, setExporting] = useState(false)
+  const handleExport = useCallback(async () => {
+    setExporting(true)
+    try {
+      const productsRef = collection(firestore, 'hosts', hostId, 'products')
+      const constraints = listQueryConstraints(plan)
+      const exported: ProductRow[] = []
+      let cursor: QueryDocumentSnapshot | null = null
+      let more = false
+      for (;;) {
+        const room = EXPORT_CEILING - exported.length
+        const snapshot = await getDocs(
+          query(
+            productsRef,
+            ...constraints,
+            ...(cursor ? [startAfter(cursor)] : []),
+            limit(room > 0 ? Math.min(EXPORT_PAGE, room) : 1),
+          ),
+        )
+        if (room <= 0) {
+          more = !snapshot.empty
+          break
+        }
+        for (const product of snapshot.docs) {
+          exported.push({
+            ...CommerceModel.liftLegacyProduct(product.data() as any),
+            $id: product.id,
+          })
+        }
+        if (snapshot.docs.length < Math.min(EXPORT_PAGE, room)) break
+        cursor = snapshot.docs[snapshot.docs.length - 1]
+      }
+      const csv = CommerceModel.productsToCsv(exported)
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const anchor = document.createElement('a')
+      anchor.href = URL.createObjectURL(blob)
+      anchor.download = `products-${hostId}.csv`
+      anchor.click()
+      URL.revokeObjectURL(anchor.href)
+      if (more) {
+        enqueueSnackbar(
+          `Exported the first ${EXPORT_CEILING.toLocaleString()} matching ` +
+            'products — the most one file holds. Filter the list to export the rest.',
+          { variant: 'info', persist: false },
+        )
+      }
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'Could not export the products', {
+        variant: 'warning',
+        persist: false,
+      })
+    } finally {
+      setExporting(false)
+    }
+  }, [firestore, hostId, plan, enqueueSnackbar])
 
   const handleImportApply = useCallback(async () => {
     const parsed = importing?.parsed
@@ -603,27 +587,36 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         { variant: 'info', persist: false },
       )
     }
-    const existingSlugs = new Set(products.map((product) => product.slug))
+    /*
+     * The duplicate-slug check asks the STORE (AGL-3321): every slug the file
+     * names, by `slug in […]`, and any suffixed one only when it is needed.
+     * It asked the table's rows, which held five hundred products and now
+     * hold one page, so a slug past them was handed out a second time.
+     */
+    const slugs = productSlugLedger(firestore, hostId)
     const created: string[] = []
     try {
+      await slugs.ask(parsed.products.map((product) => product.slug))
+      // One read of the host's smart collections for the whole file.
+      const smartCollections = await readSmartCollections(firestore, hostId)
       // Each create rides the quota-enforcing API (AGL-473); the batch cap
       // above short-circuits before we start, so this loop stays bounded.
       for (const product of parsed.products) {
-        let slug = product.slug
-        while (existingSlugs.has(slug)) slug = `${product.slug}-${Date.now() % 1000}`
-        existingSlugs.add(slug)
+        const slug = await slugs.claim(product.slug)
         const { id } = await createHostResource({
           hostId,
           resource: 'product',
           data: {
             ...product,
             // Search keys travel with the name on the IMPORT path too — a
-            // catalog arrives here in bulk, which is exactly the catalog the
-            // 500-row window cannot show and the search has to reach.
+            // catalog arrives here in bulk, and the table orders, pages and
+            // searches it by these keys alone.
             ...CommerceModel.productSearchFields(product),
+            ...CommerceModel.productStockFields(product),
+            // Its smart collections (AGL-3321).
+            collectionIds: CommerceModel.productCollectionIds(product, smartCollections),
             slug,
             priceUsd: product.variants[0]?.priceUsd ?? 0,
-            inventory: CommerceModel.productInventory(product),
             imageUrl: product.mediaUrls?.[0] ?? null,
             createdAtMs: Date.now(),
             updatedAtMs: Date.now(),
@@ -651,7 +644,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     })
   }, [
     importing,
-    products,
+    firestore,
     hostId,
     createHostResource,
     enqueueSnackbar,
@@ -693,7 +686,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           doc(firestore, 'hosts', hostId, 'products', adjusting.product.$id),
           {
             variants,
-            inventory: CommerceModel.productInventory({ variants }),
+            // The total and the In stock verdict move with the count (AGL-3321).
+            ...CommerceModel.productStockFields({ ...adjusting.product, variants }),
             updatedAtMs: Date.now(),
           },
         )
@@ -902,9 +896,9 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         { width: 470 },
       ),
     ] as GridColDef[],
-    PRODUCT_GRID_FILTER_FIELDS,
-    PRODUCT_GRID_FILTER_OPTIONS,
-    PRODUCT_GRID_FILTER_HEADERS,
+    PRODUCT_LIST_FIELDS,
+    PRODUCT_LIST_OPTIONS,
+    PRODUCT_LIST_HEADERS,
   )
 
   return (
@@ -921,7 +915,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
        * count line answers it instead.
        */
       header={
-        search || filterClauses.length
+        filtering
           ? 'Products'
           : `Products${productCount ? ` (${productCount})` : ''}`
       }
@@ -931,22 +925,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     >
       <Stack spacing={2}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <TextField
-            label="Search in"
-            value={searchField}
-            onChange={(event) =>
-              setSearchField(
-                event.target.value as 'name' | 'skus' | 'barcodes',
-              )
-            }
-            size="small"
-            select
-            sx={{ minWidth: 170 }}
-          >
-            <MenuItem value="name">{'Name'}</MenuItem>
-            <MenuItem value="skus">{'SKU (whole)'}</MenuItem>
-            <MenuItem value="barcodes">{'Barcode (whole)'}</MenuItem>
-          </TextField>
           <Box sx={{ flex: 1 }} />
           <Button
             variant="contained"
@@ -979,22 +957,26 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           </Button>
           <Button
             size="small"
-            disabled={products.length === 0}
+            // Nothing matches: there is nothing for the walk to write.
+            disabled={exporting || (products.length === 0 && page === 0)}
             onClick={handleExport}
           >
-            {'Export'}
+            {exporting ? 'Exporting…' : 'Export'}
           </Button>
         </Stack>
         {/* The cap, standing rather than only on refusal (AGL-2113). The
             count is `productCount` — the site's products, the same number
-            the gate above counts — not `products.length`, which is the
-            filtered, `limit()`-ed page (AGL-1716). */}
+            the gate above counts — not `products.length`, which is one page
+            of the table's query (AGL-1716). */}
         <QuotaReadoutComponent
           ready={productQuota !== null}
           used={productCount}
           limit={productQuota?.limit ?? 0}
           noun="product"
         />
+        {/* The zone's widgets are handed the PAGE on screen — the products
+            the reader has found and is looking at. Every write the zone makes
+            asks the store for what it must not duplicate, never these rows. */}
         <ProductsHubZone
           hostId={hostId}
           products={products}
@@ -1003,56 +985,66 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           onCreated={onCatalogCreated}
         />
         <ListFilterChips
-          fields={PRODUCT_GRID_FILTER_FIELDS}
-          headers={PRODUCT_GRID_FILTER_HEADERS}
-          clauses={filterClauses}
+          fields={PRODUCT_LIST_FIELDS}
+          headers={PRODUCT_LIST_HEADERS}
+          clauses={gridFilter.clauses}
           onChange={gridFilter.setClauses}
-          options={PRODUCT_GRID_FILTER_OPTIONS}
-          servedField={servedStatus ? 'status' : null}
+          options={PRODUCT_LIST_OPTIONS}
+        />
+        <ListQueryNotices
+          refused={listQueryRefusals(plan.refused, {
+            fields: PRODUCT_LIST_FIELDS,
+            headers: PRODUCT_LIST_HEADERS,
+            options: PRODUCT_LIST_OPTIONS,
+          })}
+          notices={plan.notices}
         />
         <ListTable
           aria-label="Products"
-          rows={visibleProducts}
+          rows={products}
           columns={productColumns}
+          loading={productsStatus === 'loading'}
+          // One page of the query, turned by the footer below: the grid
+          // neither slices, filters nor sorts it.
+          hideFooter
           filterMode="server"
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
-          // The search box drives the served query above.
           quickFilter
-          // `ListPagination` below pages what the card holds.
-          hideFooter
+          // The one order the list offers, by name: the query's.
+          sortingMode="server"
+          disableColumnSorting
+          initialState={{
+            columns: {
+              columnVisibilityModel: hiddenFilterVisibility(
+                PRODUCT_LIST_FIELDS,
+                PRODUCT_VISIBLE_COLUMNS,
+              ),
+            },
+          }}
           noRowsLabel={
-            search || filterClauses.length
-              ? 'No products match these filters'
-              : 'No products yet'
+            filtering ? 'No products match these filters' : 'No products yet'
           }
           noRowsDescription={
-            search || filterClauses.length
+            filtering
               ? undefined
               : 'Build your catalog: add a product, then drop commerce ' +
                 'blocks on any screen in Besigner.'
           }
         />
-        {products.length === 0 ? null : (
+        {products.length === 0 && page === 0 && productsStatus !== 'loading' ? null : (
+          /* The count line is the PAGE's. `hasMore` is a fact from the probe
+             row; the site's total is `productCount` above, which counts the
+             whole catalog rather than the matches, so it is not this. */
           <ListPagination
             page={page}
             pageSize={pageSize}
-            rowCount={visibleProducts.length}
-            // The rows matching the current filters, which the card holds in
-            // full below the ceiling. NOT the catalog total — that is
-            // `productCount`, and it answers a different question.
-            count={products.length}
+            rowCount={products.length}
+            hasMore={hasMore}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
           />
         )}
-        {catalogTruncated ? (
-          <Alert severity="info">
-            {`This table holds ${CATALOG_CEILING} products at a time and this ` +
-              'catalog is larger. Search, and Status on its own, reach every ' +
-              'product; the CSV export covers what the table holds.'}
-          </Alert>
-        ) : null}
       </Stack>
       <Dialog
         open={Boolean(keysFor)}

@@ -37,65 +37,73 @@ import {
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import ListTable, {
   ListRowActions,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
-  inMemoryListField,
   type ListFilterClause,
+  type ListFilterOption,
+  listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection, doc, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  query,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
 import {
   DUPLICATE_MENU_LABEL,
   useConsoleHostRoute,
   useDuplicateResource,
   useFirestore,
+  useHostCampaigns,
   useHostResourceApi,
   useLiveArtifactCount,
-  usePagedCollection,
 } from '@aglyn/tenant-feature-instance'
-import { collectionPage } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  FORM_LEAD_ROUTING_OPTIONS,
+  FORM_LIST_FILTER_FIELDS,
+  FORM_LIST_FILTER_HEADERS,
+  FORM_LIST_QUERY,
+  FORM_LIST_SELECT_FIELDS,
+  FORM_STATUS_OPTIONS,
+  formListRequest,
+} from './form-list-query'
 
-/*
- * What the forms grid's Filters panel offers (AGL-3317). The list is a paged
- * listener, so a filter matches over what its window has read, which the
- * first filter widens (`usePagedRowsFilter`). Status is a hidden column
- * reading `statusKey`, whether the form is retired.
+/**
+ * The filterable columns the table shows. The rest of the declaration —
+ * Status, Lead routing, Campaign — reaches the Filters panel as hidden
+ * columns (`hiddenFilterColumns`).
  */
-const FORM_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text'),
-  inMemoryListField('slug', 'text'),
-  inMemoryListField('status', 'select', 'statusKey'),
+const FORM_VISIBLE_FILTER_COLUMNS = [
+  'displayName',
+  'slug',
+  'submissions',
+  'leads',
+  'lastSubmission',
+  'updatedAt',
 ]
-const FORM_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  displayName: 'Display name',
-  slug: 'Slug',
-  status: 'Status',
-}
-const FORM_FILTER_OPTIONS = {
-  status: [
-    { value: 'active', label: 'Active' },
-    { value: 'retired', label: 'Retired' },
-  ],
-}
-const FORM_SEARCH_FIELDS = ['displayName', 'slug'] as const
-const FORM_HIDDEN_COLUMNS = { status: false }
-
-/** A form row with the status its filter matches on. */
-const withStatusKey = (form: any) => ({
-  ...form,
-  statusKey: isFormArchived(form) ? 'retired' : 'active',
-})
+const FORM_HIDDEN_COLUMNS = hiddenFilterVisibility(
+  FORM_LIST_FILTER_FIELDS,
+  FORM_VISIBLE_FILTER_COLUMNS,
+)
 
 export interface HostFormsCardProps {
   hostId: string
@@ -189,6 +197,8 @@ export function HostFormsCard(props: HostFormsCardProps) {
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [retireError, setRetireError] = useState<string | null>(null)
+  /** Bumped by each retire or restore, so the retired count is asked again. */
+  const [retiredEpoch, setRetiredEpoch] = useState(0)
 
   /**
    * Retire a form, or put it back (AGL-2671).
@@ -213,7 +223,10 @@ export function HostFormsCard(props: HostFormsCardProps) {
       try {
         await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
           archivedAt: retired ? Date.now() : null,
+          // The mirror the list's query asks (AGL-3330).
+          retired,
         })
+        setRetiredEpoch((epoch) => epoch + 1)
       } catch {
         setRetireError(
           retired
@@ -225,91 +238,87 @@ export function HostFormsCard(props: HostFormsCardProps) {
     [firestore, hostId],
   )
 
-  /**
-   * The list PAGES, over an ordered walk.
+  /*
+   * THE LIST IS ITS QUERY (AGL-3330, on the AGL-3321 list query plan).
    *
-   * `collectionPage` holds the ordering decision and the reason it is the
-   * document id rather than `displayName` — briefly, `orderBy` matches only
-   * documents that HAVE the field, and the resources route stores an
-   * allow-list it never checks for presence, so ordering on a name would hide
-   * every form created without one rather than mis-sorting the list.
+   * The grid's Filters panel and search box edit the clauses and the words;
+   * `useListQuery` puts every one of them on ONE Firestore query and pages
+   * that query, so a page is a page of matches and a form whose only match
+   * is past the first page is still found. What one query cannot hold — a
+   * second range, a second array clause — is refused by name above the list
+   * (`ListQueryNotices`) rather than matched over the rows read. See
+   * `form-list-query.ts` for every field and the indexes they cost.
    *
-   * The page is NOT re-sorted: sorting a server-ordered window in the browser
-   * is what makes a pseudo-random sample look like the first page.
+   * Unfiltered it reads in document order, as it always has: `orderBy` on a
+   * name would drop every form stored without one rather than mis-sort it.
+   *
+   * A retired form is a TOMBSTONE, not a row, unless the reader asks for
+   * Status (AGL-2671). The query leaves them out (`retired == false`), so a
+   * page is a page of forms in use; a Status clause replaces that with the
+   * reader's own choice. Retiring a form removes it from the list, and
+   * without the Status filter that would be a one-way door: the row is the
+   * only route back to Restore.
    */
+  const [formClauses, setFormClauses] = useState<ListFilterClause[]>([])
+  const gridFilter = useListGridFilter({
+    clauses: formClauses,
+    onChange: setFormClauses,
+    selectFields: FORM_LIST_SELECT_FIELDS,
+  })
+  const filtering = gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
+  const formsCollection = useMemo(
+    () => collection(firestore, 'hosts', hostId, 'forms'),
+    [firestore, hostId],
+  )
   const {
     status,
-    data: formData,
-    rows: formWindow,
+    rows: forms,
     hasMore,
     page,
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      collectionPage(
-        collection(firestore, 'hosts', hostId, 'forms'),
-        pageLimit,
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
+    plan,
+  } = useListQuery<any>({
+    collection: formsCollection,
+    declaration: FORM_LIST_QUERY,
+    request: formListRequest(gridFilter.clauses, gridFilter.searchWords),
+    deps: [firestore, hostId],
+    idField: '$id',
+  })
+
   /*
-   * A retired form is a TOMBSTONE, not a row — unless the reader asks for the
-   * tombstones (AGL-2671). Client-side because it has to be: Firestore cannot
-   * ask for the ABSENCE of a field, so a form created through the resources
-   * route (which carries no `archivedAt` at all) and one archived later are
-   * not one value to filter on. The cost is that a tombstone spends a slot in
-   * whichever page it falls in.
+   * The Campaign filter's choices: the campaigns placed on this site, by
+   * name, and any campaign a clause names that the list does not, by its id,
+   * so the chip can still be read and cleared.
    *
-   * The Filters panel's Status is how the reader asks (AGL-3317). With no
-   * Status clause the list leaves the tombstones out, as it always has, and
-   * reads one page; a Status clause hands the panel every row the window
-   * read, retired included, and the clause itself picks which to show. That
-   * default is the absence of a clause rather than a clause the list starts
-   * with, because a starting clause would widen the window on every visit to
-   * answer a question nobody asked. Retiring a form removes it from the list,
-   * and without the Status filter that would be a one-way door: the row is
-   * the only route back to Restore.
+   * Read once the reader opens the Filters panel, not on every visit: the
+   * names cost the org lookup and up to fifty campaign documents, which a
+   * reader who came to open one form would pay for a filter they never
+   * touched. Until they land the column has no choices, and the panel lists
+   * it a moment later.
    */
-  const [formClauses, setFormClauses] = useState<ListFilterClause[]>([])
-  const askedStatus = formClauses.some((clause) => clause.field === 'status')
-  const formRows = useMemo(
-    () =>
-      formWindow
-        .filter((form: any) => askedStatus || !isFormArchived(form))
-        .map(withStatusKey),
-    [formWindow, askedStatus],
-  )
-  const formWindowRows = useMemo(
-    () =>
-      formData
-        ?.filter((form: any) => askedStatus || !isFormArchived(form))
-        .map(withStatusKey),
-    [formData, askedStatus],
-  )
-  const formFilter = usePagedRowsFilter<any>(
-    {
-      data: formWindowRows,
-      rows: formRows,
-      hasMore,
-      page,
-      setPage,
-      pageSize,
-      setPageSize,
-    },
-    {
-      fields: FORM_FILTER_FIELDS,
-      options: FORM_FILTER_OPTIONS,
-      headers: FORM_FILTER_HEADERS,
-      search: FORM_SEARCH_FIELDS,
-      clauses: formClauses,
-      onChange: setFormClauses,
-    },
-  )
-  // The rows on screen: the page, or the page of the matches.
-  const forms = formFilter.rows
+  const [wantsCampaigns, setWantsCampaigns] = useState(false)
+  const siteCampaigns = useHostCampaigns(hostId, {
+    enabled: wantsCampaigns || formClauses.some((clause) => clause.field === 'campaignIds'),
+  })
+  const formFilterOptions = useMemo<Record<string, ListFilterOption[]>>(() => {
+    const named = siteCampaigns.options.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }))
+    const unnamed = formClauses
+      .filter((clause) => clause.field === 'campaignIds')
+      .flatMap((clause) => clause.value.split(','))
+      .map((value) => value.trim())
+      .filter((value) => value && !named.some((option) => option.value === value))
+      .map((value) => ({ value, label: value }))
+    return {
+      status: FORM_STATUS_OPTIONS,
+      leadRouting: FORM_LEAD_ROUTING_OPTIONS,
+      campaignIds: [...named, ...unnamed],
+    }
+  }, [siteCampaigns.options, formClauses])
 
   /*
    * The COUNT is a server aggregate, not the length of a page. `forms` is one
@@ -317,9 +326,28 @@ export function HostFormsCard(props: HostFormsCardProps) {
    * spare on a site that is already at the ceiling.
    */
   const liveFormCount = useLiveArtifactCount(hostId, 'forms')
-  // Pending or refused, the page window stands in: a LOWER bound, never a
-  // confident zero.
-  const formsUsed = liveFormCount ?? formWindow.length
+  // Pending or refused, the page stands in: a LOWER bound, never a confident
+  // zero.
+  const formsUsed = liveFormCount ?? forms.length
+  /*
+   * How many forms are retired, for the "keep their slot" line (AGL-2674).
+   * An aggregate, because the list no longer reads a retired row unless it is
+   * asked for one; asked again after this card retires or restores a form.
+   */
+  const [retiredCount, setRetiredCount] = useState<number | null>(null)
+  useEffect(() => {
+    let active = true
+    getCountFromServer(query(formsCollection, where('retired', '==', true)))
+      .then((snapshot) => {
+        if (active) setRetiredCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // The line is a courtesy; without the count it is simply not shown.
+      })
+    return () => {
+      active = false
+    }
+  }, [formsCollection, retiredEpoch])
 
   /**
    * Name first, then create (AGL-700).
@@ -452,6 +480,25 @@ export function HostFormsCard(props: HostFormsCardProps) {
       // destructures undefined off a Date and every row renders '--'.
       valueGetter: (value: any) => value?.toDate?.() ?? null,
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
+    },
+    /*
+     * Status and Lead routing, hidden until Columns shows them (AGL-3330).
+     * Each is a select the Filters panel offers either way, and draws the
+     * choice its value names. Status reads the FACT, `archivedAt`, rather
+     * than the `retired` mirror the query asks, so a form the backfill has
+     * not reached yet still reads true.
+     */
+    {
+      field: 'status',
+      headerName: 'Status',
+      minWidth: 110,
+      valueGetter: (_value: any, row: any) => String(isFormArchived(row)),
+    },
+    {
+      field: 'leadRouting',
+      headerName: 'Lead routing',
+      minWidth: 120,
+      valueGetter: (_value: any, row: any) => String(row?.routing?.lead === true),
     },
     listActionsColumn((row: any) => {
       const form = { ...row, $id: row.$id as string }
@@ -588,12 +635,12 @@ export function HostFormsCard(props: HostFormsCardProps) {
             room back, and the number here is the number the server will
             refuse a create at.
 
-            Shown only when a retirement is actually in the loaded page: the
-            line answers a question nobody is asking on a site that has never
-            retired anything. It makes no numeric claim, because one page is a
-            lower bound on how many there are.
+            Shown only when the site has retired a form (an aggregate — the
+            list reads no retired row unless asked): the line answers a
+            question nobody is asking on a site that has never retired
+            anything.
           */}
-          {formWindow.some((form: any) => isFormArchived(form)) ? (
+          {retiredCount ? (
             <Typography variant="caption" color="text.secondary">
               {'Retired forms keep their slot'}
             </Typography>
@@ -636,20 +683,45 @@ export function HostFormsCard(props: HostFormsCardProps) {
             {retireError}
           </Alert>
         ) : null}
-        <ListFilterChips {...formFilter.chipsProps} />
-        {formFilter.filtering && hasMore ? (
-          <Typography variant="caption" color="text.secondary">
-            {`Filtering the ${formFilter.read} forms read so far — the next page reads more.`}
-          </Typography>
-        ) : null}
+        <ListFilterChips
+          fields={FORM_LIST_FILTER_FIELDS}
+          headers={FORM_LIST_FILTER_HEADERS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+          options={formFilterOptions}
+        />
+        <ListQueryNotices
+          refused={listQueryRefusals(plan.refused, {
+            fields: FORM_LIST_FILTER_FIELDS,
+            headers: FORM_LIST_FILTER_HEADERS,
+            options: formFilterOptions,
+          })}
+          notices={plan.notices}
+        />
         <ListTable
           rowHeight={TABLE_ROW_HEIGHT}
-          columns={formFilter.filterColumns(columns)}
+          columns={listFilterGridColumns(
+            columns,
+            FORM_LIST_FILTER_FIELDS,
+            formFilterOptions,
+            FORM_LIST_FILTER_HEADERS,
+          )}
           initialState={{ columns: { columnVisibilityModel: FORM_HIDDEN_COLUMNS } }}
-          // The panel and the search are the grid's; the card answers them
-          // over what its window read.
-          {...formFilter.gridProps}
-          {...(formFilter.filtering
+          /*
+           * The grid must NOT also filter. The query answers the panel and
+           * the search, so a second pass in the browser could only drop rows
+           * that already matched — it compares what a column DRAWS, and the
+           * query compares what the document stores.
+           */
+          filterMode="server"
+          filterModel={gridFilter.filterModel}
+          onFilterModelChange={gridFilter.onFilterModelChange}
+          quickFilter
+          // The Campaign filter's names are read once the panel is opened.
+          onPreferencePanelOpen={(params) => {
+            if (params.openedPanelValue === 'filters') setWantsCampaigns(true)
+          }}
+          {...(filtering
             ? { noRowsLabel: 'No forms match these filters' }
             : {
                 noRowsLabel: 'No forms yet',
@@ -671,7 +743,14 @@ export function HostFormsCard(props: HostFormsCardProps) {
           // Paged by the footer below, so the grid must not also slice.
           hideFooter
         />
-        <ListPagination {...formFilter.pagination} />
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={forms.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
         {/*
           The console's own create drawer, from the shared library rather than a
           second one that looks like it. The empty state and the header open the

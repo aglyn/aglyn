@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   checkEntitlement,
   createResourceUid,
@@ -30,6 +31,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { refreshListingQueryFields } from './listing-query-fields'
 
 /**
  * Publishes a host reusable component to the marketplace (AGL-44). Runs
@@ -174,6 +176,9 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
         artifactType: 'component',
         sourceComponentId: componentId,
         displayName: displayName.trim(),
+        // The keys a listing is searched by (AGL-3321): the template gallery's
+        // marketplace shelf asks `nameTokens` on its query.
+        ...displayNameSearchFields(displayName.trim()),
         ...(description.trim() && { description: description.trim() }),
         ...(category.trim() && { category: category.trim() }),
         priceUsd,
@@ -190,6 +195,8 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // The lists this listing appears in query by fields derived from it (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     await listingRef.collection('versions').doc(String(version)).set({
       rootId: sanitized.rootId,
       nodes: sanitized.nodes,

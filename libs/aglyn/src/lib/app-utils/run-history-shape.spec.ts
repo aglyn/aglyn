@@ -135,7 +135,11 @@ describe('run history shape (AGL-2222)', () => {
   it('every run writer records a trigger and a summary', () => {
     const thin = runWriters
       .filter(
-        ({ payload }) => !/\btrigger:/.test(payload) || !/\bsummary:/.test(payload),
+        ({ payload }) =>
+          !/\btrigger:/.test(payload) ||
+          // `runSummaryFields(…)` writes `summary` with its search tokens
+          // (AGL-3321), so a spread of it is a summary too.
+          !/\bsummary:|\brunSummaryFields\(/.test(payload),
       )
       .map(({ file }) => file)
     if (thin.length) {

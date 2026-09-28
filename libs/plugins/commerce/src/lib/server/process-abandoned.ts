@@ -37,8 +37,11 @@ import {
 } from '@aglyn/aglyn/server'
 import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 
-const REMIND_AFTER_MS = 60 * 60 * 1000
-const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000
+import {
+  CHECKOUT_GIVE_UP_AFTER_MS as GIVE_UP_AFTER_MS,
+  CHECKOUT_REMIND_AFTER_MS as REMIND_AFTER_MS,
+  type CheckoutRecoveryState,
+} from '../model/checkout-recovery'
 
 /** One pass over the open checkouts. Bounded (200) and idempotent. */
 export interface AbandonedScanResult {
@@ -130,14 +133,20 @@ export async function scanAbandonedCheckouts(
       continue
     }
     const createdAtMs = Number(data.createdAtMs ?? 0)
-    if (!data.email || data.remindedAtMs) continue
-    if (now - createdAtMs < REMIND_AFTER_MS) continue
+    // Expiry comes BEFORE the email and reminded skips. This pass reads 200
+    // open checkouts, and a checkout that never had an address, or was
+    // already reminded, used to be skipped while still `open` — forever — so
+    // enough of them would fill every pass and starve the ones still owed a
+    // reminder. Past the give-up age every open checkout closes, whatever
+    // else it is.
     if (now - createdAtMs > GIVE_UP_AFTER_MS) {
       await docSnapshot.ref
         .set({ status: 'expired' }, { merge: true })
         .catch(() => undefined)
       continue
     }
+    if (!data.email || data.remindedAtMs) continue
+    if (now - createdAtMs < REMIND_AFTER_MS) continue
     if (!entitledHosts.has(hostId)) {
       const org = await getOrgForHost(hostId).catch(() => null)
       entitledHosts.set(
@@ -244,8 +253,11 @@ export async function scanAbandonedCheckouts(
     // DELIVERED message only: a suppressed recipient produced no message, so
     // there is no cost to record.
     if (result.sent) await meterHostEmail(hostId)
+    // `recoveryState` beside it, so the console's recovery queue counts this
+    // checkout as reminded by query rather than by reading it (AGL-3321).
+    const reminded: CheckoutRecoveryState = 'reminded'
     await docSnapshot.ref
-      .set({ remindedAtMs: now }, { merge: true })
+      .set({ remindedAtMs: now, recoveryState: reminded }, { merge: true })
       .catch(() => undefined)
     if (result.sent) sent += 1
   }

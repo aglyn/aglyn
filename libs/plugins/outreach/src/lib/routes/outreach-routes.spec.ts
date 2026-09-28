@@ -516,6 +516,9 @@ describe('outreach/sequences/save (AGL-2980)', () => {
       status: 'draft',
       createdAtMs: AT,
       updatedAtMs: AT,
+      // The list's query reads these (AGL-3321).
+      nameLower: 'second locations',
+      nameTokens: expect.arrayContaining(['s', 'second', 'l', 'locations']),
     })
     expect((stored?.['steps'] as unknown[]).length).toBe(3)
     expect(activity).toEqual([
@@ -524,6 +527,18 @@ describe('outreach/sequences/save (AGL-2980)', () => {
         target: { type: 'outreach:sequence', id: body.sequence.id, name: 'Second locations' },
       },
     ])
+  })
+
+  it('restamps the list’s search fields when the name changes (AGL-3321)', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    await post(sequences().save, REP, {
+      sequenceId: saved.body.sequence.id,
+      sequence: draft({ name: 'Renewal nudge' }),
+    })
+    const stored = docs.get(org(`outreachSequences/${saved.body.sequence.id}`))
+    expect(stored?.['nameLower']).toBe('renewal nudge')
+    expect(stored?.['nameTokens']).toEqual(expect.arrayContaining(['renewal', 'nudge']))
+    expect(stored?.['nameTokens']).not.toContain('second')
   })
 
   /*
@@ -1105,6 +1120,10 @@ describe('outreach/enroll (AGL-2980)', () => {
       },
     })
     expect(typeof stored?.['nextDueAtMs']).toBe('number')
+    // What the enrollments table searches the person by (AGL-3321).
+    expect(stored?.['searchTokens']).toEqual(
+      expect.arrayContaining(['avery', 'quinn', 'example', 'example.org']),
+    )
     expect(activity.at(-1)).toEqual({
       action: 'Enrolled 1 person in a sequence',
       target: { type: 'outreach:sequence', id: sequenceId, name: 'Second locations' },

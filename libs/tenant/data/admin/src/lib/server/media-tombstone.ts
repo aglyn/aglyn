@@ -17,6 +17,7 @@
 
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { checkQuota } from '@aglyn/aglyn/server'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   removeMediaDeliveryCopies,
   withoutMediaDeliveryCopies,
@@ -549,7 +550,14 @@ export async function restoreMediaFromTombstone(options: {
       const record = fresh.data() as MediaTombstoneDoc
       // Without its delivery copy record: the delete removed those copies,
       // and a record of them would name objects that are gone (AGL-2824).
-      transaction.set(mediaRef, withoutMediaDeliveryCopies(record.media))
+      // With the library's filter keys re-derived, so a file deleted before
+      // they existed comes back findable by them (AGL-3327).
+      const media = withoutMediaDeliveryCopies(record.media)
+      transaction.set(mediaRef, {
+        ...media,
+        ...mediaFilterKeys(media as Parameters<typeof mediaFilterKeys>[0]),
+        folderId: (media as { folderId?: unknown }).folderId ?? null,
+      })
       transaction.delete(tombstoneRef)
       transaction.set(
         counterRef,

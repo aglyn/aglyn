@@ -22,6 +22,7 @@ import {
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
+import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { mdiBullhornOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -202,6 +203,8 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
     try {
       await updateDoc(doc(firestore, 'hosts', hostId, 'screens', screenId), {
         displayName: next,
+        // The keys the design lists find it by (AGL-3321).
+        ...artifactRenameListKeys('screens', next),
       })
       setNameDraft(null)
       enqueueSnackbar('Design renamed', { variant: 'success', persist: false })

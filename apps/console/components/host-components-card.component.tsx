@@ -24,8 +24,13 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { type GridColDef } from '@mui/x-data-grid'
 import {
   mdiBookmarkOutline,
@@ -62,7 +67,7 @@ import {
   marketplacePriceCostNote,
   marketplacePriceFloorHint,
 } from '@aglyn/aglyn'
-import { doc, setDoc, updateDoc } from 'firebase/firestore'
+import { collection, doc, setDoc, updateDoc } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
 import ListTable, {
@@ -81,7 +86,6 @@ import {
   useDuplicateResource,
   useFirestore,
   useHostVersionApi,
-  usePagedCollection,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -91,7 +95,11 @@ import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { hostArtifactQuery } from '../utils/host-artifact-queries'
+import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
+import {
+  COMPONENT_LIST_HEADERS,
+  COMPONENT_LIST_QUERY,
+} from '../utils/artifact-list-queries'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from './templates/save-as-template-dialog.component'
@@ -125,45 +133,19 @@ const COMPONENT_KIND_LABELS: Readonly<Record<Aglyn.ReusableComponentKind, string
 }
 
 /*
- * What the components grid's Filters panel and quick search offer
- * (AGL-3317). The list is a paged listener, so a filter matches over what
- * its window has read, which the first filter widens (`usePagedRowsFilter`).
- * "Used in" is matched on the kind the row is READ as (`kindKey`), because a
- * component stored before the field existed carries none and is a page
- * component all the same.
+ * What the components grid's Filters panel and quick search offer: every
+ * clause on the query (AGL-3321) — see `COMPONENT_LIST_QUERY`. "Used in" is
+ * the STORED kind, which every create writes and the list-keys backfill
+ * stamped on the components that predate it (`site`, the kind they were
+ * always read as).
  */
-const COMPONENT_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text'),
-  inMemoryListField('kind', 'select', 'kindKey'),
-  inMemoryListField('$id', 'text'),
-  inMemoryListField('description', 'text'),
-  inMemoryListField('updatedAt', 'date'),
-  inMemoryListField('createdAt', 'date'),
-]
-const COMPONENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  displayName: 'Display name',
-  kind: 'Used in',
-  $id: 'ID',
-  description: 'Description',
-  updatedAt: 'Updated',
-  createdAt: 'Created',
-}
 const COMPONENT_FILTER_OPTIONS = {
   kind: Aglyn.REUSABLE_COMPONENT_KINDS.map((kind) => ({
     value: kind,
     label: COMPONENT_KIND_LABELS[kind],
   })),
 }
-const COMPONENT_SEARCH_FIELDS = ['displayName', '$id', 'description'] as const
-
-/** A live component row, with the kind it is read as. */
-const componentRows = (window: readonly any[]) =>
-  window
-    .filter((definition: any) => !definition.deletedAt)
-    .map((definition: any) => ({
-      ...definition,
-      kindKey: Aglyn.reusableComponentKindOf(definition),
-    }))
+const COMPONENT_SELECT_FIELDS = Object.keys(COMPONENT_FILTER_OPTIONS)
 
 /** The count and cap a components readout renders (AGL-2501). */
 export interface ComponentQuotaReadout {
@@ -241,65 +223,64 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
    * The page is NOT re-sorted. Sorting a server-ordered window in the browser
    * is exactly what produced the old illusion.
    */
+  /*
+   * The rows the rename dialog is seeded from are unconfirmed by the server
+   * (AGL-1358). The payload here is narrow — `nodes`, `versionId` and
+   * `deletedAt` are not in it, and a plain `updateDoc` leaves them alone —
+   * but `description` and `icon` are written on every save whether or not
+   * the author opened them, and both are echoes of the seed. Against a
+   * cached read, retyping the name restores that snapshot's description
+   * and icon, which is the identity this component wears in every besigner
+   * drawer and in its marketplace listing.
+   */
+  const gridFilter = useListGridFilter({ selectFields: COMPONENT_SELECT_FIELDS })
+  const componentList = useListQuery<any>({
+    collection: hostId ? collection(firestore, 'hosts', hostId, 'components') : null,
+    declaration: COMPONENT_LIST_QUERY,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    deps: [firestore, hostId],
+    idField: '$id',
+    /*
+     * A predicate on a MUTABLE field — a name, a kind — can drop a document
+     * out of the live target mid-session, and the SDK caches that as a
+     * tombstone every other reader of the path is then served (AGL-827/929).
+     * Confirmed against the server before it is believed.
+     */
+    confirmDisappearances: true,
+  })
+  const componentsNarrowed =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
+  const componentRefusals = useMemo(
+    () =>
+      listQueryRefusals(componentList.plan.refused, {
+        fields: COMPONENT_LIST_QUERY.fields,
+        headers: COMPONENT_LIST_HEADERS,
+        options: COMPONENT_FILTER_OPTIONS,
+      }),
+    [componentList.plan],
+  )
   const {
     status: componentsStatus,
-    /**
-     * The rows the rename dialog is seeded from are unconfirmed by the server
-     * (AGL-1358). The payload here is narrow — `nodes`, `versionId` and
-     * `deletedAt` are not in it, and a plain `updateDoc` leaves them alone —
-     * but `description` and `icon` are written on every save whether or not
-     * the author opened them, and both are echoes of the seed. Against a
-     * cached read, retyping the name restores that snapshot's description
-     * and icon, which is the identity this component wears in every besigner
-     * drawer and in its marketplace listing.
-     */
     fromCache: componentsFromCache,
-    data: componentData,
-    rows: componentWindow,
     hasMore,
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) => hostArtifactQuery(firestore, hostId, 'components', pageLimit),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
+  } = componentList
   /*
    * A deleted component is a TOMBSTONE, not a row: delete stamps `deletedAt`
    * and leaves the document so already-published tenant pages keep grafting
    * until their next revalidate.
    *
-   * Client-side because it has to be. Firestore cannot ask for the ABSENCE of
-   * a field, and the two live shapes are not one value — a component created
-   * through the resources route carries no `deletedAt`, one installed from the
-   * marketplace carries an explicit `null`, so `where('deletedAt', '==', null)`
-   * would return the marketplace copies alone. The cost is that a tombstone
-   * spends a slot in whichever page it falls in, so a page can render fewer
-   * rows than its size; the walk and `hasMore` are unaffected.
+   * Dropped from the page it falls in because it has to be. Firestore cannot
+   * ask for the ABSENCE of a field, and the two live shapes are not one value
+   * — a component created through the resources route carries no
+   * `deletedAt`, one installed from the marketplace carries an explicit
+   * `null` — so `where('deletedAt', '==', null)` would return the marketplace
+   * copies alone. It is the list's scope, not a filter: every clause and
+   * search word is on the query (AGL-3321); a tombstone only spends a slot in
+   * the page it falls in.
    */
-  const components = componentWindow.filter(
-    (definition: any) => !definition.deletedAt,
-  )
-  const componentLive = useMemo(() => componentRows(componentData ?? []), [componentData])
-  const componentPage = useMemo(() => componentRows(componentWindow), [componentWindow])
-  const componentFilter = usePagedRowsFilter<any>(
-    {
-      data: componentLive,
-      rows: componentPage,
-      hasMore,
-      page,
-      setPage,
-      pageSize,
-      setPageSize,
-    },
-    {
-      fields: COMPONENT_FILTER_FIELDS,
-      options: COMPONENT_FILTER_OPTIONS,
-      headers: COMPONENT_FILTER_HEADERS,
-      search: COMPONENT_SEARCH_FIELDS,
-    },
+  const components = useMemo(
+    () => componentList.rows.filter((definition: any) => !definition.deletedAt),
+    [componentList.rows],
   )
 
   /**
@@ -427,6 +408,8 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           doc(firestore, 'hosts', hostId, 'components', editor.id),
           {
             displayName: editor.name.trim(),
+            // The keys the components list finds it by (AGL-3321).
+            ...artifactRenameListKeys('components', editor.name.trim()),
             description: editor.description.trim(),
             // Only when the dialog was opened on a component that has one or
             // the picker set one — an untouched dialog must not write
@@ -804,20 +787,31 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   return (
     <CardDisplay>
       {duplicate.dialog}
-      <ListFilterChips {...componentFilter.chipsProps} />
-      {componentFilter.filtering && hasMore ? (
-        <Typography variant="caption" color="text.secondary">
-          {`Filtering the ${componentFilter.read} components read so far — the next page reads more.`}
-        </Typography>
-      ) : null}
+      <ListFilterChips
+        fields={COMPONENT_LIST_QUERY.fields}
+        headers={COMPONENT_LIST_HEADERS}
+        clauses={gridFilter.clauses}
+        onChange={gridFilter.setClauses}
+        options={COMPONENT_FILTER_OPTIONS}
+      />
+      <ListQueryNotices refused={componentRefusals} notices={componentList.plan.notices} />
       <ListTable
         aria-label="Reusable components"
         rowHeight={TABLE_ROW_HEIGHT}
-        columns={componentFilter.filterColumns(columns)}
+        columns={listFilterGridColumns(
+          columns,
+          COMPONENT_LIST_QUERY.fields,
+          COMPONENT_FILTER_OPTIONS,
+          COMPONENT_LIST_HEADERS,
+        )}
         // A filtered-to-nothing list says so; the empty state and its way
         // out are for a site that has no components at all.
-        {...(componentFilter.filtering
-          ? { noRowsLabel: 'No components match these filters' }
+        {...(componentsNarrowed
+          ? {
+              noRowsLabel: hasMore
+                ? 'No components match on this page — the next one has more'
+                : 'No components match these filters',
+            }
           : {
               noRowsLabel: 'No reusable components yet',
               noRowsDescription:
@@ -838,7 +832,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                   </Stack>
                 ) : null,
             })}
-        rows={componentFilter.rows}
+        rows={components}
         // The whole row opens the detail page (AGL-2501); the action cluster
         // stops propagation so a menu click never navigates underneath it.
         onOpen={(id) =>
@@ -858,11 +852,22 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         loading={componentsStatus === 'loading'}
         // Paged by the footer below, so the grid must not also slice.
         hideFooter
-        // The panel and the search are the grid's; the card answers them
-        // over what its window read (AGL-3317).
-        {...componentFilter.gridProps}
+        // The panel and the search are the grid's; the QUERY answers them
+        // (AGL-3321), so the grid filters and sorts nothing.
+        filterMode="server"
+        filterModel={gridFilter.filterModel}
+        onFilterModelChange={gridFilter.onFilterModelChange}
+        quickFilter
+        disableColumnSorting
       />
-      <ListPagination {...componentFilter.pagination} />
+      <ListPagination
+        page={componentList.page}
+        pageSize={componentList.pageSize}
+        rowCount={components.length}
+        hasMore={hasMore}
+        onPageChange={componentList.setPage}
+        onPageSizeChange={componentList.setPageSize}
+      />
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}

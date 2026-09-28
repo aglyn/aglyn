@@ -1,0 +1,30 @@
+{
+  "$comment": "Worked examples for giftCardSearchTokens (libs/plugins/commerce/src/lib/model/gift-card-search.ts) and its restatement in tools/scripts/backfill-gift-card-search-tokens.mjs. Both assert these; change one only with the other (AGL-3321).",
+  "cases": [
+    {
+      "name": "a purchased card with an address",
+      "code": "GC-A1B2C3D4E5F6",
+      "recipientEmail": "Jane.Doe@Acme.com",
+      "expected": [
+        "g", "gc", "gc-", "gc-a", "gc-a1", "gc-a1b", "gc-a1b2", "gc-a1b2c", "gc-a1b2c3", "gc-a1b2c3d", "gc-a1b2c3d4", "gc-a1b2c3d4e",
+        "a", "a1", "a1b", "a1b2", "a1b2c", "a1b2c3", "a1b2c3d", "a1b2c3d4", "a1b2c3d4e", "a1b2c3d4e5", "a1b2c3d4e5f", "a1b2c3d4e5f6",
+        "j", "ja", "jan", "jane", "jane.", "jane.d", "jane.do", "jane.doe", "jane.doe@", "jane.doe@a", "jane.doe@ac", "jane.doe@acm",
+        "ac", "acm", "acme", "acme.", "acme.c", "acme.co", "acme.com",
+        "@", "@a", "@ac", "@acm", "@acme", "@acme.", "@acme.c", "@acme.co", "@acme.com",
+        "d", "do", "doe", "c", "co", "com"
+      ]
+    },
+    {
+      "name": "a card issued by hand with no address",
+      "code": "GC-00FF",
+      "recipientEmail": null,
+      "expected": ["g", "gc", "gc-", "gc-0", "gc-00", "gc-00f", "gc-00ff", "0", "00", "00f", "00ff"]
+    },
+    {
+      "name": "no code, no address",
+      "code": "",
+      "recipientEmail": "",
+      "expected": []
+    }
+  ]
+}

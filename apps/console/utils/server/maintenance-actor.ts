@@ -43,6 +43,7 @@ import {
 import { invalidIdTokenResponse } from '../../app/api/_lib/invalid-id-token-response'
 import { isCronAuthorized } from '../cron-auth'
 import type { MaintenanceJobDescriptor } from '../maintenance-jobs'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export interface MaintenanceActor {
   uid: string
@@ -104,7 +105,7 @@ export async function recordStaffMaintenanceRun(
   reason: string,
 ): Promise<void> {
   try {
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: actor.uid,
       action: job.auditAction,
       target: job.path,

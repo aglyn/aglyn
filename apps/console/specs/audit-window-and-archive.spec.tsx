@@ -120,8 +120,8 @@ const queries: any[][] = []
 let mockRows: any[] = []
 
 /*==========================================
- * A Firestore double that ANSWERS the constraints: equalities and `in`,
- * ranges on `at`, the order, the cursor and the limit. An unordered query is
+ * A Firestore double that ANSWERS the constraints: equalities, `in` and
+ * `array-contains`, ranges on `at`, the order, the cursor and the limit. An unordered query is
  * answered in document-id order, as Firestore answers it.
  *=========================================*/
 const mockServe = (constraints: any[]) => {
@@ -134,6 +134,9 @@ const mockServe = (constraints: any[]) => {
         return bound.op === '>=' ? seconds(row) >= edge : seconds(row) < edge
       }
       if (bound.op === 'in') return bound.value.includes(row[bound.field])
+      if (bound.op === 'array-contains') {
+        return Array.isArray(row[bound.field]) && row[bound.field].includes(bound.value)
+      }
       return row[bound.field] === bound.value
     })
   }
@@ -182,6 +185,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
 }))
 
+import { withAdminAuditIndex } from '@aglyn/aglyn/app-utils/admin-audit-index'
 import AdminAudit from '../app/(app)/admin/audit/page'
 
 /** Seconds, as Firestore hands a `Timestamp` to the browser. */
@@ -316,13 +320,15 @@ describe('the audit log filters its QUERY (AGL-3321)', () => {
     expect(constraint('startAfter')).toHaveLength(0)
   })
 
-  it('searches the whole log, reading batches until a page is full', async () => {
-    // One match per twenty entries, so a page of three spans several batches
-    // and page one on screen holds none of the later ones.
-    mockRows = rows(200).map((row, index) => ({
-      ...row,
-      actorEmail: index % 20 === 0 ? `auditor${index}@aglyn.com` : row.actorEmail,
-    }))
+  it('searches the whole log on the query, by the tokens every writer stamps', async () => {
+    // One match per twenty entries, so page one of the unfiltered log holds
+    // one of them and the rest are pages away.
+    mockRows = rows(200).map((row, index) =>
+      withAdminAuditIndex({
+        ...row,
+        actorEmail: index % 20 === 0 ? `auditor${index}@aglyn.com` : row.actorEmail,
+      }),
+    )
     render(<AdminAudit />)
     await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
     act(() => {
@@ -333,14 +339,15 @@ describe('the audit log filters its QUERY (AGL-3321)', () => {
       () => expect(targetsOnScreen()).toEqual(matches.slice(0, 10).map((row) => row.target)),
       { timeout: 3000 },
     )
-    // Batches larger than a page, and never a filter the query cannot serve.
-    expect(constraint('limit')[0].count).toBe(100)
-    expect(constraint('where')).toEqual([])
-    expect(screen.getByText(/each page looks through up to 500 entries/)).toBeTruthy()
+    // One word on the query, a page read, and nothing matched in memory.
+    expect(constraint('where')).toEqual([
+      { kind: 'where', field: 'searchTokens', op: 'array-contains', value: 'auditor' },
+    ])
+    expect(constraint('limit')[0].count).toBe(11)
   })
 
-  it('a search the page cannot fill says there is more rather than ending', async () => {
-    mockRows = rows(600)
+  it('a search that matches nothing says so, with no next page', async () => {
+    mockRows = rows(600).map((row) => withAdminAuditIndex(row))
     render(<AdminAudit />)
     await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
     act(() => {
@@ -350,8 +357,8 @@ describe('the audit log filters its QUERY (AGL-3321)', () => {
       () => expect(screen.getByText('No audit entries match these filters')).toBeTruthy(),
       { timeout: 3000 },
     )
-    // 500 read, 100 left: the walk stopped at its budget, not at the end.
-    expect((screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled).toBe(false)
+    // The query answered for the whole log: there is no "more" to walk to.
+    expect((screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled).toBe(true)
   })
 })
 

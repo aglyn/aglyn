@@ -18,9 +18,13 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -36,6 +40,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
+import useStaffListQuery from '../hooks/use-staff-list-query'
+import {
+  ERASURE_FILTER_FIELDS,
+  ERASURE_FILTER_HEADERS,
+  ERASURE_FILTER_OPTIONS,
+  ERASURE_SEARCH_HINT,
+  ERASURE_SELECT_FIELDS,
+} from '../utils/pending-erasures-list-query'
+import StaffListPaginationControls from './staff-list-pagination.component'
 
 /**
  * The erasure queue: see it, and run it (AGL-2165).
@@ -72,11 +85,11 @@ interface PendingErasure {
   due: boolean
 }
 
-interface PendingResponse {
-  pending: PendingErasure[]
+/** The figures over the whole queue, from `?view=summary`. */
+interface QueueSummary {
+  queued: number
   dueCount: number
   maxPerRun: number
-  truncated: boolean
   /**
    * The PEOPLE waiting (AGL-2623) — erasure requests a workspace admin filed
    * for one person, drained by the same run. Null when the count could not
@@ -91,41 +104,46 @@ interface RunResponse {
   scanned: number
 }
 
-/*
- * What the queue's grid filters and searches by. The card holds the whole
- * window the route read (it says when that window is short), so both answer
- * over every row of it.
- */
-const ERASURE_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('due', 'select', 'state'),
-]
-const ERASURE_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'Organization',
-  due: 'State',
-}
-const ERASURE_FILTER_OPTIONS = {
-  due: [
-    { value: 'due', label: 'Due' },
-    { value: 'holding', label: 'Holding' },
-  ],
-}
-const ERASURE_SEARCH_PATHS = ['name', 'slug', 'orgId']
-
 const formatWhen = (ms: number | null): string =>
   ms ? new Date(ms).toLocaleString() : '—'
 
 export function PendingErasuresCard() {
   const { data: user } = useUser()
-  const [pending, setPending] = useState<PendingResponse | null>(null)
+  const [pending, setPending] = useState<QueueSummary | null>(null)
   const [ran, setRan] = useState<RunResponse | null>(null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  /*
+   * The queue, every Filters-panel clause and the search word SERVED by the
+   * route on one query (AGL-3321), oldest request first; each page the
+   * footer turns is a page of the narrowed queue. See
+   * `utils/pending-erasures-list-query.ts`.
+   */
+  const gridFilter = useListGridFilter({ selectFields: ERASURE_SELECT_FIELDS })
+  const onListError = useCallback(
+    (listError: unknown) =>
+      setError(
+        listError instanceof Error && listError.message
+          ? listError.message
+          : 'The erasure queue could not be read',
+      ),
+    [],
+  )
+  const queue = useStaffListQuery<PendingErasure>({
+    endpoint: '/api/admin/run-erasures',
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+    onError: onListError,
+  })
+  const { refresh: refreshQueue } = queue
+
   const call = useCallback(
     async (method: 'GET' | 'POST', body?: unknown) => {
-      const response = await authorizedFetch(user, '/api/admin/run-erasures', {
+      const path =
+        method === 'GET' ? '/api/admin/run-erasures?view=summary' : '/api/admin/run-erasures'
+      const response = await authorizedFetch(user, path, {
         method,
         headers: {
           ...(body ? { 'Content-Type': 'application/json' } : {}),
@@ -145,13 +163,18 @@ export function PendingErasuresCard() {
     setBusy(true)
     setError(null)
     try {
-      setPending((await call('GET')) as PendingResponse)
+      setPending((await call('GET')) as QueueSummary)
     } catch (refreshError) {
       setError(String((refreshError as Error).message))
     } finally {
       setBusy(false)
     }
   }, [call])
+
+  const reload = useCallback(async () => {
+    refreshQueue()
+    await refresh()
+  }, [refresh, refreshQueue])
 
   // GET is read-only since AGL-2165 (it used to be an alias for POST and
   // ERASED), so loading the queue on mount is safe — and a queue you have to
@@ -169,48 +192,21 @@ export function PendingErasuresCard() {
       })) as RunResponse
       setRan(result)
       setReason('')
-      await refresh()
+      await reload()
     } catch (runError) {
       setError(String((runError as Error).message))
     } finally {
       setBusy(false)
     }
-  }, [call, reason, refresh])
+  }, [call, reason, reload])
 
   const dueCount = pending?.dueCount ?? 0
   const peopleWaiting = pending?.people?.pending ?? 0
   const reasonTooShort = reason.trim().length < 8
-  /**
-   * "at least", or nothing at all.
-   *
-   * Both chips are counted over the window the route returns, so once the
-   * probe finds a request past it they are lower bounds — and a lower bound
-   * printed as a total is the defect on a queue whose whole purpose is saying
-   * how much statutory work is outstanding. Keyed on the probe rather than on
-   * the window's length, because a queue of exactly the ceiling is complete
-   * and its numbers are exact.
-   */
-  const countPrefix = pending?.truncated ? 'at least ' : ''
 
   /* One row grammar, the console's (AGL-2501). */
-  const erasureRows = useMemo(
-    () =>
-      (pending?.pending ?? []).map((row) => ({
-        ...row,
-        state: row.due ? 'due' : 'holding',
-      })),
-    [pending],
-  )
-  const erasureFilter = useListRowsFilter({
-    rows: erasureRows,
-    fields: ERASURE_FILTER_FIELDS,
-    options: ERASURE_FILTER_OPTIONS,
-    headers: ERASURE_FILTER_HEADERS,
-    search: ERASURE_SEARCH_PATHS,
-  })
-  const { filterColumns } = erasureFilter
   const erasureColumns: GridColDef[] = useMemo(
-    () => filterColumns([
+    () => listFilterGridColumns([
       {
         field: 'name',
         headerName: 'Organization',
@@ -253,10 +249,9 @@ export function PendingErasuresCard() {
           />
         ),
       },
-    ]),
-    [filterColumns],
+    ], ERASURE_FILTER_FIELDS, ERASURE_FILTER_OPTIONS, ERASURE_FILTER_HEADERS),
+    [],
   )
-
 
   return (
     <CardDisplay
@@ -284,15 +279,13 @@ export function PendingErasuresCard() {
         {error ? <Alert severity="warning">{error}</Alert> : null}
 
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          {/* Counted over the whole queue, not the page on screen. */}
           <Chip
             size="small"
             color={dueCount > 0 ? 'warning' : 'default'}
-            label={`${countPrefix}${dueCount} due now`}
+            label={`${dueCount} due now`}
           />
-          <Chip
-            size="small"
-            label={`${countPrefix}${pending?.pending.length ?? 0} in the queue`}
-          />
+          <Chip size="small" label={`${pending?.queued ?? 0} in the queue`} />
           {/*
             The people beside the workspaces: a person's request has no hold
             and runs with the next scheduled run, so the number is the whole
@@ -307,48 +300,70 @@ export function PendingErasuresCard() {
               } waiting`}
             />
           ) : null}
-          <Button size="small" disabled={busy} onClick={() => void refresh()}>
+          <Button size="small" disabled={busy} onClick={() => void reload()}>
             {busy ? 'Working…' : 'Refresh'}
           </Button>
         </Stack>
 
-        {/* A cap that is not stated reads as a total. */}
-        {pending?.truncated ? (
-          <Alert severity="info">
-            {'More requests are queued than are listed here — this is a ' +
-              'floor, not the total.'}
-          </Alert>
-        ) : null}
-
-        {pending && pending.pending.length > 0 ? (
+        {pending && pending.queued === 0 && !queue.filtering ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Nothing queued.'}
+          </Typography>
+        ) : pending ? (
           <>
-          <ListFilterChips {...erasureFilter.chipsProps} />
-          <ListTable
-            aria-label="Pending erasures"
-            rows={erasureFilter.rows}
-            columns={erasureColumns}
-            {...erasureFilter.gridProps}
-            noRowsLabel="No requests match these filters"
-            getRowId={(row: any) => row.orgId}
-            /*
-             * The grid's own footer, which is the console's one footer
-             * (AGL-2501). The rows are a WINDOW the route already read in
-             * full, so the page is a client slice and the count is exact for
-             * what this card holds — the alert above says when the window
-             * itself is short.
-             *
-             * A row here has no detail page of its own, which is why nothing
-             * navigates. That is a statement about the ROW and was never a
-             * reason to withhold the pager: this queue is longest exactly
-             * when a statutory deadline is being missed, and the rows past
-             * the tenth were drawn by nothing and reachable by nothing.
-             */
-            rowHeight={TABLE_ROW_HEIGHT}
-          />
+            <ListFilterChips
+              fields={ERASURE_FILTER_FIELDS}
+              headers={ERASURE_FILTER_HEADERS}
+              options={ERASURE_FILTER_OPTIONS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+            />
+            <ListQueryNotices
+              refused={listQueryRefusals(queue.refused, {
+                fields: ERASURE_FILTER_FIELDS,
+                headers: ERASURE_FILTER_HEADERS,
+                options: ERASURE_FILTER_OPTIONS,
+              })}
+              notices={queue.notices}
+            />
+            {gridFilter.searchWords.join('').trim() ? (
+              <Typography variant="caption" color="text.secondary">
+                {ERASURE_SEARCH_HINT}
+              </Typography>
+            ) : null}
+            <ListTable
+              aria-label="Pending erasures"
+              rows={queue.rows}
+              columns={erasureColumns}
+              loading={queue.loading}
+              filterMode="server"
+              quickFilter
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              noRowsLabel="No requests match these filters"
+              getRowId={(row: PendingErasure) => row.orgId}
+              rowHeight={TABLE_ROW_HEIGHT}
+              /*
+               * One page of a cursor walk, turned by the console's shared
+               * footer below. This queue is longest exactly when a statutory
+               * deadline is being missed, which is when a fixed window would
+               * hide the requests past it.
+               *
+               * A row here has no detail page of its own, which is why
+               * nothing navigates. That is a statement about the ROW and was
+               * never a reason to withhold the pager.
+               */
+              hideFooter
+            />
+            <StaffListPaginationControls
+              pagination={queue}
+              shown={queue.rows.length}
+              sizeMenu={false}
+            />
           </>
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {pending ? 'Nothing queued.' : 'Loading…'}
+            {'Loading…'}
           </Typography>
         )}
 

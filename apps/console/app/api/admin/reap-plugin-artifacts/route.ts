@@ -35,6 +35,7 @@ import {
   artifactClaimKey,
   planArtifactReap,
 } from '../../../../utils/server/reap-plugin-artifacts'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * This job's console descriptor (AGL-1949) — the confirmation phrase and the
@@ -228,18 +229,16 @@ async function handler(request: Request): Promise<Response> {
         await bucket.file(name).delete({ ignoreNotFound: true })
         deleted += 1
       }
-      await firestore
-        .collection('adminAudit')
-        .add({
-          actorUid: 'system:cron',
-          action: 'plugins.artifacts.reap',
-          target: `gs://${bucketName}`,
-          after: {
-            deleted: plan.toDelete,
-            bytesFreed: plan.bytesToFree,
-          },
-          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firestore, {
+        actorUid: 'system:cron',
+        action: 'plugins.artifacts.reap',
+        target: `gs://${bucketName}`,
+        after: {
+          deleted: plan.toDelete,
+          bytesFreed: plan.bytesToFree,
+        },
+        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
         .catch(() => undefined)
     }
 

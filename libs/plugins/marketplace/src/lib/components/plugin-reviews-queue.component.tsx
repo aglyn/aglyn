@@ -16,9 +16,13 @@
  */
 'use client'
 
-import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { PageHeaderHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {
   Alert,
   Chip,
@@ -33,6 +37,10 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { reviewStatusMeaning } from '../model/plugin-review-status'
+import {
+  REVIEW_QUEUE_QUERY,
+  type ReviewQueueSection,
+} from '../model/listing-query'
 
 interface QueueRow {
   listingId: string
@@ -73,6 +81,33 @@ const STATUS_FILTERS = [
   { value: 'hidden', label: 'Taken down' },
 ]
 
+/** How the queue's clauses read in a refusal. */
+const QUEUE_HEADERS: Readonly<Record<string, string>> = {
+  reviewStatus: 'Status',
+  takenDown: 'Taken down',
+}
+const QUEUE_OPTIONS = {
+  reviewStatus: STATUS_FILTERS.filter(
+    (option) => option.value !== 'all' && option.value !== 'hidden',
+  ),
+}
+
+/** Rows per page of each section. */
+const QUEUE_PAGE = 50
+/** How long the search box waits for typing to stop before it asks again. */
+const SEARCH_SETTLE_MS = 300
+
+const NO_MORE: Record<ReviewQueueSection, boolean> = {
+  queue: false,
+  listed: false,
+  verification: false,
+}
+const FIRST_PAGES: Record<ReviewQueueSection, number> = {
+  queue: 0,
+  listed: 0,
+  verification: 0,
+}
+
 /**
  * Staff marketplace review index (AGL-961).
  *
@@ -81,6 +116,15 @@ const STATUS_FILTERS = [
  * on the detail page. The previous version stacked all of it inline, which
  * meant the most destructive controls in the platform sat as same-weight
  * text buttons in a wall of caption text.
+ *
+ * The search box and the Status select are served by the route's QUERY
+ * (AGL-3321): each section asks Firestore for its rows with the status and
+ * the searched name word on it, so a plugin past the first hundred is found.
+ * They used to be matched here over the hundred the route had read. Search
+ * reads the listing name; a refusal or a one-word notice from the plan is
+ * shown above the sections. Each section pages: the route reads every section
+ * out to the furthest page asked plus one row, which is how a section knows
+ * there is a next page (the window `usePagedCollection` reads, over a route).
  */
 export function PluginReviewsQueue({ basePath }: { basePath: string }) {
   const { data: user } = useUser()
@@ -93,10 +137,38 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [asked, setAsked] = useState('')
   const [status, setStatus] = useState('all')
+  const [pages, setPages] =
+    useState<Record<ReviewQueueSection, number>>(FIRST_PAGES)
+  /** Every section is read out to the furthest page any of them is on. */
+  const limit = QUEUE_PAGE * (Math.max(...Object.values(pages)) + 1)
+  const [more, setMore] = useState<Record<ReviewQueueSection, boolean>>(NO_MORE)
+  const [refused, setRefused] = useState<
+    Array<{ clause: ListFilterClause | 'search'; reason: string }>
+  >([])
+  const [notices, setNotices] = useState<string[]>([])
+
+  // The search is asked once typing settles, not per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setAsked(search.trim()), SEARCH_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [search])
+  // A new question starts from the first page.
+  useEffect(() => {
+    setPages(FIRST_PAGES)
+  }, [asked, status])
 
   const refresh = useCallback(async () => {
-    const response = await authorizedFetch(user, '/api/marketplace/admin/reviews')
+    const params = new URLSearchParams()
+    if (asked) params.set('q', asked)
+    if (status !== 'all') params.set('status', status)
+    params.set('limit', String(limit))
+    const suffix = params.toString()
+    const response = await authorizedFetch(
+      user,
+      `/api/marketplace/admin/reviews${suffix ? `?${suffix}` : ''}`,
+    )
     const payload = await response.json().catch(() => ({}))
     if (response.ok) {
       setLoadError(null)
@@ -104,6 +176,9 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
       setListed(payload?.listed ?? [])
       setVerificationRequests(payload?.verificationRequests ?? [])
       setPublishers(payload?.publishers ?? {})
+      setMore({ ...NO_MORE, ...(payload?.more ?? {}) })
+      setRefused(payload?.refused ?? [])
+      setNotices(payload?.notices ?? [])
     } else {
       // Named, not swallowed. An empty queue and a queue that could not be
       // read look identical, and only one of them means there is no work.
@@ -112,7 +187,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
       )
     }
     setLoaded(true)
-  }, [user])
+  }, [user, asked, status, limit])
 
   useEffect(() => {
     if (user) void refresh()
@@ -123,32 +198,43 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
     [publishers],
   )
 
-  // One predicate for both sections, so a search never means two things.
-  const matches = useCallback(
-    (row: { displayName: string; listingId: string; profileId: string; reviewStatus: string; hidden: boolean }) => {
-      const term = search.trim().toLowerCase()
-      if (
-        term &&
-        ![row.displayName, row.listingId, publisherName(row.profileId)].some(
-          (field) => String(field).toLowerCase().includes(term),
-        )
-      ) {
-        return false
-      }
-      if (status === 'all') return true
-      if (status === 'hidden') return row.hidden
-      return row.reviewStatus === status
-    },
-    [search, status, publisherName],
+  // Every section is already what the query answered: nothing is matched
+  // here, only the page on screen sliced out of the window read.
+  const pageOf = <T,>(section: ReviewQueueSection, rows: T[]): T[] =>
+    rows.slice(pages[section] * QUEUE_PAGE, (pages[section] + 1) * QUEUE_PAGE)
+  const visibleQueue = pageOf('queue', queue)
+  const visibleListed = pageOf('listed', listed)
+  const visibleVerification = pageOf('verification', verificationRequests)
+  const total: Record<ReviewQueueSection, number> = {
+    queue: queue.length,
+    listed: listed.length,
+    verification: verificationRequests.length,
+  }
+  const filtering = asked.length > 0 || status !== 'all'
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(refused, {
+        fields: REVIEW_QUEUE_QUERY.fields,
+        headers: QUEUE_HEADERS,
+        options: QUEUE_OPTIONS,
+      }),
+    [refused],
   )
-
-  const visibleQueue = useMemo(() => queue.filter(matches), [queue, matches])
-  const visibleListed = useMemo(() => listed.filter(matches), [listed, matches])
-  const visibleVerification = useMemo(
-    () => verificationRequests.filter(matches),
-    [verificationRequests, matches],
-  )
-  const filtering = search.trim().length > 0 || status !== 'all'
+  const pager = (section: ReviewQueueSection, shown: number) => {
+    const hasMore =
+      total[section] > (pages[section] + 1) * QUEUE_PAGE || more[section]
+    return pages[section] > 0 || hasMore ? (
+      <ListPagination
+        page={pages[section]}
+        pageSize={QUEUE_PAGE}
+        rowCount={shown}
+        hasMore={hasMore}
+        onPageChange={(page) =>
+          setPages((previous) => ({ ...previous, [section]: page }))
+        }
+      />
+    ) : null
+  }
 
   const row = (
     key: string,
@@ -210,7 +296,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
             >
               <TextField
                 size="small"
-                placeholder="Search name, publisher or listing id"
+                placeholder="Search plugin names"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 sx={{ minWidth: 320 }}
@@ -233,6 +319,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
             {loadError ? (
               <Alert severity="error">{loadError}</Alert>
             ) : null}
+            <ListQueryNotices refused={refusals} notices={notices} />
 
             {!loaded ? (
               <Stack spacing={2}>
@@ -251,7 +338,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                     nothing on the common day. */}
                 {visibleVerification.length ? (
                   <CardDisplay
-                    header={`Verification requested (${visibleVerification.length})`}
+                    header={`Verification requested (${total.verification}${more.verification ? '+' : ''})`}
                     help={pluginDocsHelp('publisherHandbook', {
                       anchor: '#asking-to-be-verified',
                       excerpt:
@@ -297,11 +384,12 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                           'Awaiting a verification decision',
                         ),
                       )}
+                      {pager('verification', visibleVerification.length)}
                     </Stack>
                   </CardDisplay>
                 ) : null}
                 <CardDisplay
-                  header={`Awaiting review (${visibleQueue.length})`}
+                  header={`Awaiting review (${total.queue}${more.queue ? '+' : ''})`}
                   help={pluginDocsHelp('manifestAndEnvs', {
                     anchor: '#review--trust-lifecycle',
                     excerpt:
@@ -360,6 +448,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                           entry.priceUsd > 0 ? `$${entry.priceUsd}` : 'Free',
                         ),
                       )}
+                      {pager('queue', visibleQueue.length)}
                     </Stack>
                   ) : (
                     <Alert severity={filtering ? 'info' : 'success'}>
@@ -371,7 +460,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                 </CardDisplay>
 
                 <CardDisplay
-                  header={`Listed plugins (${visibleListed.length})`}
+                  header={`Listed plugins (${total.listed}${more.listed ? '+' : ''})`}
                   help={pluginDocsHelp('publisherHandbook', {
                     anchor: '#review-what-happens-after-you-publish',
                     excerpt:
@@ -444,6 +533,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                           }${entry.hidden && entry.hiddenReason ? ` · ${entry.hiddenReason}` : ''}`,
                         ),
                       )}
+                      {pager('listed', visibleListed.length)}
                     </Stack>
                   ) : (
                     <Alert severity="info">

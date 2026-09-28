@@ -28,8 +28,6 @@ import { useListGridFilter } from './use-list-grid-filter'
 const owner: ListFilterClause = { field: 'ownerUid', op: 'equals', value: 'u1' }
 /** A clause that narrows the loaded page, so it may stand beside a served one. */
 const NO_NEXT_ACTIVITY: ListFilterClause = { field: 'nextActivityAt', op: 'isEmpty', value: '' }
-const isNoNextActivity = (clause: ListFilterClause) =>
-  clause.field === NO_NEXT_ACTIVITY.field && clause.op === NO_NEXT_ACTIVITY.op
 
 function setup(initial: ListFilterClause[], extra: { single?: boolean } = {}) {
   let clauses = initial
@@ -41,7 +39,6 @@ function setup(initial: ListFilterClause[], extra: { single?: boolean } = {}) {
       clauses,
       onChange,
       selectFields: ['ownerUid', 'stage'],
-      keepAlongside: isNoNextActivity,
       ...extra,
     }),
   )
@@ -85,13 +82,10 @@ describe('useListGridFilter', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('on a single-clause list replaces the served clause, and keeps "No next activity" beside it', () => {
+  it('on a single-clause list replaces every other clause with the new one', () => {
     const { change, current } = setup([owner, NO_NEXT_ACTIVITY], { single: true })
     change([{ id: 'list', field: 'stage', operator: 'is', value: 'lead' }])
-    expect(current()).toEqual([
-      NO_NEXT_ACTIVITY,
-      { field: 'stage', op: 'equals', value: 'lead' },
-    ])
+    expect(current()).toEqual([{ field: 'stage', op: 'equals', value: 'lead' }])
   })
 
   it('holds its own clauses when the list passes none', () => {

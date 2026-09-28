@@ -102,6 +102,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         }),
       }),
       firestore: {
+        // The plan's translator names the document id; these reads never use it.
+        FieldPath: { documentId: () => '__name__' },
         Timestamp: {
           fromMillis: (millis: number) => ({ toMillis: () => millis }),
         },

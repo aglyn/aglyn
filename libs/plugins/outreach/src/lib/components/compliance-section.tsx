@@ -29,7 +29,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { composeOutreachFooter } from '../engine/compose'
 import {
   outreachComplianceSettingsEqual,
@@ -65,10 +65,50 @@ const EMPTY: OutreachComplianceSettings = {
   allowedCountries: ['US'],
 }
 
+type ComplianceCardKey = 'identity' | 'countries'
+
+/**
+ * The page's cards and the settings each one owns. Every card saves only its
+ * own fields onto what is stored, so saving the countries never commits a
+ * half-edited sender identity, and the other way round.
+ */
+const CARDS: Record<
+  ComplianceCardKey,
+  { fields: readonly (keyof OutreachComplianceSettings)[]; saved: string }
+> = {
+  identity: {
+    fields: ['legalName', 'brandName', 'postalAddress'],
+    saved: 'Sender identity saved.',
+  },
+  countries: {
+    fields: ['allowedCountries'],
+    saved: 'Allowed countries saved.',
+  },
+}
+
+function pickCard(
+  settings: OutreachComplianceSettings,
+  card: ComplianceCardKey,
+): Partial<OutreachComplianceSettings> {
+  return Object.fromEntries(
+    CARDS[card].fields.map((field) => [field, settings[field]]),
+  )
+}
+
+function cardEqual(
+  card: ComplianceCardKey,
+  a: OutreachComplianceSettings,
+  b: OutreachComplianceSettings,
+): boolean {
+  return outreachComplianceSettingsEqual({ ...b, ...pickCard(a, card) }, b)
+}
+
 /**
  * Sequences → Compliance (AGL-2980): who every email says sent it, the
  * countries a sequence may send to at all, and — below the settings, with
- * no Save of its own — the domains no sequence emails (AGL-3244).
+ * no Save of its own — the domains no sequence emails (AGL-3244). Each
+ * settings card saves its own fields from its header, the console's place
+ * for a card's actions (AGL-3333).
  *
  * The footer is previewed from what is typed, by the engine's own
  * `composeOutreachFooter`, so the page shows the lines every email will end
@@ -83,15 +123,30 @@ export function OutreachComplianceSection(
   const loaded = useOutreachComplianceSettings(api, orgId)
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState<OutreachComplianceSettings>(EMPTY)
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving] = useState<ComplianceCardKey | null>(null)
   const [serverIssues, setServerIssues] = useState<
     Partial<Record<OutreachComplianceField, string>>
   >({})
   const countries = useMemo(() => outreachCountryOptions(), [])
 
   const stored = loaded.settings
+  const previousStored = useRef<OutreachComplianceSettings | null>(null)
   useEffect(() => {
-    if (stored) setForm({ ...stored })
+    if (!stored) return
+    const before = previousStored.current
+    previousStored.current = stored
+    // A fresh read replaces every card the member has not touched; a card
+    // with unsaved edits keeps them, so saving one card never wipes another.
+    setForm((current) => {
+      if (!before) return { ...stored }
+      let next: OutreachComplianceSettings = { ...stored }
+      for (const card of Object.keys(CARDS) as ComplianceCardKey[]) {
+        if (!cardEqual(card, current, before)) {
+          next = { ...next, ...pickCard(current, card) }
+        }
+      }
+      return next
+    })
   }, [stored])
 
   const { settings: normalized, issues } =
@@ -99,32 +154,62 @@ export function OutreachComplianceSection(
   const fieldIssue = (field: OutreachComplianceField) =>
     serverIssues[field] ??
     issues.find((issue) => issue.field === field)?.message
-  const dirty = stored
-    ? !outreachComplianceSettingsEqual(stored, normalized)
-    : false
+  /** What saving one card would store: its own fields over the stored rest. */
+  const candidate = (card: ComplianceCardKey) =>
+    validateOutreachComplianceSettings(
+      stored ? { ...stored, ...pickCard(form, card) } : form,
+    )
+  const cardDirty = (card: ComplianceCardKey) =>
+    stored
+      ? !outreachComplianceSettingsEqual(stored, candidate(card).settings)
+      : false
+  const cardBlocked = (card: ComplianceCardKey) =>
+    candidate(card).issues.some((issue) =>
+      (CARDS[card].fields as readonly string[]).includes(issue.field),
+    )
   const footer = composeOutreachFooter(normalized)
   const set = (field: keyof OutreachComplianceSettings) => (value: string) => {
-    setServerIssues({})
+    setServerIssues((previous) => {
+      const next = { ...previous }
+      delete next[field as OutreachComplianceField]
+      return next
+    })
     setForm((previous) => ({ ...previous, [field]: value }))
   }
 
-  const save = async () => {
-    setSaving(true)
+  const clearIssues = (card: ComplianceCardKey) =>
+    setServerIssues((previous) => {
+      const next = { ...previous }
+      for (const field of CARDS[card].fields) {
+        delete next[field as OutreachComplianceField]
+      }
+      return next
+    })
+
+  const discard = (card: ComplianceCardKey) => {
+    clearIssues(card)
+    if (stored)
+      setForm((previous) => ({ ...previous, ...pickCard(stored, card) }))
+  }
+
+  const save = async (card: ComplianceCardKey) => {
+    setSaving(card)
     try {
-      const answer = await api.saveSettings(normalized)
-      setServerIssues({})
-      setForm({ ...answer.settings })
+      const answer = await api.saveSettings(candidate(card).settings)
+      clearIssues(card)
+      setForm((previous) => ({
+        ...previous,
+        ...pickCard(answer.settings, card),
+      }))
       loaded.reload()
-      enqueueSnackbar(
-        answer.changed ? 'Compliance settings saved.' : 'Nothing changed.',
-        {
-          variant: answer.changed ? 'success' : 'info',
-        },
-      )
+      enqueueSnackbar(answer.changed ? CARDS[card].saved : 'Nothing changed.', {
+        variant: answer.changed ? 'success' : 'info',
+      })
     } catch (error) {
       if (error instanceof OutreachRouteError && error.issues.length) {
-        setServerIssues(
-          Object.fromEntries(
+        setServerIssues((previous) => ({
+          ...previous,
+          ...Object.fromEntries(
             error.issues
               .filter(
                 (
@@ -136,14 +221,14 @@ export function OutreachComplianceSection(
               )
               .map((issue) => [issue.field, issue.message]),
           ),
-        )
+        }))
       }
       enqueueSnackbar((error as Error).message, {
         variant: 'error',
         allowDuplicate: true,
       })
     } finally {
-      setSaving(false)
+      setSaving(null)
     }
   }
 
@@ -169,11 +254,36 @@ export function OutreachComplianceSection(
       },
   )
 
+  const cardActions = (card: ComplianceCardKey) => {
+    const dirty = cardDirty(card)
+    return (
+      <Stack direction="row" spacing={1}>
+        <Button
+          size="small"
+          variant="text"
+          disabled={!dirty || saving !== null}
+          onClick={() => discard(card)}
+        >
+          Discard changes
+        </Button>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={!dirty || saving !== null || cardBlocked(card)}
+          onClick={() => void save(card)}
+        >
+          {saving === card ? 'Saving…' : 'Save'}
+        </Button>
+      </Stack>
+    )
+  }
+
   return (
     <Stack spacing={2}>
       <CardDisplay
         header="Sender identity"
         help={pluginDocsHelp('sequences', { anchor: '#compliance-settings' })}
+        HeaderProps={{ action: cardActions('identity') }}
         contentGutterX
         contentGutterY
       >
@@ -251,6 +361,7 @@ export function OutreachComplianceSection(
       <CardDisplay
         header="Allowed countries"
         help={pluginDocsHelp('sequences', { anchor: '#allowed-countries' })}
+        HeaderProps={{ action: cardActions('countries') }}
         contentGutterX
         contentGutterY
       >
@@ -269,7 +380,7 @@ export function OutreachComplianceSection(
             getOptionLabel={(option) => option.name}
             isOptionEqualToValue={(option, value) => option.code === value.code}
             onChange={(_event, next) => {
-              setServerIssues({})
+              clearIssues('countries')
               setForm((previous) => ({
                 ...previous,
                 allowedCountries: next.map((option) => option.code),
@@ -295,31 +406,7 @@ export function OutreachComplianceSection(
         </Stack>
       </CardDisplay>
 
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={1}
-        sx={{ justifyContent: 'flex-end' }}
-      >
-        <Button
-          variant="text"
-          disabled={!dirty || saving}
-          onClick={() => {
-            setServerIssues({})
-            if (stored) setForm({ ...stored })
-          }}
-        >
-          Discard changes
-        </Button>
-        <Button
-          variant="contained"
-          disabled={!dirty || saving || issues.length > 0}
-          onClick={() => void save()}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-      </Stack>
-
-      {/* Its own list, saved as it is edited (AGL-3244): no Save above it. */}
+      {/* Its own list, saved as it is edited (AGL-3244): it has no Save. */}
       <OutreachDoNotContactDomainsCard orgId={orgId} />
     </Stack>
   )

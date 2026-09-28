@@ -18,6 +18,7 @@
  */
 
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
+import { outreachDomainSearchTokens } from '../model/do-not-contact-domain-list-query'
 import {
   addOutreachDoNotContact,
   addOutreachDoNotContactDomain,
@@ -247,7 +248,16 @@ describe('the domain list (AGL-3244)', () => {
       enrollmentId: 'enr-1',
       sequenceId: 'seq-1',
       detail: '550 permanent failure for one or more recipients (the address:blocked)',
+      // What the domains list searches it by (AGL-3321): the domain, each
+      // label, and the words of the detail.
+      searchTokens: outreachDomainSearchTokens({
+        domain: 'kcorp.kendal.org',
+        detail: '550 permanent failure for one or more recipients (the address:blocked)',
+      }),
     })
+    expect(docs.get(domainPath('kcorp.kendal.org'))?.['searchTokens']).toEqual(
+      expect.arrayContaining(['kcorp', 'kendal', 'kendal.org', 'permanent']),
+    )
   })
 
   it('keeps the first entry, and refuses what is not a domain or has no member behind it', async () => {

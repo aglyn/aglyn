@@ -22,6 +22,44 @@ import StaffUserEmailHistoryCard, {
   type StaffEmailDeliveryRow,
 } from '../components/staff-user-email-history-card.component'
 
+/*
+ * The card reads its page from `/api/admin/users/email-history` through the
+ * shared staff list hook (AGL-3321); this suite is about how a page LOOKS, so
+ * the hook hands back the page each case names.
+ */
+const mockPage: {
+  rows: Array<StaffEmailDeliveryRow & { $id: string }>
+  failed: boolean
+  hasMore: boolean
+} = { rows: [], failed: false, hasMore: false }
+
+jest.mock('../hooks/use-staff-list-query', () => ({
+  __esModule: true,
+  useStaffListQuery: () => ({
+    rows: mockPage.rows,
+    failed: mockPage.failed,
+    hasMore: mockPage.hasMore,
+    loading: false,
+    filtering: false,
+    refused: [],
+    notices: [],
+    pageIndex: 0,
+    pageSize: 10,
+    setPageSize: () => undefined,
+    loadPage: async () => undefined,
+    refresh: () => undefined,
+    showRows: () => undefined,
+  }),
+}))
+
+/** The card over one page of rows, as the route would answer it. */
+function card(rows: StaffEmailDeliveryRow[], options: { failed?: boolean; hasMore?: boolean } = {}) {
+  mockPage.rows = rows.map((row) => ({ ...row, $id: `key/${row.messageId}` }))
+  mockPage.failed = options.failed ?? false
+  mockPage.hasMore = options.hasMore ?? false
+  return <StaffUserEmailHistoryCard uid="uid-1" address={ROW.to} />
+}
+
 /**
  * THE DELIVERY TABLE'S LAYOUT.
  *
@@ -66,7 +104,7 @@ const rowsOf = (count: number): StaffEmailDeliveryRow[] =>
 describe('the delivery table', () => {
   it('gives the sender its own column instead of stacking it under the subject', () => {
     render(
-      <StaffUserEmailHistoryCard rows={[ROW]} lookupFailed={false} address={ROW.to} />,
+      card([ROW]),
     )
 
     // A column, not a second line: stacking was what forced the row height up,
@@ -81,7 +119,7 @@ describe('the delivery table', () => {
 
   it('draws every column the card promises', () => {
     render(
-      <StaffUserEmailHistoryCard rows={[ROW]} lookupFailed={false} address={ROW.to} />,
+      card([ROW]),
     )
     for (const name of ['Message', 'Sender', 'Sent', 'Status', 'Opens', 'Clicks']) {
       expect(screen.getByRole('columnheader', { name })).toBeTruthy()
@@ -90,7 +128,7 @@ describe('the delivery table', () => {
 
   it('keeps rows to a single line', () => {
     render(
-      <StaffUserEmailHistoryCard rows={[ROW]} lookupFailed={false} address={ROW.to} />,
+      card([ROW]),
     )
     // The grid pins each row to the configured height. Asserted because the
     // default (52px) is sized for stacked cells, and every cell here is one
@@ -104,18 +142,13 @@ describe('the delivery table', () => {
     expect(grid.style.getPropertyValue('--DataGrid-headerHeight')).toBe('44px')
   })
 
-  it('paginates rather than drawing every row at once', () => {
-    render(
-      <StaffUserEmailHistoryCard
-        rows={rowsOf(14)}
-        lookupFailed={false}
-        address={ROW.to}
-      />,
-    )
-    // The shared console footer, not a wall of rows: this is what `ListTable`
-    // is for, and the hand-rolled MUI table it replaced had neither.
+  it('pages rather than drawing every message at once', () => {
+    render(card(rowsOf(10), { hasMore: true }))
+    // The shared console footer over one page the route read, not a wall of
+    // rows: the next page is a read, offered only when there is one.
     expect(screen.getByText('Rows per page:')).toBeTruthy()
     expect(document.querySelectorAll('[role="row"][data-id]')).toHaveLength(10)
+    expect((screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled).toBe(false)
   })
 
   /*
@@ -127,7 +160,7 @@ describe('the delivery table', () => {
    */
   it('centres every cell so text and chips sit on one line', () => {
     render(
-      <StaffUserEmailHistoryCard rows={[ROW]} lookupFailed={false} address={ROW.to} />,
+      card([ROW]),
     )
     const cell = document.querySelector(
       '[data-field="status"][role="gridcell"]',
@@ -139,7 +172,7 @@ describe('the delivery table', () => {
 
   it('renders Sent through a formatter, so the grid owns its layout', () => {
     render(
-      <StaffUserEmailHistoryCard rows={[ROW]} lookupFailed={false} address={ROW.to} />,
+      card([ROW]),
     )
     // A formatter leaves the grid to draw the text, which is what puts it on
     // the same line as every other plain cell; a custom node opts out of that
@@ -151,11 +184,7 @@ describe('the delivery table', () => {
 
   it('sorts Sent on the timestamp, not on its formatted text', () => {
     render(
-      <StaffUserEmailHistoryCard
-        rows={rowsOf(3)}
-        lookupFailed={false}
-        address={ROW.to}
-      />,
+      card(rowsOf(3)),
     )
     // A formatted date sorts alphabetically — "Aug" before "Dec" before
     // "Jan" — so the column has to carry the number and format only at render.
@@ -167,14 +196,14 @@ describe('the delivery table', () => {
   describe('the states that are not a table', () => {
     it('separates a failed read from an empty one', () => {
       const { rerender } = render(
-        <StaffUserEmailHistoryCard rows={[]} lookupFailed address={ROW.to} />,
+        card([], { failed: true }),
       )
       // The distinction the card exists to preserve: one of these means "we
       // never emailed them" and the other means "we cannot tell".
       expect(screen.getByRole('alert').textContent).toContain('could not be read')
 
       rerender(
-        <StaffUserEmailHistoryCard rows={[]} lookupFailed={false} address={ROW.to} />,
+        card([]),
       )
       expect(screen.queryByRole('alert')).toBeNull()
       expect(
@@ -184,7 +213,7 @@ describe('the delivery table', () => {
 
     it('says an empty table is not proof nothing was sent', () => {
       render(
-        <StaffUserEmailHistoryCard rows={[]} lookupFailed={false} address={ROW.to} />,
+        card([]),
       )
       expect(
         screen.getByText(/not proof that nothing was sent/),

@@ -56,6 +56,7 @@ import {
   type SendingDomainDisposition,
   type TeardownSendingDomainDriver,
 } from './sending-domain-debt'
+import { addAdminAudit } from './admin-audit-write'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -1216,23 +1217,19 @@ async function recordErasureFailure(entry: {
   before: { hosts: number; members: number }
   after: Record<string, unknown>
 }): Promise<void> {
-  await firebaseAdmin
-    .app()
-    .firestore()
-    .collection('adminAudit')
-    .add({
-      actorUid: entry.actorUid,
-      action: 'org.erase-failed',
-      target: `orgs/${entry.orgId}`,
-      before: entry.before,
-      after: {
-        failedStep: entry.step,
-        error: errorLabel(entry.error),
-        requestedAt: entry.requestedAt,
-        ...entry.after,
-      },
-      at: FieldValue.serverTimestamp(),
-    })
+  await addAdminAudit(firebaseAdmin.app().firestore(), {
+    actorUid: entry.actorUid,
+    action: 'org.erase-failed',
+    target: `orgs/${entry.orgId}`,
+    before: entry.before,
+    after: {
+      failedStep: entry.step,
+      error: errorLabel(entry.error),
+      requestedAt: entry.requestedAt,
+      ...entry.after,
+    },
+    at: FieldValue.serverTimestamp(),
+  })
     .catch((auditError) => {
       console.error(
         `eraseOrg: could not record the failed attempt for ${entry.orgId}`,
@@ -1550,22 +1547,20 @@ export async function eraseOrg(
   // The proof of erasure, and now the only record of it: actor, action,
   // target, the request it fulfilled, the inventory found and what each sweep
   // destroyed. Ids and counts — never the content (AGL-1443).
-  await firestore
-    .collection('adminAudit')
-    .add({
-      actorUid,
-      action: 'org.erased',
-      target: `orgs/${orgId}`,
-      before,
-      after: {
-        requestedAt: requestedMs,
-        // What stood in for a request, when nothing did (AGL-2585). Absent on
-        // every ordinary erasure, so its presence is the whole flag.
-        ...(withoutRequest ? { withoutRequest: withoutRequest.reason } : {}),
-        ...progress,
-      },
-      at: FieldValue.serverTimestamp(),
-    })
+  await addAdminAudit(firestore, {
+    actorUid,
+    action: 'org.erased',
+    target: `orgs/${orgId}`,
+    before,
+    after: {
+      requestedAt: requestedMs,
+      // What stood in for a request, when nothing did (AGL-2585). Absent on
+      // every ordinary erasure, so its presence is the whole flag.
+      ...(withoutRequest ? { withoutRequest: withoutRequest.reason } : {}),
+      ...progress,
+    },
+    at: FieldValue.serverTimestamp(),
+  })
     .catch(() => undefined)
 
   return { ok: true, ...progress, hosts: hosts.size, members: members.size }
@@ -2100,26 +2095,24 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
     incomplete: addressSet.incomplete,
   }
 
-  await firestore
-    .collection('adminAudit')
-    .add({
-      actorUid: 'system:erase-user',
-      action: 'user.erased',
-      target: `users/${uid}`,
-      before: { orgs: candidates.length },
-      after: {
-        subcollections,
-        authRecord,
-        photo,
-        profile,
-        supportMessagesRedacted,
-        plugins,
-        emailDeliveries,
-        emailIdentityIndex,
-        addressSweep,
-      },
-      at: FieldValue.serverTimestamp(),
-    })
+  await addAdminAudit(firestore, {
+    actorUid: 'system:erase-user',
+    action: 'user.erased',
+    target: `users/${uid}`,
+    before: { orgs: candidates.length },
+    after: {
+      subcollections,
+      authRecord,
+      photo,
+      profile,
+      supportMessagesRedacted,
+      plugins,
+      emailDeliveries,
+      emailIdentityIndex,
+      addressSweep,
+    },
+    at: FieldValue.serverTimestamp(),
+  })
     .catch(() => undefined)
 
   return {

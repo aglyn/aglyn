@@ -36,11 +36,32 @@ import {
 } from '../../_lib/success-manager'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { SUPPORT_TICKET_LIST_QUERY } from '../../../../utils/support-ticket-list-query'
+import {
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../utils/server/staff-list-query'
 
 // lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
 // "contact support", and a locked member doing so is the happy path.
 
 const MAX_BODY = 5000
+
+/**
+ * One ticket as a list shows it. Timestamps do not survive JSON as anything
+ * a client can read (AGL-1103), so every one is converted here, once, for
+ * every list that returns tickets.
+ */
+function ticketRow(doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  return {
+    $id: doc.id,
+    ...doc.data(),
+    createdAt: doc.get('createdAt')?.toMillis?.() ?? null,
+    updatedAt: doc.get('updatedAt')?.toMillis?.() ?? null,
+    responseDueAt: doc.get('responseDueAt')?.toMillis?.() ?? null,
+    firstRespondedAt: doc.get('firstRespondedAt')?.toMillis?.() ?? null,
+  }
+}
 
 /**
  * Support tickets (AGL-142): paid subscribers open tickets and thread
@@ -176,6 +197,33 @@ async function handler(request: Request): Promise<Response> {
           })),
         }, { status: 200 })
       }
+      /**
+       * THE STAFF QUEUE (AGL-3321): every organization's tickets, the Status
+       * clause on the Firestore query and the queue paged by a cursor in
+       * its own order (`utils/support-ticket-list-query.ts`) — the staff
+       * list wire, so nothing is narrowed over a window of tickets already
+       * read. `view=openCount` is the header's count, its own count query
+       * over the whole queue.
+       */
+      const view = String(query['view'] ?? '')
+      if (isStaff && view === 'openCount') {
+        const open = await ticketsRef.where('status', '==', 'open').count().get()
+        return Response.json({ open: Number(open.data().count ?? 0) }, { status: 200 })
+      }
+      if (isStaff && view === 'queue') {
+        const listRequest = readStaffListQuery(query)
+        if (!listRequest) {
+          return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+        }
+        const page = await runStaffListQuery({
+          firestore,
+          collection: ticketsRef,
+          declaration: SUPPORT_TICKET_LIST_QUERY,
+          request: listRequest,
+          row: ticketRow,
+        })
+        return Response.json(page, { status: 200 })
+      }
       if (!isStaff && !orgId) return Response.json({ tickets: [] }, { status: 200 })
       const listQuery = isStaff
         ? ticketsRef.orderBy('updatedAt', 'desc').limit(100)
@@ -192,14 +240,7 @@ async function handler(request: Request): Promise<Response> {
         : null
       return Response.json({
         successManager,
-        tickets: snapshot.docs.map((doc) => ({
-          $id: doc.id,
-          ...doc.data(),
-          createdAt: doc.get('createdAt')?.toMillis?.() ?? null,
-          updatedAt: doc.get('updatedAt')?.toMillis?.() ?? null,
-          responseDueAt: doc.get('responseDueAt')?.toMillis?.() ?? null,
-          firstRespondedAt: doc.get('firstRespondedAt')?.toMillis?.() ?? null,
-        })),
+        tickets: snapshot.docs.map(ticketRow),
       }, { status: 200 })
     }
 

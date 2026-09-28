@@ -1,4 +1,5 @@
 import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 /**
  * @license
  * Copyright 2026 Aglyn LLC
@@ -186,16 +187,14 @@ async function handler(request: Request): Promise<Response> {
       await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
     }
 
-    await firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'host.set-subdomain',
-        target: `hosts/${hostId}`,
-        before: { subdomain: previous },
-        after: { subdomain },
-        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firestore, {
+      actorUid: decoded.uid,
+      action: 'host.set-subdomain',
+      target: `hosts/${hostId}`,
+      before: { subdomain: previous },
+      after: { subdomain },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     // The OLD label still resolves to this host until its alias entry is

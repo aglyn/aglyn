@@ -26,12 +26,18 @@
  * counting only the VISIBLE orders would hide a running deadline behind a
  * status the merchant happened to select.
  *
+ * The list and the banner are each a QUERY (AGL-3321): `useListQuery` is the
+ * contract's double, answering each plan over the stamped fixture orders the
+ * way Firestore would, so the banner is proven to be its own `disputeKey ==
+ * 'open'` query rather than a count over the rows on screen.
+ *
  * `Date.now` is stubbed rather than the timers faked — MUI's Tooltip schedules
  * a real `setTimeout` and fake timers would deadlock the hover assertion.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import HostOrdersCard from './host-orders-card.component'
+import { orderListFields } from '../../model/order-list-fields'
 
 /*
  * The real grid, with its props kept so a case can set a filter the way the
@@ -63,8 +69,18 @@ const pickFilter = (field: string, value: string) =>
     }),
   )
 
-/** Swapped per case, keyed by collection name. */
+/** Swapped per case: the host's orders, as the writers stamp them. */
 let orderDocs: Array<Record<string, unknown>> = []
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(() => orderDocs, options),
+  }
+})
 
 /** Settled, unentitled — the tiles stay off and the table still renders. */
 const ORG_PLAN = { org: { plan: 'starter' }, ready: true }
@@ -90,9 +106,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
    */
   useOrgPlan: () => ORG_PLAN,
   useUser: () => ({ data: { uid: 'uid-admin', getIdToken: jest.fn() } }),
-  useFirestoreCollection: (build: () => { __collection?: string }) => ({
-    data: build()?.__collection === 'orders' ? orderDocs : [],
-  }),
+  // The product picker; the orders come through the list query's double.
+  useFirestoreCollection: () => ({ data: [] }),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -101,6 +116,7 @@ jest.mock('firebase/firestore', () => ({
   }),
   limit: () => ({}),
   orderBy: () => ({}),
+  where: () => ({}),
   documentId: () => '__name__',
   query: (ref: unknown) => ref,
 }))
@@ -144,13 +160,15 @@ const wonDispute = {
   reversedCents: 0,
 }
 
+/** An order as the writers leave it, newest first by its id's letter. */
 const order = (
   id: string,
   name: string,
   extra: Record<string, unknown> = {},
-) => ({
+) => stamp({
   $id: id,
   status: 'paid',
+  createdAtMs: NOW - id.charCodeAt(0) * 60_000,
   customerEmail: `${id}@example.com`,
   lineItems: [{ productId: 'p1', name, quantity: 1, unitAmountCents: 6200 }],
   totals: {
@@ -164,6 +182,10 @@ const order = (
   timeline: [],
   ...extra,
 })
+
+function stamp(row: Record<string, unknown>) {
+  return { ...row, ...orderListFields(row, String(row.$id)) }
+}
 
 beforeEach(() => {
   jest.spyOn(Date, 'now').mockReturnValue(NOW)
@@ -251,9 +273,19 @@ describe('the orders list surfaces an open dispute (AGL-1796)', () => {
     render(<HostOrdersCard hostId="host-1" />)
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'kettle' } })
     await waitFor(() => expect(rowNames()).toEqual(['Kettle']))
-    expect(screen.getByRole('alert').textContent).toContain('in 3 days')
-    pickFilter('productIds', 'p1')
-    expect(screen.getByText('No orders match these filters')).toBeTruthy()
+    expect(screen.getAllByRole('alert')[0].textContent).toContain('in 3 days')
+    // The search holds the query's one array clause, so Product beside it is
+    // refused by name rather than matched over the rows the search returned.
+    act(() =>
+      mockGrid.onFilterModelChange({
+        items: [{ id: 'panel', field: 'productIds', operator: 'isAnyOf', value: ['p1'] }],
+        quickFilterValues: mockGrid.filterModel.quickFilterValues,
+      }),
+    )
+    expect(
+      screen.getByText(/^Product is any of p1 is not applied: cannot be combined with the search/),
+    ).toBeTruthy()
+    expect(rowNames()).toEqual(['Kettle'])
   })
 
   it('filters to the open disputes from the banner itself', () => {

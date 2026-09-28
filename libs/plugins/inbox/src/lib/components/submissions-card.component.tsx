@@ -42,25 +42,25 @@ import {
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
-  inMemoryListField,
-  type ListFilterClause,
+  type ListFilterOption,
+  listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useFirestore,
-  useFirestoreCollection,
-  usePagedCollection,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   Avatar,
   Box,
@@ -86,7 +86,6 @@ import {
   orderBy,
   query,
   updateDoc,
-  where,
 } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -96,56 +95,29 @@ import {
   senderHue,
   submissionSender,
 } from '../model/submission-presenter'
+import {
+  FORM_SCOPED_SUBMISSION_LIST_QUERY,
+  ORG_SUBMISSION_LIST_QUERY,
+  SUBMISSION_FILTER_HEADERS,
+  SUBMISSION_LIST_QUERY,
+  SUBMISSION_READ_OPTIONS,
+  formSubmissionBase,
+  orgSubmissionBase,
+} from '../constants/list-queries'
 import { orgSiteName } from './inbox-org-sites'
 import SubmissionListAssignment from './submission-list-assignment.component'
 import SubmissionReply from './submission-reply.component'
 import { useRecordRouteContext } from './use-record-route-context'
 
-/*
- * What the submissions grid's Filters panel offers (AGL-3317).
- *
- * Form is SERVED: its clause is the query's `where('formId', '==')`, so it
- * reaches every submission to that form, and the rows are not matched
- * against it again. It is offered only where a site's catalog is read — not
- * on a card scoped to one form, and not across every site. The rest match
- * over what the paged window has read, which the first filter widens
- * (`usePagedRowsFilter`): From and Message (as the columns draw them), Read
- * (`readKey`), and Site on the organization's Inbox.
- */
-const FORM_FIELD: ListFilterField = {
-  ...inMemoryListField('formId', 'select'),
-  operators: ['equals'],
-}
-const SUBMISSION_BASE_FIELDS = [
-  inMemoryListField('from', 'text', 'senderLabel'),
-  inMemoryListField('message', 'text', 'messageText'),
-  inMemoryListField('read', 'select', 'readKey'),
-]
-const SUBMISSION_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  from: 'From',
-  message: 'Message',
-  read: 'Read',
-  formId: 'Form',
-  hostId: 'Site',
-}
-const READ_OPTIONS = [
-  { value: 'unread', label: 'Unread' },
-  { value: 'read', label: 'Read' },
-]
-const SUBMISSION_SEARCH_FIELDS = ['senderLabel', 'formName', 'messageText'] as const
+/** Read, Form and Site are picked, so the panel shows selects. */
+const SUBMISSION_SELECT_FIELDS = ['read', 'formId', 'hostId']
 const SUBMISSION_HIDDEN_COLUMNS = { read: false, formId: false }
-/** The one clause the query serves. */
-const servedByQuery = (clause: ListFilterClause) => clause.field === 'formId'
 
-/** A submission with the derived values its filters and search read. */
-const withFilterValues = (submission: any) => ({
-  ...submission,
-  senderLabel: submissionSender(submission.fields).label,
-  messageText: Object.entries(submission.fields ?? {})
+/** Every field of a message, as one line — what the Message column draws. */
+const messageTextOf = (submission: any): string =>
+  Object.entries(submission?.fields ?? {})
     .map(([key, value]) => `${key}: ${value}`)
-    .join(' · '),
-  readKey: submission.read ? 'read' : 'unread',
-})
+    .join(' · ')
 
 /**
  * The Submissions section of the Inbox (AGL-77/104/109 → AGL-395): the form
@@ -265,33 +237,40 @@ export function SubmissionsCard({
         ),
     [formDocs],
   )
+  /** Form is offered where the site's catalog is read. */
+  const offersForm = !scoped && Boolean(hostId) && forms.length > 0
   /*
-   * The panel's clauses, held here because the Form clause is the query's.
-   * No clause is "All forms"; a Form clause narrows to one form's
-   * submissions.
+   * WHAT THIS CARD'S LIST CAN BE ASKED (AGL-3321) — every clause and the
+   * search on the query, see `SUBMISSION_LIST_QUERY`:
    *
-   * `formFilter` is a PRIMITIVE, deliberately: `usePagedCollection` reopens
-   * its listener when a dep changes, and an object identity would tear down
-   * and reopen on every render. It also resets the reader to page 1, which
-   * is what switching subjects should do.
+   *   - a site's Inbox: From, Read and — where the site has forms — Form;
+   *   - a card scoped to one form: that form is the list's own scope, and
+   *     Form has nothing left to pick, so it is not offered. The scope wins
+   *     over any clause: it is the base, and no clause can reach it;
+   *   - every site's, on the organization's Inbox: From, Read and Site,
+   *     under the `orgId` clause the rules require of the group read.
    */
-  const [clauses, setClauses] = useState<ListFilterClause[]>([])
-  const formFilter =
-    clauses.find((clause) => clause.field === 'formId' && clause.op === 'equals')
-      ?.value || null
-  /**
-   * The form the query is actually narrowed to.
-   *
-   * The scope wins over the panel rather than seeding it. A scoped card
-   * offers no Form filter, so a `formFilter` that could outrank `formId`
-   * would be a filter with no control — reachable only by a state change
-   * nothing on screen can cause, and unclearable if one ever could.
-   */
-  const activeForm = formId ?? formFilter
+  const declaration = useMemo<ListQueryDeclaration>(() => {
+    if (scoped) return FORM_SCOPED_SUBMISSION_LIST_QUERY
+    if (hostId == null) return ORG_SUBMISSION_LIST_QUERY
+    return offersForm
+      ? SUBMISSION_LIST_QUERY
+      : {
+          ...SUBMISSION_LIST_QUERY,
+          fields: SUBMISSION_LIST_QUERY.fields.filter((field) => field.column !== 'formId'),
+        }
+  }, [scoped, hostId, offersForm])
+  const base = useMemo(
+    () =>
+      formId ? formSubmissionBase(formId) : hostId == null && orgId ? orgSubmissionBase(orgId) : [],
+    [formId, hostId, orgId],
+  )
+  const gridFilter = useListGridFilter({ selectFields: SUBMISSION_SELECT_FIELDS })
 
   /*
    * The inbox WALKS its submissions instead of sampling them (AGL-2501,
-   * AGL-2292).
+   * AGL-2292), and every filter and search word is a predicate on the walk
+   * (AGL-3321), so a page is a page of the matches.
    *
    * `limit(200)` carried no `orderBy`, so Firestore answered it in
    * DOCUMENT-ID order over ids `add()` generates — an arbitrary two hundred
@@ -306,67 +285,38 @@ export function SubmissionsCard({
    * that creates one and stamps `createdAt: serverTimestamp()` on every add,
    * the v1 API only ever reads and deletes, and `formSubmissions` is absent
    * from `IMPORTABLE_FIELDS`, so no restore path can make one without it.
+   *
+   * EVERY SITE'S SUBMISSIONS IN ONE QUERY on the organization's Inbox
+   * (AGL-3303), not a listener per site: the collection group, newest first.
+   * The `orgId` clause is not a filter this card could drop. The rules admit
+   * a group read only when it is narrowed to an org the reader spans, so an
+   * unfiltered group query is refused outright. Every submission carries
+   * `orgId`: the submit route stamps it, and the rows written before it did
+   * were stamped once (AGL-3303). A row without one would be in no
+   * organization's list, though its own site's Inbox lists it either way.
    */
   const {
-    data: submissionData,
-    rows: submissionRows,
+    rows: submissions,
     hasMore: hasMoreSubmissions,
     page: submissionPage,
     setPage: setSubmissionPage,
     pageSize: submissionPageSize,
     setPageSize: setSubmissionPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      hostId
-        ? query(
-            collection(firestore, 'hosts', hostId, 'formSubmissions'),
-            // Served by the `formId ASC, createdAt DESC` composite index in
-            // `cloud/firebase-firestore.indexes.json`, which must be deployed
-            // before this ships — without it Firestore refuses the query
-            // rather than answering it slowly.
-            ...(activeForm ? [where('formId', '==', activeForm)] : []),
-            orderBy('createdAt', 'desc'),
-            limit(pageLimit),
-          )
-        : orgId
-          ? query(
-              /*
-               * EVERY SITE'S SUBMISSIONS IN ONE BOUNDED QUERY (AGL-3303), not
-               * a listener per site: the same page-plus-probe window, over
-               * the collection group, newest first.
-               *
-               * The `orgId` clause is not a filter this card could drop. The
-               * rules admit a group read only when it is narrowed to an org
-               * the reader spans, so an unfiltered group query is refused
-               * outright. Served by the `orgId ASC, createdAt DESC`
-               * COLLECTION_GROUP index. Every submission carries `orgId`: the
-               * submit route stamps it, and the rows written before it did
-               * were stamped once (AGL-3303). A row without one would be in no
-               * organization's list, though its own site's Inbox lists it
-               * either way.
-               */
-              collectionGroup(firestore, 'formSubmissions'),
-              where('orgId', '==', orgId),
-              orderBy('createdAt', 'desc'),
-              limit(pageLimit),
-            )
-          : null,
-    [firestore, hostId, orgId, activeForm],
-    { idField: '$id' },
-  )
-  /** Form is offered where the site's catalog is read. */
-  const offersForm = !scoped && Boolean(hostId) && forms.length > 0
-  const submissionFields = useMemo(
-    () => [
-      ...SUBMISSION_BASE_FIELDS,
-      ...(offersForm ? [FORM_FIELD] : []),
-      ...(hostId == null ? [inMemoryListField('hostId', 'select')] : []),
-    ],
-    [offersForm, hostId],
-  )
-  const submissionOptions = useMemo(
+    plan,
+  } = useListQuery<any>({
+    collection: hostId
+      ? collection(firestore, 'hosts', hostId, 'formSubmissions')
+      : orgId
+        ? collectionGroup(firestore, 'formSubmissions')
+        : null,
+    declaration,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords, base },
+    deps: [firestore, hostId, orgId],
+    idField: '$id',
+  })
+  const submissionOptions = useMemo<Readonly<Record<string, readonly ListFilterOption[]>>>(
     () => ({
-      read: READ_OPTIONS,
+      read: SUBMISSION_READ_OPTIONS,
       ...(offersForm
         ? {
             formId: forms.map((form: any) => ({
@@ -386,41 +336,22 @@ export function SubmissionsCard({
     }),
     [offersForm, forms, hostId, orgMount],
   )
-  const submissionWindow = useMemo(
-    () => submissionData?.map(withFilterValues),
-    [submissionData],
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: declaration.fields,
+        headers: SUBMISSION_FILTER_HEADERS,
+        options: submissionOptions,
+      }),
+    [plan.refused, declaration, submissionOptions],
   )
-  const submissionPageRows = useMemo(
-    () => submissionRows.map(withFilterValues),
-    [submissionRows],
-  )
-  const submissionFilter = usePagedRowsFilter<any>(
-    {
-      data: submissionWindow,
-      rows: submissionPageRows,
-      hasMore: hasMoreSubmissions,
-      page: submissionPage,
-      setPage: setSubmissionPage,
-      pageSize: submissionPageSize,
-      setPageSize: setSubmissionPageSize,
-    },
-    {
-      fields: submissionFields,
-      options: submissionOptions,
-      headers: SUBMISSION_FILTER_HEADERS,
-      search: SUBMISSION_SEARCH_FIELDS,
-      served: servedByQuery,
-      clauses,
-      onChange: setClauses,
-    },
-  )
-  // The rows on screen: the page, or the page of the matches.
-  const submissions = submissionFilter.rows
-  /** Narrowed by nothing but the served Form clause. */
+  const searching = gridFilter.searchWords.some((word) => word.trim())
+  const filtering = gridFilter.clauses.length > 0 || searching
+  /** Narrowed by nothing but a Form clause. */
   const onlyForm =
-    Boolean(formFilter) &&
-    clauses.every(servedByQuery) &&
-    submissionFilter.gridFilter.searchWords.length === 0
+    !searching &&
+    gridFilter.clauses.length > 0 &&
+    gridFilter.clauses.every((clause) => clause.field === 'formId')
 
   // Mail reader (AGL-104): opening a submission shows the full message and
   // marks it read.
@@ -585,7 +516,7 @@ export function SubmissionsCard({
       headerName: 'From',
       flex: 1,
       minWidth: 220,
-      valueGetter: (_value, submission) => submission.senderLabel,
+      valueGetter: (_value, submission) => submissionSender(submission.fields).label,
       renderCell: ({ row: submission }) => {
         const sender = submissionSender(submission.fields)
         const hue = senderHue(sender.label)
@@ -651,7 +582,7 @@ export function SubmissionsCard({
       headerName: 'Message',
       flex: 2,
       minWidth: 260,
-      valueGetter: (_value, submission) => submission.messageText,
+      valueGetter: (_value, submission) => messageTextOf(submission),
       renderCell: ({ value }) => (
         <Typography variant="body2" noWrap>
           {value}
@@ -674,6 +605,18 @@ export function SubmissionsCard({
           <span>{relativeTime(submission.createdAt?.toDate?.().getTime())}</span>
         </Tooltip>
       ),
+    },
+    /*
+      READ, as the panel picks it — never drawn: the unread dot and the bold
+      row already say it. A boolean field has no hidden column of its own (the
+      grid's boolean operators are not the select's), so it is declared here,
+      kept hidden and out of Manage columns.
+     */
+    {
+      field: 'read',
+      headerName: 'Read',
+      hideable: false,
+      valueGetter: (_value, submission) => String(Boolean(submission.read)),
     },
     /*
       One overflow menu, as the Members & leads rows have: two inline buttons
@@ -744,9 +687,7 @@ export function SubmissionsCard({
               'narrow them by form.'}
           </Typography>
         ) : null}
-        {submissionRows.length === 0 &&
-        !hasMoreSubmissions &&
-        !submissionFilter.filtering ? (
+        {submissions.length === 0 && !hasMoreSubmissions && !filtering ? (
           <Typography variant="body2" color="text.secondary">
             {scoped
               ? 'No submissions carry this form’s id yet. Messages this ' +
@@ -759,16 +700,23 @@ export function SubmissionsCard({
           </Typography>
         ) : (
           <>
-            <ListFilterChips {...submissionFilter.chipsProps} servedField="formId" />
-            {submissionFilter.filtering && hasMoreSubmissions ? (
-              <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
-                {`Filtering the ${submissionFilter.read} submissions read so far — the next page reads more.`}
-              </Typography>
-            ) : null}
+            <ListFilterChips
+              fields={declaration.fields}
+              headers={SUBMISSION_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={submissionOptions}
+            />
+            <ListQueryNotices refused={refusals} notices={plan.notices} />
             <ListTable
               aria-label={scoped ? 'Submissions to this form' : 'Form submissions'}
               rows={submissions}
-              columns={submissionFilter.filterColumns(submissionColumns)}
+              columns={listFilterGridColumns(
+                submissionColumns,
+                declaration.fields,
+                submissionOptions,
+                SUBMISSION_FILTER_HEADERS,
+              )}
               initialState={{ columns: { columnVisibilityModel: SUBMISSION_HIDDEN_COLUMNS } }}
               noRowsLabel={
                 onlyForm
@@ -787,11 +735,22 @@ export function SubmissionsCard({
               }}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search are the grid's: Form is the query's
-              // clause, the rest are answered over what the window read.
-              {...submissionFilter.gridProps}
+              // The panel and the search go to the query; the grid neither
+              // filters nor sorts the page it holds.
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
             />
-            <ListPagination {...submissionFilter.pagination} />
+            <ListPagination
+              page={submissionPage}
+              pageSize={submissionPageSize}
+              rowCount={submissions.length}
+              hasMore={hasMoreSubmissions}
+              onPageChange={setSubmissionPage}
+              onPageSizeChange={setSubmissionPageSize}
+            />
           </>
         )}
       </CardDisplay>

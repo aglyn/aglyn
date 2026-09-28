@@ -57,15 +57,17 @@ import {
   CRM_TASK_KINDS,
   CRM_TASK_PRIORITIES,
   CRM_TASK_PRIORITY_LABELS,
-  CRM_TASK_VIEW_LIMIT,
   CRM_TASK_VIEWS,
   type CrmTaskView,
+  TASK_LIST_QUERY_FIELDS,
 } from '../model/task-views'
-import {
-  type ListFilterField,
-  matchListFilter,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
-import { listFilterGridColumns, listRowMatchesSearch } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { CrmListToolbar } from './crm-list-toolbar'
@@ -84,14 +86,13 @@ import TasksBulkBar from './tasks-bulk-bar'
 /** What an empty view is headed, by view — "nothing overdue" is good news. */
 /*
  * What the tasks grid's panel offers (AGL-3313). `view` is the task view
- * the query serves — a hidden column, since it is no field of a task — and
- * the rest narrow the rows that view loaded.
+ * the query's base answers — a hidden column, since it is no field of a
+ * task — and Kind, Priority and Assignee are predicates on the same query
+ * (AGL-3321).
  */
 const TASK_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'view', kind: 'exact', path: 'view', operators: ['equals'] },
-  { column: 'kind', kind: 'exact', path: 'kind', operators: ['equals', 'isAnyOf'] },
-  { column: 'priority', kind: 'exact', path: 'priority', operators: ['equals', 'isAnyOf'] },
-  { column: 'assigneeUid', kind: 'exact', path: 'assigneeUid', operators: ['equals', 'isAnyOf'] },
+  ...TASK_LIST_QUERY_FIELDS,
 ]
 const TASK_FILTER_HEADERS: Readonly<Record<string, string>> = {
   view: 'Show',
@@ -101,11 +102,10 @@ const TASK_FILTER_HEADERS: Readonly<Record<string, string>> = {
 }
 /** The filter-only `view` column never shows. */
 const TASK_HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = { view: false }
+/** How many tasks the month view reads: one page, sized for a month of work. */
+const CALENDAR_PAGE_SIZE = 200
 /** No `view` clause is "My tasks", which the section opened on before views existed. */
 const TASK_VIEW_DEFAULT: CrmViewFilterClause = { field: 'view', op: 'equals', value: 'mine' }
-/** What the quick search reads on a task. */
-const TASK_SEARCH_FIELDS = ['title', 'notes'] as const
-
 const EMPTY_LABEL: Record<CrmTaskView, string> = {
   mine: 'Nothing is assigned to you',
   overdue: 'Nothing is overdue',
@@ -174,9 +174,10 @@ export function TasksSection(props: ConsolePluginPageProps) {
   }, [views.state.filters])
   /*
    * The grid's own Filters panel and quick search edit the view's clauses
-   * (AGL-3313). "Show" is the task view the query serves — the hidden
-   * `view` column, as the toggle stored it, with none meaning "My tasks" —
-   * and Kind, Priority and Assignee narrow the rows it loaded.
+   * (AGL-3313). "Show" is the task view the query's base answers — the
+   * hidden `view` column, as the toggle stored it, with none meaning "My
+   * tasks" — and Kind, Priority, Assignee and the search word are on the
+   * same query (AGL-3321).
    */
   const clauses = useMemo(
     () =>
@@ -199,14 +200,20 @@ export function TasksSection(props: ConsolePluginPageProps) {
     onChange: setClauses,
     selectFields: ['view', 'kind', 'priority', 'assigneeUid'],
   })
+  const queryClauses = useMemo(
+    () => clauses.filter((clause) => clause.field !== 'view'),
+    [clauses],
+  )
   const list = useCrmTaskList({
     hostId,
     org: orgRecord,
     view,
     uid: user?.uid,
     nowMs,
+    clauses: queryClauses,
+    search: gridFilter.searchWords,
   })
-  const { tasks: loaded, status, fromCache, truncated, scope, orgId, readTokens } = list
+  const { tasks, status, fromCache, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
   const filterOptions = useMemo(
     () => ({
@@ -223,21 +230,17 @@ export function TasksSection(props: ConsolePluginPageProps) {
     }),
     [directory.members],
   )
-  // Every clause but the served view, and the search, over the loaded rows.
-  const searchKey = gridFilter.searchWords.join(' ')
-  const tasks = useMemo(
+  // What the query could not hold, said above the list rather than matched in memory.
+  const refused = useMemo(
     () =>
-      loaded.filter(
-        (task) =>
-          clauses.every(
-            (clause) =>
-              clause.field === 'view' || matchListFilter(task, TASK_FILTER_FIELDS, clause),
-          ) && listRowMatchesSearch(task, TASK_SEARCH_FIELDS, gridFilter.searchWords),
-      ),
-    // `searchKey` stands for the words, which are a new array each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loaded, clauses, searchKey],
+      listQueryRefusals(list.plan.refused, {
+        fields: TASK_FILTER_FIELDS,
+        headers: TASK_FILTER_HEADERS,
+        options: filterOptions,
+      }),
+    [list.plan.refused, filterOptions],
   )
+  const filtered = queryClauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
 
   /*
    * Every record a task names, not only the one its "For" cell shows: the
@@ -256,9 +259,9 @@ export function TasksSection(props: ConsolePluginPageProps) {
   const nameOf = useCrmRecordNames({ orgId, groupId, org: orgRecord, records: linked })
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  // A view is a different set of rows; a selection made on the last one
-  // would be a count over rows no longer on screen.
-  useEffect(() => setSelectedIds([]), [view])
+  // A view, a filter or a page is a different set of rows; a selection made
+  // on the last one would be a count over rows no longer on screen.
+  useEffect(() => setSelectedIds([]), [view, list.plan, list.page])
   const csvOptions: TaskCsvOptions = useMemo(
     () => ({
       assigneeEmail: (uid) => {
@@ -279,6 +282,17 @@ export function TasksSection(props: ConsolePluginPageProps) {
    * it is a toggle rather than another saved view.
    */
   const [layout, setLayout] = useState<'list' | 'calendar'>('list')
+  /*
+   * The month draws one query page, so it asks for a month's worth: the
+   * calendar's page is {@link CALENDAR_PAGE_SIZE} tasks of the same view and
+   * filters, and it says when the view holds more. The list's own page size
+   * comes back with the list.
+   */
+  const { setPage: setListPage, setPageSize: setListPageSize } = list
+  useEffect(() => {
+    setListPage(0)
+    setListPageSize(layout === 'calendar' ? CALENDAR_PAGE_SIZE : TABLE_PAGE_SIZE_DEFAULT)
+  }, [layout, setListPage, setListPageSize])
   const [drawer, setDrawer] = useState<{ open: boolean; task: CrmTaskRow | null }>({
     open: false,
     task: null,
@@ -499,7 +513,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
               clauses={clauses}
               onChange={setClauses}
               options={filterOptions}
-              servedField="view"
+              marksServed={false}
             />
             <ToggleButtonGroup
               exclusive
@@ -520,17 +534,13 @@ export function TasksSection(props: ConsolePluginPageProps) {
               {'Export CSV'}
             </Button>
           </CrmListToolbar>
+          <ListQueryNotices refused={refused} notices={list.plan.notices} />
           {status === 'error' ? (
             <Typography variant="body2" color="error">
               {'The tasks could not be loaded. Reload to try again.'}
             </Typography>
           ) : (
             <>
-              {truncated ? (
-                <Typography variant="caption" color="text.secondary">
-                  {`Showing the first ${CRM_TASK_VIEW_LIMIT} — narrow the view to see the rest.`}
-                </Typography>
-              ) : null}
               {/*
                 The calendar draws the same rows, so there is no bulk bar
                 over it: a selection is a list gesture, and a month grid
@@ -539,7 +549,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
               {layout === 'calendar' ? (
                 <TasksCalendar
                   tasks={tasks}
-                  truncated={truncated}
+                  truncated={list.hasMore}
                   onOpen={(task) => setDrawer({ open: true, task })}
                 />
               ) : (
@@ -570,10 +580,10 @@ export function TasksSection(props: ConsolePluginPageProps) {
                    * empty view is said inside the grid rather than instead of
                    * it, so its toolbar stays to choose another view.
                    */
-                  noRowsLabel={loaded.length ? 'No tasks match these filters' : EMPTY_LABEL[view]}
-                  noRowsDescription={loaded.length ? undefined : EMPTY_COPY[view]}
+                  noRowsLabel={filtered ? 'No tasks match these filters' : EMPTY_LABEL[view]}
+                  noRowsDescription={filtered ? undefined : EMPTY_COPY[view]}
                   noRowsAction={
-                    loaded.length ? undefined : (
+                    filtered ? undefined : (
                       <Button
                         size="small"
                         variant="contained"
@@ -588,13 +598,26 @@ export function TasksSection(props: ConsolePluginPageProps) {
                   filterModel={gridFilter.filterModel}
                   onFilterModelChange={gridFilter.onFilterModelChange}
                   quickFilter
-                  // Columns and sort are the view's, controlled (AGL-2617).
+                  // The view orders the query (due soonest, or Done most
+                  // recently due), so the grid sorts nothing itself: a
+                  // sort over one page would reorder ten rows.
+                  sortingMode="server"
+                  disableColumnSorting
+                  // Columns are the view's, controlled (AGL-2617).
                   columnVisibilityModel={grid.columnVisibilityModel}
                   onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                  sortModel={grid.sortModel}
-                  onSortModelChange={grid.onSortModelChange}
+                  // Paged by the footer below, so the grid must not also slice.
+                  hideFooter
                 />
               </CrmColumnOrderProvider>
+              <ListPagination
+                page={list.page}
+                pageSize={list.pageSize}
+                rowCount={tasks.length}
+                hasMore={list.hasMore}
+                onPageChange={list.setPage}
+                onPageSizeChange={list.setPageSize}
+              />
                 </>
               )}
             </>

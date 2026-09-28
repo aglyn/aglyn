@@ -46,6 +46,7 @@ import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/e
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
+import { giftCardSearchTokens } from '../model/gift-card-search'
 import { releaseStockHold } from './stock-hold'
 import {
   releasePromotionHold,
@@ -492,6 +493,12 @@ async function recordDisputeOpened(
       if (order.dispute?.id === record.id) return false
       const amount = `$${(record.amountCents / 100).toFixed(2)}`
       transaction.update(snapshot.ref, {
+        // The Disputes filter and the open-dispute banner read `disputeKey`
+        // (AGL-3321), from the order as this write leaves it.
+        ...CommerceModel.orderListFields(
+          { ...(fresh.data() ?? {}), dispute: record },
+          snapshot.id,
+        ),
         dispute: record,
         timeline: CommerceModel.appendOrderEvent(
           order,
@@ -598,23 +605,33 @@ async function recordDisputeClosed(
         CommerceModel.canTransitionOrder(order.status, 'refunded')
       const closedAtMs = Date.now()
       const amount = `$${(reversedCents / 100).toFixed(2)}`
+      const settled: CommerceModel.OrderDispute = {
+        ...event,
+        // The open time from the `created` this closes, when we saw it —
+        // `closed` can arrive without it (a lost event, or a subscription
+        // added late), and `disputeFromEvent` falls back to the dispute's
+        // own `created` for that case.
+        ...(stored?.id === event.id && stored.openedAtMs
+          ? { openedAtMs: stored.openedAtMs }
+          : {}),
+        status: outcome,
+        outcome,
+        closedAtMs,
+        reversedCents,
+      }
       transaction.update(snapshot.ref, {
+        // `disputeKey` leaves `open` here (AGL-3321), and `status` may move.
+        ...CommerceModel.orderListFields(
+          {
+            ...(fresh.data() ?? {}),
+            ...(closedTheOrder ? { status: 'refunded' } : {}),
+            dispute: settled,
+          },
+          snapshot.id,
+        ),
         ...(reversedCents > 0 ? { refundedCents: reversedTotal } : {}),
         ...(closedTheOrder ? { status: 'refunded' } : {}),
-        dispute: {
-          ...event,
-          // The open time from the `created` this closes, when we saw it —
-          // `closed` can arrive without it (a lost event, or a subscription
-          // added late), and `disputeFromEvent` falls back to the dispute's
-          // own `created` for that case.
-          ...(stored?.id === event.id && stored.openedAtMs
-            ? { openedAtMs: stored.openedAtMs }
-            : {}),
-          status: outcome,
-          outcome,
-          closedAtMs,
-          reversedCents,
-        },
+        dispute: settled,
         timeline: CommerceModel.appendOrderEvent(
           order,
           'dispute',
@@ -1696,13 +1713,19 @@ async function reverseSellerShare(
         if (record?.id !== disputeId || record.reversedTransferCents != null) {
           return false
         }
+        // Written whole, the field's own rule — see `OrderDispute`.
+        const dispute: CommerceModel.OrderDispute = {
+          ...record,
+          reversedTransferCents,
+          ...(transferReversalId ? { transferReversalId } : {}),
+        }
         transaction.update(orderRef, {
-          // Written whole, the field's own rule — see `OrderDispute`.
-          dispute: {
-            ...record,
-            reversedTransferCents,
-            ...(transferReversalId ? { transferReversalId } : {}),
-          },
+          // Still `lost`; restated from the order as written (AGL-3321).
+          ...CommerceModel.orderListFields(
+            { ...(fresh.data() ?? {}), dispute },
+            orderRef.id,
+          ),
+          dispute,
           timeline: CommerceModel.appendOrderEvent(current, 'dispute', note),
         })
         return true
@@ -2709,7 +2732,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           if (shipsPhysically) {
             const orderNumber = Number(orderCounter?.get('next') ?? 1)
             transaction.set(counterRef, { next: orderNumber + 1 }, { merge: true })
-            transaction.set(orderRef, {
+            // With the fields the orders list queries by (AGL-3321).
+            transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
               number: orderNumber,
               status: 'paid',
               channel: 'subscription',
@@ -2754,7 +2778,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               feeCents: Number(invoiceTotals.feeCents ?? 0),
               createdAtMs: paidAtMs,
               createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-            })
+            }))
           }
           return true
         })
@@ -3247,7 +3271,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             object,
             { feeCents: Number(feeCents ?? 0) },
           )
-          transaction.set(orderRef, {
+          // With the fields the orders list queries by (AGL-3321).
+          transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
             number,
             status: 'paid',
             channel: 'online',
@@ -3315,7 +3340,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             feeCents: Number(feeCents ?? 0),
             createdAtMs: Date.now(),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          })
+          }))
           return true
         })
         // Redelivery/replay guard (AGL-498): only fulfil when the order was
@@ -3717,6 +3742,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 balanceCents: line.unitAmountCents,
                 recipientEmail: object?.customer_details?.email ?? null,
                 orderId: String(object.id),
+                // What the console's Gift cards search asks (AGL-3321).
+                searchTokens: giftCardSearchTokens(
+                  code,
+                  object?.customer_details?.email ?? null,
+                ),
                 createdAtMs: Date.now(),
               })
               .then(() => true)
@@ -3926,6 +3956,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           transaction.set(
             orderRef,
             {
+              // The orders list's fields (AGL-3321): `pending` becomes `paid`,
+              // and the buyer's address may be one the draft never had.
+              ...CommerceModel.orderListFields(
+                {
+                  ...(snapshot.data() ?? {}),
+                  status: 'paid',
+                  customerEmail:
+                    object?.customer_details?.email ?? lifted.customerEmail ?? null,
+                },
+                orderRef.id,
+              ),
               status: 'paid',
               // WHICH TAX THIS ORDER CARRIED (AGL-2451), resolved from the
               // session that actually charged it rather than from the draft's
@@ -4268,7 +4309,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           if (existing.exists) return false
           const number = Number(counter.get('next') ?? 1)
           transaction.set(counterRef, { next: number + 1 }, { merge: true })
-          transaction.set(orderRef, {
+          // With the fields the orders list queries by (AGL-3321).
+          transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
             number,
             status: 'paid',
             channel: 'online',
@@ -4303,7 +4345,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             customerEmail: object?.customer_details?.email ?? null,
             ...(couponCode ? { couponCode } : {}),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          })
+          }))
           return true
         })
         // Redelivery guard (AGL-498): skip the notification + fulfilment side

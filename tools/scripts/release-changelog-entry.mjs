@@ -55,6 +55,7 @@ import { cert, applicationDefault, getApps, initializeApp } from 'firebase-admin
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 
 import { changelogEntryId, renderReleaseEntry } from './lib/changelog-entry.mjs'
+import { nameSearchTokens } from './lib/name-search-tokens.mjs'
 import {
   compareVersions,
   parseCommit,
@@ -489,6 +490,8 @@ async function main() {
   await target.set(
     {
       title: entry.title,
+      // The words the console's entries table searches by (AGL-3321).
+      titleTokens: nameSearchTokens(entry.title),
       slug: entry.slug,
       excerpt: entry.excerpt,
       body: entry.body,

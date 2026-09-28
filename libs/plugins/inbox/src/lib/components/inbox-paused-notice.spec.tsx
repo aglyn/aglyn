@@ -62,25 +62,26 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
-  // The submissions table pages its own query (AGL-2501). A double that stubs
-  // only the collection hook leaves the page calling `undefined`, which fails
-  // as a crash rather than as the notice being wrong.
-  usePagedCollection: () => ({
-    rows: [],
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
-    status: 'success',
-    fromCache: false,
-  }),
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestoreDoc: (ref: () => string) => ({
     data: counters[ref()],
     status: 'success',
     fromCache: false,
   }),
 }))
+
+// The submissions table pages its own query (AGL-2501 → AGL-3321). A double
+// that stubbed nothing would leave the page calling Firestore, which fails as
+// a crash rather than as the notice being wrong: an empty inbox, through the
+// shared double.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(
+      () => [],
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
+)
 
 jest.mock('firebase/firestore', () => ({
   // The scope clause every lead read carries now (AGL-3275).

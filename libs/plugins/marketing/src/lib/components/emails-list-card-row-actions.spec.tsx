@@ -41,11 +41,9 @@
  *    WRITES, and the only email it may ever remove is one that has reached
  *    nobody — a sent message's report is evidence, and its id is inside the
  *    HMAC of every unsubscribe link it delivered.
- * 7. The ROW ORDER, which belongs here rather than in a file of its own for
- *    one reason: the fixture above already holds the three kinds of record
- *    whose ordering is in question — a draft with only a creation date, a
- *    send with a `sentAt`, and one written before either stamp — and a second
- *    copy of this harness would be a second thing to keep in step.
+ * 7. The ROW ORDER: the list's query orders on `createdAtMs`, newest first
+ *    (AGL-3321), the one date every writer stamps and the backfill stamped
+ *    on the records before it.
  */
 
 import {
@@ -56,6 +54,7 @@ import {
   waitFor,
 } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { EmailsListCard } from './emails-list-card'
 import { MarketingOrgMountProvider } from './marketing-org-mount'
 
@@ -71,8 +70,33 @@ jest.mock('next/navigation', () => ({
 }))
 
 const FIRESTORE = {}
-/** The messages the ceilinged read answers with, staged per case. */
+/** The messages the list's query answers from, staged per case. */
 let emailDocs: Array<Record<string, unknown>> = []
+
+/**
+ * The corpus as the list reads it once `backfill-campaign-list-fields.mjs`
+ * has run: every record carries `createdAtMs`, and every writer stamps the
+ * site it is sent as. A fixture that names no date is dated by its place in
+ * the array, first newest; one that names no site is the site hub's own
+ * (`host-1`), unless it says `hostId: undefined` — a send that records none.
+ */
+const stamped = () =>
+  emailDocs.map((email, at) => ({
+    createdAtMs: 1_000_000 - at,
+    ...('hostId' in email ? {} : { hostId: 'host-1' }),
+    ...email,
+  }))
+
+/*
+ * The list's query, answered by the shared double: the REAL plan over the
+ * fixture rows, as Firestore would answer it, a page at a time.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: any) =>
+    jest
+      .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+      .useListQueryDouble(() => stamped(), options),
+}))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   __esModule: true,
@@ -389,12 +413,12 @@ describe('discarding a draft from the row', () => {
 })
 
 /*==========================================
- * DRAFTS SORT BY WHEN THEY WERE CREATED.
+ * NEWEST FIRST, ON THE QUERY (AGL-3321).
  *
- * A draft carries neither `sentAt` nor `sendAtMs`, so ordering on the send
- * time alone gave every one of them the key 0 — the email a merchant is in
- * the middle of writing, at the very bottom of the list, behind whatever
- * paging it has.
+ * No send date is on every email — a draft has neither `sentAt` nor
+ * `sendAtMs` — so the list orders on `createdAtMs`, which every writer stamps
+ * when it mints a record. The order is the QUERY's, so a page is the next
+ * page of it rather than a window re-sorted in the browser.
  *=========================================*/
 describe('the newest thing is at the top', () => {
   const subjects = () =>
@@ -402,30 +426,16 @@ describe('the newest thing is at the top', () => {
       String(row.querySelector('a')?.textContent ?? ''),
     )
 
-  it('puts a draft created after the last send ABOVE it', async () => {
+  it('asks Firestore for the site’s emails newest first', async () => {
     await mountCard()
-    expect(subjects()).toEqual([
-      'Half-written',
-      'Spring sale',
-      'Last week’s news',
-    ])
+    const plan = lastListQueryPlan()
+    expect(plan?.orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+    // The site as an equality on the site the email is sent as.
+    expect(plan?.filters).toEqual([{ path: 'hostId', op: '==', value: 'host-1' }])
   })
 
-  it('does NOT re-date a sent message from its creation', async () => {
-    /*
-     * THE CONTROL, and the half that is easy to break while fixing the
-     * other: an email drafted in March and sent in June belongs in June. A
-     * fallback applied in the wrong order would sort this one by the day
-     * somebody started writing it.
-     */
+  it('puts a draft created after the last send ABOVE it', async () => {
     emailDocs = [
-      {
-        $id: 'msg-old-draft',
-        subject: 'Started in March, sent in June',
-        status: 'sent',
-        createdAtMs: Date.UTC(2026, 2, 1),
-        sentAt: { seconds: Date.UTC(2026, 5, 1) / 1000 },
-      },
       {
         $id: 'msg-april',
         subject: 'Sent in April',
@@ -433,28 +443,15 @@ describe('the newest thing is at the top', () => {
         createdAtMs: Date.UTC(2026, 3, 1),
         sentAt: { seconds: Date.UTC(2026, 3, 2) / 1000 },
       },
-    ]
-    await mountCard()
-    expect(subjects()).toEqual([
-      'Started in March, sent in June',
-      'Sent in April',
-    ])
-  })
-
-  it('sorts a draft with no creation stamp last, as it always did', async () => {
-    // The backfill has not run everywhere, and a record with no date of any
-    // kind must not be dated from nothing.
-    emailDocs = [
-      { $id: 'msg-undated', subject: 'No dates at all', status: 'draft' },
       {
-        $id: 'msg-sent',
-        subject: 'Went out',
-        status: 'sent',
-        sentAt: { seconds: 1_700 },
+        $id: 'msg-draft',
+        subject: 'Started in May',
+        status: 'draft',
+        createdAtMs: Date.UTC(2026, 4, 1),
       },
     ]
     await mountCard()
-    expect(subjects()).toEqual(['Went out', 'No dates at all'])
+    expect(subjects()).toEqual(['Started in May', 'Sent in April'])
   })
 })
 
@@ -600,6 +597,7 @@ describe('the message rows on the org hub', () => {
         $id: 'msg-siteless',
         subject: 'Nobody’s draft',
         status: 'draft',
+        hostId: undefined,
         createdAtMs: Date.UTC(2026, 7, 20),
       },
     ]

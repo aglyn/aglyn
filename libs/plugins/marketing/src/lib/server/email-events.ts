@@ -38,7 +38,10 @@ import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
 // because that graph reaches the admin SDK — would otherwise replace the real
 // suppression writer with whatever the factory happened to list. A stub there
 // is a false green on the one behaviour AGL-2407 is about.
-import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
+import {
+  emailSearchTokens,
+  suppressEmail,
+} from '@aglyn/tenant-data-admin/server/email-suppression'
 // Same leaf-import reasoning again: the per-recipient delivery log is the only
 // record staff have of what we sent someone, and a mocked-away writer is a
 // green test over an empty log.
@@ -243,6 +246,8 @@ async function recordDeliveryFailure(args: {
         ref,
         {
           email: recipient,
+          // What the site's Suppressions list searches (AGL-3321).
+          emailTokens: emailSearchTokens(recipient),
           reason,
           suppressedAt: FieldValue.serverTimestamp(),
           ...(existing.exists

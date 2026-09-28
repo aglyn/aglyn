@@ -38,6 +38,7 @@ import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
 import { recordAccountAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Just-in-time org mapping for SSO sign-ins (AGL-1101). After a user completes
@@ -288,7 +289,7 @@ async function handler(request: Request): Promise<Response> {
       `Joined via SSO as ${role}`,
       { type: 'member', id: decoded.uid, name: email },
     )
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: 'org.sso.jit',
       target: `orgs/${orgId}`,

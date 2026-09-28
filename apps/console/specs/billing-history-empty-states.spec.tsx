@@ -216,7 +216,11 @@ beforeEach(() => {
     status: 200,
     json: async () =>
       String(input).startsWith('/api/billing/invoices')
-        ? mockInvoicePayload
+        ? // A search is asked of Stripe (AGL-3321): the route answers an
+          // invoice number it does not hold with nothing.
+          String(input).includes('&number=')
+          ? { invoices: [], hasMore: false }
+          : mockInvoicePayload
         : {},
   })) as any
 })
@@ -346,11 +350,17 @@ describe('the customer billing card (AGL-2486)', () => {
     expect(screen.queryByText(NEVER_BILLED)).toBeNull()
     expect(screen.queryByText(NOTICE)).toBeNull()
     // The history is the shared grid, filtered through its own toolbar
-    // (AGL-3317).
+    // (AGL-3317) — and the search is asked of Stripe, not matched over the
+    // invoices already loaded (AGL-3321).
     expect(screen.getByRole('grid', { name: 'Invoices' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'AGL-0002' } })
     await waitFor(() => expect(screen.queryByText('AGL-0001')).toBeNull())
+    expect(
+      (global.fetch as jest.Mock).mock.calls.some(([url]) =>
+        String(url).includes('&number=AGL-0002'),
+      ),
+    ).toBe(true)
     expect(screen.getByText('No invoices match these filters')).toBeTruthy()
   })
 })

@@ -101,7 +101,7 @@ import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/email-topics'
-import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
+import { emailSearchTokens } from '@aglyn/aglyn/app-utils/email-search'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import firebaseAdmin from './firebase-admin'
@@ -250,36 +250,17 @@ export function emailSuppressionKey(
 }
 
 /**
- * The `array-contains` search tokens for an address.
+ * The `array-contains` search tokens for an address — shared with every list
+ * that searches one (`@aglyn/aglyn/app-utils/email-search`), re-exported here
+ * for the callers that have always imported it from this module.
  *
- * Every prefix, up to `NAME_TOKEN_MAX_PREFIX` characters, of each of: the
- * whole address, the domain, the domain behind an `@`, and each piece of the
- * local part and of the domain. So `jane.doe@mail.example.com` is found by
- * `jane`, `doe`, `jane.doe@ma`, `example`, `example.com`, `mail.example` and
- * `@mail`. A query becomes one token through `nameSearchToken`, which caps
- * it at the same length, so a typed address longer than that narrows by its
- * first twelve characters rather than matching nothing.
- *
- * Mirrored by `tools/scripts/backfill-email-suppression-filters.mjs`, which
- * stamps the records written before this field existed; the two share the
- * same fixtures.
+ * Mirrored for the backfills that stamp the rows written before the field
+ * (`backfill-email-suppression-filters.mjs`, `backfill-host-suppression-filters.mjs`,
+ * `backfill-email-list-filters.mjs`) by ONE script-side twin,
+ * `tools/scripts/lib/email-search-tokens.mjs`; the spec and the twin's test
+ * both assert `email-search-tokens.fixtures.json`.
  */
-export function emailSearchTokens(email: string | null | undefined): string[] {
-  const address = String(email ?? '')
-    .trim()
-    .toLowerCase()
-  if (!address) return []
-  const at = address.lastIndexOf('@')
-  const local = at === -1 ? address : address.slice(0, at)
-  const domain = at === -1 ? '' : address.slice(at + 1)
-  const words = [
-    address,
-    ...(domain ? [domain, `@${domain}`] : []),
-    ...local.split(/[._+-]+/),
-    ...domain.split('.'),
-  ]
-  return nameSearchTokens(words.filter(Boolean).join(' '))
-}
+export { emailSearchTokens }
 
 export interface SuppressEmailInput {
   email: string
@@ -1026,6 +1007,9 @@ export async function suppressEmailForHostErasure(input: {
   await ref.set(
     {
       email: null,
+      // The address's search tokens are the address in pieces, so an erasure
+      // clears them with it (AGL-3321).
+      emailTokens: [],
       reason: HOST_ERASURE_SUPPRESSION_REASON,
       suppressedAt: FieldValue.serverTimestamp(),
       ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),

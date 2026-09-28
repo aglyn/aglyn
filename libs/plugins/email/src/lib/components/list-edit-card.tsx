@@ -70,6 +70,7 @@ import {
   PageHeaderRecord,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -180,7 +181,9 @@ export function ListEditCard(props: ListEditCardProps) {
     setBusy(true)
     try {
       await updateDoc(doc(firestore, scope[0], scope[1], 'lists', listId), {
-        name: next,
+        // The name and the search keys the lists table queries, together
+        // (AGL-3321).
+        ...nameSearchFields(next),
         kind,
         /*
          * The rule is written whichever kind was chosen. On a live list it is

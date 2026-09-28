@@ -181,6 +181,9 @@ const firestoreHandle: any = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+  restampCrmListFieldsAt: async () => 'current',
+  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
   firebaseAdmin: {
     app: () => ({ firestore: () => firestoreHandle }),
     firestore: {
@@ -250,6 +253,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
     !result || result.sent ? null : 'failed',
 }))
 
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
 import { resumeFlowEnrollment, runEventActions } from './run-event-actions'
 import { runEventWorkflows } from './run-event-workflows'
@@ -528,9 +532,13 @@ describe('a workflow of function calls', () => {
       result: 'succeeded',
       trigger: 'formSubmission',
       summary: 'Ran',
+      // The Runs table's search reads the summary's words (AGL-3321).
+      summaryTokens: ['r', 'ra', 'ran'],
       status: 'ok',
       durationMs: expect.any(Number),
       target: { type: 'workflow', id: 'wf-intake', name: 'Lead intake' },
+      // The site log's search finds the run by its workflow's name (AGL-3321).
+      searchTokens: activitySearchTokens({ target: { name: 'Lead intake' } }),
       createdAt: 'server-timestamp',
     })
     expect(counter('workflowRuns')).toBe(1)

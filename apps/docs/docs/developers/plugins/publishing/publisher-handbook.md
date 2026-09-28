@@ -603,11 +603,13 @@ investigating.
 
 A purchase licenses the buyer's organization, and **Marketplace → Licenses** lists
 what the workspace holds and what the buyer bought across every workspace, one table
-each. Each table filters through its own toolbar: **Search** finds a listing by name,
-and **Filters** offers the listing, who bought it (**You** or **A colleague**) on the
-workspace's table, and which workspace a purchase landed in on the buyer's own. Both
-answer over every license the table holds, and each filter in force shows as a chip
-above it; see [Filter and search a list](../../../getting-started/console-tour.md#filter-and-search).
+each. Each table filters through its own toolbar: **Search** finds a license by a word
+of its listing's name, and **Filters** offers who bought it (**You**) on the workspace's
+table, and which workspace a purchase landed in — or **Every workspace you belong to**,
+for a purchase that names none — on the buyer's own. Both answer over every license,
+not the page on screen, and each filter in force shows as a chip above it; a word that
+more than 30 listing names share is refused with a note asking for more of it. See
+[Filter and search a list](../../../getting-started/console-tour.md#filter-and-search).
 
 Every listing shows its **artifact type** as a chip — Plugin, Component,
 Site template, Layout, Dataset schema, Email template or Email starter — so

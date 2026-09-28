@@ -115,6 +115,30 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 
 const FIRESTORE = {}
 
+/*
+ * The hub's table is its query (AGL-3321): answered by the contract's double
+ * over the same products, stamped the way every writer stamps them.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => ({
+      ...useListQueryDouble(
+        () =>
+          (collections['products'] ?? []).map((product) => ({
+            ...product,
+            deletedAt: product['deletedAt'] ?? null,
+            nameLower: String(product['name'] ?? '').toLowerCase(),
+          })),
+        options,
+      ),
+    }),
+  }
+})
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   /*
    * The real translator, not a stub. It is a pure function of the shared

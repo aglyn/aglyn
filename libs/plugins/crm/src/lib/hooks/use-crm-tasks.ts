@@ -25,16 +25,19 @@ import {
   limit,
   orderBy,
   query,
-  type QueryConstraint,
   where,
 } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
+import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListQueryPlan } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
-  CRM_TASK_VIEW_LIMIT,
   type CrmTaskView,
+  crmTaskViewBase,
   crmTaskViewPlan,
   orderTaskRows,
+  TASK_LIST_DECLARATION,
 } from '../model/task-views'
+import { useCrmFoldsScope, useCrmListQuery } from './use-crm-list-query'
 import { crmVisibleToClause, useCrmScope } from './use-crm-scope'
 
 /** A task as the console lists it: the document plus its id. */
@@ -70,14 +73,27 @@ export interface CrmTaskListResult {
   readTokens: readonly string[] | null
 }
 
+/** One page of the tasks list, and what its query held. */
+export interface CrmTaskPageResult extends CrmTaskListResult {
+  /** What the query holds, what it refused and why (AGL-3321). */
+  plan: ListQueryPlan
+  hasMore: boolean
+  page: number
+  setPage: (page: number) => void
+  pageSize: number
+  setPageSize: (pageSize: number) => void
+}
+
 /**
- * One view of the tasks section as a live, bounded listener.
+ * One view of the tasks section, PAGED BY ITS QUERY (AGL-3321).
  *
  * The plan comes from `crmTaskViewPlan`, so the hook holds no opinion about
- * what "today" means; it translates a plan into constraints in the order the
- * `crmTasks` indexes are declared and caps the window. "My tasks" opens no
- * listener at all until the reader's uid is known — a query for
- * `assigneeUid == ''` would be a real read that could only answer nothing.
+ * what "today" means; the view's predicates are the query's base beside the
+ * scope clause, and Kind, Priority, Assignee and the search word are planned
+ * onto the same query — every page a page of matches, none narrowed in
+ * memory. "My tasks" opens no listener until the reader's uid is known — a
+ * query for `assigneeUid == ''` would be a real read that could only answer
+ * nothing.
  */
 export function useCrmTaskList(options: {
   /** The site the list is read under, or `null` at the organization level. */
@@ -86,9 +102,11 @@ export function useCrmTaskList(options: {
   view: CrmTaskView
   uid: string | null | undefined
   nowMs: number
-}): CrmTaskListResult {
-  const { hostId, org, view, uid, nowMs } = options
-  const firestore = useFirestore()
+  /** The Filters panel's clauses, the view's own excluded. */
+  clauses?: readonly ListFilterRequest[]
+  search?: readonly string[]
+}): CrmTaskPageResult {
+  const { hostId, org, view, uid, nowMs, clauses = NO_CLAUSES, search = NO_WORDS } = options
   // The org root and the reader's tokens from the one scope hook (AGL-2614)
   // — the same expression the contacts list runs, so a task listed beside a
   // contact is scoped by exactly the predicate that admitted the contact.
@@ -97,53 +115,44 @@ export function useCrmTaskList(options: {
     () => crmTaskViewPlan(view, { nowMs, uid }),
     [view, nowMs, uid],
   )
-  const { data, status, fromCache } = useFirestoreCollection<CrmTaskRow>(
-    () => {
-      if (!scope) return null
-      if (plan.assigneeUid !== undefined && !plan.assigneeUid) return null
-      const constraints: QueryConstraint[] = [
-        ...crmVisibleToClause(readTokens),
-        where('status', '==', plan.status),
-      ]
-      if (plan.assigneeUid) {
-        constraints.push(where('assigneeUid', '==', plan.assigneeUid))
-      }
-      if (plan.dueFrom !== undefined) {
-        constraints.push(where('dueAtMs', '>=', plan.dueFrom))
-      }
-      if (plan.dueBefore !== undefined) {
-        constraints.push(where('dueAtMs', '<', plan.dueBefore))
-      }
-      return query(
-        collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.tasks),
-        ...constraints,
-        orderBy('dueAtMs', plan.direction),
-        limit(CRM_TASK_VIEW_LIMIT),
-      )
-    },
-    [
-      firestore,
-      scope,
-      readTokens,
-      plan.status,
-      plan.assigneeUid,
-      plan.dueFrom,
-      plan.dueBefore,
-      plan.direction,
-    ],
-    { idField: '$id' },
+  const base = useMemo(() => crmTaskViewBase(plan), [plan])
+  const sort = useMemo(
+    () => ({ path: 'dueAtMs', direction: plan.direction }),
+    [plan.direction],
   )
-  const tasks = useMemo(() => orderTaskRows(data ?? []), [data])
+  const foldsScope = useCrmFoldsScope(orgId, readTokens)
+  const paged = useCrmListQuery<CrmTaskRow>({
+    scope,
+    collection: CRM_COLLECTIONS.tasks,
+    visibleTo: readTokens,
+    foldsScope,
+    declaration: TASK_LIST_DECLARATION,
+    clauses,
+    search,
+    sort,
+    base,
+    enabled: plan.assigneeUid === undefined || Boolean(plan.assigneeUid),
+  })
+  const tasks = useMemo(() => orderTaskRows(paged.rows), [paged.rows])
   return {
     tasks,
-    status,
-    fromCache,
-    truncated: (data?.length ?? 0) >= CRM_TASK_VIEW_LIMIT,
+    status: paged.status,
+    fromCache: paged.fromCache,
+    truncated: paged.hasMore,
     scope,
     orgId,
     readTokens,
+    plan: paged.plan,
+    hasMore: paged.hasMore,
+    page: paged.page,
+    setPage: paged.setPage,
+    pageSize: paged.pageSize,
+    setPageSize: paged.setPageSize,
   }
 }
+
+const NO_CLAUSES: readonly ListFilterRequest[] = []
+const NO_WORDS: readonly string[] = []
 
 /**
  * How many of one record's tasks a card reads. A person with more than fifty

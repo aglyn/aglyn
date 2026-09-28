@@ -361,9 +361,9 @@ describe('an org that bills nothing', () => {
   })
 })
 
-describe('the per-org table filters from the grid toolbar', () => {
-  it('searches every row the scan read, not just the ones drawn', async () => {
-    mockFetch.mockResolvedValue(
+describe('the per-org table\u2019s search is the scan\u2019s question (AGL-3321)', () => {
+  it('rescans with the words, and draws what the route answered — never a match over the rows read', async () => {
+    mockFetch.mockResolvedValueOnce(
       jsonResponse({
         rows: [
           rowFor(),
@@ -377,13 +377,55 @@ describe('the per-org table filters from the grid toolbar', () => {
     render(<Page />)
     fireEvent.click(screen.getByRole('button', { name: /scan organizations/i }))
     await waitFor(() => expect(screen.getByText('Globex')).toBeTruthy())
+    // The route answers the search; this fixture is what it answered.
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        rows: [rowFor({ orgId: 'org-9', name: 'Globex Two', plan: 'business' })],
+        nextCursor: null,
+        scanned: 1,
+        reads: 4,
+        refused: [],
+        notices: [],
+      }),
+    )
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'globex' } })
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    const asked = new URL(String(mockFetch.mock.calls[1][0]), 'https://console.test')
+    expect(asked.searchParams.get('search')).toBe('globex')
+    // A new question is a new walk, from the start.
+    expect(asked.searchParams.get('cursor')).toBeNull()
     await waitFor(() => {
       const grid = screen.getByRole('grid', {
         name: 'By organization, worst margin first',
       })
-      expect(grid.textContent).toContain('Globex')
+      expect(grid.textContent).toContain('Globex Two')
+      // The first scan's Globex is gone: the rows answer the new question.
       expect(grid.textContent).not.toContain('Acme')
     })
+  })
+
+  it('keeps the table, and says what it served, while the search matches nothing', async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ rows: [rowFor()], nextCursor: null, scanned: 1, reads: 4 }),
+    )
+    render(<Page />)
+    fireEvent.click(screen.getByRole('button', { name: /scan organizations/i }))
+    await waitFor(() => expect(screen.getByText('Acme')).toBeTruthy())
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        rows: [],
+        nextCursor: null,
+        scanned: 0,
+        reads: 1,
+        refused: [],
+        notices: ['Search matches one word at a time: showing results for "zz".'],
+      }),
+    )
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zz top' } })
+    await waitFor(() => expect(screen.getByText(/one word at a time/)).toBeTruthy())
+    // A search that matched nothing is not "no organizations exist", and the
+    // search box that asked it is still there to clear.
+    expect(screen.queryByText(/No organizations exist/i)).toBeNull()
+    expect(screen.getByRole('searchbox')).toBeTruthy()
   })
 })

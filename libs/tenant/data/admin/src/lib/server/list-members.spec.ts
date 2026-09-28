@@ -96,7 +96,9 @@ const firestoreHandle: any = {
   getAll: async (...refs: any[]) => refs.map((ref) => snapshotFor(ref.path)),
 }
 
-import { enrollListMember } from './list-members'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { enrollListMember, listMemberSearchTokens } from './list-members'
 import {
   consentGroupDisclosureKey,
   grantEntriesAsRecorded,
@@ -398,5 +400,51 @@ describe('the sites a membership’s basis covers', () => {
     store = {}
     await enroll({ consent: { basis: 'contact-opt-in', atMs: 55, byUid: null } })
     expect(passed).toEqual(theRow().marketingConsentByHost)
+  })
+})
+
+/*
+ * What the membership table searches and filters by (AGL-3321), written by
+ * the collection's one writer so no row is missing them.
+ */
+describe('the keys the membership table queries', () => {
+  /*
+   * The worked examples the script-side twin
+   * (`tools/scripts/lib/email-search-tokens.mjs`, which
+   * `backfill-email-list-filters.mjs` stamps with) is held to by
+   * `email-search-tokens.test.mjs`.
+   */
+  const FIXTURES = JSON.parse(
+    readFileSync(
+      join(__dirname, '..', '..', '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'email-search-tokens.fixtures.json'),
+      'utf8',
+    ),
+  ) as { memberTokens: Array<{ email: string; name: string | null; tokens: string[] }> }
+
+  it.each(FIXTURES.memberTokens)('tokens for $email / $name are the fixtures', ({ email, name, tokens }) => {
+    expect(listMemberSearchTokens(email, name)).toEqual(tokens)
+  })
+
+  it('stamps the address and name tokens on a new row', async () => {
+    await enroll({ name: 'Priya Raman', marketingConsent: true })
+    expect(theRow()?.searchTokens).toEqual(listMemberSearchTokens(EMAIL, 'Priya Raman'))
+    expect(theRow()?.searchTokens).toEqual(expect.arrayContaining(['priya', 'raman', 'lumen']))
+  })
+
+  it('keeps the stored name in the tokens when a re-enrollment names nobody', async () => {
+    await enroll({ name: 'Priya Raman', marketingConsent: true })
+    await enroll({ marketingConsent: true })
+    expect(theRow()?.searchTokens).toEqual(expect.arrayContaining(['raman']))
+  })
+
+  it('writes how the row came to be, `manual` when the caller says nothing', async () => {
+    await enroll({ marketingConsent: true })
+    expect(theRow()?.via).toBe('manual')
+  })
+
+  it('never moves a stored `via` when the caller says nothing', async () => {
+    await enroll({ via: 'rule', marketingConsent: true })
+    await enroll({ marketingConsent: true })
+    expect(theRow()?.via).toBe('rule')
   })
 })

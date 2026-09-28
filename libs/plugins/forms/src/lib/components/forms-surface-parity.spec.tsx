@@ -87,16 +87,32 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     subdomain: 'demo',
   }),
   useHostResourceApi: () => jest.fn().mockResolvedValue(undefined),
+  // The Campaign filter's choices; no fixture here is filed under one.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: false }),
   useLiveArtifactCount: () => mockLiveCount,
-  usePagedCollection: () => ({
+}))
+
+/* The list's query (AGL-3330), answering the fixture rows as its page. */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  __esModule: true,
+  useListQuery: () => ({
     status: mockStatus,
     fromCache: false,
     rows: mockRows,
+    data: mockRows,
     hasMore: false,
     page: 0,
     setPage: jest.fn(),
     pageSize: 10,
     setPageSize: jest.fn(),
+    plan: {
+      filters: [],
+      orderBy: { path: '__name__', direction: 'asc' },
+      served: [],
+      searched: null,
+      refused: [],
+      notices: [],
+    },
   }),
 }))
 

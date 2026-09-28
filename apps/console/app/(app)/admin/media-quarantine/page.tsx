@@ -62,22 +62,23 @@
  */
 
 import {
-  isMediaQuarantineActive,
   MEDIA_QUARANTINE_MESSAGE_MAX,
   MEDIA_QUARANTINE_NOTE_MAX,
   MEDIA_QUARANTINE_REASON_LABELS,
   MEDIA_QUARANTINE_REASONS,
   mediaTakedownReachLines,
   mediaTakedownUnreachableLine,
-  normalizeMediaQuarantine,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -98,14 +99,21 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import {
-  CONTENT_MAX_WIDTH,
-  TABLE_PAGE_SIZE_DEFAULT,
-} from '../../../../constants/shared'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffRole } from '../../../../hooks/use-is-staff'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import {
+  DENY_FILTER_FIELDS,
+  DENY_FILTER_HEADERS,
+  DENY_FILTER_OPTIONS,
+  type DenyListRow,
+  LISTED_KIND_LABEL,
+  ROW_STATE_LABEL,
+} from '../../../../utils/media-quarantine-list-query'
 
 /** One key that could refuse the looked-up asset, and whether it is set. */
 interface AssetKey {
@@ -140,134 +148,23 @@ interface AssetLookup {
 }
 
 /**
- * One row of the whole deny list — the plain `GET`'s `records` shape, which
- * is the stored entry with its map key spread on top. Everything but `key` is
- * optional: entries written before a field existed simply do not carry it,
- * and those are the oldest rows, which is to say the ones this table is for.
+ * The facts about the WHOLE deny list the card states above its table —
+ * `GET ?view=summary`. They describe the list, never the page on screen.
  */
-interface QuarantineRecord {
-  key: string
-  reason?: string | null
-  message?: string | null
-  /** Staff-only rationale. Rendered here and nowhere a customer can reach. */
-  note?: string | null
-  atMs?: number | null
-  untilMs?: number | null
-  actorUid?: string | null
-  /** The copy an operator was looking at when they set it — often the only
-   * breadcrumb from a hash key back to a file. In the payload since AGL-1512
-   * and unrendered until now. */
-  originScopeSegment?: string | null
-  originMediaId?: string | null
-}
-
-interface DenyListing {
-  records: QuarantineRecord[]
+interface DenySummary {
   count: number
   maxEntries: number
+  /** Entries that enforce nothing right now and still hold a slot. */
+  clearable: number
   readAtMs: number
 }
 
-/** Enforced now / expired with no write / unenforceable and unexplainable. */
-type RowState = 'active' | 'expired' | 'malformed'
+/** The picked fields, which the panel shows as selects. */
+const DENY_SELECT_FIELDS = Object.keys(DENY_FILTER_OPTIONS)
 
-/**
- * What kind of key a deny-list ROW holds, read from the key alone.
- *
- * The lookup card above gets `kind` from the server, which holds the media
- * document to compare against. A row has no document — the deny list is keys
- * and nothing else, which is the whole reason enumerating it needed its own
- * surface. So a digest's LENGTH is the only signal there is: 64 hex
- * characters is `contentSha256`, 16 is the legacy truncated digest, and
- * anything else is a digest whose provenance this page will not guess at.
- */
-function listedKeyKind(key: string): 'sha256' | 'legacy' | 'asset' | 'digest' {
-  if (key.startsWith('asset--')) return 'asset'
-  if (!key.startsWith('hash--')) return 'digest'
-  const digest = key.slice('hash--'.length)
-  if (digest.length === 64) return 'sha256'
-  if (digest.length === 16) return 'legacy'
-  return 'digest'
-}
+/** Asks the route for the table's page rather than every entry. */
+const DENY_LIST_PARAMS = { view: 'list' } as const
 
-const LISTED_KIND_LABEL: Record<
-  ReturnType<typeof listedKeyKind>,
-  string
-> = {
-  sha256: 'sha256',
-  legacy: 'legacy digest',
-  asset: 'per-asset',
-  digest: 'digest',
-}
-
-/**
- * Enforced, expired, or neither — decided against the server's own read time
- * rather than the browser's clock, so the verdict on screen is the verdict at
- * the moment the list was read. `normalizeMediaQuarantine` returns `null` for
- * an entry whose reason nothing recognises, and the readers refuse such an
- * entry WHOLE — so it enforces nothing while still consuming a slot, and it
- * is the one row a release cannot be talked out of.
- */
-function rowState(record: QuarantineRecord, nowMs: number): RowState {
-  const state = normalizeMediaQuarantine(record as any, record.key)
-  if (!state) return 'malformed'
-  return isMediaQuarantineActive(state, nowMs) ? 'active' : 'expired'
-}
-
-/** How each row state reads, on its chip and in the filter. */
-const ROW_STATE_LABEL: Record<RowState, string> = {
-  active: 'enforcing',
-  expired: 'EXPIRED',
-  malformed: 'UNREADABLE',
-}
-
-/** One deny-list row as the grid matches it: the record, and what it derives. */
-interface DenyListRow {
-  $id: string
-  record: QuarantineRecord
-  state: RowState
-  kind: ReturnType<typeof listedKeyKind>
-  key: string
-  reason: string
-  note: string
-  origin: string
-}
-
-/*
- * What the deny-list grid filters and searches by. The page holds the whole
- * list (one read, capped at `maxEntries`) and pages it itself, so both answer
- * over every entry before a page is sliced. The Library select and the id
- * fields above are the LOOKUP form, which asks the server about one file;
- * they are not filters of this list.
- */
-const DENY_FILTER_FIELDS = [
-  inMemoryListField('key', 'text'),
-  inMemoryListField('reason', 'select'),
-  inMemoryListField('state', 'select'),
-  inMemoryListField('kind', 'select'),
-  inMemoryListField('note', 'text'),
-]
-const DENY_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  key: 'Key',
-  reason: 'Reason',
-  state: 'State',
-  kind: 'Key kind',
-  note: 'Note',
-}
-const DENY_FILTER_OPTIONS = {
-  reason: MEDIA_QUARANTINE_REASONS.map((code) => ({
-    value: code,
-    label: MEDIA_QUARANTINE_REASON_LABELS[code],
-  })),
-  state: (Object.keys(ROW_STATE_LABEL) as RowState[]).map((state) => ({
-    value: state,
-    label: ROW_STATE_LABEL[state],
-  })),
-  kind: (Object.keys(LISTED_KIND_LABEL) as Array<keyof typeof LISTED_KIND_LABEL>).map(
-    (kind) => ({ value: kind, label: LISTED_KIND_LABEL[kind] }),
-  ),
-}
-const DENY_SEARCH_PATHS = ['key', 'reason', 'note', 'origin']
 /** Filterable, but shown as chips inside the Key cell rather than columns. */
 const DENY_HIDDEN_COLUMNS = { state: false, kind: false }
 
@@ -307,7 +204,7 @@ function AdminMediaQuarantine() {
   const [revokeRawUrl, setRevokeRawUrl] = useState(true)
   const [busy, setBusy] = useState(false)
   const [lookup, setLookup] = useState<AssetLookup | null>(null)
-  const [listing, setListing] = useState<DenyListing | null>(null)
+  const [listing, setListing] = useState<DenySummary | null>(null)
   const [log, setLog] = useState<
     { atMs: number; text: string; confirmed: boolean }[]
   >([])
@@ -346,26 +243,52 @@ function AdminMediaQuarantine() {
     }
   }, [user, scopeKind, scopeId, mediaId, enqueueSnackbar])
 
-  /**
-   * The whole deny list. One document read, no media reads at all, and it
-   * runs on arrival rather than behind a button: an operator who came here
-   * because a takedown was refused with a 409 already knows the list is full
-   * and should not have to ask a second time to see what is in it.
+  /*
+   * The deny-list table PAGES (AGL-2501), and the route answers its filters
+   * and search over every entry (AGL-3321): the entries are one document's
+   * map, which no query can filter, so the route reads the whole document
+   * and hands back one page. Nothing here narrows the rows it is given.
    */
-  const loadList = useCallback(async () => {
+  const gridFilter = useListGridFilter({ selectFields: DENY_SELECT_FIELDS })
+  // Stable, because the list re-reads whenever its error handler changes.
+  const onDenyListError = useCallback(
+    (error: unknown) =>
+      enqueueSnackbar(
+        error instanceof Error && error.message ? error.message : 'Reading the deny list failed',
+        { variant: 'error', allowDuplicate: true },
+      ),
+    [enqueueSnackbar],
+  )
+  const denyList = useStaffListQuery<DenyListRow>({
+    endpoint: '/api/admin/media-quarantine',
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+    params: DENY_LIST_PARAMS,
+    onError: onDenyListError,
+  })
+  const { refresh: refreshDenyList } = denyList
+
+  /**
+   * The whole deny list's facts. One document read, no media reads at all,
+   * and it runs on arrival rather than behind a button: an operator who came
+   * here because a takedown was refused with a 409 already knows the list is
+   * full and should not have to ask a second time to see what is in it. The
+   * table reads its own first page on arrival.
+   */
+  const loadSummary = useCallback(async () => {
     try {
       const response = await authorizedFetch(
         user,
-        '/api/admin/media-quarantine',
+        '/api/admin/media-quarantine?view=summary',
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(payload.error ?? `Failed (${response.status})`)
       }
       setListing({
-        records: Array.isArray(payload.records) ? payload.records : [],
         count: Number(payload.count ?? 0),
         maxEntries: Number(payload.maxEntries ?? 0),
+        clearable: Number(payload.clearable ?? 0),
         readAtMs: Number(payload.readAtMs ?? Date.now()),
       })
     } catch (error: any) {
@@ -380,12 +303,18 @@ function AdminMediaQuarantine() {
     }
   }, [user, enqueueSnackbar])
 
+  /** The facts and the page on screen, re-read together after a write. */
+  const loadList = useCallback(async () => {
+    refreshDenyList()
+    await loadSummary()
+  }, [refreshDenyList, loadSummary])
+
   const signedInUid = (user as any)?.uid
   useEffect(() => {
     if (!signedInUid) return
-    void loadList()
-    // Keyed on WHO is signed in, not on `loadList`. `useUser` hands back a
-    // fresh object on every render, so `loadList` changes identity every
+    void loadSummary()
+    // Keyed on WHO is signed in, not on `loadSummary`. `useUser` hands back a
+    // fresh object on every render, so `loadSummary` changes identity every
     // render too — depending on the callback re-reads the index document on
     // each one, which on this page means a Firestore read per keystroke
     // typed into the form above.
@@ -548,68 +477,18 @@ function AdminMediaQuarantine() {
     : undefined
   const full = lookup ? lookup.count >= lookup.maxEntries : false
 
-  /**
-   * Oldest first — the table's entire job is surfacing what has been sitting
-   * there, and an entry with no `atMs` predates the field, so it sorts ahead
-   * of every dated one rather than behind them.
-   */
-  const rows = useMemo((): DenyListRow[] => {
-    if (!listing) return []
-    return [...listing.records]
-      .map((record) => ({
-        $id: record.key,
-        record,
-        state: rowState(record, listing.readAtMs),
-        kind: listedKeyKind(record.key),
-        key: record.key,
-        reason: record.reason ?? '',
-        note: record.note ?? '',
-        origin: [record.originScopeSegment, record.originMediaId]
-          .filter(Boolean)
-          .join(' / '),
-      }))
-      .sort(
-        (a, b) =>
-          (typeof a.record.atMs === 'number' ? a.record.atMs : 0) -
-          (typeof b.record.atMs === 'number' ? b.record.atMs : 0),
-      )
-  }, [listing])
-  /*
-   * The deny list PAGES (AGL-2501). It rendered every entry in one wall — up
-   * to `maxEntries`, which is two thousand — on a table whose rows carry a
-   * key, a reason, two timestamps, an origin and a note apiece.
-   *
-   * The rows are already in memory and already sorted here, so the footer
-   * takes the real total and the counts above it keep describing the WHOLE
-   * list rather than the page: `clearable` and `listing.count` are facts
-   * about the deny list, and paging must not turn them into facts about ten
-   * rows.
-   */
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const denyFilter = useListRowsFilter({
-    rows,
-    fields: DENY_FILTER_FIELDS,
-    options: DENY_FILTER_OPTIONS,
-    headers: DENY_FILTER_HEADERS,
-    search: DENY_SEARCH_PATHS,
-  })
-  const filteredRows = denyFilter.rows
-  const pagedRows = useMemo(
-    () => filteredRows.slice(page * pageSize, page * pageSize + pageSize),
-    [filteredRows, page, pageSize],
+  const denyRefusals = useMemo(
+    () =>
+      listQueryRefusals(denyList.refused, {
+        fields: DENY_FILTER_FIELDS,
+        headers: DENY_FILTER_HEADERS,
+        options: DENY_FILTER_OPTIONS,
+      }),
+    [denyList.refused],
   )
-  // Releasing a key, or a filter, shortens the list, and a reader on the
-  // last page of a list that just shrank gets an empty table with no way
-  // back.
-  useEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(filteredRows.length / pageSize) - 1)
-    if (page > lastPage) setPage(lastPage)
-  }, [filteredRows.length, page, pageSize])
-  const { filterColumns: denyFilterColumns } = denyFilter
   const denyColumns = useMemo(
     () =>
-      denyFilterColumns([
+      listFilterGridColumns([
         {
           field: 'key',
           headerName: 'Key',
@@ -652,11 +531,11 @@ function AdminMediaQuarantine() {
           field: 'atMs',
           headerName: 'Set',
           width: 170,
-          valueGetter: (_value, row: DenyListRow) => row.record.atMs ?? null,
+          valueGetter: (_value, row: DenyListRow) => row.atMs ?? null,
           renderCell: ({ row }: { row: DenyListRow }) => (
             <Typography variant="caption">
-              {typeof row.record.atMs === 'number'
-                ? new Date(row.record.atMs).toLocaleString()
+              {typeof row.atMs === 'number'
+                ? new Date(row.atMs).toLocaleString()
                 : 'unknown'}
             </Typography>
           ),
@@ -665,11 +544,11 @@ function AdminMediaQuarantine() {
           field: 'untilMs',
           headerName: 'Expires',
           width: 170,
-          valueGetter: (_value, row: DenyListRow) => row.record.untilMs ?? null,
+          valueGetter: (_value, row: DenyListRow) => row.untilMs ?? null,
           renderCell: ({ row }: { row: DenyListRow }) => (
             <Typography variant="caption">
-              {typeof row.record.untilMs === 'number'
-                ? new Date(row.record.untilMs).toLocaleString()
+              {typeof row.untilMs === 'number'
+                ? new Date(row.untilMs).toLocaleString()
                 : 'no expiry'}
             </Typography>
           ),
@@ -681,8 +560,8 @@ function AdminMediaQuarantine() {
           minWidth: 160,
           renderCell: ({ row }: { row: DenyListRow }) => (
             <Typography variant="caption" sx={{ wordBreak: 'break-all' }}>
-              {row.record.originScopeSegment || row.record.originMediaId
-                ? `${row.record.originScopeSegment ?? '?'} / ${row.record.originMediaId ?? '?'}`
+              {row.originScopeSegment || row.originMediaId
+                ? `${row.originScopeSegment ?? '?'} / ${row.originMediaId ?? '?'}`
                 : 'not recorded'}
             </Typography>
           ),
@@ -719,10 +598,13 @@ function AdminMediaQuarantine() {
             </Button>
           ),
         },
-      ] as GridColDef<DenyListRow>[] as GridColDef[]),
-    [denyFilterColumns, busy, canWrite, releaseKey],
+      ] as GridColDef<DenyListRow>[] as GridColDef[],
+      DENY_FILTER_FIELDS,
+      DENY_FILTER_OPTIONS,
+      DENY_FILTER_HEADERS),
+    [busy, canWrite, releaseKey],
   )
-  const clearable = rows.filter((row) => row.state !== 'active').length
+  const clearable = listing?.clearable ?? 0
   const listFull = listing ? listing.count >= listing.maxEntries : false
 
   return (
@@ -1120,7 +1002,7 @@ function AdminMediaQuarantine() {
                   </Alert>
                 ) : null}
 
-                {listing && !rows.length ? (
+                {listing && listing.count === 0 ? (
                   <Typography variant="body2" color="text.secondary">
                     {
                       'The deny list is empty. Nothing on the platform is taken down.'
@@ -1128,33 +1010,37 @@ function AdminMediaQuarantine() {
                   </Typography>
                 ) : null}
 
-                {rows.length ? (
+                {listing && listing.count > 0 ? (
                   <Stack spacing={1}>
-                    <ListFilterChips {...denyFilter.chipsProps} />
+                    <ListFilterChips
+                      fields={DENY_FILTER_FIELDS}
+                      headers={DENY_FILTER_HEADERS}
+                      options={DENY_FILTER_OPTIONS}
+                      clauses={gridFilter.clauses}
+                      onChange={gridFilter.setClauses}
+                    />
+                    <ListQueryNotices refused={denyRefusals} notices={denyList.notices} />
                     <ListTable
                       aria-label="The whole deny list"
-                      rows={pagedRows}
+                      rows={denyList.rows}
                       columns={denyColumns}
-                      {...denyFilter.gridProps}
+                      loading={denyList.loading}
+                      filterMode="server"
+                      filterModel={gridFilter.filterModel}
+                      onFilterModelChange={gridFilter.onFilterModelChange}
+                      quickFilter
                       // A key wraps under its chips, so a row is as tall as
                       // its key.
                       getRowHeight={() => 'auto'}
-                      // The page holds the whole list and pages it with the
-                      // footer below; the grid draws the page it is handed.
+                      // The route answers one page at a time; the footer
+                      // below walks the pages.
                       hideFooter
                       initialState={{
                         columns: { columnVisibilityModel: DENY_HIDDEN_COLUMNS },
                       }}
                       noRowsLabel="No entries match these filters"
                     />
-                    <ListPagination
-                      page={page}
-                      pageSize={pageSize}
-                      rowCount={pagedRows.length}
-                      count={filteredRows.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                    />
+                    <StaffListPaginationControls pagination={denyList} />
                   </Stack>
                 ) : null}
 

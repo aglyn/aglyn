@@ -16,27 +16,28 @@
  */
 
 /**
- * The records grid filters the DATASET, not the page on screen.
+ * The records grid filters the DATASET, not the page on screen (AGL-3321).
  *
  * The fixture puts the only matching records past the first page of the
  * unfiltered walk, so a filter that narrowed the loaded page would find
- * nothing. A served filter reaches them because the query itself carries the
- * `filterKeys` token; a filter the query cannot serve alone reads a window
- * and matches the rest in memory.
+ * nothing. Every clause and the search word are predicates on the records
+ * query — equalities on `filterValues`, one word-level clause on
+ * `filterKeys` — answered here the way Firestore answers them, so a record
+ * past the first page is found and nothing is matched over loaded rows.
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { datasetFilterKeys } from '@aglyn/aglyn'
+import { datasetIntegrityFields } from '@aglyn/aglyn'
+import { rowAnswers } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { HostDatasetsCard } from './host-datasets-card.component'
-import { RECORD_FILTER_WINDOW } from './dataset-record-filter'
 
 jest.setTimeout(30_000)
 
 const ORG = { $id: 'org-1', plan: 'scale' } as any
 
 const MODEL = {
-  order: ['name', 'status', 'price'],
+  order: ['name', 'status', 'price', 'active', 'tags', 'due'],
   fields: {
     name: { name: 'Name', type: 'text' },
     status: {
@@ -45,6 +46,9 @@ const MODEL = {
       validation: { options: ['Open', 'Closed'] },
     },
     price: { name: 'Price', type: 'float' },
+    active: { name: 'Active', type: 'bool' },
+    tags: { name: 'Tags', type: 'sorted' },
+    due: { name: 'Due', type: 'timestamp' },
   },
 } as const
 
@@ -58,44 +62,59 @@ const DATASET = {
 const DATASETS = [DATASET]
 
 /**
- * Sixty records, id-ordered. Only the last few are kettles, and only rec-57
- * is Closed — all far past the first page of ten.
+ * Sixty records, id-ordered, each carrying the filter fields its writers
+ * stamp. Only the last few are kettles, only rec-57 is Closed, and only the
+ * red kettles are tagged `gift` — all far past the first page of ten.
  */
 const recordDocs = Array.from({ length: 60 }, (_, index) => {
   const values = {
     name: index >= 55 ? (index % 2 ? 'Red Kettle' : 'Blue Kettle') : `Mug ${index}`,
     status: index === 57 ? 'Closed' : 'Open',
     price: index,
+    active: index % 2 === 1,
+    tags: index >= 55 && index % 2 ? ['gift'] : ['kitchen'],
+    due: 1_700_000_000_000 + index,
   }
   return {
     $id: `rec-${String(index).padStart(2, '0')}`,
     values,
-    filterKeys: datasetFilterKeys(MODEL as any, values),
+    ...datasetIntegrityFields(MODEL as any, values),
   }
 })
 
-/** Firestore's answer: `array-contains`, then document-name order, then the limit. */
-const answer = (constraints: Array<Record<string, any>>) => {
-  const contains = constraints.find((item) => item.op === 'array-contains')
+type Constraint = Record<string, any>
+
+/** Firestore's answer: every predicate, then document-name order, then the limit. */
+const answer = (constraints: Constraint[]) => {
+  const predicates = constraints
+    .filter((item) => 'op' in item)
+    .map((item) => ({ path: item.field, op: item.op, value: item.value }))
   const cap = constraints.find((item) => 'limit' in item)?.limit
-  const matching = contains
-    ? recordDocs.filter((doc) => doc.filterKeys.includes(contains.value))
-    : recordDocs
+  const matching = recordDocs.filter((doc) =>
+    predicates.every((predicate) => rowAnswers(doc as any, predicate)),
+  )
   const sorted = [...matching].sort((a, b) => (a.$id < b.$id ? -1 : 1))
   return typeof cap === 'number' ? sorted.slice(0, cap) : sorted
 }
 
-/** Every records query the card ran: its token and its limit. */
-let mockRecordQueries: Array<{ via: 'page' | 'window'; token: string | null; limit: number }> = []
-const record = (via: 'page' | 'window', built: any) => {
-  const constraints = built?.constraints ?? []
+/** Every records query the card ran: its predicates, order and limit. */
+let mockRecordQueries: Array<{
+  where: Array<[string, string, unknown]>
+  orderBy: unknown
+  limit: number
+}> = []
+const record = (built: any) => {
+  const constraints: Constraint[] = built?.constraints ?? []
   mockRecordQueries.push({
-    via,
-    token: constraints.find((item: any) => item.op === 'array-contains')?.value ?? null,
-    limit: constraints.find((item: any) => 'limit' in item)?.limit,
+    where: constraints
+      .filter((item) => 'op' in item)
+      .map((item) => [item.field, item.op, item.value]),
+    orderBy: constraints.find((item) => 'orderBy' in item)?.orderBy,
+    limit: constraints.find((item) => 'limit' in item)?.limit,
   })
   return answer(constraints)
 }
+const lastQuery = () => mockRecordQueries.at(-1)
 
 // Stable across renders, as the real hooks are: the card's count effects
 // re-run whenever either changes identity.
@@ -114,11 +133,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     if (path.endsWith('/datasets')) {
       return { data: DATASETS, status: 'success', fromCache: false }
     }
-    return {
-      data: path.endsWith('/records') ? record('window', built) : [],
-      status: 'success',
-      fromCache: false,
-    }
+    // The records table reads no listener: a window read here is the bug.
+    if (path.endsWith('/records')) throw new Error('records read through a listener')
+    return { data: [], status: 'success', fromCache: false }
   },
   usePagedCollection: (build: (pageLimit: number) => any) => {
     const { useState } = require('react')
@@ -127,7 +144,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const windowSize = pageSize * (page + 1)
     const built = build(windowSize + 1)
     const answered = String(built?.path ?? '').endsWith('/records')
-      ? record('page', built)
+      ? record(built)
       : []
     return {
       rows: answered.slice(page * pageSize, windowSize),
@@ -146,6 +163,7 @@ jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
   query: (path: string, ...constraints: unknown[]) => ({ path, constraints }),
   where: (field: string, op: string, value: unknown) => ({ field, op, value }),
+  Timestamp: { fromDate: (date: Date) => date },
   limit: (value: number) => ({ limit: value }),
   orderBy: (field: unknown) => ({ orderBy: field }),
   documentId: () => '__name__',
@@ -197,8 +215,12 @@ const pick = async (panel: HTMLElement, label: string, option: string) => {
 
 /** Sets the Filters panel's one row: a column, an operator, a value. */
 const filterBy = async (column: string, operator: string | null, value: string) => {
-  fireEvent.click(screen.getByRole('button', { name: /filters/i }))
-  const panel = (await screen.findByRole('tooltip')) as HTMLElement
+  // The panel stays open after a value is set; clicking Filters again would close it.
+  let panel = screen.queryByRole('tooltip') as HTMLElement | null
+  if (!panel) {
+    fireEvent.click(screen.getByRole('button', { name: /filters/i }))
+    panel = (await screen.findByRole('tooltip')) as HTMLElement
+  }
   await pick(panel, 'Column', column)
   if (operator) await pick(panel, 'Operator', operator)
   const select = within(panel).queryByRole('combobox', { name: 'Value' })
@@ -212,25 +234,27 @@ const filterBy = async (column: string, operator: string | null, value: string) 
   fireEvent.change(input, { target: { value } })
 }
 
+/** The notices above the table: refusals and what was served. */
+const notices = () =>
+  Array.from(document.querySelectorAll('[aria-label="Filter notices"] .MuiAlert-message')).map(
+    (alert) => alert.textContent ?? '',
+  )
+
 describe('THE CONTROL', () => {
   it('the matching records are not on the first page of the walk', async () => {
     await mountCard()
     expect(shownNames()).toHaveLength(10)
     expect(shownNames().some((name) => name.includes('Kettle'))).toBe(false)
-    expect(mockRecordQueries.at(-1)).toEqual({ via: 'page', token: null, limit: 11 })
+    expect(lastQuery()).toEqual({ where: [], orderBy: '__name__', limit: 11 })
   })
 })
 
-describe('a served condition reaches every record', () => {
-  it('a search word narrows the QUERY by its token', async () => {
+describe('every condition is on the query', () => {
+  it('a search word asks the search token', async () => {
     await mountCard()
     search('kett')
     await waitFor(() =>
-      expect(mockRecordQueries.at(-1)).toEqual({
-        via: 'page',
-        token: 's:kett',
-        limit: 11,
-      }),
+      expect(lastQuery()?.where).toEqual([['filterKeys', 'array-contains', 's:kett']]),
     )
     await waitFor(() =>
       expect(shownNames()).toEqual([
@@ -243,57 +267,95 @@ describe('a served condition reaches every record', () => {
     )
   })
 
-  it('a field filter narrows the QUERY by its token, and its chip says so', async () => {
+  it('a picked option asks filterValues, and its chip reads as picked', async () => {
     await mountCard()
     await filterBy('Status', null, 'Closed')
     await waitFor(() =>
-      expect(mockRecordQueries.at(-1)).toEqual({
-        via: 'page',
-        token: 'f:status=Closed',
+      expect(lastQuery()?.where).toEqual([['filterValues.status', '==', 'Closed']]),
+    )
+    await waitFor(() => expect(shownNames()).toEqual(['Red Kettle']))
+    const chip = within(screen.getByRole('list', { name: 'Filters' })).getByRole('listitem')
+    expect(chip.textContent).toContain('Status is Closed')
+  })
+
+  it('an equality and the search are ONE query, not a window', async () => {
+    await mountCard()
+    await filterBy('Status', null, 'Open')
+    search('kett')
+    await waitFor(() =>
+      expect(lastQuery()).toEqual({
+        where: [
+          ['filterKeys', 'array-contains', 's:kett'],
+          ['filterValues.status', '==', 'Open'],
+        ],
+        orderBy: '__name__',
         limit: 11,
       }),
     )
-    await waitFor(() => expect(shownNames()).toEqual(['Red Kettle']))
-    const chip = within(screen.getByRole('list', { name: 'Filters' })).getByRole(
-      'listitem',
+    await waitFor(() =>
+      expect(shownNames()).toEqual(['Red Kettle', 'Blue Kettle', 'Blue Kettle', 'Red Kettle']),
     )
-    expect(chip.textContent).toContain('Status')
-    // Marked as the one that reached every record.
-    expect(chip.className).toContain('MuiChip-colorPrimary')
+    expect(notices()).toEqual([])
+  })
+
+  it('a text equality asks the lower-cased key; a number asks the number', async () => {
+    await mountCard()
+    await filterBy('Name', 'equals', '  RED kettle ')
+    await waitFor(() =>
+      expect(lastQuery()?.where).toEqual([['filterValues.name', '==', 'red kettle']]),
+    )
+    await filterBy('Price', '=', '57')
+    await waitFor(() =>
+      expect(lastQuery()?.where).toEqual([
+        ['filterValues.name', '==', 'red kettle'],
+        ['filterValues.price', '==', 57],
+      ]),
+    )
+    await waitFor(() => expect(shownNames()).toEqual(['Red Kettle']))
+  })
+
+  it('a many-word contains asks the first word, and says so', async () => {
+    await mountCard()
+    await filterBy('Name', 'contains', 'red kettle')
+    await waitFor(() =>
+      expect(lastQuery()?.where).toEqual([['filterKeys', 'array-contains', 'f:name^red']]),
+    )
+    await waitFor(() => expect(shownNames()).toEqual(['Red Kettle', 'Red Kettle', 'Red Kettle']))
+    expect(notices()).toEqual([
+      'Name contains matches one word at a time: showing records with a word starting "red".',
+    ])
   })
 })
 
-describe('what one token cannot serve is matched over a window', () => {
-  it('two search words: the first is served, the second matched in memory', async () => {
+describe('what one query cannot hold is refused by name, never half-applied', () => {
+  it('a list contains beside the search is refused, and the search stands', async () => {
     await mountCard()
-    search('red kettle')
+    search('kett')
+    await filterBy('Tags', 'contains', 'gift')
     await waitFor(() =>
-      expect(mockRecordQueries.at(-1)).toEqual({
-        via: 'window',
-        token: 's:red',
-        limit: RECORD_FILTER_WINDOW + 1,
-      }),
+      expect(notices()).toEqual([
+        'Tags contains gift is not applied: cannot be combined with the search — clear the search to use it.',
+      ]),
     )
-    await waitFor(() =>
-      expect(shownNames()).toEqual(['Red Kettle', 'Red Kettle', 'Red Kettle']),
-    )
+    expect(lastQuery()?.where).toEqual([['filterKeys', 'array-contains', 's:kett']])
+    // The refused clause keeps its chip, so the reader can remove it.
+    expect(
+      within(screen.getByRole('list', { name: 'Filters' })).getByRole('listitem').textContent,
+    ).toContain('Tags contains gift')
   })
 
-  it('a number range reads the plain walk as a window', async () => {
+  it('offers no range, negation or empty check, and nothing on a timestamp', async () => {
     await mountCard()
-    await filterBy('Price', '>', '57')
-    await waitFor(() =>
-      expect(mockRecordQueries.at(-1)).toEqual({
-        via: 'window',
-        token: null,
-        limit: RECORD_FILTER_WINDOW + 1,
-      }),
-    )
-    await waitFor(() => expect(shownNames()).toEqual(['Blue Kettle', 'Red Kettle']))
-    // A range narrows the window, so its chip is not marked as served.
-    const chip = within(screen.getByRole('list', { name: 'Filters' })).getByRole(
-      'listitem',
-    )
-    expect(chip.className).not.toContain('MuiChip-colorPrimary')
+    fireEvent.click(screen.getByRole('button', { name: /filters/i }))
+    const panel = (await screen.findByRole('tooltip')) as HTMLElement
+    await pick(panel, 'Column', 'Price')
+    fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Operator' }))
+    const operators = (await screen.findAllByRole('option')).map((option) => option.textContent)
+    expect(operators).toEqual(['='])
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Column' }))
+    const columns = (await screen.findAllByRole('option')).map((option) => option.textContent)
+    expect(columns).not.toContain('Due')
+    expect(columns).toEqual(expect.arrayContaining(['Name', 'Status', 'Price', 'Active', 'Tags']))
   })
 })

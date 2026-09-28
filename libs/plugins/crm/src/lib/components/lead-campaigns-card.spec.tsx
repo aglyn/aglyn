@@ -112,7 +112,13 @@ describe('LeadCampaignsCard', () => {
     await waitFor(() => expect(notices).toEqual(['Filing saved']))
     expect(updateDoc).toHaveBeenCalledWith(
       { path: 'orgs/org-1/leads/lead-key' },
-      { campaignIds: ['founder-icp2'], updatedAt: { op: 'serverTimestamp' } },
+      {
+        campaignIds: ['founder-icp2'],
+        // Behind the lead's scope, for the Leads list's Campaign filter
+        // under a site (AGL-3321) — none here, the fixture has no scope.
+        scopedCampaignIds: [],
+        updatedAt: { op: 'serverTimestamp' },
+      },
     )
     expect(onFiled).toHaveBeenCalledWith({ added: ['founder-icp2'], removed: ['founder-icp1'] })
   })

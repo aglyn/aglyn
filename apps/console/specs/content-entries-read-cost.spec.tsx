@@ -389,9 +389,9 @@ const EntryDetailPage =
  * suite meters is the query the filter becomes.
  */
 const FilterProbe = ({ filter }: { filter: Record<string, string> }) => {
-  const { setEntryFilter } = useContentScope()
+  const { setEntryClauses } = useContentScope()
   return (
-    <button type="button" onClick={() => setEntryFilter(filter)}>
+    <button type="button" onClick={() => setEntryClauses([filter])}>
       {'apply filter'}
     </button>
   )
@@ -616,7 +616,7 @@ describe('a filter is the query, not a pass over the page', () => {
     render(<List filter={{ field: 'status', op: 'equals', value: 'scheduled' }} />)
     fireEvent.click(screen.getByRole('button', { name: 'apply filter' }))
 
-    expect(screen.getByText('No entries match this filter')).toBeTruthy()
+    expect(screen.getByText('No entries match these filters')).toBeTruthy()
     // Not the empty-collection state, which has no table to clear a filter in.
     expect(screen.queryByText('No entries yet')).toBeNull()
   })

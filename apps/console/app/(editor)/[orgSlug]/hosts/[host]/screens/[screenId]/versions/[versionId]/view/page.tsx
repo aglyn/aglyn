@@ -23,7 +23,6 @@ import {
   composeScreenRoutePath,
   findScreenIdByRoutePath,
   HostScreenVisibility,
-  nameSearchKey,
   normalizeScreenSlug,
   readCampaignIds,
   reservedScreenRouteMessage,
@@ -56,6 +55,7 @@ import {
   ICON_VARIANT_SYMBOL_SECURE,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
+import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
@@ -499,9 +499,10 @@ function ScreenDetails() {
       async () => {
         await updateDoc(screenRef, {
           displayName: editor.displayName.trim(),
-          // Keep the name-search key in sync on rename (AGL-835) so the
-          // switcher's prefix query finds the screen under its new name.
-          nameLower: nameSearchKey(editor.displayName.trim()),
+          // Keep the name keys in sync on rename (AGL-835, AGL-3321) so the
+          // switcher's prefix query and the screen lists' search find the
+          // screen under its new name.
+          ...artifactRenameListKeys('screens', editor.displayName.trim()),
           description: editor.description.trim(),
           updatedAt: Timestamp.now(),
         })

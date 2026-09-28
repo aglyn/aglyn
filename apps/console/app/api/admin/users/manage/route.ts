@@ -45,6 +45,7 @@ import {
   sendPasswordChangedNotice,
   validateNewPassword,
 } from '../../../_lib/password-admin'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 const ACTIONS = [
   'grantStaff',
@@ -154,20 +155,16 @@ async function handler(request: Request): Promise<Response> {
           { status: conflict ? 409 : 404 },
         )
       }
-      await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('adminAudit')
-        .add({
-          actorUid: decoded.uid,
-          actorEmail: decoded.email ?? null,
-          action: 'user.erased',
-          target: `users/${uid}`,
-          // The uid is all that is left to identify them by — the account it
-          // named no longer exists — so the reason has to carry the meaning.
-          after: { reason, ...result.deleted },
-          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
+        actorUid: decoded.uid,
+        actorEmail: decoded.email ?? null,
+        action: 'user.erased',
+        target: `users/${uid}`,
+        // The uid is all that is left to identify them by — the account it
+        // named no longer exists — so the reason has to carry the meaning.
+        after: { reason, ...result.deleted },
+        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
         .catch(() => undefined)
       return Response.json({ ok: true, deleted: result.deleted }, { status: 200 })
     }
@@ -286,7 +283,7 @@ async function handler(request: Request): Promise<Response> {
           },
           { merge: true },
         )
-      await firebaseAdmin.app().firestore().collection('adminAudit').add({
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
         actorUid: decoded.uid,
         action: 'user.updateProfile',
         target: `users/${uid}`,
@@ -346,7 +343,7 @@ async function handler(request: Request): Promise<Response> {
             error: 'Could not send the reset email — check email settings',
           }, { status: 502 })
         }
-        await firebaseAdmin.app().firestore().collection('adminAudit').add({
+        await addAdminAudit(firebaseAdmin.app().firestore(), {
           actorUid: decoded.uid,
           action: 'user.sendPasswordReset',
           target: `users/${uid}`,
@@ -385,7 +382,7 @@ async function handler(request: Request): Promise<Response> {
         actorName,
       })
       // The audit records THAT the password changed, never the password.
-      await firebaseAdmin.app().firestore().collection('adminAudit').add({
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
         actorUid: decoded.uid,
         action: 'user.setPassword',
         target: `users/${uid}`,
@@ -446,27 +443,23 @@ async function handler(request: Request): Promise<Response> {
       if (!outcome.existed) {
         return Response.json({ error: 'Unknown device' }, { status: 404 })
       }
-      await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('adminAudit')
-        .add({
-          actorUid: decoded.uid,
-          actorEmail: decoded.email ?? null,
-          action: 'user.signOutDevice',
-          target: `users/${uid}`,
-          targetTenantId: found.tenantId ?? null,
-          before: null,
-          // WHICH device, and the fact that the blast radius was the whole
-          // account. A row that recorded only "signed out a device" would not
-          // answer the question this audit exists for.
-          after: {
-            deviceId,
-            revokedAt: outcome.revokedAt,
-            signedOutEverywhere: true,
-          },
-          at: FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
+        actorUid: decoded.uid,
+        actorEmail: decoded.email ?? null,
+        action: 'user.signOutDevice',
+        target: `users/${uid}`,
+        targetTenantId: found.tenantId ?? null,
+        before: null,
+        // WHICH device, and the fact that the blast radius was the whole
+        // account. A row that recorded only "signed out a device" would not
+        // answer the question this audit exists for.
+        after: {
+          deviceId,
+          revokedAt: outcome.revokedAt,
+          signedOutEverywhere: true,
+        },
+        at: FieldValue.serverTimestamp(),
+      })
         .catch(() => undefined)
       return Response.json(
         {
@@ -535,42 +528,38 @@ async function handler(request: Request): Promise<Response> {
       invalidateTokenRevocationCache(uid, claimPool)
     }
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: `user.${action}`,
-        target: `users/${uid}`,
-        // WHICH pool the claim landed in (AGL-1993). `null` is the project
-        // pool; a tenant id means an SSO identity. Recorded because a staff
-        // grant on an identity in a CUSTOMER's tenant is exactly the row a
-        // staff-access review needs to see.
-        targetTenantId: claimWrite ? claimWrite.tenantId : (found.tenantId ?? null),
-        before,
-        after: {
-          staff:
-            action === 'grantStaff' || action === 'setRole'
-              ? true
-              : action === 'revokeStaff'
-                ? false
-                : before.staff,
-          staffRole:
-            action === 'setRole'
-              ? requestedRole
-              : action === 'grantStaff'
-                ? 'support'
-                : before.staffRole,
-          disabled:
-            action === 'disable'
-              ? true
-              : action === 'enable'
-                ? false
-                : before.disabled,
-        },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: `user.${action}`,
+      target: `users/${uid}`,
+      // WHICH pool the claim landed in (AGL-1993). `null` is the project
+      // pool; a tenant id means an SSO identity. Recorded because a staff
+      // grant on an identity in a CUSTOMER's tenant is exactly the row a
+      // staff-access review needs to see.
+      targetTenantId: claimWrite ? claimWrite.tenantId : (found.tenantId ?? null),
+      before,
+      after: {
+        staff:
+          action === 'grantStaff' || action === 'setRole'
+            ? true
+            : action === 'revokeStaff'
+              ? false
+              : before.staff,
+        staffRole:
+          action === 'setRole'
+            ? requestedRole
+            : action === 'grantStaff'
+              ? 'support'
+              : before.staffRole,
+        disabled:
+          action === 'disable'
+            ? true
+            : action === 'enable'
+              ? false
+              : before.disabled,
+      },
+      at: FieldValue.serverTimestamp(),
+    })
 
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {

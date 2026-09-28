@@ -18,8 +18,11 @@ all organizations at once.
 ## Triage
 
 The list is filtered to **open** by default, with **closed** and **all** chips beside
-it and a count of what's still open. Each row shows the organization it came from and
-the subject.
+it and a count of what's still open. The filter applies to **every** organization's
+tickets, not only the ones on screen, and the open count in the header is the whole
+queue's. Tickets come newest update first, a page at a time, with the page controls
+under the list. There is no search box. Each row shows the organization it came from
+and the subject.
 
 Open a ticket to read the full thread. Every message shows its author's email, so you
 can see at a glance whether the last word was the customer's or ours.

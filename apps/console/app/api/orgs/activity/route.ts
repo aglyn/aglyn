@@ -27,24 +27,22 @@ import {
   ACTOR_ACTIVITY_MAX_PAGE,
   orgActivityFacets,
   orgActivityScopePaths,
-  readActorActivity,
+  planActivityQuery,
   readOrgWideActivity,
 } from '../../../../utils/server/actor-activity'
 import {
-  applyAuditLogFilters,
-  auditLogFilterRefusal,
-  auditLogSearchMatcher,
   auditLogSearchWords,
   readAuditLogFilters,
 } from '../../../../utils/server/audit-log-filter'
 import {
+  ACTIVITY_LIST_QUERY,
   ORG_ACTIVITY_FILTER_FIELDS,
-  ORG_ACTIVITY_SEARCH_PATHS,
-  ORG_ACTIVITY_SEARCH_SCAN,
-  ORG_FEED_FILTER_FIELDS,
-  ORG_TARGET_FEED_FILTER_FIELDS,
-} from '../../../../utils/audit-log-filters'
-import { readListFilter } from '../../../../utils/server/list-filter'
+  ORG_ACTIVITY_QUERY,
+  activityActorBase,
+  activityTargetBase,
+  splitWhereClause,
+} from '../../../../utils/activity-list-query'
+import { applyListQuery } from '../../../../utils/server/list-filter'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
@@ -99,11 +97,17 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * `createdAt` is flattened to `{ seconds }` because a Firestore `Timestamp`
  * through JSON arrives as `{_seconds}` and would silently sort everything to
  * the bottom. `formatWireTimestamp` is what reads it back.
+ *
+ * ## Filters and search
+ *
+ * Every mode reads `filters` (a JSON list of `{ field, op, value }`) and
+ * `search`, and puts all of it on its query through `planListQuery`
+ * (AGL-3321) — see `utils/activity-list-query.ts` for the declarations and
+ * the indexes. What the plan could not put there comes back as `refused`,
+ * with `notices` about what it did, and is NOT applied: the page says so
+ * rather than narrowing some rows and not others.
  */
 const DEFAULT_PAGE_SIZE = 25
-
-/** The org-wide page when a caller names no size; see `readOrgWideActivity`. */
-const WINDOW = 200
 
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -132,6 +136,20 @@ async function handler(request: Request): Promise<Response> {
     ) {
       return Response.json({ error: 'org.auditLog required' }, { status: 403 })
     }
+    /** The panel's clauses, and the search box's words. */
+    const clauses = readAuditLogFilters(query, ORG_ACTIVITY_FILTER_FIELDS)
+    if (!clauses) return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+    const search = auditLogSearchWords(query['search'])
+    const pageSize = Math.min(
+      Math.max(
+        1,
+        Math.floor(Number(query['pageSize'] ?? query['limit'] ?? DEFAULT_PAGE_SIZE)) ||
+          DEFAULT_PAGE_SIZE,
+      ),
+      ACTOR_ACTIVITY_MAX_PAGE,
+    )
+    const cursor = String(query['cursor'] ?? '').trim() || null
+
     /**
      * One member's activity across the WHOLE organization.
      *
@@ -145,18 +163,20 @@ async function handler(request: Request): Promise<Response> {
      *
      * Same permission, deliberately. It is the same audit log read by a
      * narrower question, so `org.auditLog` is the right gate for both — and
-     * the scope is bounded to this org's own sites, so it cannot become a
-     * cross-organization view of a person who is also a member elsewhere.
+     * it reads only this organization's subjects, the member's equality on
+     * each, so it cannot become a cross-organization view of a person who is
+     * also a member elsewhere, and reads nothing it then throws away.
      */
     const actorId = String(query['actorId'] ?? '').trim()
     if (actorId) {
-      const page = await readActorActivity({
-        actorId,
-        pageSize: Number(query['pageSize'] ?? 25),
-        cursor: String(query['cursor'] ?? '') || null,
-        // The column filter, answered by the query rather than by the page.
-        filter: readListFilter(query),
-        scopePaths: await orgActivityScopePaths(orgId),
+      const page = await readOrgWideActivity({
+        orgId,
+        limit: pageSize,
+        cursor,
+        clauses,
+        search,
+        base: activityActorBase(actorId),
+        paths: await orgActivityScopePaths(orgId),
       })
       return Response.json(page, { status: 200 })
     }
@@ -174,126 +194,80 @@ async function handler(request: Request): Promise<Response> {
      */
     if (String(query['scope'] ?? '') === 'org-wide') {
       /*
-       * The log's filters, every one served (see `ORG_ACTIVITY_FILTER_FIELDS`):
-       * Where picks which subjects are read, Who turns the fan-out into the
-       * person's own collection-group feed kept to those subjects, and Action
-       * and When go onto every query. The search is matched as the log is
-       * read, a bounded number of entries per page.
+       * Where picks which subjects are read; Action, Who, When and the
+       * search go onto every subject's query, the same plan on each.
        */
-      const clauses = readAuditLogFilters(query, ORG_ACTIVITY_FILTER_FIELDS)
-      const refusal = clauses
-        ? auditLogFilterRefusal(ORG_ACTIVITY_FILTER_FIELDS, clauses)
-        : 'Unreadable filters'
-      if (!clauses || refusal) return Response.json({ error: refusal }, { status: 400 })
-      const valueOf = (field: string) =>
-        clauses.find((clause) => clause.field === field)?.value ?? null
-      const served = clauses.filter(
-        (clause) => clause.field === 'action' || clause.field === 'createdAt',
-      )
-      const site = valueOf('scopeId')
-      const actorFilter = valueOf('actorId')
+      const { where, rest, refused } = splitWhereClause(clauses)
       const allPaths = await orgActivityScopePaths(orgId)
-      // A subject is `hosts/{id}` or `orgs/{id}`; Where names the id.
-      const paths = site
-        ? new Set([...allPaths].filter((path) => path.split('/')[1] === site))
+      // A subject is `hosts/{id}` or `orgs/{id}`; Where names the id. A site
+      // that is not this organization's is a place with nothing in its log.
+      const paths = where
+        ? new Set([...allPaths].filter((path) => path.split('/')[1] === where))
         : allPaths
-      const matches = auditLogSearchMatcher(
-        auditLogSearchWords(query['search']),
-        ORG_ACTIVITY_SEARCH_PATHS,
-      )
-      const pageSize = Number(query['pageSize'] ?? query['limit'] ?? WINDOW)
-      const cursor = String(query['cursor'] ?? '') || null
-      const page = actorFilter
-        ? await readActorActivity({
-            actorId: actorFilter,
-            pageSize,
-            cursor,
-            filters: served,
-            matches,
-            scopePaths: paths,
-          })
-        : await readOrgWideActivity({
-            orgId,
-            limit: pageSize,
-            cursor,
-            filters: served,
-            matches,
-            scanCap: ORG_ACTIVITY_SEARCH_SCAN,
-            paths,
-          })
+      const page = await readOrgWideActivity({
+        orgId,
+        limit: pageSize,
+        cursor,
+        clauses: rest,
+        search,
+        declaration: ORG_ACTIVITY_QUERY,
+        paths,
+      })
       const facets =
         String(query['facets'] ?? '') === '1' ? await orgActivityFacets(orgId) : null
       return Response.json(
         {
-          entries: page.entries,
-          nextCursor: page.nextCursor,
-          scanned: page.scanned,
+          ...page,
+          refused: [...refused, ...page.refused],
           ...(facets ? { facets } : {}),
         },
         { status: 200 },
       )
     }
     /**
-     * Changes made TO one member, host or screen (AGL-389).
+     * The organization's own feed, or the changes made TO one member, host
+     * or screen (AGL-389).
      *
-     * Filtered by the SERVER now. The card fetched the window and filtered it
-     * in the browser, which cannot survive pagination: a page of 25 org
+     * Filtered by the SERVER. The card once fetched the window and filtered
+     * it in the browser, which cannot survive pagination: a page of 25 org
      * entries might contain two that touch this member, and the card would
      * render those two and call it the page. `logOrgActivity` writes
-     * `target: { type, id }`, so this is a field query, and the composite
-     * index it needs is in `cloud/firebase-firestore.indexes.json`.
+     * `target: { type, id }`, so the target is the query's base, and every
+     * clause and the search merge with it by index
+     * (`cloud/firebase-firestore.indexes.json`).
      */
     const targetId = String(query['targetId'] ?? '').trim()
-    const pageSize = Math.min(
-      Math.max(
-        1,
-        Math.floor(Number(query['pageSize'] ?? DEFAULT_PAGE_SIZE)) ||
-          DEFAULT_PAGE_SIZE,
-      ),
-      ACTOR_ACTIVITY_MAX_PAGE,
-    )
     const activityRef = firebaseAdmin
       .app()
       .firestore()
       .collection('orgs')
       .doc(orgId)
       .collection('activity')
+    const plan = planActivityQuery(
+      ACTIVITY_LIST_QUERY,
+      { clauses, search },
+      targetId ? activityTargetBase(targetId) : [],
+    )
     /*
      * A cursor that no longer resolves restarts at the top rather than
      * throwing. An audit log left open in a tab while its oldest entries are
      * pruned should answer the next click with the newest page, not a 500.
      */
-    const cursorId = String(query['cursor'] ?? '').trim()
-    const after = cursorId
+    const after = cursor
       ? await activityRef
-          .doc(cursorId)
+          .doc(cursor)
           .get()
           .catch(() => null)
       : null
-    /*
-     * The organization's own feed filters by Action and When; narrowed to
-     * one target it filters by When alone, because an Action beside the
-     * target equality would need a composite nobody built.
-     */
-    const feedFields = targetId ? ORG_TARGET_FEED_FILTER_FIELDS : ORG_FEED_FILTER_FIELDS
-    const clauses = readAuditLogFilters(query, feedFields)
-    const refusal = clauses ? auditLogFilterRefusal(feedFields, clauses) : 'Unreadable filters'
-    if (!clauses || refusal) return Response.json({ error: refusal }, { status: 400 })
-    const narrowed = applyAuditLogFilters(
-      targetId ? activityRef.where('target.id', '==', targetId) : activityRef,
-      feedFields,
-      clauses,
-    )
-    if (!narrowed) {
-      return Response.json({ error: 'This log cannot be filtered that way' }, { status: 400 })
-    }
-    let pageQuery: FirebaseFirestore.Query = narrowed.orderBy('createdAt', 'desc')
+    let pageQuery = applyListQuery(activityRef, plan)
     if (after?.exists) pageQuery = pageQuery.startAfter(after)
     // One extra row answers "is there another page" without a second query.
     const snapshot = await pageQuery.limit(pageSize + 1).get()
     const pageDocs = snapshot.docs.slice(0, pageSize)
     const entries = pageDocs.map((doc) => {
-      const data = doc.data() as Record<string, unknown>
+      const data = { ...(doc.data() as Record<string, unknown>) }
+      // The search's index, not something a reader is shown.
+      delete data['searchTokens']
       const createdAt = data['createdAt'] as { seconds?: number } | undefined
       return {
         ...data,
@@ -311,6 +285,8 @@ async function handler(request: Request): Promise<Response> {
           snapshot.docs.length > pageSize
             ? (pageDocs[pageDocs.length - 1]?.id ?? null)
             : null,
+        refused: plan.refused,
+        notices: plan.notices,
       },
       { status: 200 },
     )

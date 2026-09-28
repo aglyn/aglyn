@@ -65,6 +65,7 @@
 import { createHash } from 'node:crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { nameSearchFields } from './crm-fixtures.mjs'
+import { withCrmListFields } from './org-record-list-fields.mjs'
 import { readLegalDocumentVersion } from './legal-document-version.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -151,8 +152,10 @@ export async function seedFreePlanWorkspace(options) {
     auth,
     password,
     nowMs = Date.now(),
-    write = (ref, data) => ref.set(data),
+    write: writeRaw = (ref, data) => ref.set(data),
   } = options
+  // Every CRM record carries the fields its list queries (AGL-3321).
+  const write = (ref, data) => writeRaw(ref, withCrmListFields(ref, data))
   const F = FREE_PLAN_FIXTURE
 
   try {

@@ -16,77 +16,76 @@
  */
 
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import type {
-  ListFilterClause,
-  ListFilterOption,
-} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+  ListQueryDeclaration,
+  ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*
- * What the staff platform-suppression list filters and searches by, read by
- * BOTH the card that renders the panel and `/api/admin/emails/suppressions`,
- * which serves every clause on its query (AGL-3321).
+ * THE STAFF PLATFORM-SUPPRESSION LIST'S QUERY (AGL-3321).
  *
- * The list is `suppressedAt` DESC with a cursor into that order, so the
- * order is not the filter's to change. Beneath it Firestore answers
- * equalities, one `array-contains`, and a range over `suppressedAt` itself —
- * which is every shape declared here. Each composite those need is in
- * `cloud/firebase-firestore.indexes.json`, pinned by
- * `email-suppression-filters.spec.ts`.
+ * Read by BOTH the card that renders the Filters panel and
+ * `/api/admin/emails/suppressions`, which plans every clause and the search
+ * word onto one Firestore query (`runStaffListQuery`) and pages it by a
+ * cursor in that query's own order. Nothing is matched over rows a read
+ * already fetched.
  *
- * How many stand at once:
+ * ## One order, merged indexes
  *
- *   - Status and Last reported stand beside anything.
- *   - Reason, Learned from and Site ID are one at a time: a clause on one
- *     replaces a clause on another. Every pair would need an index of its
- *     own, and a pair nobody indexed fails the read rather than narrowing it.
- *   - The search stands beside Last reported only. With a search in force
- *     the card sets the other clauses aside and says so, and the route
- *     refuses a request that carries both.
+ * `suppressedAt` DESC — newest failure first — is the only order, so the
+ * only range is over `suppressedAt` itself (Last reported). Each equality
+ * (Status, Reason, Learned from, Site ID) and the search token merge with it
+ * through their own `(field, suppressedAt DESC)` composite, so any
+ * combination of them is one query with no index of its own; the spec pins
+ * the five (`specs/email-suppression-list-query.spec.ts`).
  *
- * Status reads `released`, the boolean the writers stamp beside
+ * What one query cannot hold is refused by name and not applied: a second
+ * "any of" beside the search's array clause, or thirty-plus values at once.
+ *
+ * ## Status and the search are written fields
+ *
+ * Status reads `released`, the boolean every writer stamps beside
  * `releasedAt`: "released" read from the timestamp would be `!= null`, an
- * inequality Firestore makes the first sort.
+ * inequality that would have to lead the order. The search reads
+ * `emailTokens` (`emailSearchTokens`), which `suppressEmail` stamps on every
+ * write. `tools/scripts/backfill-email-suppression-filters.mjs` stamps both
+ * on the records that predate them.
  */
+
+/** The one order the list keeps, and pages by. */
+export const SUPPRESSION_LIST_SORT: ListQuerySort = {
+  path: 'suppressedAt',
+  direction: 'desc',
+}
+
 export const SUPPRESSION_FILTER_FIELDS: readonly ListFilterField[] = [
   {
     column: 'status',
     kind: 'boolean',
     path: 'released',
     // Offered as a select of two named states rather than MUI's tri-state
-    // boolean; the route reads `'true'`/`'false'` either way.
+    // boolean; the plan reads `'true'`/`'false'` either way.
     operators: ['equals'],
   },
   { column: 'reason', kind: 'exact', path: 'reason', operators: ['equals', 'isAnyOf'] },
   { column: 'context', kind: 'exact', path: 'context', operators: ['equals'] },
   { column: 'hostId', kind: 'exact', path: 'hostId', operators: ['equals'] },
   {
-    // The sort field, so a range over it needs no index of its own. `is` (a
-    // day) is absent: it would bound the query with `startAt`/`endAt`, which
-    // the page cursor replaces.
+    // The sort field, so a range over it needs no index of its own.
     column: 'suppressedAt',
     kind: 'date',
     path: 'suppressedAt',
-    operators: ['after', 'onOrAfter', 'before', 'onOrBefore'],
+    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
   },
 ]
 
-/**
- * The toolbar's search, as the field the route matches it through: a word
- * prefix of the address, held in `emailTokens` (`emailSearchTokens`).
- */
-export const SUPPRESSION_SEARCH_FIELD: ListFilterField = {
-  column: 'email',
-  kind: 'text',
-  path: 'email',
-  tokensPath: 'emailTokens',
-  operators: ['contains'],
+/** The list's query: every field above and a word prefix of the address. */
+export const SUPPRESSION_LIST_QUERY: ListQueryDeclaration = {
+  fields: SUPPRESSION_FILTER_FIELDS,
+  sorts: [SUPPRESSION_LIST_SORT],
+  search: { tokensPath: 'emailTokens' },
 }
-
-/** Fields whose clauses stand beside any other. */
-export const SUPPRESSION_ALONGSIDE_FIELDS: readonly string[] = ['status', 'suppressedAt']
-
-/** Fields of which one clause at a time is served. */
-export const SUPPRESSION_SINGLE_FIELDS: readonly string[] = ['reason', 'context', 'hostId']
 
 export const SUPPRESSION_FILTER_HEADERS: Readonly<Record<string, string>> = {
   status: 'Status',
@@ -128,6 +127,11 @@ export const SUPPRESSION_SELECT_FIELDS: readonly string[] = Object.keys(
   SUPPRESSION_FILTER_OPTIONS,
 )
 
-/** Whether a clause stands beside the one-at-a-time clause in force. */
-export const suppressionClauseStandsAlongside = (clause: ListFilterClause): boolean =>
-  SUPPRESSION_ALONGSIDE_FIELDS.includes(clause.field)
+/**
+ * What the search box finds, said beside it while a search is in force —
+ * the promise `emailSearchTokens` keeps.
+ */
+export const SUPPRESSION_SEARCH_HINT =
+  'Search finds an address by the start of any part of it — the whole ' +
+  'address, a word of the name before the @, or the domain — across the ' +
+  'whole list.'

@@ -36,6 +36,9 @@ import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListTable,
   listActionsColumn,
@@ -81,14 +84,13 @@ import {
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
 import { DatasetRecordDialog } from './dataset-record-dialog.component'
 import {
   datasetRecordFilter,
-  matchRecordWindow,
-  planRecordFilter,
-  RECORD_FILTER_WINDOW,
+  planRecordQuery,
   recordColumn,
 } from './dataset-record-filter'
 
@@ -357,24 +359,23 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * rows would run in one order within a page and another across pages.
    * The grid's column sort is off for the same reason.
    *
-   * ## Filtering, and what reaches every record
+   * ## Filtering: every clause and the search word are on the query
    *
-   * The grid's Filters panel and quick search narrow the walk through the
-   * record's `filterKeys` (`datasetFilterKeys`): a token array Firestore's
-   * automatic single-field index serves with `array-contains` beside the same
-   * document-name order, so it needs no composite index and no index
-   * deploy. ONE condition is served that way — the first clause a token can
-   * answer (`datasetFilterToken`), else the first search word — and when it is
-   * the only condition, the walk pages through every matching record exactly
-   * as it pages through all of them.
+   * The grid's Filters panel and quick search are predicates on this same
+   * walk (AGL-3321), planned by `planRecordQuery` (`./dataset-record-filter`,
+   * over the shared `planListQuery`): equalities ask the record's
+   * `filterValues`, and one word-level clause — a text `contains`, a list
+   * member, or the search word — asks its `filterKeys`. Firestore's
+   * automatic single-field indexes merge them under the same document-name
+   * order, so every filter pages through every matching record exactly as
+   * the plain walk pages through all of them, with no composite index and
+   * no index deploy.
    *
-   * Anything more — a second clause, a second word, a multi-word `contains`,
-   * or a clause no token answers (number and date ranges, empty checks,
-   * negations) — cannot be one `array-contains`. Those read a WINDOW of
-   * {@link RECORD_FILTER_WINDOW} records under the served condition (or the
-   * plain walk when none is servable), match the rest in memory, and page the
-   * matches here; the caption says when the window was full. Ranges on
-   * numbers and dates are therefore always window-only.
+   * Nothing is matched over the rows already loaded. What one query cannot
+   * hold is not offered (ranges, negations, empty checks) or is refused by
+   * name above the table (a second `contains`, a `contains` beside the
+   * search), and a many-word `contains` or search says it asked the first
+   * word.
    */
   const gridFilter = useListGridFilter({ selectFields: recordFilter.selectFields })
   // A clause on a field this dataset does not have (the reader switched
@@ -387,12 +388,23 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [gridFilter.clauses, recordFilter.fields],
   )
   const recordPlan = useMemo(
-    () => planRecordFilter(model, recordClauses, gridFilter.searchWords),
-    [model, recordClauses, gridFilter.searchWords],
+    () => planRecordQuery(model, recordFilter, recordClauses, gridFilter.searchWords),
+    [model, recordFilter, recordClauses, gridFilter.searchWords],
   )
-  /** The walk, narrowed by the served token when there is one. */
-  const recordsQuery = useCallback(
-    (cap: number) =>
+  // The query's identity: a new plan is a new walk, from page one.
+  const recordPlanKey = JSON.stringify({
+    filters: recordPlan.plan.filters,
+    orderBy: recordPlan.plan.orderBy,
+  })
+  const {
+    rows: records,
+    hasMore: hasMoreRecords,
+    page: recordPage,
+    setPage: setRecordPage,
+    pageSize: recordPageSize,
+    setPageSize: setRecordPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       dataScope && selected?.$id
         ? query(
             collection(
@@ -403,68 +415,21 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               selected.$id,
               'records',
             ),
-            ...(recordPlan.token
-              ? [where('filterKeys', 'array-contains', recordPlan.token)]
-              : []),
-            orderBy(documentId()),
-            limit(cap),
+            ...listQueryConstraints(recordPlan.plan),
+            limit(pageLimit),
           )
         : null,
-    [firestore, dataScope, selected?.$id, recordPlan.token],
-  )
-  const {
-    rows: pagedRecords,
-    hasMore: hasMorePaged,
-    page: pagedPage,
-    setPage: setPagedPage,
-    pageSize: recordPageSize,
-    setPageSize: setPagedPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) => (recordPlan.windowed ? null : recordsQuery(pageLimit)),
-    [recordsQuery, recordPlan.windowed],
+    [firestore, dataScope, selected?.$id, recordPlanKey],
     { idField: '$id' },
   )
-  // The window: one read past the cap, so "the window was full" is a fact.
-  const { data: windowDocs } = useFirestoreCollection<any>(
-    () => (recordPlan.windowed ? recordsQuery(RECORD_FILTER_WINDOW + 1) : null),
-    [recordsQuery, recordPlan.windowed],
-    { idField: '$id' },
-  )
-  const windowRecords = useMemo(
-    () => (recordPlan.windowed ? (windowDocs ?? []).slice(0, RECORD_FILTER_WINDOW) : []),
-    [recordPlan.windowed, windowDocs],
-  )
-  const windowFull = recordPlan.windowed && (windowDocs?.length ?? 0) > RECORD_FILTER_WINDOW
-  const windowMatches = useMemo(
+  const recordRefusals = useMemo(
     () =>
-      recordPlan.windowed
-        ? matchRecordWindow(model, recordFilter.fields, windowRecords, recordPlan)
-        : [],
-    [recordPlan, model, recordFilter.fields, windowRecords],
-  )
-  const [windowPage, setWindowPage] = useState(0)
-  const [windowPageSize, setWindowPageSize] = useState(recordPageSize)
-  useEffect(() => {
-    setWindowPage(0)
-  }, [recordPlan, selected?.$id])
-  /** Every record this card has read: the page, or the whole window. */
-  const records = recordPlan.windowed ? windowRecords : pagedRecords
-  /** The rows on screen. */
-  const shownRecords = recordPlan.windowed
-    ? windowMatches.slice(windowPage * windowPageSize, (windowPage + 1) * windowPageSize)
-    : pagedRecords
-  const recordPage = recordPlan.windowed ? windowPage : pagedPage
-  const setRecordPage = recordPlan.windowed ? setWindowPage : setPagedPage
-  const hasMoreRecords = recordPlan.windowed
-    ? (windowPage + 1) * windowPageSize < windowMatches.length
-    : hasMorePaged
-  const setRecordPageSize = useCallback(
-    (next: number) => {
-      setPagedPageSize(next)
-      setWindowPageSize(next)
-      setWindowPage(0)
-    },
-    [setPagedPageSize],
+      listQueryRefusals(recordPlan.refused, {
+        fields: recordFilter.fields,
+        headers: recordFilter.headers,
+        options: recordFilter.options,
+      }),
+    [recordPlan.refused, recordFilter],
   )
   const filteringRecords =
     recordClauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
@@ -947,7 +912,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             ...datasetIntegrityUpdate(model, coerced, deleteField()),
             updatedAt: Timestamp.now(),
           },
-          { mergeFields: ['values', 'referencedIds', 'filterKeys', 'updatedAt'] },
+          {
+            mergeFields: ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt'],
+          },
         )
         await announceRecords(selected.$id)
       } else {
@@ -1272,7 +1239,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
        * being handed silent duplicates — `recordCount` is the server
        * aggregate, so that comparison is exact.
        */
-      const existingByKey = new Map<string, string>()
+      const existingByKey = new Map<
+        string,
+        { id: string; values: Record<string, unknown> }
+      >()
       const keyWindow = await getDocs(
         query(
           collection(
@@ -1288,8 +1258,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         ),
       ).catch(() => null)
       for (const snapshot of keyWindow?.docs ?? []) {
-        const key = keyOf((snapshot.get('values') as Record<string, unknown>) ?? {})
-        if (key) existingByKey.set(key, snapshot.id)
+        const values = (snapshot.get('values') as Record<string, unknown>) ?? {}
+        const key = keyOf(values)
+        if (key) existingByKey.set(key, { id: snapshot.id, values })
       }
       if (recordCount > IMPORT_KEY_WINDOW) {
         enqueueSnackbar(
@@ -1309,9 +1280,13 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       updates = []
       creates = [...keyless]
       for (const [key, row] of deduped) {
-        const existingId = existingByKey.get(key)
-        if (existingId) updates.push({ id: existingId, values: row.values })
-        else creates.push(row)
+        const existing = existingByKey.get(key)
+        // The import's columns over the record's own: a column the file
+        // does not carry keeps its value, and the filter fields are derived
+        // from the WHOLE record, not the columns imported.
+        if (existing) {
+          updates.push({ id: existing.id, values: { ...existing.values, ...row.values } })
+        } else creates.push(row)
       }
     }
 
@@ -1356,7 +1331,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             ...datasetIntegrityUpdate(model, update.values, deleteField()),
             updatedAt: Timestamp.now(),
           },
-          { merge: true },
+          // Each named field replaced whole — `merge: true` would fold the
+          // `filterValues` map into the stored one and keep a cleared value.
+          {
+            mergeFields: ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt'],
+          },
         )
       })
       await batch.commit()
@@ -1586,22 +1565,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             clauses={recordClauses}
             onChange={gridFilter.setClauses}
             options={recordFilter.options}
-            servedField={recordPlan.windowed ? null : recordPlan.servedField}
           />
-          {windowFull ? (
-            <Typography variant="caption" color="text.secondary">
-              {`Filtering the first ${RECORD_FILTER_WINDOW.toLocaleString()} records` +
-                (recordPlan.token ? ' that match the first condition' : '') +
-                ' — one filter or one search word on its own reaches every record.'}
-            </Typography>
-          ) : null}
+          <ListQueryNotices refused={recordRefusals} notices={recordPlan.notices} />
           <ListTable
             aria-label="Records"
-            rows={shownRecords}
+            rows={records}
             columns={recordGridColumns}
             onOpen={(id) => setViewerId(id)}
-            // One page of the walk (or of the window's matches), turned by
-            // the footer below: the grid neither slices nor filters it.
+            // One page of the walk, turned by the footer below: the grid
+            // neither slices nor filters it.
             hideFooter
             filterMode="server"
             filterModel={gridFilter.filterModel}
@@ -1617,12 +1589,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               handing it to the footer as `count` would tell MUI the walk is
               that long and leave Next live past the end of it whenever a rule,
               a scope or a filter has narrowed what this reader may list.
-              `hasMore` is a fact from the probe row (or from the window's
-              matches), so the footer answers for what it is actually paging. */}
+              `hasMore` is a fact from the probe row, so the footer answers
+              for what it is actually paging. */}
           <ListPagination
             page={recordPage}
             pageSize={recordPageSize}
-            rowCount={shownRecords.length}
+            rowCount={records.length}
             hasMore={hasMoreRecords}
             onPageChange={setRecordPage}
             onPageSizeChange={setRecordPageSize}

@@ -59,8 +59,46 @@ jest.mock('firebase/firestore', () => ({
   documentId: () => '__name__',
   orderBy: (field: string) => ({ type: 'orderBy', field }),
   limit: (value: number) => ({ type: 'limit', value }),
+  where: (field: string, op: string, value: unknown) => ({ type: 'where', field, op, value }),
   query: (source: any) => source,
   doc: () => ({}),
+  // The retired head-count the "keep their slot" line reads.
+  getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
+}))
+
+/** Every request the card put to its list query, newest last. */
+const mockListQueryRequests: any[] = []
+
+/*
+ * The list's query (AGL-3330): what the card ASKS is the subject here — the
+ * clauses, the search and the forms-in-use default — so the hook stands in,
+ * recording each request and answering the fixture rows as the query's.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  __esModule: true,
+  useListQuery: (options: { request: unknown }) => {
+    mockCountCalls.push('useListQuery')
+    mockListQueryRequests.push(options.request)
+    return {
+      status: 'success',
+      fromCache: false,
+      rows: mockRows,
+      data: mockRows,
+      hasMore: false,
+      page: 0,
+      setPage: jest.fn(),
+      pageSize: 10,
+      setPageSize: jest.fn(),
+      plan: {
+        filters: [],
+        orderBy: { path: '__name__', direction: 'asc' },
+        served: [],
+        searched: null,
+        refused: [],
+        notices: [],
+      },
+    }
+  },
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -78,19 +116,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     mockCountCalls.push(`useLiveArtifactCount:${hostId}/${kind}`)
     return mockLiveCount
   },
-  usePagedCollection: () => {
-    mockCountCalls.push('usePagedCollection')
-    return {
-      status: 'success',
-      fromCache: false,
-      rows: mockRows,
-      hasMore: false,
-      page: 0,
-      setPage: jest.fn(),
-      pageSize: 10,
-      setPageSize: jest.fn(),
-    }
-  },
+  // The Campaign filter's choices; nothing here opens the Filters panel.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: false }),
 }))
 
 /** What the forms table was last handed. */
@@ -284,8 +311,8 @@ describe('the forms catalog publishes its controls to the page header', () => {
     expect(
       mockCountCalls.filter((call) => call.startsWith('useLiveArtifactCount')),
     ).toEqual(['useLiveArtifactCount:host-1/forms'])
-    expect(mockCountCalls.filter((call) => call === 'usePagedCollection')).toEqual(
-      ['usePagedCollection'],
+    expect(new Set(mockCountCalls.filter((call) => call === 'useListQuery'))).toEqual(
+      new Set(['useListQuery']),
     )
   })
 })
@@ -356,34 +383,43 @@ describe('the readout names the plan’s allowance', () => {
   })
 })
 
-describe('retired forms are reached through the Status filter (AGL-3317)', () => {
-  const tableIds = () => (mockTableProps.rows ?? []).map((row: any) => row.$id)
+describe('retired forms are reached through the Status filter, on the query (AGL-3317, AGL-3330)', () => {
+  const lastRequest = () => mockListQueryRequests[mockListQueryRequests.length - 1]
 
   beforeEach(() => {
-    mockRows.length = 0
-    mockRows.push(
-      { $id: 'form-live', displayName: 'Contact' },
-      { $id: 'form-retired', displayName: 'Old survey', archivedAt: 1 },
-    )
-  })
-  afterEach(() => {
-    mockRows.length = 0
+    mockListQueryRequests.length = 0
   })
 
-  it('leaves retired forms out while no Status filter is in force', () => {
+  it('asks for the forms in use while no Status filter is in force', () => {
     renderForms({})
-    expect(tableIds()).toEqual(['form-live'])
-    expect(screen.queryByRole('button', { name: /Show retired/ })).toBeNull()
+    expect(lastRequest()).toEqual({
+      clauses: [],
+      search: [],
+      base: [{ path: 'retired', op: '==', value: false }],
+    })
   })
 
-  it('shows only the retired forms under Status is Retired', () => {
+  it('asks for the retired forms, and only them, under Status is Retired', () => {
     renderForms({})
     act(() => {
       mockTableProps.onFilterModelChange({
-        items: [{ id: 1, field: 'status', operator: 'is', value: 'retired' }],
+        items: [{ id: 1, field: 'status', operator: 'is', value: 'true' }],
         quickFilterValues: [],
       })
     })
-    expect(tableIds()).toEqual(['form-retired'])
+    // The reader's Status replaces the in-use default rather than sitting
+    // beside it: two equalities on `retired` would ask for nothing.
+    expect(lastRequest()).toEqual({
+      clauses: [{ field: 'status', op: 'equals', value: 'true' }],
+      search: [],
+    })
+  })
+
+  it('puts the search box’s words on the query', () => {
+    renderForms({})
+    act(() => {
+      mockTableProps.onFilterModelChange({ items: [], quickFilterValues: ['demo'] })
+    })
+    expect(lastRequest()).toMatchObject({ search: ['demo'] })
   })
 })

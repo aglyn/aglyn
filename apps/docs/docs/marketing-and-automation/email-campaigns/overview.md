@@ -117,31 +117,39 @@ the campaign's page adds their figures up.
 
 **Campaigns you sent before this existed are still there**, each listed as a campaign of
 one and marked **Single send**. Their reports open at the same address they always did,
-and the unsubscribe links in mail already delivered are untouched.
+and the unsubscribe links in mail already delivered are untouched. The toggle above the
+campaigns list switches it between **Campaigns** and **Single sends** (the emails filed
+under no campaign); both show in the same table, newest first, a page at a time.
 
 ### Filter the campaigns and emails lists {#filter-the-lists}
 
 The campaigns list, the Emails list and a campaign's own emails each filter
 through their table's toolbar. **Filters** narrows the list by a column, and
-**Search** matches any word of a name or subject, and on the organization's
-page a site name too:
+**Search** matches a word of a campaign's name or an email's subject, from its
+first letter. On a site's campaigns list with **Campaigns** showing, Search
+matches the start of the campaign's name instead, and while it applies the
+list is in name order:
 
-- **Campaigns:** the campaign's name, Window (no dates, upcoming, running,
-  ended), Lists, Kind (campaign or single send) and, on the organization's
-  page, Sites.
-- **Emails:** the subject, State (draft, scheduled, sending, sent, stopped),
-  Campaign (one of up to 50 campaigns by name, or **Single send** for the
-  emails filed under none) and, on the organization's page, Site. State is
-  what the email is doing, so an email part way through a large audience is
-  **Sending**, not **Scheduled**.
-- **A campaign's emails:** the subject and State.
+- **Campaigns:** the campaign's name (on a site, how it starts), **Created**
+  (a date range) and, on the organization's page, **Lists** and **Sites** (one
+  of your sites, or **Every site**). With **Single sends** showing: the
+  subject, **Created** and, on the organization's page, **Sites**.
+- **Emails:** the subject, **Status**, **Campaign** (one of up to 50 campaigns
+  by name, or **Single send** for the emails filed under none), **Created**
+  and, on the organization's page, **Site**. **Status** is what the email has
+  stored: an email part way through a large audience shows **Sending** in its
+  State column and is stored as **Scheduled** between batches.
+- **A campaign's emails:** the subject, **Status** and **Created**.
 
-The filters look at every campaign or email the list read, not only the page
-on screen. The campaigns list reads up to 50 campaigns and 30 sends, the
-Emails list 30 emails, and a campaign's own table 50; each says so when there
-are more. Each filter in force shows as a chip above the table; remove a
-chip to drop it. The **Filters** panel edits one filter at a time, and
-filters on different columns add up; see
+Every filter and the search are answered by the list's query, so a match on a
+later page is found, and each list pages through all of its campaigns or
+emails, newest first. A combination one query can't answer, such as **Sites**
+beside a search, is named above the table as not applied rather than applied to
+part of the list. The campaigns list adds up the figures of the campaigns on
+the page you're viewing, from up to 50 of their emails, and says so when there
+are more; a campaign's own page adds up 50 of its emails. Each filter in force
+shows as a chip above the table; remove a chip to drop it. The **Filters**
+panel edits one filter at a time, and filters on different columns add up; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### What belongs to a campaign {#what-belongs-to-a-campaign}
@@ -583,11 +591,13 @@ choose who receives it and when, as with any new email.
 Marketing page and target any of them from the campaign composer. A list is one of two
 kinds, chosen when you create it.
 
-The lists table filters through its toolbar: **Filters** narrows it by name or by
-**Membership** (manual or rule), and **Search** matches any word of a list's name. The
-table is paged, so the first filter reads the first 100 lists and matches over them;
-the table says when there are more, and paging forward reads the next page. See
-[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+The lists table filters through its toolbar: **Filters** narrows it by name (it
+contains a word, or it is) or by **Membership** (manual or rule), and **Search**
+matches the start of any word of a list's name. The filters and the search are asked
+of your organization's lists themselves, so they reach every list, a page at a time in
+name order. A name that contains a word and Search both match words of the name, so
+only one of them applies at a time, and a note above the table says which was set
+aside. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Manual lists
 
@@ -606,10 +616,14 @@ read until you open a list.
 **How** tells a rule match apart from somebody who was added. A person a rule enrolled
 leaves when they stop matching; a person who was added stays.
 
-The membership table filters through its toolbar by address, name, **How** (rule or
-added) and **Consent** (each of the kinds below), and **Search** matches an address,
-name or source. Like the lists table, it filters over the first 100 members it read
-and says when there are more; see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The address and name boxes above the table add people;
+The membership table filters through its toolbar by **Address** (the whole address)
+and **How** (rule or added), and **Search** matches the start of any word of a
+member's name or of any part of their address: the local part, a piece of it such as
+`doe` in `jane.doe`, or the domain, with or without the `@`, up to the first twelve
+characters typed. The filters and the search are asked of the list itself, so they
+reach everyone on it, a page at a time. **Consent** is a column, not a filter: it is
+read for the site you are on, so no one stored answer holds for every site. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The address and name boxes above the table add people;
 they are not filters.
 
 **Consent** is the basis the membership carries, read for the site you are on — or, on
@@ -774,12 +788,19 @@ Two ways to finish a test without watching it:
   one variant (re-sends reach the same variant), sends count as exposures, and once a
   winner is picked every later send uses the winning copy.
 
-The Experiments table filters through its toolbar by name, what it tests
-(screen, section or email) and status, and **Search** matches any word of an
-experiment's name. The list is paged, so the first filter or search reads the
-first 100 experiments and matches over them; the table says when there are
-more, and paging forward reads the next page. See
-[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+The Experiments table filters through its toolbar by **Experiment** (a name
+that contains a word, or is exactly a name in either case), **Tests** (screen, section or
+email) and **Status** (draft, running, paused or done; one or several of
+each). **Search** finds an experiment by the start of any word in its name:
+`cop` finds *Hero copy*. Every filter and the search are answered by the
+query, across all of the site's experiments, a page at a time and in name
+order, not only over the page on screen. A combination the query cannot answer
+together is not applied, and a notice above the table says which one and why.
+See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+
+**Start** checks every experiment on the site, not only the page on screen,
+and refuses a second test running on the same screen: the page runner serves
+only the first.
 
 ### Across your organization's sites {#experiments-across-sites}
 
@@ -854,10 +875,12 @@ never yours, and account mail — receipts, confirmations — is not listed at a
 
 An email's **Recipients** table lists everyone it was sent to. To see only
 the people who opened it, or only those who clicked something, choose
-**Engagement** in the table's **Filters** panel. That filter reaches the
-whole delivery log, one page at a time, and a new choice replaces the last.
-The table has no search box, because the delivery log can only be narrowed by
-engagement. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+**Engagement** in the table's **Filters** panel. That filter is answered by
+the query across the whole delivery log, one page at a time, and a new choice
+replaces the last. Filtered by engagement, the table lists the people who
+opened (or clicked) most first, then the newest; unfiltered, it lists the
+newest first. The table has no search box, because the delivery log can only
+be narrowed by engagement. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Which links were clicked
 
@@ -1266,11 +1289,15 @@ This is where the gap between a campaign's recipient count and what it
 actually sent comes from, and a rising **Bounced** count is the earliest sign
 a list is going stale.
 
-The table filters through its toolbar by address and by **Reason**, and **Search**
-matches any part of an address. It is paged newest first, so the first filter reads
-the 100 most recent entries and matches over them; the table says when there are
-more, and paging forward reads the next page. See
-[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+The table filters through its toolbar by **Address** (it contains a part of the
+address), **Reason** (one or several) and **Since** (the day the address was
+suppressed: on, before or after a date), and **Search** matches the start of any part
+of an address: the local part, a piece of it such as `doe` in `jane.doe`, or the
+domain, with or without the `@`, up to the first twelve characters typed. The filters
+and the search are asked of the site's list itself, so they reach every entry, newest
+first, a page at a time. **Address** and Search both match parts of the address, so
+only one of them applies at a time, and a note above the table says which was set
+aside. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 Each site keeps its own list: somebody who unsubscribed from one site can still
 be emailed by another — unless your organization has declared the two sites one

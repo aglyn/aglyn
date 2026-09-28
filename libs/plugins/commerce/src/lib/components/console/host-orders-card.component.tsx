@@ -14,19 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 'use client'
 
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
-  inMemoryListField,
   type ListFilterClause,
+  listFilterGridColumns,
   upsertListFilterClause,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   checkEntitlement,
@@ -50,7 +56,18 @@ import {
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection, doc, getDoc, limit, orderBy, query } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  type QueryDocumentSnapshot,
+  startAfter,
+  where,
+} from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -61,88 +78,71 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  listQueryConstraints,
+  useListQuery,
+} from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
+import {
+  OPEN_DISPUTE_CLAUSE,
+  ORDER_CHANNEL_OPTIONS,
+  ORDER_DISPUTE_OPTIONS,
+  ORDER_LIST_FIELDS,
+  ORDER_LIST_HEADERS,
+  ORDER_LIST_QUERY,
+  ORDER_LIST_SELECT_FIELDS,
+  ORDER_STATUS_OPTIONS,
+  ordersCustomerClause,
+} from '../../constants/orders-list-query'
 import CommerceStatTile from './commerce-stat-tile.component'
 import OrderDetailDialog, {
   DISPUTE_COLOR,
 } from './order-detail-dialog.component'
 
 /**
- * How far back the table, its filters and its export reach.
- *
- * This window cannot be paged the way a plain list can. The Filters panel,
- * the search and the CSV export all run over what was read, so a page of ten
- * would quietly narrow every one of them — a status filter would search a
- * tenth of the orders and report confidently on what it found. Bounding the read and saying where the
- * bound falls keeps the filters honest about their own scope.
+ * The products the card reads to NAME a legacy row and the CSV, to offer the
+ * Product filter's choices and to fill the draft dialog's picker. A picker's
+ * reach, not the list's: the orders themselves are paged by their query and
+ * the Product filter asks it for any product id, named here or not.
  */
-const ORDERS_WINDOW = 200
-
-/** A name map for the filter menu; it renders no product rows of its own. */
 const PRODUCT_NAME_WINDOW = 100
 
-/*
- * What the orders grid's Filters panel offers. The card holds its whole
- * window, so the panel and the search answer over every order it read.
- *
- * Status and Channel are the order's own enumerations; Disputes is apart
- * from Status on purpose, because the two are orthogonal: an OPEN dispute
- * sits on an order that is still `paid`, and a lost one on `refunded`
- * beside every ordinary refund. Product is the ids of every line item, so
- * a cart, POS or draft order is found by any product it holds. The date is
- * the field the query orders by, which every order writer stamps.
+/**
+ * How many open disputes the banner reads. Its own query, `disputeKey ==
+ * 'open'`, so a deadline is raised whatever the list is filtered to and
+ * however deep in the store the order sits; a store past this many open
+ * cases is told "more than".
  */
-const ORDER_FILTER_FIELDS = [
-  inMemoryListField('orderLabel', 'text'),
-  inMemoryListField('customerEmail', 'text'),
-  inMemoryListField('channelKey', 'select'),
-  inMemoryListField('statusKey', 'select'),
-  inMemoryListField('createdAtMs', 'date'),
-  { ...inMemoryListField('productIds', 'select'), tokensPath: 'productIds', verbatimTokens: true },
-  inMemoryListField('disputeKey', 'select'),
-]
-const ORDER_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  orderLabel: 'Order',
-  customerEmail: 'Customer',
-  channelKey: 'Channel',
-  statusKey: 'Status',
-  createdAtMs: 'Date',
-  productIds: 'Product',
-  disputeKey: 'Disputes',
-}
-const ORDER_STATUS_OPTIONS = (
-  Object.keys(CommerceModel.ORDER_STATUS_LABELS) as (keyof typeof CommerceModel.ORDER_STATUS_LABELS)[]
-).map((status) => ({ value: status, label: CommerceModel.ORDER_STATUS_LABELS[status] }))
-const ORDER_CHANNEL_OPTIONS = (
-  Object.keys(CommerceModel.ORDER_CHANNEL_LABELS) as (keyof typeof CommerceModel.ORDER_CHANNEL_LABELS)[]
-).map((channel) => ({ value: channel, label: CommerceModel.ORDER_CHANNEL_LABELS[channel] }))
-/*
- * `lost` is the badge's tone, not the raw dispute status: a dispute that was
- * WON also closes with money untouched, and listing it as charged back would
- * tell a merchant they lost a case they won.
+const OPEN_DISPUTE_CEILING = 50
+
+/**
+ * The money tiles read the last sixty days (thirty, and the thirty before it)
+ * on their own bounded query. They are analytics over a period, not a filter
+ * over the list, and share the analytics card's bound.
  */
-const ORDER_DISPUTE_OPTIONS = [
-  { value: 'open', label: 'Open dispute' },
-  { value: 'lost', label: 'Charged back' },
-]
-/** What the quick search reads on an order row. */
-const ORDER_SEARCH_FIELDS = ['orderLabel', 'customerEmail', 'itemName'] as const
-/** The filter-only columns never show. */
-const ORDER_HIDDEN_COLUMNS = hiddenFilterVisibility(ORDER_FILTER_FIELDS, [
+const STATS_WINDOW_MS = 60 * 24 * 60 * 60 * 1000
+const STATS_ORDER_CEILING = 500
+
+/**
+ * Export CSV walks the list's own query, page by page, up to this many
+ * orders, and says so when the matches run past it.
+ */
+const ORDERS_EXPORT_CEILING = 5000
+const ORDERS_EXPORT_PAGE = 500
+
+/** The columns the grid draws; every other declared field is a hidden filter column. */
+const ORDER_VISIBLE_COLUMNS = [
   'orderLabel',
   'customerEmail',
   'channelKey',
   'statusKey',
   'createdAtMs',
-])
-
-/** The clause the dispute banner's "Show them" sets. */
-const OPEN_DISPUTE_CLAUSE: ListFilterClause = {
-  field: 'disputeKey',
-  op: 'equals',
-  value: 'open',
-}
+]
+const ORDER_HIDDEN_COLUMNS = hiddenFilterVisibility(
+  ORDER_LIST_FIELDS,
+  ORDER_VISIBLE_COLUMNS,
+)
 
 export interface HostOrdersCardProps {
   hostId: string
@@ -152,28 +152,23 @@ export interface HostOrdersCardProps {
  * Orders console (AGL-287): filterable list over webhook-written order
  * docs with a detail dialog (timeline, fulfill, refund, cancel, notes,
  * packing slip) and draft orders that send the buyer a payment link.
+ *
+ * ## Every filter and the search are on the query (AGL-3321)
+ *
+ * The list used to read the newest two hundred orders and match its Filters
+ * panel and search over them, so a Status filter on a busy store answered
+ * "none" about every order past the two hundredth. Now each clause and the
+ * search word are predicates on ONE Firestore query (`ORDER_LIST_QUERY`),
+ * over the fields every writer stamps (`orderListFields`), and the footer
+ * pages that query's answer. A combination one query cannot hold is refused
+ * by name above the grid and never applied to some rows only.
  */
 export function HostOrdersCard(props: HostOrdersCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
-  /**
-   * The most recent orders, in the order the table shows them.
-   *
-   * `createdAtMs` is the field every order writer in the plugin stamps and the
-   * one `reconcile-stock` already walks the collection by. Ordering on it is
-   * what makes this window the RECENT orders: an unordered cap is answered in
-   * document-id order, and orders are keyed by generated ids, so it returns a
-   * pseudo-random sample that a client sort then dresses as newest-first.
-   */
-  const { data: orderDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'orders'),
-        orderBy('createdAtMs', 'desc'),
-        limit(ORDERS_WINDOW + 1),
-      ),
+  const ordersRef = useMemo(
+    () => collection(firestore, 'hosts', hostId, 'orders'),
     [firestore, hostId],
-    { idField: '$id' },
   )
   const { data: productDocs } = useFirestoreCollection<any>(
     () =>
@@ -183,10 +178,6 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       ),
     [firestore, hostId],
     { idField: '$id' },
-  )
-  const orderWindow = useMemo(
-    () => ceilingedWindow<any>(orderDocs ?? undefined, ORDERS_WINDOW),
-    [orderDocs],
   )
   const productWindow = useMemo(
     () => ceilingedWindow<any>(productDocs ?? undefined, PRODUCT_NAME_WINDOW),
@@ -212,54 +203,104 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   const showStats =
     orgReady && checkEntitlement(org as never, 'commerceAnalytics')
 
-  // The query returns the window already newest-first; re-sorting it here
-  // would only restate the order it arrived in.
-  const orders = orderWindow.rows
-
   /*
    * The grid's clauses (AGL-96, AGL-3317), held here so two things outside
    * the grid can set one: the CRM's contact page links with the buyer's
-   * address to answer "what has this customer ordered" (AGL-2622), seeded as
-   * a Customer clause matched as a substring so a domain finds every buyer at
-   * a company; and the dispute banner's "Show them".
+   * address to answer "what has this customer ordered" (AGL-2622) — a whole
+   * address is that buyer, a domain every buyer at a company
+   * (`ordersCustomerClause`) — and the dispute banner's "Show them".
    */
   const searchParams = useSearchParams()
   const [clauses, setClauses] = useState<ListFilterClause[]>(() => {
-    const customer = searchParams?.get(ORDERS_CUSTOMER_PARAM)?.trim()
-    return customer
-      ? [{ field: 'customerEmail', op: 'contains', value: customer }]
-      : []
+    const customer = ordersCustomerClause(
+      searchParams?.get(ORDERS_CUSTOMER_PARAM) ?? '',
+    )
+    return customer ? [customer] : []
   })
+  const gridFilter = useListGridFilter({
+    clauses,
+    onChange: setClauses,
+    selectFields: ORDER_LIST_SELECT_FIELDS,
+  })
+  const filtering =
+    clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+
+  /*
+   * The open disputes, on their OWN query (AGL-1796). Raised whatever the
+   * list is filtered to — a merchant filtered to "delivered" still has a
+   * deadline running on a `paid` order, and the evidence window is days —
+   * and however far back the order is. Asked before the list so the list's
+   * plan is the one a spec reads last.
+   */
+  const {
+    rows: disputedRows,
+    hasMore: moreDisputes,
+  } = useListQuery<any>({
+    collection: ordersRef,
+    declaration: ORDER_LIST_QUERY,
+    request: { clauses: [OPEN_DISPUTE_CLAUSE] },
+    deps: [firestore, hostId],
+    idField: '$id',
+    pageSize: OPEN_DISPUTE_CEILING,
+    // A dispute that closes leaves this query; confirm it before believing it.
+    confirmDisappearances: true,
+  })
+
+  /*
+   * THE LIST: every clause and the search word on one query, newest first,
+   * paged by the footer. A status, a dispute or a paid draft's address can
+   * move an order out of the filtered query mid-session, so a disappearance
+   * is confirmed against the server before it is believed (AGL-1196).
+   */
+  const {
+    rows: orders,
+    data: loadedOrders,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    plan,
+    status: listStatus,
+  } = useListQuery<any>({
+    collection: ordersRef,
+    declaration: ORDER_LIST_QUERY,
+    request: { clauses, search: gridFilter.searchWords },
+    deps: [firestore, hostId],
+    idField: '$id',
+    confirmDisappearances: true,
+  })
+
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
    * An order named in the URL opens in its dialog on arrival (AGL-2622). A
    * contact's timeline names the order that made the person a customer,
-   * and the address it links to is this list with `?order={id}`. The
-   * window is the newest two hundred, and an order from last year is not
-   * in it, so the document is read once by id and held beside the window
-   * for the dialog; an order that IS in the window is found there first
-   * and the read is skipped. Once per id — the ref keeps a re-render from
-   * reopening a dialog the merchant has since closed — and the landing read
-   * is judged against the ref rather than an effect cleanup, because the
-   * `setSelectedId` above re-renders before the read lands and a cleanup
-   * keyed on any dep would cancel the answer to the question just asked.
+   * and the address it links to is this list with `?order={id}`. The list
+   * shows one page, and an order from last year is not on it, so the
+   * document is read once by id and held beside the page for the dialog; an
+   * order that IS loaded is found there first and the read is skipped. Once
+   * per id — the ref keeps a re-render from reopening a dialog the merchant
+   * has since closed — and the landing read is judged against the ref
+   * rather than an effect cleanup, because the `setSelectedId` above
+   * re-renders before the read lands and a cleanup keyed on any dep would
+   * cancel the answer to the question just asked.
    */
   const seededOrderId = searchParams?.get(ORDERS_ORDER_PARAM) ?? null
   const [seededOrder, setSeededOrder] = useState<any | null>(null)
   const seededOpened = useRef<string | null>(null)
   useEffect(() => {
     if (!seededOrderId || seededOpened.current === seededOrderId) return
-    if (orderDocs === undefined) return
+    if (listStatus === 'loading') return
     seededOpened.current = seededOrderId
     setSelectedId(seededOrderId)
-    if (orderDocs.some((order: any) => order.$id === seededOrderId)) return
+    if (loadedOrders.some((order: any) => order.$id === seededOrderId)) return
     void getDoc(doc(firestore, 'hosts', hostId, 'orders', seededOrderId))
       .then((snapshot) => {
         if (seededOpened.current !== snapshot.id || !snapshot.exists()) return
         setSeededOrder({ ...snapshot.data(), $id: snapshot.id })
       })
       .catch(() => undefined)
-  }, [seededOrderId, orderDocs, firestore, hostId])
+  }, [seededOrderId, loadedOrders, listStatus, firestore, hostId])
   const [draft, setDraft] = useState<{
     productId: string
     variantId: string
@@ -278,8 +319,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   /**
-   * Each order with the values the grid shows and filters by. `liftLegacyOrder`
-   * names a status and channel on a row that predates them, and Product
+   * Each order on the page with the values the grid DRAWS. What it filters
+   * by is on the query; this is presentation only. `liftLegacyOrder` names
+   * a status and channel on a row that predates them, and the item name
    * reads the line items first (AGL-1747): the flat `productId` is written
    * only by the two buy-now Stripe paths.
    */
@@ -287,15 +329,6 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     () =>
       orders.map((order: any) => {
         const lifted = CommerceModel.liftLegacyOrder(order)
-        const dispute = CommerceModel.describeOrderDispute(lifted)
-        const productIds = [
-          ...new Set(
-            [
-              ...(lifted.lineItems ?? []).map((line) => line.productId),
-              order.productId,
-            ].filter((id): id is string => typeof id === 'string' && id !== ''),
-          ),
-        ]
         return {
           ...order,
           orderLabel: CommerceModel.formatOrderNumber(lifted, order.$id),
@@ -307,13 +340,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           statusKey: lifted.status,
           channelKey: lifted.channel ?? 'online',
           netCents: CommerceModel.orderNetCents(lifted),
-          disputeBadge: dispute,
-          productIds,
-          disputeKey: CommerceModel.orderHasOpenDispute(lifted)
-            ? 'open'
-            : dispute?.tone === 'lost'
-              ? 'lost'
-              : '',
+          disputeBadge: CommerceModel.describeOrderDispute(lifted),
         }
       }),
     [orders, productNames],
@@ -335,16 +362,15 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     }),
     [productOptions],
   )
-  const listFilter = useListRowsFilter({
-    rows: orderRows,
-    fields: ORDER_FILTER_FIELDS,
-    options: filterOptions,
-    headers: ORDER_FILTER_HEADERS,
-    search: ORDER_SEARCH_FIELDS,
-    clauses,
-    onChange: setClauses,
-  })
-  const visibleOrders = listFilter.rows
+  const refused = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: ORDER_LIST_FIELDS,
+        headers: ORDER_LIST_HEADERS,
+        options: filterOptions,
+      }),
+    [plan, filterOptions],
+  )
   const showingOpenDisputes = clauses.some(
     (clause) =>
       clause.field === OPEN_DISPUTE_CLAUSE.field &&
@@ -352,41 +378,104 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       clause.value === OPEN_DISPUTE_CLAUSE.value,
   )
 
-  /**
-   * Raised over EVERY loaded order, not the visible ones (AGL-1796). A
-   * merchant filtered to "delivered" still has a deadline running on a `paid`
-   * order, and the evidence window is days long.
-   */
   const openDisputes = useMemo(
     () =>
       CommerceModel.summariseOpenDisputes(
-        orders.map((order: any) => CommerceModel.liftLegacyOrder(order)),
+        disputedRows.map((order: any) => CommerceModel.liftLegacyOrder(order)),
       ),
-    [orders],
-  )
-  /**
-   * 30-day money summary with the prior 30 days behind it (AGL-2136). Over
-   * the LOADED window, like every other figure on this card — the query is
-   * `limit(200)`, so a store past 200 orders in 60 days is summarising a
-   * slice. That is the same bound the analytics card has always had, and
-   * making this one silently different would be worse than sharing it.
-   */
-  const summary = useMemo(
-    () => CommerceModel.summarizeOrderWindow(orders, { nowMs: Date.now() }),
-    [orders],
+    [disputedRows],
   )
 
-  const handleExportCsv = useCallback(() => {
-    // The rows themselves are built by the pure model helper (AGL-1747) so the
-    // column-by-column arithmetic is unit-testable without a Firestore mock.
-    const csv = CommerceModel.buildOrdersCsv(visibleOrders, productNames)
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'orders.csv'
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }, [visibleOrders, productNames])
+  /*
+   * 30-day money summary with the prior 30 days behind it (AGL-2136).
+   * ANALYTICS, NOT A FILTER: the tiles describe a period, not the list, so
+   * they keep their own bounded read — sixty days by `createdAtMs`, the
+   * newest `STATS_ORDER_CEILING` of them, read only when the tiles show.
+   * Range and order are the same field, so it needs no composite.
+   */
+  const statsSince = useMemo(() => Date.now() - STATS_WINDOW_MS, [])
+  const { data: statsDocs } = useFirestoreCollection<any>(
+    () =>
+      showStats
+        ? query(
+            ordersRef,
+            where('createdAtMs', '>=', statsSince),
+            orderBy('createdAtMs', 'desc'),
+            limit(STATS_ORDER_CEILING + 1),
+          )
+        : null,
+    [firestore, hostId, showStats, statsSince],
+    { idField: '$id' },
+  )
+  const statsWindow = useMemo(
+    () => ceilingedWindow<any>(statsDocs ?? undefined, STATS_ORDER_CEILING),
+    [statsDocs],
+  )
+  const summary = useMemo(
+    () =>
+      CommerceModel.summarizeOrderWindow(statsWindow.rows, { nowMs: Date.now() }),
+    [statsWindow],
+  )
+
+  /**
+   * Export CSV writes what the QUERY matches — every clause and the search
+   * the grid is showing — not the page on screen. It walks the list's own
+   * plan in pages of `ORDERS_EXPORT_PAGE` up to `ORDERS_EXPORT_CEILING`, and
+   * says so when the matches run past it.
+   */
+  const [exporting, setExporting] = useState(false)
+  const handleExportCsv = useCallback(async () => {
+    setExporting(true)
+    try {
+      const matched: any[] = []
+      let cursor: QueryDocumentSnapshot | null = null
+      let more = true
+      while (more && matched.length < ORDERS_EXPORT_CEILING) {
+        const take = Math.min(
+          ORDERS_EXPORT_PAGE,
+          ORDERS_EXPORT_CEILING - matched.length,
+        )
+        // One past the page: whether more match is a fact, not a guess.
+        const snapshot = await getDocs(
+          query(
+            ordersRef,
+            ...listQueryConstraints(plan),
+            ...(cursor ? [startAfter(cursor)] : []),
+            limit(take + 1),
+          ),
+        )
+        const docs = snapshot.docs.slice(0, take)
+        for (const entry of docs) matched.push({ ...entry.data(), $id: entry.id })
+        more = snapshot.docs.length > take
+        cursor = docs[docs.length - 1] ?? null
+        if (!cursor) more = false
+      }
+      // The rows themselves are built by the pure model helper (AGL-1747) so
+      // the column-by-column arithmetic is unit-testable without Firestore.
+      const csv = CommerceModel.buildOrdersCsv(matched, productNames)
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = 'orders.csv'
+      anchor.click()
+      URL.revokeObjectURL(url)
+      if (more) {
+        enqueueSnackbar(
+          `Exported the ${ORDERS_EXPORT_CEILING.toLocaleString('en-US')} newest matching orders. ` +
+            'Narrow the filters to export the rest.',
+          { variant: 'warning', allowDuplicate: true },
+        )
+      }
+    } catch (error) {
+      console.error('Orders export failed', error)
+      enqueueSnackbar('Export failed — try again', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setExporting(false)
+    }
+  }, [ordersRef, plan, productNames, enqueueSnackbar])
 
   /**
    * Idempotency key for ONE draft attempt (AGL-1697).
@@ -483,7 +572,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   }, [draft, user, hostId, enqueueSnackbar])
 
   const selectedOrder =
-    (orderDocs ?? []).find((order: any) => order.$id === selectedId) ??
+    loadedOrders.find((order: any) => order.$id === selectedId) ??
     (seededOrder && seededOrder.$id === selectedId ? seededOrder : null)
 
   /**
@@ -650,6 +739,26 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     [],
   )
 
+
+  const columns = useMemo(
+    () =>
+      listFilterGridColumns(
+        orderColumns,
+        ORDER_LIST_FIELDS,
+        filterOptions,
+        ORDER_LIST_HEADERS,
+      ),
+    [orderColumns, filterOptions],
+  )
+
+  /*
+   * The store is empty only when an UNFILTERED first page came back empty; a
+   * filter or search that matches nothing keeps the grid, its chips and its
+   * panel, so the reader can take the filter back off.
+   */
+  const empty =
+    listStatus === 'success' && !filtering && page === 0 && orders.length === 0
+
   return (
     <CardDisplay
       header={'Orders'}
@@ -662,7 +771,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       contentGutterX
       contentGutterY
     >
-      {orders.length === 0 ? (
+      {empty ? (
         /*
          * An invitation, not a report (AGL-1805). The "Draft order" button
          * used to live in the other arm of this ternary, so the one state a
@@ -724,6 +833,11 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               />
             </Stack>
           ) : null}
+          {showStats && statsWindow.truncated ? (
+            <Typography variant="caption" color="text.secondary">
+              {`Figures count the ${STATS_ORDER_CEILING} most recent orders of the last 60 days.`}
+            </Typography>
+          ) : null}
           {openDisputes.count > 0 ? (
             <Alert
               severity={openDisputes.overdue ? 'error' : 'warning'}
@@ -748,9 +862,11 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               }
             >
               <AlertTitle>
-                {openDisputes.count === 1
-                  ? 'A shopper has disputed a charge with their bank'
-                  : `${openDisputes.count} charges are disputed with the shopper’s bank`}
+                {moreDisputes
+                  ? `More than ${OPEN_DISPUTE_CEILING} charges are disputed with the shopper’s bank`
+                  : openDisputes.count === 1
+                    ? 'A shopper has disputed a charge with their bank'
+                    : `${openDisputes.count} charges are disputed with the shopper’s bank`}
               </AlertTitle>
               {openDisputes.soonestDaysLeft === undefined
                 ? 'Answer in the Stripe dashboard while the case is open — an unanswered dispute is decided for the shopper.'
@@ -763,15 +879,19 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           ) : null}
           {/*
             The buttons stay beside the grid: Export CSV writes the model's
-            own order columns (`buildOrdersCsv`) for the rows the filters
-            leave, which the grid's own export cannot.
+            own order columns (`buildOrdersCsv`) for every order the query
+            matches, which the grid's own export — one page — cannot.
            */}
           <Stack
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
           >
-            <Button size="small" onClick={handleExportCsv}>
+            <Button
+              size="small"
+              onClick={() => void handleExportCsv()}
+              disabled={exporting}
+            >
               {'Export CSV'}
             </Button>
             <Button
@@ -783,29 +903,46 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               {'Draft order'}
             </Button>
           </Stack>
-          <ListFilterChips {...listFilter.chipsProps} />
+          <ListFilterChips
+            fields={ORDER_LIST_FIELDS}
+            headers={ORDER_LIST_HEADERS}
+            clauses={clauses}
+            onChange={setClauses}
+            options={filterOptions}
+          />
+          <ListQueryNotices refused={refused} notices={plan.notices} />
           <ListTable
             aria-label="Orders"
-            rows={visibleOrders}
-            columns={listFilter.filterColumns(orderColumns)}
+            rows={orderRows}
+            columns={columns}
             onOpen={(id) => setSelectedId(id)}
-            {...listFilter.gridProps}
+            loading={listStatus === 'loading'}
+            /*
+             * The grid must NOT also filter, search or sort: the query
+             * answers all three, and the list has one order — newest first —
+             * which the query already holds.
+             */
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            quickFilter
+            sortingMode="server"
+            disableColumnSorting
+            // `ListPagination` below pages the query.
+            hideFooter
             initialState={{
               columns: { columnVisibilityModel: ORDER_HIDDEN_COLUMNS },
             }}
             noRowsLabel="No orders match these filters"
           />
-          {orderWindow.truncated ? (
-            /*
-             * Where the filters, the search and the export stop. All run over
-             * what was read, so a store past this window would otherwise see
-             * a status filter return nothing and read it as having no such
-             * orders.
-             */
-            <Typography variant="caption" color="text.secondary">
-              {`Showing the ${ORDERS_WINDOW} most recent orders. Filters and Export CSV cover these.`}
-            </Typography>
-          ) : null}
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={orderRows.length}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </Stack>
       )}
       {selectedOrder ? (

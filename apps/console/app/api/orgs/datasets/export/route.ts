@@ -33,6 +33,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Records read per round trip. Not a cap — the stream keeps paging until
@@ -228,16 +229,14 @@ async function handler(request: Request): Promise<Response> {
     // Ids and counts only, never content (the AGL-1443 rule the workspace
     // export follows). A full copy of a dataset leaving the platform is
     // worth a row; what was in it is not ours to log.
-    void firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'dataset.exported',
-        target: `orgs/${orgId}/datasets/${datasetId}`,
-        before: null,
-        after: { format, records: total },
-        at: FieldValue.serverTimestamp(),
-      })
+    void addAdminAudit(firestore, {
+      actorUid: decoded.uid,
+      action: 'dataset.exported',
+      target: `orgs/${orgId}/datasets/${datasetId}`,
+      before: null,
+      after: { format, records: total },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     const base =

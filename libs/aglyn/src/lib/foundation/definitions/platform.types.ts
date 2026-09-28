@@ -27,6 +27,7 @@ import type {
 // `app-utils`: the two video shapes are DEFINED beside the code that
 // validates them (`normalizeVideoMetadata`, `parseMediaRendition`) so a
 // document field and its validator can never describe different things.
+import type { MediaEmbeddedMetadata } from '../../app-utils/media-embedded-fields'
 import type { MediaVideoMetadata } from '../../app-utils/media-metadata'
 import type { MediaVideoRendition } from '../../app-utils/media-ref'
 
@@ -861,6 +862,16 @@ export interface AglynHostMedia {
    * `custom-metadata`); this doc copy is the source of truth for display.
    */
   customMetadata?: Record<string, string>
+  /**
+   * The metadata the file carries INSIDE its bytes (AGL-3331) — EXIF, IPTC
+   * and XMP on a photo, a PDF's document info, an Office file's properties,
+   * a video's tags — as read by `readMediaEmbeddedMetadata`. Server-written
+   * only (at upload, or the first time the Details drawer opens) and locked
+   * in the rules; edits go INTO the file through `/api/media/metadata`,
+   * which rewrites the bytes and this record together. Distinct from
+   * `customMetadata`, which is Aglyn's own and never touches the file.
+   */
+  embeddedMetadata?: MediaEmbeddedMetadata
   /**
    * Which sites may see this asset (AGL-1037); absent = org-wide until the
    * AGL-1040 backfill stamps it. Only meaningful on the org-scoped library

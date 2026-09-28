@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { mediaFilterKeys } from './media-filter-keys.mjs'
+
 // ONE place a script writes a media document, so the document and
 // `counters/media` cannot come apart (AGL-1488).
 //
@@ -123,7 +125,19 @@ export async function putMediaDocument({
     const countDelta = created ? 1 : 0
     const bytesDelta = nextBytes - previousBytes
 
-    transaction.set(mediaRef, data, { merge: true })
+    // With the library's filter and search keys (AGL-3327), derived from what
+    // the document holds after the merge, as every console writer stores
+    // them — a fixture without them is invisible to the library's filters.
+    const merged = { ...stored, ...data }
+    transaction.set(
+      mediaRef,
+      {
+        ...data,
+        ...mediaFilterKeys(merged),
+        ...(merged['folderId'] === undefined ? { folderId: null } : {}),
+      },
+      { merge: true },
+    )
 
     if (counter && (countDelta !== 0 || bytesDelta !== 0)) {
       const current = counter.exists ? (counter.data() ?? {}) : {}

@@ -676,6 +676,54 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'XML namespace URIs, in the RSS `atom:` declaration, the admin bar and the icon and image components. A namespace is an identifier that happens to look like a URL.',
     dataReceived: 'Nothing. No request is made.',
   },
+  'ns.adobe.com': {
+    disposition: 'no-request',
+    reason:
+      "The XMP namespace URIs (`x:`, `xmp:`, `photoshop:`, `tiff:`, `exif:`, `xmpRights:`, `pdf:`) the media library reads and writes inside a file's own metadata packet (AGL-3331), and the XMP signature string a JPEG or PNG block begins with. Identifiers inside the file, matched as text.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'purl.org': {
+    disposition: 'no-request',
+    reason:
+      "The Dublin Core namespace URIs (`dc:`, `dcterms:`) inside XMP packets and Office `core.xml` documents, read and written by the media library's file-details editor (AGL-3331). Identifiers inside the file.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'purl.oclc.org': {
+    disposition: 'no-request',
+    reason:
+      "The Strict Office Open XML namespace URIs for extended and custom document properties (`app.xml`, `custom.xml`), which a Strict-conformance Word, Excel or PowerPoint file declares in place of the transitional ones; recognized by the media library's file-details reader (AGL-3331). Identifiers inside the file.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'schemas.openxmlformats.org': {
+    disposition: 'no-request',
+    reason:
+      "The Office Open XML package, relationship and property namespace URIs in a Word, Excel or PowerPoint file's `core.xml`, `app.xml` and `custom.xml`, read and written by the media library's file-details editor (AGL-3331). Identifiers inside the file.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'iptc.org': {
+    disposition: 'no-request',
+    reason:
+      "The IPTC Photo Metadata Core XMP namespace URI (`Iptc4xmpCore:`), read and written inside a photo's metadata packet by the media library (AGL-3331). Identifiers inside the file.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'cipa.jp': {
+    disposition: 'no-request',
+    reason:
+      "The CIPA `exifEX:` XMP namespace URI for EXIF 2.3 properties (lens, body serial), read from a photo's metadata packet by the media library (AGL-3331). An identifier inside the file.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'creativecommons.org': {
+    disposition: 'no-request',
+    reason:
+      "The Creative Commons `cc:` XMP namespace URI for a photo's license properties, read inside its metadata packet by the media library (AGL-3331). An identifier inside the file.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'www.metadataworkinggroup.com': {
+    disposition: 'no-request',
+    reason:
+      "The Metadata Working Group `mwg-rs:` region namespace URI, recognized inside a photo's XMP packet by the media library (AGL-3331). An identifier inside the file.",
+    dataReceived: 'Nothing. No request is made.',
+  },
   'www.sitemaps.org': {
     disposition: 'no-request',
     reason:
