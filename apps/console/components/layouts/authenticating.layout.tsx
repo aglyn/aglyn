@@ -77,8 +77,12 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
           ? `/signin?${continueParam(encodeURIComponent(continueUrl))}`
           : '/signin',
       )
-    if (requireEmailVerification && !emailVerified)
-      return void router.push('/verify-email')
+    // Only /verify-email sets `requireEmailVerification`, so an unverified
+    // session is already where it belongs: stay put. Pushing the route here
+    // re-ran on every signed-in-check emission — the page's poll reloads the
+    // user every few seconds — which refetched the page each time and dropped
+    // its `?continue=` destination on the first tick (AGL-3384).
+    if (requireEmailVerification && !emailVerified) return void 0
 
     // Delegated cross-origin return (AGL-465/466): the workspace subdomain
     // signs in silently from the shared __session cookie, so that cookie
