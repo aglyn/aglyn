@@ -50,6 +50,7 @@ import {
   hasSafeMediaScheme,
 } from '@aglyn/shared-util-http/safe-url-scheme'
 
+import { linkifyEscapedText } from './email-linkify'
 import { resolveEmailMediaSrc } from './email-media-src'
 
 export interface EmailRenderProduct {
@@ -414,13 +415,17 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
       }
       case 'emailText': {
         const text = sub(props.children)
+        // A block whose copy is only a token the send left empty (a
+        // notification with no detail line, AGL-3367) draws nothing, rather
+        // than an empty row and a blank paragraph in the text part.
+        if (!text.trim()) return ''
         textParts.push(text)
         const style = TEXT_STYLES[props.variant as string] ?? TEXT_STYLES['body']
         const color = props.color || '#1a1a1a'
         const align = props.align || 'left'
         return row(
           `<div style="font-family:${FONT};${style};color:${color};text-align:${align};">` +
-            escapeEmailHtml(text).replace(/\n/g, '<br />') +
+            linkifyEscapedText(escapeEmailHtml(text)).replace(/\n/g, '<br />') +
             `</div>`,
           'padding:4px 0;',
         )

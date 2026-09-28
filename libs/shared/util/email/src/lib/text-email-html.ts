@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { linkifyEscapedText } from './email-linkify'
 import { escapeEmailHtml } from './email-render'
 
 /**
@@ -57,61 +58,6 @@ import { escapeEmailHtml } from './email-render'
  */
 
 /**
- * Trailing characters stripped from a matched URL.
- *
- * A sentence that ends "…see {@link https://example.com/billing}." puts the
- * period inside the match, because a period is a legal URL character and the
- * regex cannot tell prose from path. Closing brackets are handled separately
- * below, since a URL may legitimately end in one.
- *
- * `;` is deliberately absent: by the time this runs the text is already
- * escaped, so a query string reads `?a=1&amp;b=2` and trimming `;` would cut
- * an entity in half and corrupt the link.
- */
-const URL_TRAILING_PUNCTUATION = /[.,!?'"]+$/
-
-/**
- * Bare absolute URLs in already-escaped text.
- *
- * Matched AFTER escaping, not before, so the href and the visible label are
- * the same string and neither can reintroduce markup: `&` inside a query
- * string is `&amp;` by then, which is what an href attribute is supposed to
- * carry and parses back to `&` in the client.
- *
- * `http`/`https` only. Every URL our system copy emits is absolute — the
- * senders share one `consoleOrigin()` precisely because a mail client has no
- * page to resolve a relative path against — and matching bare `www.` or
- * addresses would turn ordinary prose into links nobody wrote.
- */
-const BARE_URL = /https?:\/\/[^\s<>"]+/g
-
-/**
- * Links the bare URLs in one escaped line.
- *
- * Balanced closing parens are kept, because a URL can genuinely end in one
- * and a wrapping "(see https://…/a_(b))" is the rarer case. Anything the
- * paren count says is unbalanced belongs to the prose.
- */
-function linkifyEscaped(escaped: string): string {
-  return escaped.replace(BARE_URL, (match) => {
-    let url = match.replace(URL_TRAILING_PUNCTUATION, '')
-    while (
-      url.endsWith(')') &&
-      url.split(')').length > url.split('(').length
-    ) {
-      url = url.slice(0, -1)
-    }
-    if (!url) return match
-    const trailer = match.slice(url.length)
-    return (
-      `<a href="${url}" target="_blank" ` +
-      `style="color:#1a73e8;text-decoration:underline;word-break:break-word;">` +
-      `${url}</a>${trailer}`
-    )
-  })
-}
-
-/**
  * Renders a plain-text body as the HTML part of the same message.
  *
  * Blank-line-separated blocks become paragraphs and single newlines become
@@ -147,7 +93,7 @@ export function renderTextEmailHtml(
     .map(
       (block) =>
         `<p style="margin:0 0 16px;">` +
-        linkifyEscaped(escapeEmailHtml(block)).replace(/\n/g, '<br />') +
+        linkifyEscapedText(escapeEmailHtml(block)).replace(/\n/g, '<br />') +
         `</p>`,
     )
     .join('')

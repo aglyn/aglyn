@@ -186,7 +186,23 @@ describe('PLATFORM_EMAIL_LOGO_URL', () => {
   it('AGLYN-OPERATED shape: unset is our wordmark, at an absolute https URL', () => {
     const logo = loadWith({}).PLATFORM_EMAIL_LOGO_URL
     // An inbox has no origin to resolve a relative path against.
-    expect(logo).toMatch(/^https:\/\/aglyn\.com\/api\/media\/cdn\//)
+    expect(logo).toMatch(/^https:\/\/aglyn\.com\//)
+    // A PNG, never an SVG: Gmail and Outlook draw no SVG in mail (AGL-3367).
+    expect(logo).toMatch(/\.png$/)
+  })
+
+  it('AGLYN-OPERATED shape: the default is a file aglyn.com actually serves', () => {
+    // aglyn.com is the tenant app, so its static files are that app's public
+    // folder. A renamed or moved file would draw a broken image at the top
+    // of every platform email with nothing else failing.
+    const logo = String(loadWith({}).PLATFORM_EMAIL_LOGO_URL)
+    const served = new URL(logo).pathname
+    const file = require('path').resolve(
+      __dirname,
+      '../../../../../apps/tenant/public',
+      `.${served}`,
+    )
+    expect(require('fs').existsSync(file)).toBe(true)
   })
 
   it('SELF-HOST shape: renamed and unset is null, never ours', () => {

@@ -174,5 +174,18 @@ describe('the words', () => {
         settingsUrl: 'https://s',
       }),
     ).toMatch(/^A reminder from Acme: this task is due\./)
+    // Inside a system email the footer says why and where to get help, so
+    // the body stops at the last task (AGL-3367).
+    expect(
+      composeCrmTaskReminderEmailText({
+        tasks: [task],
+        timeZone: 'UTC',
+        productName: 'Acme',
+        taskUrl: () => 'https://x',
+        settingsUrl: 'https://s',
+        supportLine: '\n\nSupport: help@acme.test',
+        omitClosing: true,
+      }),
+    ).toMatch(/\n {2}https:\/\/x$/)
   })
 })

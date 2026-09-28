@@ -27,6 +27,11 @@ import {
 // lists. A suppression check that is not actually running is the exact defect
 // this issue is about, one level up. Same reasoning as `email-events.ts`.
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
+import {
+  renderSystemEmailContent,
+  systemEmailBrand,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
+import { sendStaffAlertEmail } from '@aglyn/tenant-data-admin/server/staff-alert-email'
 
 /**
  * BILLING ALERTS BY EMAIL (AGL-2052, for AGL-1528).
@@ -197,24 +202,9 @@ export async function emailStaffAlert(input: {
   text: string
   context: string
 }): Promise<SendEmailResult> {
-  const to = String(process.env.STAFF_ALERT_EMAIL ?? '').trim()
-  if (!to.includes('@')) return { sent: false, reason: 'unconfigured' }
-  try {
-    const result = await sendEmail({
-      to,
-      subject: input.subject,
-      text: input.text,
-      context: input.context,
-    })
-    // Platform-scoped (AGL-1438): our own staff alert is our own cost, and
-    // charging an org for the mail that says we are spending money on it
-    // would be its own small absurdity.
-    if (result.sent) await meterPlatformEmail().catch(() => undefined)
-    return result
-  } catch (error) {
-    console.error('[usage-alert-email] staff alert failed', error)
-    return { sent: false, reason: 'network' }
-  }
+  // The library's sender, which is the same inbox, the same posture and the
+  // same platform meter, and wears the `staff-alert` system email (AGL-3367).
+  return sendStaffAlertEmail(input)
 }
 
 /**
@@ -248,10 +238,25 @@ export async function emailOrgAdmins(
      */
     const to = await filterSuppressedEmails(resolved, input.firestore)
     if (!to.length) return { sent: false, reason: 'no-recipient' }
+    // In the org's own brand, as the `workspace-notice` system email
+    // (AGL-3367): a white-label agency's clients are warned about their bill
+    // under the agency's name, never the platform's.
+    const org = await input.firestore.collection('orgs').doc(input.orgId).get()
+    const brand = systemEmailBrand(org.exists ? (org.data() ?? null) : null)
+    const content = await renderSystemEmailContent(
+      'workspace-notice',
+      {
+        'notice.subject': input.subject,
+        'notice.body': input.text,
+        'org.name': brand.orgName ?? '',
+      },
+      brand,
+      { subject: input.subject, text: input.text },
+    )
     const result = await sendEmail({
       to,
-      subject: input.subject,
-      text: input.text,
+      ...content,
+      ...(brand.fromName ? { fromName: brand.fromName } : {}),
       context: input.context,
     })
     // The AGL-1438 cost meter. Platform-scoped rather than charged to the

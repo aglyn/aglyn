@@ -38,8 +38,10 @@ const mockComponentGet = jest.fn()
 /** The marketing site the deployment names; null when it names none. */
 const mockPlatformHost = jest.fn((): string | null => null)
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  firebaseAdmin: {
+// The module the renderer reads Firestore through, now that it lives in
+// `tenant-data-admin` (AGL-3367): mocked by path, which is how jest keys it.
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => {
+  const firebaseAdmin = {
     app: () => ({
       firestore: () => ({
         // The template and its versions, and the one other path this module
@@ -61,8 +63,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         }),
       }),
     }),
-  },
-}))
+  }
+  return { __esModule: true, default: firebaseAdmin, firebaseAdmin }
+})
 
 jest.mock('@aglyn/tenant-data-admin/server/platform-marketing-consent', () => ({
   platformMarketingHostId: () => mockPlatformHost(),
@@ -78,7 +81,7 @@ function snapshot(data: Record<string, unknown> | null) {
 
 /** What the platform's own chrome draws on this (Aglyn-operated) deployment. */
 const AGLYN_WORDMARK =
-  'https://aglyn.com/api/media/cdn/org:jWmGooWE3L:aglyn-marketing/YwrD-IDzcf'
+  'https://aglyn.com/_static/images/brand/aglyn-email-wordmark.png'
 const AGLYN_LEGAL = `© ${new Date().getUTCFullYear()} Aglyn LLC · c/o Northwest Registered Agent, LLC, 5900 Balcones Drive STE 100, Austin, TX 78731`
 const INVITE_REASON =
   'You’re receiving this because someone invited you to join Test Org on Aglyn.'
@@ -556,7 +559,10 @@ describe('renderSystemEmail', () => {
           } as never),
         ),
       })
-      expect(configured?.html).toContain('Need help? [https://acme.test/help]')
+      expect(configured?.text).toContain('Need help? [https://acme.test/help]')
+      // Linked in the HTML part (AGL-3367), and the bracket stays prose.
+      expect(configured?.html).toContain('Need help? [<a href="https://acme.test/help" ')
+      expect(configured?.html).toContain('https://acme.test/help</a>]')
 
       const platform = renderLoadedSystemEmail(loaded!, {})
       expect(platform?.html).toContain(PLATFORM_BRANDING_PROFILE.supportUrl)

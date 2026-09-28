@@ -33,7 +33,8 @@ import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
  * Platform email metering is loaded lazily and only after a send, so that
  * importing this module — which every unit test of the meter does — never
  * pulls the Firestore-backed meter, and with it the admin app, into a test
- * that only wanted to count credits.
+ * that only wanted to count credits. The system-email renderer, which reads
+ * its template through the same admin app, is loaded the same way.
  */
 export async function sendStaffAlertEmail(input: {
   subject: string
@@ -44,12 +45,18 @@ export async function sendStaffAlertEmail(input: {
   const to = String(process.env.STAFF_ALERT_EMAIL ?? '').trim()
   if (!to.includes('@')) return { sent: false, reason: 'unconfigured' }
   try {
-    const result = await sendEmail({
-      to,
-      subject: input.subject,
-      text: input.text,
-      context: input.context,
-    })
+    // In the platform's header and footer, as the `staff-alert` system email
+    // (AGL-3367). Loaded lazily for the reason the meter below is.
+    const { renderSystemEmailContent, systemEmailBrand } = await import(
+      './render-system-email'
+    )
+    const content = await renderSystemEmailContent(
+      'staff-alert',
+      { 'alert.subject': input.subject, 'alert.body': input.text },
+      systemEmailBrand(null),
+      { subject: input.subject, text: input.text },
+    )
+    const result = await sendEmail({ to, ...content, context: input.context })
     if (result.sent) {
       // Platform-scoped (AGL-1438): our own alert is our own cost.
       const { meterPlatformEmail } = await import('./email-metering')

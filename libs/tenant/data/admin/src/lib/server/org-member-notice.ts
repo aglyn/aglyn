@@ -19,6 +19,7 @@ import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { findUserByUidAcrossPools } from './auth-pools'
 import { filterSuppressedEmails } from './email-suppression'
 import { listOrgMembers } from './organizations'
+import { orgSystemEmailBrand, renderSystemEmailContent } from './render-system-email'
 
 /**
  * A NOTICE TO NAMED MEMBERS OF AN ORGANIZATION, BY EMAIL (AGL-3244).
@@ -94,9 +95,27 @@ export async function sendOrgMemberNotice(input: OrgMemberNoticeInput): Promise<
     }
     const recipients = await filterSuppressedEmails([...addresses])
     if (!recipients.length) return { sent: 0, reason: 'no-recipients' }
+    // One message for everyone, in the organization's brand, as the
+    // `workspace-notice` system email (AGL-3367).
+    const brand = await orgSystemEmailBrand(input.orgId)
+    const content = await renderSystemEmailContent(
+      'workspace-notice',
+      {
+        'notice.subject': input.subject,
+        'notice.body': input.text,
+        'org.name': brand.orgName ?? '',
+      },
+      brand,
+      { subject: input.subject, text: input.text },
+    )
     let sent = 0
     for (const to of recipients.slice(0, MAX_SENDS)) {
-      const result = await sendEmail({ to, subject: input.subject, text: input.text, context: input.context })
+      const result = await sendEmail({
+        to,
+        ...content,
+        ...(brand.fromName ? { fromName: brand.fromName } : {}),
+        context: input.context,
+      })
       if (!result.sent) continue
       sent += 1
       const { meterOrgEmail } = await import('./email-metering')
