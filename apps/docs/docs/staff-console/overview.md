@@ -31,7 +31,7 @@ two of them told the reader to pre-read a third.
 
 ![The staff organizations directory](/img/staff-console/admin-orgs.png)
 
-![The staff audit log](/img/staff-console/admin-audit.png)
+![The staff Audit Log: the Admin actions table with its Action, Scope, Target, Who (then), When, Why, Action group, Target type and Site columns, under the table's Columns, Filters, Export and Search controls](/img/staff-console/admin-audit.png)
 
 ![The Password card on a user's staff detail page, offering a reset email or a directly
 set password](/img/staff-console/admin-user-password.png)
@@ -62,7 +62,7 @@ reply as Aglyn staff, close or reopen.
 The marketplace review queue, plus a
 **Listed plugins — realm trust** table for granting or revoking
 [realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
-per version. The search box finds a plugin by a word of its name, and the status menu
+per version. The search box finds a plugin by the start of a word of its name, and the status menu
 narrows every section to **Submitted**, **In review**, **Listed**, **Verified** or
 **Taken down**; both answer over every plugin listing, not a first batch, and each
 section pages at its foot.
@@ -95,11 +95,12 @@ first word you type, and says so when you type more than one.
 
 Every filter you set and the search apply together, each on its own field, and the
 chips above the grid show them all. The list stays in organization-id order, except
-while **Created** is filtered, when it runs newest first. Two things cannot be
-combined on one query, and the list says so above the grid rather than applying them
-to part of it: Organization *contains* together with a search (one of them is shown as
+while **Created** is filtered, when it runs newest first. Some combinations cannot
+be asked of one query, and the list says so above the grid rather than applying them
+to part of it: Organization *contains* together with a search (the filter is shown as
 "is not applied: cannot be combined with the search — clear the search to use it"),
-and a filter it cannot answer at all. A filter that is not applied is named, with its
+*is any of* filters holding more than thirty values between them, and a filter it
+cannot answer at all. A filter that is not applied is named, with its
 reason, and the rest still narrow the list. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search) for the toolbar itself.
 
 #### Free workspace limit {#free-workspace-limit}
@@ -254,16 +255,17 @@ uncapped comp is why the workspace has no AI credit band.
 
 ### Users admin {#users-admin}
 
-Staff-claim management and disabling users, with gated listing
-and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
+Staff-claim management and disabling users, with gated listing; a whole email
+address typed in the search box looks the account up directly. Staff access is
 granted to an **existing** account, so if someone isn't found, have them sign in to
 Aglyn once and then search their email again.
 Each account opens a **detail page** showing identity/auth state, staff role, every
 organization membership with roles and per-site access, and its recent audit trail.
 
-The list's **Filters** look past the loaded page into every pool: email,
-display name, uid, SSO pool, sign-in providers, created and last sign-in dates, the
-disabled flag, the staff claim, and **Staff role** picked from *support*, *billing* and
+The list's **Filters** look past the loaded page into every pool: **User** (the
+email), **Display name**, **UID**, **SSO pool** and **Sign-in providers** as typed
+text, matched anywhere in it; **Created** and **Last sign-in** as dates; **Disabled** and
+**Staff claim** as true or false; and **Staff role** picked from *support*, *billing* and
 *super*. A role picks the claim as stored, so a staff account granted no role (which
 acts as *support*) is not matched by *support*. **Search** takes a whole email address
 as an exact lookup, and anything else as part of an email, display name or uid.
@@ -286,7 +288,8 @@ date), and **Search** finds an entry by the start of a word in its action, the a
 address or uid, its target, scope, reason or note. Filters and search apply to the whole
 trail rather than the page on screen, and each filter in force shows as a chip above
 the table. Anything the table cannot apply is named in a note above it and left out
-rather than applied to some entries. **Activity by this account** filters by
+rather than applied to some entries (see [Filter and search a list](../getting-started/console-tour.md#filter-and-search)).
+**Activity by this account** filters by
 action or date through its Filters panel, and its search finds entries by the start of a
 word of the address or API key that made them or of the name of what changed — all on the
 query that reads the account's activity across every site and organization, newest first.
@@ -372,15 +375,16 @@ devices": do not tell anyone their account is clean from that screen until it lo
 An **Email delivery** card on the same detail page answers *"they say they never got
 it."* It lists every message we sent the account's addresses, newest first, a page at
 a time: the subject, which of our senders produced it, when it was sent and delivered,
-and whether it was opened or clicked. Its **Filters** take **Status** (a picker: *Sent*,
-*Delivered*, *Bounced*, *Spam complaint* and the rest), **Sender** (the tag exactly, such
-as `invite`), **Opens** and **Clicks** (a number, for example `0` for never opened),
+and whether it was opened or clicked. Its **Filters** take **Status** (a picker, one or
+several: *Sent*, *Delivered*, *Bounced*, *Spam complaint* and the rest), **Sender** (the
+tag exactly, such as `invite`), **Opens** and **Clicks** (equal to a number, for example
+`0` for never opened),
 **Sent** (before or after a date), and **Message** (contains a word of the subject).
 **Search** finds a message by the start of a word in its subject, its sender, or the
 address it went to, including the domain. Filters and search apply to the whole log
 rather than the page on screen, and combine, except that **Message** and the search both
 read the same words: while a search is typed, a Message filter is set aside with a note
-saying so.
+saying so. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 Read it before you resend anything. The four states that change what you do next:
 
@@ -478,7 +482,8 @@ the organizations that match. Month, net revenue, margin and the band readings a
 worked out from each organization's usage after it is read, so they are not offered as
 filters, and the worst-first order is the order of the organizations read so far. A
 filter the scan cannot answer is named above the table as not applied, with its
-reason.
+reason — Organization *contains* together with a search, for one, since both read the
+same name words. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ### [Refunds](refunds.md) {#refunds}
 
@@ -572,12 +577,15 @@ box and writes an audit row. A released entry stays on the list, marked
 **Released** with its date, as the record that the suppression was honored
 while it stood.
 
-The list's **Filters** narrows it by **Status** (**Active** or **Released**),
-**Reason** (one or several), **Learned from** (the tag of the send that
-failed, such as `invite`), **Site ID**, and **Last reported** (on or after, or
-before, or on, a date). The search box finds an address by the start of any
-part of it: the local part, a piece of it such as `doe` in `jane.doe`, or the
-domain, with or without the `@`. It reads one word, and matches up to the
+The list's **Filters** narrows it by **Status** (*Active* or *Released*),
+**Reason** (*Bounced*, *Marked as spam* or *Recorded by staff*, one or several),
+**Learned from** (the tag of the send that failed, such as `invite`), **Site ID**
+(typed exactly), and **Last reported** (*is*, *is after*, *is on or after*, *is
+before* or *is on or before* a day). Last reported is the latest failure, so it can
+be later than the **Since** date the table shows, which is when the address was
+first suppressed. The search box finds an address by the start of any part of it:
+the whole address, the local part, a piece of it such as `doe` in `jane.doe`, or
+the domain, with or without the `@`. It reads one word, and matches up to the
 first twelve characters typed; a note above the list says so when you type
 more. Every filter and the search combine, and all of them apply to the whole
 list rather than the page on screen, newest failure first. Each filter in
@@ -715,8 +723,8 @@ record behind them yet. The list exists so that an outbound program has somethin
 check the day one starts, and so that an opt-out we receive *now* is not lost.
 
 **Record a request** is for an opt-out that arrived outside the product — by email to
-privacy@aglyn.com, or spoken on a call. Give the number, how the request arrived (*Said
-on a call*, or *Other / staff*), the channel it covers (**Calls** or **Texts**), and a
+privacy@aglyn.com, or spoken on a call. Give the number, how the request arrived (*Email*, *Said
+on a call* or *Other / staff*), the channels it covers (**Calls**, **Texts** or both), and a
 note. Replying STOP to a text will be handled automatically once texting exists; this
 form is for everything that does not arrive that way.
 
@@ -731,7 +739,7 @@ what was asked and when survives.
 
 **Suppressed numbers** lists every record, most recently changed first, a page at a
 time, and its heading counts every number currently suppressed across the whole list,
-not only the page on screen.
+not only the page on screen. It has no filters or search.
 
 ### Access {#access}
 

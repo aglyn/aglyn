@@ -97,7 +97,7 @@ seven sections a site's has, each answering for every site at once:
 
 Where a section reads each site in turn, it reads one page of sites at a time, in order
 of name. **Sending** and **Suppressions** page their sites with the footer under the
-table, and **Templates** offers a **Sites** filter once you have more sites than one page
+table, and **Templates** offers a **Sites** picker once you have more sites than one page
 holds. The page is for members who can see the whole organization — somebody invited to
 one site keeps using that site's **Emails** page.
 
@@ -124,32 +124,45 @@ under no campaign); both show in the same table, newest first, a page at a time.
 ### Filter the campaigns and emails lists {#filter-the-lists}
 
 The campaigns list, the Emails list and a campaign's own emails each filter
-through their table's toolbar. **Filters** narrows the list by a column, and
-**Search** matches a word of a campaign's name or an email's subject, from its
-first letter. On a site's campaigns list with **Campaigns** showing, Search
-matches the start of the campaign's name instead, and while it applies the
-list is in name order:
+through their table's toolbar. **Search** finds a campaign by the start of any
+word of its name, and an email (or a single send) by the start of any word of
+its subject. On a site's campaigns list with **Campaigns** showing, Search
+matches the start of the campaign's whole name instead: the list says so, and
+while it applies the list is in name order. The **Filters** panel offers:
 
-- **Campaigns:** the campaign's name (on a site, how it starts), **Created**
-  (a date range) and, on the organization's page, **Lists** and **Sites** (one
-  of your sites, or **Every site**). With **Single sends** showing: the
-  subject, **Created** and, on the organization's page, **Sites**.
-- **Emails:** the subject, **Status**, **Campaign** (one of up to 50 campaigns
-  by name, or **Single send** for the emails filed under none), **Created**
-  and, on the organization's page, **Site**. **Status** is what the email has
-  stored: an email part way through a large audience shows **Sending** in its
-  State column and is stored as **Scheduled** between batches.
-- **A campaign's emails:** the subject, **Status** and **Created**.
+- **Campaigns:** **Campaign** (contains a word; on a site, starts with) and
+  **Created** (is, after, on or after, before, on or before), and on the
+  organization's page **Lists** and **Sites** (is any of; a site is one of your
+  sites, or **Every site**). With **Single sends** showing, the column and
+  its filter read **Subject** (contains a word), beside **Created** and, on
+  the organization's page, **Sites** (is, is any of).
+- **Emails:** **Subject** (contains a word), **Status** (is, is any of),
+  **Campaign** (is: one of up to 50 campaigns by name, or **Single send** for
+  the emails filed under none), **Created** and, on the organization's page,
+  **Site** (is, is any of). **Status** is what the email has stored: an email
+  part way through a large audience shows **Sending** in its State column and
+  is stored as **Scheduled** between batches.
+- **A campaign's emails:** **Subject**, **Status** and **Created**, as above.
+
+A campaign's **Window** and an email's **State** are worked out from dates and
+counters when the row is drawn, so neither is a filter. Column headers don't
+sort: each list is newest first.
 
 Every filter and the search are answered by the list's query, so a match on a
 later page is found, and each list pages through all of its campaigns or
-emails, newest first. A combination one query can't answer, such as **Sites**
-beside a search, is named above the table as not applied rather than applied to
-part of the list. The campaigns list adds up the figures of the campaigns on
-the page you're viewing, from up to 50 of their emails, and says so when there
-are more; a campaign's own page adds up 50 of its emails. Each filter in force
-shows as a chip above the table; remove a chip to drop it. The **Filters**
-panel edits one filter at a time, and filters on different columns add up; see
+emails. A combination one query can't hold is named above the table as not
+applied rather than applied to part of the list:
+
+- **Search**, **Subject** or **Campaign** contains, and — with **Campaigns**
+  showing on the organization's page — **Lists** and **Sites** each match
+  words or values of a list field, and only one of them applies at a time.
+- A list holds one range. **Created** is one; on a site's campaigns, so are
+  the **Campaign** starts-with filter and the search, so a **Created** filter
+  there applies only without them.
+
+The campaigns list adds up the figures of the campaigns on the page you're
+viewing, from up to 50 of their emails, and says so when there are more; a
+campaign's own page adds up 50 of its emails. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### What belongs to a campaign {#what-belongs-to-a-campaign}
@@ -591,8 +604,8 @@ choose who receives it and when, as with any new email.
 Marketing page and target any of them from the campaign composer. A list is one of two
 kinds, chosen when you create it.
 
-The lists table filters through its toolbar: **Filters** narrows it by name (it
-contains a word, or it is) or by **Membership** (manual or rule), and **Search**
+The lists table filters through its toolbar: **Filters** narrows it by **List**, the
+list's name (contains a word, or is), or by **Membership** (is manual or rule), and **Search**
 matches the start of any word of a list's name. The filters and the search are asked
 of your organization's lists themselves, so they reach every list, a page at a time in
 name order. A name that contains a word and Search both match words of the name, so
@@ -794,8 +807,9 @@ email) and **Status** (draft, running, paused or done; one or several of
 each). **Search** finds an experiment by the start of any word in its name:
 `cop` finds *Hero copy*. Every filter and the search are answered by the
 query, across all of the site's experiments, a page at a time and in name
-order, not only over the page on screen. A combination the query cannot answer
-together is not applied, and a notice above the table says which one and why.
+order, not only over the page on screen. **Experiment** containing a word and
+Search both match words of the name, so only one of them applies at a time, and
+a notice above the table says which was set aside.
 See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 **Start** checks every experiment on the site, not only the page on screen,

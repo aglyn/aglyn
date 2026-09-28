@@ -212,7 +212,8 @@ the first page holds the deadlines closest to passing.
 The menus offer only what the query can hold. A filter that reaches the queue
 some other way and cannot be applied is not applied at all: a notice above the
 list names it and says why, in the form *"Status starts with act is not applied:
-…"*, rather than narrowing some rows and not others.
+…"*, rather than narrowing some rows and not others. See
+[Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 The banners at the top count the **whole queue**, whatever page you are on: open
 reports in an urgent category, counter-notices not yet forwarded, and

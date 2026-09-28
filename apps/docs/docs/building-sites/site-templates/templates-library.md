@@ -26,8 +26,10 @@ whole name), or the date it was last updated, and **Search** finds a template by
 start of any word of its name — a starter by its starter's name. Every filter and the
 search word are part of the library's query, so they look through every template on
 the site, and the library pages through the matches. Each filter in force shows as a
-chip above the table; a combination that cannot be asked at once is left out, and the
-table says which one and why. See
+chip above the table. A name "contains" filter cannot be asked beside a search: while
+a search is typed it is left out, and the table says which one and why. The library
+lists templates by ID, and an **Updated** filter lists the matches most recently updated
+first. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## The three kinds

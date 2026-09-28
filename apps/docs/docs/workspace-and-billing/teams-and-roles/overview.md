@@ -16,8 +16,8 @@ Aglyn has two kinds of people: your **team** (who build and manage the site) and
 ![The organization Team page: the invite row above the members roster, with each member's role, access and AI credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/org-team-page.png)
 
 The **Team** page's roster filters through its table's toolbar: **Filters** narrows it
-by **Role** (one role, or several at once) or **Access** (team manager or site
-collaborator), and **Search** finds a member by the start of any word of their name,
+by **Role** (**is** one role, or **is any of** several) or **Access** (**is** Team
+manager or Site collaborator), and **Search** finds a member by the start of any word of their name,
 email address or job title — `ada`, `lovelace` or `example.com` all find Ada Lovelace at
 ada@example.com. The filters and the search add up, and they are answered by the query
 that reads the roster, so the table lists every member who matches, not a narrowing of
@@ -97,7 +97,7 @@ cannot publish through any route into Aglyn.
 
 A site's collaborators are listed in the **Users** card on that site's **Users** page,
 ordered by email address with the organization's owner first. **Filters** in the table's
-toolbar narrows it by **Site access** — one role, or several at once — and the search box
+toolbar narrows it by **Site access** — **is** one role, or **is any of** several — and the search box
 finds collaborators whose email address starts with what you type. Both reach every
 collaborator on the site, not only the page on screen, and each filter in force shows as
 a chip above the table. The filter and the search add up. The search matches the start

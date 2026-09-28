@@ -71,7 +71,7 @@ same way on every list. A list drawn as cards rather than a table — such as
   filters on different columns add up, and each column holds one filter.
   Clearing the value, or deleting the panel's row, drops that column's filter.
 - **Chips** above the table show every filter in force, each read as a sentence
-  such as "Status is Live". The panel shows one filter at a time; the chips show
+  such as "Status is Suspended". The panel shows one filter at a time; the chips show
   them all. Remove a chip to drop its filter.
 - **Search** finds records by the start of a word in the things that list
   searches — each list's page names them. It matches one word at a time: type
@@ -90,9 +90,16 @@ limits follow from asking one query:
   columns and operators the list can look up.
 - **A combination one query can't hold is refused by name.** A note above the
   list names the filter or search it set aside — for example, two date ranges
-  at once, or a search together with a filter that also matches words — and
-  the list shows what the rest of them match. Remove one to apply the other.
-  Nothing is ever quietly left out of the results.
+  at once, a search together with a filter that also matches words, or more
+  than thirty picked values at once — and the list shows what the rest of them
+  match. Remove one to apply the other. Nothing is ever quietly left out of the
+  results.
+
+A list keeps its query's order, and a range filter orders the list by the
+field it ranges over — for a date, usually newest first. So most column
+headers don't re-sort a list; where one does (the Media library's List view,
+a collection's entries), it asks the query for that order across the whole
+list.
 
 Someone who can see only some sites searches the lists shared across sites by
 the start of a name (or of an address, where the list has no name), beside the
@@ -163,15 +170,15 @@ Above the cards are a **Search** box and a **Filters** button — the same contr
 table's toolbar has, over the cards. **Search** finds a site by the start of any word of
 its name, its slug (the `name` in `name.aglyn.app`) or its custom domain: `harbor`,
 `bakery` and `shop.harbor` all find *Harbor Bakery* at `shop.harbor-bakery.com`.
-**Filters** narrows the cards by **Custom domain** (Connected or None) and by the date a
-site was **Created** (on, before or after a day). Each filter in force shows as a chip
-above the cards; remove a chip to drop it. A filter on the created date lists the cards
-newest first.
+**Filters** narrows the cards by **Custom domain** (Connected or None) and by the day a
+site was **Created** — **is**, **after**, **on or after**, **before** or **on or before**
+a day. Each filter in force shows as a chip above the cards; remove a chip to drop it. A
+filter on the created date lists the cards newest first instead of by name.
 
 The search and the filters are answered by the query that reads the cards, across every
 site you have in the workspace, not only the cards on screen. The cards come twelve at a
-time; **Load more** adds the next twelve that match. The site count beside the heading
-always counts every site. Status, plan, owner and the last-updated date are not filters:
+time; **Load more** adds the next twelve that match. The site count opposite the
+heading always counts every site. Status, plan, owner and the last-updated date are not filters:
 a site's status can change with no save at all (a timed suspension ends on its own), and
 a site doesn't store its plan, owner or template. See
 [Filter and search a list](#filter-and-search).
@@ -278,8 +285,9 @@ Your in-app notification feed — billing, publishing, workflow failures —
 lives under **Notifications**, which has two sections in the rail on the left:
 **All notifications** and **Settings**. The first shows what arrived, newest
 first, with **Mark all read** above it. The feed's **Filters** narrows it by
-**Type** (one type, or several) and by **Status** (**New** or **Read**), and
-both can stand together. Each filter in force shows as a chip above the feed;
+**Type** (**is** one type, or **is any of** up to thirty — a larger pick is
+refused, with a note above the feed) and by **Status** (**is** **New** or
+**Read**), and both can stand together. Each filter in force shows as a chip above the feed;
 remove the chip to drop it. The filters apply to the whole feed, not just the
 page on screen, and the pager then turns through the matches; see
 [Filter and search a list](#filter-and-search). There is no search box, because a
