@@ -17,6 +17,7 @@
 
 import type { HostActionAlert, HostEventType } from '@aglyn/aglyn/server'
 import {
+  type HostEventContext,
   type HostEventPayload,
   runHostEventListeners,
 } from './host-event-listeners'
@@ -27,13 +28,17 @@ import {
  * the site alerts they produced, so request/response emitters (form submit,
  * booking) can surface them; fire-and-forget emitters ignore the result. No
  * listener throws into the emitting request.
+ *
+ * `context.actor` is who caused the event (AGL-3376), for the run history's
+ * Who; a door that knows should always say.
  */
 export async function emitHostEvent(
   hostId: string,
   event: HostEventType,
   payload: HostEventPayload = {},
+  context: HostEventContext = {},
 ): Promise<{ alerts: HostActionAlert[] }> {
-  return { alerts: await runHostEventListeners(hostId, event, payload) }
+  return { alerts: await runHostEventListeners(hostId, event, payload, context) }
 }
 
 export default emitHostEvent

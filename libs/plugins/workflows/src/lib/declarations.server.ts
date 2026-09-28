@@ -31,13 +31,25 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * event pays for this object and nothing else.
  */
 export const workflowsHostEventListener: HostEventListener = {
-  async onEvent(hostId, event, payload) {
-    const { runEventAutomations } = await import('./engine/run-event-automations')
-    return await runEventAutomations(hostId, event, payload)
+  async onEvent(hostId, event, payload, context) {
+    const [{ runEventAutomations }, { withRunTriggerActor }] = await Promise.all([
+      import('./engine/run-event-automations'),
+      import('./engine/run-trigger-actor'),
+    ])
+    // Every run this event causes records who caused it (AGL-3376).
+    return await withRunTriggerActor(context?.actor, () =>
+      runEventAutomations(hostId, event, payload),
+    )
   },
-  async onDispatch(hostId, automationId, event, payload) {
-    const { runSingleAction } = await import('./engine/run-event-actions')
-    return await runSingleAction(hostId, automationId, event, payload)
+  async onDispatch(hostId, automationId, event, payload, context) {
+    const [{ runSingleAction }, { withRunTriggerActor }] = await Promise.all([
+      import('./engine/run-event-actions'),
+      import('./engine/run-trigger-actor'),
+    ])
+    // A page-fired automation is always a visitor on the published page.
+    return await withRunTriggerActor(context?.actor ?? { kind: 'visitor' }, () =>
+      runSingleAction(hostId, automationId, event, payload),
+    )
   },
 }
 

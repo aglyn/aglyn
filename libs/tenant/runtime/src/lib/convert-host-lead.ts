@@ -333,6 +333,11 @@ export async function convertHostLead(
     ...(leadName ? { name: leadName } : {}),
     source: 'manual',
     interaction: { summary: 'Converted from a lead', refId: leadId },
+    // Who converted it, for the runs its contactCreated sets off (AGL-3376).
+    actor:
+      actor.kind === 'member'
+        ? { kind: 'member', uid: actor.uid, email: actor.email ?? null }
+        : { kind: 'apiKey', apiKeyName: actor.apiKeyName ?? null },
     ...(leadConsent.basis === 'granted' ? { marketingConsent: true } : {}),
     ...(leadConsent.basis === 'granted' && leadDisclosure
       ? { disclosedConsentGroup: leadDisclosure }

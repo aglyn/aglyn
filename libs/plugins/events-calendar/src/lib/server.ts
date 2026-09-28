@@ -170,7 +170,10 @@ const eventsDispatchHandler: PluginApiHandler = async (req, res) => {
       }
     }
   }
-  const alerts = await dispatchHostAutomation(hostId, actionId, event, payload)
+  // A visitor on the published page fired it (AGL-3376).
+  const alerts = await dispatchHostAutomation(hostId, actionId, event, payload, {
+    actor: { kind: 'visitor' },
+  })
   return res.status(200).json({ ok: true, alerts })
 }
 

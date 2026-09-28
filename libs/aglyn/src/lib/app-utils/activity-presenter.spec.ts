@@ -23,6 +23,7 @@ import {
   activityTargetLabel,
   activityTypeLabel,
   activityEntryGroupId,
+  runTriggeredByLabel,
 } from './activity-presenter'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 import { registerPluginActivityActions } from '../plugin-manager/plugin-activity-actions'
@@ -352,5 +353,40 @@ describe('activityHref', () => {
     ).toBe('/acme/hosts/shop/crm/deals')
     expect(activityTypeLabel('deal')).toBe('Deal')
     expect(activityTypeLabel('lead')).toBe('Lead')
+  })
+})
+
+describe('runTriggeredByLabel (AGL-3376)', () => {
+  it('names whoever set the run off, never the automation itself', () => {
+    expect(
+      runTriggeredByLabel({
+        triggeredBy: { kind: 'member', uid: 'u1', email: 'rep@example.test' },
+      }),
+    ).toBe('rep@example.test')
+    expect(runTriggeredByLabel({ triggeredBy: { kind: 'member', uid: 'u1' } })).toBe(
+      'Account u1',
+    )
+    expect(
+      runTriggeredByLabel({ triggeredBy: { kind: 'apiKey', apiKeyName: 'Zapier' } }),
+    ).toBe('API key Zapier')
+    expect(
+      runTriggeredByLabel({
+        triggeredBy: { kind: 'visitor', email: 'guest@example.test' },
+      }),
+    ).toBe('Site visitor (guest@example.test)')
+    expect(runTriggeredByLabel({ triggeredBy: { kind: 'visitor' } })).toBe(
+      'Site visitor',
+    )
+    expect(
+      runTriggeredByLabel({ triggeredBy: { kind: 'webhook', name: 'Stripe sync' } }),
+    ).toBe('Inbound webhook Stripe sync')
+    expect(runTriggeredByLabel({ triggeredBy: { kind: 'platform' } })).toBe(
+      PLATFORM_BRAND_NAME,
+    )
+  })
+
+  it('says a run written before its trigger was recorded is not recorded', () => {
+    expect(runTriggeredByLabel({})).toBe('Not recorded')
+    expect(runTriggeredByLabel({ triggeredBy: null })).toBe('Not recorded')
   })
 })

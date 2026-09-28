@@ -31,6 +31,7 @@ import {
   personKey,
 } from '@aglyn/aglyn/server'
 import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
+import { contactCaptureActor } from '@aglyn/tenant-runtime/contact-capture-actor'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
   addHostLeadOutcome,
@@ -198,12 +199,22 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
     }
   }
   if (created) {
-    await emitHostEvent(request.hostId, 'lead', {
+    const cause = contactCaptureActor(
+      request.interaction.source,
       email,
-      source,
-      leadId: key,
-      ...(request.identity.name ? { name: request.identity.name } : {}),
-    })
+      request.actor,
+    )
+    await emitHostEvent(
+      request.hostId,
+      'lead',
+      {
+        email,
+        source,
+        leadId: key,
+        ...(request.identity.name ? { name: request.identity.name } : {}),
+      },
+      cause ? { actor: cause } : {},
+    )
   }
   return { ok: true, record: 'lead', leadId: key, created, sourceAdded: outcome.sourceAdded }
 }
@@ -214,6 +225,7 @@ async function captureOnContact(
 ): Promise<PluginContactCaptured> {
   try {
     const verdict = await captureHostContact({
+      ...(request.actor ? { actor: request.actor } : {}),
       hostId: request.hostId,
       email: request.identity.email,
       ...(request.identity.name ? { name: request.identity.name } : {}),

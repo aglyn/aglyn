@@ -398,6 +398,8 @@ describe('what the door is handed', () => {
       email: 'ada@x.co',
       name: 'Ada',
       source: 'import',
+      // The member importing set off whatever runs on the new contact (AGL-3376).
+      actor: { kind: 'member', uid: 'editor-uid', email: null },
       interaction: { summary: 'Imported from CSV' },
       marketingConsent: true,
       tags: ['vip', 'beta'],

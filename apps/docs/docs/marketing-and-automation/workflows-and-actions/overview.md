@@ -81,8 +81,8 @@ The **Workflows** and **Actions** tabs each open with a line reading
 spending. When a site reaches the month's limit, triggered automations stop running
 rather than queueing or billing on.
 
-Each row has a **Runs** button opening a four-column table — **Time**, **Trigger**,
-**Result**, **What happened** — with **Succeeded**, **Failed** and **Skipped** chips. The
+Each row has a **Runs** button opening a five-column table — **Time**, **Trigger**,
+**Who**, **Result**, **What happened** — with **Succeeded**, **Failed** and **Skipped** chips. The
 table is runs only: publishes, media saves and member changes stay in the site's general
 activity feed, where there is nothing to say **Succeeded** about.
 

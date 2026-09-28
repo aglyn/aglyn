@@ -59,6 +59,8 @@ export type ImportContext =
   | {
       ok: true
       uid: string
+      /** The importer's address, for who set off the runs it causes (AGL-3376). */
+      email: string | null
       hostId: string
       orgId: string
       org: Record<string, unknown>
@@ -145,6 +147,7 @@ export async function resolveImportContext(req: ImportRequest): Promise<ImportCo
   return {
     ok: true,
     uid: decoded.uid,
+    email: typeof decoded.email === 'string' ? decoded.email : null,
     hostId,
     orgId,
     org,

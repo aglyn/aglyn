@@ -20,6 +20,7 @@ import {
   actionRunResult,
   actionRunSummary,
   actionTriggerLabel,
+  runTriggeredByLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/workflows'
@@ -85,6 +86,8 @@ interface RunRow {
   result: RunResult
   trigger: string
   triggerLabel: string
+  /** Who set the run off (AGL-3376). */
+  who: string
   summary: string
   createdAtMs: number | null
 }
@@ -197,6 +200,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
         trigger: String(entry.trigger ?? ''),
         // `formSubmission` → `Form submitted`.
         triggerLabel: actionTriggerLabel(entry.trigger),
+        who: runTriggeredByLabel(entry),
         summary: actionRunSummary(entry),
         createdAtMs:
           typeof entry.createdAt?.seconds === 'number'
@@ -237,6 +241,13 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
             headerName: 'Trigger',
             width: 180,
             renderCell: ({ row }: { row: RunRow }) => row.triggerLabel,
+          },
+          {
+            field: 'who',
+            headerName: 'Who',
+            description: 'Who set this run off: the person, visitor, key or system whose act fired the trigger.',
+            width: 200,
+            renderCell: ({ row }: { row: RunRow }) => row.who,
           },
           {
             field: 'result',

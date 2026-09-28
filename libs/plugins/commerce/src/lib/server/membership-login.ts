@@ -88,7 +88,12 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
       return res.status(401).json({ error: MEMBER_SUSPENDED_ERROR })
     }
     // Event trigger (AGL-128/148).
-    await emitHostEvent(hostId, 'memberSignIn', { email })
+    await emitHostEvent(
+      hostId,
+      'memberSignIn',
+      { email },
+      { actor: { kind: 'visitor', email } },
+    )
     // Cart linkage (AGL-294): stamp the guest cart with the member so
     // abandoned-cart and analytics can attribute it.
     //

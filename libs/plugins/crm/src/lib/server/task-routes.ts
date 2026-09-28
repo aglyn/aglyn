@@ -115,6 +115,8 @@ const TASKS_ACT = "Working a record's tasks"
 export interface Writer {
   ok: true
   uid: string
+  /** The caller's address, for who set off the runs a write causes (AGL-3376). */
+  email: string | null
   staff: boolean
   orgId: string
   org: Record<string, unknown>
@@ -172,6 +174,7 @@ export async function authorizeCrmWriter(
     return {
       ok: true,
       uid: caller.uid,
+      email: caller.email ?? null,
       staff: caller.staff,
       orgId: caller.orgId,
       org: caller.org as Record<string, unknown>,
@@ -223,6 +226,7 @@ export async function authorizeCrmWriter(
   return {
     ok: true,
     uid: decoded.uid,
+    email: typeof decoded.email === 'string' ? decoded.email : null,
     staff,
     orgId,
     org: (org ?? {}) as Record<string, unknown>,
@@ -710,7 +714,10 @@ async function completeTask(
      * rather than absent, so `contactId != ""` is a filter somebody can
      * write without knowing whether the key exists.
      */
-    await emitHostEvent(eventHostId, 'taskCompleted', {
+    await emitHostEvent(
+      eventHostId,
+      'taskCompleted',
+      {
       taskId,
       title: String(task.title ?? ''),
       kind: String(task.kind ?? ''),
@@ -724,7 +731,9 @@ async function completeTask(
       companyId: String(task.companyId ?? ''),
       dealId: String(task.dealId ?? ''),
       taskHostId: String(task.hostId ?? ''),
-    })
+      },
+      { actor: { kind: 'member', uid: writer.uid, email: writer.email } },
+    )
   }
   return { taskId, ok: true, completedAtMs }
 }

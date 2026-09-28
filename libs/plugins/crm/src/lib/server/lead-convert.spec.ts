@@ -456,6 +456,8 @@ describe('converting a lead', () => {
       name: 'Ann Lee',
       source: 'manual',
       interaction: { summary: 'Converted from a lead', refId: 'lead-1' },
+      // Who converted it (AGL-3376).
+      actor: { kind: 'member', uid: 'uid-caller', email: null },
       facet: { lifecycleStage: 'sales-qualified' },
     })
     const [contact] = all(`orgs/${ORG}/contacts`)
