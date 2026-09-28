@@ -278,8 +278,11 @@ async function fraudSignalSubject(
   input: {
     chargeId: string
     paymentIntentId: string
-    /** `event.account` on a Connect delivery (AGL-3360). */
-    stripeAccount: string | null
+    /**
+     * `event.account` when the Connect destination delivered the event
+     * (AGL-3360): the seller, if a charge ever lived on its account.
+     */
+    connectAccount: string | null
   },
 ): Promise<{
   orgId: string | null
@@ -314,7 +317,6 @@ async function fraudSignalSubject(
   }
   const charge = await readStripeChargeForSignal(input.chargeId, {
     secretKey: process.env.STRIPE_SECRET_KEY,
-    stripeAccount: input.stripeAccount,
   })
   if (!orgId && charge?.customerId) {
     orgId = await findOrgIdByStripeCustomer(charge.customerId).catch(() => null)
@@ -324,7 +326,7 @@ async function fraudSignalSubject(
     amountCents: amountCents ?? charge?.amountCents ?? null,
     currency: charge?.currency ?? null,
     checks: charge?.checks ?? null,
-    sellerAccountId: charge?.sellerAccountId ?? input.stripeAccount ?? null,
+    sellerAccountId: charge?.sellerAccountId ?? input.connectAccount ?? null,
   }
 }
 
@@ -2065,8 +2067,7 @@ async function handler(request: Request): Promise<Response> {
      *   the amount, linking the org's Subscription card, staff notified once
      *   — `recordPaymentFraudSignal`.
      * - A SITE's own sale — a destination charge to the seller's connected
-     *   account (storefront, booking, membership, marketplace), or a charge
-     *   on the connected account itself when Connect delivers it: the plugin
+     *   account (storefront, booking, membership, marketplace): the plugin
      *   that sold it puts the signal on its own record and tells the site's
      *   managers (dispatch below), and the seller's ledger counts it. Staff
      *   hear only when that ledger shows the seller-fraud PATTERN —
@@ -2106,7 +2107,7 @@ async function handler(request: Request): Promise<Response> {
       const subject = await fraudSignalSubject(observed(), {
         chargeId,
         paymentIntentId,
-        stripeAccount: connectAccount,
+        connectAccount,
       })
       const orgId = subject.orgId
       const disputeAmount = Number(object?.amount)

@@ -33,6 +33,7 @@
 
 import {
   addPaymentRiskSignal,
+  NOTHING_MOVED,
   PAYMENT_RISK_FIELD,
   type PaymentRisk,
   type PaymentRiskSignal,
@@ -109,7 +110,7 @@ export async function recordPaymentRiskOnRecord(
           (input.signal.detail
             ? ` Stripe says: ${input.signal.detail.replace(/_/g, ' ')}.`
             : '') +
-          ' Aglyn has not refunded or canceled anything.',
+          ` ${NOTHING_MOVED}`,
         link: input.link,
       })
       .catch(() => undefined)

@@ -35,6 +35,8 @@
  * what arrived and where to act (Stripe), never that anything was refunded.
  *=========================================*/
 
+import { PLATFORM_BRAND_NAME } from './platform-brand'
+
 /** Which Stripe signal arrived. */
 export type PaymentRiskSignalKind =
   | 'early-fraud-warning'
@@ -153,6 +155,9 @@ export function settlePaymentRiskDispute(
   return { ...(existing as PaymentRisk), signals: next }
 }
 
+/** Said with every signal, so a warning never reads as money already gone. */
+export const NOTHING_MOVED = `${PLATFORM_BRAND_NAME} has not refunded or canceled anything.`
+
 const LABEL: Record<PaymentRiskSignalKind, string> = {
   'early-fraud-warning': 'Fraud warning',
   'radar-review': 'Held for review',
@@ -197,6 +202,6 @@ export function describePaymentRisk(
   const why = latest.detail ? ` Stripe says: ${latest.detail.replace(/_/g, ' ')}.` : ''
   return {
     label: `${LABEL[latest.kind]}${outcome}`,
-    detail: `${ADVICE[latest.kind]}${why} Aglyn has not refunded or canceled anything.`,
+    detail: `${ADVICE[latest.kind]}${why} ${NOTHING_MOVED}`,
   }
 }

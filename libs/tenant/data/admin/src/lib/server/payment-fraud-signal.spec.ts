@@ -184,17 +184,4 @@ describe('readStripeChargeForSignal names the seller (AGL-3360)', () => {
     })
     expect(read?.sellerAccountId).toBeNull()
   })
-
-  it('sends the Stripe-Account header for a Connect delivery', async () => {
-    const seen: Array<Record<string, string>> = []
-    await readStripeChargeForSignal('ch_1', {
-      secretKey: 'sk_test_x',
-      stripeAccount: 'acct_direct',
-      fetchImpl: (async (_url: string, init: { headers: Record<string, string> }) => {
-        seen.push(init.headers)
-        return { ok: true, json: async () => ({ amount: 1 }) }
-      }) as unknown as typeof fetch,
-    })
-    expect(seen[0]['Stripe-Account']).toBe('acct_direct')
-  })
 })

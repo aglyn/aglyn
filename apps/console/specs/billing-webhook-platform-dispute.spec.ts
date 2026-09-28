@@ -1227,7 +1227,7 @@ describe('a seller’s fraud signals page staff only as a pattern (AGL-3360)', (
     ).toBe(2)
   })
 
-  it('a Connect delivery reads the charge on the connected account and keys the ledger by it', async () => {
+  it('a Connect delivery keys the ledger by its account, and never sends Stripe-Account', async () => {
     charges['ch_direct'] = { id: 'ch_direct', amount: 500, currency: 'usd' }
     const post = loadWithKey()
     await post(
@@ -1243,7 +1243,9 @@ describe('a seller’s fraud signals page staff only as a pattern (AGL-3360)', (
       {
         method: 'GET',
         url: 'https://api.stripe.com/v1/charges/ch_direct',
-        account: 'acct_direct',
+        // Destination charges only (AGL-1956): nothing here acts as a
+        // connected account, reads included.
+        account: null,
       },
     ])
     expect(docs.get('paymentFraudLedger/acct_direct')).toBeDefined()

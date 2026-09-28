@@ -124,15 +124,7 @@ export function formatSignalAmount(
  */
 export async function readStripeChargeForSignal(
   chargeId: string,
-  options: {
-    secretKey: string | undefined
-    fetchImpl?: typeof fetch
-    /**
-     * The connected account a Connect delivery came from (`event.account`),
-     * whose charge lives on THAT account and reads only with its header.
-     */
-    stripeAccount?: string | null
-  },
+  options: { secretKey: string | undefined; fetchImpl?: typeof fetch },
 ): Promise<{
   amountCents: number | null
   currency: string
@@ -140,8 +132,10 @@ export async function readStripeChargeForSignal(
   checks: PaymentFraudCardChecks
   /**
    * The connected account the charge paid (AGL-3360): a destination
-   * charge's `transfer_data.destination`, else `on_behalf_of`. Null for a
-   * charge that paid only the platform — a workspace's own subscription.
+   * charge's `transfer_data.destination`. Every sale Aglyn takes for a site
+   * is a destination charge on the platform account — the facilitator
+   * model (AGL-1956) — so this is the seller. Null for a charge that paid
+   * only the platform, a workspace's own subscription.
    */
   sellerAccountId: string | null
 } | null> {
@@ -149,14 +143,7 @@ export async function readStripeChargeForSignal(
   try {
     const response = await (options.fetchImpl ?? fetch)(
       `https://api.stripe.com/v1/charges/${encodeURIComponent(chargeId)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${options.secretKey}`,
-          ...(options.stripeAccount
-            ? { 'Stripe-Account': options.stripeAccount }
-            : {}),
-        },
-      },
+      { headers: { Authorization: `Bearer ${options.secretKey}` } },
     )
     if (!response.ok) return null
     const charge = (await response.json()) as Record<string, any>
@@ -176,11 +163,7 @@ export async function readStripeChargeForSignal(
         riskLevel: text(charge?.['outcome']?.['risk_level']),
         threeDSecure: text(card?.['three_d_secure']?.['result']),
       },
-      sellerAccountId:
-        accountRef(charge?.['transfer_data']?.['destination']) ??
-        accountRef(charge?.['on_behalf_of']) ??
-        options.stripeAccount ??
-        null,
+      sellerAccountId: accountRef(charge?.['transfer_data']?.['destination']),
     }
   } catch {
     return null
