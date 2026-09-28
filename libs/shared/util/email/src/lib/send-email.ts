@@ -320,6 +320,14 @@ export type SendEmailFailureReason =
    * for is never held.
    */
   | 'gateway-held'
+  /**
+   * The site or workspace this message belongs to is under a full lockdown
+   * (AGL-3356), carried in on its sending identity. Terminal for this
+   * message: a sweep that holds work across a suspension skips the host
+   * before it gets here, so a caller that reaches this refusal is one with
+   * no way to come back, and retrying would only ask the same question.
+   */
+  | 'suspended'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -658,7 +666,12 @@ export async function sendEmail(
     console.warn(`${label} refused — ${identityRefusal.message}`)
     return {
       sent: false,
-      reason: 'unverified-domain',
+      // A suspension is not a DNS state, and the merchant reading the
+      // failure has nothing to finish — so it is named for what it is.
+      reason:
+        identityRefusal.code === 'workspace-suspended'
+          ? 'suspended'
+          : 'unverified-domain',
       detail: identityRefusal.message,
     }
   }

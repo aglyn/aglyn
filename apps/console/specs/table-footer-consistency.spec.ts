@@ -1167,6 +1167,14 @@ const NOT_A_LIST: Array<[string, string]> = [
     'One row per month in a fixed window.',
   ],
   [
+    'apps/console/components/staff-org-subscription-card.component.tsx',
+    'One row per Stripe subscription of ONE workspace (AGL-3359) — one in ' +
+      'the ordinary case, a handful in the fraud case the card exists for. ' +
+      'The route reads at most 100 per lookup and reports it when Stripe ' +
+      'says there are more, so a pager would page a list the read already ' +
+      'bounded.',
+  ],
+  [
     'apps/console/components/theme-editor/theme-overrides-card.component.tsx',
     'One row per overridden theme token on one site, described from the ' +
       'theme’s own shape.',
@@ -1898,7 +1906,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // new table: the org's declaration of which sites are one sender, read
     // off the org document, which cannot name more groups than half the
     // org's sites.
-    expect(NOT_A_LIST).toHaveLength(68)
+    //
+    // 69 since staff can cancel a workspace's billing (AGL-3359), and this
+    // one IS a new table: the workspace's Stripe subscriptions on the staff
+    // org page, one in the ordinary case and read under a bound that says
+    // when Stripe holds more.
+    expect(NOT_A_LIST).toHaveLength(69)
   })
 })
 

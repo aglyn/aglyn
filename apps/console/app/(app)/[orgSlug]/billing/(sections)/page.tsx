@@ -98,6 +98,7 @@ import BillingPlanQuoteComponent from '../../../../../components/billing/billing
 import BillingUpgradeDialogComponent from '../../../../../components/billing/billing-upgrade.dialog'
 import { useBillingProfile } from '../../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../../utils/browser-stripe'
+import { finishPendingCharge } from '../../../../../utils/finish-pending-charge'
 import {
   carriedAiAddonSentence,
   prorationQuote,
@@ -1184,7 +1185,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 : ''),
             confirmationText: preview.downgrade
               ? 'Schedule the move down'
-              : 'Switch plan',
+              : preview.chargesNow
+                ? 'Pay and switch'
+                : 'Switch plan',
           })
             .then(() => true)
             .catch(() => false)
@@ -1194,6 +1197,37 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             plan: targetPlan,
             interval,
           })
+          // The upgrade was charged but the charge has not gone through
+          // (AGL-3358): the bank wants the customer to confirm it, or the card
+          // was declined. Stripe is holding the switch, so the org is still on
+          // the plan it paid for, and saying "switched" here would be false.
+          // A confirmed challenge pays the invoice and Stripe applies the
+          // switch; the webhook moves the plan.
+          if (switched?.paymentPending) {
+            const finished = await finishPendingCharge(
+              switched,
+              `you move to ${targetPlan}`,
+            )
+            if (!finished.confirmed) {
+              enqueueSnackbar(finished.message, {
+                variant: 'warning',
+                persist: false,
+              })
+              return
+            }
+            trackEvent('plan_upgraded', {
+              from_plan: String(org?.plan ?? ''),
+              to_plan: targetPlan,
+              interval,
+            })
+            billingProfile.reload()
+            enqueueSnackbar(
+              `Payment confirmed. You're moving to ${targetPlan} — your ` +
+                'workspace updates as soon as Stripe applies it.',
+              { variant: 'success', persist: false },
+            )
+            return
+          }
           if (switched) {
             // The plan change, REPORTED (AGL-2235, under AGL-1859 §4).
             //
@@ -1286,6 +1320,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       confirm,
       queueLoading,
       enqueueSnackbar,
+      billingProfile.reload,
     ],
   )
 

@@ -1051,6 +1051,17 @@ export type SendingIdentityRefusalCode =
    * lands on their own name, and how they spend it is theirs to decide.
    */
   | 'shared-identity-no-unsubscribe'
+  /**
+   * The site or its workspace is under a FULL lockdown — a staff suspension
+   * for abuse, fraud, billing or a takedown (AGL-3356).
+   *
+   * Refused whatever the identity would otherwise have been, because a
+   * suspended workspace sending mail is exactly what the suspension exists
+   * to stop: the incident behind this code was a locked workspace whose
+   * event-triggered workflow could still mail on its behalf. Not the
+   * merchant's to fix, and not a DNS state — `domain` is null.
+   */
+  | 'workspace-suspended'
 
 export interface SendingIdentityRefusal {
   code: SendingIdentityRefusalCode

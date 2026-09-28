@@ -61,6 +61,7 @@ import { sendComposedOutreachEmail } from '../transport/send-message'
 import { creditOutreachFirstSend } from './campaign-credit'
 import { newOutreachLinkId, outreachStoredLink, type OutreachStoredLink } from './click-link'
 import { applyOutreachEvent } from './enrollment-events'
+import { outreachSiteHeld } from './host-suspension'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
@@ -317,6 +318,9 @@ async function runMailbox(
     byHost.set(enrollment.hostId, [...(byHost.get(enrollment.hostId) ?? []), enrollment])
   }
   const siteNames = new Map<string, string>()
+  // Sites under a staff suspension (AGL-3356): their people are held, not
+  // stamped, so the step sends on the first run after the lift.
+  const heldSites = new Set<string>()
   for (const [hostId, enrollments] of byHost) {
     const consentGroup = consentGroupForHost(org, hostId)
     const contactGroupId = consentGroup.groupId
@@ -355,6 +359,9 @@ async function runMailbox(
     for (const person of candidatesRead) people.set(person.personId, person)
     for (const [personId, answer] of lookupsRead) lookups.set(personId, answer)
     siteNames.set(hostId, host.exists ? String(host.get('name') ?? '') : '')
+    if (host.exists && outreachSiteHeld(host.data() as Record<string, unknown>, nowMs)) {
+      heldSites.add(hostId)
+    }
   }
 
   for (const candidate of selection.emails) {
@@ -363,6 +370,10 @@ async function runMailbox(
       continue
     }
     const enrollment = candidate.enrollment as OutreachEnrollment
+    if (heldSites.has(enrollment.hostId)) {
+      report.held += 1
+      continue
+    }
     const personId = outreachEnrollmentPerson(enrollment).id
     await runEmailStep(deps, firestore, run, {
       enrollment,
