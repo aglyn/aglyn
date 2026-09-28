@@ -78,7 +78,11 @@ jest.mock('@aglyn/aglyn/server', () => {
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const store: Record<string, Record<string, unknown> | undefined> = {}
-  const docFor = (path: string) => ({
+  const docFor = (path: string): any => ({
+    // A subcollection — the seller org's `members` (AGL-3365).
+    collection: (name: string) => ({
+      doc: (id: string) => docFor(`${path}/${name}/${id}`),
+    }),
     get: async () => ({
       exists: Boolean(store[path]),
       data: () => store[path],
@@ -555,5 +559,33 @@ describe('the marketplace line item names its own tax code (AGL-1553)', () => {
     expect(params.get('line_items[0][price_data][tax_behavior]')).toBe(
       'exclusive',
     )
+  })
+})
+
+describe('a publisher cannot pay itself, and a locked one sells nothing (AGL-3365)', () => {
+  it('sells to a buyer from another workspace — the control', async () => {
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+  })
+
+  it('refuses ANY member of the publishing workspace, not only a manager', async () => {
+    // `canActAsPublisher` answers false here (owner/admin only); the buyer is
+    // an editor of the publisher, which is still the publisher buying.
+    seed()
+    store()['orgs/seller-org/members/buyer-1'] = { role: 'editor' }
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(400)
+    expect(stripeCalls).toEqual([])
+  })
+
+  it('refuses a sale while the publisher workspace is locked', async () => {
+    seed({ sellerOrg: { plan: 'pro', slug: 'acme', suspendedAt: 1_790_000_000_000 } })
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(404)
+    expect(stripeCalls).toEqual([])
   })
 })

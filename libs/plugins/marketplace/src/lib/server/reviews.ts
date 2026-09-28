@@ -18,6 +18,7 @@
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { canActAsPublisher } from './publisher-profile'
+import { isOrgMember } from './sale-risk'
 
 const MAX_COMMENT_LENGTH = 2000
 /** Orgs scanned when looking for an install pin. */
@@ -83,6 +84,25 @@ export async function isVerifiedInstaller(
     if (pins.some((pin) => pin.exists)) return { verified: true, orgId }
   }
   return { verified: false }
+}
+
+/** An account younger than this may comment but not rate (AGL-3365). */
+export const REVIEW_MIN_ACCOUNT_AGE_DAYS = 7
+
+/**
+ * Whether the Firebase account is younger than
+ * {@link REVIEW_MIN_ACCOUNT_AGE_DAYS}. An account whose creation time cannot
+ * be read is not new — the answer that never locks an existing customer out.
+ */
+export async function isNewAccount(uid: string, nowMs = Date.now()): Promise<boolean> {
+  try {
+    const user = await firebaseAdmin.app().auth().getUser(uid)
+    const createdMs = Date.parse(String(user?.metadata?.creationTime ?? ''))
+    if (!Number.isFinite(createdMs)) return false
+    return nowMs - createdMs < REVIEW_MIN_ACCOUNT_AGE_DAYS * 86_400_000
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -151,8 +171,13 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json({ ok: true, removed: true })
     }
 
-    // Publishing org cannot review itself, however many accounts it has.
-    if (await canActAsPublisher(firestore, decoded.uid, listing.profileId)) {
+    // Publishing org cannot review itself, however many accounts it has —
+    // ANY member of it (AGL-3365). `canActAsPublisher` answers only for an
+    // owner or admin, so an editor of the publisher could rate its listing.
+    if (
+      (await canActAsPublisher(firestore, decoded.uid, listing.profileId)) ||
+      (await isOrgMember(firestore, String(listing.profileId ?? ''), decoded.uid))
+    ) {
       return res.status(403).json({
         error: 'You cannot review your organization’s own listing',
       })
@@ -181,7 +206,27 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
         reason: 'email-unverified',
       })
     }
+    // A rating from a brand-new account is refused (AGL-3365): a burst of
+    // fresh accounts installing a free listing and rating it five stars is
+    // the cheapest way to buy ranking. The comment stays open, and the words
+    // say what to do, never where the line is.
+    if (rating && (await isNewAccount(decoded.uid))) {
+      return res.status(403).json({
+        error:
+          'Ratings open once your account has been active for a little while — ' +
+          'you can still leave a comment',
+        reason: 'account-too-new',
+      })
+    }
     const installer = await isVerifiedInstaller(firestore, decoded.uid, listingId)
+    // The workspace that installed it must not be the publisher's own
+    // (AGL-3365) — the member check above covers the reviewer, this the org
+    // whose install vouches for the rating.
+    if (rating && installer.orgId && installer.orgId === listing.profileId) {
+      return res.status(403).json({
+        error: 'You cannot review your organization’s own listing',
+      })
+    }
     if (rating && !installer.verified) {
       return res.status(403).json({
         error:

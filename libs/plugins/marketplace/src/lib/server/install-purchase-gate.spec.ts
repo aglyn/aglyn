@@ -63,6 +63,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     purchases: [] as Array<Record<string, unknown>>,
     componentWrites: [] as Array<Record<string, unknown>>,
     listing: {} as Record<string, unknown>,
+    /** The publishing org's document (AGL-3365), for its lock. */
+    publisherOrg: undefined as Record<string, unknown> | undefined,
   }
   const componentsCollection = {
     where: () => ({
@@ -104,6 +106,16 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     collection: (name: string) => {
       if (name === 'hosts') return { doc: () => hostRef }
       if (name === 'marketplaceListings') return { doc: () => listingRef }
+      if (name === 'orgs') {
+        return {
+          doc: (id: string) => ({
+            get: async () => ({
+              exists: id === 'seller-org' && state.publisherOrg !== undefined,
+              data: () => (id === 'seller-org' ? state.publisherOrg : undefined),
+            }),
+          }),
+        }
+      }
       if (name === 'marketplacePurchases') {
         return {
           where: () => ({
@@ -189,6 +201,7 @@ beforeEach(() => {
   state.purchases.length = 0
   state.componentWrites.length = 0
   for (const key of Object.keys(state.listing)) delete state.listing[key]
+  state.publisherOrg = undefined
 })
 
 /** A live purchase, so these cases turn on the listing and nothing else. */
@@ -268,6 +281,24 @@ describe('the install door and the listing itself (AGL-2290)', () => {
     await installHandler(makeReq(), res)
     expect(res.statusCode).toBe(404)
     expect(state.componentWrites).toHaveLength(0)
+  })
+
+  it('404s a listing whose publisher is under a SECURITY lock, even for a buyer who paid (AGL-3365)', async () => {
+    paid()
+    state.publisherOrg = { suspendedAt: 1_790_000_000_000, suspendedReasonCode: 'security' }
+    const res = makeRes()
+    await installHandler(makeReq(), res)
+    expect(res.statusCode).toBe(404)
+    expect(state.componentWrites).toHaveLength(0)
+  })
+
+  it('still installs for a paid buyer while the publisher is locked over its own BILLING', async () => {
+    paid()
+    state.publisherOrg = { suspendedAt: 1_790_000_000_000, suspendedReasonCode: 'billing' }
+    const res = makeRes()
+    await installHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(state.componentWrites).toHaveLength(1)
   })
 
   it('still refuses a taken-down listing that is FREE', async () => {
