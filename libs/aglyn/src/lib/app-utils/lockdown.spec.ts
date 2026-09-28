@@ -49,6 +49,7 @@ import {
   normalizeLockdownDoc,
   normalizeOrgLockdown,
   resolveLockdown,
+  siteLockdownFromDocs,
   toEpochMs,
   userLockdownDocId,
 } from './lockdown'
@@ -263,6 +264,42 @@ describe('normalizeHostLockdown — staff takedown, NOT host.maintenance', () =>
     expect(
       normalizeHostLockdown({ maintenance: true } as never),
     ).toBeNull()
+  })
+})
+
+describe('siteLockdownFromDocs — a sender holding the org and host docs (AGL-3356)', () => {
+  it('answers the org suspension', () => {
+    const state = siteLockdownFromDocs(
+      { org: { suspendedAt: NOW, suspendedReasonCode: 'security' }, host: {} },
+      NOW,
+    )
+    expect(state?.scope).toBe('org')
+    expect(state?.reason).toBe('security')
+  })
+
+  it('answers the host suspension when the org is clear', () => {
+    expect(
+      siteLockdownFromDocs({ org: {}, host: { suspendedAt: NOW } }, NOW)?.scope,
+    ).toBe('host')
+  })
+
+  it('carries a read-only mode through for the caller to weigh', () => {
+    expect(
+      siteLockdownFromDocs(
+        { org: { suspendedAt: NOW, suspendedMode: 'read-only' } },
+        NOW,
+      )?.mode,
+    ).toBe('read-only')
+  })
+
+  it('is null for an expired suspension and for missing documents', () => {
+    expect(
+      siteLockdownFromDocs(
+        { host: { suspendedAt: NOW, suspendedUntilMs: NOW - 1 } },
+        NOW,
+      ),
+    ).toBeNull()
+    expect(siteLockdownFromDocs({ org: null, host: undefined }, NOW)).toBeNull()
   })
 })
 

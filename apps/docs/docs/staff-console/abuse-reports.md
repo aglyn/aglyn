@@ -75,6 +75,52 @@ A repeat also never re-opens a report. Once you have moved a row to `actioned`
 or `dismissed`, the reporter filing again bumps `reportCount` and leaves your
 decision where you put it.
 
+## Held outbound email {#held-outbound-email}
+
+The queue has a second source that is not a person. Campaigns and automated
+emails (workflow, action and org-automation `sendEmail` steps) from a workspace
+**less than 14 days old** pass an outbound phishing screen before they send.
+When the screen finds a strong signal it **holds** the send and files a row here:
+category `phishing`, severity urgent, reference `HS-…`, source
+`outbound-screen`. Staff get the same urgent notification an intake phishing
+report raises, once per held message.
+
+The screen holds on three shapes only, each one a legitimate merchant almost
+never produces:
+
+- **A lookalike link or reply address** — a host that wears a brand's name
+  without being the brand's domain: `poshmark.id63835663.shop`,
+  `paypal-secure.com`, `booking.com.guest-review.top`, `paypa1.com`.
+- **A brand in the sender name** that is not the workspace's own name, such as
+  mail sent as "PayPal Support".
+- **Brand, lure and elsewhere, together** — the copy names a brand, asks the
+  reader to act on an account ("verify your account", "has finally sold",
+  "feedback regarding your property"), and links to a domain that is neither the
+  brand's, the workspace's own, nor a common social or maps link.
+
+A brand mentioned on its own never holds. The brand list and its real domains
+live in `libs/shared/util/email/src/lib/outbound-phishing-screen.ts`. Add a brand
+there when it has been seen impersonated, not because it is large.
+
+**Nothing is sent while a row is held, and nothing is dropped.** A held campaign
+is saved as a scheduled send that no processor run reaches. A held automated
+step fails that run with "held for staff review" and the reference. A step that
+runs after a wait stays queued instead.
+
+**Closing the row is the decision.** Both need the usual note, and both write
+the audit row:
+
+| You set the row to | The send |
+| -- | -- |
+| `dismissed` (false positive) | **Released.** A campaign goes back on the clock and sends on the next processor run. An automation sends from its next event, and a queued step after a wait sends on its next beat. |
+| `actioned` | **Rejected.** A campaign is canceled. The automation's email is refused whenever it would send the same content. |
+| `reviewing` | Still held. |
+
+A release covers **exactly the content that was held**. If the merchant edits the
+email, the screen checks it again and a new row may appear. A rejection does not
+lock the workspace. If the content is phishing, lock the org at
+[Lockdown](./lockdown.md) as well, which stops every outbound path.
+
 ## Triage by severity {#triage-by-severity}
 
 Every category carries a severity. It is not a mood — it says how fast a human
