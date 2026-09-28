@@ -102,6 +102,7 @@ import {
   notifyUsers as notifyUsersImpl,
   type NotifyUsersOptions,
 } from './notifications'
+import { meterPlatformEmail } from './email-metering'
 import { listOrgMembers } from './organizations'
 import {
   orgSystemEmailBrand,
@@ -883,8 +884,12 @@ async function emailPeople(
         owedFor: 'account',
       })
       .catch((error: unknown) => ({ sent: false as const, reason: 'provider-error' as const, detail: String(error) }))
-    if (outcome.sent) sent += 1
-    else failed += 1
+    if (outcome.sent) {
+      sent += 1
+      // The platform's own account mail: its cost is the platform's, whatever
+      // workspace it is about (AGL-1438).
+      await meterPlatformEmail().catch(() => undefined)
+    } else failed += 1
   }
   return { sent, failed }
 }

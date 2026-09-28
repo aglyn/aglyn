@@ -46,6 +46,7 @@ jest.mock('./notifications', () => ({
   notifyStaff: async () => undefined,
 }))
 jest.mock('./organizations', () => ({ __esModule: true, listOrgMembers: async () => [] }))
+jest.mock('./email-metering', () => ({ __esModule: true, meterPlatformEmail: async () => undefined }))
 jest.mock('./auth-pools', () => ({ __esModule: true, findUserByUidAcrossPools: async () => null }))
 // The System emails seam renders the fallback here: what is under test is
 // who is sent what, not the chrome around it.

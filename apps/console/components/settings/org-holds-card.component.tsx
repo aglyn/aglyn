@@ -36,7 +36,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { RISK_NOTICE_HELP_PATH } from '@aglyn/shared-util-email/risk-notice-catalog'
 import { useCallback, useEffect, useState } from 'react'
+import { buildDocsUrl } from '../../constants/docs-links'
 import { useOrgScope } from '../../hooks/use-org-scope'
 
 /** One notice as `/api/orgs/risk-notices` hands it over (`OwnerRiskNoticeView`). */
@@ -166,6 +168,12 @@ export default function OrgHoldsCard() {
     <CardDisplay
       header="Holds & reviews"
       subheader="Anything on this workspace that was held, flagged or locked, and what to do about it"
+      help={{
+        title: 'Why was something on my account held or flagged?',
+        excerpt:
+          'What each hold, flag, lock and payment warning means, what to do about it, and how to request a review.',
+        href: buildDocsUrl(RISK_NOTICE_HELP_PATH),
+      }}
       HeaderProps={{
         action: (
           <Stack direction="row" spacing={1}>
