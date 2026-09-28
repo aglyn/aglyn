@@ -391,8 +391,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
       {
         field: 'plan',
         headerName: 'Plan',
-        flex: 1,
-        minWidth: 180,
+        flex: 1.1,
+        minWidth: 220,
         // An org with no stored plan has no `plan` key, and a query ordered
         // by it would drop that org; the same holds for the billing status.
         sortable: false,
@@ -404,12 +404,39 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           const planState = describeOrgPlan(row as never)
           const effectivePlan = planState.effectivePlan
           const storedPlanLabel = row.plan ?? 'no plan'
+          const storedLabel =
+            !isEnterpriseOrg(row as never) && storedPlanLabel !== effectivePlan
+              ? `stored: ${storedPlanLabel}`
+              : null
+          const compLabel = planState.comp
+            ? `comp: ${planCompLabel(
+                planState.comp,
+                planState.compInForce,
+                planState.comp.plan,
+              )}`
+            : null
           return (
+            /*
+             * ONE LINE, because the row does not grow.
+             *
+             * Wrapped, a third chip dropped onto a second line that the fixed
+             * row height cut in half — on a suspended org, the chip that
+             * matters most. So the chips never wrap: the plan and the status
+             * chips keep their full width, and the stored and comp notes,
+             * which only explain the plan, give way first and ellipsize, with
+             * the full text on hover.
+             */
             <Stack
               direction="row"
               spacing={0.5}
               useFlexGap
-              sx={{ flexWrap: 'wrap', alignItems: 'center', height: '100%' }}
+              sx={{
+                flexWrap: 'nowrap',
+                alignItems: 'center',
+                height: '100%',
+                minWidth: 0,
+                overflow: 'hidden',
+              }}
             >
               {/* THE PLAN THE ORG READS AS, not the one stored (AGL-1152).
                   The two diverge in both directions, exactly when it matters:
@@ -425,34 +452,15 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 }
                 size="small"
                 color={row.plan ? 'primary' : 'default'}
+                sx={{ flexShrink: 0 }}
               />
-              {/* Only when the stored value would surprise someone reading
-                  the effective one. */}
-              {!isEnterpriseOrg(row as never) &&
-              storedPlanLabel !== effectivePlan ? (
-                <Chip
-                  label={`stored: ${storedPlanLabel}`}
-                  size="small"
-                  variant="outlined"
-                />
-              ) : null}
-              {/* A staff comp (AGL-3034) — the reason the effective plan can
-                  exceed what any subscription pays for. Dormant while a
-                  live subscription decides the plan, and uncapped when it
-                  lifts every band (AGL-3049). */}
-              {planState.comp ? (
-                <Chip
-                  label={`comp: ${planCompLabel(
-                    planState.comp,
-                    planState.compInForce,
-                    planState.comp.plan,
-                  )}`}
-                  size="small"
-                  color="secondary"
-                />
-              ) : null}
               {row.suspendedAt ? (
-                <Chip label="suspended" size="small" color="error" />
+                <Chip
+                  label="suspended"
+                  size="small"
+                  color="error"
+                  sx={{ flexShrink: 0 }}
+                />
               ) : null}
               {row.erasureRequestedAt ? (
                 <Chip
@@ -460,6 +468,31 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   size="small"
                   color="error"
                   variant="outlined"
+                  sx={{ flexShrink: 0 }}
+                />
+              ) : null}
+              {/* Only when the stored value would surprise someone reading
+                  the effective one. */}
+              {storedLabel ? (
+                <Chip
+                  label={storedLabel}
+                  title={storedLabel}
+                  size="small"
+                  variant="outlined"
+                  sx={{ minWidth: 0 }}
+                />
+              ) : null}
+              {/* A staff comp (AGL-3034) — the reason the effective plan can
+                  exceed what any subscription pays for. Dormant while a
+                  live subscription decides the plan, and uncapped when it
+                  lifts every band (AGL-3049). */}
+              {compLabel ? (
+                <Chip
+                  label={compLabel}
+                  title={compLabel}
+                  size="small"
+                  color="secondary"
+                  sx={{ minWidth: 0 }}
                 />
               ) : null}
             </Stack>
