@@ -35,6 +35,7 @@ import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
+import { isPublisherSecurityLocked } from './sale-risk'
 
 /**
  * Installs a marketplace dataset schema into an org (AGL-657).
@@ -113,6 +114,8 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
       // No owner exemption, matching `install-plugin.ts`: a takedown is a
       // moderation decision about the artifact, not about who is asking.
       listing.hiddenAt ||
+      // A publisher under a SECURITY lock hands nothing over (AGL-3365).
+      (await isPublisherSecurityLocked(firestore, listing.profileId)) ||
       listingArtifactType(listing) !== 'datasetSchema'
     ) {
       return res.status(404).json({ error: 'Unknown dataset schema' })

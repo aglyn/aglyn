@@ -287,6 +287,52 @@ editor before saving:
   (`:total_charges_per_card_number_daily:`).
 - **Request 3D Secure** when `:risk_level:` is `elevated`.
 
+## The marketplace {#marketplace}
+
+Marketplace publishers get the same screens, applied where a listing is
+submitted and where a sale is recorded.
+
+**Held submissions.** Every publish, listing edit and publisher-profile save
+goes through the phishing screen before anything is listed. The title,
+description, readme, changelog and links are read as a message from the
+publisher. A template's, layout's or component's content is read as the page it
+will become, and an email template's as mail. The tiers are the ones above. A
+hold refuses the submission and files a row with source `outbound-screen`,
+reference `HS-…` and kind **Marketplace submission**. **Dismiss** releases it
+and the publisher submits again. **Actioned** rejects it. The publisher's owners
+and admins are told that it is held and how to ask about it, never which rule
+held it.
+
+A publisher name or handle that uses the platform's name, and a name or listing
+title that claims to speak for a brand ("PayPal Support"), are refused outright
+and file nothing. Staff accounts are exempt, which is how the platform's own
+listings are published.
+
+**Plugin network origins.** The plugin verifier asks the reviewer about any
+origin a manifest declares that wears a brand without being the brand's own
+domain (`paypal-verify.net`, `aglyn-billing.com`). This is a question for the
+reviewer, not a refusal.
+
+**Sales.** A buyer who is a member of the publishing workspace cannot check out,
+and a workspace under any lock sells nothing. Each recorded sale is also read
+for a publisher paying itself. A row with source `marketplace-sale-risk` and
+reference `MR-…` is filed when any of these hold:
+
+- the buying and publishing workspaces share a member;
+- the same card bought from the same publisher for another workspace;
+- a publisher in its first 30 days made a single sale of $100 or more.
+
+Payouts from a publisher in its first 30 days are held 14 days on its connected
+account, so a stolen-card sale can still be refunded with the publisher's share
+taken back. **Nothing is refunded or paused by the row.** If it is the publisher,
+lock the workspace with the `security` reason and refund the sale, which
+reverses the publisher's share. A security lock also stops every install and
+update of that publisher's listings.
+
+Early fraud warnings and disputes on marketplace sales count toward the
+[seller fraud pattern](#seller-fraud-pattern) under the **publisher's**
+workspace, never the buyer's.
+
 ## Triage by severity {#triage-by-severity}
 
 Every category carries a severity. It is not a mood — it says how fast a human

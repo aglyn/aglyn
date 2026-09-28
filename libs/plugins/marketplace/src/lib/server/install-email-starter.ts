@@ -35,6 +35,7 @@ import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
+import { isPublisherSecurityLocked } from './sale-risk'
 
 /**
  * Installs a marketplace email starter as a new email on a site.
@@ -124,6 +125,8 @@ export const installEmailStarterHandler: PluginApiHandler = async (req, res) => 
       !listing ||
       listing.deletedAt ||
       listing.hiddenAt ||
+      // A publisher under a SECURITY lock hands nothing over (AGL-3365).
+      (await isPublisherSecurityLocked(firestore, listing.profileId)) ||
       listingArtifactType(listing) !== 'emailStarter'
     ) {
       return res.status(404).json({ error: 'Unknown email starter' })

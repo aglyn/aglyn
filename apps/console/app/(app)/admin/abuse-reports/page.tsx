@@ -291,6 +291,11 @@ interface HeldSendRow {
 /** What a held send's state means, in the words the reviewer acts on. */
 function heldSendStateLine(held: HeldSendRow): string {
   const by = held.decidedBy ? ` by ${held.decidedBy}` : ''
+  if (held.kind === 'listing') {
+    if (held.state === 'released') return `Released${by} — the publisher's next submission of it goes through.`
+    if (held.state === 'rejected') return `Rejected${by} — the marketplace refuses it.`
+    return 'Held — nothing was listed. Dismiss this report (with a note) to release it (the publisher submits it again), or mark it Actioned to reject it. Reviewing leaves it held.'
+  }
   if (held.kind === 'page') {
     if (held.state === 'released') return `Released${by} — the page serves as published.`
     if (held.state === 'rejected') return `Rejected${by} — the page stays unserved.`
@@ -314,6 +319,8 @@ function heldSendKindLabel(kind: string | null): string {
       return 'Outbound campaign'
     case 'page':
       return 'Published page'
+    case 'listing':
+      return 'Marketplace submission'
     case 'message':
       return 'Outbound email'
     default:
@@ -1515,7 +1522,7 @@ function AdminAbuseReports() {
                             )} held by the phishing screen`}
                           </Typography>
                           <Typography variant="body2">
-                            {`${report.heldSend.kind === 'page' ? 'Page' : 'Subject'}: ${
+                            {`${report.heldSend.kind === 'page' ? 'Page' : report.heldSend.kind === 'listing' ? 'Listing' : 'Subject'}: ${
                               report.heldSend.subject ?? '—'
                             }`}
                             {report.heldSend.fromName
@@ -1547,6 +1554,8 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {report.source === 'outbound-screen'
                           ? 'What the screen recorded'
+                          : report.source === 'marketplace-sale-risk'
+                            ? 'What the marketplace recorded'
                           : report.source === 'stripe-fraud-signal' ||
                               report.source === 'stripe-seller-fraud-pattern'
                             ? 'What Stripe reported'
@@ -1573,6 +1582,10 @@ function AdminAbuseReports() {
                       ) : report.source === 'stripe-seller-fraud-pattern' ? (
                         <Typography variant="body2">
                           {'Filed by the Stripe billing webhook from the seller’s own sales, not by a person. There is no reporter to reply to; the seller is the subject.'}
+                        </Typography>
+                      ) : report.source === 'marketplace-sale-risk' ? (
+                        <Typography variant="body2">
+                          {'Filed by the marketplace when the sale was recorded, not by a person. There is no reporter to reply to; the publisher is the subject.'}
                         </Typography>
                       ) : report.source === 'outbound-screen' ? (
                         <Typography variant="body2">
