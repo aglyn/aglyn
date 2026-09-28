@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-import { redirect } from 'next/navigation'
-import { buildRoute, Route } from '../../../../../../../constants/route-links'
+import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
+import { segmentTitle } from '../../../page-title'
 
-/**
- * The site's staff page moved out from under its organization (AGL-3378): a
- * site is looked up by its own id, from the Sites list as often as from its
- * organization, and the organization is on the page. Old links keep working.
- */
-export default async function AdminOrgHostRedirect({
-  params,
+// Title-only shell (AGL-1059): the page is a client component, and a client
+// component cannot export `metadata` — so its title lives here, in the
+// nearest server layout. `segmentTitle` re-declares the brand template so it
+// keeps applying to the site detail route nested below (AGL-1059).
+export const metadata: Metadata = { title: segmentTitle('Staff sites') }
+
+export default function AdminSitesTitleLayout({
+  children,
 }: {
-  params: Promise<{ orgId: string; hostId: string }>
+  children: ReactNode
 }) {
-  const { hostId } = await params
-  redirect(buildRoute(Route.ADMIN_SITE_DETAIL, { hostId }))
+  return <>{children}</>
 }

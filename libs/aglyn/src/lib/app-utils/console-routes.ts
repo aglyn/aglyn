@@ -26,6 +26,14 @@ export enum Route {
   ADMIN_ORGS = '/admin/orgs',
   ADMIN_ORG_DETAIL = '/admin/orgs/[orgId]',
   ADMIN_ORG_HOST_DETAIL = '/admin/orgs/[orgId]/host/[hostId]',
+  // Every site on the platform, across organizations, and one site's staff
+  // detail (AGL-3378). The org-nested host route above redirects here.
+  ADMIN_SITES = '/admin/sites',
+  ADMIN_SITE_DETAIL = '/admin/sites/[hostId]',
+  // A site's screen, layout, component, template or form as its draft renders,
+  // for staff who are not members of the site (AGL-3378). `kind` is a
+  // `PreviewKind`; the version, when not the current one, rides `?version=`.
+  ADMIN_SITE_PREVIEW = '/admin/sites/[hostId]/preview/[kind]/[docId]',
   ADMIN_OVERVIEW = '/admin/overview',
   // Staff coupon management (AGL-1105): create discount coupons + promotion
   // codes and read the live net-margin rating before committing to one.
@@ -565,6 +573,9 @@ export interface RoutePayload {
   [Route.ADMIN_ORGS]: undefined
   [Route.ADMIN_ORG_DETAIL]: { orgId: string }
   [Route.ADMIN_ORG_HOST_DETAIL]: { orgId: string; hostId: string }
+  [Route.ADMIN_SITES]: undefined
+  [Route.ADMIN_SITE_DETAIL]: { hostId: string }
+  [Route.ADMIN_SITE_PREVIEW]: { hostId: string; kind: string; docId: string }
   [Route.ADMIN_OVERVIEW]: undefined
   [Route.ADMIN_COUPONS]: undefined
   [Route.ADMIN_LOCKDOWN]: undefined

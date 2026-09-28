@@ -74,6 +74,11 @@ function consoleAdminNavTabItems() {
       href: buildRoute(Route.ADMIN_ORGS),
     },
     {
+      id: 'nav-tab-admin-sites',
+      label: 'Sites',
+      href: buildRoute(Route.ADMIN_SITES),
+    },
+    {
       id: 'nav-tab-admin-users',
       label: 'Users',
       href: buildRoute(Route.ADMIN_USERS),
