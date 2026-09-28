@@ -96,11 +96,16 @@ Collections group products for landing pages and storefront blocks:
   away. On a big catalog that can take a few seconds after **Collection
   saved** appears.
 
-On a Product grid scoped to a smart collection whose rules use *any*, *is
-not*, a name, or a price *above*, the grid's search box and its category and
-tag chips can't be combined with the collection. Using one shows a notice
-above the grid instead of narrowing it. The type, **In stock** and price
-controls still work.
+On a Product grid scoped to a smart collection, the grid's search box and its
+category and tag chips can't be combined with the collection when a rule says a
+product's tag or category *is* something, or when the rules are ones a single
+query cannot ask: *any* across two or more rules, a tag or category that *is not*, a name, a price
+*above* or *is*, or more than one tag or category. Using one of those controls
+shows a notice above the grid instead of narrowing it. The type, **In stock**
+and price controls still work, and a collection built only from type *is* or *is not*
+rules and a price *below* keeps every control. A price *below* rule is a price range, so
+that collection's grid is in price order — high to low if that is the sort chosen, low to
+high otherwise.
 
 ## Slugs
 

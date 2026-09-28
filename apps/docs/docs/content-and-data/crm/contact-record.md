@@ -257,9 +257,9 @@ person; merge those from the overflow menu.
 ## Owner
 
 The **Owner** is the team member responsible for the relationship. The
-contacts list has an **Owner** column and an **Assigned to me** toggle that
-narrows the list to the people assigned to you; the record page shows the
-owner beside the heading and lets you reassign.
+contacts list has an **Owner** column, and its **Filters** › **Owner** offers
+**Me** first, which narrows the list to the people assigned to you; the
+record page shows the owner beside the heading and lets you reassign.
 
 ## Last engaged
 
@@ -320,7 +320,8 @@ routing has no lead, and the link is simply not there.
 ## Finding a contact
 
 The list's filters and its search box reach every contact, page by page; the
-search finds a person by a word of their name or email addresses — see
+search finds a person by the start of a word of their name, their email
+addresses or their company, or by their phone number's digits — see
 [Filters on the Contacts list](./views.md#filters-on-the-contacts-list). The console's **search** (the magnifying glass in the top bar)
 finds contacts too — by name, email, phone number or company name — and opens
 the person's page. Contacts appear in that search only for members who can

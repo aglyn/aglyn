@@ -142,11 +142,19 @@ const WINDOW_LABEL: Record<CampaignListRow['windowState'], string> = {
  * campaign's dates against the clock, which no query can ask, so it is not
  * offered; the one date range is Created, the list's own order.
  */
-const CAMPAIGN_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'Campaign',
-  listIds: 'Lists',
-  sitesLabel: 'Sites',
-  createdAtMs: 'Created',
+const CAMPAIGN_FILTER_HEADERS: Record<CampaignListKind, Readonly<Record<string, string>>> = {
+  campaign: {
+    name: 'Campaign',
+    listIds: 'Lists',
+    sitesLabel: 'Sites',
+    createdAtMs: 'Created',
+  },
+  // A single send has no container; its `name` field filters by the subject.
+  single: {
+    name: 'Subject',
+    sitesLabel: 'Sites',
+    createdAtMs: 'Created',
+  },
 }
 const NO_CLAUSES: Record<CampaignListKind, ListFilterClause[]> = {
   campaign: [],
@@ -246,6 +254,7 @@ export function HostCampaignsCard(props: {
   const containerDeclaration = campaignContainersListQuery(!hostId)
   const singleDeclaration = campaignSingleSendsListQuery(!hostId)
   const declaration = kind === 'campaign' ? containerDeclaration : singleDeclaration
+  const filterHeaders = CAMPAIGN_FILTER_HEADERS[kind]
   /*
    * A site's campaigns are searched by the START of the name: a range beside
    * the site's scope clause, the one array clause the rules can prove for a
@@ -614,7 +623,7 @@ export function HostCampaignsCard(props: {
     () => [
       {
         field: 'name',
-        headerName: 'Campaign',
+        headerName: filterHeaders.name,
         flex: 1,
         minWidth: 180,
         renderCell: ({ row }: any) => (
@@ -867,7 +876,7 @@ export function HostCampaignsCard(props: {
         { width: 72 },
       ),
     ],
-    [listNames, campaignHref, deletingId, handleDelete, orgMount],
+    [listNames, campaignHref, deletingId, handleDelete, orgMount, filterHeaders],
   )
 
   /** Nothing of this kind stored at all — not a filter that matched nothing. */
@@ -917,7 +926,7 @@ export function HostCampaignsCard(props: {
         </ToggleButtonGroup>
         <ListFilterChips
           fields={declaration.fields}
-          headers={CAMPAIGN_FILTER_HEADERS}
+          headers={filterHeaders}
           clauses={gridFilter.clauses}
           onChange={gridFilter.setClauses}
           options={filterOptions}
@@ -925,7 +934,7 @@ export function HostCampaignsCard(props: {
         <ListQueryNotices
           refused={listQueryRefusals(page.plan.refused, {
             fields: declaration.fields,
-            headers: CAMPAIGN_FILTER_HEADERS,
+            headers: filterHeaders,
             options: filterOptions,
           })}
           notices={
@@ -940,7 +949,7 @@ export function HostCampaignsCard(props: {
             columns as any,
             declaration.fields,
             filterOptions,
-            CAMPAIGN_FILTER_HEADERS,
+            filterHeaders,
           )}
           onOpen={(id) => openCampaign(id)}
           loading={page.status === 'loading'}

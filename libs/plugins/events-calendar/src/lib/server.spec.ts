@@ -31,6 +31,9 @@
  * become true, and this asserts it at that boundary.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 jest.mock('@aglyn/tenant-runtime', () => ({
   __esModule: true,
   dispatchHostAutomation: jest.fn(),
@@ -41,18 +44,60 @@ const hostDoc: Record<string, unknown> = {
   subdomain: 'acme',
 }
 let eventDocs: Array<{ id: string; data: Record<string, unknown> }> = []
+/** The constraints the last listing put on its query, in order. */
+let asked: unknown[][] = []
 
+/**
+ * The events query, answered the way Firestore would: its `where`s, its one
+ * `orderBy` and its `limit` applied to `eventDocs` in that order, so a
+ * condition left off the query shows up as rows the limit let through.
+ */
 const query = () => {
+  const wheres: Array<[string, string, unknown]> = []
+  let order: [string, 'asc' | 'desc'] | null = null
+  let cap = Number.POSITIVE_INFINITY
+  asked = []
   const chain: any = {
-    where: () => chain,
-    orderBy: () => chain,
-    limit: () => chain,
-    get: async () => ({
-      docs: eventDocs.map((row) => ({
-        id: row.id,
-        get: (field: string) => row.data[field],
-      })),
-    }),
+    where: (path: string, op: string, value: unknown) => {
+      asked.push(['where', path, op, value])
+      wheres.push([path, op, value])
+      return chain
+    },
+    orderBy: (path: string, direction: 'asc' | 'desc') => {
+      asked.push(['orderBy', path, direction])
+      order = [path, direction]
+      return chain
+    },
+    limit: (count: number) => {
+      asked.push(['limit', count])
+      cap = count
+      return chain
+    },
+    get: async () => {
+      const passes = (data: Record<string, unknown>) =>
+        wheres.every(([path, op, value]) => {
+          const field = data[path] as any
+          if (op === '==') return field === value
+          if (op === '<') return field < (value as any)
+          if (op === '>=') return field >= (value as any)
+          throw new Error(`the fake does not answer ${op}`)
+        })
+      const rows = eventDocs.filter((row) => passes(row.data))
+      if (order) {
+        const [path, direction] = order
+        rows.sort(
+          (a, b) =>
+            ((a.data[path] as number) - (b.data[path] as number)) *
+            (direction === 'asc' ? 1 : -1),
+        )
+      }
+      return {
+        docs: rows.slice(0, cap).map((row) => ({
+          id: row.id,
+          get: (field: string) => row.data[field],
+        })),
+      }
+    },
   }
   return chain
 }
@@ -99,6 +144,9 @@ const listEvents = async () => {
   return body
 }
 
+/** Far enough ahead to stay "upcoming" whenever the suite runs. */
+const FUTURE_MS = Date.UTC(2100, 7, 20, 18)
+
 const givenEvent = (coverImage: unknown) => {
   eventDocs = [
     {
@@ -106,8 +154,8 @@ const givenEvent = (coverImage: unknown) => {
       data: {
         title: 'Launch party',
         status: 'published',
-        startsAtMs: Date.UTC(2026, 7, 20, 18),
-        endsAtMs: Date.UTC(2026, 7, 20, 21),
+        startsAtMs: FUTURE_MS,
+        endsAtMs: FUTURE_MS + 3 * 60 * 60 * 1000,
         coverImage,
       },
     },
@@ -183,8 +231,61 @@ describe('the events payload absolutizes each cover (AGL-1351)', () => {
     expect(body.events[0]).toMatchObject({
       $id: 'e1',
       title: 'Launch party',
-      startsAtMs: Date.UTC(2026, 7, 20, 18),
-      endsAtMs: Date.UTC(2026, 7, 20, 21),
+      startsAtMs: FUTURE_MS,
+      endsAtMs: FUTURE_MS + 3 * 60 * 60 * 1000,
     })
+  })
+})
+
+describe('the listing asks for published events on its query', () => {
+  const event = (id: string, at: number, data: Record<string, unknown>) => ({
+    id,
+    data: { title: id, startsAtMs: FUTURE_MS + at * 60_000, ...data },
+  })
+
+  it('returns fifty published events when drafts start sooner than all of them', async () => {
+    /*
+     * Sixty drafts and a deleted event start before any published one. Read
+     * by start time with the status left for after the read, the limit of
+     * fifty filled with drafts and the page came back empty.
+     */
+    eventDocs = [
+      ...Array.from({ length: 60 }, (_unused, at) => event(`draft-${at}`, at, { status: 'draft' })),
+      event('deleted', 61, { status: 'deleted', deletedAt: 1 }),
+      ...Array.from({ length: 55 }, (_unused, at) =>
+        event(`published-${at}`, 100 + at, { status: 'published' }),
+      ),
+    ]
+
+    const body = await listEvents()
+
+    expect(asked).toContainEqual(['where', 'status', '==', 'published'])
+    expect(body.events).toHaveLength(50)
+    expect(body.events[0].$id).toBe('published-0')
+    expect(body.events.every((row: any) => row.$id.startsWith('published-'))).toBe(true)
+  })
+
+  it('keeps an event deleted before the delete wrote its status off the page', async () => {
+    eventDocs = [
+      event('deleted-long-ago', 0, { status: 'published', deletedAt: 1 }),
+      event('live', 1, { status: 'published' }),
+    ]
+
+    expect((await listEvents()).events.map((row: any) => row.$id)).toEqual(['live'])
+  })
+
+  it('has the composite each direction needs', () => {
+    const { indexes } = JSON.parse(
+      readFileSync(join(__dirname, '../../../../../cloud/firebase-firestore.indexes.json'), 'utf8'),
+    ) as { indexes: Array<{ collectionGroup: string; queryScope: string; fields: Array<{ fieldPath: string; order?: string }> }> }
+    const shapes = indexes
+      .filter((index) => index.collectionGroup === 'events' && index.queryScope === 'COLLECTION')
+      .map((index) => index.fields.map((field) => `${field.fieldPath}:${field.order}`).join(','))
+    expect(shapes).toEqual(
+      expect.arrayContaining([
+        'status:ASCENDING,startsAtMs:ASCENDING',
+        'status:ASCENDING,startsAtMs:DESCENDING',
+      ]),
+    )
   })
 })

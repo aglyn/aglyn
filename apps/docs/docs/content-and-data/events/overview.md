@@ -32,7 +32,9 @@ renders nothing on your site.
 
 ## Manage events
 
-The console **Events** page lists your site's events, newest start first. **Add event**
+The console **Events** page lists your site's events, newest start first. It has no
+filters or search, and it reads the newest 200 events: a site with more says so above
+**Add event**, and the older ones are not reachable from the list. **Add event**
 opens the editor; each event has:
 
 - **Title** — required.

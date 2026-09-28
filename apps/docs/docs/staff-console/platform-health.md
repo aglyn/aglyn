@@ -138,8 +138,8 @@ whole window, not only the page shown:
 
 Every filter combines with every other and with the search. The count is not a filter:
 the window is already the table's one range, and a second range beside it cannot be
-asked. A combination the table cannot ask — a second "any of" beside the search, say —
-shows a notice above it, "*Filter* is not applied: *why*", and is left out rather than
+asked. A combination the table cannot ask — "any of" filters holding more than thirty
+values between them, say — shows a notice above it, "*Filter* is not applied: *why*", and is left out rather than
 applied to some rows. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ## Sharing-scope drift
@@ -188,13 +188,13 @@ Each row answers the one question worth asking:
 - **Due** — the hold has expired. The next scheduled run will take it.
 
 The table's **Filters** picks **State** (*Due* or *Holding*) and **Organization**
-(*contains* a word of the name); the search finds an organization by the start of any
+(*contains*, matching the start of a word of the name); the search finds an organization by the start of any
 word of its name, using the first word you type. Both apply to the whole queue rather
 than the page on screen, oldest request first, and State combines with either. The
 Organization filter and the search read the same name words, so they do not combine:
 with a search in the box, an Organization filter is not applied, and a note above the
 list says *"Organization contains … is not applied: cannot be combined with the search —
-clear the search to use it."*
+clear the search to use it."* See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 **Run due erasures now** is for when a deadline will not wait for the schedule. Three
 things about it:
@@ -261,11 +261,12 @@ without the time it was taken has no age, so it cannot be placed in that order: 
 card says how many such claims there are, above the table, rather than listing them.
 
 The table's **Filters** narrows the whole list: **State** picks *stranded* or *in
-flight*, **Age (ms)** compares the age with *greater than* or *less than*, and
+flight*, **Age (ms)** compares the age in milliseconds (`>`, `>=`, `<` or `<=`), and
 **Operation** (one or several), **Scope** and **Org** match an exact value. Every
 combination applies at once. There is no search box: every value on a claim is an
 identifier, which the exact filters match. A filter the list cannot apply — an age that
-is not a number, say — is left off entirely and named in a note above the table.
+is not a number, say — is left off entirely and named in a note above the table. See
+[Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ## Resolved server config {#resolved-server-config}
 

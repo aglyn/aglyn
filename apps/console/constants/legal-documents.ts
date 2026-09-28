@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v8'
+export const LEGAL_DOCUMENT_VERSION = 'v9'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -584,6 +584,33 @@ export interface LegalDocumentManifestEntry {
  * reproduced its `v7` pin (43836 bytes / `69d59b…`) byte for byte before and
  * after publication, and keeps that pin.
  *
+ * v9 (2026-09-28, AGL-3357): phishing, scams, fraud and impersonation
+ * anywhere on the Services, after the 2026-09-26 incident (AGL-3356).
+ *
+ *   - Terms §9 adds "phishing, or scams, or impersonating any business,
+ *     brand, or person, anywhere on the Services" after "engaging in fraud".
+ *   - Terms §13.3 adds that a suspension or termination under §13.2 gives no
+ *     refund (§4.8) and leaves amounts owed due, including prorated
+ *     plan-change charges not yet invoiced.
+ *   - The Acceptable Use Policy (not acceptance-pinned, but incorporated by
+ *     the Terms) gains a §2 bullet naming every part of the Services — sites,
+ *     forms and domains, hosting, the CRM, campaigns, sequences, automations
+ *     and every message sent, commerce, marketplace, AI and APIs — and two §7
+ *     paragraphs: immediate suspension, permanent termination and refusal of
+ *     future accounts, with no refund and amounts owed still due.
+ *
+ * Both documents and their `/legal` index cards move "Last updated" to
+ * September 28, 2026; the Terms keep "Effective date: August 5, 2026". The
+ * wording is recorded in
+ * `Platform Docs/Legal/Proposed/2026-09-28-aup-terms-phishing/PROPOSAL.md`.
+ *
+ * Publication-first: the pages were published, the live pages confirmed
+ * serving the new text, and only then was terms captured: 44131 bytes
+ * (`c48915…`), identical across two requests and a cache-busting query. The
+ * Privacy Policy did not change, so it was the control: the live privacy page
+ * reproduced its `v8` pin (25267 bytes / `069319…`) byte for byte before and
+ * after publication, and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -643,8 +670,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '69d59b4367067a1c95adc9ed825fb09165e5e6b1817ebacad835234b15561b7a',
-    bytes: 43836,
+      'c48915a82b23cfd08b49f006d68e07737b0bf7170de24fd0405e6ca084279278',
+    bytes: 44131,
   },
   {
     key: 'privacy',

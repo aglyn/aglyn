@@ -21,6 +21,7 @@ import type {
   ListFilterClause,
   ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { LIST_QUERY_DISJUNCTIONS } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*
  * What the notifications feed filters by, and how the feed's query serves it
@@ -63,21 +64,35 @@ export const NOTIFICATION_FILTER_OPTIONS: Readonly<
   ],
 }
 
-/** Firestore caps `in` at thirty values. */
-const IN_LIMIT = 30
-
 /** One `where` the feed's query applies: a path, an operator, a value. */
 export type NotificationWhere = [path: string, op: '==' | 'in', value: unknown]
+
+/** A clause the feed's query could not take, and why. */
+export interface NotificationFilterRefusal {
+  clause: ListFilterClause
+  reason: string
+}
+
+export interface NotificationFilterPlan {
+  wheres: NotificationWhere[]
+  /** Shown above the feed by `ListQueryNotices`, beside the clause's chip. */
+  refused: NotificationFilterRefusal[]
+}
 
 /**
  * The feed's `where`s for the clauses in force — every clause, since the
  * indexes serve both fields together. A clause on a field the feed does not
  * declare, or with no value, is ignored rather than guessed at.
+ *
+ * Type "is any of" is an `in`, which Firestore caps at thirty values. A pick
+ * past that is refused whole, with the reason `planListQuery` gives, so
+ * the feed never reads as the answer for types it did not ask about.
  */
-export function notificationFilterWheres(
+export function planNotificationFilters(
   clauses: readonly ListFilterClause[],
-): NotificationWhere[] {
+): NotificationFilterPlan {
   const wheres: NotificationWhere[] = []
+  const refused: NotificationFilterRefusal[] = []
   for (const clause of clauses) {
     if (clause.field === 'type') {
       const values = clause.value
@@ -86,7 +101,11 @@ export function notificationFilterWheres(
         .filter(Boolean)
       if (!values.length) continue
       if (clause.op === 'isAnyOf') {
-        wheres.push(['type', 'in', values.slice(0, IN_LIMIT)])
+        if (values.length > LIST_QUERY_DISJUNCTIONS) {
+          refused.push({ clause, reason: `at most ${LIST_QUERY_DISJUNCTIONS} values` })
+          continue
+        }
+        wheres.push(['type', 'in', values])
       } else if (clause.op === 'equals') {
         wheres.push(['type', '==', values[0]])
       }
@@ -96,5 +115,5 @@ export function notificationFilterWheres(
       }
     }
   }
-  return wheres
+  return { wheres, refused }
 }

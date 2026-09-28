@@ -24,7 +24,8 @@ settings. Everything you build lives under a site, and you can own several.
    publishes a home page for you; building by hand, that's
    [your first screen](publish-your-first-screen.md).
 4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for
-   Basic details, SEO, Theme, Custom Domain, Emails, and Activity. To start building
+   Basic details, SEO, Tracking, Theme, and Emails; the custom domain and the
+   activity log are under **Admin**. To start building
    rather than configuring, use the **Screens** tab in the site navigation — see
    [Publish your first screen](publish-your-first-screen.md).
 

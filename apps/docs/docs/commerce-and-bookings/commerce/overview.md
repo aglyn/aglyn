@@ -118,8 +118,8 @@ Restock, Correction, Damaged, Order canceled — and the **source** that wrote
 it.
 
 The table's toolbar narrows it: **Filters** offers **Product** and **Reason**
-(is, or is any of), **When** (a date or a range of dates), and **Order** and
-**Location** by their id. Each filter in force shows as a chip above the
+(is, or is any of), **When** (a date or a range of dates), **Order** by its
+id, and **Location**, picked from your locations. Each filter in force shows as a chip above the
 table; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 There is no search box: a movement names its product by id, so you pick the
@@ -252,7 +252,9 @@ first, and the footer pages through what they match; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 The search, **Customer contains**, **Order** and **Product** can't be combined with
 each other: add a second one and a notice above the table says it is not applied,
-rather than showing a partial answer. Beside the table, **Export CSV** writes every
+rather than showing a partial answer. The same notice refuses **is any of** choices
+across Product, Status, Channel and Disputes that multiply past thirty combinations.
+Beside the table, **Export CSV** writes every
 order the filters and the search match, up to 5,000 (it tells you when there are
 more), and **Draft order** builds an order by hand and sends the buyer a payment
 link.

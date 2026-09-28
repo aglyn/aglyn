@@ -113,7 +113,7 @@ Board / Table control).
 | **Complete** | Each open selected task is completed [through the server](./tasks.md#completing-and-reopening), one at a time, so every one fires its `taskCompleted` event. Tasks already done are left alone. |
 | **Assign** | Pick a team member, or **Nobody** to clear the assignee. Each task is saved through the server, so the new assignee gets the same [notification](./tasks.md#assigning-a-task-to-someone-else) the drawer sends — assigning to yourself sends nothing. |
 | **Set due** | Pick a date and time for every selected task, or leave it empty to clear the due date. |
-| **Export CSV** | Download the selected tasks as `tasks-selected.csv` — the same file the list's **Export CSV** writes for the view on screen: title, kind, priority, status, the due date and the completion as timestamps, the assignee by email address, the contact, company and deal by name, and notes. |
+| **Export CSV** | Download the selected tasks as `tasks-selected.csv` — the same file the list's **Export CSV** writes for the page on screen: title, kind, priority, status, the due date and the completion as timestamps, the assignee by email address, the contact, company and deal by name, and notes. |
 | **Delete** | After a confirmation, the selected tasks are deleted for everyone who can see them. A finished task is better ticked done, which keeps it in the Done view. |
 
 ## Leads

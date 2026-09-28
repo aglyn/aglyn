@@ -378,8 +378,10 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
             getRowHeight={() => 'auto'}
             // One page of a cursor feed, turned by the footer below: the grid
             // neither slices it nor filters the page and calls that the log.
-            // Its panel's one filter is the route's (AGL-3317).
+            // Its panel's one filter is the route's (AGL-3317). Nor does it
+            // sort: a header sort would order that one page, not the log.
             hideFooter
+            disableColumnSorting
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}

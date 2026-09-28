@@ -385,6 +385,10 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                                 // button below loads older ones: the history
                                 // grows rather than pages.
                                 hideFooter
+                                // In the order Stripe returns them; a header
+                                // sort would order only the invoices loaded so
+                                // far and read as the whole history's.
+                                disableColumnSorting
                                 // The panel and the search are Stripe's: the
                                 // grid narrows nothing itself (AGL-3321).
                                 filterMode="server"
