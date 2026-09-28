@@ -9,6 +9,83 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.201 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.200...v1.0.0-beta.201)
+
+### Added
+
+- **abuse:** screen lookalike sending domains and plugin credential inputs ([AGL-3362](https://linear.app/aglyn/issue/AGL-3362))
+- **abuse:** one phishing screen for every tenant email, page and site name ([AGL-3362](https://linear.app/aglyn/issue/AGL-3362), [AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **payments:** card fraud signals reach the merchant; staff see a seller pattern ([AGL-3360](https://linear.app/aglyn/issue/AGL-3360))
+- **billing:** a fraud signal from Stripe files an urgent abuse row and moves no money ([AGL-3356](https://linear.app/aglyn/issue/AGL-3356), [AGL-3359](https://linear.app/aglyn/issue/AGL-3359))
+- **marketing:** a held campaign reads "Held for review", and only staff can release it ([AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **email:** hold a young workspace's phishing-shaped email for staff review ([AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **staff:** cancel a workspace's subscription, and let a security lock stop billing ([AGL-3359](https://linear.app/aglyn/issue/AGL-3359))
+- **media:** a file is found by the details it carries inside it ([AGL-3339](https://linear.app/aglyn/issue/AGL-3339), [AGL-3327](https://linear.app/aglyn/issue/AGL-3327))
+- **legal:** v9 — Terms and AUP name phishing, scams and impersonation ([AGL-3357](https://linear.app/aglyn/issue/AGL-3357))
+- **marketing:** a campaign's screens and forms are tables served by their query ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **media:** a replaced file is described by its own details; the API and MCP return them ([AGL-3339](https://linear.app/aglyn/issue/AGL-3339), [AGL-3327](https://linear.app/aglyn/issue/AGL-3327))
+- **crm:** fields use the list table, with reorder held while sorted or filtered ([AGL-3335](https://linear.app/aglyn/issue/AGL-3335))
+- **outreach:** each enrollment opens a detail view with the person's history ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **crm:** activity reads as collapsed, paged rows; card buttons sit in the header ([AGL-3334](https://linear.app/aglyn/issue/AGL-3334))
+- **email:** deliverability preflight on every send, and a sending-domain gateway ledger ([AGL-3328](https://linear.app/aglyn/issue/AGL-3328), [AGL-3326](https://linear.app/aglyn/issue/AGL-3326))
+
+### Fixed
+
+- **payments:** the seller read stays inside the destination-charge model ([AGL-3360](https://linear.app/aglyn/issue/AGL-3360), [AGL-1956](https://linear.app/aglyn/issue/AGL-1956), [AGL-3362](https://linear.app/aglyn/issue/AGL-3362))
+- **lockdown:** a suspended site's checkout is gated on the site it charges ([AGL-3360](https://linear.app/aglyn/issue/AGL-3360))
+- **payments:** every tenant card payment requests 3-D Secure through one seam ([AGL-3360](https://linear.app/aglyn/issue/AGL-3360), [AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **firestore:** trim the click-rollup rule's comment to keep the ruleset under 256 KiB ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **jobs:** the console's manual cron doors skip a locked site's rows ([AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **billing:** a held add-on increase refreshes the pending downgrade when it applies ([AGL-3358](https://linear.app/aglyn/issue/AGL-3358), [AGL-2150](https://linear.app/aglyn/issue/AGL-2150))
+- **billing:** request 3-D Secure on the card every subscription is paid from ([AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **staff:** the cancellation comment names the configured brand, not a literal ([AGL-3359](https://linear.app/aglyn/issue/AGL-3359))
+- **billing:** charge an upgrade immediately and grant it only once paid ([AGL-3358](https://linear.app/aglyn/issue/AGL-3358))
+- **forms:** the Forms list's counters, campaign flag and Updated stay true ([AGL-3330](https://linear.app/aglyn/issue/AGL-3330))
+- **crm:** the Fields table's filters and search are its Firestore query ([AGL-3335](https://linear.app/aglyn/issue/AGL-3335), [AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **events:** the public event list asks its query for published events ([AGL-3354](https://linear.app/aglyn/issue/AGL-3354))
+- **console:** list filters refuse by name and label what they filter ([AGL-3353](https://linear.app/aglyn/issue/AGL-3353))
+- **console:** query-served tables keep their query's order ([AGL-3352](https://linear.app/aglyn/issue/AGL-3352))
+- **email:** a suspended workspace sends nothing, on every outbound path ([AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **tools:** the outreach backfill's fixture links name no Aglyn host ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **firestore:** the enrollment history rule fits the 256 KiB ruleset limit ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **outreach:** a person's page reads their mail gateway through the server ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332), [AGL-3328](https://linear.app/aglyn/issue/AGL-3328))
+- **firestore:** trim two rules comments back under the 256 KiB ruleset limit ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** every door that creates a Google account records where it came from ([AGL-3355](https://linear.app/aglyn/issue/AGL-3355), [AGL-1497](https://linear.app/aglyn/issue/AGL-1497))
+- **tools:** the CRM list-field backfill knows the would-bounce email state ([AGL-3328](https://linear.app/aglyn/issue/AGL-3328))
+- **crons:** the CRM task reminders run on Cloud Scheduler, not GitHub Actions ([AGL-3351](https://linear.app/aglyn/issue/AGL-3351))
+- **console:** a date filter's chip names the day the query reads ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** an owner is never refused a plugin page before their role is known ([AGL-3337](https://linear.app/aglyn/issue/AGL-3337))
+- **console:** declare the gmail thread link a sequence person's page renders ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **outreach:** a person's activity and details cards link their help ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **outreach:** a person's page without its click rows says only that list is missing ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **email:** load the deliverability store under a partial email library ([AGL-3328](https://linear.app/aglyn/issue/AGL-3328))
+- **email:** keep plugin ids out of the shared engine's quoted strings ([AGL-3328](https://linear.app/aglyn/issue/AGL-3328))
+
+### Documentation
+
+- **staff:** the lockdown page spells canceled the American way ([AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- list pages name the filters their query serves; changed lists re-shot ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **crm:** the fields table says why matching its loaded rows is complete ([AGL-3335](https://linear.app/aglyn/issue/AGL-3335))
+
+<details>
+<summary>Also in this release: 4 test, 7 chore</summary>
+
+- **tenant:** the plugin-jobs spec's admin mock carries the job lockdown gate ([AGL-3361](https://linear.app/aglyn/issue/AGL-3361), [AGL-3356](https://linear.app/aglyn/issue/AGL-3356))
+- **console:** the adminAudit sweep reads a stamped doc(id).set() as stamped ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **tools:** the Linear id ceiling reads AGL-3359 ([AGL-3359](https://linear.app/aglyn/issue/AGL-3359))
+- **console:** the metadata route's read stores the search keys beside the record ([AGL-3339](https://linear.app/aglyn/issue/AGL-3339))
+- **tools:** the Linear id ceiling reads AGL-3358 ([AGL-3358](https://linear.app/aglyn/issue/AGL-3358))
+- **console:** every artifact rename and media edit restamps its list keys ([AGL-3330](https://linear.app/aglyn/issue/AGL-3330))
+- **tools:** the Linear id ceiling reads AGL-3357 ([AGL-3357](https://linear.app/aglyn/issue/AGL-3357))
+- **tools:** the Linear id ceiling reads AGL-3354 ([AGL-3354](https://linear.app/aglyn/issue/AGL-3354))
+- **firestore:** retire 20 composites no query reads since the list-query sweep ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321), [AGL-3327](https://linear.app/aglyn/issue/AGL-3327))
+- **tools:** the Linear id ceiling reads AGL-3339 ([AGL-3339](https://linear.app/aglyn/issue/AGL-3339))
+- **tools:** the Linear id ceiling reads AGL-3337 ([AGL-3337](https://linear.app/aglyn/issue/AGL-3337))
+
+</details>
+
 ## v1.0.0-beta.200 — 2026-09-27
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.199...v1.0.0-beta.200)
