@@ -100,6 +100,12 @@ export interface SystemEmailBrandOptions {
    * `http(s)` URL is linked; a `mailto:` home is no destination for a logo.
    */
   brandHomeUrl?: string | null
+  /**
+   * The org's resolved `primaryColor` (AGL-3370): a white-label send's
+   * buttons and links wear it, over the platform palette. Absent or blank is
+   * the platform's own accent.
+   */
+  brandPrimaryColor?: string | null
 }
 
 /**

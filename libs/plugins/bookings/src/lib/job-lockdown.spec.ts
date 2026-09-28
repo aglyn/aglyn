@@ -124,6 +124,13 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'NOW', delete: () => 'DELETE' },
 }))
 
+// No template published: the batch loader answers nothing, as the stubbed
+// `loadHostEmail` below always did (AGL-3370 moved the batch onto the leaf).
+jest.mock('@aglyn/tenant-data-admin/server/host-email-tokens', () => ({
+  loadHostEmailWithTokens: async () => null,
+  renderLoadedHostEmailWithTokens: () => null,
+}))
+
 jest.mock('@aglyn/shared-util-email', () => ({
   // TRUE, deliberately. `isEmailConfigured()` false is the other way the
   // reminder beat sends nothing, and a suite that left it false would prove

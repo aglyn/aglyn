@@ -17,11 +17,14 @@
 
 import {
   EMAIL_NODE_ROOT_ID,
+  PLATFORM_EMAIL_PALETTE,
   SYSTEM_EMAIL_COLLECTION,
+  buildEmailPalette,
   buildDefaultEmailNodeMap,
   getSystemEmailTemplate,
   renderEmailHtml,
   substituteMergeTokens,
+  type EmailTheme,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from './firebase-admin'
@@ -292,6 +295,21 @@ export async function loadSystemEmail(
 }
 
 /**
+ * The theme a system email is drawn in (AGL-3370): the console's palette,
+ * or, for a white-label org that set a brand color, the same palette with
+ * that color as its primary. Buttons use the console's corner radius.
+ */
+function systemEmailTheme(options: SystemEmailBrandOptions): EmailTheme {
+  const primaryColor = String(options.brandPrimaryColor ?? '').trim()
+  return {
+    palette: primaryColor
+      ? buildEmailPalette({ base: 'platform', primaryColor })
+      : PLATFORM_EMAIL_PALETTE,
+    buttonRadius: 4,
+  }
+}
+
+/**
  * Renders a loaded email for one recipient's merge values (AGL-768). No
  * Firestore access — call {@link loadSystemEmail} once, then this per
  * recipient. `null` only if the renderer produced no document at all.
@@ -337,6 +355,10 @@ export function renderLoadedSystemEmail(
     // which is a broken-image box in the recipient's inbox (AGL-1224). The
     // chrome's logo resolves against it too.
     mediaOrigin: CONSOLE_ORIGIN,
+    // In the console's theme (AGL-3370), under a white-label org's own color
+    // when it set one: a color staff picked in the Besigner is a palette
+    // token, and a button nobody colored wears the brand's accent.
+    ...systemEmailTheme(options),
     // No `brandLogoUrl`: the org's email logo (AGL-2139) is the chrome
     // header's logo whenever there is one to draw, and a send that draws the
     // platform's blocks is by definition one that carries none.
@@ -436,6 +458,7 @@ export function systemEmailBrand(
     options: {
       brandLogoUrl: branding.emailLogoUrl,
       brandHomeUrl: branding.homeUrl,
+      brandPrimaryColor: branding.primaryColor,
     },
     fromName: branding.fromName,
   }

@@ -529,7 +529,9 @@ the mail, a link to support, and the copyright line with Aglyn's postal address.
 designed template that places none of the marketing site's email blocks goes out in the
 same header and footer. Mail Aglyn sends to its own staff, and receipts to people who
 filed a report, always use Aglyn's brand. Mail to an organization's people uses that
-organization's brand. The editor's canvas doesn't draw them, because they are added
+organization's brand. Buttons and links use the console theme's colors, or a white-label organization's brand
+color when it set one, and a color picked from the theme in the editor goes out as that
+color. The editor's canvas doesn't draw them, because they are added
 when the mail is sent; a test send shows them.
 
 The editor also offers the platform marketing site's email blocks, such as its header

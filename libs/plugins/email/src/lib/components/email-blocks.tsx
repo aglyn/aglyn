@@ -445,8 +445,10 @@ export const EmailButton = forwardRef<HTMLDivElement, EmailButtonProps>(
             px: 3,
             py: 1.25,
             borderRadius: 1,
-            backgroundColor: backgroundColor || '#1a73e8',
-            color: color || '#ffffff',
+            // The theme's accent when nothing was picked, as the sent email
+            // resolves it (AGL-3370): the canvas and the inbox agree.
+            backgroundColor: backgroundColor || 'primary.main',
+            color: color || 'primary.contrastText',
             fontFamily: 'Helvetica, Arial, sans-serif',
             fontSize: 15,
             fontWeight: 600,
