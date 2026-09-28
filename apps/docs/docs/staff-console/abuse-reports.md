@@ -237,11 +237,15 @@ they were for, with links to the workspace and to the account in the Stripe
 Dashboard. **Nothing is refunded, canceled or paused.** If the seller is the
 fraudster:
 
-- Lock the workspace at [Lockdown](./lockdown.md). A locked site's checkout,
-  bookings and memberships stop taking payments.
-- Pause the connected account's payouts in the Stripe Dashboard
-  (**Connect → Accounts → the account → Payouts**). Aglyn does not create
-  payouts, so Stripe pays out on the account's schedule until you do.
+- Lock the workspace at [Lockdown](./lockdown.md) with the `security`
+  reason. A locked site's checkout, bookings and memberships stop taking new
+  payments, and the two boxes that start ticked for `security` also pause its
+  membership renewals and switch the seller to manual payouts
+  ([Stopping a tenant's money](./lockdown.md#pause-site-money)). Unlocking
+  restores exactly what the lock paused.
+- If the lock result says the payouts are **not controllable** (a Standard
+  account), pause them in the Stripe Dashboard
+  (**Connect → Accounts → the account → Payouts**).
 
 Then close the row with a note saying what you did.
 

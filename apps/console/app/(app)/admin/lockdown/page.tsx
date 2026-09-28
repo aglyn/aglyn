@@ -50,7 +50,10 @@ import { useIsStaff } from '../../../../hooks/use-is-staff'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { lockdownCancelsBillingByDefault } from '../../../../constants/subscription-cancel'
+import {
+  lockdownCancelsBillingByDefault,
+  lockdownPausesSiteMoneyByDefault,
+} from '../../../../constants/subscription-cancel'
 
 /** Mirrors the route's server-side type-to-confirm — both must be typed. */
 const PLATFORM_CONFIRM_PHRASE = 'LOCK PLATFORM'
@@ -232,6 +235,110 @@ const READ_ONLY_SCOPES = new Set(['platform', 'org', 'host'])
 const timeOf = (ms: number) => new Date(ms).toLocaleTimeString()
 
 /**
+ * The site-money steps an org or host lock or lift reported (AGL-3364):
+ * membership renewals paused or resumed, and the seller's payouts paused or
+ * restored. One line each, each with its own verified/NOT CONFIRMED chip —
+ * a lock that landed and a pause that did not are two facts.
+ */
+function siteMoneyLogLines(
+  payload: Record<string, any>,
+): Array<{ text: string; confirmed: boolean }> {
+  const lines: Array<{ text: string; confirmed: boolean }> = []
+  const problems = (step: Record<string, any>) => [
+    ...((step['lookupErrors'] as string[]) ?? []),
+    ...((step['subscriptions'] as Array<Record<string, any>>) ?? [])
+      .filter((entry) => !entry['confirmed'])
+      .map((entry) => `${entry['id']}: ${entry['error'] ?? entry['outcome']}`),
+    ...(step['error'] ? [String(step['error'])] : []),
+  ]
+  const count = (step: Record<string, any>, outcome: string) =>
+    ((step['subscriptions'] as Array<Record<string, any>>) ?? []).filter(
+      (entry) => entry['outcome'] === outcome,
+    ).length
+  const pause = payload['renewalsPause'] as Record<string, any> | undefined
+  if (pause) {
+    lines.push(
+      pause['confirmed'] === true
+        ? {
+            text:
+              `Paused ${count(pause, 'paused')} membership renewal(s) — nothing canceled or refunded, customers not told` +
+              (count(pause, 'held') ? `; ${count(pause, 'held')} already held by another lock` : '') +
+              (count(pause, 'already-paused')
+                ? `; ${count(pause, 'already-paused')} already paused by the merchant, left alone`
+                : ''),
+            confirmed: true,
+          }
+        : {
+            text: `Membership renewal pause NOT confirmed — the lock stands. ${problems(pause).join('; ')}`,
+            confirmed: false,
+          },
+    )
+  }
+  const resume = payload['renewalsResume'] as Record<string, any> | undefined
+  if (resume) {
+    lines.push(
+      resume['confirmed'] === true
+        ? {
+            text:
+              `Resumed ${count(resume, 'resumed')} membership renewal(s) this lock paused` +
+              (count(resume, 'still-held')
+                ? `; ${count(resume, 'still-held')} still held by another lock`
+                : ''),
+            confirmed: true,
+          }
+        : {
+            text: `Membership renewal resume NOT confirmed — some stay paused. ${problems(resume).join('; ')}`,
+            confirmed: false,
+          },
+    )
+  }
+  const payouts = payload['payoutsPause'] as Record<string, any> | undefined
+  if (payouts) {
+    const account = payouts['accountId'] ?? 'no account'
+    lines.push(
+      payouts['outcome'] === 'not-controllable'
+        ? {
+            text: `Payouts for ${account}: not controllable (Standard account) — pause them in the Stripe Dashboard`,
+            confirmed: false,
+          }
+        : payouts['confirmed'] === true
+          ? {
+              text:
+                payouts['outcome'] === 'no-account'
+                  ? 'Payouts: the seller has no connected account — nothing pays out'
+                  : payouts['outcome'] === 'held'
+                    ? `Payouts for ${account} already held manual by another lock`
+                    : `Payouts for ${account} set to manual (was ${payouts['schedule']?.['interval'] ?? 'unknown'}; saved for the lift)`,
+              confirmed: true,
+            }
+          : {
+              text: `Payout pause for ${account} NOT confirmed — the lock stands. ${payouts['error'] ?? ''}`.trim(),
+              confirmed: false,
+            },
+    )
+  }
+  const restore = payload['payoutsRestore'] as Record<string, any> | undefined
+  if (restore) {
+    const account = restore['accountId'] ?? 'the account'
+    lines.push(
+      restore['confirmed'] === true
+        ? {
+            text:
+              restore['outcome'] === 'still-held'
+                ? `Payouts for ${account} stay manual — another lock still holds them`
+                : `Payouts for ${account} restored to ${restore['schedule']?.['interval'] ?? 'the saved schedule'}`,
+            confirmed: true,
+          }
+        : {
+            text: `Payout restore for ${account} NOT confirmed — payouts may still be manual. ${restore['error'] ?? ''}`.trim(),
+            confirmed: false,
+          },
+    )
+  }
+  return lines
+}
+
+/**
  * The billing steps a lock reported (AGL-3359), as log lines of their own.
  *
  * Separate lines, never folded into the lock's: a lock that landed and a
@@ -274,6 +381,7 @@ function billingLogLines(
       ),
     )
   }
+  lines.push(...siteMoneyLogLines(payload))
   const owned = payload['ownedWorkspaces'] as Record<string, any> | undefined
   if (owned) {
     if (owned['error']) {
@@ -387,10 +495,23 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [lockOwned, setLockOwned] = useState(
     lockdownCancelsBillingByDefault('manual'),
   )
+  /**
+   * Org and host locks: pause the membership renewals the sites sell, and
+   * the seller's payouts (AGL-3364). Same default rule as the cancel: on for
+   * `security`, off for everything else, reset when the reason changes.
+   */
+  const [pauseRenewals, setPauseRenewals] = useState(
+    lockdownPausesSiteMoneyByDefault('manual'),
+  )
+  const [pausePayouts, setPausePayouts] = useState(
+    lockdownPausesSiteMoneyByDefault('manual'),
+  )
   const changeReason = (next: string) => {
     setReason(next)
     setCancelBilling(lockdownCancelsBillingByDefault(next))
     setLockOwned(lockdownCancelsBillingByDefault(next))
+    setPauseRenewals(lockdownPausesSiteMoneyByDefault(next))
+    setPausePayouts(lockdownPausesSiteMoneyByDefault(next))
   }
   const [message, setMessage] = useState('')
   const [until, setUntil] = useState('')
@@ -1072,6 +1193,40 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                   </Stack>
                 ) : null}
+                {/* The sites' money (AGL-3364): after the lock lands, each on
+                    its own line, and a failed pause never undoes the lock.
+                    Unlocking restores exactly what this lock paused. */}
+                {scope === 'org' || scope === 'host' ? (
+                  <Stack spacing={0.5}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={pauseRenewals}
+                          onChange={(event) =>
+                            setPauseRenewals(event.target.checked)
+                          }
+                        />
+                      }
+                      label="Also pause the membership renewals it sells"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={pausePayouts}
+                          onChange={(event) => setPausePayouts(event.target.checked)}
+                        />
+                      }
+                      label="Also pause the seller's payouts"
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {
+                        'On by default for security locks only. Renewals: every live subscription the site sells stops collecting (invoices are voided); nothing is canceled or refunded and customers are not told. Payouts: the owner’s connected account moves to manual payouts, which also holds payouts for any other workspace that owner runs. Unlocking resumes exactly the renewals this lock paused and restores the saved payout schedule. A Standard account cannot be paused from here; the result says so.'
+                      }
+                    </Typography>
+                  </Stack>
+                ) : null}
                 {scope === 'user' ? (
                   <Stack spacing={0.5}>
                     <FormControlLabel
@@ -1121,6 +1276,9 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                             : {}),
                           ...(scope === 'user'
                             ? { lockOwnedWorkspaces: lockOwned }
+                            : {}),
+                          ...(scope === 'org' || scope === 'host'
+                            ? { pauseRenewals, pausePayouts }
                             : {}),
                         },
                         // The id STAYS. Clearing it used to disable both
