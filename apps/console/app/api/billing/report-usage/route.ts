@@ -38,6 +38,7 @@ import {
   parseOrgReleaseFlagOverrides,
   priceEmailSendOverage,
   resolveEffectivePlan,
+  formatOperatorAlertAmount,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
@@ -53,6 +54,7 @@ import {
   emailSendsOverage,
   firebaseAdmin,
   getServerReleaseFlagValues,
+  raiseOperatorAlert,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
@@ -1321,6 +1323,19 @@ async function handler(request: Request): Promise<Response> {
             month,
             billedCents,
             reason: meterReportBlocked,
+          })
+          // And said to the operator, once per workspace and month: a log
+          // line is read by nobody on an install without log alerting
+          // (AGL-3377).
+          await raiseOperatorAlert('billing.usageNotReported', {
+            dedupeKey: `${orgId}:${month}`,
+            context: {
+              orgId,
+              month,
+              amount: formatOperatorAlertAmount(billedCents),
+              reason: meterReportBlocked,
+            },
+            orgId,
           })
         }
       }

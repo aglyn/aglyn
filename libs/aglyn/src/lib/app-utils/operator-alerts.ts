@@ -213,9 +213,9 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
       'A card dispute on a workspace subscription closed as lost: the money has been taken back. Decide whether the workspace keeps its plan.',
     tier: 'must',
     category: 'billing',
-    title: 'Dispute lost on {{orgName}}',
+    title: 'Subscription dispute lost on workspace {{orgId}}',
     body:
-      'The card dispute {{disputeId}} on invoice {{invoiceId}} closed as lost, and {{amount}} was taken back. The workspace {{orgName}} ({{orgId}}) still has its plan until somebody decides otherwise.',
+      'The card dispute {{disputeId}} on invoice {{invoiceId}} closed as lost ({{reason}}), and {{amount}} was taken back. The workspace keeps its plan until somebody decides otherwise.',
     link: '/admin/orgs/{{orgId}}',
     delivery: 'immediate',
     dedupeWindowMinutes: 30 * DAY,
@@ -259,7 +259,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     category: 'billing',
     title: 'Billing webhook is refusing deliveries',
     body:
-      'The billing webhook refused {{count}} deliveries in the last hour because their Stripe signature did not match a configured secret. If Stripe is the sender, its signing secret no longer matches this install’s.',
+      'The billing webhook refused several signed deliveries within six hours because their Stripe signature matched none of the configured secrets. If Stripe is the sender, its signing secret no longer matches this install’s, and no billing event is being applied.',
     link: '/admin/health',
     delivery: 'immediate',
     dedupeWindowMinutes: 6 * 60,
@@ -643,6 +643,23 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     notificationType: 'system.scopeDrift',
   },
 ]
+
+/** An amount in minor units, as an alert prints it: `$12.40`. */
+export function formatOperatorAlertAmount(
+  cents: number,
+  currency = 'usd',
+): string {
+  const value = Number(cents) / 100
+  if (!Number.isFinite(value)) return ''
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: String(currency || 'usd').toUpperCase(),
+    }).format(value)
+  } catch {
+    return `${value.toFixed(2)} ${String(currency).toUpperCase()}`
+  }
+}
 
 /** Replaces each `{{token}}` with its context value, or nothing. */
 export function renderOperatorAlertTemplate(

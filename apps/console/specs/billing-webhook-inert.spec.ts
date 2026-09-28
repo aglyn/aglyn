@@ -185,6 +185,8 @@ function mockMakeFirestore() {
 }
 
 const mockAfterScheduled: Array<() => unknown> = []
+const mockRaiseOperatorAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'delivered' }))
+
 jest.mock('next/server', () => ({
   after: (work: () => unknown) => {
     mockAfterScheduled.push(work)
@@ -193,6 +195,9 @@ jest.mock('next/server', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  formatOperatorAlertAmount: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/operator-alerts',
+  ).formatOperatorAlertAmount,
   // The platform's billing events (AGL-3011). The webhook raises them once an
   // invoice or a dispute resolves to a workspace; what a plugin does with one
   // is proved in the plugin's own suite, so this only has to exist.
@@ -230,6 +235,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what the route raises, not how it is delivered.
+  raiseOperatorAlert: (...args: unknown[]) => mockRaiseOperatorAlert(...args),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockMakeFirestore() }),
@@ -338,6 +345,7 @@ const OUR_SUBSCRIPTION = {
 
 describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
   beforeEach(() => {
+    mockRaiseOperatorAlert.mockClear()
     docs = new Map()
     docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'starter' })
     mockDispatched.length = 0
@@ -399,6 +407,11 @@ describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
       'customer.subscription.updated',
     )
     expect(typeof claim('evt_dead')?.['inertAtMs']).toBe('number')
+    // And said to the operator, once per event type per window (AGL-3377).
+    expect(mockRaiseOperatorAlert).toHaveBeenCalledWith('billing.webhookInert', {
+      dedupeKey: 'customer.subscription.updated',
+      context: { eventId: 'evt_dead', eventType: 'customer.subscription.updated' },
+    })
   })
 
   it('the healthy and the neutered delivery are IDENTICAL from outside', async () => {

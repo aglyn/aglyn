@@ -127,6 +127,14 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+const mockAlerts: Array<{ type: string; options: Record<string, any> }> = []
+jest.mock('./operator-alerts', () => ({
+  raiseOperatorAlert: async (type: string, options: Record<string, unknown>) => {
+    mockAlerts.push({ type, options })
+    return { outcome: 'delivered', type }
+  },
+}))
+
 import {
   clearConnectPayoutFailure,
   recordConnectPayoutFailure,
@@ -141,6 +149,7 @@ const payout = {
 }
 
 beforeEach(() => {
+  mockAlerts.length = 0
   docs.clear()
   docs.set('profiles/owner-1', {
     stripeAccountId: 'acct_1',
@@ -166,6 +175,25 @@ describe('recordConnectPayoutFailure', () => {
       livemode: true,
       boundProfiles: ['profiles/owner-1'],
     })
+  })
+
+  it('tells the operator, once per Stripe id (AGL-3377)', async () => {
+    await recordConnectPayoutFailure('profiles', { kind: 'payout', object: payout, accountId: 'acct_1' })
+    expect(mockAlerts).toEqual([
+      {
+        type: 'billing.connectPayoutFailed',
+        options: {
+          dedupeKey: 'po_1',
+          context: {
+            kind: 'payout',
+            stripeId: 'po_1',
+            account: 'acct_1',
+            reason: 'The bank account has been closed.',
+            amount: '$420.00',
+          },
+        },
+      },
+    ])
   })
 
   it('mirrors the latest failure onto the profile the surfaces already read', async () => {

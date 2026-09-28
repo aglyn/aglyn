@@ -183,6 +183,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   readOrgBilling: async () => ({ stripeCustomerId: 'cus_test_org' }),
   getServerReleaseFlagValues: async () => ({}),
   emailSendsOverage: () => 0,
+  // The operator alert an unbillable closed month raises (AGL-3377).
+  raiseOperatorAlert: async () => ({ outcome: 'delivered' }),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => {
@@ -192,6 +194,10 @@ jest.mock('@aglyn/aglyn/server', () => {
   const adapter = jest.requireActual('@aglyn/aglyn/app-utils/api-adapter')
   return {
     __esModule: true,
+    // REAL: how the unreported-usage alert prints its amount (AGL-3377).
+    formatOperatorAlertAmount: jest.requireActual(
+      '@aglyn/aglyn/app-utils/operator-alerts',
+    ).formatOperatorAlertAmount,
     // REAL: the arithmetic under the figure a budget reads.
     checkApiRequestQuota: entitlements.checkApiRequestQuota,
     checkContactQuota: entitlements.checkContactQuota,

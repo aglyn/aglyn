@@ -167,6 +167,24 @@ export async function recordConnectPayoutFailure(
       { merge: true },
     )
 
+  // Money due to a merchant or seller did not arrive, and a human decides
+  // what happens next (AGL-3377). Loaded lazily, like everything this module
+  // only needs once a failure is real.
+  const { raiseOperatorAlert } = await import('./operator-alerts')
+  const { formatOperatorAlertAmount } = await import(
+    '@aglyn/aglyn/app-utils/operator-alerts'
+  )
+  await raiseOperatorAlert('billing.connectPayoutFailed', {
+    dedupeKey: stripeId,
+    context: {
+      kind: input.kind,
+      stripeId,
+      account: accountId,
+      reason,
+      amount: formatOperatorAlertAmount(amountCents, text(input.object?.currency) ?? 'usd'),
+    },
+  })
+
   // `updateExisting` rather than a merge-set, for the reason its sibling
   // states: the refs come from a query, and a merge-set would resurrect a
   // profile erased in between as a stub holding nothing but a payout warning.

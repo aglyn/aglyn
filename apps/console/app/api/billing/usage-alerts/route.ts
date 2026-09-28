@@ -61,6 +61,7 @@ import {
   notifyOrgAdmins,
   notifyRiskEvent,
   notifyStaff,
+  raiseOperatorAlert,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -1347,6 +1348,22 @@ async function handler(request: Request): Promise<Response> {
               lock: { reason: 'billing' },
             })
             alerted.push({ orgId: org.id, quota: 'billing-auto-lock', threshold: 100 })
+            // An automatic suspension of a paying-ish customer is the one lock
+            // no person decided; staff check it before the customer does
+            // (AGL-3377).
+            await raiseOperatorAlert('billing.autoLocked', {
+              dedupeKey: `${org.id}:${month}`,
+              context: {
+                orgId: org.id,
+                orgName: String(orgData['name'] ?? '') || org.id,
+                reason: `its subscription is ${billingSubscription?.status ?? 'unpaid'}${
+                  billingSubscription?.canceledReason
+                    ? ` (${billingSubscription.canceledReason})`
+                    : ''
+                }`,
+              },
+              orgId: org.id,
+            })
           }
         } catch (error) {
           // One org's failure must not stop the sweep.
