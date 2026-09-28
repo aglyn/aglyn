@@ -26,6 +26,13 @@ import * as Aglyn from '@aglyn/aglyn'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { DEFAULT_TITLE_PATTERN } from '@aglyn/aglyn/app-utils/seo-title-variables'
+import {
+  AREA_SERVED_MAX,
+  LOCAL_BUSINESS_TYPES,
+  PAYMENT_ACCEPTED_MAX_LENGTH,
+  PRICE_RANGE_MAX_LENGTH,
+  invalidOpeningHoursLines,
+} from '@aglyn/aglyn/app-utils/local-business'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import {
   FieldComponentType,
@@ -847,6 +854,124 @@ const seoAddressSchema: FormSchema = {
 }
 
 /**
+ * LOCAL BUSINESS — the entity as a business with a place and hours (AGL-3383).
+ *
+ * A card of its own rather than more rows on Entity, because most sites are
+ * not local businesses and the four fields below mean nothing to them. The
+ * Business type is the switch: until one is picked the card is that one
+ * Select, and the rest appear under it through the form's own `condition`.
+ *
+ * Still `seo.entity.*`, like Address above it — the structured data is one
+ * node either way, and Firestore deep-merges the map, so saving here leaves
+ * Entity's fields alone. A hidden field keeps its stored value; clearing the
+ * business type stops it publishing without deleting what was typed.
+ */
+const LOCAL_BUSINESS_CHOSEN = {
+  when: 'seo.entity.businessType',
+  isNotEmpty: true,
+}
+
+const seoLocalBusinessSchema: FormSchema = {
+  id: 'hostSeoLocalBusiness',
+  title: 'Local business',
+  CardDisplayProps: {
+    help: docsHelp('seo', {
+      anchor: '#local-businesses',
+      excerpt:
+        'For a business customers visit, or one that comes to them — ' +
+        'published as its LocalBusiness type with the areas it serves, its ' +
+        'hours, price range and the payment it takes.',
+    }),
+  },
+  fields: [
+    {
+      component: FieldComponentType.SELECT,
+      name: 'seo.entity.businessType',
+      label: 'Business type',
+      helperText:
+        'Pick the closest fit, or Local business when nothing narrower ' +
+        'does. Has no effect while the entity type is Person',
+      defaultOption: { children: 'Not a local business' },
+      options: LOCAL_BUSINESS_TYPES.map(({ value, label }) => ({
+        value,
+        label,
+      })),
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.areaServed',
+      label: 'Areas served',
+      multiline: true,
+      rows: 3,
+      helperText:
+        `One city or area per line, up to ${AREA_SERVED_MAX}. Where you ` +
+        'work, not only where you are — no street address needed',
+      condition: LOCAL_BUSINESS_CHOSEN,
+      /*
+        Stored as an ARRAY, one entry per line, typed as text. Lines are kept
+        as typed — blank and untrimmed — so the box round-trips while someone
+        is mid-line; the serializer trims, drops blanks and de-duplicates.
+      */
+      FieldProps: {
+        format: (value: unknown) =>
+          Array.isArray(value) ? value.join('\n') : (value ?? ''),
+        parse: (value: string) => (value ? value.split('\n') : []),
+      },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.openingHours',
+      label: 'Hours',
+      multiline: true,
+      rows: 3,
+      placeholder: 'Mo-Fr 08:00-17:00\nSa 09:00-13:00',
+      helperText:
+        'One line per set of days, in 24-hour time, e.g. Mo-Fr 08:00-17:00',
+      condition: LOCAL_BUSINESS_CHOSEN,
+      validate: [
+        (value: unknown) => {
+          const lines = invalidOpeningHoursLines(value)
+          if (!lines.length) return undefined
+          return lines.length === 1
+            ? `Line ${lines[0]} doesn’t read as days and hours, e.g. Sa 09:00-13:00`
+            : `Lines ${lines.join(', ')} don’t read as days and hours, e.g. Sa 09:00-13:00`
+        },
+      ],
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.priceRange',
+      label: 'Price range',
+      helperText: 'e.g. $$ or $150–$400',
+      condition: LOCAL_BUSINESS_CHOSEN,
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+      validate: [
+        {
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: PRICE_RANGE_MAX_LENGTH,
+          message: 'Please enter a shorter price range',
+        },
+      ],
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.paymentAccepted',
+      label: 'Payment accepted',
+      helperText: 'e.g. Cash, credit card, Zelle',
+      condition: LOCAL_BUSINESS_CHOSEN,
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+      validate: [
+        {
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: PAYMENT_ACCEPTED_MAX_LENGTH,
+          message: 'Please enter a shorter list',
+        },
+      ],
+    },
+  ],
+}
+
+/**
  * AI AGENTS (AGL-2716) — what `/llms.txt` publishes above its derived link
  * lists, on its own card (AGL-3258).
  *
@@ -946,6 +1071,7 @@ const fieldOwner = (() => {
     seoSchema,
     seoEntitySchema,
     seoAddressSchema,
+    seoLocalBusinessSchema,
     seoAgentSchema,
     trackingSchema,
   ]) {
@@ -1659,6 +1785,12 @@ export function HostSettingsScopeProvider({
       initialValues: seedFor(seoAddressSchema.id),
       onSubmit: (fields: any) =>
         saveAndClearDraft(seoAddressSchema.id, fields),
+    },
+    {
+      schema: seoLocalBusinessSchema,
+      initialValues: seedFor(seoLocalBusinessSchema.id),
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(seoLocalBusinessSchema.id, fields),
     },
     {
       schema: seoAgentSchema,

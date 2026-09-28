@@ -319,6 +319,30 @@ export interface AglynHost extends AglynDocument {
         /** ISO 3166-1 alpha-2, or a country name. */
         addressCountry?: string
       }
+      /**
+       * The `schema.org` LocalBusiness subtype this entity publishes as —
+       * `Plumber`, `Restaurant`, `LocalBusiness` (AGL-3383).
+       *
+       * Beside `type` rather than a third value of it: `type` still
+       * answers Organization or Person for every reader that asks, and a
+       * business is an Organization. Only a value on `LOCAL_BUSINESS_TYPES`
+       * publishes; anything else, or a Person, publishes as before. The four
+       * fields below are published only when this is.
+       */
+      businessType?: string
+      /** Cities or areas the business serves, published as `areaServed`. */
+      areaServed?: string[]
+      /**
+       * Opening hours, one line per set of days — `Mo-Fr 09:00-17:00` — the
+       * syntax `schema.org`'s own `openingHours` text uses. Parsed into
+       * `openingHoursSpecification` at serialization; a line that does not
+       * read is dropped. See `parseOpeningHours`.
+       */
+      openingHours?: string
+      /** Free text, e.g. `$$` or `$100–$500`. */
+      priceRange?: string
+      /** Free text, e.g. `Cash, credit card, Zelle`. */
+      paymentAccepted?: string
     }
     /**
      * Guidance for AI agents, published in `/llms.txt` (AGL-2716).
