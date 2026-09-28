@@ -75,10 +75,11 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
-const mockNotifyStaff = jest.fn(async (_payload: unknown) => undefined)
-jest.mock('./notifications', () => ({
+// Every hold tells owners and staff through the risk notice seam (AGL-3368).
+const mockNotifyRisk = jest.fn(async (_input: unknown) => undefined)
+jest.mock('./risk-notice', () => ({
   __esModule: true,
-  notifyStaff: (payload: unknown) => mockNotifyStaff(payload),
+  notifyRiskEvent: (input: unknown) => mockNotifyRisk(input),
 }))
 
 const DAY = 24 * 60 * 60 * 1000
@@ -133,7 +134,7 @@ beforeEach(() => {
   store.clear()
   failWrites = false
   mockOrg = { name: 'Harbor View', createdAt: NOW - 400 * DAY }
-  mockNotifyStaff.mockClear()
+  mockNotifyRisk.mockClear()
   mockGetHostDoc.mockClear()
   mockGetOrgForHost.mockClear()
   resetHostedPageReviewMemoForTests()
@@ -164,7 +165,12 @@ describe('a published page', () => {
       heldPage: { screenId: 'screen-1', versionId: 'v2' },
       heldSend: { kind: 'page', state: 'held', path: 'hosts/host-1/screens/screen-1', ageDays: 400 },
     })
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk.mock.calls[0][0]).toMatchObject({
+      kind: 'page-held',
+      hostId: 'host-1',
+      item: { path: '/host-1/screens/screen-1/versions/v2/view' },
+    })
   })
 
   it('serves an established workspace’s page that only the soft rules flag', async () => {
@@ -224,7 +230,7 @@ describe('a custom domain that wears a brand', () => {
     })
     await flagLookalikeCustomDomain({ hostId: 'host-1', orgId: 'org-1', domain: 'paypal-secure.com' })
     expect(pageRow()?.['reportCount']).toBe(2)
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
 
     await expect(
       flagLookalikeCustomDomain({ hostId: 'host-1', orgId: 'org-1', domain: 'harborviewhotel.com' }),
@@ -247,10 +253,15 @@ describe('a sending domain that wears a brand (AGL-3362)', () => {
     })
     await flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: 'org-1', domain: 'paypa1.com' })
     expect(pageRow()?.['reportCount']).toBe(2)
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
-    expect(mockNotifyStaff.mock.calls[0][0]).toMatchObject({
-      title: expect.stringContaining('Sending domain'),
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk.mock.calls[0][0]).toMatchObject({
+      kind: 'domain-flagged',
+      orgId: 'org-1',
+      item: { label: 'the sending domain paypa1.com', path: '/org/emails/sending' },
+      staffEvidence: expect.stringContaining('Sending domain'),
     })
+    // The owners' words never name the brand the domain resembles.
+    expect(JSON.stringify((mockNotifyRisk.mock.calls[0][0] as { item: unknown }).item)).not.toMatch(/paypal/i)
   })
 
   it('leaves an ordinary sending domain alone', async () => {

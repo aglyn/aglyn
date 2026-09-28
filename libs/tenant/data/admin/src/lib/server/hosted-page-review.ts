@@ -82,7 +82,7 @@ import {
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
-import { notifyStaff } from './notifications'
+import { notifyRiskEvent } from './risk-notice'
 import { orgAgeDays } from './org-age'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
 import {
@@ -216,6 +216,14 @@ export async function reviewHostedPage(
         'serves its last clean version, or nothing, until this is decided.',
       alertTitle: 'Published page held for review — possible phishing',
       alertBody: `A page ${url ? `at ${url} ` : ''}was held before it went live.`,
+      // The owners' words for it, and the held version's own page in the
+      // console (AGL-3368).
+      item: {
+        label: url ? `the page ${url}` : 'a page on your site',
+        path:
+          `/${request.hostId}/screens/${encodeURIComponent(request.screenId)}` +
+          `/versions/${encodeURIComponent(request.versionId)}/view`,
+      },
       // The page itself is what was reported; the flagged host, when there
       // is one, is named in the details and on `reportedHostname`.
       url,
@@ -360,15 +368,21 @@ export async function flagLookalikeDomain(input: {
       { merge: true },
     )
     if (first) {
-      await notifyStaff({
-        type: 'system.abuseReportUrgent',
-        title: sending
-          ? 'Sending domain flagged — possible brand impersonation'
-          : 'Custom domain flagged — possible brand impersonation',
-        body:
-          `A ${sending ? 'workspace added the sending domain' : 'site attached'} ${domain}, ` +
-          `which looks like ${label}. Reference ${reference}.`,
-        link: '/admin/abuse-reports',
+      // The owners hear that the domain is waiting on a routine review — not
+      // which name it resembles; staff get the brand and a link to the row.
+      await notifyRiskEvent({
+        kind: 'domain-flagged',
+        orgId: input.orgId,
+        hostId: input.hostId,
+        reviewId,
+        reference,
+        item: {
+          label: sending ? `the sending domain ${domain}` : `the custom domain ${domain}`,
+          // Emails → Sending, or the site's Domain settings.
+          path: sending ? '/org/emails/sending' : input.hostId ? `/${input.hostId}/admin/domain` : null,
+        },
+        staffEvidence:
+          `${sending ? 'Sending domain' : 'Custom domain'} ${domain} looks like ${label}.`,
       })
     }
     return 'flagged'

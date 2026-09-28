@@ -21,7 +21,8 @@
  * The server half of `@aglyn/aglyn/app-utils/payment-risk`. A plugin that
  * finds its own record behind a charge — an order, a booking — hands the
  * document here, and this writes the `paymentRisk` field once per signal and
- * tells the site's managers once. Any plugin that sells through Stripe uses
+ * tells the site's managers and the workspace's owners once, through the
+ * risk notice seam (AGL-3368). Any plugin that sells through Stripe uses
  * the same two calls; nothing about the record's kind is known here.
  *
  * NOTHING IS REFUNDED OR CANCELED. The merchant decides for their own
@@ -33,26 +34,29 @@
 
 import {
   addPaymentRiskSignal,
-  NOTHING_MOVED,
   PAYMENT_RISK_FIELD,
   type PaymentRisk,
   type PaymentRiskSignal,
-  paymentRiskAdvice,
-  paymentRiskTitle,
+  type PaymentRiskSignalKind,
   settlePaymentRiskDispute,
 } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { AglynNotificationType } from '@aglyn/aglyn/app-utils/notifications'
+import type { RiskEventKind } from '@aglyn/shared-util-email/risk-notice-catalog'
+import type { RiskEventInput } from './risk-notice'
 
-/** The notifier's shape: `notifyHostManagers` from the admin barrel. */
-export type PaymentRiskNotifier = (
-  hostId: string,
-  payload: {
-    type: AglynNotificationType
-    title: string
-    body: string
-    link: string
-  },
-) => Promise<void>
+/**
+ * The notifier's shape: `notifyRiskEvent` from the admin barrel (AGL-3368),
+ * which tells the site's managers and the workspace's owners and admins what
+ * arrived, what it means, and how to refund, keep or answer it.
+ */
+export type PaymentRiskNotifier = (input: RiskEventInput) => Promise<unknown>
+
+/** The risk notice each Stripe signal on a sale is told as. */
+export const PAYMENT_RISK_NOTICE_KINDS: Record<PaymentRiskSignalKind, RiskEventKind> = {
+  'early-fraud-warning': 'sale-fraud-warning',
+  'radar-review': 'sale-payment-review',
+  dispute: 'sale-dispute',
+}
 
 export interface RecordPaymentRiskInput {
   ref: FirebaseFirestore.DocumentReference
@@ -61,10 +65,20 @@ export interface RecordPaymentRiskInput {
   hostId: string
   /** What the record is, as the merchant calls it: `Order 1042`, `Booking`. */
   subjectLabel: string
-  /** The console path the notification opens. */
+  /**
+   * The console path the notice's actions open, in the stored-notification
+   * shape (`/{hostId}/…`) — the order's own dialog, the Bookings page.
+   */
   link: string
-  /** The plugin's own notification type: `content.order`, `content.booking`. */
-  notificationType: AglynNotificationType
+  /**
+   * The plugin's own notification type. Kept for the record's callers; the
+   * notice itself is always a `system.riskNotice` now.
+   */
+  notificationType?: AglynNotificationType
+  /** `$56.00 USD`, when the plugin knows the amount. */
+  amount?: string | null
+  /** A dispute's evidence deadline, when the plugin knows it. */
+  evidenceDueByMs?: number | null
   /**
    * More fields to write in the same transaction, from the record as read —
    * a plugin's own activity line (an order's timeline) rides here.
@@ -82,7 +96,7 @@ export async function recordPaymentRiskOnRecord(
   input: RecordPaymentRiskInput,
   deps: {
     firestore: FirebaseFirestore.Firestore
-    notify: PaymentRiskNotifier
+    notifyRisk: PaymentRiskNotifier
   },
 ): Promise<boolean> {
   const written = await deps.firestore.runTransaction(async (transaction) => {
@@ -102,16 +116,18 @@ export async function recordPaymentRiskOnRecord(
   })
   if (written && input.hostId) {
     await deps
-      .notify(input.hostId, {
-        type: input.notificationType,
-        title: paymentRiskTitle(input.signal.kind),
-        body:
-          `${input.subjectLabel}. ${paymentRiskAdvice(input.signal.kind)}` +
-          (input.signal.detail
-            ? ` Stripe says: ${input.signal.detail.replace(/_/g, ' ')}.`
-            : '') +
-          ` ${NOTHING_MOVED}`,
-        link: input.link,
+      .notifyRisk({
+        kind: PAYMENT_RISK_NOTICE_KINDS[input.signal.kind],
+        orgId: null,
+        hostId: input.hostId,
+        item: { label: input.subjectLabel, path: input.link },
+        occurredAtMs: input.signal.atMs,
+        amount: input.amount ?? null,
+        evidenceDueByMs: input.evidenceDueByMs ?? null,
+        dedupeKey: `sale:${input.signal.stripeObjectId}`,
+        staffEvidence: input.signal.detail
+          ? `Stripe says: ${input.signal.detail.replace(/_/g, ' ')}.`
+          : null,
       })
       .catch(() => undefined)
   }

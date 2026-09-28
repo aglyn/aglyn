@@ -82,6 +82,9 @@ const mockGa4Refunds: Ga4PurchaseInput[] = []
 /** Every `notifyStaff` payload, in order (AGL-2429). */
 const mockStaffNotifications: Record<string, unknown>[] = []
 
+/** Every `notifyRiskEvent` input, in order (AGL-3368). */
+const mockRiskNotices: Record<string, unknown>[] = []
+
 /** Every document, keyed by `collection/id`. */
 let docs = new Map<string, Record<string, unknown>>()
 
@@ -298,6 +301,23 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyStaff: async (payload: Record<string, unknown>) => {
     mockStaffNotifications.push(payload)
   },
+  // The fraud signals tell owners and staff through the risk notice seam
+  // (AGL-3368). Captured, and the staff half modeled from the real catalog,
+  // so "staff were paged once" stays a statement about what reaches them.
+  notifyRiskEvent: async (input: Record<string, unknown>) => {
+    mockRiskNotices.push(input)
+    const { RISK_NOTICE_CATALOG } = jest.requireActual(
+      '../../../libs/shared/util/email/src/lib/risk-notice-catalog',
+    )
+    if (RISK_NOTICE_CATALOG[String(input['kind'])]?.alertStaff) {
+      mockStaffNotifications.push({
+        type: 'system.abuseReportUrgent',
+        link: `/admin/abuse-reports?report=${String(input['reviewId'])}`,
+        riskKind: input['kind'],
+      })
+    }
+    return { duplicate: false }
+  },
   sendGa4Purchase: async (): Promise<Ga4SendResult> => ({
     sent: true,
     synthesizedClientId: true,
@@ -388,6 +408,7 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
     })
     mockGa4Refunds.length = 0
     mockStaffNotifications.length = 0
+    mockRiskNotices.length = 0
     mockDispatchClaimed = false
     // NO STRIPE CALL MAY LEAVE THIS SUITE. `nx test` leaks the root `.env`,
     // whose key on this machine is `sk_live_`, so a mock that quietly answers
@@ -860,6 +881,7 @@ describe('fraud signals are filed for staff, and nothing is refunded (AGL-3356)'
       paymentIntentId: 'pi_own_1',
     })
     mockStaffNotifications.length = 0
+    mockRiskNotices.length = 0
     mockGa4Refunds.length = 0
     mockDispatchClaimed = false
     stripeCalls = []
@@ -925,8 +947,20 @@ describe('fraud signals are filed for staff, and nothing is refunded (AGL-3356)'
     expect(mockStaffNotifications).toHaveLength(1)
     expect(mockStaffNotifications[0]).toMatchObject({
       type: 'system.abuseReportUrgent',
-      link: '/admin/abuse-reports',
+      link: expect.stringMatching(/^\/admin\/abuse-reports\?report=[a-f0-9]{40}$/),
     })
+    // The owners are told too, in the catalog's words, with the amount and
+    // the way to confirm the payment; staff get the evidence and Stripe.
+    expect(mockRiskNotices).toEqual([
+      expect.objectContaining({
+        kind: 'billing-payment-flagged',
+        orgId: 'org-real',
+        reference: expect.stringMatching(/^PF-/),
+        amount: '56.00 USD',
+        stripeUrl: 'https://dashboard.stripe.com/test/payments/ch_own_1',
+        staffEvidence: expect.stringContaining('Early fraud warning'),
+      }),
+    ])
     // No money moved: no reversal on the revenue row, no Stripe write.
     expect(docs.get('platformRevenue/in_pro')).not.toHaveProperty('refundedCents')
     expect(stripeCalls.filter((call) => !call.startsWith('GET '))).toEqual([])
@@ -1094,6 +1128,7 @@ describe('a seller’s fraud signals page staff only as a pattern (AGL-3360)', (
     docs = new Map()
     docs.set('hosts/host-shop', { orgId: 'org-seller', subdomain: 'shop' })
     mockStaffNotifications.length = 0
+    mockRiskNotices.length = 0
     mockDispatchClaimed = true
     mockDispatchHostIds = ['host-shop']
     stripeCalls = []
@@ -1185,6 +1220,13 @@ describe('a seller’s fraud signals page staff only as a pattern (AGL-3360)', (
     expect(String(rows[0]['details'])).toContain('Nothing has been refunded, canceled or paused')
     expect(mockStaffNotifications).toHaveLength(1)
     expect(mockStaffNotifications[0]).toMatchObject({ type: 'system.abuseReportUrgent' })
+    // The seller's owners hear that a review is open — never the count or
+    // the window that opened it; those are the staff half's evidence.
+    expect(mockRiskNotices).toEqual([
+      expect.objectContaining({ kind: 'seller-review', orgId: 'org-seller', hostId: 'host-shop' }),
+    ])
+    expect(JSON.stringify((mockRiskNotices[0] as { item: unknown }).item)).not.toMatch(/\d/)
+    expect(String(mockRiskNotices[0]['staffEvidence'])).toContain('3 different charges in 7 days')
 
     // A fourth inside the same window joins the ledger, not a second row.
     await post(signed(event('radar.early_fraud_warning.created', { id: 'issfr_d', charge: 'ch_d' })))

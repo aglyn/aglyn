@@ -47,6 +47,7 @@ import {
   sendGa4Refund,
   sendGa4SubscriptionCancelled,
   notifyOrgAdmins,
+  notifyRiskEvent,
   notifyStaff,
   updateExisting,
   writeOrgBilling,
@@ -2137,7 +2138,7 @@ async function handler(request: Request): Promise<Response> {
       if (orgId || (!subject.sellerAccountId && kind !== 'dispute')) {
         await recordPaymentFraudSignal(signal, {
           firestore: observed(),
-          notify: notifyStaff,
+          notifyRisk: notifyRiskEvent,
         })
       } else if (!subject.sellerAccountId) {
         // Neither a workspace's charge nor a seller's; the platform-fault
@@ -2176,7 +2177,7 @@ async function handler(request: Request): Promise<Response> {
           hostIds,
           orgIds: await orgIdsForHosts(observed(), hostIds),
         },
-        { firestore: observed(), notify: notifyStaff },
+        { firestore: observed(), notifyRisk: notifyRiskEvent },
       )
     }
 

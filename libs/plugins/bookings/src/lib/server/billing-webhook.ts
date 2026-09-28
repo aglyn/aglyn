@@ -28,7 +28,7 @@ import {
   getOrgForHost,
   hostSendingIdentity,
   meterHostEmail,
-  notifyHostManagers,
+  notifyRiskEvent,
   renderHostEmailWithTokens,
   sendGa4Purchase,
 } from '@aglyn/tenant-data-admin'
@@ -106,11 +106,16 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           ref: booking.ref,
           signal: risk.signal,
           hostId,
-          subjectLabel: `Booking ${String(booking.get('serviceName') ?? booking.id)}`,
+          subjectLabel: `the booking for ${String(booking.get('serviceName') ?? booking.id)}`,
           link: `/${hostId}/bookings`,
           notificationType: 'content.booking',
+          amount: Number.isFinite(Number(booking.get('paidAmountCents')))
+            ? `$${(Number(booking.get('paidAmountCents')) / 100).toFixed(2)}`
+            : null,
+          evidenceDueByMs:
+            Number((object as { evidence_details?: { due_by?: unknown } })?.evidence_details?.due_by ?? 0) * 1000 || null,
         },
-        { firestore: firebaseAdmin.app().firestore(), notify: notifyHostManagers },
+        { firestore: firebaseAdmin.app().firestore(), notifyRisk: notifyRiskEvent },
       )
       return { claimed: true, hostId }
     }

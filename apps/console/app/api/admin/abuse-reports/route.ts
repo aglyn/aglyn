@@ -103,11 +103,18 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  closeRiskNotice,
   decideHeldOutboundSend,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import {
+  renderStaffRiskNotice,
+  resolveStaffRiskActions,
+  RISK_NOTICE_CATALOG,
+  riskKindForAbuseRow,
+} from '@aglyn/shared-util-email/risk-notice-catalog'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   describePhishingScreenSignals,
@@ -255,7 +262,78 @@ function rowPayload(
     heldSend: heldSendPayload(data['heldSend']),
     paymentSignal: paymentSignalPayload(data['paymentSignal']),
     sellerPattern: sellerPatternPayload(data['sellerPattern']),
+    riskNotice: riskNoticePayload(id, data),
+    ownerReviewRequests: ownerReviewRequestsPayload(data['ownerReviewRequests']),
+    reviewRequestedAtMs: asMillis(data['reviewRequestedAtMs']),
   }
+}
+
+/**
+ * The catalog's staff half for a row a risk source filed (AGL-3368): the
+ * same title and summary the staff alert carried, and the actions — each a
+ * deep link to the real control — so nobody has to hunt for where to act.
+ * Null for a row from the public report form.
+ */
+function riskNoticePayload(id: string, data: Record<string, unknown>) {
+  const stamp = (data['riskNotice'] ?? null) as Record<string, unknown> | null
+  const kind = riskKindForAbuseRow({
+    source: data['source'],
+    heldSend: (data['heldSend'] ?? null) as { kind?: unknown } | null,
+    riskNotice: stamp as { kind?: unknown } | null,
+  })
+  if (!kind) return null
+  const seller = (data['sellerPattern'] ?? null) as Record<string, unknown> | null
+  const orgId = asString(data['orgId'])
+  const hostId = asString(data['hostId'])
+  const createdAtMs = asMillis(data['createdAt'])
+  const copy = renderStaffRiskNotice(kind, {
+    'workspace.name': orgId,
+    'item.label':
+      asString(stamp?.['itemLabel']) ??
+      asString(data['url']) ??
+      asString(data['reportedHostname']),
+    reference: asString(data['reference']),
+    occurredAt: createdAtMs
+      ? `${new Date(createdAtMs).toISOString().replace('T', ' ').slice(0, 16)} UTC`
+      : null,
+    // The row's own details carry the evidence, right beside this.
+    'staff.evidence': '',
+  })
+  return {
+    kind,
+    noticeId: asString(stamp?.['noticeId']),
+    ownersNotifiedAtMs: asMillis(stamp?.['ownersNotifiedAtMs']),
+    title: copy.title,
+    summary: copy.summary,
+    reviewable: RISK_NOTICE_CATALOG[kind].reviewable,
+    actions: resolveStaffRiskActions(kind, {
+      reviewId: id,
+      orgId,
+      hostId,
+      stripeUrl:
+        asString(stamp?.['stripeUrl']) ?? asString(seller?.['stripeAccountUrl']),
+      lockScope: hostId ? 'host' : orgId ? 'org' : null,
+      lockTargetId: hostId ?? orgId,
+    }).map((action) => ({
+      id: action.id,
+      label: action.label,
+      hint: action.hint,
+      href: action.href,
+    })),
+  }
+}
+
+/** The owners' review requests on a row, oldest first (AGL-3368). */
+function ownerReviewRequestsPayload(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.slice(-20).map((entry) => {
+    const request = (entry ?? {}) as Record<string, unknown>
+    return {
+      atMs: asMillis(request['atMs']),
+      email: asString(request['email']),
+      note: asString(request['note']) ?? '',
+    }
+  })
 }
 
 /**
@@ -687,6 +765,32 @@ async function handler(request: Request): Promise<Response> {
 
     if (method === 'GET') {
       const nowMs = Date.now()
+
+      /**
+       * One row by id (AGL-3368): what a staff alert's deep link opens. The
+       * queue is paged, so the row a notification names may be on no page
+       * the list has loaded.
+       */
+      const oneId = asString(query?.['id'])
+      if (oneId) {
+        if (!REPORT_ID.test(oneId)) {
+          return Response.json({ error: 'Malformed id' }, { status: 400 })
+        }
+        const snapshot = await collection.doc(oneId).get()
+        if (!snapshot.exists) {
+          return Response.json({ error: 'No such report' }, { status: 404 })
+        }
+        return Response.json(
+          {
+            report: rowPayload(
+              oneId,
+              snapshot.data() as Record<string, unknown>,
+              canSeeIdentity,
+            ),
+          },
+          { status: 200, headers: { 'Cache-Control': 'no-store' } },
+        )
+      }
 
       /**
        * The queue's counts, each its own query over the whole queue — never
@@ -1230,6 +1334,18 @@ async function handler(request: Request): Promise<Response> {
       url: asString(before.get('url')),
       withdrawalReason: 'staffReversed',
     })
+    /*
+     * The closing notice (AGL-3368): the owners who were told this item was
+     * held or flagged are told how it ended — released, or not approved —
+     * in the catalog's words. Only on a closing status, only for a row a
+     * risk source filed, and once per decision. Never throws.
+     */
+    const riskNoticeClose = closing
+      ? await closeRiskNotice({
+          reviewId: id,
+          decision: status === 'dismissed' ? 'released' : 'rejected',
+        })
+      : null
     const ledgerAfter = reportOrgId
       ? await strikeLedger(firestore, reportOrgId)
       : null
@@ -1278,6 +1394,15 @@ async function handler(request: Request): Promise<Response> {
         strike: strikeEffect,
         // What closing the row did to the send it held (AGL-3356), or null.
         heldSend: heldSendDecision,
+        // Whether the owners were told how it ended (AGL-3368), or null.
+        ownerNotice: riskNoticeClose
+          ? {
+              duplicate: riskNoticeClose.duplicate,
+              emailed: riskNoticeClose.owners.emailed,
+              recipients: riskNoticeClose.owners.recipients,
+              error: riskNoticeClose.error,
+            }
+          : null,
         // Recomputed from the ledger rather than adjusted arithmetically, so
         // the number the page shows after an action is one the database
         // actually holds.
