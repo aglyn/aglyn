@@ -135,9 +135,16 @@ export interface OutreachRuntimeDeps {
   openMailbox(mailboxId: string): Promise<OpenedOutreachMailbox>
   /**
    * The MX resolver a domain's mail gateway is classified with (AGL-3326)
-   * — Node's `dns.promises.resolveMx` on the platform, a table in a spec.
+   * — the platform's pinned resolver (`platformMailDnsResolver`), a table
+   * in a spec.
    */
   resolveMx: OutreachResolveMx
+  /**
+   * Whether a domain with no MX has an address record (AGL-3328) — the
+   * implicit MX mail is still delivered to. Omitted, a domain with no MX
+   * reads as having no mail server.
+   */
+  resolveAddress?: (domain: string) => Promise<boolean>
   /**
    * Why Outreach may not act for this workspace now, or `null` when it may:
    * the plugin switched on and entitled, and its release flag on for the
