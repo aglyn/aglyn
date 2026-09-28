@@ -82,6 +82,12 @@ export const WEBHOOK_EVENTS = [
   'customer.updated',
   'payment_method.attached',
   'payment_method.detached',
+  // Fraud signals (AGL-3356): an issuer early fraud warning and a Radar
+  // review each file an urgent abuse-queue row and notify staff, from
+  // apps/console/app/api/billing/webhook/route.ts. Nothing is refunded or
+  // canceled automatically. charge.dispute.created, above, now files one too.
+  'radar.early_fraud_warning.created',
+  'review.opened',
 ]
 
 /**

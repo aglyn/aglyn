@@ -32,6 +32,7 @@ import {
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
+  FORM_IN_CAMPAIGN_OPTIONS,
   FORM_LEAD_ROUTING_OPTIONS,
   FORM_LIST_FILTER_FIELDS,
   FORM_LIST_FILTER_HEADERS,
@@ -225,7 +226,7 @@ describe('the marketing site’s forms answer the acceptance on the query', () =
 })
 
 describe('the grid offers every visible column, typed', () => {
-  // The card's columns: the six it shows, and the two it hides until
+  // The card's columns: the six it shows, and the three it hides until
   // Columns shows them.
   const columns = [
     'displayName',
@@ -236,11 +237,17 @@ describe('the grid offers every visible column, typed', () => {
     'updatedAt',
     'status',
     'leadRouting',
+    'inCampaign',
   ].map((field) => ({ field }))
   const typed = listFilterGridColumns(
     columns,
     FORM_LIST_FILTER_FIELDS,
-    { status: FORM_STATUS_OPTIONS, leadRouting: FORM_LEAD_ROUTING_OPTIONS, campaignIds: [{ value: 'c1', label: 'Fall' }] },
+    {
+      status: FORM_STATUS_OPTIONS,
+      leadRouting: FORM_LEAD_ROUTING_OPTIONS,
+      campaignIds: [{ value: 'c1', label: 'Fall' }],
+      inCampaign: FORM_IN_CAMPAIGN_OPTIONS,
+    },
     FORM_LIST_FILTER_HEADERS,
   )
   const operators = (field: string) =>
@@ -269,6 +276,23 @@ describe('the grid offers every visible column, typed', () => {
     expect([campaign?.filterable, campaign?.hideable]).toEqual([true, false])
     expect(operators('campaignIds')).toEqual(['isAnyOf'])
   })
+
+  it('In a campaign = No: an equality on the stored boolean, "in no campaign" (AGL-3330)', () => {
+    expect(plan([{ field: 'inCampaign', op: 'equals', value: 'false' }])).toMatchObject({
+      filters: [IN_USE, { path: 'inCampaign', op: '==', value: false }],
+      orderBy: { path: '__name__', direction: 'asc' },
+      refused: [],
+    })
+    // Beside a range, it is one of the three composites it costs.
+    expect(
+      plan([
+        { field: 'inCampaign', op: 'equals', value: 'true' },
+        { field: 'submissions', op: '>', value: '0' },
+      ]).refused,
+    ).toEqual([])
+    // Picked from Yes and No, as Lead routing is.
+    expect(operators('inCampaign')).toEqual(operators('leadRouting'))
+  })
 })
 
 describe('every composite the forms query can need is in the index file', () => {
@@ -289,10 +313,12 @@ describe('every composite the forms query can need is in the index file', () => 
       'stats.submissions:ASCENDING',
       'updatedAt:DESCENDING',
     ])
-    // Eight equality fields times three range orders, less Submissions
+    // Nine equality fields times three range orders, less Submissions
     // against its own order. A new filter that grows this is a decision about
-    // the index budget, made here on purpose rather than by accident.
-    expect(needed).toHaveLength(23)
+    // the index budget, made here on purpose rather than by accident: In a
+    // campaign (AGL-3330) is the last three, and the ceiling Zach set for it.
+    expect(needed).toHaveLength(26)
+    expect(needed.filter((index) => index.fields[0].fieldPath === 'inCampaign')).toHaveLength(3)
   })
 
   it('has every one of them', () => {

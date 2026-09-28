@@ -834,6 +834,51 @@ describe('sending a draft turns THAT document into the sent email', () => {
   })
 })
 
+/*
+ * A send the phishing screen held is parked as `scheduled` (AGL-3356), and
+ * nothing a merchant can call releases it: not "send now", not a reschedule,
+ * not a rewrite of its copy. Staff decide; withdrawing it stays theirs.
+ */
+describe('a send held for staff review is not the merchant’s to release', () => {
+  const HELD = {
+    status: 'scheduled',
+    sendAtMs: 253402300799000,
+    hostId: HOST,
+    subject: 'Shared feedback regarding your property',
+    body: 'held copy',
+    audience: 'leads',
+    staffReview: { state: 'held', reference: 'HS-ABCDEF1234', reviewId: 'r' },
+  }
+
+  it.each(['sendNow', 'schedule', 'draft'])('refuses %s with the review notice', async (action) => {
+    store.set('orgs/org-1/campaigns/held-1', { ...HELD })
+    const result = await post({
+      hostId: HOST,
+      action,
+      campaignId: 'held-1',
+      subject: 'rewritten',
+      body: 'rewritten',
+      audience: 'leads',
+      sendAtMs: Date.now() + 60_000,
+    })
+    expect(result.status).toBe(409)
+    expect(String(result.body.error)).toContain('held for review')
+    expect(String(result.body.error)).toContain('HS-ABCDEF1234')
+    expect(sent).toHaveLength(0)
+    expect(store.get('orgs/org-1/campaigns/held-1')).toMatchObject({
+      sendAtMs: 253402300799000,
+      subject: 'Shared feedback regarding your property',
+    })
+  })
+
+  it('still lets the merchant cancel it', async () => {
+    store.set('orgs/org-1/campaigns/held-1', { ...HELD })
+    const result = await post({ hostId: HOST, action: 'cancel', campaignId: 'held-1' })
+    expect(result.status).toBe(200)
+    expect(store.get('orgs/org-1/campaigns/held-1')?.['status']).toBe('canceled')
+  })
+})
+
 describe('send-now is refused on everything that has gone out', () => {
   it('refuses a SENT email and points at the follow-up instead', async () => {
     /*

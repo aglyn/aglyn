@@ -626,6 +626,9 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               onOpen={(_id, experiment) => void openResults(experiment)}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
+              // The rows keep the query's order; a header sort would order
+              // only the page on screen and read as the whole list's.
+              disableColumnSorting
               /*
                * The panel and the search are the grid's; every clause and the
                * search word are on the list's query (AGL-3321), so the grid

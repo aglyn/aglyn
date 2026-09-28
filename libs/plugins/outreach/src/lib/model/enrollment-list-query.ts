@@ -41,7 +41,18 @@ import type {
  *   search      `searchTokens`: every prefix of the person's name and of
  *               their address and its parts, stamped at enrollment by the
  *               enroll route and by `tools/scripts/backfill-outreach-list-search.mjs`
- *               for the enrollments made before it.
+ *               for the enrollments made before it;
+ *   clicked     (AGL-3332) whether the person clicked a link: `clicked`,
+ *               `false` at enrollment and set by the click route's
+ *               transaction on a person's click (never a scanner's), and
+ *               stamped from `engagement.clicks` by the same backfill;
+ *   link        (AGL-3332) a destination they followed, whole:
+ *               `engagement.links`, the capped array the click route keeps,
+ *               asked with `array-contains-any` — the query's one array
+ *               clause, so it and the search cannot stand together and the
+ *               plan refuses the pair by name. The backfill seeds it with an
+ *               earlier click's `lastClickUrl`, the one destination such a
+ *               click is known by.
  *
  * The step, the next send and the last activity are not offered: each is
  * derived from the sequence's steps or from several fields, and a query can
@@ -50,6 +61,15 @@ import type {
 
 /** The array the search box reads, stamped by the enroll route. */
 export const OUTREACH_ENROLLMENT_SEARCH_TOKENS = 'searchTokens'
+
+/** Whether the person clicked (AGL-3332): what the "Clicked" filter asks. */
+export const OUTREACH_ENROLLMENT_CLICKED = 'clicked'
+
+/** The destinations followed (AGL-3332): what the "Link followed" filter asks. */
+export const OUTREACH_ENROLLMENT_LINKS_PATH = 'engagement.links'
+
+/** The fields the table offers only for a sequence that counts clicks. */
+export const OUTREACH_ENROLLMENT_CLICK_FIELDS = ['clicked', 'link'] as const
 
 export const OUTREACH_ENROLLMENT_LIST_QUERY: ListQueryDeclaration = {
   fields: [
@@ -64,6 +84,14 @@ export const OUTREACH_ENROLLMENT_LIST_QUERY: ListQueryDeclaration = {
       storedAs: 'millis',
       presence: 'always',
       operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
+    },
+    { column: 'clicked', kind: 'boolean', path: OUTREACH_ENROLLMENT_CLICKED, operators: ['equals'] },
+    {
+      column: 'link',
+      kind: 'exact',
+      path: OUTREACH_ENROLLMENT_LINKS_PATH,
+      tokensPath: OUTREACH_ENROLLMENT_LINKS_PATH,
+      operators: ['isAnyOf'],
     },
   ],
   sorts: [{ path: 'createdAtMs', direction: 'desc' }],

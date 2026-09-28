@@ -30,6 +30,7 @@ import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { displayNameSearchFields } from '../scripts/lib/name-search-tokens.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
@@ -77,6 +78,8 @@ function check(label, ok, detail) {
 // that is the path every pre-existing component will take.
 await hostRef.collection('components').doc('e2e-editable').set({
   displayName: 'E2E Editable',
+  // The keys the components list searches by, as a create stamps them.
+  ...displayNameSearchFields('E2E Editable'),
   rootId: 'root',
   nodes: { root: { $id: 'root', componentId: 'box', parentId: null } },
   createdAt: new Date(),
@@ -91,6 +94,7 @@ await hostRef
 await hostRef.collection('templates').doc('e2e-editable-template').set({
   kind: 'page',
   displayName: 'E2E Editable Template',
+  ...displayNameSearchFields('E2E Editable Template'),
   nodes: { root: { $id: 'root', componentId: 'box', parentId: null } },
   source: { type: 'authored' },
   createdAt: new Date(),

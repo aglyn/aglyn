@@ -176,6 +176,25 @@ const shots = [
     waitFor: 'DozenQuote',
   },
   {
+    // A workflow's Runs dialog: its run history, a query over the site's
+    // activity feed (AGL-3321), with the runs seed-docs-fixtures.mjs records
+    // for DozenQuote.
+    out: 'workflows-and-actions/workflow-runs-dialog.png',
+    path: `/${HOST_BASE}/automation`,
+    waitFor: 'DozenQuote',
+    actions: [
+      {
+        // The Runs button in DozenQuote's own row: the page lists the
+        // site's actions too, each with a Runs button of its own.
+        click:
+          'xpath=//*[text()="DozenQuote"]/ancestor::*[.//button[normalize-space()="Runs"]][1]//button[normalize-space()="Runs"]',
+        waitFor: 'Qty is required',
+        settleMs: 1500,
+      },
+    ],
+    clipTo: { locator: '.MuiDialog-paper' },
+  },
+  {
     out: 'workflows-and-actions/logic-page.png',
     path: `/${HOST_BASE}/logic`,
     waitFor: 'Reference health',
@@ -197,6 +216,14 @@ const shots = [
     out: 'forms/inbox-page.png',
     path: `/${HOST_BASE}/inbox`,
     waitFor: 'Inbox',
+  },
+  {
+    // The site's Forms list, the catalog seed-e2e files two forms into, with
+    // the toolbar every query-served table shares (AGL-3330).
+    out: 'forms/forms-list.png',
+    path: `/${HOST_BASE}/forms`,
+    waitFor: 'Wholesale inquiry',
+    settleMs: 2500,
   },
   {
     out: 'redirects/redirects-page.png',

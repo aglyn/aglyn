@@ -141,9 +141,9 @@ under [Aglyn AI](../../ai/overview.md).
 - **Free workspaces** do not buy it. They generate against the
   [monthly taste](overview.md#free-ai-credits) instead, which stops at its band and
   never bills.
-- **Removing it** is immediate and prorated, like every add-on. The band shrinks back to
-  your plan's own credits and generative building turns off; what the assistant already
-  built stays exactly as it is.
+- **Removing it** takes effect at the end of the period you already paid for, like every
+  add-on removal. Then the band shrinks back to your plan's own credits and generative
+  building turns off; what the assistant already built stays exactly as it is.
 
 ### Common questions {#aglyn-ai-questions}
 
@@ -179,15 +179,17 @@ unless you turn on the stop switch or set a monthly ceiling. See
 
 ## How changes bill
 
-- Adding or removing units shows a **prorated preview** of today's charge before you
-  confirm, and takes effect immediately.
-- Removing an add-on credits the unused time onto your next invoice.
+- Adding units shows a **prorated preview** of today's charge before you confirm. It is
+  charged to your card when you confirm, and the units are yours as soon as that
+  payment goes through — if your bank asks you to confirm it, Billing shows the check
+  right there.
+- Removing units charges nothing and refunds nothing: you keep them until the end of
+  the period you already paid for, and they drop off then.
 
 :::note Add-ons are not on the plan-switch schedule
-Add-on changes are always immediate and always prorated, in **both** directions.
-Plan switches are not: since Aglyn moved to end-of-cycle downgrades, a *plan*
-downgrade waits for your period end and charges $0 today, while only a plan
-*upgrade* is immediate and prorated. Removing an add-on still credits you today.
+Adding an add-on works like a plan upgrade: charged today, prorated, and applied once
+paid. Removing one works like a plan downgrade: nothing today, and it ends at your
+period end.
 See [when each change takes effect](./downgrading-and-canceling.md#when-changes-take-effect).
 :::
 - **Hard caps**: seat and dataset add-ons stop at your plan's maximum (for example,
@@ -199,7 +201,7 @@ See [when each change takes effect](./downgrading-and-canceling.md#when-changes-
 - **Switching plans** keeps your add-on quantities and re-prices them at the new
   plan's rates. If the new plan doesn't sell one of your add-ons, it's removed and
   the switch confirmation says so. On an **upgrade** this happens today, in the same
-  prorated update as the plan change. On a **downgrade** it happens on the effective
+  prorated charge as the plan change. On a **downgrade** it happens on the effective
   date along with the plan — your add-ons keep running, at your current plan's rates,
   for the rest of the period you already paid for.
 - **Canceling** (or a subscription that dies after failed payments) ends your add-ons

@@ -40,8 +40,10 @@ import type {
  * combination of them is one query with no index of its own; the spec pins
  * the five (`specs/email-suppression-list-query.spec.ts`).
  *
- * What one query cannot hold is refused by name and not applied: a second
- * "any of" beside the search's array clause, or thirty-plus values at once.
+ * What one query cannot hold is refused by name and not applied: more than
+ * thirty values at once. Reason "is any of" is an `in` on `reason`, not an
+ * array clause, so it stands beside the search's `array-contains` on
+ * `emailTokens` rather than competing with it.
  *
  * ## Status and the search are written fields
  *

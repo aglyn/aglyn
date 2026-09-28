@@ -797,3 +797,231 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
     expect(mockStaffNotifications).toHaveLength(1)
   })
 })
+
+/*==========================================
+ * STRIPE'S FRAUD SIGNALS REACH THE ABUSE QUEUE (AGL-3356).
+ *
+ * An issuer early fraud warning, a Radar review and a dispute on a
+ * WORKSPACE's charge each file one urgent row naming the org, the charge and
+ * the amount, with a link to the org's Subscription card, and notify staff
+ * once. Nothing is refunded or canceled — asserted by the absence of any
+ * Stripe write and of any revenue reversal.
+ *=========================================*/
+describe('fraud signals are filed for staff, and nothing is refunded (AGL-3356)', () => {
+  /** Every Stripe request the route made, as `METHOD url`. */
+  let stripeCalls: string[] = []
+  /** The charge a GET of `/v1/charges/{id}` answers with, per test. */
+  let chargeReply: Record<string, unknown> | null = null
+
+  const abuseRows = () =>
+    [...docs.entries()]
+      .filter(([path]) => path.startsWith('abuseReports/'))
+      .map(([, value]) => value)
+
+  const event = (type: string, object: Record<string, unknown>, id?: string) => ({
+    id: id ?? `evt_${Math.random().toString(36).slice(2)}`,
+    type,
+    // The deployment under test holds no live key, so it accepts test-mode
+    // events only (`livemodeDecision`), and the row says TEST MODE.
+    livemode: false,
+    data: { object },
+  })
+
+  beforeEach(() => {
+    docs = new Map()
+    docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'pro' })
+    docs.set('platformRevenue/in_pro', {
+      grossCents: 5600,
+      taxCents: 0,
+      netCents: 5600,
+      orgId: 'org-real',
+      stripeCustomerId: 'cus_own_1',
+      chargeId: 'ch_own_1',
+      paymentIntentId: 'pi_own_1',
+    })
+    mockStaffNotifications.length = 0
+    mockGa4Refunds.length = 0
+    mockDispatchClaimed = false
+    stripeCalls = []
+    chargeReply = null
+    // READS of a charge are answered; ANY other Stripe request throws, so a
+    // refund or a cancel this route must never make would fail the suite.
+    global.fetch = jest.fn(async (input: unknown, init?: { method?: string }) => {
+      const url = String(
+        typeof input === 'string' ? input : (input as { url?: string })?.url,
+      )
+      const method = String(init?.method ?? 'GET').toUpperCase()
+      if (url.includes('api.stripe.com')) {
+        stripeCalls.push(`${method} ${url}`)
+        if (method !== 'GET' || !url.includes('/v1/charges/')) {
+          throw new Error(`REFUSED: only a charge READ is allowed — ${method} ${url}`)
+        }
+        return { ok: Boolean(chargeReply), json: async () => chargeReply }
+      }
+      return { ok: true, json: async () => ({}) }
+    }) as never
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV
+    jest.restoreAllMocks()
+  })
+
+  it('an EARLY FRAUD WARNING on a workspace charge names the org, charge and amount', async () => {
+    const post = loadWebhook()
+    const response = await post(
+      signed(
+        event('radar.early_fraud_warning.created', {
+          id: 'issfr_1',
+          object: 'radar.early_fraud_warning',
+          charge: 'ch_own_1',
+          fraud_type: 'unauthorized_use_of_card',
+          actionable: true,
+        }),
+      ),
+    )
+    expect(response.status).toBe(200)
+    const rows = abuseRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      category: 'phishing',
+      severity: 'urgent',
+      source: 'stripe-fraud-signal',
+      status: 'open',
+      orgId: 'org-real',
+      paymentSignal: {
+        kind: 'early-fraud-warning',
+        chargeId: 'ch_own_1',
+        amountCents: 5600,
+        detail: 'unauthorized_use_of_card',
+        livemode: false,
+        subscriptionCard: '/admin/orgs/org-real#subscription',
+      },
+    })
+    expect(String(rows[0]['details'])).toContain('56.00 USD')
+    expect(String(rows[0]['details'])).toContain('TEST MODE')
+    expect(String(rows[0]['details'])).toContain('Nothing has been refunded or canceled')
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(mockStaffNotifications[0]).toMatchObject({
+      type: 'system.abuseReportUrgent',
+      link: '/admin/abuse-reports',
+    })
+    // No money moved: no reversal on the revenue row, no Stripe write.
+    expect(docs.get('platformRevenue/in_pro')).not.toHaveProperty('refundedCents')
+    expect(stripeCalls.filter((call) => !call.startsWith('GET '))).toEqual([])
+  })
+
+  it('a REVIEW on a charge no row names resolves the org through a charge READ, with the card checks', async () => {
+    const post = loadWebhook()
+    process.env = { ...process.env, STRIPE_SECRET_KEY: 'sk_test_fake' }
+    chargeReply = {
+      id: 'ch_new_1',
+      amount: 5600,
+      currency: 'usd',
+      customer: 'cus_own_1',
+      outcome: { risk_level: 'elevated' },
+      payment_method_details: {
+        card: {
+          country: 'NL',
+          checks: { cvc_check: 'unavailable', address_postal_code_check: 'fail' },
+        },
+      },
+    }
+    await post(
+      signed(
+        event('review.opened', {
+          id: 'prv_1',
+          object: 'review',
+          charge: 'ch_new_1',
+          reason: 'rule',
+          opened_reason: 'rule',
+        }),
+      ),
+    )
+    expect(stripeCalls).toEqual(['GET https://api.stripe.com/v1/charges/ch_new_1'])
+    const [row] = abuseRows()
+    expect(row).toMatchObject({
+      orgId: 'org-real',
+      paymentSignal: {
+        kind: 'radar-review',
+        chargeId: 'ch_new_1',
+        amountCents: 5600,
+        checks: {
+          cvcCheck: 'unavailable',
+          addressPostalCodeCheck: 'fail',
+          cardCountry: 'NL',
+          riskLevel: 'elevated',
+        },
+      },
+    })
+    expect(mockStaffNotifications).toHaveLength(1)
+  })
+
+  it('a review on a charge that is no workspace’s is still filed, saying so', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(event('review.opened', { id: 'prv_2', charge: 'ch_shop_9', reason: 'rule' })),
+    )
+    const [row] = abuseRows()
+    expect(row).toMatchObject({ orgId: null, paymentSignal: { subscriptionCard: null } })
+    expect(String(row['details'])).toContain('did not resolve to a workspace')
+  })
+
+  it('an OPENED dispute on a workspace charge is filed beside its audit row', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(
+        event('charge.dispute.created', {
+          id: 'dp_own_9',
+          charge: 'ch_own_1',
+          payment_intent: 'pi_own_1',
+          amount: 5600,
+          currency: 'usd',
+          reason: 'fraudulent',
+          status: 'warning_needs_response',
+        }),
+      ),
+    )
+    expect(abuseRows()).toEqual([
+      expect.objectContaining({
+        orgId: 'org-real',
+        paymentSignal: expect.objectContaining({
+          kind: 'dispute',
+          amountCents: 5600,
+          detail: 'fraudulent',
+        }),
+      }),
+    ])
+    expect(auditEntries().map((entry) => entry.action)).toEqual(['billing.disputeOpened'])
+    expect(mockStaffNotifications).toHaveLength(1)
+  })
+
+  it('a STOREFRONT dispute files nothing — it is the merchant’s, and its plugin’s', async () => {
+    mockDispatchClaimed = true
+    const post = loadWebhook()
+    await post(
+      signed(
+        event('charge.dispute.created', {
+          id: 'dp_shop_1',
+          charge: 'ch_shop_1',
+          payment_intent: 'pi_shop_1',
+          amount: 4200,
+          reason: 'product_not_received',
+        }),
+      ),
+    )
+    expect(abuseRows()).toEqual([])
+    expect(mockStaffNotifications).toHaveLength(0)
+  })
+
+  it('a REDELIVERED warning counts again and alerts once', async () => {
+    const post = loadWebhook()
+    const warning = { id: 'issfr_2', charge: 'ch_own_1', fraud_type: 'misc' }
+    await post(signed(event('radar.early_fraud_warning.created', warning, 'evt_a')))
+    await post(signed(event('radar.early_fraud_warning.created', warning, 'evt_b')))
+    const rows = abuseRows()
+    expect(rows).toHaveLength(1)
+    expect(mockStaffNotifications).toHaveLength(1)
+  })
+})

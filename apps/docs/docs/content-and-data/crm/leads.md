@@ -15,8 +15,14 @@ decides who owns each one, keeps notes, and either converts the lead into a
 contact or closes it with a reason.
 
 Leads live under the site that captured them, so each site's list is its own.
-Open **CRM → Leads** in the console, or use **Open in CRM** on a row of the
-**Leads** list in the Inbox's **Site Members & Leads** section.
+Open **CRM → Leads** in the console, or open one lead from the Inbox: its
+**Site Members & Leads** section shows members or leads, one at a time, by
+the **Members | Leads** toggle above the table. Choose **Leads**, and a
+row's menu (⋮) has **Open in CRM**. Each side is its own list with its own
+filters and search, so a person who left their address and later signed up
+appears under both. On the organization's Inbox the section is **Leads**
+alone, every site's. See
+[Filter the Inbox tables](../forms/overview.md#filter-the-inbox).
 
 :::info Plan availability
 Leads are part of the **CRM**, included from **Starter**. On Free the section is shown
@@ -165,7 +171,8 @@ view. **Email** narrows by the address's verdict — **Cannot be emailed** for
 every verdict but OK, one verdict on its own, or **Nothing known**. **Campaign** narrows to the leads filed under one of the campaigns,
 by name, and **Lead source** to one of your lead source values — inactive
 ones included, marked — or to **No lead source**. **Owner** keeps one
-teammate's leads.
+teammate's leads. **Status**, **Email**, **Owner** and **Lead source** each
+take one choice (**is**) or several (**is any of**); **Campaign** takes one.
 
 The panel edits one filter at a time, and filters on different columns add
 up: filter **Lead source**, then **Status**, and the list keeps both. Every
@@ -189,7 +196,10 @@ search cannot be combined: while the search box holds a word, the Campaign
 filter is not applied, and a notice above the table names it and says why. Under a site, a member
 whose access is limited to particular sites searches by the start of a lead's
 email address, and a notice says so; the Campaign filter is not applied for
-them.
+them. **No lead source** cannot be picked beside a lead source value, and a
+filter whose choices, multiplied by the other filters' choices, come to more
+than 30 is not applied either (**Cannot be emailed** counts as every verdict
+it covers); the notice names both.
 
 ### Working a lead from the row
 

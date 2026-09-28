@@ -89,6 +89,8 @@ Each workflow row has a **Runs** button. It opens the run-history table describe
 [Run history](actions-builder.md#run-history) — **Time**, **Trigger**, **Result**,
 **What happened**.
 
+![A workflow's Runs dialog: the Recent runs table with its Columns, Filters, Export and Search controls, and four runs, each with its time, the Form submitted trigger, a Succeeded or Failed result and what happened, above the pager](/img/workflows-and-actions/workflow-runs-dialog.png)
+
 *What happened* reads what each step did, joined — `saved to Leads · sent email · tagged
 website` — or the error when a step failed. A workflow of function calls alone reads
 **Ran**, with the time it took beneath.

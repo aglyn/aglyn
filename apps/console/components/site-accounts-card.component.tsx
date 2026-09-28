@@ -288,6 +288,9 @@ export function SiteAccountsCard(props: { hostId: string }) {
             noRowsLabel="No site users match these filters"
             // Paged by the footer below, so the grid must not also slice.
             hideFooter
+            // The rows keep the query's newest-first order; a header sort
+            // would order only the page on screen.
+            disableColumnSorting
             rowHeight={TABLE_ROW_HEIGHT}
             initialState={{
               columns: {

@@ -26,7 +26,7 @@ with its domain, how many **contacts** are linked to it, its owner, when it was
 last changed and its [**next activity**](./tasks.md#next-activity) — when the
 earliest open task against it is due. The table's **Search** box finds a
 company by a word of its name or its domain. **Filters** › **Company** finds
-one whose name **is** exactly what you type, or **starts with** it — which
+one whose name **equals** what you type, or **starts with** it — which
 orders the list by name — **Filters** › **Owner** shows one teammate's
 accounts, or any of several, and **Next activity** › **is empty** keeps only
 the companies with nothing scheduled.
@@ -40,8 +40,9 @@ site, a member whose access is limited to particular sites searches by the
 start of a company's name, and a notice says so. When a
 combination cannot be answered by one query, the list does not apply that
 filter, and a notice above the table names it and says why; see
-[Filter and search a list](../../getting-started/console-tour.md#filter-and-search). Clicking a row opens the company's
-page.
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The
+**Company** column's header sorts only the rows of the page on screen; the
+pages keep the list's own order. Clicking a row opens the company's page.
 
 The **Contacts** column is a count kept on the company and moved with every
 link and unlink, so a page of companies costs no lookup per row. A company

@@ -93,6 +93,7 @@ import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { logResourceDuplicated } from '@aglyn/tenant-data-admin/server/duplicate-activity'
 import { restampCrmListFieldsOf } from '@aglyn/tenant-data-admin/server/crm-records'
+import { restampFormsInCampaign } from './campaign-form-flags'
 import {
   DUPLICATE_BUSY_MESSAGE,
   duplicateDisplayName,
@@ -263,9 +264,13 @@ async function detachMembership(
       .get()
     if (page.empty) return { detached, remaining: false }
     const batch = firestore.batch()
+    const isForms = collectionRef.id === 'forms'
     for (const member of page.docs) {
       batch.update(member.ref, {
         [fieldPath]: firebaseAdmin.firestore.FieldValue.arrayRemove(campaignId),
+        // Leaving a campaign is an edit to the form, and Updated says when
+        // the form was last edited (AGL-3330).
+        ...(isForms ? { updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() } : {}),
       })
     }
     await batch.commit()
@@ -273,6 +278,12 @@ async function detachMembership(
     // under a site (AGL-3321): restamped from each lead as it now stands.
     if (collectionRef.id === 'leads') {
       await restampCrmListFieldsOf(page.docs.map((member) => member.ref), 'leads')
+    }
+    // A form's `inCampaign` is what the Forms list's "In a campaign" filter
+    // asks (AGL-3330), and `arrayRemove` cannot say whether it emptied the
+    // array: restamped from each form as it now stands.
+    if (isForms) {
+      await restampFormsInCampaign(firestore, page.docs.map((member) => member.ref))
     }
     detached += page.size
     if (page.size < DETACH_BATCH) return { detached, remaining: false }

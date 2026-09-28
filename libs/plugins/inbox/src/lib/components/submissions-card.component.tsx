@@ -59,7 +59,11 @@ import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  usePluginApiPost,
+} from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   Avatar,
@@ -109,6 +113,13 @@ import SubmissionListAssignment from './submission-list-assignment.component'
 import SubmissionReply from './submission-reply.component'
 import { useRecordRouteContext } from './use-record-route-context'
 
+
+/**
+ * The forms plugin's recount route (AGL-3330), by address: this plugin
+ * shows the submissions a form counts and may not import the plugin that
+ * keeps the counts.
+ */
+const FORM_STATS_API_PATH = '/api/forms/stats'
 /** Read, Form and Site are picked, so the panel shows selects. */
 const SUBMISSION_SELECT_FIELDS = ['read', 'formId', 'hostId']
 const SUBMISSION_HIDDEN_COLUMNS = { read: false, formId: false }
@@ -164,6 +175,7 @@ export function SubmissionsCard({
 }: SubmissionsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const postPluginApi = usePluginApiPost()
   const { confirm } = useConfirmationContext()
   /** Scoped to one form: the subject is fixed and nothing may widen it. */
   const scoped = Boolean(formId)
@@ -445,8 +457,17 @@ export function SubmissionsCard({
         variant: 'success',
         persist: false,
       })
+      /*
+       * The form counted this submission when it arrived (AGL-3330), and an
+       * increment cannot see a delete: the forms plugin recounts the form
+       * from the rows that are left. Best effort — the delete has happened
+       * either way, and the recount script catches a follow-up that failed.
+       */
+      if (typeof submission.formId === 'string' && submission.formId) {
+        void postPluginApi(FORM_STATS_API_PATH, { hostId: site, formIds: [submission.formId] })
+      }
     },
-    [confirm, firestore, siteOf, enqueueSnackbar],
+    [confirm, firestore, siteOf, enqueueSnackbar, postPluginApi],
   )
 
   /*

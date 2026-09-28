@@ -54,3 +54,6 @@ export * from './lib/email-merge'
 export * from './lib/mail-gateway'
 export * from './lib/mail-bounce'
 export * from './lib/email-deliverability'
+// The outbound phishing screen a young workspace's campaigns and automated
+// email pass (AGL-3356). Pure; the hold it leads to is `tenant-data-admin`'s.
+export * from './lib/outbound-phishing-screen'

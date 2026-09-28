@@ -344,6 +344,9 @@ export default function IdempotencyClaimsCard() {
                * ROW and was never a reason to withhold the pager.
                */
               hideFooter
+              // The rows keep the query's order; a header sort would order
+              // only the page on screen.
+              disableColumnSorting
             />
             <StaffListPaginationControls
               pagination={claims}

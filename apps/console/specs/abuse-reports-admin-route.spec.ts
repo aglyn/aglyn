@@ -37,6 +37,7 @@
  * means there is nobody to reply to.
  */
 
+const mockDecideHeldOutboundSend = jest.fn(async (..._args: unknown[]) => 'released')
 const mockVerifyIdToken = jest.fn()
 
 const state: {
@@ -196,6 +197,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
+  // The held-send decision (AGL-3356) is proven against its own store in
+  // `tenant-data-admin`; here the route's contract with it is what is asked.
+  decideHeldOutboundSend: (...args: unknown[]) => mockDecideHeldOutboundSend(...args),
 }))
 
 // The REAL catalog and status helpers are spread in below — stubbing them
@@ -640,5 +644,145 @@ describe('acting on a report leaves a record', () => {
     const withoutFieldDeletes = route.replace(/FieldValue\.delete\s*\(\s*\)/g, '')
     expect(withoutFieldDeletes).not.toMatch(/\.delete\s*\(/)
     expect(route).not.toMatch(/export const DELETE/)
+  })
+})
+
+describe('a send the phishing screen held (AGL-3356)', () => {
+  const HELD_ID = 'c'.repeat(40)
+  beforeEach(() => {
+    mockDecideHeldOutboundSend.mockClear()
+    state.reports[HELD_ID] = {
+      reference: 'HS-CCCCCCCCCC',
+      status: 'open',
+      category: 'phishing',
+      severity: 'urgent',
+      source: 'outbound-screen',
+      url: 'https://poshmark.id63835663.shop/',
+      reportedHostname: 'poshmark.id63835663.shop',
+      hostId: 'host-evil',
+      orgId: 'org-9',
+      details: 'Held workflow email step.',
+      reporterEmail: null,
+      reporterName: null,
+      reportCount: 23,
+      createdAt: stamp(1000),
+      updatedAt: stamp(2000),
+      dmca: null,
+      heldSend: {
+        kind: 'workflow',
+        path: 'hosts/host-evil/workflows/wf-1',
+        subject: 'Poshmark Order',
+        state: 'held',
+        ageDays: 2,
+        heldAtMs: 1000,
+        signals: [
+          { code: 'lookalike-link', brand: 'poshmark', host: 'poshmark.id63835663.shop' },
+        ],
+      },
+    }
+  })
+
+  it('shows staff what was held and why', async () => {
+    asSupport()
+    const body = await (await get()).json()
+    const row = body.reports.find((report: any) => report.id === HELD_ID)
+    expect(row.source).toBe('outbound-screen')
+    expect(row.heldSend).toMatchObject({
+      kind: 'workflow',
+      subject: 'Poshmark Order',
+      state: 'held',
+      ageDays: 2,
+    })
+    expect(row.heldSend.reasons[0]).toContain('poshmark.id63835663.shop')
+  })
+
+  it('DISMISSING the row releases the send, and the audit row says so', async () => {
+    asSuper()
+    const response = await post({
+      id: HELD_ID,
+      status: 'dismissed',
+      resolution: 'Real Poshmark reseller; verified by phone.',
+    })
+    expect(response.status).toBe(200)
+    expect(mockDecideHeldOutboundSend).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewId: HELD_ID, decision: 'release', actorUid: 'staff-1' }),
+    )
+    expect((await response.json()).heldSend).toBe('released')
+    expect((state.audit[0].after as any).heldSend).toBe('released')
+  })
+
+  it('ACTIONING the row rejects the send', async () => {
+    asSuper()
+    mockDecideHeldOutboundSend.mockResolvedValueOnce('rejected')
+    await post({ id: HELD_ID, status: 'actioned', resolution: 'Phishing. Org locked.' })
+    expect(mockDecideHeldOutboundSend).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewId: HELD_ID, decision: 'reject' }),
+    )
+  })
+
+  it('leaves it held while the row is only being reviewed', async () => {
+    asSuper()
+    await post({ id: HELD_ID, status: 'reviewing' })
+    expect(mockDecideHeldOutboundSend).not.toHaveBeenCalled()
+  })
+
+  it('decides nothing for an ordinary intake report', async () => {
+    asSuper()
+    await post({ id: REPORT_ID, status: 'dismissed', resolution: 'Not phishing.' })
+    expect(mockDecideHeldOutboundSend).not.toHaveBeenCalled()
+  })
+})
+
+describe('a Stripe fraud signal the billing webhook filed (AGL-3356)', () => {
+  const SIGNAL_ID = 'd'.repeat(40)
+  beforeEach(() => {
+    state.reports[SIGNAL_ID] = {
+      reference: 'PF-DDDDDDDDDD',
+      status: 'open',
+      category: 'phishing',
+      severity: 'urgent',
+      source: 'stripe-fraud-signal',
+      url: null,
+      reportedHostname: null,
+      hostId: null,
+      orgId: 'org-9',
+      details: 'Early fraud warning from Stripe (issfr_1).',
+      reporterEmail: null,
+      reporterName: null,
+      reportCount: 1,
+      createdAt: stamp(1000),
+      updatedAt: stamp(3000),
+      dmca: null,
+      paymentSignal: {
+        kind: 'early-fraud-warning',
+        stripeObjectId: 'issfr_1',
+        chargeId: 'ch_1',
+        paymentIntentId: null,
+        amountCents: 5600,
+        currency: 'usd',
+        detail: 'unauthorized_use_of_card',
+        livemode: true,
+        subscriptionCard: '/admin/orgs/org-9#subscription',
+        checks: { cvcCheck: 'unavailable', cardCountry: 'NL' },
+      },
+    }
+  })
+
+  it('hands the page the org, charge, amount, checks and the Subscription card link', async () => {
+    asSupport()
+    const body = await (await get()).json()
+    const row = body.reports.find((report: any) => report.id === SIGNAL_ID)
+    expect(row.source).toBe('stripe-fraud-signal')
+    expect(row.orgId).toBe('org-9')
+    expect(row.paymentSignal).toMatchObject({
+      kind: 'early-fraud-warning',
+      chargeId: 'ch_1',
+      amountCents: 5600,
+      currency: 'usd',
+      subscriptionCard: '/admin/orgs/org-9#subscription',
+      checks: { cvcCheck: 'unavailable', cardCountry: 'NL', riskLevel: null },
+    })
+    // Not a held send: closing it decides nothing about one.
+    expect(row.heldSend).toBeNull()
   })
 })

@@ -436,6 +436,22 @@ describe('catalog handler params (AGL-561)', () => {
     ])
     expect((await run({ sort: 'newest' })).body.notices).toBeUndefined()
   })
+
+  it('says a collection’s price rule orders it by price, without promising the sort returns', async () => {
+    fake.seed(`${HOST}/collections/under-25`, {
+      kind: 'catalog',
+      name: 'Under $25',
+      slug: 'under-25',
+      mode: 'smart',
+      rules: [{ field: 'priceUsd', op: 'lt', value: 25 }],
+    })
+    const result = await run({ collectionId: 'under-25', sort: 'name' })
+    expect(names(result)).toEqual(['Ebook', 'Red Scarf'])
+    // The rule is the collection's, which a visitor cannot clear.
+    expect(result.body.notices).toEqual([
+      'Sorted by price, low to high — this collection picks its products by price, so it cannot be sorted by Name.',
+    ])
+  })
 })
 
 /**

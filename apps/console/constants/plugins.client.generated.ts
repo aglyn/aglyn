@@ -20,6 +20,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'forms',
+    apiPrefixes: ["forms"],
     register: {"site":"registerFormsPlugin","console":"registerFormsConsole"},
     contributes: {"console":{"shell":true,"routes":["/forms"]}},
     load: () => import('@aglyn/plugins-forms'),

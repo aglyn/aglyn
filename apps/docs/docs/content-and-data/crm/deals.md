@@ -101,7 +101,8 @@ searches by the start of a deal's title, and a notice says so. When a
 combination cannot be answered by one query, the table does not
 apply that filter, and a notice above it names the filter and says why; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
-The board has no filters.
+A column header sorts only the rows of the page on screen; the pages keep
+the table's own order. The board has no filters.
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one

@@ -42,6 +42,15 @@ const mockEraseDeliveries = jest.fn(async (_addresses: unknown, _db: unknown) =>
   addresses: ['jane@example.com'],
   contestedAddresses: [],
 }))
+import {
+  registerPluginEventHandler,
+  resetPluginEventHandlersForTests,
+  type PluginEventPayloads,
+} from '@aglyn/aglyn/plugin-manager/plugin-events'
+
+/** What the erasure told the plugins it removed (AGL-3330). */
+const mockRemoved: Array<PluginEventPayloads['host.records.removed']> = []
+
 jest.mock('./email-delivery-log', () => ({
   eraseEmailDeliveriesForAddresses: (addresses: unknown, db: unknown) =>
     mockEraseDeliveries(addresses, db),
@@ -199,6 +208,11 @@ beforeEach(() => {
   autoId = 0
   onDelete = null
   mockEraseDeliveries.mockClear()
+  mockRemoved.length = 0
+  resetPluginEventHandlersForTests()
+  registerPluginEventHandler('host.records.removed', (payload) => {
+    mockRemoved.push(payload)
+  }, { pluginId: 'forms' })
   resetPluginPersonErasersForTests()
 })
 
@@ -252,6 +266,39 @@ describe('erasePerson', () => {
     // request's to end.
     expect(docs.has(`hosts/other/leads/${KEY}`)).toBe(true)
     expect(result).toMatchObject({ leads: 1 })
+  })
+
+  it('tells the plugins which leads it removed, once they are gone (AGL-3330)', async () => {
+    seedWorkspace()
+    docs.set(`orgs/${ORG}/leads/${KEY}`, { email: EMAIL, sources: ['form:form-1', 'booking'] })
+    docs.set(`hosts/h1/leads/${KEY}`, { email: EMAIL, sources: ['form:form-2'] })
+    // Raised AFTER the rows are gone, so a recount it prompts sees them gone.
+    let leftWhenTold: boolean | null = null
+    resetPluginEventHandlersForTests()
+    registerPluginEventHandler('host.records.removed', (payload) => {
+      leftWhenTold = docs.has(`orgs/${ORG}/leads/${KEY}`)
+      mockRemoved.push(payload)
+    }, { pluginId: 'forms' })
+    await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
+    expect(leftWhenTold).toBe(false)
+    expect(mockRemoved).toEqual([
+      {
+        orgId: ORG,
+        hostIds: expect.arrayContaining(['h1']),
+        collection: 'leads',
+        records: [
+          { id: KEY, data: { email: EMAIL, sources: ['form:form-1', 'booking'] } },
+          { id: KEY, data: { email: EMAIL, sources: ['form:form-2'] } },
+        ],
+      },
+    ])
+  })
+
+  it('raises nothing when the erased person was on no lead', async () => {
+    seedWorkspace()
+    docs.delete(`hosts/h1/leads/${KEY}`)
+    await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
+    expect(mockRemoved).toEqual([])
   })
 
   it('takes the person off every audience list, leaving the list and its other members', async () => {

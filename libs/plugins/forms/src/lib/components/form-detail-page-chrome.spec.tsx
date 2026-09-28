@@ -64,6 +64,12 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: async () => undefined,
 }))
 
+const mockRecountFormStats = jest.fn(async (_target: unknown) => true)
+// The form counters' recount (AGL-3330); `form-stats.spec.ts` owns what it writes.
+jest.mock('./use-form-stats-recount-api', () => ({
+  __esModule: true,
+  default: () => mockRecountFormStats,
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),

@@ -618,6 +618,39 @@ describe('an email that is still going out', () => {
   })
 })
 
+describe('an email held for staff review (AGL-3356)', () => {
+  const HELD = {
+    status: 'scheduled',
+    sentAt: undefined,
+    stats: undefined,
+    sendAtMs: 253402300799000,
+    staffReview: { state: 'held', reference: 'HS-ABCDEF1234' },
+  }
+
+  it('says it is held for review, not scheduled for the year 9999', async () => {
+    await renderEmail({ email: HELD })
+    expect(screen.getByText('Held for review')).toBeTruthy()
+    expect(screen.queryByText('Scheduled')).toBeNull()
+    expect(screen.queryByText(/9999/)).toBeNull()
+  })
+
+  it('tells the merchant they cannot release it, with the reference', async () => {
+    await renderEmail({ email: HELD })
+    expect(screen.getByText(/cannot be released, rescheduled or edited/)).toBeTruthy()
+    expect(screen.getByText(/HS-ABCDEF1234/)).toBeTruthy()
+  })
+
+  it('offers nothing that would release it', async () => {
+    await renderEmail({ email: HELD })
+    expect(screen.queryByText('Send now')).toBeNull()
+    expect(screen.queryByText('Write this email')).toBeNull()
+    openOverflow()
+    expect(overflowLabels()).not.toContain('Reschedule')
+    // Withdrawing it stays the merchant's.
+    expect(overflowLabels()).toContain('Cancel send')
+  })
+})
+
 describe('sending an email that has not gone out', () => {
   it('offers Send now on a scheduled email', async () => {
     await renderEmail({

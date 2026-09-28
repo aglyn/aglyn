@@ -569,10 +569,21 @@ async function handler(request: Request): Promise<Response> {
       // charged on renewals with nobody present, and telling Stripe so at
       // setup time is what lets the issuer authenticate it NOW instead of
       // declining the first unattended renewal months later.
+      //
+      // `request_three_d_secure: any` asks the issuer to authenticate the
+      // card holder whenever the card supports 3-D Secure, rather than only
+      // when Stripe's own risk model decides to (AGL-3356). Every
+      // subscription is paid from the card saved here, and the fraud it
+      // answers paid for Pro with a card whose CVC check came back
+      // unavailable and which never met 3DS. A card that does not support
+      // it still saves; the customer who can authenticate does so once, now,
+      // on Stripe's own step — `confirmSetup` already handles it — and gets
+      // the liability shift on renewals in return.
       const params = new URLSearchParams({
         customer: customerId,
         usage: 'off_session',
         'automatic_payment_methods[enabled]': 'true',
+        'payment_method_options[card][request_three_d_secure]': 'any',
         'metadata[orgId]': orgId,
       })
       const result = await stripeRequest(

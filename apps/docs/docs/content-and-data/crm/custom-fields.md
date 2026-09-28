@@ -72,8 +72,10 @@ fields, each read by its own type.
 
 Only a **contact** field can be the destination of a website form field, because a
 submission is a fact about a person; the drawer on the other tabs says so. Company, deal
-and lead columns show values and are not filterable, for the reason the contact columns
-are not: the value lives in a map no index covers.
+and lead columns show values and are not filterable: the value lives in a map no index
+covers. A contact field is the exception — each site's record of the person carries a
+key for it that the list's query can ask — see
+[Filters on the Contacts list](./views.md#filters-on-the-contacts-list).
 
 A lead's values **stay on the lead** when it converts. A lead field and a contact field
 are two fields even when they share a key, so nothing is copied across; the converted
@@ -90,8 +92,9 @@ need nothing done to them.
   **Save**, in its header, writes the profile and only the fields you changed; clearing a
   control clears the value. With no field defined, there is no **More fields** at all.
 - **The contacts list** offers one optional column per field. The columns show the value
-  as it reads — a date as a day, a checkbox as *Yes* or *No*, a link as a link — and are
-  not sortable or filterable.
+  as it reads — a date as a day, a checkbox as *Yes* or *No*, a link as a link. They do
+  not sort; each is a field in the table's **Filters** panel — see
+  [Filters on the Contacts list](./views.md#filters-on-the-contacts-list).
 - **A lead's page** carries its fields in the **Details** card, under **More fields**
   after the profile and saved with it by the same **Save** in the card's header. The **New
   lead** drawer offers the same controls, so a lead can be entered complete. A converted
@@ -137,12 +140,12 @@ need mapping.
 **Lead source** is a standard lead field — Salesforce's Lead Source — and its choices are
 your organization's own. They are kept on the **Leads** tab, below the custom lead
 fields, under **Lead source values**. Every lead's page, the **New lead** drawer and every
-contact's page offer them as a select, and the leads list filters and sorts by them.
+contact's page offer them as a select, and the leads list filters by them.
 
 | Action | What it does |
 | --- | --- |
 | **Add value** | Adds a value at the end of the list. A value the list already holds, in any capitalization, is refused. |
-| **Drag**, or the arrows | Reorders the list. The order is the order every select offers, and the order the leads list sorts in. |
+| **Drag**, or the arrows | Reorders the list. The order is the order every select offers. |
 | **Sort A–Z** | Puts the whole list in alphabetical order. |
 | **Rename** | Renames the value, and every lead and contact holding it is updated to the new name in the same step, so a report grouped by lead source follows the rename. |
 | **Make default** | New leads start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. **Clear default** removes it. |

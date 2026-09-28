@@ -38,8 +38,10 @@ brackets, like **[material]**, and the proposal lists what to fill in before you
 ## Write copy for many products
 
 On the products page, **Build your catalog with AI** has **Write copy for products**.
-Pick up to 50 products and press **Write copy**. The copy is written one product at a
-time, and each row appears in the review table as it is ready.
+Pick up to 50 products and press **Write copy**. The picker offers the page of products
+the products table is showing, so filter, search or page that table first to reach
+others. The copy is written one product at a time, and each row appears in the review
+table as it is ready.
 
 - **Apply** saves one product's copy. **Apply to all** saves every row still waiting.
 - Applying changes only the description, search listing, tags, categories and option

@@ -38,6 +38,13 @@ import {
   normalizeFormSlug,
   normalizeSubmissionFormName,
   readFormDeclaredConsent,
+  formCampaignFields,
+  formCounterDrift,
+  formCounterPatch,
+  formCountersFromSource,
+  formIdsOfLeadSources,
+  formLeadSource,
+  FORM_LAST_SUBMISSION_TOLERANCE_MS,
 } from './forms'
 import { checkFormContract } from './form-contract'
 
@@ -907,6 +914,68 @@ describe('the fields the Forms list queries (AGL-3330)', () => {
     expect(fields.routing).toEqual({ datasetId: 'd1', lead: false })
     // Null, never zero: a zero would claim a measurement nobody took.
     expect(fields.stats).toEqual({ submissions: null, leads: null, lastSubmissionAtMs: null })
+    expect(fields.inCampaign).toBe(false)
     expect(newFormListFields({ id: 'f2', routing: { lead: true } }).routing).toEqual({ lead: true })
+  })
+
+  it('writes a lead-routing form with 0 leads, so "Leads = 0" finds it before its first', () => {
+    expect(newFormListFields({ id: 'f2', routing: { lead: true } }).stats).toEqual({
+      submissions: null,
+      leads: 0,
+      lastSubmissionAtMs: null,
+    })
+  })
+
+  it('writes a form created inside a campaign as in one', () => {
+    expect(newFormListFields({ id: 'f3', campaignIds: ['cmp1'] }).inCampaign).toBe(true)
+    expect(newFormListFields({ id: 'f3', campaignIds: [] }).inCampaign).toBe(false)
+  })
+})
+
+describe('the campaign fields a form is written with (AGL-3330)', () => {
+  it('stores the ids normalized, and whether there are any', () => {
+    expect(formCampaignFields([' cmp1 ', 'cmp1', 'cmp2', 7])).toEqual({
+      campaignIds: ['cmp1', 'cmp2'],
+      inCampaign: true,
+    })
+    // "In no campaign" is one stored shape: an empty array, and `false`.
+    expect(formCampaignFields([])).toEqual({ campaignIds: [], inCampaign: false })
+    expect(formCampaignFields(undefined)).toEqual({ campaignIds: [], inCampaign: false })
+  })
+})
+
+describe('the counters, recounted from what they count (AGL-3330)', () => {
+  const fixtures = JSON.parse(
+    readFileSync(
+      join(__dirname, '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'site-form-stats-recount.fixtures.json'),
+      'utf8',
+    ),
+  )
+
+  it('answers the worked examples the recount script is held to', () => {
+    expect(fixtures.toleranceMs).toBe(FORM_LAST_SUBMISSION_TOLERANCE_MS)
+    expect(fixtures.cases.length).toBeGreaterThan(0)
+    for (const one of fixtures.cases) {
+      const recounted = formCountersFromSource(one.source)
+      expect([one.name, recounted]).toEqual([one.name, one.recounted])
+      expect([one.name, formCounterDrift(one.stored, recounted)]).toEqual([one.name, one.drift])
+    }
+  })
+
+  it('puts the recount on the form as three dotted fields', () => {
+    expect(formCounterPatch({ submissions: 2, leads: 0, lastSubmissionAtMs: 5 })).toEqual({
+      'stats.submissions': 2,
+      'stats.leads': 0,
+      'stats.lastSubmissionAtMs': 5,
+    })
+  })
+
+  it('reads a lead\'s form sources, and writes the one a form files', () => {
+    expect(formLeadSource('f1')).toBe('form:f1')
+    expect(formIdsOfLeadSources(['form:f1', 'booking', 'form:f2', 'form:f1', 'form:', 3])).toEqual([
+      'f1',
+      'f2',
+    ])
+    expect(formIdsOfLeadSources(null)).toEqual([])
   })
 })

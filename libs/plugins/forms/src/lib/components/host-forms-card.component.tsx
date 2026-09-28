@@ -54,6 +54,7 @@ import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
@@ -78,6 +79,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  FORM_IN_CAMPAIGN_OPTIONS,
   FORM_LEAD_ROUTING_OPTIONS,
   FORM_LIST_FILTER_FIELDS,
   FORM_LIST_FILTER_HEADERS,
@@ -89,7 +91,7 @@ import {
 
 /**
  * The filterable columns the table shows. The rest of the declaration —
- * Status, Lead routing, Campaign — reaches the Filters panel as hidden
+ * Status, Lead routing, Campaign, In a campaign — reaches the Filters panel as hidden
  * columns (`hiddenFilterColumns`).
  */
 const FORM_VISIBLE_FILTER_COLUMNS = [
@@ -150,11 +152,13 @@ export interface HostFormsCardProps {
  * ## The two numeric columns, and when one is honestly blank
  *
  * `stats.submissions` and `stats.leads` are both incremented by
- * `/api/forms/submit` on a write that was happening anyway, so both are real
- * numbers. `leads` is counted only for a form whose `routing.lead` is set, so
- * a form that does not route to leads carries no figure at all and renders as
- * a dash rather than as `0`. A zero would say this form has produced no leads,
- * which for an unrouted form is a measurement nobody took.
+ * `/api/forms/submit` on a write that was happening anyway, and recounted
+ * from their rows after a removal (AGL-3330), so both are real numbers.
+ * `leads` is counted only for a form whose `routing.lead` is set — it holds
+ * `0` there until the first lead — so a form that has never routed to leads
+ * carries no figure at all and renders as a dash rather than as `0`. A zero
+ * would say this form has produced no leads, which for an unrouted form is a
+ * measurement nobody took.
  */
 export function HostFormsCard(props: HostFormsCardProps) {
   const { hostId, basePath, org } = props
@@ -225,6 +229,10 @@ export function HostFormsCard(props: HostFormsCardProps) {
           archivedAt: retired ? Date.now() : null,
           // The mirror the list's query asks (AGL-3330).
           retired,
+          // Retiring and restoring are edits, and Updated says when the form
+          // was last edited (AGL-3330): a write that skipped it left a form
+          // retired today reading as untouched for weeks.
+          updatedAt: Timestamp.now(),
         })
         setRetiredEpoch((epoch) => epoch + 1)
       } catch {
@@ -317,6 +325,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
       status: FORM_STATUS_OPTIONS,
       leadRouting: FORM_LEAD_ROUTING_OPTIONS,
       campaignIds: [...named, ...unnamed],
+      inCampaign: FORM_IN_CAMPAIGN_OPTIONS,
     }
   }, [siteCampaigns.options, formClauses])
 
@@ -446,12 +455,13 @@ export function HostFormsCard(props: HostFormsCardProps) {
       align: 'right',
       headerAlign: 'right',
       /*
-       * A dash rather than a `0` whenever the field is absent.
+       * A dash rather than a `0` whenever the field holds no number.
        *
-       * `stats.leads` is incremented only for a form whose `routing.lead` is
-       * set, so a form that does not route to leads has no recorded figure.
-       * Rendering `0` there would read as "this form has produced no leads",
-       * which is a claim about a measurement nobody took.
+       * `stats.leads` is counted only for a form whose `routing.lead` is set
+       * (`0` there until its first lead), so a form that has never routed to
+       * leads has no recorded figure. Rendering `0` there would read as "this
+       * form has produced no leads", which is a claim about a measurement
+       * nobody took.
        */
       valueGetter: (_value: any, row: any) =>
         typeof row?.stats?.leads === 'number' ? row.stats.leads : null,
@@ -499,6 +509,18 @@ export function HostFormsCard(props: HostFormsCardProps) {
       headerName: 'Lead routing',
       minWidth: 120,
       valueGetter: (_value: any, row: any) => String(row?.routing?.lead === true),
+    },
+    /*
+     * In a campaign, hidden like the two above. Reads the ids the form is
+     * filed under — the fact `inCampaign` mirrors for the query — so a form
+     * the backfill has not reached still draws the truth.
+     */
+    {
+      field: 'inCampaign',
+      headerName: 'In a campaign',
+      minWidth: 130,
+      valueGetter: (_value: any, row: any) =>
+        String(Aglyn.readCampaignIds(row).length > 0),
     },
     listActionsColumn((row: any) => {
       const form = { ...row, $id: row.$id as string }
@@ -742,6 +764,9 @@ export function HostFormsCard(props: HostFormsCardProps) {
           loading={status === 'loading'}
           // Paged by the footer below, so the grid must not also slice.
           hideFooter
+          // The rows keep the query's order; a header sort would order only
+          // the page on screen and read as the whole list's.
+          disableColumnSorting
         />
         <ListPagination
           page={page}
