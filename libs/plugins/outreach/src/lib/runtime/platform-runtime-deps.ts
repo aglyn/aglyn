@@ -154,12 +154,13 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     // The one phishing screen every tenant message passes (AGL-3356). The
     // review module's import installs its store, so a hold files the same
     // abuse-queue row a held newsletter or campaign does.
-    async screenMessage({ orgId, org, hostId, host, subject, text, fromName }) {
+    async screenMessage({ orgId, org, hostId, host, subject, text, fromName, fromAddress }) {
       const refusal = await screenTenantMessage(
         {
           workspace: sendingWorkspaceFor({ hostId, orgId, org, host }),
           subject,
           fromName,
+          fromAddress: fromAddress ?? null,
           bodies: [text],
           context: 'outreach sequence',
         },

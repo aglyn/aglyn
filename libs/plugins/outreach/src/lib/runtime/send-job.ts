@@ -903,6 +903,7 @@ async function runEmailStep(
       subject: composed.email.subject,
       text: composed.email.text,
       fromName: mailbox.displayName ?? null,
+      fromAddress: sender.address,
     })
     if (held) return stop({ type: 'pause', atMs: nowMs, byUid: null, detail: held }, 'failed')
   }

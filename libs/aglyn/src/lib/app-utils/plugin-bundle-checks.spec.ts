@@ -463,7 +463,7 @@ describe('per-check summary (AGL-1087)', () => {
 
   it('reports every area, not only the ones that found something', () => {
     const result = checkPluginBundle(GOOD_BUNDLE, { declaredNetwork: [] })
-    expect(result.checks).toHaveLength(11)
+    expect(result.checks).toHaveLength(12)
     expect(result.checks.every((check) => check.status === 'pass')).toBe(true)
   })
 
@@ -723,5 +723,72 @@ describe('isStoredVerdictCurrent (AGL-962)', () => {
     expect(isStoredVerdictCurrent(null, SHA)).toBe(false)
     expect(isStoredVerdictCurrent(undefined, SHA)).toBe(false)
     expect(isStoredVerdictCurrent(verdict(), '')).toBe(false)
+  })
+})
+
+describe('inputs that collect credentials (AGL-3362)', () => {
+  const credentials = (source: string) => {
+    const result = checkPluginBundle(source, { declaredNetwork: [] })
+    return {
+      result,
+      status: result.checks.find((check) => check.id === 'credentials')?.status,
+      messages: result.problems
+        .filter((problem) => problem.check === 'credentials')
+        .map((problem) => problem.message),
+    }
+  }
+
+  it('asks the reviewer about a password input built with createElement', () => {
+    const { result, status, messages } = credentials(
+      `const R = globalThis.__AGLYN_PLUGIN_HOST__.React;
+       export function register() { return R.createElement('input', { type: 'password', name: 'pw' }) }\n`,
+    )
+    // A question, never a refusal: a real plugin may own a sign-in.
+    expect(result.ok).toBe(true)
+    expect(status).toBe('question')
+    expect(messages).toEqual([expect.stringContaining('a password')])
+  })
+
+  it('reads a card or code autocomplete token, setAttribute and a constant', () => {
+    const { messages } = credentials(
+      `const CC = 'cc-number';
+       export function register() {
+         const el = document.createElement('input');
+         el.setAttribute('autocomplete', 'one-time-code');
+         return { autoComplete: CC };
+       }\n`,
+    )
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('a card number'),
+        expect.stringContaining('a one-time code'),
+      ]),
+    )
+  })
+
+  it('reads an input in an HTML string or template', () => {
+    const { status } = credentials(
+      'export function register(h) { h.el.innerHTML = `<form><input type="password" name="p"></form>` }\n',
+    )
+    expect(status).toBe('question')
+  })
+
+  it('passes ordinary inputs — an email, a search box, a promo code', () => {
+    const { status, messages } = credentials(
+      `const R = globalThis.__AGLYN_PLUGIN_HOST__.React;
+       export function register() {
+         return [
+           R.createElement('input', { type: 'email', autoComplete: 'email' }),
+           R.createElement('input', { type: 'search', placeholder: 'Password reset help' }),
+           R.createElement('input', { name: 'promo', autoComplete: 'off' }),
+         ]
+       }\n`,
+    )
+    expect(status).toBe('pass')
+    expect(messages).toEqual([])
+  })
+
+  it('re-verifies every stored verdict from the checker before this one', () => {
+    expect(PLUGIN_VERIFIER_VERSION).toBeGreaterThanOrEqual(7)
   })
 })

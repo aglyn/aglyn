@@ -2198,6 +2198,9 @@ export async function performCampaignSend(
       host: (hostSnapshot.data() as Record<string, unknown> | undefined) ?? null,
       subject,
       fromName: options.fromName ?? null,
+      // The verified address it will leave on: a lookalike domain there
+      // holds for every workspace (AGL-3362).
+      fromAddress: sendingIdentity.from ?? null,
       replyTo: options.replyTo ?? null,
       preheader: options.preheader ?? null,
       bodies: [

@@ -37,6 +37,12 @@
  */
 
 import { parse, type Node, type Options } from 'acorn'
+// The leaf, not the barrel: the phishing screen's own reading of an input's
+// type, autocomplete token and raw HTML (AGL-3362).
+import {
+  credentialForInputAttribute,
+  credentialInHtml,
+} from '@aglyn/shared-util-email/hosted-page-screen'
 import type { PluginContributions } from '../plugin-manager/plugin-contributions'
 
 /** The areas the verifier reports on, in the order a reviewer reads them. */
@@ -52,6 +58,7 @@ export type BundleCheckId =
   | 'network'
   | 'obfuscation'
   | 'contributions'
+  | 'credentials'
 
 export interface BundleCheckProblem {
   level: 'error' | 'warning'
@@ -118,6 +125,7 @@ const CHECK_LABELS: Record<BundleCheckId, string> = {
   network: 'Network calls match the manifest',
   obfuscation: 'No obfuscation shapes',
   contributions: 'Registrations match the declared contributions',
+  credentials: 'No password, card or one-time-code inputs',
 }
 
 /** Check order as displayed — findings first would reorder on every bundle. */
@@ -133,6 +141,7 @@ const CHECK_ORDER: BundleCheckId[] = [
   'network',
   'obfuscation',
   'contributions',
+  'credentials',
 ]
 
 export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
@@ -153,8 +162,9 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * 4 — calls through an alias are resolved (AGL-1090).
  * 5 — URLs held in a constant are resolved (AGL-1093).
  * 6 — registrations are compared with the declared contributions (AGL-3116).
+ * 7 — inputs that collect a password, card or one-time code (AGL-3362).
  */
-export const PLUGIN_VERIFIER_VERSION = 6
+export const PLUGIN_VERIFIER_VERSION = 7
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -750,6 +760,67 @@ function compareContributions(
   unused('the console slot', declared.console?.slots, found.console?.slots)
 }
 
+/**
+ * Inputs a bundle builds that collect a password, a card number or a
+ * one-time code (AGL-3362) — a reviewer's QUESTION, never a failure.
+ *
+ * The phishing screen holds a published page whose author defined such a
+ * field, but a plugin renders its own inputs from code the page screen never
+ * reads. So the same reading is applied here, to the bundle, at review: an
+ * input's `type` or `autocomplete` in an object literal (`createElement`
+ * props, a JSX runtime call, a DOM `Object.assign`), in `setAttribute`, and
+ * in any HTML string. A warning rather than an error because a legitimate
+ * plugin can own a sign-in (a gated community, a booking account); what the
+ * reviewer asks is whether its credentials go anywhere but its declared
+ * origins. The sandbox tier cannot post a native form at all — its frame
+ * has no `allow-forms` and its CSP says `form-action 'none'` — so the
+ * question is about `connect-src`, which the network check already lists.
+ */
+function credentialInputsIn(
+  program: AnyNode,
+  constants: ReadonlyMap<string, string>,
+): string[] {
+  const found = new Set<'password' | 'card' | 'otp'>()
+  const keyOf = (node: AnyNode): string | null => {
+    const key = node['key'] as AnyNode
+    if (!key) return null
+    if (!node['computed'] && key.type === 'Identifier') return key['name'] as string
+    return staticString(key, constants)
+  }
+  walk(program, (node) => {
+    if (node.type === 'Property') {
+      const key = keyOf(node)
+      const value = staticString(node['value'] as AnyNode, constants)
+      const field = key && value !== null ? credentialForInputAttribute(key, value) : null
+      if (field) found.add(field)
+    } else if (node.type === 'CallExpression') {
+      const callee = node['callee'] as AnyNode
+      const args = (node['arguments'] ?? []) as AnyNode[]
+      if (callee?.type === 'MemberExpression' && propertyName(callee, constants) === 'setAttribute') {
+        const name = staticString(args[0], constants)
+        const value = staticString(args[1], constants)
+        const field = name !== null && value !== null ? credentialForInputAttribute(name, value) : null
+        if (field) found.add(field)
+      }
+    } else if (node.type === 'Literal' && typeof node['value'] === 'string') {
+      const field = credentialInHtml(node['value'] as string)
+      if (field) found.add(field)
+    } else if (node.type === 'TemplateLiteral') {
+      const text = ((node['quasis'] ?? []) as AnyNode[])
+        .map((quasi) => String((quasi['value'] as { cooked?: string } | undefined)?.cooked ?? ''))
+        .join('')
+      const field = credentialInHtml(text)
+      if (field) found.add(field)
+    }
+  })
+  const words = { password: 'a password', card: 'a card number or security code', otp: 'a one-time code' }
+  return [...found].map(
+    (field) =>
+      `builds an input that collects ${words[field]} — confirm what it is for, and that ` +
+      'it is sent only to the origins the manifest declares',
+  )
+}
+
 function analyseBundle(
   source: string,
   options?: CheckOptions,
@@ -801,6 +872,7 @@ function analyseBundle(
       'network',
       'obfuscation',
       'contributions',
+      'credentials',
     )
     return {
       ok: false,
@@ -844,6 +916,7 @@ function analyseBundle(
       'network',
       'obfuscation',
       'contributions',
+      'credentials',
     )
     return {
       ok: false,
@@ -1405,6 +1478,9 @@ function analyseBundle(
   }
 
   const detected = detectRegistrations(program, constants)
+  for (const message of credentialInputsIn(program, constants)) {
+    add('warning', 'credentials', message)
+  }
   compareContributions(detected, options, add, details, (check) =>
     status.set(check, 'unknown'),
   )

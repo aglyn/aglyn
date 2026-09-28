@@ -100,6 +100,7 @@ import { getSiteLockdown } from './tenant-write-lockdown'
 // (AGL-3356): every sender whose identity comes from `hostSendingIdentity`
 // has therefore installed the gate the workspace stamped below is read by.
 import { sendingWorkspaceFor } from './outbound-send-review'
+import { flagLookalikeDomain } from './hosted-page-review'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -200,6 +201,10 @@ export async function requestSendingDomain(options: {
     createdAtMs: Date.now(),
   }
   await ref.set(record, { merge: true })
+  // A domain that wears a brand (`paypa1.com`) goes to staff in the abuse
+  // queue the moment it is claimed — flagged, not refused (AGL-3362). Mail
+  // from it is held at the send seam whatever staff decide. Never throws.
+  await flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: options.orgId, domain })
   return { record, error: null, status: 201 }
 }
 
@@ -603,6 +608,13 @@ export async function verifySendingDomain(
     },
     { merge: true },
   )
+
+  // Again on verification, the moment it can actually send (AGL-3362): a
+  // claim added before this check existed is caught here. One row per
+  // domain, so this counts rather than re-alerts.
+  if (verified) {
+    await flagLookalikeDomain({ kind: 'sending', hostId: null, orgId, domain })
+  }
 
   return {
     record: readSendingDomainRecord(await ref.get()),

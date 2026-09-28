@@ -222,5 +222,7 @@ export interface OutreachRuntimeDeps {
     subject: string
     text: string
     fromName: string | null
+    /** The mailbox address it leaves from — a lookalike domain holds (AGL-3362). */
+    fromAddress?: string | null
   }): Promise<string | null>
 }

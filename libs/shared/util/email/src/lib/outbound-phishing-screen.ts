@@ -324,6 +324,14 @@ export interface PhishingScreenInput {
   subject?: string | null
   /** The display name in front of the sending address. */
   fromName?: string | null
+  /**
+   * The ADDRESS the message leaves from (AGL-3362) — a `From:` domain is a
+   * link the recipient never has to click, so its host is read by the
+   * lookalike rule exactly like a link's: mail from `support@paypa1.com` is
+   * the disguise whoever sends it. Not an own domain for the lure's "is this
+   * elsewhere" test either way; it only ever adds a lookalike signal.
+   */
+  fromAddress?: string | null
   replyTo?: string | readonly string[] | null
   preheader?: string | null
   /**
@@ -563,9 +571,11 @@ export function screenOutboundEmail(input: PhishingScreenInput): PhishingScreenV
     : String(input.replyTo ?? '')
   const linkHosts = linkHostsIn(copy)
 
-  // 1. A lookalike host, anywhere a recipient could click or write back.
+  // 1. A lookalike host, anywhere a recipient could click, write back, or
+  //    read as the sender.
   const seenLookalike = new Set<string>()
-  for (const host of [...linkHosts, ...addressHostsIn(`${copy}\n${replyTo}`)]) {
+  const fromAddress = String(input.fromAddress ?? '')
+  for (const host of [...linkHosts, ...addressHostsIn(`${copy}\n${replyTo}\n${fromAddress}`)]) {
     if (seenLookalike.has(host)) continue
     const brand = lookalikeBrandForHost(host)
     if (brand) {

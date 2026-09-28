@@ -209,6 +209,31 @@ function credentialOf(node: WalkedNode): { field: 'password' | 'card' | 'otp'; l
 }
 
 /**
+ * The credential an input asks for, read from the two attributes that decide
+ * it in the browser — its `type` and its `autocomplete` token — or null.
+ * For code that builds inputs rather than storing them as page props: the
+ * marketplace verifier reads a plugin bundle's `{ type: 'password' }` and
+ * `setAttribute('autocomplete', 'cc-number')` with this (AGL-3362).
+ */
+export function credentialForInputAttribute(
+  attribute: string,
+  value: string,
+): 'password' | 'card' | 'otp' | null {
+  const name = String(attribute ?? '').toLowerCase()
+  const token = String(value ?? '').trim().toLowerCase()
+  if ((name === 'type' || name === 'inputtype') && token === 'password') return 'password'
+  if (name === 'autocomplete') return CREDENTIAL_AUTOCOMPLETE[token] ?? null
+  return null
+}
+
+/** The credential a piece of raw HTML asks for in an input of its own, or null. */
+export function credentialInHtml(html: string): 'password' | 'card' | 'otp' | null {
+  const text = String(html ?? '')
+  if (!text.includes('<')) return null
+  return HTML_CREDENTIAL_INPUTS.find(({ pattern }) => pattern.test(text))?.field ?? null
+}
+
+/**
  * Does a submitted field's NAME ask for a credential — a password, a card
  * number or security code, a one-time code? The same wording the page
  * screen holds a field for, read over a name as a form posts it

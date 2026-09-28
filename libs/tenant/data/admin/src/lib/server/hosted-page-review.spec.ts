@@ -99,6 +99,7 @@ jest.mock('./organizations', () => ({
 
 import {
   flagLookalikeCustomDomain,
+  flagLookalikeDomain,
   recordServedPageVersion,
   resetHostedPageReviewMemoForTests,
   reviewHostedPage,
@@ -228,5 +229,34 @@ describe('a custom domain that wears a brand', () => {
     await expect(
       flagLookalikeCustomDomain({ hostId: 'host-1', orgId: 'org-1', domain: 'harborviewhotel.com' }),
     ).resolves.toBe('clean')
+  })
+})
+
+describe('a sending domain that wears a brand (AGL-3362)', () => {
+  it('is flagged to staff under the workspace, once, with its own wording', async () => {
+    await expect(
+      flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: 'org-1', domain: 'paypa1.com' }),
+    ).resolves.toBe('flagged')
+    expect(pageRow()).toMatchObject({
+      category: 'phishing',
+      severity: 'urgent',
+      orgId: 'org-1',
+      hostId: null,
+      reportedHostname: 'paypa1.com',
+      details: expect.stringContaining('send email from'),
+    })
+    await flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: 'org-1', domain: 'paypa1.com' })
+    expect(pageRow()?.['reportCount']).toBe(2)
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+    expect(mockNotifyStaff.mock.calls[0][0]).toMatchObject({
+      title: expect.stringContaining('Sending domain'),
+    })
+  })
+
+  it('leaves an ordinary sending domain alone', async () => {
+    await expect(
+      flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: 'org-1', domain: 'mail.harborviewhotel.com' }),
+    ).resolves.toBe('clean')
+    expect(store.size).toBe(0)
   })
 })

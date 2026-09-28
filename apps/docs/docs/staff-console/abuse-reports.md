@@ -160,9 +160,20 @@ workspace. If the content is phishing, lock the org at
 - **Custom domains.** Attaching a custom domain that is a brand lookalike is
   not refused. It files an urgent `phishing` row here for staff to decide. The
   site's pages are still screened as they are served.
+- **Sending domains.** A custom sending domain that is a brand lookalike
+  (`paypa1.com`) files the same urgent row when it is added and again when it
+  verifies. Email from it is held for every workspace, because the screen reads
+  the `From:` address the way it reads a link.
 - **Form submissions.** The public form endpoint drops any submitted field
   named for a password, card number or one-time code. This covers pages the
   screen never reads, such as a marketplace plugin's frame.
+- **Marketplace plugins.** A sandboxed plugin frame cannot post a native form:
+  its sandbox has no `allow-forms` and its CSP sets `form-action 'none'`. At
+  review, the bundle verifier's **No password, card or one-time-code inputs**
+  row flags a bundle that builds such an input. It is a question for the
+  reviewer, not a refusal, because a real plugin can own a sign-in. Ask what
+  the input is for and confirm the plugin sends it only to the origins its
+  manifest declares.
 
 ## Stripe fraud signals {#stripe-fraud-signals}
 

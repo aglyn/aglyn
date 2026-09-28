@@ -228,6 +228,12 @@ export interface OutboundScreenRequest {
   host: Record<string, unknown> | null
   subject: string
   fromName?: string | null
+  /**
+   * The address it leaves from (AGL-3362). Read by the lookalike rule only,
+   * and kept out of the content hash so a release granted before this was
+   * read still names the same row.
+   */
+  fromAddress?: string | null
   replyTo?: string | readonly string[] | null
   preheader?: string | null
   bodies: readonly (string | null | undefined)[]
@@ -374,6 +380,7 @@ export async function screenOutboundSend(
   const verdict = screenOutboundEmail({
     subject: request.subject,
     fromName: request.fromName ?? null,
+    fromAddress: request.fromAddress ?? null,
     replyTo: request.replyTo ?? null,
     preheader: request.preheader ?? null,
     bodies: request.bodies,

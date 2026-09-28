@@ -337,3 +337,24 @@ describe('a subdomain that wears a brand', () => {
     expect(brandForSubdomainLabel(label)).toBeNull()
   })
 })
+
+describe('the From address is read like a link (AGL-3362)', () => {
+  it('holds mail FROM a lookalike domain, for any workspace', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Your account',
+      fromAddress: 'support@paypa1.com',
+      bodies: ['Hello.'],
+      ...OWN,
+    })
+    expect(verdict.signals).toEqual([
+      { code: 'lookalike-link', brand: 'paypal', host: 'paypa1.com' },
+    ])
+    expect(signalsThatHold(verdict.signals, { ageDays: 900, owed: true })).toHaveLength(1)
+  })
+
+  it('does not hold mail from the workspace’s own or a brand’s real domain', () => {
+    for (const fromAddress of ['hello@harborviewhotel.com', 'service@paypal.com', 'hi@mail.acme.co.uk']) {
+      expect(screenOutboundEmail({ subject: 'Hi', fromAddress, bodies: ['Hello.'], ...OWN }).hold).toBe(false)
+    }
+  })
+})

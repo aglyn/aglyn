@@ -291,21 +291,29 @@ export async function recordServedPageVersion(
 }
 
 /**
- * A custom domain a site attached that wears a brand (AGL-3362): filed in
- * the abuse queue as an urgent `phishing` row for staff, not refused.
+ * A domain a workspace attached that wears a brand (AGL-3356, AGL-3362):
+ * filed in the abuse queue as an urgent `phishing` row for staff, not
+ * refused. Two kinds, one rule:
+ *
+ * - `site` — a custom domain a site is served on (the attach route);
+ * - `sending` — a custom domain a workspace sends email as, when it is
+ *   added and again when it verifies (`sending-domains.ts`).
  *
  * Not refused, because the domain is the merchant's own registration and
  * the platform cannot tell a brand's own agency attaching `paypal-promo.com`
- * from a kit — but a brand's lookalike serving a site is exactly what staff
- * look at first, and every page on it still passes the page review. The
- * test is the phishing screen's own lookalike rule (`lookalikeBrandForHost`),
- * the one that holds a link in an email. One row per (site, domain), so a
- * re-attach counts rather than re-alerts.
+ * from a kit — but a brand's lookalike on a site or in a `From:` line is
+ * exactly what staff look at first. The site's pages are still screened as
+ * they are served, and mail FROM a lookalike domain is held at the send seam
+ * for every workspace. The test is the phishing screen's own lookalike rule
+ * (`lookalikeBrandForHost`), the one that holds a link in an email. One row
+ * per (owner, kind, domain), so a re-attach or a re-verify counts rather than
+ * re-alerts.
  *
- * Never throws: the attach it rides on has already happened.
+ * Never throws: the write it rides on has already happened.
  */
-export async function flagLookalikeCustomDomain(input: {
-  hostId: string
+export async function flagLookalikeDomain(input: {
+  kind: 'site' | 'sending'
+  hostId: string | null
   orgId: string | null
   domain: string
 }): Promise<'flagged' | 'clean' | 'failed'> {
@@ -313,9 +321,11 @@ export async function flagLookalikeCustomDomain(input: {
   const brand = lookalikeBrandForHost(domain)
   if (!brand) return 'clean'
   const label = phishingScreenBrandLabel(brand.id)
+  const sending = input.kind === 'sending'
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const reviewId = heldOutboundReviewId(`hosts/${input.hostId}/cname`, domain)
+    const owner = sending ? `orgs/${input.orgId ?? ''}/sendingDomains` : `hosts/${input.hostId ?? ''}/cname`
+    const reviewId = heldOutboundReviewId(owner, domain)
     const reference = heldOutboundReference(reviewId)
     const ref = firestore.collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
     const first = !(await ref.get()).exists
@@ -330,10 +340,15 @@ export async function flagLookalikeCustomDomain(input: {
         hostId: input.hostId,
         orgId: input.orgId,
         details: [
-          `A site attached the custom domain ${domain}.`,
+          sending
+            ? `A workspace added ${domain} as a domain to send email from.`
+            : `A site attached the custom domain ${domain}.`,
           `${domain} wears the ${label} name but is not ${label}'s domain.`,
-          'Its pages are still screened as they are served. Mark this actioned ' +
-            'and lock the site if it is impersonation; dismiss it if the brand is theirs.',
+          sending
+            ? 'Email from it is held at the send seam for every workspace. Mark this actioned ' +
+              'and lock the workspace if it is impersonation; dismiss it if the brand is theirs.'
+            : 'Its pages are still screened as they are served. Mark this actioned ' +
+              'and lock the site if it is impersonation; dismiss it if the brand is theirs.',
         ].join('\n'),
         reporterEmail: null,
         reporterName: null,
@@ -347,14 +362,27 @@ export async function flagLookalikeCustomDomain(input: {
     if (first) {
       await notifyStaff({
         type: 'system.abuseReportUrgent',
-        title: 'Custom domain flagged — possible brand impersonation',
-        body: `A site attached ${domain}, which looks like ${label}. Reference ${reference}.`,
+        title: sending
+          ? 'Sending domain flagged — possible brand impersonation'
+          : 'Custom domain flagged — possible brand impersonation',
+        body:
+          `A ${sending ? 'workspace added the sending domain' : 'site attached'} ${domain}, ` +
+          `which looks like ${label}. Reference ${reference}.`,
         link: '/admin/abuse-reports',
       })
     }
     return 'flagged'
   } catch (error) {
-    console.error('[page-review] a lookalike custom domain could not be flagged', error)
+    console.error('[page-review] a lookalike domain could not be flagged', error)
     return 'failed'
   }
+}
+
+/** A site's custom domain, through {@link flagLookalikeDomain}. */
+export function flagLookalikeCustomDomain(input: {
+  hostId: string
+  orgId: string | null
+  domain: string
+}): Promise<'flagged' | 'clean' | 'failed'> {
+  return flagLookalikeDomain({ kind: 'site', ...input })
 }

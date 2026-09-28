@@ -565,6 +565,9 @@ export async function askOutboundScreen(
       workspace,
       subject: options.subject,
       fromName: options.fromName ?? null,
+      // The resolved address, never anything the caller passed: the only
+      // `From:` this message can leave on (AGL-3362).
+      fromAddress: options.sendingIdentity?.from ?? null,
       replyTo: options.replyTo ?? null,
       bodies: [options.text, options.html],
       // A marketing message is never owed, whatever it declares.

@@ -107,6 +107,8 @@ export interface TenantMessageScreenInput {
   workspace: SendingWorkspace
   subject: string
   fromName?: string | null
+  /** The address it leaves from — a lookalike `From:` domain holds for everyone. */
+  fromAddress?: string | null
   replyTo?: string | readonly string[] | null
   /** Everything the recipient reads or clicks: the text part, the HTML. */
   bodies: readonly (string | null | undefined)[]
@@ -147,6 +149,7 @@ export async function screenTenantMessage(
   const verdict = screenOutboundEmail({
     subject: input.subject,
     fromName: input.fromName ?? null,
+    fromAddress: input.fromAddress ?? null,
     replyTo: input.replyTo ?? null,
     bodies: input.bodies,
     ownNames: workspace.ownNames,

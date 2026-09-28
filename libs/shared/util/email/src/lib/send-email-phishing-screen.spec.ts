@@ -192,6 +192,22 @@ describe('sendEmail × the outbound phishing screen', () => {
     expect((await send(LOOKALIKE, 400)).sent).toBe(true)
   })
 
+  it('holds clean words sent FROM a lookalike domain, for an established workspace and owed mail too', async () => {
+    const result = await sendEmail({
+      to: 'buyer@example.com',
+      subject: 'Your receipt',
+      text: 'Thanks for your order.',
+      audience: 'tenant',
+      owedFor: 'order',
+      sendingIdentity: { ...identity(900), from: 'support@paypa1.com', domain: 'paypa1.com' },
+    })
+    expect(sendFailureReason(result)).toBe('held-for-review')
+    expect(asked[0].signals).toEqual([
+      expect.objectContaining({ code: 'lookalike-link', brand: 'paypal', host: 'paypa1.com' }),
+    ])
+    expect(requests).toHaveLength(0)
+  })
+
   it('does not screen platform mail, or tenant mail no host identity was resolved for', async () => {
     const platform = await sendEmail({ to: 'a@example.com', ...LOOKALIKE })
     expect(platform.sent).toBe(true)
