@@ -24,7 +24,7 @@ import {
 import { assignOwnerForCapture } from './assign-contact-owner'
 import { associateCompanyByDomain } from './associate-company-by-domain'
 import { emitHostEvent } from './emit-host-event'
-import { contactCaptureActor } from './contact-capture-actor'
+import { contactCaptureActor } from './capture-actor'
 import type { HostEventActor, HostEventPayload } from './host-event-listeners'
 
 

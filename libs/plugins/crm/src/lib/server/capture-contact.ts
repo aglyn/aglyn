@@ -31,7 +31,7 @@ import {
   personKey,
 } from '@aglyn/aglyn/server'
 import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
-import { contactCaptureActor } from '@aglyn/tenant-runtime/contact-capture-actor'
+import { contactCaptureActor } from '@aglyn/tenant-runtime/capture-actor'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
   addHostLeadOutcome,

@@ -66,7 +66,7 @@ import {
   captureHostContact,
   contactCreatedPayload,
 } from './capture-host-contact'
-import { contactCaptureActor } from './contact-capture-actor'
+import { contactCaptureActor } from './capture-actor'
 
 const capture = (
   facet?: { companyId?: string; ownerUid?: string },
