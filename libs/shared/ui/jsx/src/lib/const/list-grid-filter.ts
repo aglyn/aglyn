@@ -267,14 +267,27 @@ export function listFilterGridColumns(
     return { ...column, ...listFilterColumn(fields, field.column) }
   })
   const present = columns.map((column) => column.field)
-  const hidden = hiddenFilterColumns(fields, present, headers).map(
-    (column): GridColDef => {
-      const field = fields.find((entry) => entry.column === column.field)
-      return field && options[field.column]
-        ? ({ ...column, ...selectProps(field) } as GridColDef)
-        : column
-    },
-  )
+  /*
+   * A field with choices is judged filterable by its choices, not by the
+   * grid's operators for its kind: a Yes/No `boolean` field allows `equals`,
+   * which the grid's boolean pool names `is`, so judged the plain way it has
+   * no operator and was dropped before its choices could make it a select —
+   * leaving a served filter nobody could reach (AGL-3332's Clicked). A field
+   * with choices stays a column even while they are empty (products not yet
+   * loaded): the list still reads a clause on it back through that column.
+   */
+  const hidden = fields
+    .filter((field) => !present.includes(field.column))
+    .flatMap((field): GridColDef[] => {
+      const base = {
+        field: field.column,
+        headerName: headers[field.column] ?? field.column,
+        hideable: false,
+      }
+      if (options[field.column]) return [{ ...base, ...selectProps(field) } as GridColDef]
+      const plain = listFilterColumn(fields, field.column)
+      return plain.filterable ? [{ ...base, ...plain } as GridColDef] : []
+    })
   return [...shown, ...hidden]
 }
 
