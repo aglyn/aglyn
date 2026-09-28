@@ -24,6 +24,11 @@ import {
 import { resolveAccountEmails } from '../../../../utils/server/actor-activity'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
+// lockdown-423: exempt — read-only, writes nothing: it names who acted in a
+// site's activity log, the same record the org feed serves exempt. A locked
+// member working out what happened should not lose the names in it. Every
+// WRITE that produces an entry is behind its own route, and those answer 423.
+
 /** The most uids one request resolves — a page of the feed, not a directory. */
 const ACTIVITY_ACTORS_MAX = 50
 
