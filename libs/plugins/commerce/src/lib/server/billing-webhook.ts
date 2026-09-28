@@ -4750,14 +4750,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     await notifyGiftCardHold(
       {
         hostId,
-        orderLabel: `Order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        orderLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
+        orderId: snapshot.id,
         cards: await applyOrderGiftCardRisk(snapshot, {
           kind: 'freeze',
           reason: risk.signal.kind,
         }),
         reason: risk.signal.kind,
       },
-      notifyHostManagers,
+      notifyRiskEvent,
     )
     return { claimed: true, hostId }
   }
@@ -4817,14 +4819,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         await notifyGiftCardHold(
           {
             hostId,
-            orderLabel: `Order ${snapshot.id}`,
+            orderLabel: `order ${snapshot.id}`,
+            orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
+            orderId: snapshot.id,
             cards: await applyOrderGiftCardRisk(snapshot, {
               kind: 'freeze',
               reason: 'dispute',
             }),
             reason: 'dispute',
           },
-          notifyHostManagers,
+          notifyRiskEvent,
         )
         const { opened, record } = await recordDisputeOpened(snapshot, dispute)
         if (opened && hostId) {

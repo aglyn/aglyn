@@ -1847,7 +1847,7 @@ describe('the gift cards a questioned payment bought (AGL-3363)', () => {
       created: OPENED_AT_S,
     })
     expect(card()).toMatchObject({ balanceCents: 5000, frozenReason: 'early-fraud-warning' })
-    expect(managerNotices.some((notice) => /on hold/.test(String(notice.title)))).toBe(true)
+    expect(riskNotices.some((notice) => notice.kind === 'gift-card-hold')).toBe(true)
   })
 
   it('an open dispute freezes them; a lost one voids what is left', async () => {

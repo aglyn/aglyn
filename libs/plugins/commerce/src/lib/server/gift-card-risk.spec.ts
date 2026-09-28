@@ -32,6 +32,7 @@ import {
   giftCardPurchaseRefusal,
   giftCardSettlementCents,
 } from '../model/commerce-gift-cards'
+import { renderOwnerRiskNotice } from '@aglyn/shared-util-email/risk-notice-catalog'
 import { applyGiftCardRiskToOrder, notifyGiftCardHold } from './gift-card-risk'
 
 const NOW = 1_760_000_000_000
@@ -236,15 +237,17 @@ describe('a purchase has a ceiling', () => {
 
 describe('notifyGiftCardHold', () => {
   it('tells the managers what happened and what to do, with no rule or number', async () => {
-    const notify = jest.fn(async () => undefined)
+    const notify = jest.fn(async (_input: Record<string, unknown>) => undefined)
     await notifyGiftCardHold(
       { hostId: 'host-1', orderLabel: 'your order', cards: 2, reason: 'early-fraud-warning' },
       notify,
     )
+    // One notice through the risk seam (AGL-3368): managers, owners, staff.
     expect(notify).toHaveBeenCalledTimes(1)
-    const [, payload] = notify.mock.calls[0] as unknown as [string, { title: string; body: string }]
-    expect(payload.body).toMatch(/release it from Gift cards/)
-    expect(`${payload.title} ${payload.body}`).not.toMatch(/\d/)
+    expect(notify.mock.calls[0][0]).toMatchObject({ kind: 'gift-card-hold', hostId: 'host-1' })
+    const told = renderOwnerRiskNotice('gift-card-hold', { 'item.label': 'your order' })
+    expect(told.steps.join(' ')).toMatch(/release the cards from Gift cards/)
+    expect(Object.values(told).flat().join(' ')).not.toMatch(/\d/)
   })
 
   it('says nothing when no card changed', async () => {
