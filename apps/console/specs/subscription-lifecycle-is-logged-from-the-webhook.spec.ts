@@ -93,6 +93,7 @@ const mockOrgActivity: Array<{
   actor: { uid: string | null; email: string | null }
   action: string
   target: Record<string, unknown>
+  options?: { staffActorId?: string | null }
 }> = []
 
 let docs = new Map<string, Record<string, unknown>>()
@@ -212,8 +213,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     actor: { uid: string | null; email: string | null },
     action: string,
     target: Record<string, unknown>,
+    options?: { staffActorId?: string | null },
   ) => {
-    mockOrgActivity.push({ orgId, actor, action, target })
+    mockOrgActivity.push({ orgId, actor, action, target, options })
   },
   notifyStaff: async () => undefined,
   sendGa4Purchase: async (): Promise<Ga4SendResult> => ({
@@ -507,6 +509,8 @@ describe('what a subscription event earns in the feed', () => {
     expect(entries()).toHaveLength(1)
     expect(entries()[0].actor).toEqual({ uid: null, email: null })
     expect(entries()[0].action).toBe('Subscription canceled by Aglyn')
+    // Which of us did it rides beside the actor, for staff readers only.
+    expect(entries()[0].options).toEqual({ staffActorId: 'staff-1' })
   })
 
   it('writes NOTHING for a renewal that moves no plan', async () => {
@@ -605,6 +609,7 @@ describe('subscriptionActivityEntry — which stamp may sign which event', () =>
       action: 'Changed the plan from starter to pro',
       actorUid: 'uid-7',
       actorEmail: null,
+      staffActorId: null,
       plan: 'pro',
     })
   })

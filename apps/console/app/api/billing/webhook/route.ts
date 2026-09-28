@@ -1004,6 +1004,7 @@ async function handler(request: Request): Promise<Response> {
                 ...(object?.id ? { id: String(object.id) } : {}),
                 name: entry.plan,
               },
+              entry.staffActorId ? { staffActorId: entry.staffActorId } : undefined,
             )
             // No `ledger.effect()` beside it, per the AGL-1954 rule this file
             // states above: `logOrgActivity` swallows its own failures and

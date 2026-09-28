@@ -180,7 +180,7 @@ async function handler(request: Request): Promise<Response> {
         paths: await orgActivityScopePaths(orgId),
       })
       return Response.json(
-        { ...page, entries: await withResolvedActors(page.entries) },
+        { ...page, entries: await withResolvedActors(page.entries, { staff: isStaff }) },
         { status: 200 },
       )
     }
@@ -222,7 +222,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json(
         {
           ...page,
-          entries: await withResolvedActors(page.entries),
+          entries: await withResolvedActors(page.entries, { staff: isStaff }),
           refused: [...refused, ...page.refused],
           ...(facets ? { facets } : {}),
         },
@@ -285,7 +285,7 @@ async function handler(request: Request): Promise<Response> {
     })
     return Response.json(
       {
-        entries: await withResolvedActors(entries),
+        entries: await withResolvedActors(entries, { staff: isStaff }),
         nextCursor:
           snapshot.docs.length > pageSize
             ? (pageDocs[pageDocs.length - 1]?.id ?? null)
