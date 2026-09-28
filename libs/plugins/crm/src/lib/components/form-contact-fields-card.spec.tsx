@@ -28,7 +28,7 @@
  * defined nothing.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ContactFieldDefinition } from '@aglyn/aglyn'
 
 /** The org's definitions, as the hook would hand them over. */
@@ -59,7 +59,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: (props: any) => (
     <section aria-label="card">
       {props.header ? <h2>{props.header}</h2> : null}
-      {props.children}
+      <div data-testid="card-header">{props.HeaderProps?.action}</div>
+      <div data-testid="card-body">{props.children}</div>
     </section>
   ),
 }))
@@ -100,7 +101,13 @@ function pick(control: RegExp, option: RegExp) {
   fireEvent.click(screen.getByRole('option', { name: option }))
 }
 
-const saveButton = () => screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+/** Save, which is the card's action and sits in its header (AGL-3334). */
+const saveButton = () => {
+  expect(within(screen.getByTestId('card-body')).queryByRole('button', { name: 'Save' })).toBeNull()
+  return within(screen.getByTestId('card-header')).getByRole('button', {
+    name: 'Save',
+  }) as HTMLButtonElement
+}
 
 /** What a MUI select shows, by its accessible name. */
 const shown = (control: RegExp) => screen.getByRole('combobox', { name: control }).textContent

@@ -31,7 +31,13 @@
  * The word-prefix and scoped-token builders are imported, not copied: they are
  * `name-search-tokens.mjs`, the platform's one script-side twin.
  */
-import { NAME_TOKEN_MAX_PREFIX, nameSearchKey, scopedSearchTokens } from './name-search-tokens.mjs'
+import {
+  NAME_TOKEN_MAX_PREFIX,
+  nameSearchKey,
+  nameSearchTokens,
+  sameSearchTokens,
+  scopedSearchTokens,
+} from './name-search-tokens.mjs'
 
 /** `CRM_SEARCH_TOKENS_MAX`: the most search tokens one record keeps. */
 export const CRM_SEARCH_TOKENS_MAX = 200
@@ -265,4 +271,34 @@ export function withCrmListFields(ref, data) {
   const root = ref?.parent?.parent?.parent?.id
   if (root !== 'orgs' || !LIST_COLLECTIONS.has(collection)) return data
   return { ...data, ...crmNewRecordListFields(collection, data) }
+}
+
+/** `CRM_FIELD_OBJECTS`: the records a custom field may describe. */
+const CRM_FIELD_OBJECTS = ['contact', 'company', 'deal', 'lead']
+
+/**
+ * `crmFieldListFields`: what the CRM › Fields table's query reads on a field
+ * definition (AGL-3335) — its tab, stored even for a contact's; `required`
+ * as a boolean; and the word prefixes of its name and its key.
+ */
+export function crmFieldListFields(definition) {
+  const label = typeof definition?.label === 'string' ? definition.label : ''
+  const key = typeof definition?.key === 'string' ? definition.key : ''
+  return {
+    object: CRM_FIELD_OBJECTS.includes(definition?.object) ? definition.object : 'contact',
+    required: definition?.required === true,
+    searchTokens: nameSearchTokens([label, key, key.replace(/[_.-]+/g, ' ')].join(' ')),
+  }
+}
+
+/** What a stored definition is missing or carries wrongly of those fields; `{}` when level. */
+export function crmFieldListFieldsBackfillPatch(definition) {
+  const fields = crmFieldListFields(definition)
+  const patch = {}
+  if (definition?.object !== fields.object) patch.object = fields.object
+  if (definition?.required !== fields.required) patch.required = fields.required
+  if (!sameSearchTokens(definition?.searchTokens, fields.searchTokens)) {
+    patch.searchTokens = fields.searchTokens
+  }
+  return patch
 }

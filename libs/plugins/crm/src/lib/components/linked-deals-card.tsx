@@ -81,16 +81,18 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
       <CardDisplay
         header={'Deals'}
         help={pluginDocsHelp('deals', { anchor: '#a-deals-page' })}
-        actions={
-          <Button
-            size="small"
-            startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
-            disabled={!pipelineState.pipeline || !scope.orgId}
-            onClick={() => setCreating(true)}
-          >
-            {'New deal'}
-          </Button>
-        }
+        HeaderProps={{
+          action: (
+            <Button
+              size="small"
+              startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+              disabled={!pipelineState.pipeline || !scope.orgId}
+              onClick={() => setCreating(true)}
+            >
+              {'New deal'}
+            </Button>
+          ),
+        }}
         contentGutterX
         contentGutterY
       >

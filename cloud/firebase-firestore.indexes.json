@@ -4543,6 +4543,34 @@
       ]
     },
     {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "clicked",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "engagement.links",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "outreachDoNotContactDomains",
       "queryScope": "COLLECTION",
       "fields": [

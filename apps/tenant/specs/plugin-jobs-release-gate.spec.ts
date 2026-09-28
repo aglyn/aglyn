@@ -72,6 +72,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         }),
       }),
     },
+    // The job lockdown gate `utils/plugin-job-lockdown.ts` builds at load
+    // (AGL-3356): no site here is locked, which is what every case assumes.
+    siteLockdownJobGate: () => ({ isLocked: async () => false }),
   }
 })
 

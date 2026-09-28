@@ -27,7 +27,10 @@ import { outreachShortLinkUrl } from '../runtime/click-link'
 import { createOutreachCurateRoutes } from './curate-routes'
 import { createOutreachDoNotContactDomainsRoute } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
-import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
+import {
+  createOutreachEnrollmentActionRoute,
+  createOutreachEnrollmentGatewayRoute,
+} from './enrollment-routes'
 import { canonicalConsoleOrigin } from '../mailboxes/oauth-redirect'
 import { createOutreachLinkDomainsRoute, type OutreachLinkDomainRouteDeps } from './link-domain-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
@@ -150,6 +153,11 @@ export function registerOutreachRoutes(
   registerPluginApiRoute(
     OUTREACH_API_ROUTES.enrollmentsAction,
     { web: createOutreachEnrollmentActionRoute(deps) },
+    orgSubject,
+  )
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.enrollmentsGateway,
+    { web: createOutreachEnrollmentGatewayRoute(deps) },
     orgSubject,
   )
   registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) }, orgSubject)

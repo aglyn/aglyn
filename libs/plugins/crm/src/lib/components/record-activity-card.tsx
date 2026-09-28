@@ -19,7 +19,7 @@
 import type { CrmActivityRow } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Button, Typography } from '@mui/material'
+import { Button, Stack, Typography } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { ActivityList } from './activity-list'
 import {
@@ -28,6 +28,7 @@ import {
   useActivityScope,
   useActivityWindow,
 } from './activity-queries'
+import { TimelineExpandAllButton, useTimelineExpansion } from './activity-timeline'
 import { LogActivityDialog } from './log-activity-dialog'
 
 export type RecordActivityCardProps = ActivityRecordLink & {
@@ -41,8 +42,10 @@ export type RecordActivityCardProps = ActivityRecordLink & {
  * (AGL-2615) — with the button that adds to it (AGL-2600).
  *
  * One card for all four record pages, because the log is the same thing on
- * each of them: what people did about this record, newest first, bounded to
- * a page of a hundred with a foot that asks for the next hundred. Which
+ * each of them: what people did about this record, newest first, one
+ * collapsed entry each and paged by the console's footer over a listener
+ * bounded to a hundred, which a page turned past it widens by the next
+ * hundred. **Log activity** and **Expand all** sit in the card header. Which
  * record is decided by whichever of the four ids the page passes, and that
  * id is what the dialog files a new activity against — the page fixes it,
  * the reader does not pick it.
@@ -65,6 +68,7 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
     [contactId, companyId, dealId, leadId],
   )
   const activities = useActivityWindow(scope, link)
+  const expansion = useTimelineExpansion()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<CrmActivityRow | null>(null)
   const openNew = useCallback(() => {
@@ -82,17 +86,25 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
       <CardDisplay
         header={'Activity'}
         help={pluginDocsHelp('contactActivities', { anchor: '#logging-an-activity' })}
-        actions={
-          <Button
-            size="small"
-            variant="contained"
-            color="primary"
-            onClick={openNew}
-            disabled={!activities.ready}
-          >
-            {'Log activity'}
-          </Button>
-        }
+        HeaderProps={{
+          action: (
+            <Stack direction="row" spacing={1}>
+              <TimelineExpandAllButton
+                expansion={expansion}
+                disabled={!activities.rows.length}
+              />
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={openNew}
+                disabled={!activities.ready}
+              >
+                {'Log activity'}
+              </Button>
+            </Stack>
+          ),
+        }}
         contentGutterX
         contentGutterY
       >
@@ -107,6 +119,8 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
             onEdit={openEdit}
             hasMore={activities.hasMore}
             onShowMore={activities.showMore}
+            loading={activities.status === 'loading'}
+            expansion={expansion}
             emptyText="A call, an email, a meeting or a note about this record goes here."
             emptyAction={
               <Button
