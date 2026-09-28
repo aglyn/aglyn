@@ -451,6 +451,34 @@ handler, a cron or the billing webhook runs — and
 `tax-profile-is-registered.spec.ts` in each app runs the real registrars and
 holds the real rule, because a plugin's own spec may not import the owner.
 
+## Recurring charges — `plugin-recurring-charges` (`/server`)
+
+A security lockdown pauses the subscriptions a locked site sells to its own
+customers. If your plugin sells subscriptions, declare them so a lock can
+find them:
+
+```ts
+import { registerRecurringChargeSource } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
+
+registerRecurringChargeSource({
+  // Every subscription you sell on these sites that can still bill,
+  // read from the ids YOU stored when the sale completed.
+  listLiveSubscriptions: async ({ hostIds }) => [
+    { subscriptionId: 'sub_…', hostId: 'host-1' },
+  ],
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerRecurringChargeSource(source, { pluginId? })` | Joins the `core.recurring-charge-sources` contract (multiple). Register it on the `consoleApi` surface, where the lockdown route runs. |
+| `listRecurringChargeSources()` | Every declared source with its plugin id. The lockdown asks each one; a source that throws is reported as a lookup error and the others still run. |
+
+Answer from your own records, never by searching the payment provider. The
+lockdown pauses what you return with `pause_collection[behavior]=void`,
+records it, and the lift resumes exactly those. You never pause, resume or
+cancel anything yourself.
+
 ## Contact capture — `plugin-contact-capture` (`/server`)
 
 A silo that meets a person — a form submission, a member sign-up, an order, a

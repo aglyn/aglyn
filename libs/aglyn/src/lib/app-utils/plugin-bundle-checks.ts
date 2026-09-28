@@ -770,7 +770,7 @@ function compareContributions(
  * input's `type` or `autocomplete` in an object literal (`createElement`
  * props, a JSX runtime call, a DOM `Object.assign`), in `setAttribute`, and
  * in any HTML string. A warning rather than an error because a legitimate
- * plugin can own a sign-in (a gated community, a booking account); what the
+ * plugin can own a sign-in (a members-only area, a booking account); what the
  * reviewer asks is whether its credentials go anywhere but its declared
  * origins. The sandbox tier cannot post a native form at all — its frame
  * has no `allow-forms` and its CSP says `form-action 'none'` — so the
