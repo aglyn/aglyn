@@ -9,6 +9,57 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.204 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.203...v1.0.0-beta.204)
+
+### Added
+
+- **email:** designed emails wear the sender's header and footer too ([AGL-3372](https://linear.app/aglyn/issue/AGL-3372))
+- **email:** site emails wear the site's header, footer and theme colors ([AGL-3370](https://linear.app/aglyn/issue/AGL-3370))
+- **console:** owners see holds and request reviews; lockdown resends notices ([AGL-3368](https://linear.app/aglyn/issue/AGL-3368))
+- **lockdown:** every lock and lift emails the people it locked ([AGL-3368](https://linear.app/aglyn/issue/AGL-3368))
+- **payments:** card testing, gift card holds and blocked links go through the risk seam ([AGL-3368](https://linear.app/aglyn/issue/AGL-3368))
+- **marketplace:** held submissions and flagged sales tell publishers via the risk seam ([AGL-3368](https://linear.app/aglyn/issue/AGL-3368))
+- **abuse:** one notifyRiskEvent seam tells owners and staff what was held or flagged ([AGL-3368](https://linear.app/aglyn/issue/AGL-3368))
+
+### Fixed
+
+- **phishing-screen:** no video vendor named in core; its own domain covers a brand ([AGL-3362](https://linear.app/aglyn/issue/AGL-3362))
+- **phishing-screen:** live pages are never taken down; media embeds never flag ([AGL-3362](https://linear.app/aglyn/issue/AGL-3362), [AGL-3365](https://linear.app/aglyn/issue/AGL-3365))
+- **media:** the library shows its search box ([AGL-3327](https://linear.app/aglyn/issue/AGL-3327), [AGL-3339](https://linear.app/aglyn/issue/AGL-3339))
+- **console:** risk notices are metered and the holds card carries its help ([AGL-3368](https://linear.app/aglyn/issue/AGL-3368))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **linear-ids:** raise the ceiling to AGL-3372, read from Linear ([AGL-3372](https://linear.app/aglyn/issue/AGL-3372))
+- **payments:** the merged dispute specs read gift card holds from the risk seam ([AGL-3368](https://linear.app/aglyn/issue/AGL-3368))
+
+</details>
+
+## v1.0.0-beta.203 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/e4bab07ca...v1.0.0-beta.203)
+
+### Added
+
+- **lockdown:** a workspace lock reaches its publisher payouts and its listings ([AGL-3365](https://linear.app/aglyn/issue/AGL-3365), [AGL-3364](https://linear.app/aglyn/issue/AGL-3364))
+
+### Fixed
+
+- **outreach:** a Yes/No filter with no column of its own reaches the panel ([AGL-3332](https://linear.app/aglyn/issue/AGL-3332))
+- **entitlements:** a staff seat override lifts its band's max, not clamped to it ([AGL-3371](https://linear.app/aglyn/issue/AGL-3371))
+- **console:** the site activity-actors lookup carries its lockdown exemption ([AGL-3369](https://linear.app/aglyn/issue/AGL-3369))
+- **payments:** lost booking chargebacks and Dashboard refunds reach seller and gift cards ([AGL-3363](https://linear.app/aglyn/issue/AGL-3363))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **linear:** the ceiling reads AGL-3369, which main already cites ([AGL-3369](https://linear.app/aglyn/issue/AGL-3369), [AGL-3365](https://linear.app/aglyn/issue/AGL-3365), [AGL-3366](https://linear.app/aglyn/issue/AGL-3366))
+
+</details>
+
 ## v1.0.0-beta.202 — 2026-09-28
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.201...v1.0.0-beta.202)

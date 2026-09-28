@@ -77,6 +77,16 @@ The latest version of a page was held before visitors saw it.
   mistake, request a review.
 - **When it is released.** Visitors see the held version.
 
+
+## A live page is being reviewed {#page-flagged}
+
+A page that visitors can already see was flagged by our automated safety review.
+
+- **What it means.** The page stays live while a person looks. If you did not publish what
+  is on it, someone else may have access to your account.
+- **What to do.** Check the page's links, embeds and any fields that ask visitors for
+  information. If you did not make those changes, change your password, remove members you
+  do not recognize, and contact support. If you think it is a mistake, request a review.
 ## A marketplace submission is on hold {#listing-held}
 
 A listing you submitted to the marketplace was held before it was listed.

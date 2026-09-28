@@ -78,6 +78,8 @@ import {
   lookalikeBrandForHost,
   phishingScreenBrandLabel,
   type PhishingScreenSignal,
+  describePhishingScreenSignals,
+  isYoungWorkspaceAge,
   signalsThatHold,
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -134,11 +136,15 @@ const PAGE_MEMO_TTL_MS = 60_000
 const pageMemo = new Map<string, { state: HeldOutboundSendState; atMs: number }>()
 /** The version each page last served clean, as this process last wrote it. */
 const servedMemo = new Map<string, string>()
+/** Lookalike hosts this process already flagged for an established page, and when. */
+const flaggedMemo = new Map<string, number>()
+const FLAGGED_MEMO_TTL_MS = 60 * 60_000
 
 /** Test seam: forget what this process learned. */
 export function resetHostedPageReviewMemoForTests(): void {
   pageMemo.clear()
   servedMemo.clear()
+  flaggedMemo.clear()
 }
 
 /** The page's public URL, for the review row. Best effort; the row stands without it. */
@@ -164,7 +170,6 @@ export async function reviewHostedPage(
   if (!found.signals.length) return { outcome: 'serve' }
 
   const nowMs = request.nowMs ?? Date.now()
-  let reviewId = ''
   try {
     const [host, owner] = await Promise.all([
       request.host !== undefined ? request.host : getHostDocAdmin(request.hostId),
@@ -179,10 +184,38 @@ export async function reviewHostedPage(
     const identity = workspaceScreenIdentity({ org, host })
     const verdict = screenHostedPage({ nodes: request.nodes, ...identity })
     const ageDays = orgAgeDays((org as { createdAt?: unknown } | null)?.createdAt, nowMs)
+    // Every workspace is screened, however old: an established account can
+    // be compromised, and a compromised account publishing a lure is the
+    // same harm as a new one. What differs is what a hold may take DOWN.
+    // Holding content that is already live serves its last clean version or
+    // nothing, and on a real business's home page that is an outage the
+    // screen caused (aglyn.com, 2026-09-28, a page that had served clean
+    // until a rule changed). So for an established workspace:
+    //   - NEW content (a new version of a live page, or a page that has
+    //     never been live) holds, exactly as for a young workspace; the live
+    //     page keeps serving its last clean version, or the new page waits;
+    //   - content ALREADY LIVE keeps serving, and is flagged to staff as
+    //     urgent, who lock the site if it is impersonation.
+    if (!isYoungWorkspaceAge(ageDays)) {
+      const strong = signalsThatHold(verdict.signals, { ageDays })
+      if (!strong.length) return { outcome: 'serve' }
+      if (await isAlreadyLive(request.hostId, request.screenId, request.versionId, nowMs)) {
+        await flagLivePage({
+          hostId: request.hostId,
+          screenId: request.screenId,
+          versionId: request.versionId,
+          orgId,
+          host,
+          signals: strong,
+          nowMs,
+        })
+        return { outcome: 'serve' }
+      }
+    }
     const signals = signalsThatHold(verdict.signals, { ageDays })
     if (!signals.length) return { outcome: 'serve' }
 
-    reviewId = pageReviewId(request.hostId, request.screenId, signals)
+    const reviewId = pageReviewId(request.hostId, request.screenId, signals)
     const reference = heldOutboundReference(reviewId)
     const memo = pageMemo.get(reviewId)
     if (memo && nowMs - memo.atMs < PAGE_MEMO_TTL_MS) {
@@ -234,18 +267,10 @@ export async function reviewHostedPage(
       ? { outcome: 'serve' }
       : { outcome: state === 'rejected' ? 'rejected' : 'held', reviewId, reference }
   } catch (error) {
-    // Closed only for what holds whoever the workspace is: a soft signal
-    // needs the workspace's age to hold at all, and that is what failed.
-    if (!signalsThatHold(found.signals, { ageDays: null }).length) {
-      console.error('[page-review] a page could not be reviewed — serving it', error)
-      return { outcome: 'serve' }
-    }
-    console.error('[page-review] a flagged page could not be reviewed — not serving it', error)
-    return {
-      outcome: 'held',
-      reviewId,
-      reference: reviewId ? heldOutboundReference(reviewId) : '',
-    }
+    // Open: a review that could not run must not take a live page down —
+    // the screen failing is not evidence about the page.
+    console.error('[page-review] a flagged page could not be reviewed — serving it', error)
+    return { outcome: 'serve' }
   }
 }
 
@@ -257,6 +282,114 @@ function pageReviewRef(hostId: string, screenId: string) {
     .doc(hostId)
     .collection(PAGE_REVIEW_SUBCOLLECTION)
     .doc(screenId)
+}
+
+/**
+ * Is this version of the page already what visitors receive? It is when it
+ * is the version the page last served clean, or when the page has no record
+ * at all and is not new: it went live before the screen existed. A page
+ * created in the last {@link NEW_PAGE_DAYS} days with no record has never
+ * been live, so holding it takes nothing down.
+ */
+const NEW_PAGE_DAYS = 7
+async function isAlreadyLive(
+  hostId: string,
+  screenId: string,
+  versionId: string,
+  nowMs: number,
+): Promise<boolean> {
+  const lastClean = await servedPageVersion(hostId, screenId)
+  if (lastClean) return lastClean === versionId
+  try {
+    const screen = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostId)
+      .collection('screens')
+      .doc(screenId)
+      .get()
+    const created = screen.get('createdAt') as { toMillis?: () => number } | number | undefined
+    const createdMs =
+      typeof created === 'number' ? created : typeof created?.toMillis === 'function' ? created.toMillis() : null
+    // No readable creation time: an old page, so live.
+    return createdMs === null || nowMs - createdMs >= NEW_PAGE_DAYS * 24 * 60 * 60 * 1000
+  } catch {
+    return true
+  }
+}
+
+/**
+ * A page ALREADY LIVE carries a strong signal: file one urgent abuse row for
+ * it (keyed on the page and its signals, so a busy page is one row) and, the
+ * first time, tell staff and the owners through the `page-flagged` notice.
+ * The page keeps serving; staff lock the site if it is impersonation or the
+ * account looks compromised. Once per page and signal set per process.
+ */
+async function flagLivePage(input: {
+  hostId: string
+  screenId: string
+  versionId: string
+  orgId: string | null
+  host: Record<string, unknown> | null
+  signals: readonly PhishingScreenSignal[]
+  nowMs: number
+}): Promise<void> {
+  const key = `${input.hostId}\n${input.screenId}\n${input.signals.map((signal) => canonicalJson(signal)).sort().join('\n')}`
+  const at = flaggedMemo.get(key)
+  if (at !== undefined && input.nowMs - at < FLAGGED_MEMO_TTL_MS) return
+  flaggedMemo.set(key, input.nowMs)
+  try {
+    const url = pageUrl(input.host, input.screenId)
+    const reviewId = pageReviewId(input.hostId, `${input.screenId}/live`, input.signals)
+    const reference = heldOutboundReference(reviewId)
+    const evidence = describePhishingScreenSignals(input.signals).join(' ')
+    const flagged = flaggedHostOf(input.signals)
+    const ref = firebaseAdmin.app().firestore().collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
+    const first = !(await ref.get()).exists
+    await ref.set(
+      {
+        reference,
+        category: 'phishing',
+        severity: 'urgent',
+        source: 'outbound-screen',
+        url,
+        reportedHostname: flagged,
+        hostId: input.hostId,
+        orgId: input.orgId,
+        details: [
+          `A LIVE page${url ? ` (${url})` : ''} was flagged by the phishing screen and is still serving.`,
+          evidence,
+          'Lock the site if it is impersonation or the account looks compromised; dismiss this if the content is theirs.',
+        ].join('\n'),
+        reporterEmail: null,
+        reporterName: null,
+        dmca: null,
+        riskNotice: { kind: 'page-flagged' },
+        reportCount: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(first ? { status: 'open', createdAt: FieldValue.serverTimestamp() } : {}),
+      },
+      { merge: true },
+    )
+    if (!first) return
+    await notifyRiskEvent({
+      kind: 'page-flagged',
+      orgId: input.orgId,
+      hostId: input.hostId,
+      reviewId,
+      reference,
+      item: {
+        label: url ? `the page at ${url}` : 'a page on your site',
+        path:
+          `/${input.hostId}/screens/${encodeURIComponent(input.screenId)}` +
+          `/versions/${encodeURIComponent(input.versionId)}/view`,
+      },
+      staffEvidence: evidence,
+    })
+  } catch (error) {
+    console.error('[page-review] a live page could not be flagged', error)
+  }
 }
 
 /**

@@ -37,7 +37,7 @@ const read = (path: string) => readFileSync(join(ROOT, path), 'utf8')
 /** Each source, and the kinds it sends. */
 const SOURCES: Record<string, readonly string[]> = {
   'libs/tenant/data/admin/src/lib/server/outbound-send-review.ts': ['email-held', 'page-held', 'listing-held'],
-  'libs/tenant/data/admin/src/lib/server/hosted-page-review.ts': ['domain-flagged', 'link-blocked'],
+  'libs/tenant/data/admin/src/lib/server/hosted-page-review.ts': ['domain-flagged', 'link-blocked', 'page-flagged'],
   'libs/tenant/data/admin/src/lib/server/payment-fraud-signal.ts': ['billing-payment-flagged', 'seller-review'],
   'libs/tenant/data/admin/src/lib/server/payment-risk-record.ts': [
     'sale-fraud-warning',

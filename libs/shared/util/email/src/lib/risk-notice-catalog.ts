@@ -68,6 +68,9 @@ export const RISK_EVENT_KINDS = [
   'page-held',
   'page-released',
   'page-rejected',
+  // A page ALREADY LIVE that the safety review flagged: it keeps serving,
+  // and staff look — the account may have been compromised.
+  'page-flagged',
   // A marketplace submission (a listing, a publisher profile) held before
   // it was listed.
   'listing-held',
@@ -524,6 +527,43 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       title: 'Held page released',
       summary: '{{item.label}} of {{workspace.name}} was released. Reference {{reference}}.',
       actions: ['staff-open-row', 'staff-view-workspace'],
+    },
+  },
+  'page-flagged': {
+    kind: 'page-flagged',
+    severity: 'warning',
+    emailOwners: true,
+    alertStaff: true,
+    neverDigest: false,
+    reviewable: true,
+    closesWith: { released: 'review-cleared', rejected: 'review-upheld' },
+    includeSiteManagers: true,
+    helpAnchor: 'page-flagged',
+    owner: {
+      title: 'A live page is being reviewed',
+      summary:
+        'Our automated safety review flagged {{item.label}} on {{occurredAt}}. The page is still live.',
+      meaning:
+        'Visitors still see the page while a person looks. If you did not publish what is on it, someone else may have access to your account.',
+      steps: [
+        'Open the page and check its links, embeds and any fields that ask visitors for information.',
+        'If you did not make these changes, change your password, remove members you do not recognize, and contact support.',
+        ASK_FOR_REVIEW,
+        REVIEW_TIME,
+      ],
+      actions: ['view-details', 'edit-and-resubmit', 'request-review', 'contact-support'],
+    },
+    staff: {
+      title: 'Live page flagged — possible phishing or a compromised account',
+      summary:
+        '{{item.label}} of {{workspace.name}} is live and was flagged on {{occurredAt}}. {{staff.evidence}} It is still serving; lock the site if it is impersonation. Reference {{reference}}.',
+      actions: [
+        'staff-open-row',
+        'staff-release',
+        'staff-lock-site',
+        'staff-lock-workspace',
+        'staff-view-workspace',
+      ],
     },
   },
   'page-rejected': {
