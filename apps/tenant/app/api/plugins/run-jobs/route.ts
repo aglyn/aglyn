@@ -184,7 +184,7 @@ export async function POST(request: Request): Promise<Response> {
   if (failures.length) {
     try {
       const { raiseOperatorAlert } = await import(
-        '@aglyn/tenant-data-admin/server/operator-alerts'
+        '../../../../utils/operator-alerts-seam'
       )
       for (const failure of failures) {
         await raiseOperatorAlert('ops.pluginJobFailed', {

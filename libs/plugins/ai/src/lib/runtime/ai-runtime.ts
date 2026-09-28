@@ -359,7 +359,7 @@ async function reportAccountProblem(provider: AiProvider, error: unknown): Promi
   if (!(error instanceof AiUpstreamError) || !error.accountProblem) return
   try {
     const [{ raiseOperatorAlert }, { AI_PROVIDER_UNAVAILABLE }] = await Promise.all([
-      import('@aglyn/tenant-data-admin/server/operator-alerts'),
+      import('./operator-alerts-seam'),
       import('../operator-alerts'),
     ])
     await raiseOperatorAlert(AI_PROVIDER_UNAVAILABLE, {

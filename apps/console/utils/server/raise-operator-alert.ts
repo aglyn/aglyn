@@ -31,9 +31,7 @@ export async function raiseConsoleOperatorAlert(
   options: RaiseOperatorAlertOptions = {},
 ): Promise<OperatorAlertResult | null> {
   try {
-    const { raiseOperatorAlert } = await import(
-      '@aglyn/tenant-data-admin/server/operator-alerts'
-    )
+    const { raiseOperatorAlert } = await import('./operator-alerts-seam')
     return await raiseOperatorAlert(type, options)
   } catch (error) {
     console.error(`[operator-alerts] ${type} could not be raised`, error)
