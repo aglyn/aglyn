@@ -733,8 +733,10 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   /*
                    * The grid holds one page of a cursor feed, so it never
                    * filters that page itself: the clauses and the search go
-                   * to the read above.
+                   * to the read above. Nor does it sort that page: the rows
+                   * keep the feed's newest-first order.
                    */
+                  disableColumnSorting
                   filterMode="server"
                   filterModel={gridFilter.filterModel}
                   onFilterModelChange={gridFilter.onFilterModelChange}

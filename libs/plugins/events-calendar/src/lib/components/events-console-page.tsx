@@ -90,7 +90,8 @@ interface EventRecord {
   description?: string
   coverImage?: string
   coverImageAlt?: string
-  status?: 'draft' | 'published'
+  /** `deleted` is written by the delete, beside `deletedAt`. */
+  status?: 'draft' | 'published' | 'deleted'
   deletedAt?: unknown
 }
 
@@ -334,8 +335,11 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
+      // `status` too: the public listing asks for `status == 'published'`
+      // on its query, and cannot ask for a missing `deletedAt`.
       await updateDoc(doc(firestore, 'hosts', hostId, 'events', event.$id), {
         deletedAt: Timestamp.now(),
+        status: 'deleted',
       })
     },
     [confirm, firestore, hostId],
@@ -389,7 +393,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
                     description: event.description ?? '',
                     coverImage: event.coverImage ?? '',
                     coverImageAlt: event.coverImageAlt ?? '',
-                    status: event.status ?? 'draft',
+                    status: event.status === 'published' ? 'published' : 'draft',
                   })
                 }
               >

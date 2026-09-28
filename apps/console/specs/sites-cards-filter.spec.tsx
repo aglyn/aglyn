@@ -206,7 +206,7 @@ describe('the Sites page keeps its CARDS, filtered and searched by the query (AG
     expect(screen.getAllByText('Visit')).toHaveLength(12)
     // The toolbar a list that is not a table gets.
     expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
-    expect(screen.getByLabelText('Search sites by name or domain')).toBeTruthy()
+    expect(screen.getByLabelText('Search by name, slug or domain')).toBeTruthy()
     const { options, plan } = lastCall()
     expect(options.collection).toEqual({ path: 'users/u1/hostMemberships' })
     expect(plan.filters).toEqual([{ path: 'orgId', op: '==', value: 'org-1' }])
@@ -218,7 +218,7 @@ describe('the Sites page keeps its CARDS, filtered and searched by the query (AG
 
   it('puts the search\'s word on the query, and draws the card it answers', async () => {
     render(<HostsPage />)
-    fireEvent.change(screen.getByLabelText('Search sites by name or domain'), {
+    fireEvent.change(screen.getByLabelText('Search by name, slug or domain'), {
       target: { value: 'shop.harbor' },
     })
     await waitFor(() => expect(screen.getByText('Harbor Bakery')).toBeTruthy())
@@ -265,7 +265,7 @@ describe('the Sites page keeps its CARDS, filtered and searched by the query (AG
       plan.searched ? { ids: [] } : { ids: FIRST_PAGE, hasMore: true },
     )
     render(<HostsPage />)
-    fireEvent.change(screen.getByLabelText('Search sites by name or domain'), {
+    fireEvent.change(screen.getByLabelText('Search by name, slug or domain'), {
       target: { value: 'no-such-site' },
     })
     await waitFor(() =>

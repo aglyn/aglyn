@@ -9,7 +9,7 @@ description: Create a dataset with a typed schema, design a survey form with dro
 This walkthrough strings together datasets, the Besigner's form elements, and
 publishing into one loop: **model the responses → design the survey → publish →
 collect**. By the end you have a live survey page whose submissions land in a
-typed dataset you can filter, sort, and export.
+typed dataset you can filter, search, and export.
 
 <!-- regenerate: node tools/e2e/capture-docs-shots.mjs -->
 
@@ -41,8 +41,8 @@ organization **Data** page (or any site's Data page — both edit the same data)
    field id, and a type chip.
 3. Use **Add field** / **Edit** to type the fields properly:
    - `satisfaction` → type **Integer**. A form stores every value as text, so the
-     rating lands as `"4"`; the Data page's filter and sort still compare it as a
-     number.
+     rating lands as `"4"`; the Data page's `=` filter still matches it as the
+     number 4.
    - `visit` → type **Text** (one radio choice).
    - `topics` → type **Text** (ticked checkboxes arrive joined with `, `).
    - `comments` → type **Text**.
@@ -161,11 +161,13 @@ Every submission does three things:
   [workflows and actions](../marketing-and-automation/workflows-and-actions/overview.md)
   can react (send a thank-you alert, notify your team, write other datasets).
 
-On the Data page, use **Filter** (`satisfaction >= 4`) and **Sort**
-(`satisfaction desc`) over the loaded records, and export everything with the
-**CSV** / **JSON** buttons.
+On the Data page, use **Filters** (`satisfaction` `=` `5`) or **Search** (a word from
+the comments) to narrow the records. Both reach every record in the dataset, not only the
+page on screen; a number field offers `=` but no ranges, and the column headers don't
+sort. See [Filter and search the records](../content-and-data/datasets/overview.md#filter-records).
+Export everything with the **CSV** / **JSON** buttons.
 
-![The Data page after a submission: the new survey response at the top of the records table, under the table's Columns, Filters, Export and Search controls](/img/guides/survey-records-after-submit.png)
+![The Data page after a submission: the new survey response in the records table, under the table's Columns, Filters, Export and Search controls](/img/guides/survey-records-after-submit.png)
 
 :::tip Chart it
 Bind a container's **Repeat over dataset** to `Survey responses` and reference

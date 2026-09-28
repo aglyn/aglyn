@@ -54,7 +54,9 @@ list — see [Filter and search a list](../../getting-started/console-tour.md#fi
 **Every filter and the search reach the whole dataset.** They are answered by the
 database across every record, and the table pages through the matches exactly as it pages
 through the unfiltered dataset — nothing is matched only against the records already on
-screen. What each field type offers:
+screen. The records run in one stable order, by each record's ID — the same on every load,
+though not the order they were added in — and the column headers don't re-sort them. What
+each field type offers:
 
 | Field | Filters |
 | -- | -- |
@@ -72,7 +74,9 @@ panel does not show what the database cannot answer this way.
 nothing. The search looks at every text field, option field and list of the record.
 Each asks for **one word**: type several and the table uses the first and says so above
 the records. A word is matched on its first 12 characters, a text value's first 40 words
-are searchable, and *equals* compares the first 64 characters of a text value.
+are searchable, and *equals* compares the first 64 characters of a text value. A record
+keeps at most 500 filter terms; past that, a very long record loses search words before it
+loses *contains* words, and those before any exact value.
 
 **Combine as many *is*, *equals*, *is any of* and *=* filters as you like, but only one
 *contains* or search at a time.** A second one — a *contains* while a search word is typed,
