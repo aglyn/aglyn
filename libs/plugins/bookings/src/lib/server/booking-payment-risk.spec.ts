@@ -105,6 +105,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyRiskEvent: async (input: any) => {
     managerNotices.push(input)
   },
+  // A lost dispute's payout adjustment is not a risk notice; it still goes
+  // to the site's managers directly (AGL-3363).
+  notifyHostManagers: async (hostId: string, payload: any) => {
+    managerNotices.push({ hostId, ...payload })
+  },
 }))
 jest.mock('@aglyn/tenant-runtime', () => ({ captureHostContact: async () => undefined }))
 jest.mock('@aglyn/shared-util-email', () => ({ sendEmail: async () => undefined }))

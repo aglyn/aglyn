@@ -1930,7 +1930,7 @@ describe('a refund made outside the console (AGL-3363)', () => {
   it('an unmatched partial refund freezes the cards and asks the managers to review', async () => {
     await deliver('charge.refunded', refunded(1234))
     expect(card('GC-DASH')).toMatchObject({ balanceCents: 5000, frozenReason: 'refund-review' })
-    expect(managerNotices.some((notice) => /on hold/.test(String(notice.title)))).toBe(true)
+    expect(riskNotices.some((notice) => notice.kind === 'gift-card-hold')).toBe(true)
   })
 
   it('a console refund’s own event, already counted on the order, changes nothing', async () => {
@@ -1947,7 +1947,7 @@ describe('a refund made outside the console (AGL-3363)', () => {
     await deliver('charge.refunded', refunded(1234))
     await deliver('charge.refunded', refunded(1234))
     expect(order().externalRefundedCents).toBe(1234)
-    expect(managerNotices.filter((notice) => /on hold/.test(String(notice.title)))).toHaveLength(1)
+    expect(riskNotices.filter((notice) => notice.kind === 'gift-card-hold')).toHaveLength(1)
   })
 
   it('a refund on a charge that is no order’s is left alone', async () => {
