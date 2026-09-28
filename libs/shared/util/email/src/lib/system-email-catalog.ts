@@ -866,6 +866,383 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'to a {{brand.productName}} account.',
       source: 'apps/console/app/api/account/emails/route.ts',
     },
+    // AGL-3367. The platform's other senders, each of which composed its
+    // own plain text and so went out with no header or footer. A sender whose
+    // message is assembled per send (a digest's list, an alert's figures)
+    // hands its composed text in as one body token: the built-in copy is that
+    // text in the brand's chrome, and a design can wrap it in anything else.
+    {
+      key: 'notification',
+      name: 'Notification',
+      description:
+        'The email copy of a console notification, sent to people who ' +
+        'turned email on for that kind of notification: staff alerts, ' +
+        'workspace-admin and site-manager notices.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{notification.title}}',
+      mergeTokens: [
+        {
+          name: 'notification.title',
+          description: 'The notification, in one line',
+          sample: 'Subscription canceled',
+        },
+        {
+          name: 'notification.body',
+          description: 'The detail under it, when it has any',
+          sample: 'Test Org canceled, leaving the Advanced plan.',
+        },
+        {
+          name: 'notification.url',
+          description: 'Where the notification opens in the console',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications`,
+        },
+        {
+          name: 'settingsUrl',
+          description: 'Notification settings, where email can be turned off',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{notification.title}}', variant: 'heading' },
+        { block: 'text', text: '{{notification.body}}', variant: 'body' },
+        { block: 'button', label: 'Open in {{brand.productName}}', href: '{{notification.url}}' },
+        {
+          block: 'text',
+          text: 'Change what you are emailed about: {{settingsUrl}}',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this because you turned on email for these ' +
+        'notifications in {{brand.productName}}.',
+      source: 'libs/tenant/data/admin/src/lib/server/notifications.ts',
+    },
+    {
+      key: 'staff-alert',
+      name: 'Staff alert',
+      description:
+        'Operational alerts to STAFF_ALERT_EMAIL: free-tier AI spend, usage ' +
+        'margins, SSO re-verification and the like.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{alert.subject}}',
+      mergeTokens: [
+        {
+          name: 'alert.subject',
+          description: 'The alert, in one line',
+          sample: 'Free AI spend at 80% of today’s ceiling',
+        },
+        {
+          name: 'alert.body',
+          description: 'The alert as its sender wrote it',
+          sample: 'Free-tier AI spend for 2026-09-28 (UTC) is at $40.00 of the $50.00 ceiling.',
+        },
+      ],
+      defaultBody: [{ block: 'text', text: '{{alert.body}}', variant: 'body' }],
+      footerReason:
+        'You’re receiving this because this address gets ' +
+        '{{brand.productName}}’s staff alerts.',
+      source: 'libs/tenant/data/admin/src/lib/server/staff-alert-email.ts',
+    },
+    {
+      key: 'support-ticket-alert',
+      name: 'Support ticket to success manager',
+      description:
+        'Copies an organization’s named success manager on a support ticket ' +
+        'it opened or replied to.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{ticket.heading}} — {{org.name}}: {{ticket.subject}}',
+      mergeTokens: [
+        {
+          name: 'ticket.heading',
+          description: '“New ticket” or “Ticket reply”',
+          sample: 'New ticket',
+        },
+        {
+          name: 'ticket.subject',
+          description: 'The ticket’s subject',
+          sample: 'Domain will not verify',
+        },
+        {
+          name: 'ticket.body',
+          description: 'Who wrote, and what they wrote',
+          sample: 'Test Org opened a support ticket.\nFrom: owner@example.com',
+        },
+        {
+          name: 'ticket.url',
+          description: 'The ticket in the staff console',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/admin/support`,
+        },
+        {
+          name: 'manager.name',
+          description: 'The success manager’s name',
+          sample: 'Sam',
+        },
+        {
+          name: 'org.name',
+          description: 'The organization the ticket is from',
+          sample: 'Test Org',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{manager.name}},', variant: 'body' },
+        { block: 'text', text: '{{ticket.body}}', variant: 'body' },
+        { block: 'button', label: 'Open the ticket', href: '{{ticket.url}}' },
+      ],
+      footerReason:
+        'You’re receiving this because you are the success manager for ' +
+        '{{org.name}} on {{brand.productName}}.',
+      source: 'apps/console/app/api/_lib/success-manager.ts',
+    },
+    {
+      key: 'workspace-notice',
+      name: 'Workspace notice',
+      description:
+        'Operational notices to a workspace’s people: usage alerts and SSO ' +
+        'domain lapses to its owners and admins, and a stopped outreach ' +
+        'mailbox to the member who connected it.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{notice.subject}}',
+      mergeTokens: [
+        {
+          name: 'notice.subject',
+          description: 'The notice, in one line',
+          sample: 'Test Org has used 80% of this month’s emails',
+        },
+        {
+          name: 'notice.body',
+          description: 'The notice as its sender wrote it',
+          sample: 'Test Org has sent 8,000 of its 10,000 emails this month.',
+        },
+        {
+          name: 'org.name',
+          description: 'The workspace the notice is about',
+          sample: 'Test Org',
+        },
+      ],
+      defaultBody: [{ block: 'text', text: '{{notice.body}}', variant: 'body' }],
+      footerReason:
+        'You’re receiving this because you’re a member of {{org.name}} on ' +
+        '{{brand.productName}}.',
+      source: 'libs/tenant/data/admin/src/lib/server/org-member-notice.ts',
+    },
+    {
+      key: 'member-email-alias-confirmation',
+      name: 'Member email address confirmation',
+      description:
+        'Sent to an address a workspace member asked to add as one of their ' +
+        'own, so mail from it is filed under the people it was written to.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Confirm your address for {{org.name}}',
+      mergeTokens: [
+        {
+          name: 'member.name',
+          description: 'The member who asked',
+          sample: 'Alex',
+        },
+        {
+          name: 'address',
+          description: 'The address being confirmed',
+          sample: 'alex@example.com',
+        },
+        {
+          name: 'org.name',
+          description: 'The workspace',
+          sample: 'Test Org',
+        },
+        {
+          name: 'confirmUrl',
+          description: 'The one-time confirmation link',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/account`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Confirm this address', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            '{{member.name}} asked to add {{address}} as one of their own ' +
+            'email addresses in the {{org.name}} workspace on ' +
+            '{{brand.productName}}. To confirm it, open the link while ' +
+            'signed in as that member.',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Confirm the address', href: '{{confirmUrl}}' },
+        {
+          block: 'text',
+          text:
+            'Once it is confirmed, email sent from {{address}} with the ' +
+            'workspace’s capture address in BCC is filed under the person it ' +
+            'was written to. The link works for 24 hours.',
+          variant: 'body',
+        },
+        {
+          block: 'text',
+          text:
+            'If you did not expect this email, ignore it. Nothing changes ' +
+            'unless the member who asked opens the link.',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this because a member of {{org.name}} on ' +
+        '{{brand.productName}} asked to add this address to their account.',
+      source: 'libs/tenant/data/admin/src/lib/server/member-email-aliases.ts',
+    },
+    {
+      key: 'crm-daily-digest',
+      name: 'Daily CRM digest',
+      description:
+        'Each morning, a member’s overdue and due-today tasks and unworked ' +
+        'leads, for members who turned the digest on.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{digest.subject}}',
+      mergeTokens: [
+        {
+          name: 'digest.subject',
+          description: 'The summary line',
+          sample: '2 tasks overdue, 3 new leads',
+        },
+        {
+          name: 'digest.body',
+          description: 'The tasks and leads, one per line, with their links',
+          sample: 'Overdue (2)\n- Call back Jordan · Sep 27, 9:00 AM',
+        },
+        {
+          name: 'settingsUrl',
+          description: 'Notification settings, where the digest is turned off',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{digest.body}}', variant: 'body' },
+        {
+          block: 'text',
+          text: 'Change what you are emailed about: {{settingsUrl}}',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this each morning because the Daily CRM digest is ' +
+        'on in your {{brand.productName}} notification settings.',
+      source: 'apps/console/app/api/crm/daily-digest/route.ts',
+    },
+    {
+      key: 'crm-task-reminder',
+      name: 'CRM task reminder',
+      description: 'A reminder for CRM tasks that have come due.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{reminder.subject}}',
+      mergeTokens: [
+        {
+          name: 'reminder.subject',
+          description: 'The task, or how many are due',
+          sample: 'Reminder: Call back Jordan',
+        },
+        {
+          name: 'reminder.body',
+          description: 'The tasks, each with its link',
+          sample: '- Call back Jordan · due today at 9:00 AM',
+        },
+        {
+          name: 'settingsUrl',
+          description: 'Notification settings, where reminders are turned off',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{reminder.body}}', variant: 'body' },
+        {
+          block: 'text',
+          text: 'Change what you are emailed about: {{settingsUrl}}',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this because task reminders are on in your ' +
+        '{{brand.productName}} notification settings.',
+      source: 'apps/console/app/api/crm/task-reminders/route.ts',
+    },
+    {
+      key: 'ai-insights-digest',
+      name: 'Weekly insights digest',
+      description:
+        'The week’s AI insights for a site, for members who turned the ' +
+        'digest on for that workspace.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your weekly insights for {{site.name}}',
+      mergeTokens: [
+        {
+          name: 'site.name',
+          description: 'The site the insights are about',
+          sample: 'Test Site',
+        },
+        {
+          name: 'digest.body',
+          description: 'The insights, numbered, with their links',
+          sample: '1. Visits from search rose 18% on last week.',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Weekly insights for {{site.name}}', variant: 'heading' },
+        { block: 'text', text: '{{digest.body}}', variant: 'body' },
+      ],
+      footerReason:
+        'You’re receiving this because you turned on weekly insights in ' +
+        '{{brand.productName}}.',
+      source: 'libs/plugins/ai/src/lib/insights/ai-insight-digest.ts',
+    },
+    {
+      key: 'legal-intake-receipt',
+      name: 'Report and notice receipt',
+      description:
+        'The receipt for an abuse report, a copyright notice or a ' +
+        'counter-notice, carrying its reference.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{receipt.subject}}',
+      mergeTokens: [
+        {
+          name: 'receipt.subject',
+          description: 'What was received, and its reference',
+          sample: 'Report received — AR-3F9K2',
+        },
+        {
+          name: 'receipt.body',
+          description: 'The receipt as the intake wrote it',
+          sample: 'We have received your report about https://example.com.\n\nYour reference is AR-3F9K2.',
+        },
+      ],
+      defaultBody: [{ block: 'text', text: '{{receipt.body}}', variant: 'body' }],
+      footerReason:
+        'You’re receiving this because this address was given on a report ' +
+        'or notice sent to {{brand.productName}}.',
+      source: 'apps/tenant/app/api/_legal-intake/acknowledge.ts',
+    },
+    {
+      key: 'plugin-review-update',
+      name: 'Plugin review update',
+      description:
+        'Tells a marketplace publisher’s owners and admins what review ' +
+        'decided about their submission.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{review.subject}}',
+      mergeTokens: [
+        {
+          name: 'review.subject',
+          description: 'The decision, in one line',
+          sample: 'Your plugin was approved',
+        },
+        {
+          name: 'review.body',
+          description: 'The decision as review wrote it',
+          sample: 'Test Plugin 1.2.0 passed review and is live in the marketplace.',
+        },
+      ],
+      defaultBody: [{ block: 'text', text: '{{review.body}}', variant: 'body' }],
+      footerReason:
+        'You’re receiving this because you manage a plugin published on ' +
+        '{{brand.productName}}.',
+      source: 'libs/plugins/marketplace/src/lib/server/publisher-review-email.ts',
+    },
     // Stripe-delivered billing email (AGL-767). Aglyn never composes these —
     // Stripe sends them from the Dashboard's Customer-emails and Subscription
     // settings, so they are listed for visibility only and are not designable.

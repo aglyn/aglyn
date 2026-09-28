@@ -211,8 +211,14 @@ const httpsUrl = (value: string | undefined): string | undefined => {
  *
  * The WORDMARK rather than the square mark: a header is read at a glance, and
  * the wordmark names the sender where the mark would need the reader to
- * already know it. This one is the file the Aglyn marketing site's own email
- * header block draws, served from that site's media CDN.
+ * already know it.
+ *
+ * A PNG sized for the slot (AGL-3367): 396×120, three times the 132×40 the
+ * header draws it at, about 15 KB, served as a static file off aglyn.com's
+ * edge. The master-resolution file behind the media CDN's 60-second cache is
+ * four times the bytes and makes the header the last thing in the email to
+ * appear. Not an SVG: Gmail and Outlook do not draw SVG in mail, so every
+ * recipient on either would get a broken-image box where the logo belongs.
  *
  * Null unless this is the Aglyn-operated brand, for the reason
  * {@link PLATFORM_HOME_URL} is: a renamed deployment must not put our logo at
@@ -229,7 +235,7 @@ const httpsUrl = (value: string | undefined): string | undefined => {
 export const PLATFORM_EMAIL_LOGO_URL: string | null =
   httpsUrl(clean(process.env.NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL)) ??
   (isAglynOperatedBrand()
-    ? 'https://aglyn.com/api/media/cdn/org:jWmGooWE3L:aglyn-marketing/YwrD-IDzcf'
+    ? 'https://aglyn.com/_static/images/brand/aglyn-email-wordmark.png'
     : null)
 
 /**

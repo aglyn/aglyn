@@ -45,6 +45,11 @@ import { recordContactRefund } from './contact-refund'
 import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
 import { paymentRiskEventFrom } from '@aglyn/aglyn/app-utils/payment-risk'
 import { recordPaymentRiskOnRecord } from '@aglyn/tenant-data-admin/server/payment-risk-record'
+import {
+  applyGiftCardRiskToOrder,
+  type GiftCardRiskAction,
+  notifyGiftCardHold,
+} from './gift-card-risk'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
@@ -441,6 +446,30 @@ function disputeFromEvent(dispute: StripeDispute): CommerceModel.OrderDispute {
     amountCents: Math.max(0, Math.round(Number(dispute?.amount ?? 0))),
     openedAtMs: Number(dispute?.created ?? 0) * 1000 || Date.now(),
     ...(dueBy > 0 ? { evidenceDueByMs: dueBy * 1000 } : {}),
+  }
+}
+
+/**
+ * Apply a gift-card risk action to the cards an order issued (AGL-3363). The
+ * order doc id is the Checkout Session id every issued card carries as its
+ * `orderId`. Never throws.
+ */
+async function applyOrderGiftCardRisk(
+  snapshot: FirebaseFirestore.DocumentSnapshot,
+  action: GiftCardRiskAction,
+): Promise<number> {
+  try {
+    const hostRef = snapshot.ref?.parent?.parent
+    if (!hostRef) return 0
+    return await applyGiftCardRiskToOrder({
+      firestore: firebaseAdmin.app().firestore(),
+      hostRef,
+      orderId: snapshot.id,
+      action,
+    })
+  } catch (error) {
+    console.error('[gift-card-risk] skipped', snapshot.id, error)
+    return 0
   }
 }
 
@@ -3750,6 +3779,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 balanceCents: line.unitAmountCents,
                 recipientEmail: object?.customer_details?.email ?? null,
                 orderId: String(object.id),
+                // Which line bought it, so a refund that withdraws that line
+                // voids this card and no other (AGL-3363).
+                productId: line.productId,
                 // What the console's Gift cards search asks (AGL-3321).
                 searchTokens: giftCardSearchTokens(
                   code,
@@ -4709,6 +4741,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       },
       { firestore: firebaseAdmin.app().firestore(), notify: notifyHostManagers },
     )
+    // The cards this order bought are frozen until the merchant releases them
+    // (AGL-3363): a warning or review is the moment a stolen-card gift card
+    // is still unspent.
+    await notifyGiftCardHold(
+      {
+        hostId,
+        orderLabel: `Order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        cards: await applyOrderGiftCardRisk(snapshot, {
+          kind: 'freeze',
+          reason: risk.signal.kind,
+        }),
+        reason: risk.signal.kind,
+      },
+      notifyHostManagers,
+    )
     return { claimed: true, hostId }
   }
 
@@ -4763,6 +4810,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     if (snapshot) {
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
       if (type === 'charge.dispute.created') {
+        // A chargeback's gift cards are frozen while it is open (AGL-3363).
+        await notifyGiftCardHold(
+          {
+            hostId,
+            orderLabel: `Order ${snapshot.id}`,
+            cards: await applyOrderGiftCardRisk(snapshot, {
+              kind: 'freeze',
+              reason: 'dispute',
+            }),
+            reason: 'dispute',
+          },
+          notifyHostManagers,
+        )
         const { opened, record } = await recordDisputeOpened(snapshot, dispute)
         if (opened && hostId) {
           // Time-critical — Stripe's evidence window is days, not weeks — so
@@ -4785,6 +4845,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           })
         }
       } else {
+        // Lost: the money went back, so the cards it bought are voided. Won
+        // (or closed on a warning): the dispute's freeze lifts; a freeze a
+        // fraud warning or review put on stays for the merchant (AGL-3363).
+        await applyOrderGiftCardRisk(
+          snapshot,
+          String(dispute?.status ?? '') === 'lost'
+            ? { kind: 'void', reason: 'dispute-lost' }
+            : { kind: 'release', reason: 'dispute' },
+        )
         const settled = await recordDisputeClosed(snapshot, dispute)
         if (settled.recorded && hostId) {
           await notifyHostManagers(hostId, {

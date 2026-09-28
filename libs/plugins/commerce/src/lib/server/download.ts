@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { flagLookalikeDomain } from '@aglyn/tenant-data-admin/server/hosted-page-review'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
@@ -181,6 +182,16 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
           refusal: delivery.refusal,
         }),
       )
+      // A lookalike hotlink is filed for staff and the merchant (AGL-3363).
+      if (delivery.refusal === 'lookalike' && delivery.host) {
+        await flagLookalikeDomain({
+          kind: 'link',
+          hostId,
+          orgId: null,
+          domain: delivery.host,
+          where: "a product's download link",
+        })
+      }
       return delivery.refusal === 'not-private'
         ? res
             .status(409)

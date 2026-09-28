@@ -91,6 +91,10 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { type SendEmailResult, sendEmail } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
+import {
+  renderSystemEmailContent,
+  systemEmailBrand,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import { contactText } from './chrome'
 
@@ -114,6 +118,33 @@ function signOff(kind: 'support' | 'legal'): string {
 const KEEP_THIS =
   'Keep this email. It is your record that we received the message above, ' +
   'and the reference is how we will find it if you write to us about it.'
+
+/**
+ * Sends one receipt as the `legal-intake-receipt` system email (AGL-3367),
+ * in the platform's header and footer: the reporter wrote to the platform,
+ * whichever site they reported. The copy is composed by each intake below and
+ * rides in as the body; it is also the last resort if the render fails.
+ */
+async function sendReceipt(options: {
+  to: string
+  subject: string
+  text: string
+  replyTo?: string
+  context: string
+}): Promise<SendEmailResult> {
+  const content = await renderSystemEmailContent(
+    'legal-intake-receipt',
+    { 'receipt.subject': options.subject, 'receipt.body': options.text.trim() },
+    systemEmailBrand(null),
+    { subject: options.subject, text: options.text },
+  )
+  return sendEmail({
+    to: options.to,
+    ...content,
+    ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+    context: options.context,
+  })
+}
 
 export interface AcknowledgeResult {
   /** `true` only when the provider accepted the message. */
@@ -228,7 +259,7 @@ export async function acknowledgeCounterNotice(options: {
   reportedUrl: string
 }): Promise<AcknowledgeResult> {
   const { to, reference, reportedUrl } = options
-  const result = await sendEmail({
+  const result = await sendReceipt({
     to,
     subject: `Counter-notice received — ${reference}`,
     replyTo: contactText('legal') ?? undefined,
@@ -284,7 +315,7 @@ export async function acknowledgeAbuseReport(options: {
     : `We do not publish what we decide about individual sites, and we will ` +
       `not share your details with the site's owner unless the law requires ` +
       `it.`
-  const result = await sendEmail({
+  const result = await sendReceipt({
     to,
     subject: `${isCopyright ? 'Copyright notice' : 'Report'} received — ${reference}`,
     replyTo: contactText(isCopyright ? 'legal' : 'support') ?? undefined,

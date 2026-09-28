@@ -152,6 +152,20 @@ export interface PluginApiRouteOptions {
    * authenticates the link itself, by a signature it verifies.
    */
   recipientLink?: boolean
+  /**
+   * The route OPENS A CARD PAYMENT for whoever calls it: a Checkout Session,
+   * a PaymentIntent or a SetupIntent (AGL-3363).
+   *
+   * The tenant dispatcher holds such a route to the card-testing counters
+   * (`card-payment-velocity.ts`) on top of its ordinary write limit, so a
+   * plugin's payment door is covered by declaring itself here rather than by
+   * carrying a limiter of its own. A console door (a signed-in merchant's
+   * POS or draft order) does not declare it: a register ringing up a queue
+   * is not a card tester. The 3-D Secure sweep
+   * (`card-payments-request-3ds.spec.ts`) classifies every file that creates
+   * a payment, so a new visitor door cannot skip the declaration.
+   */
+  cardPayment?: boolean
 }
 
 /** Leading/trailing slashes stripped so '/events/list' and 'events/list' key alike. */
@@ -302,6 +316,16 @@ export function resolvePluginApiMatch(path: string): PluginApiMatch | undefined 
 export function isPluginRecipientLinkRoute(path: string): boolean {
   const matched = matchRegisteredApiKey(path)
   return matched ? apiRouteOptions.get(matched.key)?.recipientLink === true : false
+}
+
+/**
+ * Whether a request path resolves to a route registered with
+ * {@link PluginApiRouteOptions.cardPayment} — what the tenant dispatcher
+ * asks before its card-testing counters (AGL-3363).
+ */
+export function isPluginCardPaymentRoute(path: string): boolean {
+  const matched = matchRegisteredApiKey(path)
+  return matched ? apiRouteOptions.get(matched.key)?.cardPayment === true : false
 }
 
 /** An id a subject may carry: a non-empty path segment, not a path. */

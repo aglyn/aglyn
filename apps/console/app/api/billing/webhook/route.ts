@@ -36,6 +36,7 @@ import {
   createWebhookEffectLedger,
   NOTIFICATION_TYPE_LABELS,
   observeWrites,
+  PLAN_LABELS,
   Route,
   runBillingWebhookHandlers,
 } from '@aglyn/aglyn/server'
@@ -1041,9 +1042,13 @@ async function handler(request: Request): Promise<Response> {
                     ? 'staff.subscriptionCanceled'
                     : 'staff.planChanged'
               const workspace = (orgSnapshot.get('name') as string) ?? String(orgId)
+              // Plans by the name the pricing page prints, never the id: this
+              // sentence is emailed as well as listed (AGL-3367).
+              const plan = (id: unknown): string =>
+                PLAN_LABELS[id as keyof typeof PLAN_LABELS] ?? String(id)
               const body =
                 entry.kind === 'started'
-                  ? `${workspace} subscribed on ${entry.plan}.`
+                  ? `${workspace} subscribed to the ${plan(entry.plan)} plan.`
                   : entry.kind === 'canceled'
                     ? // WHY it ended, in the sentence — the same distinction
                       // AGL-1877 put on the org doc. A workspace Stripe gave
@@ -1054,8 +1059,8 @@ async function handler(request: Request): Promise<Response> {
                         object?.cancellation_details?.reason === 'payment_failed'
                           ? ' after failed payments'
                           : ''
-                      }, from ${previousPlan}.`
-                    : `${workspace} moved from ${previousPlan} to ${entry.plan}.`
+                      }, leaving the ${plan(previousPlan)} plan.`
+                    : `${workspace} moved from ${plan(previousPlan)} to ${plan(entry.plan)}.`
               await notifyStaff({
                 type: staffType,
                 title: NOTIFICATION_TYPE_LABELS[staffType],

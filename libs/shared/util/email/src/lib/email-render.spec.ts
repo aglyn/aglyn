@@ -572,6 +572,63 @@ describe('chrome (AGL-3322)', () => {
  * point it is the only defense. A "view this email in your browser" link is
  * the ordinary way that happens.
  */
+describe('emailText copy a sender composed (AGL-3367)', () => {
+  const textNodes = (children: string) =>
+    ({
+      root: { componentId: 'div', nodes: ['t', 'after'] },
+      t: { componentId: 'emailText', props: { children } },
+      after: { componentId: 'emailText', props: { children: 'after' } },
+    }) as any
+
+  it('links a bare URL, with the same string as href and label', () => {
+    const { html, text } = renderEmailHtml({
+      nodes: textNodes('Open your tasks: https://app.test/a?x=1&y=2.'),
+      sanitize: SANITIZE,
+    })
+    expect(html).toContain(
+      '<a href="https://app.test/a?x=1&amp;y=2" target="_blank" ' +
+        'style="color:#1a73e8;text-decoration:underline;word-break:break-word;">' +
+        'https://app.test/a?x=1&amp;y=2</a>.',
+    )
+    // The text part is the words, never markup.
+    expect(text).toContain('Open your tasks: https://app.test/a?x=1&y=2.')
+  })
+
+  it('leaves a closing bracket or paren the URL never opened to the prose', () => {
+    const { html } = renderEmailHtml({
+      nodes: textNodes('Help: [https://a.test/help] (https://a.test/x_(y))'),
+      sanitize: SANITIZE,
+    })
+    expect(html).toContain('[<a href="https://a.test/help" ')
+    expect(html).toContain('https://a.test/help</a>]')
+    expect(html).toContain('(<a href="https://a.test/x_(y)" ')
+    expect(html).toContain('https://a.test/x_(y)</a>)')
+  })
+
+  it('still escapes the copy around a link, so a token cannot inject markup', () => {
+    const { html } = renderEmailHtml({
+      nodes: textNodes('<b>hi</b> https://app.test/'),
+      sanitize: SANITIZE,
+    })
+    expect(html).toContain('&lt;b&gt;hi&lt;/b&gt; <a href="https://app.test/"')
+    expect(html).not.toContain('<b>hi</b>')
+  })
+
+  it('draws nothing for a block whose token the send left empty', () => {
+    const { html, text } = renderEmailHtml({
+      nodes: {
+        root: { componentId: 'div', nodes: ['t', 'after'] },
+        t: { componentId: 'emailText', props: { children: '{{notification.body}}' } },
+        after: { componentId: 'emailText', props: { children: 'after' } },
+      } as any,
+      merge: { 'notification.body': '  ' },
+      sanitize: SANITIZE,
+    })
+    expect(text).toBe('after')
+    expect(html.match(/<div style="font-family/g)).toHaveLength(1)
+  })
+})
+
 describe('render safety', () => {
   const nodesWith = (id: string, props: Record<string, unknown>) =>
     ({

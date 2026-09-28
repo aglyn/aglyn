@@ -30,6 +30,7 @@ import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { createHmac } from 'crypto'
 import { tokenSigningSecret } from './media-signing'
+import { renderSystemEmailContent, systemEmailBrand } from './render-system-email'
 import { safeEqual } from './safe-equal'
 
 /**
@@ -504,10 +505,22 @@ export async function sendMemberEmailAliasConfirmation(input: {
     '',
     'If you did not expect this email, ignore it. Nothing changes unless the member who asked opens the link.',
   ].join('\n')
+  // The `member-email-alias-confirmation` system email (AGL-3367), in the
+  // workspace's brand; `text` above is its last resort.
+  const content = await renderSystemEmailContent(
+    'member-email-alias-confirmation',
+    {
+      'member.name': member || 'A member',
+      address: input.address,
+      'org.name': workspace,
+      confirmUrl: input.confirmUrl,
+    },
+    systemEmailBrand((input.org ?? null) as Record<string, unknown> | null),
+    { subject: `Confirm your address for ${workspace}`, text },
+  )
   const result = await sendEmail({
     to: input.address,
-    subject: `Confirm your address for ${workspace}`,
-    text,
+    ...content,
     fromName: branding.fromName,
     context: 'member-email-alias-confirmation',
   })

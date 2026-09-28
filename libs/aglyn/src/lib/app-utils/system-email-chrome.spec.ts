@@ -80,7 +80,7 @@ function loadWith(env: Partial<Record<(typeof ENV_KEYS)[number], string>>): {
 const IN_2031 = () => new Date('2031-06-01T12:00:00Z')
 
 const AGLYN_WORDMARK =
-  'https://aglyn.com/api/media/cdn/org:jWmGooWE3L:aglyn-marketing/YwrD-IDzcf'
+  'https://aglyn.com/_static/images/brand/aglyn-email-wordmark.png'
 const AGLYN_ADDRESS =
   'c/o Northwest Registered Agent, LLC, 5900 Balcones Drive STE 100, Austin, TX 78731'
 
