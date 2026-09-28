@@ -61,7 +61,7 @@ where a widget proposes a theme and the editor's own Save keeps it +
 host-scoped installs; besigner =
 canvas components + `besignerFunctions`/`besignerInspector` zones + drawer
 presets; published sites = canvas components, runtimes, page hooks, APIs;
-admin (staff) = `adminOrgDetail`/`staffOrg`/`staffUser` zones, staff pages,
+admin (staff) = `adminOrgDetail`/`staffOrg`/`staffUser`/`staffSite` zones, staff pages,
 and the lockdown levers a plugin declares. Core itself is extended only through
 these registries — plugins never edit core code, and a capability core
 lacks is added as a generic seam every plugin can use, never as a hook for

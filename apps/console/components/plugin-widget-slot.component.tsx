@@ -103,6 +103,7 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   orgBillingOverview: 'stack',
   staffOrg: 'stack',
   staffUser: 'stack',
+  staffSite: 'stack',
   // Columns of a table. The usage table's zone also draws a caption line
   // above the table, and a caption is part of the table, not a card.
   staffOrgsListColumn: 'bare',

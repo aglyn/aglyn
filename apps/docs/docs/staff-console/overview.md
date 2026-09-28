@@ -115,25 +115,24 @@ reason, and the rest still narrow the list. See [Filter and search a list](../ge
 
 An organization's staff page lists its **Sites** with the same row menu as the
 Sites list — visit the live site, open its preview, open the site's page — and,
-below the cards, **Emails sent** across its sites and **Email & automations**.
+below the cards, **Emails sent** across its sites, then the
+[Email campaigns](#staff-org-email) and [Organization
+automations](#staff-automations) cards when those plugins are installed.
 **Transfer organization ownership** is under **Edit organization**, and asks
 for a confirmation before it hands the organization over.
 
-#### Email & automations {#org-email-and-automations}
+#### Organization email campaigns {#staff-org-email}
 
-Three tabs of the organization's own email and automation work, each paged in
-id order:
+The **Email campaigns** card, from the Marketing plugin, has two tabs, each
+paged in id order:
 
-- **Email sends** — every campaign send: its subject and site, status (and
-  **held for review** when the outbound screen stopped it), how many were sent,
-  opened, clicked and bounced, and when. **View message** shows the stored
-  message in a frame that runs no scripts and loads nothing; **Open design
-  preview** opens the design it was composed from, in a new tab.
-- **Email campaigns** — the campaign containers, the sites each runs on, and
-  its window.
-- **Automations** — the organization-level automations, whether each is on,
-  paused on some sites, or deleted, with a read-only view of the trigger and
-  steps.
+- **Sends** — every campaign send: its subject and site, status (and **held for
+  review** when the outbound screen stopped it), how many were sent, opened,
+  clicked and bounced, and when. **View message** shows the stored message in a
+  frame that runs no scripts and loads nothing; **Open design preview** opens
+  the design it was composed from, in a new tab.
+- **Campaigns** — the campaign containers, the sites each runs on, and its
+  window.
 
 #### Free workspace limit {#free-workspace-limit}
 
@@ -347,9 +346,9 @@ sign-on is refused, with the reason shown.
 
 #### Site content {#site-content}
 
-The **Content** card lists everything the site holds, one tab per kind: **Pages**,
-**Email designs**, **Layouts**, **Components**, **Templates**, **Forms** and
-**Automations**. Each tab pages through every document in id order; nothing on it
+The **Content** card lists what the site is built from, one tab per kind:
+**Pages**, **Email designs**, **Layouts**, **Components**, **Templates** and
+**Forms**. Each tab pages through every document in id order; nothing on it
 is filtered. A page shows whether it is live and at which path, or a draft, and
 whether it is in the trash; a form shows its submission count and whether it is
 retired or archived.
@@ -358,10 +357,20 @@ Clicking a row — or its eye icon — opens that document's **draft preview in 
 new tab**: what the besigner last saved, rendered with the site's own theme and
 blocks. You do not need to be a member of the site or impersonate anyone, and
 nothing you do there changes the site. A published page's menu also has **Visit
-live page**. Automations have no rendering, so theirs opens a read-only view of
-the trigger and the steps; the tab lists the site's own automations, the
-organization automations that run on this site (with **paused here** where the
-site has paused one), and its workflows.
+live page**.
+
+What a plugin keeps for the site is shown below, by that plugin, when it is
+installed on the platform — see [Automations](#staff-automations).
+
+#### Automations {#staff-automations}
+
+The **Automations** card — on a site's page, and **Organization automations** on
+an organization's — comes from the Automation plugin. On a site it lists the
+site's own automations, the organization automations that run on the site (with
+**paused here** where the site has paused one), and its workflows; on an
+organization, its automations and on how many sites each is paused. Automations
+have no rendering, so a row opens a read-only view of the trigger and the steps.
+Nothing here runs, pauses or edits an automation.
 
 #### Emails sent {#emails-sent}
 
@@ -371,8 +380,8 @@ subject and the sender tag (a campaign, a form notification, site account
 mail), what became of it (sent, delivered, opened, bounced and why), and its
 opens and clicks. It is the same delivery record the staff account page reads,
 seen from the site instead of the person. Message bodies are not kept, so this
-answers *whether* and *when*, not *what*; a campaign's content is under **Email
-& automations** on the organization. Mail the platform sends to the
+answers *whether* and *when*, not *what*; a campaign's content is on the organization's
+[Email campaigns](#staff-org-email) card. Mail the platform sends to the
 organization's own members — invitations, billing — belongs to no site and is on
 each member's staff page. An organization with more than thirty sites reads the
 first thirty and says so.

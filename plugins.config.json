@@ -726,6 +726,7 @@
       "package": "@aglyn/plugins-marketing",
       "register": {
         "console": "registerMarketingConsole",
+        "staff": "registerMarketingConsole",
         "tenantApi": "registerMarketingApi",
         "consoleApi": "registerMarketingConsoleApi",
         "site": "registerMarketingPlugin"
@@ -786,6 +787,7 @@
             "/marketing"
           ],
           "slots": [
+            "adminOrgDetail",
             "crmRecordAttribution",
             "emailMessages",
             "emailTemplateRecipients",
@@ -830,6 +832,7 @@
       "package": "@aglyn/plugins-workflows",
       "register": {
         "console": "registerWorkflowsConsole",
+        "staff": "registerWorkflowsConsole",
         "tenantApi": "registerWorkflowsApi",
         "consoleApi": "registerWorkflowsConsoleApi",
         "serverDeclarations": "registerWorkflowsServerDeclarations"
@@ -880,7 +883,9 @@
             "/automation"
           ],
           "slots": [
-            "hostActivity"
+            "adminOrgDetail",
+            "hostActivity",
+            "staffSite"
           ]
         }
       }

@@ -23,13 +23,7 @@ import {
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
-  Box,
-  Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Stack,
   Typography,
 } from '@mui/material'
@@ -53,7 +47,7 @@ import StaffListPaginationControls from './staff-list-pagination.component'
  * PAGED TABLES OF A CUSTOMER'S DOCUMENTS, FOR STAFF (AGL-3379).
  *
  * The staff site and organization pages list what a site or an organization
- * holds — pages, forms, automations, campaigns — each a paged walk of one
+ * holds — pages, layouts, forms — each a paged walk of one
  * collection in document-id order, the one order that drops nothing, read
  * with the client SDK (the rules admit staff on every site and organization
  * subcollection). No table here filters: a filter would be a match over the
@@ -236,54 +230,3 @@ export const chipsColumn = (
     </Stack>
   ),
 })
-
-/** The trigger and steps of an automation, read-only. */
-export function AutomationDialog(props: { row: StaffDocRow | null; onClose: () => void }) {
-  const { row, onClose } = props
-  const steps: any[] = Array.isArray(row?.['steps']) ? row['steps'] : []
-  return (
-    <Dialog open={Boolean(row)} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{row ? nameOf(row) : ''}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2}>
-          <Box>
-            <Typography variant="overline" color="text.secondary">
-              {'Trigger'}
-            </Typography>
-            <Typography variant="body2">
-              {row?.['trigger']?.event ?? 'Manual — runs only when called'}
-            </Typography>
-            {row?.['trigger']?.filter ? (
-              <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-                {`when ${row['trigger'].filter}`}
-              </Typography>
-            ) : null}
-          </Box>
-          <Box>
-            <Typography variant="overline" color="text.secondary">
-              {`Steps (${steps.length})`}
-            </Typography>
-            <Box
-              component="pre"
-              sx={{
-                m: 0,
-                p: 1.5,
-                borderRadius: 1,
-                bgcolor: 'action.hover',
-                fontSize: 12,
-                overflow: 'auto',
-                maxHeight: 420,
-              }}
-            >
-              {JSON.stringify(steps, null, 2)}
-            </Box>
-          </Box>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{'Close'}</Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-

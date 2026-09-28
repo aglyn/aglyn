@@ -18,19 +18,17 @@
 
 import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { mdiEyeOutline } from '@aglyn/shared-data-mdi'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { Stack, Tab, Tabs, Typography } from '@mui/material'
+import { Stack, Tab, Tabs } from '@mui/material'
 import { type QueryConstraint, where } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import type { PreviewKind } from '../constants/preview-state'
-import { buildRoute, Route } from '../constants/route-links'
 import { buildScreenLiveUrl } from '../constants/tenant-links'
 import { staffSitePreviewHref } from '../utils/staff-site-links'
 import {
-  AutomationDialog,
   chipsColumn,
   nameColumn,
   nameOf,
@@ -45,8 +43,7 @@ import {
  * One tab per kind of document, each a paged table from
  * `staff-doc-table.component`. The five besigner kinds open in the staff
  * preview route in a new tab, rendering the draft as the besigner last saved
- * it. Automations have no renderer; theirs is a read-only view of the
- * trigger and the steps.
+ * it.
  */
 
 /** The tabs, in the order a reader looks for things. */
@@ -57,7 +54,6 @@ type ContentTab =
   | 'components'
   | 'templates'
   | 'forms'
-  | 'automations'
 
 const TAB_LABELS: Record<ContentTab, string> = {
   screens: 'Pages',
@@ -66,7 +62,6 @@ const TAB_LABELS: Record<ContentTab, string> = {
   components: 'Components',
   templates: 'Templates',
   forms: 'Forms',
-  automations: 'Automations',
 }
 
 /**
@@ -90,12 +85,13 @@ export interface StaffSiteContentCardProps {
 
 /**
  * The staff site page's Content card (AGL-3379): pages, email designs,
- * layouts, components, templates, forms and automations, each previewable.
+ * layouts, components, templates and forms, each previewable. What a plugin
+ * holds for the site — its automations, its sends — is the plugin's to show,
+ * on the page's `staffSite` zone.
  */
 export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
-  const { hostId, host, orgId } = props
+  const { hostId, host } = props
   const [tab, setTab] = useState<ContentTab>('screens')
-  const [automation, setAutomation] = useState<StaffDocRow | null>(null)
   const routing = useMemo(
     () => (host?.['screens'] ?? {}) as Record<string, string>,
     [host],
@@ -158,42 +154,6 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
   )
 
   const emailOnly = useMemo(() => [where('kind', '==', 'email')], [])
-  const orgAutomationScope = useMemo(
-    () => [where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`])],
-    [hostId],
-  )
-  const automationActions = useCallback(
-    (row: StaffDocRow) => (
-      <ListRowActions
-        label={nameOf(row)}
-        quick={{
-          icon: mdiEyeOutline.path,
-          label: 'View steps',
-          onClick: () => setAutomation(row),
-        }}
-        items={[]}
-      />
-    ),
-    [],
-  )
-  const automationColumns = useMemo(
-    () => [
-      nameColumn('Automation'),
-      chipsColumn('Status', (row) => [
-        { label: row['trigger']?.event ?? 'manual' },
-        row['enabled'] === false
-          ? { label: 'off', color: 'warning' as const }
-          : { label: 'on', color: 'success' as const },
-        ...(Array.isArray(row['pausedHostIds']) && row['pausedHostIds'].includes(hostId)
-          ? [{ label: 'paused here', color: 'warning' as const }]
-          : []),
-        ...(row['deletedAt'] ? [{ label: 'deleted', color: 'error' as const }] : []),
-      ]),
-      updatedColumn,
-    ],
-    [hostId],
-  )
-
   const columns = useMemo(
     () => ({
       screens: [nameColumn('Page'), chipsColumn('Status', screenChips), updatedColumn],
@@ -260,7 +220,7 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
   )
 
   const siteTable = (
-    key: Exclude<ContentTab, 'automations'>,
+    key: ContentTab,
     collectionId: string,
     kind: PreviewKind,
     constraints?: readonly QueryConstraint[],
@@ -305,53 +265,8 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
           {tab === 'components' ? siteTable('components', 'components', 'component') : null}
           {tab === 'templates' ? siteTable('templates', 'templates', 'template') : null}
           {tab === 'forms' ? siteTable('forms', 'forms', 'form') : null}
-          {tab === 'automations' ? (
-            <Stack spacing={3}>
-              <Stack spacing={1}>
-                <Typography variant="subtitle2">{'Site automations'}</Typography>
-                <StaffDocTable
-                  path={['hosts', hostId, 'actions']}
-                  columns={automationColumns}
-                  actions={automationActions}
-                  onOpen={setAutomation}
-                  noRowsLabel="No automations on this site"
-                />
-              </Stack>
-              <Stack spacing={1}>
-                <Typography variant="subtitle2">{'Organization automations that run here'}</Typography>
-                <StaffDocTable
-                  path={orgId ? ['orgs', orgId, 'automations'] : null}
-                  constraints={orgAutomationScope}
-                  columns={automationColumns}
-                  actions={automationActions}
-                  onOpen={setAutomation}
-                  noRowsLabel="No organization automation runs on this site"
-                />
-              </Stack>
-              <Stack spacing={1}>
-                <Typography variant="subtitle2">{'Workflows'}</Typography>
-                <StaffDocTable
-                  path={['hosts', hostId, 'workflows']}
-                  columns={automationColumns}
-                  actions={automationActions}
-                  onOpen={setAutomation}
-                  noRowsLabel="No workflows on this site"
-                />
-              </Stack>
-              {orgId ? (
-                <Typography variant="caption" color="text.secondary">
-                  {'Email campaigns and sends belong to the organization — see its '}
-                  <AppLink href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId })}>
-                    {'staff page'}
-                  </AppLink>
-                  {'.'}
-                </Typography>
-              ) : null}
-            </Stack>
-          ) : null}
         </Stack>
       </CardDisplay>
-      <AutomationDialog row={automation} onClose={() => setAutomation(null)} />
     </>
   )
 }

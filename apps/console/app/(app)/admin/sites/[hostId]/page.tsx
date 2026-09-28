@@ -48,6 +48,9 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 import HostActivityTable from '../../../../../components/host-activity-table.component'
 import { StaffDomainCard } from '../../../../../components/staff-domain-card.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'
@@ -112,6 +115,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hostId, (user as { uid?: string } | null)?.uid, siteNonce])
   const homeId = useMemo(() => homeScreenId(host?.screens), [host?.screens])
+  const { widgets: staffSiteWidgets } = useSlotWidgets(['staffSite'])
 
   // Usage counts (AGL-392): screens = pages, media file count, members.
   const [counts, setCounts] = useState<{
@@ -460,6 +464,23 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: <StaffEmailDeliveriesCard hostId={hostId} />,
               },
+              // What a plugin holds for this site — its automations, its
+              // sends — shown by the plugin that owns it (AGL-3379).
+              ...(staffSiteWidgets.length
+                ? [
+                    {
+                      size: { xs: 12 },
+                      children: (
+                        <PluginWidgetSlot
+                          slot="staffSite"
+                          hostId={hostId}
+                          orgId={orgId}
+                          host={host ?? undefined}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               {
                 size: { xs: 12 },
                 children: (

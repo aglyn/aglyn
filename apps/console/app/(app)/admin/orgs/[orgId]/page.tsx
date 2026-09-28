@@ -87,7 +87,6 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
-import StaffOrgMarketingCard from '../../../../../components/staff-org-marketing-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
@@ -2370,10 +2369,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 },
               ]}
             />
-            {/* Full width below the columns: both are wide tables. */}
-            <Stack spacing={3} sx={{ mt: 3 }}>
+            {/* Full width below the columns: a wide table. */}
+            <Stack sx={{ mt: 3 }}>
               <StaffEmailDeliveriesCard orgId={orgId} siteNames={siteNames} />
-              <StaffOrgMarketingCard orgId={orgId} siteNames={siteNames} />
             </Stack>
           </>
         </StaffOnly>
