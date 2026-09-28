@@ -3280,6 +3280,11 @@ describe('hosts', () => {
         await setDoc(doc(db, 'hosts', HOST, 'screens', 'deleted-1'), {
           displayName: 'Old', deletedAt: new Date('2026-01-01'),
         })
+        // A screen as every create now stores it (AGL-3321): the null a
+        // campaign's screens list asks `deletedAt == null` for.
+        await setDoc(doc(db, 'hosts', HOST, 'screens', 'live-1'), {
+          displayName: 'Landing', slug: 'landing', versionId: 'v1', deletedAt: null,
+        })
       })
     }
 
@@ -3464,6 +3469,15 @@ describe('hosts', () => {
           deletedAt: null,
         }),
       )
+      // Nor back to the stored null a live screen holds (AGL-3321).
+      await mustDeny(
+        'screens/deleted-1 { deletedAt: null } over a time',
+        setDoc(
+          doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'),
+          { deletedAt: null },
+          { merge: true },
+        ),
+      )
       await mustDeny(
         'screens/deleted-1 { deletedAt: <a different time> }',
         updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
@@ -3496,6 +3510,15 @@ describe('hosts', () => {
         'screens/deleted-1 rename',
         updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
           displayName: 'Old (archived)',
+        }),
+      )
+      // A screen that STORES `deletedAt: null` is live, and its null is what
+      // the delete overwrites (AGL-3321) — refused, it would leave every
+      // screen created since the flag undeletable from the console.
+      await mustAllow(
+        'screens/live-1 soft delete over a stored null',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'live-1'), {
+          deletedAt: new Date(),
         }),
       )
       // And hard delete is untouched — /api/resources/erase aside, the rules
@@ -6626,6 +6649,68 @@ describe('the lockdowns collection is staff-read, nobody-write (AGL-1507)', () =
     await mustAllow(
       'the same super-staff token updating an org doc',
       updateDoc(doc(superStaffDb, 'orgs', ORG), { enabledPlugins: ['paid'] }),
+    )
+  })
+})
+
+describe("the deliverability store is server-written: staff read the platform half, members their org's (AGL-3328)", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'mailDomains', 'kcorp.example'), {
+        domain: 'kcorp.example', status: 'mx', mx: ['d1.ess.barracudanetworks.com'],
+        gateway: 'barracuda', resolvedAtMs: 1,
+      })
+      await setDoc(doc(db, 'mailGatewayLedger', 'aglyn.com~barracuda'), {
+        sendingDomain: 'aglyn.com', gateway: 'barracuda', blocked: 2, days: {},
+        updatedAtMs: 1, shared: true,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda'), {
+        sendingDomain: 'acme.example', gateway: 'barracuda', blocked: 2, days: {},
+        updatedAtMs: 1, orgId: ORG,
+      })
+    })
+  })
+
+  it('staff read the MX cache and the platform ledger; members and anon cannot; nobody writes', async () => {
+    const staffDb = authed(STAFF, { staff: true })
+    await mustAllow(
+      'staff reading a cached MX answer',
+      getDoc(doc(staffDb, 'mailDomains', 'kcorp.example')),
+    )
+    await mustAllow(
+      'staff reading the platform gateway ledger',
+      getDoc(doc(staffDb, 'mailGatewayLedger', 'aglyn.com~barracuda')),
+    )
+    await assertFails(getDoc(doc(authed(OWNER), 'mailDomains', 'kcorp.example')))
+    await assertFails(getDoc(doc(authed(OWNER), 'mailGatewayLedger', 'aglyn.com~barracuda')))
+    await assertFails(getDoc(doc(anon(), 'mailDomains', 'kcorp.example')))
+    const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    // A write could clear the refusals that hold a send, or mark a domain
+    // as taking no mail and suppress everyone at it.
+    await mustDeny(
+      'super staff clearing a refusal from the client',
+      setDoc(doc(superStaffDb, 'mailGatewayLedger', 'aglyn.com~barracuda'), { blocked: 0 }),
+    )
+    await mustDeny(
+      'super staff marking a domain as taking no mail from the client',
+      setDoc(doc(superStaffDb, 'mailDomains', 'kcorp.example'), { status: 'no_mx' }),
+    )
+  })
+
+  it("members read their organization's mailbox ledger; outsiders cannot; nobody writes", async () => {
+    await mustAllow(
+      "the owner reading the organization's mailbox ledger",
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda')),
+    )
+    await assertFails(
+      getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda')),
+    )
+    await mustDeny(
+      'the owner clearing a refusal from the client',
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda'), {
+        blocked: 0,
+      }),
     )
   })
 })

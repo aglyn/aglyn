@@ -38,12 +38,12 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * allows: a Starter site showed "10 / 25" where creation treated it as 8,
  * and deleting a screen never moved the number.
  *
- * The client cannot just filter it itself. Live screens have **no**
- * `deletedAt` field at all rather than an explicit null, and Firestore
- * cannot express "field is absent" in a query, so the compound aggregation
- * that would be needed is not available to the web SDK (which also has no
+ * The client cannot just filter it itself. A live screen stores
+ * `deletedAt: null` (AGL-3321), but the rule also drops email screens and
+ * the collection templates a site's collections name, which no one
+ * aggregation over the screens can express beside it, and the web SDK has no
  * `select()` field mask, making a full read the only alternative — per host,
- * on a page that renders one meter set per host).
+ * on a page that renders one meter set per host.
  *
  * So the server answers, reusing the exact helper the quota gate uses. One
  * source of truth: if the two ever disagree again it is a code change, not

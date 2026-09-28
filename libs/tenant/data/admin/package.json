@@ -43,6 +43,7 @@
   },
   "sideEffects": [
     "./src/lib/server/client-error-report.*",
+    "./src/lib/server/email-deliverability.*",
     "./src/lib/server/email-marketing-gate.*",
     "./src/lib/server/email-send-rate.*"
   ]

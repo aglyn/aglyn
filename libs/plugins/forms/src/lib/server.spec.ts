@@ -77,7 +77,7 @@ function call(body: unknown, token: string | null = 'good') {
       return res
     },
   }
-  return formStatsHandler(
+  return Promise.resolve(formStatsHandler(
     {
       method: 'POST',
       body,
@@ -87,7 +87,7 @@ function call(body: unknown, token: string | null = 'good') {
       socket: {},
     } as never,
     res,
-  ).then(() => ({ status, json }))
+  )).then(() => ({ status, json }))
 }
 
 beforeEach(() => {

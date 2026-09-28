@@ -156,7 +156,7 @@ Importing is part of the [CRM](#what-each-plan-includes), included from Starter.
 ## Segments
 
 Group contacts into **segments** — saved filters over tags and sources, kept
-from the Contacts list's filter bar through **Save as segment…** in the views
+from the Contacts list's filters through **Save as segment…** in the views
 menu — and target them directly in
 [email campaigns](../../marketing-and-automation/email-campaigns/overview.md).
 A [saved view](./views.md) keeps more than a segment — every filter, the
@@ -175,7 +175,7 @@ back out to the record that put the person there.
 | Where | Into the CRM | Out of the CRM |
 | --- | --- | --- |
 | **Search** (the top bar) | Contacts by name, email, phone or company; **leads** by name or email; **companies** by name or domain; **deals** by title. Each result opens the record. The CRM groups appear only for members who may open the CRM. | — |
-| **Inbox** | A submission row's **⋮ → Open contact in CRM**; a member or lead row's **Open in CRM**. | A contact's timeline opens the submission that captured them, in the Inbox reader. |
+| **Inbox** | A submission row's **⋮ → Open contact in CRM**; with the **Site Members & Leads** section's toggle on **Leads**, a lead row's **⋮ → Open in CRM**. A member row has no CRM link. | A contact's timeline opens the submission that captured them, in the Inbox reader. |
 | **Forms** | A form's page: **See the contacts this form captured in the CRM**, and the **CRM routing** card. | — |
 | **Products → Orders** | An order's dialog: **View customer in CRM**. | The contact header's order count opens the orders list narrowed to the person's address; a timeline entry opens the order itself. |
 | **Bookings** | Each upcoming booking: **View in CRM**. | A timeline entry for a booking opens the Bookings page. |

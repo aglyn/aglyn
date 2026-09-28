@@ -21,8 +21,14 @@ import {
   Figure,
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   buildRoute,
   CAMPAIGN_MEMBERSHIP_FIELD,
@@ -41,7 +47,7 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -54,15 +60,23 @@ import {
   isWindowedRange,
   type CampaignFormsRollup,
 } from '../model/campaign-membership-figures'
+import {
+  CAMPAIGN_MEMBERS_QUERY,
+  CAMPAIGN_MEMBERS_SEARCH_NOTICE,
+  campaignMembersBase,
+  campaignMembersSearchClause,
+  type CampaignMemberCollection,
+} from '../model/campaign-members-query'
 
 /**
- * How many members of one kind the section enumerates.
+ * How many forms the holdings figures add up.
  *
- * One document past it is asked for, so "this campaign holds more than are
- * listed" is a fact rather than a guess — the same probe the emails table on
- * this page makes.
+ * The tables page through every member; the figures are a sum, read from a
+ * window of their own. One document past it is asked for, so "the figures
+ * cover some of the forms" is a fact rather than a guess — the same probe
+ * the emails figures on this page make.
  */
-const MEMBER_CEILING = 25
+const FIGURES_CEILING = 25
 
 export interface CampaignMembersSectionProps {
   hostId: string
@@ -77,23 +91,6 @@ export interface CampaignMembersSectionProps {
   startAtMs?: number | null
   /** The campaign's last day, when it has one. */
   endAtMs?: number | null
-}
-
-/**
- * The rows a reader may act on: the window, minus what has been deleted.
- *
- * The soft delete is filtered HERE and not in the query. `deletedAt` is
- * written only when a record is removed, so `where('deletedAt', '==', null)`
- * would match nothing at all — Firestore's equality matches documents that
- * HAVE the field — and every live record would vanish from the campaign. The
- * campaigns table filters its own soft-deleted containers the same way.
- */
-function live(
-  docs: Array<Record<string, unknown>> | undefined,
-): Array<Record<string, unknown>> {
-  return (docs ?? [])
-    .slice(0, MEMBER_CEILING)
-    .filter((row) => !row['deletedAt'])
 }
 
 /** One row, whatever collection it came out of. */
@@ -164,12 +161,24 @@ interface MemberRow {
  * A campaign holds no member list. Each record names the campaigns it is in,
  * which is what makes deleting one record leave nothing behind and what lets
  * a record's own page draw its campaigns without a query. The query here is
- * the other direction of the same field, served by Firestore's automatic
- * single-field index.
+ * the other direction of the same field.
  *
- * `orderBy(documentId())`, like every other bounded list in this console: a
+ * ## Each kind is a table paged by its own query (AGL-3321)
+ *
+ * The screens and the forms are each a list a reader pages and searches, so
+ * the membership, the soft delete and the search word are all on the
+ * table's Firestore query (`campaign-members-query.ts`), and every member is
+ * reachable a page at a time. Nothing is matched over rows already read: a
+ * deleted screen is left out by `deletedAt == null`, which every screen
+ * stores, and the search is a prefix range on the stored `nameLower`.
+ *
+ * Unsearched, a table walks the document name, which every record has — a
  * form carries `updatedAt` only if some writer stamped one, and ordering on a
  * field a writer may omit does not mis-sort the list, it drops rows from it.
+ *
+ * The forms' HOLDINGS are a sum, not a list, so they read a window of their
+ * own — the first {@link FIGURES_CEILING} forms by document name — and say
+ * when the campaign holds more, as the mail figures on this page do.
  *
  * ## Contacts are named here and NOT listed, and the reason is a query limit
  *
@@ -188,22 +197,23 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
   const firestore = useFirestore()
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
 
-  const memberQuery = (collectionName: string) => () =>
-    query(
-      collection(firestore, 'hosts', hostId, collectionName),
-      where(CAMPAIGN_MEMBERSHIP_FIELD, 'array-contains', campaignId),
-      orderBy(documentId()),
-      limit(MEMBER_CEILING + 1),
-    )
-
-  const { data: screenDocs, status: screensStatus } = useFirestoreCollection<
-    Record<string, unknown>
-  >(memberQuery('screens'), [firestore, hostId, campaignId], {
-    idField: '$id',
-  })
-  const { data: formDocs, status: formsStatus } = useFirestoreCollection<
-    Record<string, unknown>
-  >(memberQuery('forms'), [firestore, hostId, campaignId], { idField: '$id' })
+  /*
+   * The window the holdings figures add up: the forms filed here, by
+   * document name, one past the ceiling as the probe. A form has no soft
+   * delete — it is deleted outright — so every document this returns is a
+   * form in use or a retired one, and both hold what they collected.
+   */
+  const { data: figureDocs } = useFirestoreCollection<Record<string, unknown>>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'forms'),
+        where(CAMPAIGN_MEMBERSHIP_FIELD, 'array-contains', campaignId),
+        orderBy(documentId()),
+        limit(FIGURES_CEILING + 1),
+      ),
+    [firestore, hostId, campaignId],
+    { idField: '$id' },
+  )
 
   /*
    * The months the campaign's dates cover, or nothing where it has neither.
@@ -216,8 +226,8 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
   )
   const windowed = isWindowedRange(range)
 
-  const screens = useMemo<MemberRow[]>(() => {
-    return live(screenDocs).map((row) => {
+  const screenRow = useCallback(
+    (row: Record<string, unknown>): MemberRow => {
       const id = String(row['$id'])
       const versionId = String(row['versionId'] ?? '')
       return {
@@ -243,16 +253,16 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
           : 'This screen has no saved version yet',
         campaigns: readCampaignIds(row).length,
       }
-    })
-  }, [screenDocs, orgSlug, host])
+    },
+    [orgSlug, host],
+  )
 
   /*
-   * The counters ride on the documents the membership query already returned,
-   * so every figure below is paid for by a read this section was making
-   * anyway. Nothing here opens a second listener.
+   * The counters ride on the form documents, so each row's figures are paid
+   * for by the read that lists it.
    */
-  const forms = useMemo<MemberRow[]>(() => {
-    return live(formDocs).map((row) => {
+  const formRow = useCallback(
+    (row: Record<string, unknown>): MemberRow => {
       const id = String(row['$id'])
       return {
         id,
@@ -265,23 +275,25 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
         totals: campaignFormTotals(row['stats'] as FormStats | undefined, range),
         campaigns: readCampaignIds(row).length,
       }
-    })
-  }, [formDocs, orgSlug, host, range])
+    },
+    [orgSlug, host, range],
+  )
 
+  const figureForms = useMemo(
+    () => (figureDocs ?? []).slice(0, FIGURES_CEILING).map(formRow),
+    [figureDocs, formRow],
+  )
+  const figuresTruncated = (figureDocs ?? []).length > FIGURES_CEILING
   const rollup = useMemo(
     () =>
       campaignFormsRollup(
-        forms.map((row) => ({
+        figureForms.map((row) => ({
           totals: row.totals as FormStatsTotals,
           campaigns: row.campaigns ?? 1,
         })),
       ),
-    [forms],
+    [figureForms],
   )
-
-  const screensTruncated = (screenDocs ?? []).length > MEMBER_CEILING
-  const formsTruncated = (formDocs ?? []).length > MEMBER_CEILING
-  const settled = screensStatus !== 'loading' && formsStatus !== 'loading'
 
   const analyticsHref =
     orgSlug && host
@@ -307,9 +319,10 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
         <MemberTable
           heading="Screens"
           noun="screen"
-          rows={screens}
-          truncated={screensTruncated}
-          settled={settled}
+          collectionName="screens"
+          hostId={hostId}
+          campaignId={campaignId}
+          toRow={screenRow}
         />
         {/*
           The absence, named where a reader would look for the number.
@@ -336,9 +349,10 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
         <MemberTable
           heading="Forms"
           noun="form"
-          rows={forms}
-          truncated={formsTruncated}
-          settled={settled}
+          collectionName="forms"
+          hostId={hostId}
+          campaignId={campaignId}
+          toRow={formRow}
           figures
         />
         {/*
@@ -348,12 +362,13 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
           words: it says what the forms HOLD, and the caption beneath refuses
           the reading a merchant will reach for first.
          */}
-        {forms.length ? (
+        {figureForms.length ? (
           <FormsHoldings
             rollup={rollup}
             windowed={windowed}
             from={range.from ?? null}
             to={range.to ?? null}
+            truncated={figuresTruncated}
           />
         ) : null}
         {/*
@@ -409,8 +424,10 @@ function FormsHoldings(props: {
   windowed: boolean
   from: string | null
   to: string | null
+  /** The campaign holds more forms than the figures add up. */
+  truncated: boolean
 }) {
-  const { rollup, windowed, from, to } = props
+  const { rollup, windowed, from, to, truncated } = props
   const note = (recorded: number) =>
     recorded < rollup.members
       ? `across ${recorded} of ${rollup.members} forms`
@@ -468,6 +485,13 @@ function FormsHoldings(props: {
             'a start and an end to count only its months.'}
         </Typography>
       )}
+      {truncated ? (
+        <Alert severity="info">
+          {`These figures add up the first ${FIGURES_CEILING} forms in this ` +
+            'campaign, in document order. It holds more; the table above ' +
+            'lists every one of them.'}
+        </Alert>
+      ) : null}
       {rollup.shared ? (
         <Typography variant="caption" color="text.secondary">
           {`${rollup.shared} of these ${rollup.members} forms ${
@@ -495,13 +519,21 @@ const MEMBER_FIGURES = [
   ['leads', 'Leads'],
 ] as const
 
+/** How the search reads on a notice: the box, not a column. */
+const MEMBER_SEARCH_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Search',
+}
+
 /**
- * One kind's members, as a record list in the shared grid.
+ * One kind's members, as a record list in the shared grid, paged by its own
+ * query (AGL-3321).
  *
- * The rows are a window this component already holds — the same arrangement
- * the campaign's emails list beside it uses, and for the same reason: the
- * ceiling bounds the read, and the grid's footer lets a reader walk what came
- * back without the card deciding how many rows fit.
+ * The membership, the soft delete and the search word are predicates on the
+ * query (`campaign-members-query.ts`); the grid neither filters nor sorts
+ * the page it is handed. The search box is the grid's quick filter, turned
+ * into "name starts with" because the membership holds the query's one
+ * array clause; the Filters panel is not offered, because every column
+ * beside it would need an index of its own for a list this size.
  *
  * `figures` adds the counter columns for a kind that carries them on its own
  * document. It is a prop rather than two lists because the row grammar — the
@@ -511,12 +543,31 @@ const MEMBER_FIGURES = [
 function MemberTable(props: {
   heading: string
   noun: string
-  rows: MemberRow[]
-  truncated: boolean
-  settled: boolean
+  collectionName: CampaignMemberCollection
+  hostId: string
+  campaignId: string
+  toRow: (row: Record<string, unknown>) => MemberRow
   figures?: boolean
 }) {
-  const { heading, noun, rows, truncated, settled, figures } = props
+  const { heading, noun, collectionName, hostId, campaignId, toRow, figures } =
+    props
+  const firestore = useFirestore()
+  const gridFilter = useListGridFilter({})
+  const search = campaignMembersSearchClause(gridFilter.searchWords)
+  const page = useListQuery<Record<string, unknown>>({
+    collection: collection(firestore, 'hosts', hostId, collectionName),
+    declaration: CAMPAIGN_MEMBERS_QUERY,
+    request: {
+      clauses: search ? [search] : [],
+      base: campaignMembersBase(collectionName, campaignId),
+    },
+    deps: [firestore, hostId, collectionName, campaignId],
+    idField: '$id',
+  })
+  const rows = useMemo(() => page.rows.map(toRow), [page.rows, toRow])
+  // Nothing typed and nothing on the first page: the campaign holds none,
+  // which is said in words rather than as an empty grid.
+  const none = !search && page.page === 0 && rows.length === 0
   const columns = useMemo<GridColDef<MemberRow>[]>(
     () => [
       {
@@ -573,30 +624,54 @@ function MemberTable(props: {
       <Typography variant="overline" color="text.secondary">
         {heading}
       </Typography>
-      {truncated ? (
-        <Alert severity="info">
-          {`More than ${MEMBER_CEILING} ${noun}s are in this campaign. The ` +
-            `first ${MEMBER_CEILING} are listed, in document order.`}
-        </Alert>
-      ) : null}
-      {rows.length ? (
-        <ListTable
-          aria-label={heading}
-          rows={rows}
-          columns={columns}
-          getRowId={(row: MemberRow) => row.id}
-          rowHeight={TABLE_ROW_HEIGHT}
-          // A member's name carries why it has no link, and the other
-          // campaigns it is in, beneath it.
-          getRowHeight={() => 'auto'}
-        />
-      ) : (
+      {none ? (
         <Typography variant="body2" color="text.secondary">
-          {settled
-            ? `No ${noun} is in this campaign. Open a ${noun} and pick this ` +
-              'campaign on its own page to put it in one.'
-            : `Reading this campaign’s ${noun}s…`}
+          {page.status === 'loading'
+            ? `Reading this campaign’s ${noun}s…`
+            : `No ${noun} is in this campaign. Open a ${noun} and pick this ` +
+              'campaign on its own page to put it in one.'}
         </Typography>
+      ) : (
+        <>
+          <ListQueryNotices
+            refused={listQueryRefusals(page.plan.refused, {
+              fields: CAMPAIGN_MEMBERS_QUERY.fields,
+              headers: MEMBER_SEARCH_HEADERS,
+            })}
+            notices={
+              search
+                ? [CAMPAIGN_MEMBERS_SEARCH_NOTICE, ...page.plan.notices]
+                : page.plan.notices
+            }
+          />
+          <ListTable
+            aria-label={heading}
+            rows={rows}
+            columns={columns}
+            getRowId={(row: MemberRow) => row.id}
+            rowHeight={TABLE_ROW_HEIGHT}
+            // A member's name carries why it has no link, and the other
+            // campaigns it is in, beneath it.
+            getRowHeight={() => 'auto'}
+            loading={page.status === 'loading'}
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            quickFilter
+            disableColumnFilter
+            disableColumnSorting
+            hideFooter
+            noRowsLabel={`No ${noun} in this campaign starts with that`}
+          />
+          <ListPagination
+            page={page.page}
+            pageSize={page.pageSize}
+            rowCount={rows.length}
+            hasMore={page.hasMore}
+            onPageChange={page.setPage}
+            onPageSizeChange={page.setPageSize}
+          />
+        </>
       )}
     </Stack>
   )

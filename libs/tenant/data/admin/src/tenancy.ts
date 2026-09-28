@@ -74,6 +74,11 @@ export * from './lib/server/email-metering'
 // imports this barrel, so nothing has to remember to call an installer.
 export * from './lib/server/campaign-conversion-attribution'
 export * from './lib/server/email-send-rate'
+// Side-effecting on purpose, for the same reason (AGL-3328): evaluating this
+// module INSTALLS the deliverability preflight on `sendEmail`, so a recipient
+// whose domain takes no mail is refused, and bulk mail behind a gateway that
+// refused its sending domain twice is held, on every send path at once.
+export * from './lib/server/email-deliverability'
 export * from './lib/server/email-sender-reputation'
 export * from './lib/server/erase'
 export * from './lib/server/erase-person'

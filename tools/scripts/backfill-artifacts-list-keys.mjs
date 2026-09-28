@@ -35,7 +35,11 @@
  *                 (`page` unless `component` or `layout`);
  *   source.type   a template with none, or the legacy `workspace`: `authored`;
  *   libraryRow    a template: whether it is its own library row — a
- *                 multi-page starter is ONE row, led by one live page.
+ *                 multi-page starter is ONE row, led by one live page;
+ *   deletedAt     a live screen: `null`, STORED — a campaign's screens list
+ *                 leaves tombstones out with `deletedAt == null`, which
+ *                 matches only a document that holds the field. A deleted
+ *                 screen's time is never touched.
  *
  * A document without them still exists and still opens; it is only the
  * lists' search and filters that cannot see it.
@@ -129,7 +133,8 @@ const READ_FIELDS = [
 const args = parseDeployArgs({
   command: 'backfill-artifacts-list-keys',
   summary:
-    'Stamp the list keys (name keys, kind, source, library row) onto ' +
+    'Stamp the list keys (name keys, kind, source, library row, a live ' +
+    'screen\'s deletedAt: null) onto ' +
     'site artifacts and marketplace listings written before them, so the ' +
     'console lists can filter and search them. Writes to the named project with --apply.',
   effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
@@ -167,6 +172,7 @@ export function createKeys(collection, doc) {
   if (!ARTIFACTS.includes(collection)) return {}
   if (collection === 'screens' && doc.deletedAt != null) return {}
   const keys = { ...displayNameSearchFields(searchName(collection, doc)) }
+  if (collection === 'screens') keys.deletedAt = null
   if (collection === 'components' && doc.kind !== 'email') keys.kind = 'site'
   if (collection === 'templates') {
     if (!TEMPLATE_KINDS.includes(String(doc.kind))) keys.kind = 'page'
@@ -242,6 +248,9 @@ export function planArtifact(collection, data, libraryRow) {
   if (data.nameLower !== keys.nameLower) update.nameLower = keys.nameLower
   if (!sameSearchTokens(data.nameTokens, keys.nameTokens)) update.nameTokens = keys.nameTokens
   if (data.nameReversed !== keys.nameReversed) update.nameReversed = keys.nameReversed
+  // A live screen stores its null; one that holds no `deletedAt` at all is
+  // stamped. `select()` returns an absent field as absent, never as null.
+  if ('deletedAt' in keys && data.deletedAt === undefined) update.deletedAt = null
   if ('kind' in keys && data.kind !== keys.kind) update.kind = keys.kind
   if ('source' in keys) update['source.type'] = keys.source.type
   if (collection === 'templates') {
@@ -292,8 +301,9 @@ function selfTest() {
   )
   const HOME = displayNameSearchFields('Home')
   const cases = [
-    ['a legacy screen', 'screens', { displayName: 'Home' }, undefined, { update: HOME }],
-    ['a current screen', 'screens', { displayName: 'Home', ...HOME }, undefined, { skip: 'current' }],
+    ['a legacy screen', 'screens', { displayName: 'Home' }, undefined, { update: { ...HOME, deletedAt: null } }],
+    ['a current screen', 'screens', { displayName: 'Home', ...HOME, deletedAt: null }, undefined, { skip: 'current' }],
+    ['a keyed screen missing its stored null', 'screens', { displayName: 'Home', ...HOME }, undefined, { update: { deletedAt: null } }],
     ['a deleted email template with no keys', 'screens', { displayName: 'Old', kind: 'email', deletedAt: 1 }, undefined, { skip: 'deleted' }],
     ['a deleted screen still keyed, its keys cleared', 'screens', { displayName: 'Old', kind: 'email', deletedAt: 1, nameLower: 'old', nameTokens: ['o'] }, undefined, { update: { nameLower: CLEAR, nameTokens: CLEAR } }],
     ['a renamed layout with stale keys', 'layouts', { displayName: 'Home', ...HOME, nameLower: 'old' }, undefined, { update: { nameLower: 'home' } }],
@@ -334,6 +344,9 @@ async function main() {
   // Deleted screens a delete from before AGL-3321 left carrying a name key;
   // their keys are cleared with the rest of the writes.
   let keyedTombstones = 0
+  // Live screens holding no `deletedAt` at all, which a campaign's screens
+  // list (`deletedAt == null`) cannot see until they store the null.
+  let unflaggedScreens = 0
   const hostIds = args.host
     ? [args.host]
     : (await db.collection('hosts').listDocuments()).map((ref) => ref.id).sort()
@@ -350,6 +363,7 @@ async function main() {
       for (const row of rows) {
         count.scanned += 1
         if (row.data.deletedAt != null) count.tombstones += 1
+        if (collection === 'screens' && row.data.deletedAt === undefined) unflaggedScreens += 1
         if (collection === 'screens' && row.data.deletedAt != null && row.data.nameLower != null) {
           keyedTombstones += 1
         }
@@ -392,6 +406,7 @@ async function main() {
     )
   }
   console.log(`  deleted screens still carrying a name key (keys to clear): ${keyedTombstones}`)
+  console.log(`  live screens with no stored deletedAt (null to stamp): ${unflaggedScreens}`)
   if (!apply) {
     console.log(`DRY RUN — ${writes.length} writes planned, NOTHING WAS WRITTEN.`)
     return

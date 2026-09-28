@@ -44,7 +44,7 @@ export const CRM_EMAIL_STATUS_NONE = 'none'
 /** `CRM_LEAD_TEXT_MAX`: a picklist label's cap. */
 const CRM_LEAD_TEXT_MAX = 120
 
-const EMAIL_STATE_STATUSES = ['ok', 'bounced', 'blocked', 'unsubscribed', 'complained', 'do_not_contact']
+const EMAIL_STATE_STATUSES = ['ok', 'undeliverable', 'bounced', 'blocked', 'unsubscribed', 'complained', 'do_not_contact']
 const CRM_LEAD_STATUSES = ['new', 'working', 'qualified', 'unqualified']
 const CONTACT_LIFECYCLE_STAGES = [
   'subscriber',

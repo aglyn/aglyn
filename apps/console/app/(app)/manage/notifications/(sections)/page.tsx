@@ -17,6 +17,9 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Button, Stack } from '@mui/material'
@@ -48,7 +51,12 @@ import {
   resolveNotificationOrgSlug,
   resolveNotificationWorkspace,
 } from '../../../../../utils/notification-links'
-import { notificationFilterWheres } from '../../../../../utils/notification-filters'
+import {
+  NOTIFICATION_FILTER_FIELDS,
+  NOTIFICATION_FILTER_HEADERS,
+  NOTIFICATION_FILTER_OPTIONS,
+  planNotificationFilters,
+} from '../../../../../utils/notification-filters'
 
 /**
  * The notifications feed (AGL-260): the full, cursor-paginated list behind
@@ -88,10 +96,11 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
    * reader starts on its first page.
    */
   const gridFilter = useListGridFilter({ selectFields: ['type', 'readAt'] })
-  const wheres = useMemo(
-    () => notificationFilterWheres(gridFilter.clauses),
+  const filterPlan = useMemo(
+    () => planNotificationFilters(gridFilter.clauses),
     [gridFilter.clauses],
   )
+  const { wheres } = filterPlan
 
   const loadPage = useCallback(
     async (targetPage: number, cursor?: QueryDocumentSnapshot) => {
@@ -245,6 +254,13 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
             {markingAll ? 'Marking…' : 'Mark all read'}
           </Button>
         </Stack>
+        <ListQueryNotices
+          refused={listQueryRefusals(filterPlan.refused, {
+            fields: NOTIFICATION_FILTER_FIELDS,
+            headers: NOTIFICATION_FILTER_HEADERS,
+            options: NOTIFICATION_FILTER_OPTIONS,
+          })}
+        />
         <NotificationsTable
           rows={rows}
           onOpen={handleOpen}

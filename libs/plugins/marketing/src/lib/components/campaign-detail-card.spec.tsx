@@ -162,12 +162,15 @@ let listQueried: any = null
  */
 jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
   useListQuery: (options: any) => {
-    if (options.collection) listQueried = options
+    // The emails table's query; the assigned screens and forms below it are
+    // tables of their own, over the site's collections.
+    const emails = String(options.collection?.path ?? '').endsWith('/campaigns')
+    if (emails) listQueried = options
     return jest
       .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
       .useListQueryDouble(
         () =>
-          options.collection
+          emails
             ? sends.map((send, at) => ({
                 createdAtMs: 1_000_000 - at,
                 emailCampaignId: 'camp-1',

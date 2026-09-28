@@ -41,6 +41,13 @@ import { displayNameSearchFields } from './name-search'
  *                so does a deleted template (`artifactDeleteListKeys`), which
  *                is how the library's query leaves tombstones out;
  *
+ *   deletedAt    on a screen, `null` — the flag a campaign's screens list
+ *                asks for (`deletedAt == null`) to leave tombstones out. A
+ *                query cannot ask for a field to be absent, so a live
+ *                screen must STORE the null; a delete overwrites it with
+ *                the time (and the security rules let an editor do that
+ *                only while it is null, so a tombstone stays one);
+ *
  * A DELETED screen gets none of them. The email templates list orders by
  * `nameLower`, and an email template's delete clears its name keys so the
  * tombstone leaves that order (a query cannot ask for `deletedAt` to be
@@ -119,6 +126,9 @@ export function artifactCreateListKeys(
   const keys: Record<string, unknown> = {
     ...displayNameSearchFields(artifactSearchName(collection, doc)),
   }
+  // Stored, not omitted: `deletedAt == null` matches only a document that
+  // holds the field (AGL-3321, a campaign's screens).
+  if (collection === 'screens') keys['deletedAt'] = null
   if (collection === 'components' && doc['kind'] !== 'email') keys['kind'] = 'site'
   if (collection === 'templates') {
     if (!TEMPLATE_KINDS.includes(String(doc['kind']))) keys['kind'] = 'page'

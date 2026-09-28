@@ -767,8 +767,11 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   router.push(buildRoute(Route.ADMIN_USER_DETAIL, { uid: id }))
                 }
                 // Server-paged through Firebase Auth: the footer below owns
-                // the page, so the grid must not also slice these rows.
+                // the page, so the grid must not also slice these rows —
+                // nor sort them, which would order one page and read as the
+                // whole list's.
                 hideFooter
+                disableColumnSorting
                 // The console's row height, like every other grid list.
                 rowHeight={TABLE_ROW_HEIGHT}
                 initialState={{
