@@ -154,6 +154,16 @@ export type AglynNotificationType =
   // fan-out in apps/tenant/app/api/report-abuse/route.ts for why: a flood of
   // alerts IS the flood, and the alert it would cost us is the phishing one.
   | 'system.abuseReportUrgent'
+  // Something on the recipient's OWN workspace was held, flagged, locked or
+  // paused (AGL-3368): an email or page held for review, a flagged domain,
+  // a fraud signal on a payment, a lock and its lift. Written by
+  // `notifyRiskEvent` from the risk notice catalog, which says what happened,
+  // what it means and how to request a review. `system.` for the AGL-1088
+  // reason: it is the one message saying the owner's work has STOPPED, and a
+  // category muted to quieten routine chatter must not swallow it. It sends
+  // its own email, transactional and preference-free, so it is also in
+  // NOTIFICATION_SELF_SENT_EMAIL_TYPES.
+  | 'system.riskNotice'
   // The §512(g) counter-notice (AGL-1983), and the one place the "only urgent
   // categories raise a notification" restraint above is deliberately not
   // applied. Every counter-notice carries a statutory deadline that is
@@ -292,6 +302,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'system.formSubmissionsPaused': 'Form submissions paused',
   'system.visitorRecordsPaused': 'Sign-ups or leads paused',
   'system.abuseReportUrgent': 'Urgent abuse report',
+  'system.riskNotice': 'Held, flagged or locked on your workspace',
   'system.dmcaCounterNotice': 'DMCA counter-notice',
   'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
   'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
@@ -597,6 +608,8 @@ export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
   new Set<AglynNotificationType>([
     'content.crmDailyDigest',
     'content.insightsDigest',
+    // Emailed by `notifyRiskEvent` itself, as account mail (AGL-3368).
+    'system.riskNotice',
   ])
 
 /**

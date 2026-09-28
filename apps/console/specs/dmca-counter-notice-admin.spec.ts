@@ -191,6 +191,8 @@ const collectionRef = (prefix: string): any => {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The owners' closing notice (AGL-3368); a copyright row has none.
+  closeRiskNotice: async () => null,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({

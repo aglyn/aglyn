@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  notifyRiskEvent,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
@@ -155,7 +156,38 @@ async function handler(request: Request): Promise<Response> {
       via: 'staff-console',
       result,
     })
-    return Response.json({ ok: true, ...result }, { status: 200 })
+    // The owners and admins are told (AGL-3368), from the platform's sender:
+    // what changes, and how to reach support. Never the reason or the note,
+    // which are staff's record. Only when something was actually canceled.
+    const ownerNotice =
+      result.changed > 0
+        ? await notifyRiskEvent({
+            kind: 'subscription-canceled',
+            orgId,
+            item: { label: 'your subscription', path: '/org/billing' },
+            lock: {
+              affected:
+                when === 'now'
+                  ? 'The subscription ended now, with no refund. Your sites and data stay; paid features stop.'
+                  : 'The subscription ends at the end of the current billing period, with no refund. Paid features stop then.',
+            },
+          })
+        : null
+    return Response.json(
+      {
+        ok: true,
+        ...result,
+        ownerNotice: ownerNotice
+          ? {
+              recipients: ownerNotice.owners.recipients,
+              emailed: ownerNotice.owners.emailed,
+              emailFailed: ownerNotice.owners.emailFailed,
+              error: ownerNotice.error,
+            }
+          : null,
+      },
+      { status: 200 },
+    )
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours (AGL-1993).
     const unauthenticated = invalidIdTokenResponse(error)

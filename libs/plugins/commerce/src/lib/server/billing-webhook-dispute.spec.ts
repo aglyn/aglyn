@@ -275,6 +275,9 @@ const fakeFirestore = {
 }
 
 const managerNotices: any[] = []
+// Fraud signals and a chargeback's opening reach the owners and the site's
+// managers through the risk notice seam (AGL-3368).
+const riskNotices: any[] = []
 const staffNotices: any[] = []
 
 /*
@@ -321,6 +324,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     meterHostEmail: async () => undefined,
     notifyHostManagers: async (hostId: string, payload: any) => {
       managerNotices.push({ hostId, ...payload })
+    },
+    notifyRiskEvent: async (input: any) => {
+      if (riskNotices.some((notice) => notice.dedupeKey && notice.dedupeKey === input.dedupeKey)) {
+        return { duplicate: true }
+      }
+      riskNotices.push(input)
+      return { duplicate: false }
     },
     // AGL-2161: an unrouted chargeback is a PLATFORM fault, so it is reported
     // to staff rather than to a merchant nobody could identify.
@@ -465,6 +475,7 @@ afterAll(() => {
 beforeEach(() => {
   docs.clear()
   managerNotices.length = 0
+  riskNotices.length = 0
   staffNotices.length = 0
   collectionGroupFailure = null
   deleteOrderDuringQuery = false
@@ -584,11 +595,15 @@ describe('charge.dispute.created — flag, reverse nothing (AGL-1787)', () => {
    */
   it('warns the merchant, with the evidence deadline', async () => {
     await deliver('charge.dispute.created', disputeEvent())
-    expect(managerNotices).toHaveLength(1)
-    expect(managerNotices[0].hostId).toBe('host-1')
-    expect(managerNotices[0].title).toContain('$62.00')
-    expect(managerNotices[0].body).toContain('product not received')
-    expect(managerNotices[0].body).toContain('2025-10-16')
+    expect(riskNotices).toHaveLength(1)
+    expect(riskNotices[0]).toMatchObject({
+      kind: 'sale-dispute',
+      hostId: 'host-1',
+      amount: '$62.00',
+      evidenceDueByMs: EVIDENCE_DUE_S * 1000,
+      item: { path: expect.stringMatching(/^\/host-1\/products\/orders\?order=/) },
+    })
+    expect(riskNotices[0].staffEvidence).toContain('product not received')
   })
 
   /** The console order dialog renders `timeline`; this is what it shows. */
@@ -603,7 +618,7 @@ describe('charge.dispute.created — flag, reverse nothing (AGL-1787)', () => {
     await deliver('charge.dispute.created', disputeEvent())
     await deliver('charge.dispute.created', disputeEvent())
     expect(disputeEvents()).toHaveLength(1)
-    expect(managerNotices).toHaveLength(1)
+    expect(riskNotices).toHaveLength(1)
   })
 })
 
@@ -1756,15 +1771,16 @@ describe('an early fraud warning or a Radar review on an order (AGL-3360)', () =
     expect(
       (order().timeline as any[]).filter((entry) => entry.event === 'fraud-warning'),
     ).toHaveLength(1)
-    expect(managerNotices).toEqual([
+    expect(riskNotices).toEqual([
       expect.objectContaining({
+        kind: 'sale-fraud-warning',
         hostId: 'host-1',
-        type: 'content.order',
-        title: 'Early fraud warning on a payment',
-        link: '/host-1/orders',
+        item: expect.objectContaining({
+          path: expect.stringMatching(/^\/host-1\/products\/orders\?order=/),
+        }),
       }),
     ])
-    expect(managerNotices[0].body).toContain('has not refunded or canceled')
+    expect(managerNotices).toEqual([])
     // Nothing moved: the order is still paid, nothing reversed, no Stripe call.
     expect(order()).toMatchObject({ status: 'paid' })
     expect(order()).not.toHaveProperty('refundedCents')
@@ -1776,7 +1792,7 @@ describe('an early fraud warning or a Radar review on an order (AGL-3360)', () =
     await deliver('radar.early_fraud_warning.created', warning())
     await deliver('radar.early_fraud_warning.created', warning())
     expect((order().paymentRisk as any).signals).toHaveLength(1)
-    expect(managerNotices).toHaveLength(1)
+    expect(riskNotices).toHaveLength(1)
   })
 
   it('stamps a Radar review the same way, in its own words', async () => {
@@ -1788,7 +1804,7 @@ describe('an early fraud warning or a Radar review on an order (AGL-3360)', () =
       reason: 'rule',
     })
     expect(order().paymentRisk).toMatchObject({ latestKind: 'radar-review' })
-    expect(managerNotices[0]).toMatchObject({ title: 'A payment is held for review' })
+    expect(riskNotices[0]).toMatchObject({ kind: 'sale-payment-review' })
   })
 
   it('leaves a warning on somebody else’s charge alone', async () => {
@@ -1831,7 +1847,7 @@ describe('the gift cards a questioned payment bought (AGL-3363)', () => {
       created: OPENED_AT_S,
     })
     expect(card()).toMatchObject({ balanceCents: 5000, frozenReason: 'early-fraud-warning' })
-    expect(managerNotices.some((notice) => /on hold/.test(String(notice.title)))).toBe(true)
+    expect(riskNotices.some((notice) => notice.kind === 'gift-card-hold')).toBe(true)
   })
 
   it('an open dispute freezes them; a lost one voids what is left', async () => {
@@ -1914,7 +1930,7 @@ describe('a refund made outside the console (AGL-3363)', () => {
   it('an unmatched partial refund freezes the cards and asks the managers to review', async () => {
     await deliver('charge.refunded', refunded(1234))
     expect(card('GC-DASH')).toMatchObject({ balanceCents: 5000, frozenReason: 'refund-review' })
-    expect(managerNotices.some((notice) => /on hold/.test(String(notice.title)))).toBe(true)
+    expect(riskNotices.some((notice) => notice.kind === 'gift-card-hold')).toBe(true)
   })
 
   it('a console refund’s own event, already counted on the order, changes nothing', async () => {
@@ -1931,7 +1947,7 @@ describe('a refund made outside the console (AGL-3363)', () => {
     await deliver('charge.refunded', refunded(1234))
     await deliver('charge.refunded', refunded(1234))
     expect(order().externalRefundedCents).toBe(1234)
-    expect(managerNotices.filter((notice) => /on hold/.test(String(notice.title)))).toHaveLength(1)
+    expect(riskNotices.filter((notice) => notice.kind === 'gift-card-hold')).toHaveLength(1)
   })
 
   it('a refund on a charge that is no order’s is left alone', async () => {

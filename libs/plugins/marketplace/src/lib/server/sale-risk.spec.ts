@@ -23,11 +23,12 @@
  * holds is a `sk_test_` placeholder.
  */
 
-const mockPublisherNotices: Array<{ orgId: string; title: string; body: string }> = []
+// Every notice goes through the risk notice seam (AGL-3368).
+const mockPublisherNotices: Array<Record<string, any>> = []
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  notifyOrgAdmins: async (orgId: string, payload: { title: string; body: string }) => {
-    mockPublisherNotices.push({ orgId, title: payload.title, body: payload.body })
+  notifyRiskEvent: async (input: Record<string, any>) => {
+    mockPublisherNotices.push(input)
   },
   firebaseAdmin: {
     app: () => {
@@ -37,6 +38,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
+import { renderOwnerRiskNotice } from '@aglyn/shared-util-email/risk-notice-catalog'
 import {
   applyPublisherPayoutPolicy,
   isOrgMember,
@@ -96,9 +98,9 @@ function collectionRef(path: string): any {
 }
 
 const firestore = { collection: collectionRef } as any
-const staffNotices: Array<{ title: string; body: string }> = []
-const notify = async (payload: { title: string; body: string }) => {
-  staffNotices.push(payload)
+const staffNotices: Array<Record<string, any>> = []
+const notifyRisk = async (input: Record<string, any>) => {
+  staffNotices.push(input)
 }
 
 beforeEach(() => {
@@ -157,8 +159,12 @@ describe("a young publisher's payouts", () => {
       }),
     ])
     expect(docs.get('publisherProfiles/org-pub')).toMatchObject({ payoutDelayDays: 14 })
-    expect(mockPublisherNotices).toHaveLength(1)
-    expect(mockPublisherNotices[0].body).not.toMatch(/\d/)
+    expect(mockPublisherNotices).toEqual([
+      expect.objectContaining({ kind: 'publisher-payouts-held', orgId: 'org-pub' }),
+    ])
+    // The words the publisher reads never carry the delay the rule set.
+    const told = renderOwnerRiskNotice('publisher-payouts-held', {})
+    expect([told.meaning, ...told.steps].join(' ')).not.toMatch(/\d/)
     // A second sale changes nothing.
     expect(
       await applyPublisherPayoutPolicy({ firestore, publisherOrgId: 'org-pub', ageDays: 4, stripeKey: KEY, nowMs: NOW }),
@@ -184,7 +190,7 @@ describe("a young publisher's payouts", () => {
 
 describe("a sale's fraud shape", () => {
   it('files nothing for an ordinary sale between two unrelated workspaces', async () => {
-    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notify, nowMs: NOW })
+    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notifyRisk, nowMs: NOW })
     expect(result).toEqual({ signals: [], filed: null })
     expect([...docs.keys()].some((key) => key.startsWith('abuseReports/'))).toBe(false)
     expect(docs.get('marketplacePurchases/cs_1')).toMatchObject({ cardFingerprint: 'fp_card_1' })
@@ -192,7 +198,7 @@ describe("a sale's fraud shape", () => {
 
   it('flags a buyer workspace that shares a member with the publisher', async () => {
     docs.set('orgs/org-buyer/members/owner-1', { role: 'editor' })
-    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notify, nowMs: NOW })
+    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notifyRisk, nowMs: NOW })
     expect(result.signals).toEqual([{ code: 'shared-member', uids: ['owner-1'] }])
     const row = [...docs.entries()].find(([key]) => key.startsWith('abuseReports/'))?.[1]
     expect(row).toMatchObject({
@@ -201,12 +207,21 @@ describe("a sale's fraud shape", () => {
       orgId: 'org-pub',
       status: 'open',
     })
-    expect(staffNotices).toHaveLength(1)
-    // The publisher hears the outcome, never the shape that was found.
-    expect(mockPublisherNotices).toEqual([
-      expect.objectContaining({ orgId: 'org-pub', title: 'A marketplace sale is under review' }),
+    // One notice: staff get the shape as evidence, the publisher's owners the
+    // catalog's words — the outcome, never the shape that was found.
+    expect(staffNotices).toEqual([
+      expect.objectContaining({
+        kind: 'marketplace-sale-review',
+        orgId: 'org-pub',
+        reference: expect.stringMatching(/^MR-/),
+        amount: '$49.00',
+        staffEvidence: expect.stringMatching(/member/i),
+      }),
     ])
-    expect(mockPublisherNotices[0].body).not.toMatch(/member|card|shared|self/i)
+    const told = renderOwnerRiskNotice('marketplace-sale-review', {
+      'item.label': staffNotices[0].item.label,
+    })
+    expect(Object.values(told).flat().join(' ')).not.toMatch(/member|card|shared|self/i)
   })
 
   it('flags one card buying from one publisher for several workspaces', async () => {
@@ -215,7 +230,7 @@ describe("a sale's fraud shape", () => {
       buyerOrgId: 'org-other',
       cardFingerprint: 'fp_card_1',
     })
-    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notify, nowMs: NOW })
+    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notifyRisk, nowMs: NOW })
     expect(result.signals).toEqual([
       { code: 'card-reused-across-buyers', otherBuyerOrgIds: ['org-other'] },
     ])
@@ -226,7 +241,7 @@ describe("a sale's fraud shape", () => {
     const result = await screenMarketplaceSale(sale({ amountCents: 25_000 }), {
       firestore,
       stripeKey: KEY,
-      notify,
+      notifyRisk,
       nowMs: NOW,
     })
     expect(result.signals).toEqual([
@@ -237,7 +252,7 @@ describe("a sale's fraud shape", () => {
 
   it("does not flag a young publisher's small sale, but still holds its payouts", async () => {
     docs.set('orgs/org-pub', { name: 'Northwind Labs', createdAt: NOW - 2 * DAY })
-    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notify, nowMs: NOW })
+    const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notifyRisk, nowMs: NOW })
     expect(result.signals).toEqual([])
     expect(payoutWrites()).toHaveLength(1)
   })

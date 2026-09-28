@@ -46,6 +46,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
   }
   return {
+    notifyRiskEvent: async () => ({ duplicate: false }),
     firebaseAdmin: {
       app: () => ({
         firestore: () => ({
@@ -90,8 +91,13 @@ describe('a fraud signal on a marketplace sale (AGL-3365)', () => {
         expect.objectContaining({
           ref: { path: 'marketplacePurchases/cs_1' },
           signal: expect.objectContaining({ stripeObjectId: 'issfr_1' }),
-          // Nobody is paged per signal: staff hear through the pattern.
+          // No site: the publisher's own owners are told (AGL-3368), in the
+          // words for a sale they cannot refund; staff hear through the
+          // pattern, never per signal.
           hostId: '',
+          orgId: 'org-publisher',
+          noticeKind: 'marketplace-sale-warning',
+          link: '/org/marketplace/payouts',
         }),
       ])
     },

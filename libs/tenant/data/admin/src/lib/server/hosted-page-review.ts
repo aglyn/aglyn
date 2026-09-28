@@ -84,7 +84,7 @@ import {
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
-import { notifyHostManagers, notifyStaff } from './notifications'
+import { notifyRiskEvent } from './risk-notice'
 import { orgAgeDays } from './org-age'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
 import {
@@ -200,7 +200,15 @@ export async function reviewHostedPage(
       const strong = signalsThatHold(verdict.signals, { ageDays })
       if (!strong.length) return { outcome: 'serve' }
       if (await isAlreadyLive(request.hostId, request.screenId, request.versionId, nowMs)) {
-        await flagLivePage({ hostId: request.hostId, screenId: request.screenId, orgId, host, signals: strong, nowMs })
+        await flagLivePage({
+          hostId: request.hostId,
+          screenId: request.screenId,
+          versionId: request.versionId,
+          orgId,
+          host,
+          signals: strong,
+          nowMs,
+        })
         return { outcome: 'serve' }
       }
     }
@@ -241,6 +249,14 @@ export async function reviewHostedPage(
         'serves its last clean version, or nothing, until this is decided.',
       alertTitle: 'Published page held for review — possible phishing',
       alertBody: `A page ${url ? `at ${url} ` : ''}was held before it went live.`,
+      // The owners' words for it, and the held version's own page in the
+      // console (AGL-3368).
+      item: {
+        label: url ? `the page ${url}` : 'a page on your site',
+        path:
+          `/${request.hostId}/screens/${encodeURIComponent(request.screenId)}` +
+          `/versions/${encodeURIComponent(request.versionId)}/view`,
+      },
       // The page itself is what was reported; the flagged host, when there
       // is one, is named in the details and on `reportedHostname`.
       url,
@@ -304,44 +320,75 @@ async function isAlreadyLive(
 }
 
 /**
- * Tell staff, urgently and once per host and signal per process, that a
- * page ALREADY LIVE carries a strong signal. Lookalike hosts go through
- * {@link flagLookalikeDomain}; anything else (a credential field) through
- * the staff alert directly.
+ * A page ALREADY LIVE carries a strong signal: file one urgent abuse row for
+ * it (keyed on the page and its signals, so a busy page is one row) and, the
+ * first time, tell staff and the owners through the `page-flagged` notice.
+ * The page keeps serving; staff lock the site if it is impersonation or the
+ * account looks compromised. Once per page and signal set per process.
  */
 async function flagLivePage(input: {
   hostId: string
   screenId: string
+  versionId: string
   orgId: string | null
   host: Record<string, unknown> | null
   signals: readonly PhishingScreenSignal[]
   nowMs: number
 }): Promise<void> {
-  const url = pageUrl(input.host, input.screenId)
-  for (const signal of input.signals) {
-    const key = `${input.hostId}\n${input.screenId}\n${canonicalJson(signal)}`
-    const at = flaggedMemo.get(key)
-    if (at !== undefined && input.nowMs - at < FLAGGED_MEMO_TTL_MS) continue
-    flaggedMemo.set(key, input.nowMs)
-    if (signal.code === 'lookalike-link') {
-      await flagLookalikeDomain({
-        kind: 'link',
+  const key = `${input.hostId}\n${input.screenId}\n${input.signals.map((signal) => canonicalJson(signal)).sort().join('\n')}`
+  const at = flaggedMemo.get(key)
+  if (at !== undefined && input.nowMs - at < FLAGGED_MEMO_TTL_MS) return
+  flaggedMemo.set(key, input.nowMs)
+  try {
+    const url = pageUrl(input.host, input.screenId)
+    const reviewId = pageReviewId(input.hostId, `${input.screenId}/live`, input.signals)
+    const reference = heldOutboundReference(reviewId)
+    const evidence = describePhishingScreenSignals(input.signals).join(' ')
+    const flagged = flaggedHostOf(input.signals)
+    const ref = firebaseAdmin.app().firestore().collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
+    const first = !(await ref.get()).exists
+    await ref.set(
+      {
+        reference,
+        category: 'phishing',
+        severity: 'urgent',
+        source: 'outbound-screen',
+        url,
+        reportedHostname: flagged,
         hostId: input.hostId,
         orgId: input.orgId,
-        domain: signal.host,
-        where: `a live page${url ? ` (${url})` : ''}`,
-      }).catch(() => 'failed')
-      continue
-    }
-    await notifyStaff({
-      type: 'system.abuseReportUrgent',
-      title: 'Live page flagged — possible phishing',
-      body:
-        `A live page${url ? ` at ${url}` : ''} carries a strong phishing signal. ` +
-        `${describePhishingScreenSignals([signal]).join(' ')} It is still serving; ` +
-        'lock the site if it is impersonation or the account looks compromised.',
-      link: '/admin/abuse-reports',
-    }).catch(() => undefined)
+        details: [
+          `A LIVE page${url ? ` (${url})` : ''} was flagged by the phishing screen and is still serving.`,
+          evidence,
+          'Lock the site if it is impersonation or the account looks compromised; dismiss this if the content is theirs.',
+        ].join('\n'),
+        reporterEmail: null,
+        reporterName: null,
+        dmca: null,
+        riskNotice: { kind: 'page-flagged' },
+        reportCount: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(first ? { status: 'open', createdAt: FieldValue.serverTimestamp() } : {}),
+      },
+      { merge: true },
+    )
+    if (!first) return
+    await notifyRiskEvent({
+      kind: 'page-flagged',
+      orgId: input.orgId,
+      hostId: input.hostId,
+      reviewId,
+      reference,
+      item: {
+        label: url ? `the page at ${url}` : 'a page on your site',
+        path:
+          `/${input.hostId}/screens/${encodeURIComponent(input.screenId)}` +
+          `/versions/${encodeURIComponent(input.versionId)}/view`,
+      },
+      staffEvidence: evidence,
+    })
+  } catch (error) {
+    console.error('[page-review] a live page could not be flagged', error)
   }
 }
 
@@ -472,21 +519,29 @@ export async function flagLookalikeDomain(input: {
     if (first && link) {
       await notifyLookalikeLink({
         hostId: input.hostId,
+        orgId: input.orgId,
         domain,
         label,
         where: input.where ?? 'a commerce link',
         reference,
+        reviewId,
       })
     } else if (first) {
-      await notifyStaff({
-        type: 'system.abuseReportUrgent',
-        title: sending
-          ? 'Sending domain flagged — possible brand impersonation'
-          : 'Custom domain flagged — possible brand impersonation',
-        body:
-          `A ${sending ? 'workspace added the sending domain' : 'site attached'} ${domain}, ` +
-          `which looks like ${label}. Reference ${reference}.`,
-        link: '/admin/abuse-reports',
+      // The owners hear that the domain is waiting on a routine review — not
+      // which name it resembles; staff get the brand and a link to the row.
+      await notifyRiskEvent({
+        kind: 'domain-flagged',
+        orgId: input.orgId,
+        hostId: input.hostId,
+        reviewId,
+        reference,
+        item: {
+          label: sending ? `the sending domain ${domain}` : `the custom domain ${domain}`,
+          // Emails → Sending, or the site's Domain settings.
+          path: sending ? '/org/emails/sending' : input.hostId ? `/${input.hostId}/admin/domain` : null,
+        },
+        staffEvidence:
+          `${sending ? 'Sending domain' : 'Custom domain'} ${domain} looks like ${label}.`,
       })
     }
     return 'flagged'
@@ -497,41 +552,36 @@ export async function flagLookalikeDomain(input: {
 }
 
 /**
- * Tell staff and the site's managers, once per (site, domain), that a link
- * the merchant configured was refused because it wears another brand's name
- * (AGL-3363). The one notifier for this kind of signal, so a shared
- * risk-notice seam can take it over whole. The merchant is told what was
- * refused and how to fix it; never how the check works. Never throws.
+ * Tell staff and the site's managers and the workspace's owners, once per
+ * (site, domain), that a link the merchant configured was refused because it
+ * wears another brand's name (AGL-3363), through the risk notice seam
+ * (AGL-3368). The merchant reads the catalog's `link-blocked` words — what
+ * was refused and how to fix it, never how the check works; staff get the
+ * brand and a link to the row. Never throws.
  */
 export async function notifyLookalikeLink(input: {
   hostId: string | null
+  orgId?: string | null
   domain: string
   label: string
   where: string
   reference: string
+  reviewId?: string | null
 }): Promise<void> {
-  await Promise.all([
-    notifyStaff({
-      type: 'system.abuseReportUrgent',
-      title: 'Commerce link flagged — possible brand impersonation',
-      body:
-        `A site configured ${input.where} to ${input.domain}, which looks like ${input.label}. ` +
-        `It is refused wherever it is followed. Reference ${input.reference}.`,
-      link: '/admin/abuse-reports',
-    }).catch(() => undefined),
-    input.hostId
-      ? notifyHostManagers(input.hostId, {
-          type: 'content.order',
-          title: 'A link on your store was blocked',
-          body:
-            `${input.where[0].toUpperCase()}${input.where.slice(1)} points to ${input.domain}, ` +
-            `which looks like another company's website, so nobody is sent there. ` +
-            'Replace it with a file from your media library or a link on your own domain. ' +
-            `If you think this is a mistake, contact support with reference ${input.reference}.`,
-          link: `/${input.hostId}/products`,
-        }).catch(() => undefined)
-      : Promise.resolve(),
-  ])
+  await notifyRiskEvent({
+    kind: 'link-blocked',
+    orgId: input.orgId ?? null,
+    hostId: input.hostId,
+    reviewId: input.reviewId ?? null,
+    reference: input.reference,
+    item: {
+      label: `${input.where} pointing to ${input.domain}`,
+      path: input.hostId ? `/${input.hostId}/products` : null,
+    },
+    staffEvidence:
+      `A site configured ${input.where} to ${input.domain}, which looks like ${input.label}. ` +
+      'It is refused wherever it is followed.',
+  }).catch(() => undefined)
 }
 
 /** A site's custom domain, through {@link flagLookalikeDomain}. */

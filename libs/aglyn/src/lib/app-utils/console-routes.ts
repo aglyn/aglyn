@@ -210,6 +210,10 @@ export enum Route {
    * (AGL-2839) — outside the CRM, so it is there on every plan.
    */
   ORG_SETTINGS_PRIVACY = '/[orgSlug]/settings/privacy',
+  // Holds & reviews (AGL-3368): everything on the workspace that was held,
+  // flagged, locked or paused, its status, and the way to request a review.
+  // Where every risk notice's "Request a review" lands (`?notice=<id>`).
+  ORG_SETTINGS_HOLDS = '/[orgSlug]/settings/holds',
   ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
   /**
    * Billing, section by section (AGL-2501).
@@ -617,6 +621,7 @@ export interface RoutePayload {
   [Route.ORG_SETTINGS_SSO]: { orgSlug: string }
   [Route.ORG_SETTINGS_OWNERSHIP]: { orgSlug: string }
   [Route.ORG_SETTINGS_PRIVACY]: { orgSlug: string }
+  [Route.ORG_SETTINGS_HOLDS]: { orgSlug: string }
   [Route.ORG_SETTINGS_DELETE]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }

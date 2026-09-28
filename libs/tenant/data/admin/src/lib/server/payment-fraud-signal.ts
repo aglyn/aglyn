@@ -41,6 +41,14 @@
 import { createHash } from 'crypto'
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
 import { FieldValue } from 'firebase-admin/firestore'
+import type { RiskEventInput } from './risk-notice'
+
+/**
+ * The seam every signal here tells people through (AGL-3368): the owners
+ * and admins of the workspace, and staff. Passed in, like the Firestore
+ * handle, so the webhook's spec substitutes it with the barrel.
+ */
+export type RiskNotifier = (input: RiskEventInput) => Promise<unknown>
 
 /** Which Stripe signal this is. */
 export type PaymentFraudSignalKind =
@@ -102,6 +110,25 @@ export function paymentFraudSignalReference(reviewId: string): string {
 /** Where staff act on the workspace's billing: its Subscription card. */
 export function staffSubscriptionCardPath(orgId: string): string {
   return `/admin/orgs/${encodeURIComponent(orgId)}#subscription`
+}
+
+/**
+ * The Stripe Dashboard page for a signal: the dispute itself, else the
+ * payment it is about.
+ */
+export function stripeSignalDashboardUrl(signal: {
+  kind: PaymentFraudSignalKind
+  stripeObjectId: string
+  chargeId: string | null
+  paymentIntentId: string | null
+  livemode: boolean
+}): string | null {
+  const base = `https://dashboard.stripe.com/${signal.livemode ? '' : 'test/'}`
+  if (signal.kind === 'dispute' && signal.stripeObjectId) {
+    return `${base}disputes/${encodeURIComponent(signal.stripeObjectId)}`
+  }
+  const payment = signal.paymentIntentId || signal.chargeId
+  return payment ? `${base}payments/${encodeURIComponent(payment)}` : null
 }
 
 /** `$56.00 USD`, or a sentence saying the amount is not known. */
@@ -220,12 +247,7 @@ export async function recordPaymentFraudSignal(
   signal: PaymentFraudSignal,
   deps: {
     firestore: FirebaseFirestore.Firestore
-    notify: (payload: {
-      type: 'system.abuseReportUrgent'
-      title: string
-      body: string
-      link: string
-    }) => Promise<void>
+    notifyRisk: RiskNotifier
   },
 ): Promise<{ reviewId: string; reference: string; first: boolean }> {
   const reviewId = paymentFraudSignalReviewId(signal.kind, signal.stripeObjectId)
@@ -271,15 +293,23 @@ export async function recordPaymentFraudSignal(
     { merge: true },
   )
   if (first) {
+    // The workspace's owners are told their subscription payment was
+    // flagged and how to confirm it; staff get the row with the evidence.
     await deps
-      .notify({
-        type: 'system.abuseReportUrgent',
-        title: `${KIND_LABEL[signal.kind]} — ${formatSignalAmount(signal.amountCents, signal.currency)}`,
-        body:
-          `${signal.orgId ? `Workspace ${signal.orgId}` : 'A charge that is not a workspace subscription'}, ` +
-          `charge ${signal.chargeId ?? signal.paymentIntentId ?? 'not named'}. ` +
-          `Nothing has been refunded or canceled. Reference ${reference}.`,
-        link: '/admin/abuse-reports',
+      .notifyRisk({
+        kind: 'billing-payment-flagged',
+        orgId: signal.orgId,
+        reviewId,
+        reference,
+        item: { label: 'your subscription payment', path: '/org/billing/invoices' },
+        amount: formatSignalAmount(signal.amountCents, signal.currency),
+        stripeUrl: stripeSignalDashboardUrl(signal),
+        staffEvidence:
+          `${KIND_LABEL[signal.kind]} (${signal.stripeObjectId}) on charge ` +
+          `${signal.chargeId ?? signal.paymentIntentId ?? 'not named'}` +
+          (signal.detail ? `; Stripe says: ${signal.detail}` : '') +
+          (signal.livemode ? '' : ' — TEST MODE') +
+          '.',
       })
       .catch(() => undefined)
   }
@@ -397,12 +427,7 @@ export async function recordSellerFraudSignal(
   },
   deps: {
     firestore: FirebaseFirestore.Firestore
-    notify: (payload: {
-      type: 'system.abuseReportUrgent'
-      title: string
-      body: string
-      link: string
-    }) => Promise<void>
+    notifyRisk: RiskNotifier
     nowMs?: number
   },
 ): Promise<{
@@ -524,16 +549,23 @@ export async function recordSellerFraudSignal(
       },
       { merge: true },
     )
+  // Staff get the pattern with its numbers; the owners get a plain "we are
+  // reviewing recent payments" with the way to talk to us, never the count
+  // or the window that opened the review.
   await deps
-    .notify({
-      type: 'system.abuseReportUrgent',
-      title: `Seller fraud pattern — ${chargeIds.length} charges on one account`,
-      body:
-        `Connected account ${sellerAccountId}` +
-        (orgId ? ` (workspace ${orgId})` : '') +
-        ` drew fraud warnings or disputes on ${chargeIds.length} different charges in ${WINDOW_DAYS} days. ` +
-        `Nothing has been refunded, canceled or paused. Reference ${reference}.`,
-      link: '/admin/abuse-reports',
+    .notifyRisk({
+      kind: 'seller-review',
+      orgId,
+      hostId: hostIds[0] ?? null,
+      reviewId,
+      reference,
+      item: { label: 'recent card payments on your store', path: '/org/settings/holds' },
+      stripeUrl,
+      staffEvidence:
+        `Connected account ${sellerAccountId} drew fraud warnings or disputes on ` +
+        `${chargeIds.length} different charges in ${WINDOW_DAYS} days` +
+        (signal.livemode ? '' : ' — TEST MODE') +
+        '.',
     })
     .catch(() => undefined)
   return { first: true, matched: true, filed: { reviewId, reference } }

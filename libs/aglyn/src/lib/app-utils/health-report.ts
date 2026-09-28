@@ -2389,6 +2389,17 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Sends each CRM task’s reminder at its own time — a console notification and an email to the assignee (AGL-2659). If it stops, every reminder a person set in the task drawer is silently late, and nothing but the morning digest says a task was due.',
   },
   {
+    id: 'risk-notice-digests',
+    label: 'Risk notice digests',
+    // Hourly at quarter past (AGL-3368); the dailies' ninety-minute grace.
+    cron: '15 * * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/risk-notices/digests',
+    graceMinutes: 90,
+    drives:
+      'Sends the one summary a workspace gets when more items were held or flagged in an hour than are sent one by one (AGL-3368). If it stops, a workspace whose attack ended hears nothing about the items folded into its digest until its next notice.',
+  },
+  {
     id: 'firestore-export',
     label: 'Weekly Firestore export',
     cron: '0 5 * * 1',

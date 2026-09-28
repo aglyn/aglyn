@@ -79,6 +79,9 @@ export default function SettingsSectionsLayout({
     // The workspace's privacy obligations (AGL-2839): exporting the people
     // it holds and erasing one. Outside the CRM, so every plan has them.
     section(Route.ORG_SETTINGS_PRIVACY, 'Privacy', canManage),
+    // Everything held, flagged or locked on the workspace, and the way to
+    // request a review (AGL-3368). Owners and admins: it is who is told.
+    section(Route.ORG_SETTINGS_HOLDS, 'Holds & reviews', canManage),
     section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
     section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
   ]
