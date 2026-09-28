@@ -37,6 +37,7 @@ import {
   resolvePublisherProfile,
 } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { listingSubmissionRefusal } from './listing-screen'
 import { refreshListingQueryFields } from './listing-query-fields'
 import {
   attestationLabels,
@@ -108,6 +109,25 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     const displayName = req.body?.displayName
     const nextName =
       typeof displayName === 'string' ? displayName.trim().slice(0, 80) : ''
+    // An edit is a submission too (AGL-3365): the listing is already public,
+    // so what it is about to say is screened before it says it. The copy is
+    // read as it will stand after the merge, not only the changed fields.
+    const content = verdict.content ?? {}
+    const screened = await listingSubmissionRefusal({
+      publisherOrgId: String(listing.profileId ?? ''),
+      content: {
+        displayName: nextName || String(listing.displayName ?? ''),
+        description:
+          typeof description === 'string' ? description : String(listing.description ?? ''),
+        readme: content.readme ?? (listing.readme as string | undefined) ?? null,
+        urls: [
+          content.homepageUrl ?? listing.homepageUrl,
+          content.repositoryUrl ?? listing.repositoryUrl,
+        ],
+      },
+      official: decoded['staff'] === true,
+    })
+    if (screened) return res.status(screened.status).json(screened.body)
     await listingRef.set(
       {
         ...verdict.content,
@@ -471,6 +491,22 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         ),
       })
     }
+
+    // The phishing screen, before anything is stored or queued (AGL-3365).
+    const screened = await listingSubmissionRefusal({
+      publisherOrgId: publisher.orgId,
+      content: {
+        displayName,
+        publisherName: publisher.displayName,
+        description,
+        changelog,
+        readme: contentVerdict.content?.readme ?? null,
+        urls: [contentVerdict.content?.homepageUrl, contentVerdict.content?.repositoryUrl],
+      },
+      official: decoded['staff'] === true,
+      org,
+    })
+    if (screened) return res.status(screened.status).json(screened.body)
 
     // Immutable content-addressed write — a new build is a new object, so a
     // consumer's pinned version can never be overwritten underneath it.

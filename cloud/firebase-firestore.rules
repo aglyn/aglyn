@@ -4103,13 +4103,18 @@ service cloud.firestore {
       // route is what enforces https-only and the fixed social hosts, and a
       // client that could write `avatarUrl` directly could store a
       // `javascript:` URL the storefront would then have to distrust.
+      // The public NAME and bio too (AGL-3365): the save route runs them
+      // through the phishing screen and refuses a name that impersonates a
+      // brand or the platform, and a direct client write would skip both.
+      // Nothing in the console writes this document client-side.
       allow update: if publisherManager() && publisherFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled',
                    'stripeAccountLivemode', 'stripePayoutsEnabled',
                    'publisherAgreement', 'avatarUrl', 'website',
                    'supportEmail', 'supportUrl', 'githubUrl', 'xUrl',
-                   'linkedinUrl']);
+                   'linkedinUrl', 'displayName', 'bio',
+                   'payoutDelayDays', 'payoutPolicyAtMs']);
       allow delete: if isStaff();
     }
 
@@ -4252,7 +4257,12 @@ service cloud.firestore {
                      'nameLower', 'nameTokens', 'nameReversed',
                      'browseAudience', 'browseTokens', 'takenDown',
                      // …and their inputs, written via publish-plugin.
-                     'displayName', 'deletedAt', 'visibility']));
+                     'displayName', 'deletedAt', 'visibility',
+                     // The copy a buyer reads (AGL-3365): the API screens it
+                     // for phishing before it is stored, and a direct client
+                     // write would publish it unscreened.
+                     'description', 'readme', 'homepageUrl', 'repositoryUrl',
+                     'license']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which

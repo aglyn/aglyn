@@ -3629,23 +3629,39 @@ describe('hosts', () => {
         { uid: VIEWER, rating: 5 },
       )
     })
-    // An org manager may edit their own listing's metadata. (Its copy — the
-    // name is written through the publish API since AGL-3321.)
+    // An org manager may edit their own listing's shelf placement. (Its copy
+    // — the name since AGL-3321, the description, readme and links since
+    // AGL-3365 — is written through the publish API, which screens it.)
     await assertSucceeds(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {
-        description: 'Reworded',
+        category: 'Reworded',
       }),
     )
+    for (const [field, value] of [
+      ['description', 'Verify your PayPal account at paypal-verify.net'],
+      ['readme', 'Reworded'],
+      ['homepageUrl', 'https://paypal-verify.net'],
+      ['repositoryUrl', 'https://paypal-verify.net'],
+      ['license', 'MIT'],
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {
+          [field]: value,
+        }),
+      ).catch((error) => {
+        throw new Error(`owner could write ${field} unscreened: ${error.message}`)
+      })
+    }
     // A non-manager member of the same org may not.
     await assertFails(
       updateDoc(doc(authed(VIEWER), 'marketplaceListings', 'listing-rated'), {
-        description: 'Nope',
+        category: 'Nope',
       }),
     )
     // Nor may an outsider.
     await assertFails(
       updateDoc(doc(authed(OUTSIDER), 'marketplaceListings', 'listing-rated'), {
-        description: 'Nope',
+        category: 'Nope',
       }),
     )
     // Even the owner cannot invent a rating. Values must DIFFER from the
@@ -3710,7 +3726,7 @@ describe('hosts', () => {
     // The owner may still edit ordinary metadata...
     await assertSucceeds(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-hidden'), {
-        description: 'Reworded',
+        category: 'Reworded',
       }),
     )
     // ...but cannot un-hide themselves, which would make moderation a
@@ -5602,13 +5618,23 @@ describe('pre-release hardening guards', () => {
         stripePayoutsEnabled: true,
       }),
     )
-    // ...but a manager may still edit the cosmetic fields on an existing
-    // profile, so the handle freeze doesn't lock the page entirely.
-    await assertSucceeds(
+    // The public name and bio are server-owned since AGL-3365: the save
+    // route screens them for phishing and refuses a name that impersonates
+    // a brand or the platform, and a direct write would skip both.
+    await assertFails(
       updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
-        handle: 'seeded-handle',
-        displayName: 'Acme Labs Renamed',
+        displayName: 'Aglyn Official Plugins',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
         bio: 'We make things.',
+      }),
+    )
+    // Nor may a publisher set its own payout hold (AGL-3365).
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        payoutDelayDays: 0,
       }),
     )
     await assertFails(

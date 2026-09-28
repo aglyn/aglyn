@@ -43,6 +43,7 @@ import {
   credentialForInputAttribute,
   credentialInHtml,
 } from '@aglyn/shared-util-email/hosted-page-screen'
+import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import type { PluginContributions } from '../plugin-manager/plugin-contributions'
 
 /** The areas the verifier reports on, in the order a reviewer reads them. */
@@ -163,8 +164,9 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * 5 — URLs held in a constant are resolved (AGL-1093).
  * 6 — registrations are compared with the declared contributions (AGL-3116).
  * 7 — inputs that collect a password, card or one-time code (AGL-3362).
+ * 8 — declared network origins that are a brand's lookalike (AGL-3365).
  */
-export const PLUGIN_VERIFIER_VERSION = 7
+export const PLUGIN_VERIFIER_VERSION = 8
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -821,6 +823,41 @@ function credentialInputsIn(
   )
 }
 
+/**
+ * Declared network origins that wear a brand without being the brand's
+ * (AGL-3365) — a reviewer's QUESTION, read with the phishing screen's own
+ * lookalike rule (`lookalikeBrandForHost`), the one that holds a link in an
+ * email or on a page.
+ *
+ * The manifest's origins are what the loader stamps into the plugin frame's
+ * `connect-src`, so they are exactly where a plugin's data and a visitor's
+ * input can go. A plugin that integrates with PayPal declares
+ * `https://api-m.paypal.com`, which is PayPal's own domain and passes; one that
+ * declares `https://paypal-verify.net` or `https://aglyn-billing.com` is
+ * sending somewhere dressed as somebody else. A warning rather than an error
+ * because every plugin version is reviewed before it installs, and the
+ * reviewer is the one who can ask whose domain it is.
+ */
+function lookalikeDeclaredOrigins(declared: readonly string[]): string[] {
+  const messages: string[] = []
+  for (const origin of declared) {
+    let host: string
+    try {
+      host = new URL(origin).hostname
+    } catch {
+      continue
+    }
+    const brand = lookalikeBrandForHost(host)
+    if (brand) {
+      messages.push(
+        `the manifest declares ${origin}, which wears the ${brand.label} name ` +
+          `but is not ${brand.label}'s domain — confirm whose it is before approving`,
+      )
+    }
+  }
+  return messages
+}
+
 function analyseBundle(
   source: string,
   options?: CheckOptions,
@@ -1128,6 +1165,9 @@ function analyseBundle(
       }
     }),
   )
+  for (const message of lookalikeDeclaredOrigins(declared ?? [])) {
+    add('warning', 'network', message)
+  }
   /** Level for a network finding: a claim only when we know what was declared. */
   const networkLevel: BundleCheckProblem['level'] = declared
     ? 'error'
