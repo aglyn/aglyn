@@ -1209,7 +1209,8 @@ export function HostActionsCard(props: {
       <Dialog
         open={Boolean(runsFor)}
         onClose={() => setRunsFor(null)}
-        maxWidth="sm"
+        // md: the history's four columns fit without the table scrolling.
+        maxWidth="md"
         fullWidth
       >
         <DialogTitle>{`Runs — ${runsFor?.name ?? ''}`}</DialogTitle>

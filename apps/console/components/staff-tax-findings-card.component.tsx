@@ -380,8 +380,10 @@ export default function StaffTaxFindingsCard({
               // An invoice carries its org beneath it and a row may raise
               // several findings, so a row is as tall as its content.
               getRowHeight={() => 'auto'}
-              // One page of the route's answer, turned by the footer below.
+              // One page of the route's answer, turned by the footer below,
+              // in the route's order: a header sort would order only the page.
               hideFooter
+              disableColumnSorting
               noRowsLabel="No rows match these filters"
             />
             <StaffListPaginationControls

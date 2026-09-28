@@ -1033,8 +1033,10 @@ function AdminMediaQuarantine() {
                       // its key.
                       getRowHeight={() => 'auto'}
                       // The route answers one page at a time; the footer
-                      // below walks the pages.
+                      // below walks the pages, and a header sort would order
+                      // only one.
                       hideFooter
+                      disableColumnSorting
                       initialState={{
                         columns: { columnVisibilityModel: DENY_HIDDEN_COLUMNS },
                       }}

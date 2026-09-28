@@ -698,6 +698,9 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
             rows={emailList.rows}
             columns={columns as any}
             hideFooter
+            // One page of a walk in stored order; a header sort would order
+            // only that page.
+            disableColumnSorting
             onOpen={(_id, row) => {
               const href = campaignHref(row as ConversionRow)
               if (href) router.push(href)
@@ -748,6 +751,9 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
               rows={webList.rows}
               columns={columns as any}
               hideFooter
+              // One page of a walk in stored order; a header sort would
+              // order only that page.
+              disableColumnSorting
               noRowsLabel="Nothing credited to a tagged link"
               noRowsDescription={
                 'A conversion lands here when the visitor arrived on a URL ' +

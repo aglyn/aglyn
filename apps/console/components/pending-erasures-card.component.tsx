@@ -354,6 +354,9 @@ export function PendingErasuresCard() {
                * never a reason to withhold the pager.
                */
               hideFooter
+              // The rows keep the queue's order; a header sort would order
+              // only the page on screen.
+              disableColumnSorting
             />
             <StaffListPaginationControls
               pagination={queue}
