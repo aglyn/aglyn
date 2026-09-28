@@ -383,11 +383,11 @@ test('a catch-all `*` subscription satisfies the required set', () => {
   assert.equal(result.ok, true)
 })
 
-test('the required event list carries the fifteen the platform destination needs', () => {
+test('the required event list carries the seventeen the platform destination needs', () => {
   // A guard on the list itself: AGL-1798 was a MISSING entry, so a silent
   // shrink here would quietly narrow every assertion above.
-  assert.equal(WEBHOOK_EVENTS.length, 15)
-  assert.equal(new Set(WEBHOOK_EVENTS).size, 15)
+  assert.equal(WEBHOOK_EVENTS.length, 17)
+  assert.equal(new Set(WEBHOOK_EVENTS).size, 17)
   for (const required of [
     'charge.refunded',
     'charge.dispute.created',
@@ -402,6 +402,10 @@ test('the required event list carries the fifteen the platform destination needs
     'customer.updated',
     'payment_method.attached',
     'payment_method.detached',
+    // AGL-3356. Without these the issuer and Radar fraud signals never
+    // reach staff.
+    'radar.early_fraud_warning.created',
+    'review.opened',
   ]) {
     assert.ok(WEBHOOK_EVENTS.includes(required), `${required} missing`)
   }

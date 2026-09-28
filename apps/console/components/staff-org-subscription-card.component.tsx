@@ -56,6 +56,12 @@ import {
 } from '../constants/subscription-cancel'
 import { SuperStaffOnly } from './staff-super-only.component'
 
+/**
+ * The card's fragment on the staff org page: what a Stripe fraud signal's
+ * abuse-queue row links to (AGL-3356, `staffSubscriptionCardPath`).
+ */
+export const STAFF_SUBSCRIPTION_CARD_ID = 'subscription'
+
 /** One subscription, as `/api/admin/billing/cancel-subscription` describes it. */
 export interface StaffSubscriptionRow {
   id: string
@@ -188,6 +194,21 @@ export default function StaffOrgSubscriptionCard({
     void refresh()
   }, [refresh])
 
+  /*
+   * Arriving from a Stripe fraud signal in the abuse queue (AGL-3356), whose
+   * row links `/admin/orgs/{orgId}#subscription`. The org page renders this
+   * card after its own reads, so the browser's own jump to the fragment has
+   * already happened against a page without it; the card scrolls itself
+   * into view once it exists.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.location.hash !== `#${STAFF_SUBSCRIPTION_CARD_ID}`) return
+    document
+      .getElementById(STAFF_SUBSCRIPTION_CARD_ID)
+      ?.scrollIntoView?.({ block: 'start' })
+  }, [])
+
   const cancelable = (rows ?? []).filter((row) => !row.terminal)
   const reasonComplete = normalizeSubscriptionCancelReason(reason, note) !== null
   const canSubmit =
@@ -257,6 +278,7 @@ export default function StaffOrgSubscriptionCard({
 
   return (
     <CardDisplay
+      id={STAFF_SUBSCRIPTION_CARD_ID}
       header={'Subscription'}
       help={docsHelp('lockdown', {
         anchor: '#cancel-billing',

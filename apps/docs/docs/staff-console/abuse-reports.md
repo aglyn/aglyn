@@ -121,6 +121,38 @@ email, the screen checks it again and a new row may appear. A rejection does not
 lock the workspace. If the content is phishing, lock the org at
 [Lockdown](./lockdown.md) as well, which stops every outbound path.
 
+## Stripe fraud signals {#stripe-fraud-signals}
+
+The billing webhook files a third kind of row. The source is
+`stripe-fraud-signal`, the category is `phishing`, the severity is urgent and
+the reference is `PF-…`. It files one row for each of these Stripe events:
+
+| Event | Filed when |
+| -- | -- |
+| `radar.early_fraud_warning.created` | Always. The card issuer reports the charge as likely fraud. It is not a chargeback yet, and refunding now can prevent one. |
+| `review.opened` | Always. Radar put the payment into review, and it stays there until someone closes the review in Stripe. |
+| `charge.dispute.created` | Only when the charge bills a workspace subscription. Storefront and marketplace chargebacks belong to the merchant and their plugin. |
+
+The row names the workspace, the charge and the amount. When the charge can be
+read from Stripe, it also shows what the card's own checks said: CVC, postal
+code, issuing country, 3DS and Radar risk level. It links to the workspace's
+**Subscription** card on the staff org page, and staff are notified once for
+each signal. A redelivery only increases the count.
+
+**Nothing is refunded or canceled automatically.** You decide:
+
+- Refund on the charge in Stripe.
+- Cancel billing on the Subscription card ([Lockdown](./lockdown.md#cancel-billing)).
+- Lock the workspace if it is fraud.
+- Close the review or answer the dispute in Stripe.
+
+Then close the row with a note saying what you did.
+
+The live webhook endpoint must be subscribed to the two new events. Run
+`node tools/scripts/setup-stripe.mjs`, which only adds missing events, or enable
+them on the endpoint in the Stripe dashboard. Until then, `/api/health/billing`
+reports the endpoint as missing required events.
+
 ## Triage by severity {#triage-by-severity}
 
 Every category carries a severity. It is not a mood — it says how fast a human
