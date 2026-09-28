@@ -30,6 +30,7 @@ import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-su
 import {
   renderSystemEmailContent,
   systemEmailBrand,
+  type SystemEmailBrand,
 } from '@aglyn/tenant-data-admin/server/render-system-email'
 import { sendStaffAlertEmail } from '@aglyn/tenant-data-admin/server/staff-alert-email'
 
@@ -208,6 +209,24 @@ export async function emailStaffAlert(input: {
 }
 
 /**
+ * The org's email brand, or the platform's when the org cannot be read: a
+ * warning about somebody's bill goes out in the wrong livery rather than not
+ * at all.
+ */
+async function orgBrand(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<SystemEmailBrand> {
+  try {
+    const org = await firestore.collection('orgs').doc(orgId).get()
+    return systemEmailBrand(org.exists ? (org.data() ?? null) : null)
+  } catch (error) {
+    console.error('[usage-alert-email] org brand read failed', orgId, error)
+    return systemEmailBrand(null)
+  }
+}
+
+/**
  * Emails every owner/admin of an org. Never throws.
  *
  * Returns the send result so a caller can log it; `sent: false` with reason
@@ -241,8 +260,7 @@ export async function emailOrgAdmins(
     // In the org's own brand, as the `workspace-notice` system email
     // (AGL-3367): a white-label agency's clients are warned about their bill
     // under the agency's name, never the platform's.
-    const org = await input.firestore.collection('orgs').doc(input.orgId).get()
-    const brand = systemEmailBrand(org.exists ? (org.data() ?? null) : null)
+    const brand = await orgBrand(input.firestore, input.orgId)
     const content = await renderSystemEmailContent(
       'workspace-notice',
       {
