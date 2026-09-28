@@ -272,6 +272,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .status(403)
         .json({ error: 'Gift cards require a Business plan' })
     }
+    // A gift card is issued only by the cart's completion (AGL-3363): the
+    // buy-now order branch mints no code, so a buy-now of one took the money
+    // and delivered nothing — and bypassed the cart's cash-out ceilings.
+    if (product.giftCard) {
+      return res.status(409).json({
+        error: 'Add this gift card to your cart to buy it.',
+        code: 'gift_card_needs_cart',
+      })
+    }
     const accountId = ownerProfile.get('stripeAccountId')
     if (
       !connectLinkageIsReady(

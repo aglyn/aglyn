@@ -22,6 +22,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { createHash } from 'crypto'
 import { recordContactRefund } from './contact-refund'
+import { applyGiftCardRiskToOrder } from './gift-card-risk'
 import { flagOrderRestock } from './restock-flag'
 // Leaf import, not the barrel, for the reason `contact-refund.ts` states about
 // `updateExisting`: the specs in this library mock `@aglyn/tenant-data-admin`
@@ -628,6 +629,30 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // restock ledgers below: the money has moved and nothing here may fail a
     // refund that already left the merchant's account.
     await retireLicenseKeys(hostRef, orderRef, orderId)
+    // GIFT CARDS THE REFUND TOOK BACK ARE VOIDED (AGL-3363). The money went
+    // back to the card that paid, so what is left on the cards that money
+    // bought goes too — every card on a full refund, and on a partial one
+    // only the cards bought by the lines it withdrew. A refund by amount with
+    // no lines named withdraws nothing, so it voids nothing. Same best-effort
+    // placement as the key retirement above: the refund has already moved.
+    if (fullyRefunded || requestedLineIds.length > 0) {
+      await applyGiftCardRiskToOrder({
+        firestore,
+        hostRef,
+        orderId,
+        action: {
+          kind: 'void',
+          reason: 'refund',
+          ...(fullyRefunded
+            ? {}
+            : {
+                productIds: requestedLineIds
+                  .map((index) => String(order.lineItems?.[index]?.productId ?? ''))
+                  .filter(Boolean),
+              }),
+        },
+      })
+    }
     // The customer's side of the ledger (AGL-1754). Everything above records
     // the money on the ORDER; without this the buyer's `ltvCents` still counts
     // a sale they returned, and only ever rises.

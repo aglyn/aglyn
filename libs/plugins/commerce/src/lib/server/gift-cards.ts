@@ -75,7 +75,7 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(body.hostId ?? '')
   const action = String(body.action ?? '')
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  if (action !== 'issue' && action !== 'void') {
+  if (action !== 'issue' && action !== 'void' && action !== 'release') {
     return res.status(400).json({ error: 'Unknown action' })
   }
 
@@ -111,6 +111,33 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(402)
         .json({ error: 'Gift cards are not included on this plan' })
+    }
+
+    // RELEASE A HELD CARD (AGL-3363). A fraud warning, review or dispute on
+    // the payment that bought a card freezes it; the merchant who has
+    // satisfied themselves the payment is genuine lifts that here. A voided
+    // card stays voided: release restores redemption, never a balance.
+    if (action === 'release') {
+      const code = String(body.code ?? '').trim()
+      if (!code) return res.status(400).json({ error: 'Missing code' })
+      const cardRef = hostRef.collection('giftCards').doc(code)
+      const existing = await cardRef.get()
+      if (!existing.exists) {
+        return res.status(404).json({ error: 'Unknown gift card' })
+      }
+      if (!(Number(existing.get('frozenAtMs')) > 0)) {
+        return res.status(409).json({ error: 'This gift card is not on hold' })
+      }
+      await cardRef.set(
+        {
+          frozenAtMs: null,
+          frozenReason: null,
+          releasedAtMs: Date.now(),
+          releasedBy: decoded.uid,
+        },
+        { merge: true },
+      )
+      return res.status(200).json({ ok: true, code })
     }
 
     if (action === 'void') {
