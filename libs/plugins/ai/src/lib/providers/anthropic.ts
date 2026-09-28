@@ -18,6 +18,7 @@
 import { aiModelIdsForProvider, estimateAiBilledUsd, aiCatalogEntry } from './catalog'
 import {
   AiUpstreamError,
+  type AiAccountProblem,
   aiRawOutputOf,
   aiStoppedAtCeiling,
   aiTokenCount,
@@ -108,6 +109,24 @@ export function anthropicFailureIsRetryable(
     errorType === 'rate_limit_error' ||
     errorType === 'overloaded_error'
   )
+}
+
+/**
+ * Whether a failure is about the platform's Anthropic account rather than the
+ * request (AGL-3377): a refused key, or a balance too low to answer.
+ */
+export function anthropicAccountProblem(
+  status: number | null,
+  error: { type?: string; message?: string } | null | undefined,
+): AiAccountProblem | null {
+  if (status === 401 || status === 403) return 'credentials'
+  if (error?.type === 'authentication_error' || error?.type === 'permission_error') {
+    return 'credentials'
+  }
+  if (error?.type === 'billing_error' || /credit balance/i.test(error?.message ?? '')) {
+    return 'credit'
+  }
+  return null
 }
 
 /** Anthropic's `usage` object, in the meter's shape. Missing fields read 0. */
@@ -231,6 +250,7 @@ async function send(
       response.status,
       anthropicFailureIsRetryable(response.status, payload?.error?.type),
       requestId,
+      anthropicAccountProblem(response.status, payload?.error),
     )
   }
   return response

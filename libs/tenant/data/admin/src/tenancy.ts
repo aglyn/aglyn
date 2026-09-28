@@ -100,6 +100,10 @@ export * from './lib/server/hosted-page-review'
 export * from './lib/server/risk-notice'
 export * from './lib/server/host-email-tokens'
 export * from './lib/server/notifications'
+// Every operator alert raises through one entry point, and every health check
+// remembers its state (AGL-3377).
+export * from './lib/server/operator-alerts'
+export * from './lib/server/operator-health'
 export * from './lib/server/org-billing'
 export * from './lib/server/organizations'
 export * from './lib/server/duplicate-activity'

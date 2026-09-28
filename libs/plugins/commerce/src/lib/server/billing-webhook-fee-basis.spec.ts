@@ -126,7 +126,14 @@ const fakeFirestore = {
 
 let orgFixture: any = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
 
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert a refused correction raises (AGL-3377).
+  raiseOperatorAlert: async (definition: any, options: any) => {
+    mockOperatorAlerts.push({ type: definition.type, options })
+    return { outcome: 'delivered', type: definition.type }
+  },
   /*
    * The real resolution's shape: an org that declared no pooling resolves
    * every site to a group of ONE. Faked rather than imported because this
@@ -328,6 +335,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  mockOperatorAlerts.length = 0
   docs.clear()
   autoIdCounter = 0
   fetchMock.mockReset()
@@ -573,5 +581,12 @@ describe('a paid subscription invoice (AGL-2317)', () => {
 
     expect(invoiceDocs()).toHaveLength(1)
     expect((invoiceDocs()[0] as any).totals.feeCents).toBe(227)
+    // And the operator is told the merchant kept a fee on the wrong base.
+    expect(mockOperatorAlerts).toEqual([
+      expect.objectContaining({
+        type: 'commerce.feeRepriceRefused',
+        options: expect.objectContaining({ dedupeKey: 'in_2' }),
+      }),
+    ])
   })
 })

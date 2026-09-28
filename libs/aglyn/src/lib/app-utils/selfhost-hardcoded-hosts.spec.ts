@@ -95,6 +95,12 @@ function stripComments(source: string): string {
  */
 const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   {
+    file: 'apps/console/utils/server/email-health.ts',
+    count: 1,
+    reason:
+      'EXPECTED_FROM_DOMAIN derives from operatorIdentity().supportEmail; the literal is the not-yet-configured fallback. Moved from the email-health route so the operator alerts tick runs the same checks (AGL-3377).',
+  },
+  {
     file: 'libs/shared/util/email/src/lib/email-palette.ts',
     count: 2,
     reason:
@@ -203,12 +209,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
-  },
-  {
-    file: 'apps/console/app/api/admin/email-health/route.ts',
-    count: 1,
-    reason:
-      'EXPECTED_FROM_DOMAIN derives from operatorIdentity().supportEmail; the literal is the not-yet-configured fallback.',
   },
   {
     file: 'apps/console/app/api/admin/enterprise-billing/route.ts',

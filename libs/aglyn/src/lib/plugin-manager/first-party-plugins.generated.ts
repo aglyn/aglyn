@@ -416,7 +416,14 @@ export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollecti
     "pluginId": "marketing",
     "name": "campaigns",
     "routeSlug": "marketing",
-    "siteField": "hostId"
+    "siteField": "hostId",
+    "holdsTransferWhile": {
+      "field": "status",
+      "values": [
+        "scheduled",
+        "sending"
+      ]
+    }
   },
   {
     "pluginId": "marketing",

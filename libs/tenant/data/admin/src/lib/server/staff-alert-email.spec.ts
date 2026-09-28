@@ -122,7 +122,7 @@ describe('who hears a staff alarm (AGL-3375)', () => {
     const html = String(sends[0]['html'])
     expect(html).toContain('A dispute was opened on invoice in_123.')
     expect(html).toContain('href="https://app.example.com/admin/abuse-reports/r1"')
-    expect(html).toContain('fraud and risk alerts')
+    expect(html).toContain('operator alerts')
   })
 
   it('reports unconfigured, and sends nothing, when there is no one to tell', async () => {

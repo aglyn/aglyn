@@ -46,7 +46,14 @@ const mockOrgDoc = (id: string) => ({
   data: () => ({}),
 })
 
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what was raised, not how it is delivered.
+  raiseOperatorAlert: async (type: string, options: any = {}) => {
+    mockOperatorAlerts.push({ type, options })
+    return { outcome: 'delivered', type }
+  },
   ERASURE_HOLD_MS: 7 * 24 * 60 * 60 * 1000,
   eraseOrg: (orgId: string) => mockEraseOrg(orgId),
   findUserByUidAcrossPools: async () => null,
@@ -102,6 +109,7 @@ describe('the erasure runner batch (AGL-1455)', () => {
     jest.clearAllMocks()
     process.env.CRON_SECRET = 'test-secret'
     mockDue = []
+    mockOperatorAlerts.length = 0
   })
 
   it('THE DEFECT: a throw on one org still erases the rest of the batch', async () => {
@@ -122,6 +130,16 @@ describe('the erasure runner batch (AGL-1455)', () => {
     // 200, because the run itself completed: the failed org's durable record
     // is the `org.erase-failed` audit row `eraseOrg` writes, not this body.
     expect(status).toBe(200)
+    // The operator hears about the data still held (AGL-3377).
+    expect(mockOperatorAlerts).toEqual([
+      expect.objectContaining({
+        type: 'data.orgErasureFailed',
+        options: expect.objectContaining({
+          dedupeKey: 'org-a',
+          context: expect.objectContaining({ orgId: 'org-a', reason: 'erase-failed' }),
+        }),
+      }),
+    ])
   })
 
   it('reports a skipped org without stopping the batch', async () => {
@@ -140,5 +158,7 @@ describe('the erasure runner batch (AGL-1455)', () => {
       { orgId: 'org-a', reason: 'hold-active' },
     ])
     expect(payload.scanned).toBe(2)
+    // A hold is the schedule working, not a failure: nobody is alerted.
+    expect(mockOperatorAlerts).toEqual([])
   })
 })

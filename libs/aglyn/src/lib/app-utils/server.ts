@@ -37,6 +37,12 @@ export * from './collection-entries'
 export * from './collection-kind'
 export * from './collection-slug'
 export * from './content-authors'
+// NOT re-exported: `./local-business` and `./site-entity-json-ld` (AGL-3383).
+// This barrel is the whole namespace a realm bundle is handed and part of the
+// runtime a published page loads (`check:tenant-wire-weight`); the site
+// entity's JSON-LD and the LocalBusiness allow-list are read only by the
+// tenant page's server render and the console's Setup → SEO card, which import
+// them by path (`@aglyn/aglyn/app-utils/...`).
 export * from './content-query-fields'
 export * from './content-schema-type'
 export * from './content-author-profile'
@@ -270,6 +276,9 @@ export * from './expand-repeatables'
 export * from './org-roles'
 export * from './markdown-lite'
 export * from './notifications'
+// The operator alert registry (AGL-3377); OPERATOR_ALERT_NOTIFICATION_TYPES
+// lives here now, derived from it.
+export * from './operator-alerts'
 export * from './definition-canvas-tree'
 export * from './ensure-canvas-root'
 export * from './repair-canvas-nodes'

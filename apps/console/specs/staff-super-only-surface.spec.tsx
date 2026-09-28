@@ -186,6 +186,11 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ],
     via: /SuperStaffOnly/,
   },
+  'site-transfer/route.ts': {
+    // Moving a site to another organization (AGL-3381).
+    ui: ['app/(app)/admin/sites/[hostId]/page.tsx'],
+    via: /SuperStaffOnly/,
+  },
   'lockdown/route.ts': {
     ui: [
       'app/(app)/admin/lockdown/page.tsx',
@@ -282,6 +287,11 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
   // switched off. Like `flags/page.tsx` and the send-rate card, the card
   // reads the role off its OWN endpoint's response rather than the claim
   // hook; the route is the authority either way.
+  // Operator alert switches and test sends (AGL-3377).
+  'operator-alerts/route.ts': {
+    ui: ['components/staff-operator-alerts-card.component.tsx'],
+    via: /isSuper/,
+  },
   'free-workspace-cap/route.ts': {
     ui: ['components/staff-free-workspace-cap-card.component.tsx'],
     via: /isSuper/,

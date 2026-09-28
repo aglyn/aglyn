@@ -33,6 +33,12 @@ import { verifySvixSignature } from '@aglyn/shared-util-email/svix-signature'
 // holds it). It now lives beside `updateExisting` in the library where Firestore paths are
 // built, which was always the better home and is now the reachable one.
 import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
+import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
+import {
+  MARKETING_EMAIL_EVENTS_FAILED,
+  MARKETING_EMAIL_EVENTS_SIGNATURE_REJECTED,
+  MARKETING_EMAIL_EVENTS_UNCONFIGURED,
+} from '../constants/operator-alerts'
 // From the LEAF, not the barrel, for the same reason `isDocumentId` is
 // (AGL-1771): a spec that mocks `@aglyn/tenant-data-admin` — which it must,
 // because that graph reaches the admin SDK — would otherwise replace the real
@@ -348,6 +354,11 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
   }
   const secret = process.env.RESEND_WEBHOOK_SECRET
   if (!secret) {
+    // The provider is posting, so it is configured on THAT side: every bounce
+    // and complaint is being refused here and none suppressed (AGL-3377).
+    await raiseOperatorAlert(MARKETING_EMAIL_EVENTS_UNCONFIGURED, {
+      dedupeKey: 'unconfigured',
+    })
     return res.status(501).json({ error: 'Webhook is not configured' })
   }
   const payload = Buffer.from(req.rawBody ?? '', 'utf8')
@@ -360,12 +371,22 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     !svixTimestamp ||
     !verifySvix(secret, svixId, svixTimestamp, payload, svixSignature)
   ) {
+    // Only a SIGNED request counts, and only the third inside the window
+    // alerts: a stranger's POST is noise, a rotated secret is not (AGL-3377).
+    if (svixSignature) {
+      await raiseOperatorAlert(MARKETING_EMAIL_EVENTS_SIGNATURE_REJECTED, {
+        dedupeKey: 'signature',
+      })
+    }
     return res.status(401).json({ error: 'Bad signature' })
   }
 
+  // Outside the try, so a failure can say which kind of event it lost.
+  let eventType = ''
   try {
     const event = JSON.parse(payload.toString('utf8'))
     const type = String(event?.type ?? '')
+    eventType = type
 
     /*==========================================
      * THE PER-RECIPIENT DELIVERY LOG.
@@ -832,7 +853,16 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error(error)
-    // Never make Resend retry-storm.
+    // Never make Resend retry-storm — which also means Resend will never send
+    // this event again, so a bounce in it is never suppressed unless somebody
+    // hears about it now (AGL-3377). The recipient stays out of the alert.
+    await raiseOperatorAlert(MARKETING_EMAIL_EVENTS_FAILED, {
+      dedupeKey: eventType || 'unknown',
+      context: {
+        eventType: eventType || 'unknown',
+        error: (error instanceof Error ? error.message : String(error)).slice(0, 200),
+      },
+    })
     return res.status(200).json({ ok: true })
   }
 }

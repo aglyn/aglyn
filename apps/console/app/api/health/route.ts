@@ -46,6 +46,7 @@
  * so a degraded dependency returns 503 rather than a 200 whose body says
  * "degraded" — a body nobody parses is not a signal.
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import {
   firebaseAdmin,
   probeMediaVariantSupport,
@@ -151,11 +152,13 @@ export async function GET(): Promise<Response> {
     environment: deploymentEnvironmentLabel(),
     region: process.env['VERCEL_REGION'] ?? null,
   })
-  return Response.json(
-    // Reported alongside the body rather than merged into `checks`, so it is
-    // readable by anything that wants it and cannot move the status code.
-    { ...body, imaging: await imagingHealth() },
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      // Reported alongside the body rather than merged into `checks`, so it is
+      // readable by anything that wants it and cannot move the status code.
+      { ...body, imaging: await imagingHealth() },
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 

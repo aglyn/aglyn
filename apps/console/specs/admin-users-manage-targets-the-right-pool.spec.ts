@@ -57,6 +57,8 @@ const TARGET_UID = 'SsoTenantUidFixture000000000'
 let mockCalls: string[] = []
 const mockVerifyIdToken = jest.fn()
 
+const mockRaiseOperatorAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'delivered' }))
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const serverTimestamp = () => 'SERVER_TIMESTAMP'
   // AGL-1881: recorded like every other pool-sensitive call here, because a
@@ -95,6 +97,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     metadata: { creationTime: null, lastSignInTime: null },
   }
   return {
+    // The operator alert pipeline (AGL-3377): what the route raises, not how it is delivered.
+    raiseOperatorAlert: (...args: unknown[]) => mockRaiseOperatorAlert(...args),
     __esModule: true,
     firebaseAdmin: {
       app: () => ({
@@ -156,6 +160,9 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  formatOperatorAlertAmount: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/operator-alerts',
+  ).formatOperatorAlertAmount,
   __esModule: true,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
@@ -205,7 +212,15 @@ beforeEach(() => {
 
 describe('AGL-2005 · staff actions land in the identified account’s pool', () => {
   it('grants staff in the SSO tenant pool, never the project pool', async () => {
+    mockRaiseOperatorAlert.mockClear()
     expect((await manage({ action: 'grantStaff' })).status).toBe(200)
+    // A new staff member is told to the operator (AGL-3377).
+    expect(mockRaiseOperatorAlert).toHaveBeenCalledWith(
+      'security.staffGranted',
+      expect.objectContaining({
+        context: expect.objectContaining({ role: 'support', previous: 'not staff' }),
+      }),
+    )
     expect(mockCalls).toContain(
       `${SSO_TENANT}:setCustomUserClaims:${TARGET_UID}:staff=true`,
     )

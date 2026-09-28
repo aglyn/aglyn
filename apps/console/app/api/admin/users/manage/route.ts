@@ -30,6 +30,7 @@ import {
   invalidateTokenRevocationCache,
   isImpersonationSession,
   passwordResetThrottleMessage,
+  raiseOperatorAlert,
   setClaimsInOwningPool,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
@@ -560,6 +561,28 @@ async function handler(request: Request): Promise<Response> {
       },
       at: FieldValue.serverTimestamp(),
     })
+
+    // A new staff member, or a raised role, is told to the operator
+    // (AGL-3377): a grant nobody on the team made is a compromised staff
+    // account, and the audit row alone is read by nobody until it is too late.
+    const grantedRole =
+      action === 'grantStaff'
+        ? 'support'
+        : action === 'setRole' &&
+            STAFF_ROLES.indexOf(requestedRole as never) >
+              STAFF_ROLES.indexOf(String(before.staffRole ?? '') as never)
+          ? String(requestedRole)
+          : null
+    if (grantedRole && !(action === 'grantStaff' && before.staff)) {
+      await raiseOperatorAlert('security.staffGranted', {
+        context: {
+          target: target.email || uid,
+          role: grantedRole,
+          previous: before.staff ? String(before.staffRole ?? 'staff') : 'not staff',
+          actor: decoded.email || decoded.uid,
+        },
+      })
+    }
 
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {

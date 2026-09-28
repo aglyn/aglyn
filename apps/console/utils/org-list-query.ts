@@ -37,21 +37,29 @@ import {
  * Both are read by Admin-SDK routes (`runStaffListQuery`), so the security
  * rules never see these queries.
  *
- * ## One order, merged indexes
+ * ## The orders, merged indexes
  *
- * The list's order is the DOCUMENT ID, as it always was: an `orderBy` on a
- * data field drops every organization that lacks it, and the id is the one
- * path every organization has. Equalities and the search token merge against
- * the built-in single-field indexes in that order, so they need no composite
- * at all.
+ * With no order asked for, the order is the DOCUMENT ID, as it always was —
+ * the staff pickers' page walk and the margin scan rely on it. Equalities and
+ * the search token merge against the built-in single-field indexes in that
+ * order, so they need no composite at all.
  *
- * The one range is Created, which then leads the order (`createdAt` DESC).
- * Each equality and the search token merge with it through their own
- * `(field, createdAt DESC)` composite (`listQueryIndexes`), pinned by
- * `specs/org-list-query.spec.ts`. A second range — Updated, a name that
- * starts or ends with, a slug or an id that starts with, `is not empty` on
- * the plan — would each need its own order and a further set of composites
- * for every equality, so none is offered; one range per table.
+ * The Organizations grid sorts by its column headers (`ORG_LIST_COLUMN_SORTS`):
+ * Organization A to Z and back (`nameLower`) and Created either way. An
+ * `orderBy` on a data field drops every organization that lacks it, so only
+ * fields EVERY organization carries are offered — `nameLower` and `createdAt`
+ * are stamped by `createOrganization`. The stored plan and the billing status
+ * are absent on an org that never had one, so their columns do not sort: the
+ * sort would hide exactly those orgs. Each order costs one
+ * `(field, order)` composite per equality and for the search token
+ * (`listQueryIndexes`), pinned by `specs/org-list-query.spec.ts`.
+ *
+ * The one range is Created, which then leads the order — in the direction the
+ * header asked for when that is Created, `createdAt` DESC otherwise. A
+ * second range — Updated, a name that starts or ends with, a slug or an id
+ * that starts with, `is not empty` on the plan — would each need its own
+ * order and a further set of composites for every equality, so none is
+ * offered; one range per table.
  *
  * ## The search
  *
@@ -156,8 +164,20 @@ export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   ownerUid: 'Owner UID',
 }
 
-/** The order both organization lists keep while no range is in force. */
+/** The order both organization lists keep while no order is asked for. */
 export const ORG_LIST_SORT: ListQuerySort = { path: LIST_QUERY_ID_PATH, direction: 'asc' }
+
+/**
+ * The orders the Organizations grid's headers ask for, the page's default
+ * (newest first) FIRST. Only fields every organization carries — see "The
+ * orders" above.
+ */
+export const ORG_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
+  { path: 'createdAt', direction: 'desc', column: 'createdAt' },
+  { path: 'createdAt', direction: 'asc', column: 'createdAt' },
+  { path: 'nameLower', direction: 'asc', column: 'name' },
+  { path: 'nameLower', direction: 'desc', column: 'name' },
+]
 
 /** Where an organization's search tokens are stored. */
 export const ORG_NAME_TOKENS_PATH = 'nameTokens'
@@ -165,7 +185,7 @@ export const ORG_NAME_TOKENS_PATH = 'nameTokens'
 /** The staff Organizations list's query: every field above, and the search. */
 export const ORG_LIST_QUERY: ListQueryDeclaration = {
   fields: ORG_LIST_FILTER_FIELDS,
-  sorts: [ORG_LIST_SORT],
+  sorts: [ORG_LIST_SORT, ...ORG_LIST_COLUMN_SORTS],
   search: { tokensPath: ORG_NAME_TOKENS_PATH },
 }
 

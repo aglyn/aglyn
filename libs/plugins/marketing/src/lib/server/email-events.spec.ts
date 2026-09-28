@@ -450,6 +450,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
  * belongs to nobody is counted against somebody.
  */
 const reputationFailures: Array<{ orgId: string; kind: string }> = []
+// The operator alerts this webhook raises (AGL-3377): what it raised, not how
+// it is delivered.
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+jest.mock('@aglyn/tenant-data-admin/server/operator-alerts', () => ({
+  raiseOperatorAlert: async (definition: any, options: any = {}) => {
+    mockOperatorAlerts.push({ type: definition.type, options })
+    return { outcome: 'delivered', type: definition.type }
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin/server/email-sender-reputation', () => ({
   recordEmailReputationFailure: async (orgId: string, kind: string) => {
     reputationFailures.push({ orgId, kind })
@@ -829,11 +839,23 @@ describe('a genuine Firestore failure', () => {
     outage.code = 13
     updateFailure = outage
 
+    mockOperatorAlerts.length = 0
     const result = await deliver(event('email.opened', TAGS))
 
     expect(errors).toHaveLength(1)
     // Resend still must not retry-storm.
     expect(result.status).toBe(200)
+    // ...which means Resend never sends it again, so the operator hears
+    // (AGL-3377) — naming the event, never the recipient.
+    expect(mockOperatorAlerts).toEqual([
+      {
+        type: 'marketing.emailEventsFailed',
+        options: {
+          dedupeKey: 'email.opened',
+          context: { eventType: 'email.opened', error: 'INTERNAL' },
+        },
+      },
+    ])
   })
 })
 
@@ -941,6 +963,12 @@ describe('the pre-existing gates', () => {
 
     expect(result.status).toBe(401)
     expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 2, clicks: 5 })
+    // A signed refusal is counted toward the rotated-secret alert (AGL-3377);
+    // the registry's threshold, not this route, decides when it fires.
+    expect(mockOperatorAlerts.at(-1)).toEqual({
+      type: 'marketing.emailEventsSignatureRejected',
+      options: { dedupeKey: 'signature' },
+    })
   })
 
   it('ignores an event type no campaign counter is kept for', async () => {

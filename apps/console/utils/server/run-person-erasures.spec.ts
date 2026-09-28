@@ -30,7 +30,14 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what was raised, not how it is delivered.
+  raiseOperatorAlert: async (type: string, options: any = {}) => {
+    mockOperatorAlerts.push({ type, options })
+    return { outcome: 'delivered', type }
+  },
   firebaseAdmin: { app: () => ({ firestore: () => { throw new Error('inject the store') } }) },
   erasePerson: async () => {
     throw new Error('inject the sweep')
@@ -164,6 +171,12 @@ describe('runPersonErasures', () => {
     spy.mockRestore()
     expect(result.erased).toEqual(['b', 'c'])
     expect(result.failed).toEqual([{ requestId: 'a', reason: 'recursiveDelete exploded' }])
+    // The operator hears, once per request per day, without the address.
+    expect(mockOperatorAlerts.at(-1)).toMatchObject({
+      type: 'data.personErasureFailed',
+      options: { dedupeKey: 'a', context: { requestId: 'a', attempt: 1, error: 'recursiveDelete exploded' } },
+    })
+    expect(JSON.stringify(mockOperatorAlerts)).not.toContain('a@example.com')
     expect(requests.get('a')).toMatchObject({
       status: 'failed',
       failedAtMs: 100,

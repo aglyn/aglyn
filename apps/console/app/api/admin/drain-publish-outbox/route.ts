@@ -30,6 +30,7 @@ import {
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { postTenantRevalidate } from '../../../../utils/server/tenant-revalidate'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 /**
  * DRAIN THE PUBLISH OUTBOX (AGL-2575).
@@ -249,6 +250,18 @@ async function handler(request: Request): Promise<Response> {
       }),
     )
 
+    // Pages left stale after every retry, or entries no sweep has dropped:
+    // published sites serving yesterday's page (AGL-3377).
+    if (!dryRun && (failed > 0 || stalled > 0 || stalePending > 0)) {
+      await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
+        dedupeKey: 'drain-publish-outbox',
+        context: {
+          job: 'The publish outbox drain',
+          error: `${failed} failed, ${stalled} stalled and ${stalePending} stale entries; published pages may be serving an old version`,
+        },
+      })
+    }
+
     return Response.json(
       {
         ok: true,
@@ -267,6 +280,13 @@ async function handler(request: Request): Promise<Response> {
     )
   } catch (error) {
     console.error('[publish-outbox] drain failed', error)
+    await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
+      dedupeKey: 'drain-publish-outbox:run',
+      context: {
+        job: 'The publish outbox drain',
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error),
+      },
+    })
     return Response.json(
       { error: 'Publish outbox drain failed' },
       { status: 500 },

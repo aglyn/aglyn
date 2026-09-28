@@ -196,7 +196,8 @@
         "site": "registerCommercePlugin",
         "console": "registerCommerceConsole",
         "tenantApi": "registerCommerceApi",
-        "consoleApi": "registerCommerceConsoleApi"
+        "consoleApi": "registerCommerceConsoleApi",
+        "serverDeclarations": "registerCommerceServerDeclarations"
       },
       "modules": {
         "site": "site"
@@ -726,9 +727,11 @@
       "package": "@aglyn/plugins-marketing",
       "register": {
         "console": "registerMarketingConsole",
+        "staff": "registerMarketingConsole",
         "tenantApi": "registerMarketingApi",
         "consoleApi": "registerMarketingConsoleApi",
-        "site": "registerMarketingPlugin"
+        "site": "registerMarketingPlugin",
+        "serverDeclarations": "registerMarketingServerDeclarations"
       },
       "modules": {
         "site": "site"
@@ -763,7 +766,11 @@
         {
           "name": "campaigns",
           "routeSlug": "marketing",
-          "siteField": "hostId"
+          "siteField": "hostId",
+          "holdsTransferWhile": {
+            "field": "status",
+            "values": ["scheduled", "sending"]
+          }
         },
         {
           "name": "emailCampaigns",
@@ -786,6 +793,7 @@
             "/marketing"
           ],
           "slots": [
+            "adminOrgDetail",
             "crmRecordAttribution",
             "emailMessages",
             "emailTemplateRecipients",
@@ -830,6 +838,7 @@
       "package": "@aglyn/plugins-workflows",
       "register": {
         "console": "registerWorkflowsConsole",
+        "staff": "registerWorkflowsConsole",
         "tenantApi": "registerWorkflowsApi",
         "consoleApi": "registerWorkflowsConsoleApi",
         "serverDeclarations": "registerWorkflowsServerDeclarations"
@@ -880,7 +889,9 @@
             "/automation"
           ],
           "slots": [
-            "hostActivity"
+            "adminOrgDetail",
+            "hostActivity",
+            "staffSite"
           ]
         }
       }

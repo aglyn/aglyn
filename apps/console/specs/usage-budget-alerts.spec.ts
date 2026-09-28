@@ -292,6 +292,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   notifyOrgAdmins: (...args: unknown[]) => (mockNotifyOrgAdmins as any)(...args),
   notifyStaff: (...args: unknown[]) => (mockNotifyStaff as any)(...args),
+  // The operator alert an automatic billing lock raises (AGL-3377).
+  raiseOperatorAlert: async () => ({ outcome: 'delivered' }),
   meterPlatformEmail: async () => undefined,
   // The auth-pool fallback for an owner/admin whose member document carries no
   // denormalized email (AGL-2234). A wholesale `jest.mock` is a CLOSED WORLD:

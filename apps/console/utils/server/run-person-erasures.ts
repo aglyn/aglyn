@@ -16,7 +16,12 @@
  */
 
 import { PERSON_ERASURES_COLLECTION } from '@aglyn/aglyn/server'
-import { erasePerson, type ErasePersonResult, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  erasePerson,
+  type ErasePersonResult,
+  firebaseAdmin,
+  raiseOperatorAlert,
+} from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -125,6 +130,19 @@ export async function runPersonErasures(
           updatedAt: FieldValue.serverTimestamp(),
         })
         .catch(() => undefined)
+      // The statutory deadline keeps running while this retries, so the
+      // operator hears once a day per request (AGL-3377). The data subject's
+      // address never travels in the alert, even inside an error message.
+      await raiseOperatorAlert('data.personErasureFailed', {
+        dedupeKey: requestId,
+        context: {
+          requestId,
+          orgId,
+          attempt: Number(request.get('failureCount') ?? 0) + 1,
+          error: (email ? reason.split(email).join('[address]') : reason).slice(0, 200),
+        },
+        ...(orgId ? { orgId } : {}),
+      })
     }
   }
   return { erased, failed, scanned: queue.size }

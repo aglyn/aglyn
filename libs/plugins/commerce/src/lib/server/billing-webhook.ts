@@ -24,7 +24,7 @@ import {
   meterHostEmail,
   notifyHostManagers,
   notifyRiskEvent,
-  notifyStaff,
+  raiseOperatorAlert,
   renderHostEmailWithTokens,
   clearConnectPayoutFailure,
   recordConnectPayoutFailure,
@@ -33,6 +33,13 @@ import {
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { captureHostContact } from '@aglyn/tenant-runtime'
+import { formatOperatorAlertAmount } from '@aglyn/aglyn/app-utils/operator-alerts'
+import {
+  COMMERCE_CHARGEBACK_UNROUTABLE,
+  COMMERCE_FEE_REPRICE_REFUSED,
+  COMMERCE_SELLER_SHARE_NOT_REVERSED,
+  COMMERCE_TAX_NOT_REVERSED,
+} from '../constants/operator-alerts'
 import { createHmac } from 'crypto'
 import {
   isEmailConfigured,
@@ -398,34 +405,62 @@ async function findOrderForDispute(
  *
  * Staff, not the merchant: on the missing-index path there is no merchant to
  * tell — the whole point is that the order could not be found — and a missing
- * platform index is a platform fault affecting every host at once. `notifyStaff`
- * is the same channel the analytics and abuse routes use for exactly this
- * class, and it never throws.
+ * platform index is a platform fault affecting every host at once.
  *
- * `system.announcement` rather than a new type: the AGL-1088 rule is that
- * category is the prefix and `system` is the bucket nobody mutes to reduce
- * noise, which is the property an alert about unrouted money needs.
+ * As this plugin's own operator alert (AGL-3377), which reaches the operator's
+ * inbox and webhook as well as the console. A missing index is one alert for
+ * every chargeback it drops, not one per chargeback.
  */
 async function reportUnresolvedDispute(
   reason: 'missing-index' | 'ambiguous',
   paymentIntentId: string,
   dispute: StripeDispute,
 ): Promise<void> {
-  const amount = `$${((dispute.amount ?? 0) / 100).toFixed(2)}`
-  await notifyStaff({
-    type: 'system.announcement',
-    title: 'Chargeback could not be routed to an order',
-    body:
-      reason === 'missing-index'
-        ? `A ${amount} chargeback (${paymentIntentId}) could not be looked ` +
-          'up: the collection-group index on orders.paymentIntentId is not ' +
-          'deployed, so EVERY commerce chargeback is currently being ignored ' +
-          '— no flag, no seller-share reversal, no merchant notification. ' +
-          'Deploy cloud/firebase-firestore.indexes.json.'
-        : `A ${amount} chargeback (${paymentIntentId}) matched more than one ` +
-          'order, so none was reversed. The dispute is durable in Stripe and ' +
-          'needs reconciling by hand.',
-    link: '/admin',
+  const amount = formatOperatorAlertAmount(dispute.amount ?? 0)
+  await raiseOperatorAlert(COMMERCE_CHARGEBACK_UNROUTABLE, {
+    dedupeKey: reason === 'missing-index' ? 'missing-index' : paymentIntentId,
+    url: '/admin',
+    context: {
+      amount,
+      detail:
+        reason === 'missing-index'
+          ? `A ${amount} chargeback (${paymentIntentId}) could not be looked ` +
+            'up: the collection-group index on orders.paymentIntentId is not ' +
+            'deployed, so EVERY commerce chargeback is currently being ignored ' +
+            '— no flag, no seller-share reversal, no merchant notification. ' +
+            'Deploy cloud/firebase-firestore.indexes.json.'
+          : `A ${amount} chargeback (${paymentIntentId}) matched more than one ` +
+            'order, so none was reversed. The dispute is durable in Stripe and ' +
+            'needs reconciling by hand.',
+    },
+  })
+}
+
+/**
+ * Tells the operator that a subscription cycle's sales tax stayed with the
+ * merchant (AGL-3377): the platform files and remits it, so every one of
+ * these is tax it may owe and does not hold. Once per invoice and outcome, so
+ * Stripe's redeliveries of the same invoice say it once.
+ */
+async function reportTaxNotReversed(input: {
+  hostId: string
+  invoiceId: string
+  /** Absent when the invoice stated no readable amount. */
+  taxCents?: number
+  status: string
+  reason: string
+}): Promise<void> {
+  await raiseOperatorAlert(COMMERCE_TAX_NOT_REVERSED, {
+    dedupeKey: `${input.invoiceId}:${input.status}`,
+    context: {
+      invoiceId: input.invoiceId,
+      hostId: input.hostId,
+      amount:
+        input.taxCents === undefined
+          ? 'An unknown amount'
+          : formatOperatorAlertAmount(input.taxCents),
+      reason: input.reason,
+    },
   })
 }
 
@@ -969,15 +1004,41 @@ async function repriceStorefrontSubscriptionFee(
           `(${response ? response.status : 'network'})`,
       )
     }
-    console.error(
-      `Stripe refused the fee re-price for ${subscriptionId} (AGL-2289)`,
-      await response.json().catch(() => null),
-    )
+    const refusal = (await response.json().catch(() => null)) as {
+      error?: { message?: string }
+    } | null
+    console.error(`Stripe refused the fee re-price for ${subscriptionId} (AGL-2289)`, refusal)
+    await raiseOperatorAlert(COMMERCE_FEE_REPRICE_REFUSED, {
+      dedupeKey: `${subscriptionId}:${desiredFeePct}`,
+      context: {
+        subject: `subscription ${subscriptionId}`,
+        hostId: subscriptionRef.parent.parent?.id ?? '',
+        reason: `Stripe refused to set the fee to ${desiredFeePct}% (${
+          refusal?.error?.message ?? `HTTP ${response.status}`
+        })`,
+      },
+    })
     return
   }
   await subscriptionRef
     .set({ appliedFeePct: desiredFeePct }, { merge: true })
     .catch(() => undefined)
+}
+
+/**
+ * Tells the operator a subscription cycle kept a fee charged on the wrong
+ * base (AGL-3377): the merchant paid more than the plan sets. Once per
+ * invoice.
+ */
+async function reportFeeNotCorrected(
+  hostId: string,
+  invoiceId: string,
+  reason: string,
+): Promise<void> {
+  await raiseOperatorAlert(COMMERCE_FEE_REPRICE_REFUSED, {
+    dedupeKey: invoiceId,
+    context: { subject: `invoice ${invoiceId}`, hostId, reason },
+  })
 }
 
 /**
@@ -1118,6 +1179,7 @@ async function chargeSubscriptionFeeOnItemsOnly(
       'Subscription fee not corrected to the items-only base: STRIPE_SECRET_KEY is not set (AGL-2317)',
       { hostId, invoiceId },
     )
+    await reportFeeNotCorrected(hostId, invoiceId, 'STRIPE_SECRET_KEY is not set on this deployment')
     return chargedCents
   }
   const chargeId = await resolveInvoiceChargeId(invoice, stripeKey)
@@ -1126,6 +1188,7 @@ async function chargeSubscriptionFeeOnItemsOnly(
       'Subscription fee not corrected to the items-only base: the invoice names no charge (AGL-2317)',
       { hostId, invoiceId },
     )
+    await reportFeeNotCorrected(hostId, invoiceId, 'the invoice names no charge')
     return chargedCents
   }
   const fees = await stripeGet(
@@ -1146,6 +1209,7 @@ async function chargeSubscriptionFeeOnItemsOnly(
       'Subscription fee not corrected to the items-only base: no application fee on the charge (AGL-2317)',
       { hostId, invoiceId, chargeId, status: fees.status },
     )
+    await reportFeeNotCorrected(hostId, invoiceId, `no application fee was found on charge ${chargeId}`)
     return chargedCents
   }
   const feeAmount = Math.max(0, Math.round(Number(fee.amount ?? 0)))
@@ -1182,9 +1246,16 @@ async function chargeSubscriptionFeeOnItemsOnly(
     }
     // Definitive: no redelivery fixes it, and throwing would have Stripe retry
     // the whole invoice forever. Record what was actually taken.
-    console.error(
-      `Stripe refused the items-only fee correction for ${invoiceId} (AGL-2317)`,
-      await response.json().catch(() => null),
+    const refusal = (await response.json().catch(() => null)) as {
+      error?: { message?: string }
+    } | null
+    console.error(`Stripe refused the items-only fee correction for ${invoiceId} (AGL-2317)`, refusal)
+    await reportFeeNotCorrected(
+      hostId,
+      invoiceId,
+      `Stripe refused to refund ${formatOperatorAlertAmount(refundCents)} of the fee (${
+        refusal?.error?.message ?? `HTTP ${response.status}`
+      })`,
     )
     return chargedCents
   }
@@ -1417,14 +1488,12 @@ async function reverseSubscriptionTaxToPlatform(
       { hostId, invoiceId, reason: decision.reason },
     )
     await settle(0, { status: 'unreadable', reason: decision.reason })
-    void notifyStaff({
-      type: 'system.announcement',
-      title: 'A subscription invoice stated no readable tax',
-      body:
-        `Invoice ${invoiceId} enables automatic tax but names no tax field, so ` +
-        `no reversal was made. Aglyn may owe tax it did not pull back. ` +
-        `${decision.reason}`,
-    }).catch(() => undefined)
+    await reportTaxNotReversed({
+      hostId,
+      invoiceId,
+      status: 'unreadable',
+      reason: `the invoice enables automatic tax but states no readable tax field (${decision.reason})`,
+    })
     return
   }
 
@@ -1436,6 +1505,13 @@ async function reverseSubscriptionTaxToPlatform(
       'Subscription tax not reversed to the platform: STRIPE_SECRET_KEY is not set (AGL-1956)',
       { hostId, invoiceId },
     )
+    await reportTaxNotReversed({
+      hostId,
+      invoiceId,
+      taxCents,
+      status: 'no-key',
+      reason: 'STRIPE_SECRET_KEY is not set on this deployment',
+    })
     return
   }
 
@@ -1480,6 +1556,13 @@ async function reverseSubscriptionTaxToPlatform(
         { hostId, invoiceId, chargeId, error: charge.body?.error },
       )
       await settle(0, { status: 'charge-unreadable', taxCents })
+      await reportTaxNotReversed({
+        hostId,
+        invoiceId,
+        taxCents,
+        status: 'charge-unreadable',
+        reason: `Stripe refused to read charge ${chargeId}`,
+      })
       return
     }
     const transferId = String(charge.body?.transfer ?? '')
@@ -1504,6 +1587,13 @@ async function reverseSubscriptionTaxToPlatform(
         { hostId, invoiceId, transferId, error: transfer.body?.error },
       )
       await settle(0, { status: 'transfer-unreadable', taxCents })
+      await reportTaxNotReversed({
+        hostId,
+        invoiceId,
+        taxCents,
+        status: 'transfer-unreadable',
+        reason: `Stripe refused to read transfer ${transferId}`,
+      })
       return
     }
     // GUARD 2 — the crash window, and LOAD-BEARING now that the idempotency key
@@ -1568,6 +1658,13 @@ async function reverseSubscriptionTaxToPlatform(
         transferId,
         owedCents: taxCents,
       })
+      await reportTaxNotReversed({
+        hostId,
+        invoiceId,
+        taxCents,
+        status: 'nothing-left',
+        reason: `transfer ${transferId} had nothing left to reverse, so the tax must be reconciled by hand`,
+      })
       return
     }
     const response = await fetch(
@@ -1622,16 +1719,15 @@ async function reverseSubscriptionTaxToPlatform(
       } else {
         await settle(0, { status: 'refused', ...failureFields })
       }
-      void notifyStaff({
-        type: 'system.announcement',
-        title: 'A subscription sales-tax reversal failed',
-        body:
-          `$${(taxCents / 100).toFixed(2)} of sales tax on invoice ${invoiceId} ` +
-          `is still with the merchant and Aglyn owes it. ` +
-          (insufficient
-            ? 'The connected account had insufficient balance; this will retry.'
-            : `Stripe refused: ${String(body?.error?.message ?? 'no reason given')}`),
-      }).catch(() => undefined)
+      await reportTaxNotReversed({
+        hostId,
+        invoiceId,
+        taxCents,
+        status: insufficient ? 'insufficient' : 'refused',
+        reason: insufficient
+          ? 'the connected account had insufficient balance; it will retry on the next delivery'
+          : `Stripe refused the reversal: ${String(body?.error?.message ?? 'no reason given')}`,
+      })
       return
     }
     const reversedCents = Math.max(0, Math.round(Number(body?.amount ?? reverseCents)))
@@ -1770,6 +1866,7 @@ async function reverseSellerShare(
     console.error(
       'Transfer reversal skipped: STRIPE_SECRET_KEY is not set (AGL-1794)',
     )
+    await reportSellerShareNotReversed(orderRef, disputeId, principalCents, 'STRIPE_SECRET_KEY is not set on this deployment')
     return 0
   }
 
@@ -1841,6 +1938,15 @@ async function reverseSellerShare(
       { disputeId, reason: outcome.reason },
     )
     await settle(0, null, SELLER_SHARE_NOT_REVERSED_NOTE[outcome.reason])
+    // Already reversed on the transfer is money back, not money lost.
+    if (outcome.reason !== 'transfer-fully-reversed') {
+      await reportSellerShareNotReversed(
+        orderRef,
+        disputeId,
+        principalCents,
+        SELLER_SHARE_NOT_REVERSED_NOTE[outcome.reason],
+      )
+    }
     return 0
   }
   // Announced on adoption too: the delivery that created an adopted reversal
@@ -1852,6 +1958,28 @@ async function reverseSellerShare(
     `$${(outcome.cents / 100).toFixed(2)} seller share reversed for lost dispute`,
   )
   return wrote ? outcome.cents : 0
+}
+
+/**
+ * Tells the operator the platform is out a lost dispute's principal because
+ * the merchant's share could not be pulled back (AGL-3377). Once per dispute.
+ */
+async function reportSellerShareNotReversed(
+  orderRef: FirebaseFirestore.DocumentReference,
+  disputeId: string,
+  principalCents: number,
+  reason: string,
+): Promise<void> {
+  await raiseOperatorAlert(COMMERCE_SELLER_SHARE_NOT_REVERSED, {
+    dedupeKey: disputeId,
+    context: {
+      disputeId,
+      orderId: orderRef.id,
+      hostId: orderRef.parent.parent?.id ?? '',
+      amount: formatOperatorAlertAmount(principalCents),
+      reason,
+    },
+  })
 }
 
 /** The order timeline's words for each final reason nothing was pulled back. */

@@ -29,6 +29,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `orgBillingOverview` | Billing → Overview, among the plan and add-on cards | `orgId`, `org`, `plan`, `canManage` |
 | `staffOrg` | Staff org page, among its cards (staff-only) | `orgId` |
 | `staffUser` | Staff user page, below the account's activity (staff-only) | `uid` |
+| `staffSite` | Staff site page, below its own cards (staff-only) | `hostId`, `orgId` (`''` for none), `host` (the site document, `undefined` while loading) |
 | `staffOrgsListColumn` | A **column** of the staff Organizations list — see [Column zones](#column-zones) (staff-only) | per row: `row`, `orgId`, `orgIds` (every org on the page); its `Header`: `orgIds` |
 | `staffOrgUsageColumn` | The staff org usage table: a column between Forms and Cost when the widget declares `column`, a line above the table otherwise (staff-only) | per month: `month`, `orgId`; above the table: `orgId`, `org` (the org document, where the page holds one) |
 | `orgMember` | Team → member detail, below the member's activity | `orgId`, `uid`, `member`, `canManage` |
@@ -111,9 +112,9 @@ A widget that renders nothing leaves no gap in either kind of zone.
 
 ## Staff zones
 
-`adminOrgDetail`, `staffOrg`, `staffUser`, `staffOrgsListColumn` and
-`staffOrgUsageColumn` are on the staff pages, which
-name no workspace: a staff page is about an org or an account, not about the
+`adminOrgDetail`, `staffOrg`, `staffUser`, `staffSite`, `staffOrgsListColumn`
+and `staffOrgUsageColumn` are on the staff pages, which
+name no workspace: a staff page is about an org, a site or an account, not about the
 reader's own. So these zones do not read an org's enabled plugins. The staff
 area loads every plugin whose `plugins.config.json` entry names a `staff`
 register surface (see [the manifest](./manifest-and-envs.md)), before any

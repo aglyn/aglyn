@@ -18,7 +18,8 @@
 
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { RowActionsMenu } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -38,17 +39,27 @@ import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import { SuperStaffOnly } from '../../../../../components/staff-super-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 import HostActivityTable from '../../../../../components/host-activity-table.component'
 import { StaffDomainCard } from '../../../../../components/staff-domain-card.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../components/plugin-widget-slot.component'
+import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
+import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
+import StaffSiteTransfer from '../../../../../components/staff-site-transfer.component'
+import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'
+import {
+  type StaffSiteRow,
+  staffSiteLiveUrl,
+} from '../../../../../components/staff-site-row-actions.component'
+import { homeScreenId, staffSitePreviewHref } from '../../../../../utils/staff-site-links'
 
 /**
  * The published-site apex, from the ONE shared source (AGL-2195).
@@ -81,6 +92,32 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
   // The site names its organization; the URL no longer does (AGL-3378).
   const orgId = String(host?.orgId ?? '')
 
+  /*
+   * The organization and its owner, as the Sites list reads them: one row of
+   * `/api/admin/sites` narrowed to this site's id. The owner's address comes
+   * from the auth pools, which only a server route can read.
+   */
+  const [site, setSite] = useState<StaffSiteRow | null>(null)
+  const [siteNonce, setSiteNonce] = useState(0)
+  useEffect(() => {
+    if (!hostId || !user) return undefined
+    let active = true
+    const filters = JSON.stringify([{ field: '$id', op: 'equals', value: hostId }])
+    void authorizedFetch(user, `/api/admin/sites?filters=${encodeURIComponent(filters)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (active) setSite((payload?.sites?.[0] as StaffSiteRow | undefined) ?? null)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+    // `user` identity churns with token refreshes; the uid names the reader.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostId, (user as { uid?: string } | null)?.uid, siteNonce])
+  const homeId = useMemo(() => homeScreenId(host?.screens), [host?.screens])
+  const { widgets: staffSiteWidgets } = useSlotWidgets(['staffSite'])
+
   // Usage counts (AGL-392): screens = pages, media file count, members.
   const [counts, setCounts] = useState<{
     screens: number | null
@@ -110,12 +147,17 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
     }
   }, [firestore, hostId, orgId])
 
-  const liveUrl = useMemo(() => {
-    if (!host) return null
-    if (host.cname) return `https://${host.cname}`
-    if (host.subdomain) return `https://${host.subdomain}.${TENANT_ROOT}`
-    return null
-  }, [host])
+  const liveUrl = useMemo(
+    () =>
+      host
+        ? (staffSiteLiveUrl({
+            subdomain: host.subdomain ?? null,
+            cname: host.cname ?? null,
+            cnameAttachmentPending: host.cnameAttachmentPending === true,
+          }) ?? null)
+        : null,
+    [host],
+  )
   const publishedPages = useMemo(
     () => Object.keys((host?.screens ?? {}) as Record<string, string>).length,
     [host],
@@ -169,13 +211,56 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
         { children: host?.displayName ?? hostId },
       ]}
       header={{
-        children: host?.displayName ?? 'Host',
+        children: host?.displayName ?? 'Site',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
-      help={{
-        topic: 'architectureMultiTenancy',
-        anchor: '#workspace-subdomains',
-      }}
+      help={{ topic: 'staffConsole', anchor: '#site-detail' }}
+      headerRight={
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            href={liveUrl ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+            disabled={!liveUrl}
+          >
+            {'Visit live site'}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            href={homeId ? staffSitePreviewHref(hostId, 'screen', homeId) : undefined}
+            target="_blank"
+            rel="noreferrer"
+            disabled={!homeId}
+            title={homeId ? undefined : 'No home page is published — preview a page from Content'}
+          >
+            {'Open preview'}
+          </Button>
+          <RowActionsMenu
+            label={host?.displayName ?? hostId}
+            items={[
+              {
+                key: 'org',
+                label: 'Open organization',
+                href: orgId ? buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }) : undefined,
+                disabled: !orgId,
+                disabledReason: orgId ? undefined : 'This site belongs to no organization',
+              },
+              {
+                key: 'owner',
+                label: 'Open owner',
+                href: site?.owner?.uid
+                  ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })
+                  : undefined,
+                disabled: !site?.owner?.uid,
+                disabledReason: site?.owner?.uid ? undefined : 'The organization records no owner',
+              },
+            ]}
+          />
+        </Stack>
+      }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
@@ -232,8 +317,14 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <Chip
                           size="small"
                           variant="outlined"
-                          label={host?.published ? 'published' : 'draft'}
+                          label={publishedPages ? 'published' : 'unpublished'}
                         />
+                        {site?.suspended ? (
+                          <Chip size="small" color="error" label="suspended" />
+                        ) : null}
+                        {host?.maintenance ? (
+                          <Chip size="small" color="warning" label="maintenance" />
+                        ) : null}
                       </Stack>
                       {/* Subdomain edit (AGL-390). */}
                       <Stack
@@ -278,6 +369,74 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12, md: 6 },
                 children: (
                   <CardDisplay
+                    header={'Ownership'}
+                    help={docsHelp('staffConsole', {
+                      anchor: '#site-ownership',
+                      excerpt:
+                        'The organization this site belongs to and who owns it. Ownership moves with the organization: transferring it here hands every site of the organization to the new owner.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <Stack spacing={1.5}>
+                      <Stack>
+                        <Typography variant="caption" color="text.secondary">
+                          {'Organization'}
+                        </Typography>
+                        {/* An anchor either way: one without an href is
+                            the placeholder link, not a different element. */}
+                        <AppLink
+                          href={orgId ? buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }) : undefined}
+                        >
+                          {orgId ? (site?.org?.name ?? orgId) : '—'}
+                        </AppLink>
+                        {site?.org?.plan ? (
+                          <Typography variant="caption" color="text.secondary">
+                            {`stored plan: ${site.org.plan}`}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                      <Stack>
+                        <Typography variant="caption" color="text.secondary">
+                          {'Owner'}
+                        </Typography>
+                        <AppLink
+                          href={
+                            site?.owner
+                              ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })
+                              : undefined
+                          }
+                        >
+                          {site?.owner
+                            ? (site.owner.email ?? site.owner.displayName ?? site.owner.uid)
+                            : '—'}
+                        </AppLink>
+                      </Stack>
+                      {orgId ? (
+                        <StaffOrgOwnershipTransfer
+                          orgId={orgId}
+                          orgName={site?.org?.name}
+                          ownerUid={site?.org?.ownerUid}
+                          onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
+                        />
+                      ) : null}
+                      {/* Moving the site itself to another organization
+                          (AGL-3381) is super-only at /api/admin/site-transfer. */}
+                      <SuperStaffOnly>
+                        <StaffSiteTransfer
+                          hostId={hostId}
+                          currentOrgId={orgId || null}
+                          onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
+                        />
+                      </SuperStaffOnly>
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 6 },
+                children: (
+                  <CardDisplay
                     header={'Usage'}
                     help={docsHelp('billing', {
                       anchor: '#usage-meters',
@@ -294,7 +453,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       {stat('Published pages', publishedPages)}
                       {stat('Screens', counts.screens)}
-                      {stat('Media files', counts.media)}
+                      {stat('Media files (organization)', counts.media)}
                       {stat('Site members', counts.members)}
                       {stat('Storage (MB)', storageMb)}
                     </Stack>
@@ -305,6 +464,33 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: <StaffDomainCard hostId={hostId} host={host} />,
               },
+              {
+                size: { xs: 12 },
+                children: (
+                  <StaffSiteContentCard hostId={hostId} host={host} orgId={orgId} />
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: <StaffEmailDeliveriesCard hostId={hostId} />,
+              },
+              // What a plugin holds for this site — its automations, its
+              // sends — shown by the plugin that owns it (AGL-3379).
+              ...(staffSiteWidgets.length
+                ? [
+                    {
+                      size: { xs: 12 },
+                      children: (
+                        <PluginWidgetSlot
+                          slot="staffSite"
+                          hostId={hostId}
+                          orgId={orgId}
+                          host={host ?? undefined}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               {
                 size: { xs: 12 },
                 children: (

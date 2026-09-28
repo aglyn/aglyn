@@ -68,6 +68,7 @@
  * spec-covered branch by branch; the threshold reasoning lives on
  * `MAX_ORG_CREATIONS_PER_WINDOW` there.
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import { getApp } from 'firebase-admin/app'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 // Imported for its side effect too: guarantees the firebase-admin default app
@@ -380,20 +381,22 @@ export async function GET(): Promise<Response> {
   )
   const checks = { signupVolume, signupRefusals, signupDrought }
   const status = healthStatus(checks)
-  return Response.json(
-    healthBody({
-      service: 'console-signup-volume',
-      checks,
-      commit: deploymentCommitRef(),
-      // Which VERSION of the platform answered. The commit above is only
-      // set off Vercel if the operator stamped it; this one is inlined
-      // from package.json by every build, so a self-hoster always has
-      // something to quote in a bug report (AGL-2091).
-      version: platformVersion(),
-      environment: deploymentEnvironmentLabel(),
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      healthBody({
+        service: 'console-signup-volume',
+        checks,
+        commit: deploymentCommitRef(),
+        // Which VERSION of the platform answered. The commit above is only
+        // set off Vercel if the operator stamped it; this one is inlined
+        // from package.json by every build, so a self-hoster always has
+        // something to quote in a bug report (AGL-2091).
+        version: platformVersion(),
+        environment: deploymentEnvironmentLabel(),
+        region: process.env['VERCEL_REGION'] ?? null,
+      }),
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 

@@ -289,6 +289,12 @@ on:
           # time — each change is leased, so a manual run beside a scheduled one
           # never does a unit twice, and every unit is idempotent.
           - /api/admin/consent-group-changes
+          # The operator alerts tick (AGL-3377), the same as the fifteen-minute
+          # `consoleFastCrons` tick: the health sweep, the support SLA sweep and
+          # the daily digest. A GET reports what is due and raises nothing; the
+          # POST works it. Safe by hand — every alert it raises is deduped and
+          # the digest is claimed once per day.
+          - /api/admin/operator-alerts/tick
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

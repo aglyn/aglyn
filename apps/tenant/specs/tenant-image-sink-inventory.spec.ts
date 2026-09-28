@@ -245,7 +245,7 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
   'apps/tenant/app/[host]/[scheme]/layout.tsx': {
     markers: 1,
     guard: 'media-ref',
-    why: 'The site favicon, the org brand favicon and the navigation loader logo, all three through resolveMediaSrc since AGL-1407. Site-relative is correct here: a page is present to resolve against.',
+    why: 'The site favicon, the org brand favicon, the apple-touch-icon (AGL-3382) and the navigation loader logo, all through resolveMediaSrc since AGL-1407. Site-relative is correct here: a page is present to resolve against.',
   },
   'apps/tenant/app/api/_legal-intake/chrome.ts': {
     markers: 1,
@@ -258,9 +258,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The host projection API hands seo.image on as stored; resolveSocialImage absolutizes it at the surface that renders it. Nothing is fetched here.',
   },
   'apps/tenant/app/api/locked/route.ts': {
-    markers: 1,
-    guard: 'platform',
-    why: 'The lockdown interstitial, served when a site is suspended. Inline constant CSS, deliberately self-contained so it renders with no host document read at all.',
+    markers: 2,
+    guard: 'media-ref',
+    why: "The lockdown interstitial. Its <style> is inline constant CSS; its icon links (AGL-3382) are the site's seo.favicon/appIcon through resolveMediaSrc, emitted only for a bandwidth cap or containment, never for a lock.",
   },
   'apps/tenant/app/api/manifest/route.ts': {
     markers: 1,

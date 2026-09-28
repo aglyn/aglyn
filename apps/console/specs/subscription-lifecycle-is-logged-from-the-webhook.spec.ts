@@ -144,6 +144,8 @@ function mockMakeFirestore() {
 
 /** See `billing-webhook-ga-cancellation.spec.ts` — records AND runs inline. */
 const mockAfterScheduled: Array<() => unknown> = []
+const mockRaiseOperatorAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'delivered' }))
+
 jest.mock('next/server', () => ({
   after: (work: () => unknown) => {
     mockAfterScheduled.push(work)
@@ -152,6 +154,9 @@ jest.mock('next/server', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  formatOperatorAlertAmount: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/operator-alerts',
+  ).formatOperatorAlertAmount,
   // The platform's billing events (AGL-3011). The webhook raises them once an
   // invoice or a dispute resolves to a workspace; what a plugin does with one
   // is proved in the plugin's own suite, so this only has to exist.
@@ -192,6 +197,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what the route raises, not how it is delivered.
+  raiseOperatorAlert: (...args: unknown[]) => mockRaiseOperatorAlert(...args),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockMakeFirestore() }),

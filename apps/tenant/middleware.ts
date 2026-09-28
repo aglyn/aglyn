@@ -98,7 +98,7 @@ import {
  * 1 /api routes
  * 2 /_next (Next.js internals)
  * 3 /_static (the one directory inside /public)
- * 4 all root files inside /public (e.g. /favicon.ico)
+ * 4 all root files inside /public (e.g. /robots.txt)
  *
  * `/fonts` and `/examples` were on this list until AGL-2076. Neither
  * directory has ever existed in `apps/tenant/public` — they are leftovers
@@ -139,9 +139,9 @@ export const config = {
     //
     // `fonts` and `examples` are GONE rather than anchored. They came from
     // the Vercel platforms starter kit this app was forked from, and
-    // `apps/tenant/public` holds `_static/`, `favicon.ico` and `robots.txt` —
-    // it has never held either directory. They were costing every customer
-    // two perfectly ordinary page slugs to protect nothing.
+    // `apps/tenant/public` holds `_static/` and `robots.txt` — it has never
+    // held either directory. They were costing every customer two perfectly
+    // ordinary page slugs to protect nothing.
     //
     // The three that remain are real: `/api/*` are this app's route handlers,
     // `/_next/*` is Next's own output, `/_static/*` is the public directory.
@@ -154,6 +154,11 @@ export const config = {
     '/sitemap.xml',
     '/robots.txt',
     '/manifest.webmanifest',
+    // The origin-level icons a browser or link unfurler falls back to
+    // (AGL-3382), rewritten per host for the same `name.ext` reason.
+    '/favicon.ico',
+    '/apple-touch-icon.png',
+    '/apple-touch-icon-precomposed.png',
     // Per-collection RSS (AGL-1385), same reason as the three above: the
     // matcher excludes anything shaped `name.ext`, so a feed path would never
     // reach a route at all.
@@ -192,6 +197,17 @@ type EnvVercelEnv = 'production' | 'development' | 'preview' | undefined
 // subsequent navigations) and falls back to the demo host.
 const TENANT_HOST_PARAM = 'tenantHost'
 const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
+
+/**
+ * The icon paths rewritten to `/api/site-icon`, and which icon each asks for
+ * (AGL-3382). iOS requests the `-precomposed` spelling first on some
+ * versions, so it answers exactly like the plain one.
+ */
+const SITE_ICON_PATHS: Record<string, 'favicon' | 'apple-touch-icon'> = {
+  '/favicon.ico': 'favicon',
+  '/apple-touch-icon.png': 'apple-touch-icon',
+  '/apple-touch-icon-precomposed.png': 'apple-touch-icon',
+}
 
 /**
  * The `x-powered-by` value (AGL-2088). A local READ, not an import.
@@ -782,6 +798,21 @@ export const middleware: NextMiddleware = async (req, event) => {
   // is not guaranteed to reach a route handler while the original request URL
   // is (AGL-1501) — this carries the answer either way.
   const childSitemap = req.nextUrl.pathname.startsWith('/sitemaps/')
+  // The origin-level icons (AGL-3382). `/favicon.ico` was a static file in
+  // `public/` — Aglyn's mark — and the touch icons were 404s, so every
+  // unfurler that found no link on the page previewed the site as Aglyn. Which
+  // of the two was asked for travels as a header, like the collection above.
+  const siteIcon = SITE_ICON_PATHS[req.nextUrl.pathname]
+  if (siteIcon) {
+    const iconUrl = req.nextUrl.clone()
+    iconUrl.pathname = '/api/site-icon'
+    iconUrl.searchParams.set('host', tenantHost)
+    iconUrl.searchParams.set('icon', siteIcon)
+    const iconHeaders = new Headers(req.headers)
+    iconHeaders.set('x-aglyn-tenant-host', tenantHost)
+    iconHeaders.set('x-aglyn-site-icon', siteIcon)
+    return NextResponse.rewrite(iconUrl, { request: { headers: iconHeaders } })
+  }
   const seoPathname = rssMatch
     ? '/api/collections-rss'
     : childSitemap

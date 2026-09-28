@@ -37,6 +37,7 @@ import {
   NOTIFICATION_TYPE_LABELS,
   observeWrites,
   PLAN_LABELS,
+  formatOperatorAlertAmount,
   Route,
   runBillingWebhookHandlers,
 } from '@aglyn/aglyn/server'
@@ -50,6 +51,7 @@ import {
   notifyOrgAdmins,
   notifyRiskEvent,
   notifyStaff,
+  raiseOperatorAlert,
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
@@ -262,6 +264,22 @@ async function recordOrphanedSubscription(entry: {
     at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
     .catch(() => undefined)
+  // The customer is still being charged for a workspace that is gone, and
+  // only a person can cancel or refund it (AGL-3377).
+  await raiseOperatorAlert('billing.orphanedSubscription', {
+    dedupeKey: entry.subscriptionId || `${entry.orgId}:${entry.stripeCustomerId ?? ''}`,
+    context: {
+      orgId: entry.orgId,
+      subscriptionId: entry.subscriptionId,
+      customerId: entry.stripeCustomerId,
+      plan: entry.plan,
+      eventType: entry.eventType,
+      reason:
+        entry.reason === 'no-such-org'
+          ? 'does not exist'
+          : 'was erased while the event was being applied',
+    },
+  })
 }
 
 /**
@@ -404,6 +422,15 @@ async function handler(request: Request): Promise<Response> {
       ? verifyStripeSignature(payload, signatureHeader, connectSecret)
       : false)
   if (!verified) {
+    // One refused request is noise anyone on the internet can make; several
+    // SIGNED ones inside the window are a rolled secret, and every billing
+    // event is being dropped while it lasts (AGL-3377). Deduped and
+    // thresholded by the registry, so this costs one state write per miss.
+    if (signatureHeader) {
+      await raiseOperatorAlert('billing.webhookSignatureRejected', {
+        dedupeKey: 'signature',
+      })
+    }
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
@@ -1647,6 +1674,20 @@ async function handler(request: Request): Promise<Response> {
               reason: type === 'invoice.voided' ? 'voided' : 'uncollectible',
               metadata: invoiceMetadata,
             })
+            // Revenue the books expected that is not coming (AGL-3377).
+            await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
+              dedupeKey: `${String(object?.id ?? '')}:${type}`,
+              context: {
+                invoiceId: String(object?.id ?? ''),
+                orgId,
+                status: type === 'invoice.voided' ? 'voided' : 'uncollectible',
+                amount: formatOperatorAlertAmount(
+                  Number(object?.amount_due ?? 0),
+                  String(object?.currency ?? 'usd'),
+                ),
+              },
+              orgId,
+            })
           }
         }
       }
@@ -1977,6 +2018,22 @@ async function handler(request: Request): Promise<Response> {
               internal: revenueDoc.get('internalTraffic') === true,
             }).catch(() => undefined))
           }
+          // Money taken back from a paying workspace, which keeps its plan
+          // until a person decides otherwise (AGL-3377). Once per dispute.
+          await raiseOperatorAlert('billing.platformDisputeLost', {
+            dedupeKey: disputeId || chargeId || revenueDoc.id,
+            context: {
+              disputeId,
+              invoiceId: revenueDoc.id,
+              orgId,
+              reason: String(object?.reason ?? '') || 'no reason given',
+              amount: formatOperatorAlertAmount(
+                disputedCents,
+                String(object?.currency ?? 'usd'),
+              ),
+            },
+            ...(orgId ? { orgId } : {}),
+          })
         }
         // Every platform dispute reaches staff, won or lost — `created` is
         // the actionable one and `closed` is the outcome. Best-effort: a
@@ -2304,6 +2361,12 @@ async function handler(request: Request): Promise<Response> {
         '[billing/webhook] a delivery we ASKED FOR moved nothing at all',
         { eventId, type },
       )
+      // Once per event type per window: a handler that stopped being
+      // registered makes every delivery of its type inert (AGL-3377).
+      await raiseOperatorAlert('billing.webhookInert', {
+        dedupeKey: type,
+        context: { eventId, eventType: type },
+      })
       if (eventRef) {
         try {
           await eventRef.set(

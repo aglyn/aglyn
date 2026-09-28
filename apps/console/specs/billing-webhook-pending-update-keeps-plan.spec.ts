@@ -69,6 +69,8 @@ const mockBillingWrites: Array<{ orgId: string; payload: any }> = []
 /** Every `org.seatAddons.changed` event the route raised (AGL-2929, AGL-2939). */
 const mockActivityRows: unknown[][] = []
 
+const mockRaiseOperatorAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'delivered' }))
+
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
   __esModule: true,
   logOrgActivity: async (...args: unknown[]) => {
@@ -124,6 +126,9 @@ jest.mock('next/server', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  formatOperatorAlertAmount: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/operator-alerts',
+  ).formatOperatorAlertAmount,
   __esModule: true,
   // The event the route raises (AGL-2939); the AI plugin's handler — proven
   // in its own spec — is what writes the row.
@@ -168,6 +173,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what the route raises, not how it is delivered.
+  raiseOperatorAlert: (...args: unknown[]) => mockRaiseOperatorAlert(...args),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockMakeFirestore() }),

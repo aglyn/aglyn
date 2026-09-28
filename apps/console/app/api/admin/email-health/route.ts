@@ -17,34 +17,12 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
-  checkEmailCredentials,
-  checkSharedSendingPool,
-  describeEmailConfig,
-  sharedSendingPool,
-} from '@aglyn/shared-util-email'
-import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { operatorIdentity } from '@aglyn/aglyn/app-utils/operator-identity'
-import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
-
-/**
- * The sender domain this deployment expects in production (AGL-709/721).
- *
- * Operator configuration (AGL-2016). Hardcoded to `aglyn.com`, this health
- * check told every self-hoster their correctly-configured mail was wrong —
- * an unfixable red on a staff diagnostics page, for the one deployment shape
- * where the answer is "your domain, not ours". Derived from the operator's
- * support address so it cannot drift from the address the product actually
- * prints; falls back to the literal for a deployment that has not configured
- * an operator yet, which keeps this check's behaviour rather than turning it
- * into a second unconfigured surface.
- */
-const EXPECTED_FROM_DOMAIN =
-  operatorIdentity().supportEmail?.split('@').pop() || 'aglyn.com'
+import { evaluateEmailHealth } from '../../../../utils/server/email-health'
 
 /**
  * Email provisioning health (AGL-709). Answers "can this deployment send
@@ -89,110 +67,10 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
 
-    const config = describeEmailConfig()
-    const credentials =
-      String(query?.['probe'] ?? '') === '1'
-        ? await checkEmailCredentials()
-        : null
-
-    // What an operator should do next, in the order it blocks delivery.
-    const blockers: string[] = []
-    if (!config.hasApiKey) {
-      blockers.push(
-        'RESEND_API_KEY is not set on this project — add it in Vercel ' +
-          '(the Resend integration sets it per project, not team-wide).',
-      )
-    }
-    if (!config.hasFrom) {
-      blockers.push(
-        'USAGE_EMAIL_FROM is not set — without it every sender no-ops, ' +
-          `even with a valid API key. Set it to "${PLATFORM_BRAND_NAME} ` +
-          `<noreply@${EXPECTED_FROM_DOMAIN}>".`,
-      )
-    }
-    if (config.fromDomain && config.fromDomain !== EXPECTED_FROM_DOMAIN) {
-      blockers.push(
-        `USAGE_EMAIL_FROM sends from ${config.fromDomain}, but the verified ` +
-          `sending domain is ${EXPECTED_FROM_DOMAIN}.`,
-      )
-    }
-    if (credentials?.status === 'invalid-key') {
-      blockers.push('Resend rejected RESEND_API_KEY — rotate or re-scope it.')
-    }
-
-    /*
-     * The shared pool, which this check could not see until now.
-     *
-     * `USAGE_EMAIL_FROM` describes ONE sender: the platform's own operational
-     * mail. Every tenant site without a domain of its own sends from a pool
-     * member instead, and nothing above looks at those. That gap is not
-     * hypothetical — the sending key was scoped to a single domain while the
-     * pool carried the transactional floor for every other site, and this
-     * endpoint reported healthy throughout.
-     *
-     * Only probed on request, for the same reason the credential probe is: an
-     * unauthenticated caller must not be able to make this deployment talk to
-     * the provider.
-     */
-    const pool =
-      String(query?.['probe'] ?? '') === '1'
-        ? await checkSharedSendingPool({
-            pool: sharedSendingPool(),
-            readApiKey: process.env['RESEND_READ_API_KEY'],
-          })
-        : null
-
-    /*
-     * A measurement fault, reported APART from the blockers.
-     *
-     * `blockers` means delivery is stopped, and this is not that: mail on an
-     * untracked domain arrives exactly as it should and only the click rate
-     * is a lie. Folding it in would either page somebody about healthy
-     * delivery or teach them that a blocker can be ignored, and the second is
-     * how the real one gets missed.
-     *
-     * It is reported at all because the symptom is invisible: a click rate of
-     * 0% reads as an audience that does not click rather than as a domain
-     * that cannot count, and the last time this was wrong nobody found it in
-     * the numbers.
-     */
-    const notices: string[] = []
-    if (pool?.untracked?.length) {
-      notices.push(
-        `Click tracking is off for ${pool.untracked.join(', ')}. Mail from ` +
-          'these domains delivers normally and reports a click rate of ' +
-          'exactly 0% — a provider rewrites links only on a domain with a ' +
-          'verified tracking subdomain.',
-      )
-    }
-
-    if (pool?.status === 'degraded') {
-      blockers.push(
-        `The shared sending pool cannot carry mail on ${pool.unusable.join(', ')}. ` +
-          'Every site without a sending domain of its own sends its receipts ' +
-          'and password resets from a pool member, so this is those sites ' +
-          'already failing rather than a warning about later.',
-      )
-    }
-
-    return Response.json({
-      ...config,
-      expectedFromDomain: EXPECTED_FROM_DOMAIN,
-      credentials,
-      pool,
-      blockers,
-      notices,
-      /*
-       * True only when nothing known is standing in the way of delivery.
-       *
-       * An UNREADABLE pool is deliberately not a blocker: without a read key
-       * this deployment cannot look, and refusing to call itself healthy for
-       * something it cannot observe would make the self-host shape
-       * permanently red. It is reported instead, so the difference between
-       * "looked and it was fine" and "could not look" stays visible.
-       */
-      healthy: config.configured && !blockers.length,
-    }, { status: 200 })
+    return Response.json(
+      await evaluateEmailHealth({ probe: String(query?.['probe'] ?? '') === '1' }),
+      { status: 200 },
+    )
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

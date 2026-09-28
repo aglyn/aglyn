@@ -63,6 +63,8 @@ import {
   type CampaignSendReservation,
   resolveHostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
+import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
+import { MARKETING_REPUTATION_BREAKER } from '../constants/operator-alerts'
 // The leaf, not the barrel: this plugin's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
@@ -1790,6 +1792,14 @@ export async function performCampaignSend(
      * that says the product is broken.
      */
     if (reputation.blocked) {
+      // The merchant is told by the refusal; the operator, once a day per
+      // workspace, so a tripped breaker on a shared domain is looked at
+      // before it is reinstated (AGL-3377).
+      await raiseOperatorAlert(MARKETING_REPUTATION_BREAKER, {
+        dedupeKey: orgId,
+        context: { orgId, reason: reputation.reason },
+        orgId,
+      })
       throw new CampaignSendError(reputation.reason, 409)
     }
     /*

@@ -78,6 +78,8 @@ describe('the marketing plugin registers the campaign glance', () => {
       'marketing-email-template-recipients',
       'marketing-inbox-campaigns',
       'marketing-inbox-record-attribution',
+      // The staff organization page's sends and campaigns (AGL-3380).
+      'marketing-staff-org-email',
     ])
     expect(extension?.navItems?.[0]?.href).toBe('/marketing')
   })

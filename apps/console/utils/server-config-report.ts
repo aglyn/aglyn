@@ -375,11 +375,41 @@ export function buildServerConfigReport(
       key: 'STAFF_ALERT_EMAIL',
       label: 'Staff alert address',
       drives:
-        'Where staff alarms go: fraud and risk alerts, erasure-hold ' +
-        'reminders, cost alarms. Absent, they go to the operator support ' +
-        'address, else to every staff account (AGL-3375).',
+        'Where operator alerts go: fraud and risk, lost disputes, failed ' +
+        'erasures and exports, red health checks, cost alarms. Absent, ' +
+        'they go to the operator support address, else to every staff ' +
+        'account (AGL-3375, AGL-3377).',
       raw: env['STAFF_ALERT_EMAIL'],
       value: describePresence(env['STAFF_ALERT_EMAIL']),
+    }),
+    analyzeOpaqueKnob({
+      key: 'OPERATOR_ALERT_WEBHOOK_URL',
+      label: 'Operator alert webhook',
+      drives:
+        'Every operator alert also POSTed as JSON (Slack-compatible text), ' +
+        'so a mail-provider outage still reaches somebody. Absent, alerts ' +
+        'are email and console only (AGL-3377).',
+      raw: env['OPERATOR_ALERT_WEBHOOK_URL'],
+      value: describePresence(env['OPERATOR_ALERT_WEBHOOK_URL']),
+    }),
+    analyzeOpaqueKnob({
+      key: 'OPERATOR_ALERT_WEBHOOK_SECRET',
+      label: 'Operator alert webhook signing secret',
+      drives:
+        'HMAC-SHA256 signature on each webhook post. Absent, posts are ' +
+        'unsigned (AGL-3377).',
+      raw: env['OPERATOR_ALERT_WEBHOOK_SECRET'],
+      value: describePresence(env['OPERATOR_ALERT_WEBHOOK_SECRET']),
+    }),
+    analyzeOpaqueKnob({
+      key: 'OPERATOR_HEALTH_TENANT_ORIGIN',
+      label: 'Site runtime health origin',
+      drives:
+        'A published site the operator alerts tick probes, so a site ' +
+        'runtime that stops rendering alerts the operator. Absent, only ' +
+        'the console is probed (AGL-3377).',
+      raw: env['OPERATOR_HEALTH_TENANT_ORIGIN'],
+      value: describePresence(env['OPERATOR_HEALTH_TENANT_ORIGIN']),
     }),
   ]
 

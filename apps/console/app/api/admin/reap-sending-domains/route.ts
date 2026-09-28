@@ -67,6 +67,7 @@ import {
 } from '../../../../utils/server/reap-sending-domains'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 export const dynamic = 'force-dynamic'
 
@@ -258,6 +259,15 @@ async function handler(request: Request): Promise<Response> {
             'provider slot and the zone records remain. Check the mail ' +
             'provider and DNS credentials.',
         )
+        // Once a day per domain (AGL-3377): a slot that never frees is a
+        // provider allowance that silently runs out.
+        await raiseConsoleOperatorAlert('ops.reaperStuck', {
+          dedupeKey: `reap-sending-domains:${candidate.domain}`,
+          context: {
+            job: 'The sending-domain reaper',
+            detail: `${candidate.domain} is still held after ${candidate.attempts + 1} attempts (${detail}). Check the mail provider and DNS credentials.`,
+          },
+        })
       }
 
       if (released || stillOwed) {
@@ -304,6 +314,13 @@ async function handler(request: Request): Promise<Response> {
       '[reap-sending-domains] sweep failed',
       (error as { name?: string })?.name ?? 'unknown',
     )
+    await raiseConsoleOperatorAlert('ops.reaperStuck', {
+      dedupeKey: 'reap-sending-domains:sweep',
+      context: {
+        job: 'The sending-domain reaper',
+        detail: `the sweep failed (${(error as { name?: string })?.name ?? 'unknown'}).`,
+      },
+    })
     return Response.json({ error: 'Sending-domain reaping failed' }, { status: 500 })
   }
 }

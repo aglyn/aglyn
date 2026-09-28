@@ -240,10 +240,39 @@ export async function consumeEmailSendBudget(
       return decision
     })
 
-    return { ...(verdict as EmailSendRateVerdict), windowStartMs, degraded: false }
+    const decided = verdict as EmailSendRateVerdict
+    if (!decided.allowed) {
+      // Refusable mail is being deferred for the rest of the hour. Told once
+      // per six hours (AGL-3377); the operator email itself is transactional,
+      // which this governor never refuses.
+      await raiseSendRateAlert('deliverability.sendRateSaturated', {
+        scope: 'platform',
+        detail: `${decided.used ?? '?'}/${decided.ceiling ?? config.perHour} this hour`,
+      })
+    }
+    return { ...decided, windowStartMs, degraded: false }
   } catch (error) {
     console.error('[send-rate] counter unavailable — allowing', error)
+    await raiseSendRateAlert('deliverability.sendRateUnavailable', {
+      error: error instanceof Error ? error.message.slice(0, 200) : String(error),
+    })
     return fallback()
+  }
+}
+
+/**
+ * Raises a governor alert, loaded lazily so the hot path imports no alert
+ * pipeline until the governor actually has something to say. Never throws.
+ */
+async function raiseSendRateAlert(
+  type: 'deliverability.sendRateSaturated' | 'deliverability.sendRateUnavailable',
+  context: Record<string, string>,
+): Promise<void> {
+  try {
+    const { raiseOperatorAlert } = await import('./operator-alerts')
+    await raiseOperatorAlert(type, { dedupeKey: type, context })
+  } catch (error) {
+    console.error(`[send-rate] ${type} could not be raised`, error)
   }
 }
 
@@ -454,6 +483,9 @@ export async function claimOrgEmailSendBudget(options: {
     })
   } catch (error) {
     console.error('[send-rate] org window unavailable — allowing', error)
+    await raiseSendRateAlert('deliverability.sendRateUnavailable', {
+      error: error instanceof Error ? error.message.slice(0, 200) : String(error),
+    })
     return granted(0, true)
   }
 }

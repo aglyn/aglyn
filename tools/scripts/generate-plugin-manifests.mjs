@@ -675,7 +675,7 @@ function orgCollectionRows() {
     }
     const routes = (plugin.contributes?.console?.routes ?? []).map((route) => route.replace(/^\//, ''))
     for (const declaration of declared) {
-      const { name, label, mediaScan, mediaScanReason, routeSlug, siteField } = declaration
+      const { name, label, mediaScan, mediaScanReason, routeSlug, siteField, holdsTransferWhile } = declaration
       const what = `${where} "${name ?? ''}"`
       if (typeof name !== 'string' || !name.trim()) throw new Error(`${where}: a collection needs a "name"`)
       const held = owners.get(name)
@@ -698,6 +698,16 @@ function orgCollectionRows() {
       }
       if (siteField !== undefined && (typeof siteField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(siteField))) {
         throw new Error(`${what}: "siteField" is the plain name of the field naming a document's site`)
+      }
+      if (holdsTransferWhile !== undefined) {
+        const { field, values } = holdsTransferWhile ?? {}
+        if (!siteField) throw new Error(`${what}: "holdsTransferWhile" needs a "siteField" — it holds the site the documents name`)
+        if (typeof field !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(field)) {
+          throw new Error(`${what}: "holdsTransferWhile.field" is the plain name of the field holding the document's state`)
+        }
+        if (!Array.isArray(values) || !values.length || values.length > 10 || values.some((value) => typeof value !== 'string' || !value)) {
+          throw new Error(`${what}: "holdsTransferWhile.values" names one to ten in-flight states`)
+        }
       }
       if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
         throw new Error(`${what}: "label" is what ONE of its documents is called, or is left out`)

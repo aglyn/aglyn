@@ -780,6 +780,15 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   staffUser: 'staffUser',
   /**
+   * The staff site page, below its own cards (AGL-3379). Props: `hostId`,
+   * `orgId` (the site's organization, `''` for none) and `host` (the site
+   * document as the page read it, or `undefined` while it loads). What a
+   * plugin holds for one site — its automations, its sends — is shown here,
+   * by the plugin that owns it. A staff zone — see
+   * {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffSite: 'staffSite',
+  /**
    * A COLUMN of the staff Organizations list (AGL-2984) — see
    * {@link ConsoleWidget.column}. The list renders the widget's component
    * once per row with `{ row, orgId, orgIds }`: the row as the list route
@@ -1139,6 +1148,7 @@ export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
   CONSOLE_WIDGET_SLOTS.adminOrgDetail,
   CONSOLE_WIDGET_SLOTS.staffOrg,
   CONSOLE_WIDGET_SLOTS.staffUser,
+  CONSOLE_WIDGET_SLOTS.staffSite,
   CONSOLE_WIDGET_SLOTS.staffOrgsListColumn,
   CONSOLE_WIDGET_SLOTS.staffOrgUsageColumn,
 ]

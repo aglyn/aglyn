@@ -158,6 +158,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({ org: orgFixture }),
   meterHostEmail: async () => undefined,
   notifyHostManagers: async () => undefined,
+  // The operator alert (AGL-3377), rendered from the definition's own
+  // templates so the copy asserted here is the copy that ships.
+  raiseOperatorAlert: async (definition: any, options: any = {}) => {
+    const { renderOperatorAlertTemplate } = jest.requireActual(
+      '@aglyn/aglyn/app-utils/operator-alerts',
+    )
+    staffNotifications.push({
+      type: definition.type,
+      dedupeKey: options.dedupeKey,
+      title: renderOperatorAlertTemplate(definition.title, options.context),
+      body: renderOperatorAlertTemplate(definition.body, options.context),
+    })
+    return { outcome: 'delivered', type: definition.type }
+  },
   notifyStaff: async (payload: any) => {
     staffNotifications.push(payload)
   },
@@ -1120,6 +1134,8 @@ describe('when the reversal cannot be made (AGL-1956)', () => {
       owedCents: TAX_CENTS,
     })
     expect(staffNotifications).toHaveLength(1)
+    expect(staffNotifications[0]).toMatchObject({ type: 'commerce.taxNotReversed' })
+    expect(String(staffNotifications[0].body)).toContain('Stripe refused the reversal: nope')
   })
 
   /**
@@ -1161,6 +1177,13 @@ describe('when the reversal cannot be made (AGL-1956)', () => {
       reversedCents: 0,
       owedCents: TAX_CENTS,
     })
+    // Said to the operator, who files the return (AGL-3377).
+    expect(staffNotifications).toEqual([
+      expect.objectContaining({
+        type: 'commerce.taxNotReversed',
+        title: expect.stringContaining('Sales tax not reversed on invoice'),
+      }),
+    ])
   })
 
   /** A partial reversal reverses what it can and records the remainder. */

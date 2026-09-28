@@ -61,6 +61,7 @@
  * SELF-CLEARING. Nothing latches; a provider config restored, or an
  * authorized domain put back, clears the red within one probe TTL.
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import {
   deploymentCommitRef,
   deploymentEnvironmentLabel,
@@ -110,16 +111,18 @@ export async function GET(): Promise<Response> {
     passkey,
   }
   const status = healthStatus(checks)
-  return Response.json(
-    healthBody({
-      service: 'console-auth-doors',
-      checks,
-      commit: deploymentCommitRef(),
-      version: platformVersion(),
-      environment: deploymentEnvironmentLabel(),
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      healthBody({
+        service: 'console-auth-doors',
+        checks,
+        commit: deploymentCommitRef(),
+        version: platformVersion(),
+        environment: deploymentEnvironmentLabel(),
+        region: process.env['VERCEL_REGION'] ?? null,
+      }),
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 

@@ -100,13 +100,14 @@ const proposedFieldNames = (): string[] => [
 ]
 
 describe('the SEO section is a stack of cards (AGL-3258)', () => {
-  it('THE CONTROL: the four schemas exist and the page renders each once', () => {
+  it('THE CONTROL: every SEO schema exists and the page renders each once', () => {
     const scope = read(SCOPE)
     const page = read(SEO_PAGE)
     for (const id of [
       'hostSeo',
       'hostSeoEntity',
       'hostSeoAddress',
+      'hostSeoLocalBusiness',
       'hostSeoAgent',
     ]) {
       expect([id, scope.includes(`id: '${id}'`)]).toEqual([id, true])

@@ -220,6 +220,8 @@ function mockMakeFirestore() {
  * the route to a bare `void promise` and this array stays empty.
  */
 const mockAfterScheduled: Array<() => unknown> = []
+const mockRaiseOperatorAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'delivered' }))
+
 jest.mock('next/server', () => ({
   after: (work: () => unknown) => {
     mockAfterScheduled.push(work)
@@ -242,6 +244,9 @@ let mockDispatchHostIds: string[] = []
 let mockDispatchOrgIds: string[] | undefined = undefined
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  formatOperatorAlertAmount: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/operator-alerts',
+  ).formatOperatorAlertAmount,
   // The platform's billing events (AGL-3011). The webhook raises them once an
   // invoice or a dispute resolves to a workspace; what a plugin does with one
   // is proved in the plugin's own suite, so this only has to exist.
@@ -285,6 +290,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what the route raises, not how it is delivered.
+  raiseOperatorAlert: (...args: unknown[]) => mockRaiseOperatorAlert(...args),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockMakeFirestore() }),
@@ -396,6 +403,7 @@ const OWN_DISPUTE = {
 
 describe('a platform subscription chargeback is handled (AGL-2120)', () => {
   beforeEach(() => {
+    mockRaiseOperatorAlert.mockClear()
     docs = new Map()
     docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'pro' })
     // The AGL-1811 tax row the invoice's `purchase` pass wrote, now carrying
@@ -470,6 +478,18 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
     // 28900 * (28900 - 2312) / 28900 = 26588 cents.
     expect(mockGa4Refunds[0].value).toBe(265.88)
     expect(mockGa4Refunds[0].stripeCustomerId).toBe('cus_own_1')
+    // And the operator is told, once per dispute (AGL-3377).
+    expect(mockRaiseOperatorAlert).toHaveBeenCalledWith('billing.platformDisputeLost', {
+      dedupeKey: 'dp_own_1',
+      context: {
+        disputeId: 'dp_own_1',
+        invoiceId: 'in_disputed',
+        orgId: 'org-real',
+        reason: 'fraudulent',
+        amount: '$289.00',
+      },
+      orgId: 'org-real',
+    })
   })
 
   it('an OPENED dispute warns staff with an actor, a reason and the deadline — and moves no money', async () => {
@@ -523,6 +543,7 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
     expect(audit).toHaveLength(1)
     expect(audit[0]).toMatchObject({ action: 'billing.disputeClosed' })
     expect(String(audit[0].reason)).toContain('nothing was reversed')
+    expect(mockRaiseOperatorAlert).not.toHaveBeenCalled()
   })
 
   it('a redelivery of the same lost dispute converges instead of double-counting', async () => {

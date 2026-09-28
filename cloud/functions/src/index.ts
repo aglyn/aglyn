@@ -360,6 +360,13 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
    * so an abandoned change never holds the next one off.
    */
   '/api/admin/consent-group-changes',
+  /*
+   * The operator alerts tick (AGL-3377): asks every health endpoint so a
+   * degraded check alerts the operator with no external monitor attached,
+   * flags support tickets past their response time, and sends the daily
+   * operator digest once its hour has passed.
+   */
+  '/api/admin/operator-alerts/tick',
 ]
 
 /** What one POST to a cron route settled as. */

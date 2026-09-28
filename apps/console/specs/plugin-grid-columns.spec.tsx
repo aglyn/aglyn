@@ -187,10 +187,14 @@ describe('the staff Organizations list draws its zone through it', () => {
     expect(page).toContain('rows={sortedOrgs}')
   })
 
-  it("keeps the query's order under the grid's own headers", () => {
-    expect(page).toContain('disableColumnSorting')
-    expect(page).not.toContain('onSortModelChange')
-    expect(page).not.toContain('sortModel=')
+  it("hands the grid's own header sorts to the query, never to the page", () => {
+    // A grid-side sort would order the ten rows on screen and read as the
+    // whole list's; the header's order goes to the route instead.
+    expect(page).toContain('sortingMode="server"')
+    expect(page).toContain('sort: columnSort,')
+    expect(page).toContain('onSortModelChange={onSortModelChange}')
+    // A grid header click hands the order back from a plugin's page sort.
+    expect(page).toContain('onPluginSort(pluginSortedBy, null)')
   })
 
   it('places the columns after the limits and before Created', () => {

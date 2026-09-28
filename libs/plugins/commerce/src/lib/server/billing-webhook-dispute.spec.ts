@@ -334,6 +334,20 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     // AGL-2161: an unrouted chargeback is a PLATFORM fault, so it is reported
     // to staff rather than to a merchant nobody could identify.
+    // The operator alert (AGL-3377), rendered from the definition's own
+    // templates so the copy asserted here is the copy that ships.
+    raiseOperatorAlert: async (definition: any, options: any = {}) => {
+      const { renderOperatorAlertTemplate } = jest.requireActual(
+        '@aglyn/aglyn/app-utils/operator-alerts',
+      )
+      staffNotices.push({
+        type: definition.type,
+        dedupeKey: options.dedupeKey,
+        title: renderOperatorAlertTemplate(definition.title, options.context),
+        body: renderOperatorAlertTemplate(definition.body, options.context),
+      })
+      return { outcome: 'delivered', type: definition.type }
+    },
     notifyStaff: async (payload: any) => {
       staffNotices.push(payload)
     },
@@ -1036,6 +1050,10 @@ describe('the failure that no redelivery can fix', () => {
     // that is the fact staff have to be handed — a `console.error` in a
     // serverless log is not a signal anybody receives.
     expect(staffNotices).toHaveLength(1)
+    expect(staffNotices[0]).toMatchObject({
+      type: 'commerce.chargebackUnroutable',
+      dedupeKey: 'missing-index',
+    })
     expect(String(staffNotices[0].title)).toContain('could not be routed')
     expect(String(staffNotices[0].body)).toContain('orders.paymentIntentId')
   })

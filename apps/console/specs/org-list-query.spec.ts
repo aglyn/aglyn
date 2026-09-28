@@ -36,6 +36,7 @@ import {
   type ListQueryDeclaration,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
+  ORG_LIST_COLUMN_SORTS,
   ORG_LIST_FILTER_FIELDS,
   ORG_LIST_QUERY,
   ORG_MARGIN_FILTER_FIELDS,
@@ -59,17 +60,45 @@ describe('every organization list has the composites its query shapes need', () 
     expect(missingListQueryIndexes(INDEX_FILE, 'orgs', listQueryIndexes(declaration))).toEqual([])
   })
 
-  it('names exactly the merged composites: one per equality, under the one range', () => {
+  it('names exactly the merged composites: one per equality, under each header order', () => {
     // In document-id order an equality or the search token merges against
-    // the built-in single-field indexes, so only Created's order needs any.
-    expect(shapes(ORG_LIST_QUERY).sort()).toEqual([
-      'billingStatus:ASCENDING,createdAt:DESCENDING',
-      'nameLower:ASCENDING,createdAt:DESCENDING',
-      'nameTokens:CONTAINS,createdAt:DESCENDING',
-      'ownerUid:ASCENDING,createdAt:DESCENDING',
-      'plan:ASCENDING,createdAt:DESCENDING',
-      'slug:ASCENDING,createdAt:DESCENDING',
-    ])
+    // the built-in single-field indexes, so only the header orders need any —
+    // Created either way and Organization either way.
+    const equalities = [
+      'billingStatus:ASCENDING',
+      'nameLower:ASCENDING',
+      'nameTokens:CONTAINS',
+      'ownerUid:ASCENDING',
+      'plan:ASCENDING',
+      'slug:ASCENDING',
+    ]
+    const orders = [
+      'createdAt:DESCENDING',
+      'createdAt:ASCENDING',
+      'nameLower:ASCENDING',
+      'nameLower:DESCENDING',
+    ]
+    expect(shapes(ORG_LIST_QUERY).sort()).toEqual(
+      equalities
+        .flatMap((equality) =>
+          orders
+            // `nameLower ==` beside an order on `nameLower` needs no composite.
+            .filter((order) => order.split(':')[0] !== equality.split(':')[0])
+            .map((order) => `${equality},${order}`),
+        )
+        .sort(),
+    )
+  })
+
+  it('offers header orders only on fields every organization carries', () => {
+    const always = new Set(
+      ORG_LIST_FILTER_FIELDS.filter((field) => field.presence === 'always').flatMap(
+        (field) => [field.path, field.lowerPath],
+      ),
+    )
+    expect(ORG_LIST_COLUMN_SORTS.map((sort) => sort.path).filter((path) => !always.has(path))).toEqual(
+      [],
+    )
   })
 
   it('the margin scan is equalities in id order, and needs no composite at all', () => {
@@ -129,13 +158,39 @@ describe('every clause and the search word land on one query', () => {
       ['acme'],
     )
     expect(answer.refused).toEqual([])
-    expect(answer.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
     expect(answer.filters).toEqual(
       expect.arrayContaining([
         { path: 'nameLower', op: '==', value: 'acme coffee' },
         { path: 'slug', op: '==', value: 'acme-coffee' },
       ]),
     )
+  })
+
+  it('takes the header order asked for, and keeps its direction under a Created range', () => {
+    const ask = (
+      sort: { path: string; direction: 'asc' | 'desc' } | null,
+      clauses: Array<{ field: string; op: string; value: string }> = [],
+    ) =>
+      planListQuery(ORG_LIST_QUERY, { clauses, search: [], sort }, nameSearchNormalizers).orderBy
+    const created = { field: 'createdAt', op: 'onOrAfter', value: '2026-09-01' }
+    // No order asked: the document id, for the pickers' walk and the margin scan.
+    expect(ask(null)).toEqual({ path: '__name__', direction: 'asc' })
+    expect(ask({ path: 'nameLower', direction: 'desc' })).toMatchObject({
+      path: 'nameLower',
+      direction: 'desc',
+    })
+    expect(ask({ path: 'createdAt', direction: 'asc' }, [created])).toMatchObject({
+      path: 'createdAt',
+      direction: 'asc',
+    })
+    // A range on Created leads the order, whatever header was asked.
+    expect(ask({ path: 'nameLower', direction: 'asc' }, [created])).toMatchObject({
+      path: 'createdAt',
+      direction: 'desc',
+    })
+    // An order the declaration does not offer is not taken.
+    expect(ask({ path: 'plan', direction: 'asc' })).toEqual({ path: '__name__', direction: 'asc' })
   })
 
   it('an org id or several is the document id, and composes with the rest', () => {

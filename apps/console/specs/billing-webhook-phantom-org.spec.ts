@@ -256,6 +256,8 @@ const mockUpdateExisting = jest.requireActual(
  * the route to a bare `void promise` and this array stays empty.
  */
 const mockAfterScheduled: Array<() => unknown> = []
+const mockRaiseOperatorAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'delivered' }))
+
 jest.mock('next/server', () => ({
   after: (work: () => unknown) => {
     mockAfterScheduled.push(work)
@@ -264,6 +266,9 @@ jest.mock('next/server', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  formatOperatorAlertAmount: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/operator-alerts',
+  ).formatOperatorAlertAmount,
   // The platform's billing events (AGL-3011). The webhook raises them once an
   // invoice or a dispute resolves to a workspace; what a plugin does with one
   // is proved in the plugin's own suite, so this only has to exist.
@@ -306,6 +311,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what the route raises, not how it is delivered.
+  raiseOperatorAlert: (...args: unknown[]) => mockRaiseOperatorAlert(...args),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockMakeFirestore() }),
@@ -405,6 +412,7 @@ function seedOrg(id = 'org-real', extra: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  mockRaiseOperatorAlert.mockClear()
   docs = new Map()
   audit = []
   onUpdate = null
@@ -485,6 +493,19 @@ describe('a subscription naming no workspace (AGL-1763)', () => {
     expect(after['subscriptionId']).toBe('sub_1')
     expect(after['stripeCustomerId']).toBe('cus_1')
     expect(after['plan']).toBe('business')
+    // ...and tells the operator, who is the only one who can cancel it
+    // (AGL-3377).
+    expect(mockRaiseOperatorAlert).toHaveBeenCalledWith('billing.orphanedSubscription', {
+      dedupeKey: 'sub_1',
+      context: {
+        orgId: 'org-typo',
+        subscriptionId: 'sub_1',
+        customerId: 'cus_1',
+        plan: 'business',
+        eventType: 'customer.subscription.created',
+        reason: 'does not exist',
+      },
+    })
   })
 
   it('SECOND LINE: an org erased between the check and the write is not reborn', async () => {

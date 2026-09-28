@@ -20,6 +20,10 @@ import { mdiSitemap } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { HostActivityCard } from './components/host-activity-card.component'
 import {
+  StaffOrgAutomationsCard,
+  StaffSiteAutomationsCard,
+} from './components/staff-automations-card.component'
+import {
   WORKFLOWS_CONSOLE_SECTIONS,
   WORKFLOWS_ORG_CONSOLE_SECTIONS,
 } from './components/workflows-console-sections'
@@ -67,6 +71,20 @@ export function registerWorkflowsConsole(): void {
         widgetId: 'workflows-host-activity',
         title: 'Recent Activity',
         Component: HostActivityCard,
+      },
+      // The staff site and organization pages' automations (AGL-3379), read
+      // only: staff see what runs on a site without joining it.
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.staffSite,
+        widgetId: 'workflows-staff-site-automations',
+        title: 'Automations',
+        Component: StaffSiteAutomationsCard,
+      },
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.adminOrgDetail,
+        widgetId: 'workflows-staff-org-automations',
+        title: 'Organization automations',
+        Component: StaffOrgAutomationsCard,
       },
     ],
     pluginId: BUNDLE_ID,

@@ -135,6 +135,21 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 /**
+ * The health-state recorder (AGL-3377), which remembers each verdict and
+ * alerts the operator on a change. Its own spec covers it; here it only
+ * proves the route hands it every answer, unchanged.
+ */
+const mockRecorded: Array<{ service: string; status: number }> = []
+jest.mock('@aglyn/tenant-data-admin/server/operator-health', () => ({
+  __esModule: true,
+  recordHealthResponse: async (response: Response) => {
+    const body = (await response.clone().json()) as { service: string }
+    mockRecorded.push({ service: body.service, status: response.status })
+    return response
+  },
+}))
+
+/**
  * The plugins' declarations, which is where a plugin declares a console job
  * (AGL-2981). No plugin by default, so the board is exactly the platform's
  * inventory; a test that wants a plugin's rows sets this to declare them,
@@ -530,6 +545,14 @@ describe('/api/health/crons', () => {
     expect((await GET()).status).toBe(200)
 
     expect(errorLog).not.toHaveBeenCalled()
+  })
+
+  it('hands every answer to the operator health recorder (AGL-3377)', async () => {
+    mockRecorded.length = 0
+    mockStore = healthyStore(Date.now())
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(200)
+    expect(mockRecorded).toEqual([{ service: 'console-crons', status: 200 }])
   })
 
   it('logs once per PROBE, not once per caller', async () => {

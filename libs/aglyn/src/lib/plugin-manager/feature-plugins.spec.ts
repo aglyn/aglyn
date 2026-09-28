@@ -301,6 +301,7 @@ describe('console extension registry', () => {
         'staffOrg',
         'staffOrgUsageColumn',
         'staffOrgsListColumn',
+        'staffSite',
         'staffUser',
       ])
       expect(isConsoleStaffWidgetSlot('staffOrg')).toBe(true)

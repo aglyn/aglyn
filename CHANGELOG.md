@@ -9,6 +9,52 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.207 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/699a9e833...v1.0.0-beta.207)
+
+### Added
+
+- **staff:** super staff can move a site to another organization ([AGL-3381](https://linear.app/aglyn/issue/AGL-3381))
+- **staff:** org page lists sent email, sends, campaigns and automations ([AGL-3380](https://linear.app/aglyn/issue/AGL-3380))
+- **staff:** the site page shows owner, transfer, and all content with previews ([AGL-3379](https://linear.app/aglyn/issue/AGL-3379))
+- **console:** the staff operator alerts page, its switches and its channels ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **staff:** the Organizations list sorts by its Organization and Created headers ([AGL-3385](https://linear.app/aglyn/issue/AGL-3385))
+- **alerts:** deliverability controls and background jobs alert the operator ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **alerts:** erasure, backup and legal-report failures alert the operator ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **alerts:** commerce, marketing and AI declare and raise their own operator alerts ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **seo:** a site entity can be a LocalBusiness with areas served, hours, price, payment ([AGL-3383](https://linear.app/aglyn/issue/AGL-3383))
+- **alerts:** billing and staff-access failures alert the operator ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **alerts:** health checks remember their state and alert on the edge ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377), [AGL-3375](https://linear.app/aglyn/issue/AGL-3375))
+- **alerts:** one operator-alert registry and raiseOperatorAlert ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377), [AGL-3375](https://linear.app/aglyn/issue/AGL-3375))
+
+### Fixed
+
+- **staff:** a site transfer rebuilds the access list first, and adopts an orphan site ([AGL-3381](https://linear.app/aglyn/issue/AGL-3381))
+- **alerts:** digest alerts take a minted id; the brand baseline records the win ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **marketing:** the staff org email widget registers last, and its spec names it ([AGL-3380](https://linear.app/aglyn/issue/AGL-3380))
+- **staff:** site Ownership links keep their element; Content memoizes routing ([AGL-3379](https://linear.app/aglyn/issue/AGL-3379))
+- **staff:** the Organizations Plan chips stay on one line, suspended first ([AGL-3385](https://linear.app/aglyn/issue/AGL-3385))
+- **tenant:** an icon-less free site's /favicon.ico keeps platform attribution ([AGL-3382](https://linear.app/aglyn/issue/AGL-3382), [AGL-2183](https://linear.app/aglyn/issue/AGL-2183))
+- **tenant:** link previews use the site's own icons and theme color ([AGL-3382](https://linear.app/aglyn/issue/AGL-3382))
+
+### Changed
+
+- **staff:** automations and campaigns render from their plugins on staff zones ([AGL-3380](https://linear.app/aglyn/issue/AGL-3380))
+
+### Documentation
+
+- **alerts:** the operator alerts page summary fits the help excerpt ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **alerts:** operator alert env vars, the tick, and where alerts go ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **self-host:** the email-health host allowlist row follows the code it names ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+- **linear-ids:** raise the ceiling to AGL-3377, read from Linear ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+
+</details>
+
 ## v1.0.0-beta.206 — 2026-09-28
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/5c53af612...v1.0.0-beta.206)

@@ -29,6 +29,15 @@
  * this path it fails here rather than on the sending domain.
  */
 
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+// The operator alerts the governor raises (AGL-3377): what, not how.
+jest.mock('./operator-alerts', () => ({
+  raiseOperatorAlert: async (type: string, options: any) => {
+    mockOperatorAlerts.push({ type, options })
+    return { outcome: 'delivered', type }
+  },
+}))
+
 import {
   EMAIL_SEND_RATE_DEFAULT_PER_HOUR,
   EMAIL_SEND_RATE_WINDOW_MS,
@@ -227,6 +236,14 @@ describe('consumeEmailSendBudget', () => {
     expect(result.allowed).toBe(false)
     expect(docs.get(WINDOW_PATH)?.count).toBe(9)
     expect(versions.get(WINDOW_PATH)).toBe(before)
+    // The operator hears the hour is full, once per six hours.
+    expect(mockOperatorAlerts.at(-1)).toEqual({
+      type: 'deliverability.sendRateSaturated',
+      options: {
+        dedupeKey: 'deliverability.sendRateSaturated',
+        context: { scope: 'platform', detail: '9/10 this hour' },
+      },
+    })
   })
 
   it('counts a transactional send that goes OVER the ceiling, and allows it', async () => {
@@ -298,6 +315,8 @@ describe('consumeEmailSendBudget', () => {
     })
     expect(result.allowed).toBe(true)
     expect(result.degraded).toBe(true)
+    // Unmetered is a state the operator must know about.
+    expect(mockOperatorAlerts.at(-1)?.type).toBe('deliverability.sendRateUnavailable')
   })
 })
 

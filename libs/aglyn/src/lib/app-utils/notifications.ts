@@ -212,6 +212,13 @@ export type AglynNotificationType =
   // muted as routine invoice traffic, and this is the one message on that
   // route where muting it means money moves with nobody looking.
   | 'system.disputeUnattributed'
+  // An operator alert from the registry in `./operator-alerts` (AGL-3377)
+  // that has no notification type of its own: a lost dispute, a failed
+  // erasure, a degraded health check. One type for all of them because the
+  // registry, not the taxonomy, is what names the alert; the title and body
+  // say which one it is. `system.` for the AGL-1088 reason above: these are
+  // the faults nobody may mute away as routine chatter.
+  | 'system.operatorAlert'
   // Somebody created an account, and somebody created a workspace
   // (AGL-3225). Staff audience, and the only two types in the taxonomy whose
   // subject is the platform's own growth rather than anybody's work.
@@ -308,6 +315,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
   'system.billingWebhookHalfApplied': 'Billing webhook half applied',
   'system.disputeUnattributed': 'Card dispute with no owner',
+  'system.operatorAlert': 'Operator alert',
   'staff.userSignedUp': 'New account',
   'staff.orgCreated': 'New workspace',
   'staff.subscriptionStarted': 'New subscription',
@@ -610,25 +618,6 @@ export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
     'content.insightsDigest',
     // Emailed by `notifyRiskEvent` itself, as account mail (AGL-3368).
     'system.riskNotice',
-  ])
-
-/**
- * Staff notifications the OPERATOR must hear about by email, whoever runs the
- * install and whatever anyone switched on (AGL-3375): fraud and risk alerts,
- * a card dispute nobody owns, a DMCA counter-notice whose statutory clock is
- * running, and a billing webhook that applied only half of what it meant to.
- *
- * The console notification is still written for every staff member. What
- * this adds is one email to the operator's alert inbox, because the email
- * channel defaults OFF and a self-hosted or OSS install that nobody tuned
- * would otherwise learn about card testing on its checkout from its bank.
- */
-export const OPERATOR_ALERT_NOTIFICATION_TYPES: ReadonlySet<string> =
-  new Set<AglynNotificationType>([
-    'system.abuseReportUrgent',
-    'system.disputeUnattributed',
-    'system.dmcaCounterNotice',
-    'system.billingWebhookHalfApplied',
   ])
 
 /**

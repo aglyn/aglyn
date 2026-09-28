@@ -19,13 +19,13 @@ import {
   buildRoute,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_SETTINGS_FIELD,
-  OPERATOR_ALERT_NOTIFICATION_TYPES,
   normalizeNotificationLink,
   notificationChannelEnabled,
   type AglynNotification,
   Route,
   type NotificationSettings,
 } from '@aglyn/aglyn/server'
+import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
@@ -33,10 +33,6 @@ import { filterSuppressedEmails } from './email-suppression'
 import { meterOrgEmail, meterPlatformEmail } from './email-metering'
 import firebaseAdmin from './firebase-admin'
 import { listOrgMembers } from './organizations'
-import {
-  resolveStaffAlertRecipients,
-  sendOperatorAlertEmail,
-} from './staff-alert-email'
 import {
   loadSystemEmail,
   renderLoadedSystemEmail,
@@ -376,41 +372,49 @@ async function listStaffUids(): Promise<string[]> {
  * reach them; this enumerates the `staff` custom claim instead. The docs land
  * at `users/{uid}/notifications`, which the console notifications menu already
  * renders, so no separate staff inbox is needed. Never throws.
+ *
+ * A type the operator alert registry names (AGL-3377) — a fraud or risk
+ * alert, a dispute nobody owns, a support ticket — is raised as that alert
+ * instead: the same console notification, plus staff's switches, the
+ * operator email or digest, and the webhook. See `raiseOperatorAlert`.
  */
 export async function notifyStaff(payload: NotificationPayload): Promise<void> {
   try {
-    // A fraud or risk alert also reaches the operator's inbox by email
-    // (AGL-3375), on every install and whatever anyone switched on. Whether
-    // there is an inbox is settled first, so the per-person channel stands
-    // down only when the alert is actually going somewhere.
-    const operatorAlert =
-      OPERATOR_ALERT_NOTIFICATION_TYPES.has(payload.type) &&
-      isEmailConfigured() &&
-      (await resolveStaffAlertRecipients()).length > 0
-    await notifyUsers(await listStaffUids(), payload, {
-      audience: 'staff',
-      ...(operatorAlert ? { skipEmail: true } : {}),
-    })
-    if (operatorAlert) {
-      await sendOperatorAlertEmail({
-        title: payload.title,
-        body: payload.body,
-        url: absoluteConsoleLink(payload.link),
-        context: `operator-alert ${payload.type}`,
+    const alert = operatorAlertForNotificationType(payload.type)
+    if (alert) {
+      const { raiseOperatorAlert } = await import('./operator-alerts')
+      await raiseOperatorAlert(alert, {
+        subject: payload.title,
+        ...(payload.body ? { body: payload.body } : {}),
+        ...(payload.link ? { url: payload.link } : {}),
+        ...(payload.orgId ? { orgId: payload.orgId } : {}),
+        ...(payload.hostId ? { hostId: payload.hostId } : {}),
       })
+      return
     }
+    await notifyStaffConsole(payload)
   } catch (error) {
     console.error('staff notification failed', error)
   }
 }
 
-/** A notification link as an inbox can follow it, or `''`. */
-function absoluteConsoleLink(link: string | undefined): string {
-  const value = String(link ?? '').trim()
-  if (!value) return ''
-  if (/^https?:\/\//i.test(value)) return value
-  const origin = consoleOrigin()
-  return origin && value.startsWith('/') ? `${origin}${value}` : ''
+/**
+ * The staff console notification alone, with the per-person email channel
+ * it carries: what `notifyStaff` did before the registry, and what
+ * `raiseOperatorAlert` writes as its first step. Never throws.
+ */
+export async function notifyStaffConsole(
+  payload: NotificationPayload,
+  options: { skipEmail?: boolean } = {},
+): Promise<void> {
+  try {
+    await notifyUsers(await listStaffUids(), payload, {
+      audience: 'staff',
+      ...(options.skipEmail ? { skipEmail: true } : {}),
+    })
+  } catch (error) {
+    console.error('staff notification failed', error)
+  }
 }
 
 /** Notifies the org's owner + admins (billing, membership, org events). */
