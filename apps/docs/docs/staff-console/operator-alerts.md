@@ -1,7 +1,7 @@
 ---
 sidebar_position: 10
 title: Operator alerts
-description: 'Every event the operator of an install must hear about: which alerts exist, where they go (email and an optional webhook), how staff switch them or batch them into a daily digest, and how health checks alert on their own.'
+description: 'Every event an install operator must hear about: which alerts exist, where they go (email and an optional webhook), how staff switch them or batch them daily, and how health checks alert on their own.'
 ---
 
 # Operator alerts
