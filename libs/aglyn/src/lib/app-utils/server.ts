@@ -37,9 +37,12 @@ export * from './collection-entries'
 export * from './collection-kind'
 export * from './collection-slug'
 export * from './content-authors'
-// The LocalBusiness allow-list and parsers the site entity publishes through
-// (AGL-3383); the console's Setup → SEO card is built from the same list.
-export * from './local-business'
+// NOT re-exported: `./local-business` and `./site-entity-json-ld` (AGL-3383).
+// This barrel is the whole namespace a realm bundle is handed and part of the
+// runtime a published page loads (`check:tenant-wire-weight`); the site
+// entity's JSON-LD and the LocalBusiness allow-list are read only by the
+// tenant page's server render and the console's Setup → SEO card, which import
+// them by path (`@aglyn/aglyn/app-utils/...`).
 export * from './content-query-fields'
 export * from './content-schema-type'
 export * from './content-author-profile'

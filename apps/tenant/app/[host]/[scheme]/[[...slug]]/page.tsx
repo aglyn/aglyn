@@ -17,6 +17,10 @@
 
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
+import {
+  hostSeoEntityJsonLd,
+  siteEntityJsonLd,
+} from '@aglyn/aglyn/app-utils/site-entity-json-ld'
 // Deep import, not the barrel (AGL-3148): four call sites in this file need
 // three small functions, and `import * as` pins whatever the barrel reaches.
 import {
@@ -780,7 +784,7 @@ function buildJsonLd(props: Props): string[] {
   // `HostEntityType.PERSON`, so a site that declared itself a Person published
   // `"@type": "Organization"` on every page. Strict equality across a string
   // and a number is always false; nothing here could ever have said Person.
-  const publisher = Aglyn.hostSeoEntityJsonLd(host?.seo?.entity)
+  const publisher = hostSeoEntityJsonLd(host?.seo?.entity)
 
   /*
     THE SITE'S OWN ENTITY, as a top-level node (AGL-2716).
@@ -806,7 +810,7 @@ function buildJsonLd(props: Props): string[] {
     Emitted on every page rather than only the home page for the same reason:
     an agent fetches one URL and reads what is on it.
   */
-  const siteEntity = Aglyn.siteEntityJsonLd(host, {
+  const siteEntity = siteEntityJsonLd(host, {
     origin: canonicalBase,
     hostId: host?.$id,
   })

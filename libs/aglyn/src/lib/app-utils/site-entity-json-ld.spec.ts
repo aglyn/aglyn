@@ -16,12 +16,12 @@
  */
 
 import { HostEntityType } from '../foundation/definitions/platform.types'
+import { SITE_ENTITY_FRAGMENT } from './content-authors'
 import {
-  SITE_ENTITY_FRAGMENT,
   hostSeoEntityJsonLd,
   siteEntityJsonLd,
   siteEntitySchemaType,
-} from './content-authors'
+} from './site-entity-json-ld'
 
 const ORIGIN = 'https://acme.test'
 

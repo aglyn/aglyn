@@ -22,7 +22,6 @@ import {
   type ContentAuthorRecord,
   contentAuthorJsonLd,
   contentAuthorSchemaType,
-  hostSeoEntityJsonLd,
   normalizeContentAuthor,
   entryHasByline,
   resolveEntryAuthor,
@@ -39,10 +38,10 @@ import {
   contentAuthorPaginationLinks,
   contentAuthorSlug,
   parseContentAuthorRoute,
-  siteEntityJsonLd,
   siteProfileUrls,
   xHandleFromProfiles,
 } from './content-authors'
+import { hostSeoEntityJsonLd, siteEntityJsonLd } from './site-entity-json-ld'
 
 const ORIGIN = 'https://example.com'
 
