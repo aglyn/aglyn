@@ -37,6 +37,13 @@ import type { NotificationWorkspace } from '../utils/notification-links'
 const typeLabel = (type: string | undefined): string =>
   (NOTIFICATION_TYPE_LABELS as Record<string, string>)[type ?? ''] ?? type ?? ''
 
+/** The empty feed with no filter set, once it has loaded. */
+export const CAUGHT_UP_COPY = "You're all caught up."
+/** The empty feed under a filter, once it has loaded. */
+export const NO_MATCHES_COPY = 'No notifications match these filters'
+/** The empty feed after a read that failed. */
+export const LOAD_FAILED_COPY = "Notifications couldn't be loaded."
+
 /** What the Workspace cell reads for a row whose org was never recorded. */
 const NO_WORKSPACE = '—'
 
@@ -180,8 +187,18 @@ export interface NotificationsTableProps {
   pageSize: number
   /** Whether the feed holds a page after this one. */
   hasMore: boolean
-  /** A page is being read, so the pager holds still. */
+  /**
+   * A page is being read: the grid draws its loading overlay and the pager
+   * holds still. Until it clears, neither empty-state copy may speak — a
+   * read that has not finished has found nothing yet, not nothing at all
+   * (AGL-3373).
+   */
   loading?: boolean
+  /**
+   * The last read failed, so an empty page says so instead of claiming the
+   * reader is caught up.
+   */
+  failed?: boolean
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: number) => void
   /**
@@ -217,7 +234,8 @@ export function NotificationsTable(props: NotificationsTableProps) {
     page,
     pageSize,
     hasMore,
-    loading,
+    loading = false,
+    failed = false,
     onPageChange,
     onPageSizeChange,
     gridFilter,
@@ -233,6 +251,7 @@ export function NotificationsTable(props: NotificationsTableProps) {
     [workspaceOf],
   )
   const filtering = Boolean(gridFilter?.clauses.length)
+  const caughtUp = rows.length === 0 && !loading && !filtering && !failed
   return (
     <>
       {gridFilter ? (
@@ -244,9 +263,9 @@ export function NotificationsTable(props: NotificationsTableProps) {
           options={NOTIFICATION_FILTER_OPTIONS}
         />
       ) : null}
-      {rows.length === 0 && !loading && !filtering ? (
+      {caughtUp ? (
         <Typography variant="body2" color="text.secondary">
-          {"You're all caught up."}
+          {CAUGHT_UP_COPY}
         </Typography>
       ) : (
         <ListTable
@@ -261,7 +280,17 @@ export function NotificationsTable(props: NotificationsTableProps) {
           // No index holds a notification's words; see above.
           quickFilter={false}
           onOpen={(_id, row) => onOpen(row)}
-          noRowsLabel="No notifications match these filters"
+          /*
+           * The overlay, not the empty copy, while a page is in flight
+           * (AGL-3373). Without it a read that never finished drew "No
+           * notifications match these filters" over a feed of 105, with no
+           * filter set. The grid shows its no-rows copy only once `loading`
+           * is false, and the copy names the reason the page is empty.
+           */
+          loading={loading}
+          noRowsLabel={
+            filtering ? NO_MATCHES_COPY : failed ? LOAD_FAILED_COPY : CAUGHT_UP_COPY
+          }
           {...(gridFilter
             ? {
                 filterMode: 'server' as const,

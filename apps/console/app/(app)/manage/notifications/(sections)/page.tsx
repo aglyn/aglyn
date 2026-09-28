@@ -22,11 +22,10 @@ import ListQueryNotices, {
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { Button, Stack } from '@mui/material'
+import { Alert, Button, Stack } from '@mui/material'
 import {
   collection,
   doc,
-  getDocs,
   limit,
   orderBy,
   query,
@@ -36,10 +35,12 @@ import {
   where,
   writeBatch,
   type QueryDocumentSnapshot,
+  type QuerySnapshot,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { getDocsBounded, STALE_READ_NOTICE } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import NotificationsTable from '../../../../../components/notifications-table.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../../../../constants/shared'
@@ -90,6 +91,15 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
+  /**
+   * The server did not answer in time and the page is the cache's
+   * (AGL-3373). Said out loud, because the rows may be out of date.
+   */
+  const [stale, setStale] = useState(false)
+  /** The last read failed outright, so an empty page is not "caught up". */
+  const [failed, setFailed] = useState(false)
+  /** Only the newest read may write the page; a filter change supersedes. */
+  const requestRef = useRef(0)
   /*
    * Type and Status, served by the feed's query (AGL-3321). A new set of
    * clauses is a new feed, so the cursors of the old one are dropped and the
@@ -105,17 +115,17 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   const loadPage = useCallback(
     async (targetPage: number, cursor?: QueryDocumentSnapshot) => {
       if (!uid) return
+      const requestId = ++requestRef.current
       setLoading(true)
-      try {
-        const snapshot = await getDocs(
-          query(
-            collection(firestore, 'users', uid, 'notifications'),
-            ...wheres.map(([path, op, value]) => where(path, op, value)),
-            orderBy('createdAt', 'desc'),
-            ...(cursor ? [startAfter(cursor)] : []),
-            limit(pageSize + 1),
-          ),
-        )
+      /*
+       * Bounded (AGL-3373). A bare `getDocs` waits for the server whenever
+       * the client believes it is online, and when that belief is stale —
+       * a multi-tab cache whose primary tab died — it never settles, so
+       * `loading` never cleared and the table read "no matches" for ten
+       * minutes. This settles from the cache after a few seconds, asks the
+       * client to recover, and swaps in the server's page when it arrives.
+       */
+      const apply = (snapshot: QuerySnapshot) => {
         const docs = snapshot.docs.slice(0, pageSize)
         setRows(docs.map((entry) => ({ $id: entry.id, ...entry.data() })))
         setHasMore(snapshot.docs.length > pageSize)
@@ -126,10 +136,33 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           if (last) next[targetPage] = last
           return next
         })
+      }
+      try {
+        const read = await getDocsBounded(
+          query(
+            collection(firestore, 'users', uid, 'notifications'),
+            ...wheres.map(([path, op, value]) => where(path, op, value)),
+            orderBy('createdAt', 'desc'),
+            ...(cursor ? [startAfter(cursor)] : []),
+            limit(pageSize + 1),
+          ),
+        )
+        if (requestRef.current !== requestId) return
+        apply(read.snapshot)
+        setStale(read.stale)
+        setFailed(false)
+        void read.fresh?.then((fresh) => {
+          if (!fresh || requestRef.current !== requestId) return
+          apply(fresh)
+          setStale(false)
+        })
       } catch (error) {
         console.error(error)
+        if (requestRef.current !== requestId) return
+        setFailed(true)
+        setStale(false)
       } finally {
-        setLoading(false)
+        if (requestRef.current === requestId) setLoading(false)
       }
     },
     [firestore, uid, pageSize, wheres],
@@ -145,7 +178,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     if (!uid || markingAll) return
     setMarkingAll(true)
     try {
-      const snapshot = await getDocs(
+      // Bounded like the feed (AGL-3373), so a stalled client cannot hold
+      // the button on "Marking…".
+      const { snapshot } = await getDocsBounded(
         query(
           collection(firestore, 'users', uid, 'notifications'),
           orderBy('createdAt', 'desc'),
@@ -160,7 +195,12 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           count += 1
         }
       })
-      if (count > 0) await batch.commit()
+      /*
+       * Not awaited: `commit` resolves on the server's acknowledgment, which
+       * a stalled client never delivers (AGL-3373). The writes apply to the
+       * local cache at once and stay queued until the server takes them.
+       */
+      if (count > 0) void batch.commit().catch(console.error)
       await loadPage(page, cursors[page - 1])
     } catch (error) {
       console.error(error)
@@ -254,6 +294,12 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
             {markingAll ? 'Marking…' : 'Mark all read'}
           </Button>
         </Stack>
+        {stale ? <Alert severity="warning">{STALE_READ_NOTICE}</Alert> : null}
+        {failed && !stale ? (
+          <Alert severity="error">
+            {"Notifications couldn't be loaded. Check your connection and reload the page."}
+          </Alert>
+        ) : null}
         <ListQueryNotices
           refused={listQueryRefusals(filterPlan.refused, {
             fields: NOTIFICATION_FILTER_FIELDS,
@@ -269,6 +315,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           pageSize={pageSize}
           hasMore={hasMore}
           loading={loading}
+          failed={failed}
           // `cursors[i]` is the LAST row of page i, so page i+1 resumes
           // after `cursors[i]` and page i resumes after `cursors[i - 1]`.
           onPageChange={(next) =>

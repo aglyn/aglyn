@@ -23,7 +23,6 @@ import {
   endAt,
   type DocumentData,
   type Firestore,
-  getDocs,
   limit,
   orderBy,
   query,
@@ -41,6 +40,7 @@ import {
   reportFirestoreDenial,
   reportFirestoreServerRead,
 } from './firestore-denial-reporter'
+import { getDocsBounded } from './firebase/firestore-bounded-read'
 
 /**
  * Collection KEY for the session-health verdict (AGL-2486).
@@ -270,7 +270,7 @@ export function useSwitcherCollection<T = DocumentData>(
     const searchRead = async () => {
       let windowRows = windowRef.current
       if (!windowRows) {
-        const windowSnapshot = await getDocs(
+        const { snapshot: windowSnapshot } = await getDocsBounded(
           query(ref, ...scopeFilter, orderBy(documentId()), limit(searchWindow)),
         )
         windowRows = {
@@ -292,7 +292,7 @@ export function useSwitcherCollection<T = DocumentData>(
       let beyond: T[] = []
       let beyondFromCache: boolean | undefined
       if (windowRows.rows.length >= searchWindow) {
-        const prefixSnapshot = await getDocs(
+        const { snapshot: prefixSnapshot } = await getDocsBounded(
           query(
             ref,
             ...scopeFilter,
@@ -321,9 +321,11 @@ export function useSwitcherCollection<T = DocumentData>(
 
     const read = hasQuery
       ? searchRead()
-      : getDocs(
+      : // Bounded (AGL-3373): a stalled client answers from the cache,
+        // marked `fromCache`, instead of holding the menu on its spinner.
+        getDocsBounded(
           query(ref, ...scopeFilter, orderBy('updatedAt', 'desc'), limit(idleLimit)),
-        ).then((snapshot) => ({
+        ).then(({ snapshot }) => ({
           rows: toRows(snapshot),
           fromCache: snapshot.metadata?.fromCache,
         }))
