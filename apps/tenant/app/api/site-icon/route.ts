@@ -16,6 +16,7 @@
  */
 
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { showsPlatformAttribution } from '@aglyn/aglyn/server'
 import { getSiteLockdown } from '@aglyn/tenant-data-admin'
 // Deep import: one predicate and the set it reads, not the theme barrel's
 // React providers.
@@ -90,14 +91,16 @@ export async function GET(request: Request): Promise<Response> {
   const site = !platformBrand && host ? (await getHost({ host }))?.host : null
   // `no-store`: the lock lifting must not wait out a cached refusal.
   if (await siteLocked(site?.$id)) return notFound('no-store')
-  // The org's white-label mark is only a favicon fallback, so it is only read
-  // when the site has no favicon of its own.
-  const brandFavicon =
+  // The org is only read when the site has no favicon of its own: its
+  // white-label mark is the next fallback, and its plan decides whether the
+  // last one is ours or a blank (AGL-2183).
+  const org =
     kind === 'favicon' && site?.$id && !siteFaviconSrc(site)
-      ? resolveMediaSrc(
-          orgBrandFavicon((await getOrgBilling({ hostId: site.$id })).org),
-          { hostId: site.$id },
-        )
+      ? (await getOrgBilling({ hostId: site.$id })).org
+      : undefined
+  const brandFavicon =
+    org && site?.$id
+      ? resolveMediaSrc(orgBrandFavicon(org), { hostId: site.$id })
       : undefined
 
   const answer = siteIconAnswer({
@@ -105,6 +108,9 @@ export async function GET(request: Request): Promise<Response> {
     platformBrand,
     host: site,
     brandFavicon,
+    // An unread org suppresses, as the layout's link does: a blank tab for
+    // one render beats our mark on a paid customer's domain.
+    attribution: org ? showsPlatformAttribution(org) : false,
   })
   if (answer.kind === 'redirect') {
     return new Response(null, {

@@ -168,10 +168,13 @@ export type SiteIconAnswer =
  *    {@link siteAppleTouchIconSrc}, a favicon from the site's favicon and
  *    then the org's white-label mark, the same precedence the layout's
  *    `<link rel="icon">` follows.
- *  - A site with nothing never gets ours. The favicon becomes a transparent
- *    blank, so a tab shows the browser's default rather than a 404 in every
- *    visitor's network log; the touch icon is a plain 404, which is what an
- *    unfurler treats as "no icon".
+ *  - A site with no favicon keeps the attribution rule the layout's link
+ *    follows (AGL-2183, `resolveSiteFaviconHref`): where the plan shows
+ *    platform attribution the favicon is ours, as it always was; anywhere
+ *    else it is a transparent blank, so a white-label tab shows the browser's
+ *    default rather than a 404 in every visitor's network log. The touch icon
+ *    is never ours on a customer host — a plain 404 is what an unfurler
+ *    treats as "no icon".
  */
 export function siteIconAnswer(options: {
   kind: SiteIconKind
@@ -180,8 +183,10 @@ export function siteIconAnswer(options: {
   host: SiteIconHost | null | undefined
   /** The org's white-label favicon, already resolved to a fetchable src. */
   brandFavicon?: string
+  /** `showsPlatformAttribution(org)` — false when the org could not be read. */
+  attribution?: boolean
 }): SiteIconAnswer {
-  const { kind, platformBrand, host, brandFavicon } = options
+  const { kind, platformBrand, host, brandFavicon, attribution } = options
   if (platformBrand) {
     return { kind: 'redirect', location: PLATFORM_ICON_PATHS[kind] }
   }
@@ -190,5 +195,8 @@ export function siteIconAnswer(options: {
       ? siteAppleTouchIconSrc(host)
       : siteFaviconSrc(host) || brandFavicon
   if (location) return { kind: 'redirect', location }
-  return kind === 'favicon' ? { kind: 'blank' } : { kind: 'not-found' }
+  if (kind === 'apple-touch-icon') return { kind: 'not-found' }
+  return attribution
+    ? { kind: 'redirect', location: PLATFORM_ICON_PATHS.favicon }
+    : { kind: 'blank' }
 }

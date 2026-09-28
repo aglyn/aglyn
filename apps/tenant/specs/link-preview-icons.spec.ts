@@ -116,7 +116,8 @@ describe('/favicon.ico and /apple-touch-icon.png, decided', () => {
     host: Record<string, unknown> | null,
     platformBrand = false,
     brandFavicon?: string,
-  ) => siteIconAnswer({ kind, platformBrand, host, brandFavicon })
+    attribution = false,
+  ) => siteIconAnswer({ kind, platformBrand, host, brandFavicon, attribution })
 
   it('a site with an app icon: both paths lead to the site', () => {
     expect(answer('apple-touch-icon', WITH_APP_ICON)).toEqual({
@@ -140,11 +141,30 @@ describe('/favicon.ico and /apple-touch-icon.png, decided', () => {
     })
   })
 
-  it('a site with neither gets a blank favicon and no touch icon — never ours', () => {
+  it('a site with neither and no attribution gets a blank favicon and no touch icon', () => {
     expect(answer('favicon', NEITHER)).toEqual({ kind: 'blank' })
     expect(answer('apple-touch-icon', NEITHER)).toEqual({ kind: 'not-found' })
     // An unknown host is the same case, not a reason to fall back to ours.
     expect(answer('favicon', null)).toEqual({ kind: 'blank' })
+  })
+
+  it('a site with neither on an attributed plan keeps our favicon, as the layout does (AGL-2183)', () => {
+    expect(answer('favicon', NEITHER, false, undefined, true)).toEqual({
+      kind: 'redirect',
+      location: PLATFORM_ICON_PATHS.favicon,
+    })
+    // The touch icon is what an unfurler shows, and it is never ours on a
+    // customer host — attribution is the tab's, not the preview card's.
+    expect(answer('apple-touch-icon', NEITHER, false, undefined, true)).toEqual(
+      { kind: 'not-found' },
+    )
+  })
+
+  it('a site’s own icon wins over attribution', () => {
+    expect(answer('favicon', FAVICON_ONLY, false, undefined, true)).toEqual({
+      kind: 'redirect',
+      location: FAVICON_SRC,
+    })
   })
 
   it('an org’s white-label mark stands in for a missing favicon', () => {
@@ -206,8 +226,27 @@ describe('the /api/site-icon route', () => {
     expect(touch.headers.get('Location')).toBe(FAVICON_SRC)
   })
 
-  it('serves a transparent ICO, and a 404 touch icon, for a site with neither', async () => {
+  it('keeps our favicon, and 404s the touch icon, for a free site with neither (AGL-2183)', async () => {
     mockGetHost.mockResolvedValue({ host: NEITHER })
+    const favicon = await call('plain', 'favicon')
+    expect(favicon.status).toBe(302)
+    expect(favicon.headers.get('Location')).toBe(PLATFORM_ICON_PATHS.favicon)
+    const touch = await call('plain', 'apple-touch-icon')
+    expect(touch.status).toBe(404)
+    expect(touch.headers.get('Location')).toBeNull()
+  })
+
+  it('serves a transparent ICO when the org cannot be read — never ours by accident', async () => {
+    mockGetHost.mockResolvedValue({ host: NEITHER })
+    mockOrg.mockResolvedValue({ org: null })
+    const favicon = await call('plain', 'favicon')
+    expect(favicon.status).toBe(200)
+    expect(favicon.headers.get('Location')).toBeNull()
+  })
+
+  it('serves a transparent ICO, and a 404 touch icon, for a white-label site with neither', async () => {
+    mockGetHost.mockResolvedValue({ host: NEITHER })
+    mockOrg.mockResolvedValue({ org: { $id: 'org-agency', plan: 'agency' } })
     const favicon = await call('plain', 'favicon')
     expect(favicon.status).toBe(200)
     expect(favicon.headers.get('Content-Type')).toBe('image/x-icon')
@@ -232,10 +271,17 @@ describe('the /api/site-icon route', () => {
   })
 
   it('never redirects a customer host to the platform icon', async () => {
-    // The whole issue as one sweep: three customer sites, both paths.
+    // The whole issue as one sweep: a customer site with its own icon never
+    // previews as ours, and no customer site's TOUCH icon — the one an
+    // unfurler shows — is ever ours. (An icon-less free site's tab favicon is
+    // ours by design, AGL-2183, and is covered above.)
     for (const host of [WITH_APP_ICON, FAVICON_ONLY, NEITHER]) {
       mockGetHost.mockResolvedValue({ host })
-      for (const icon of ['favicon', 'apple-touch-icon'] as const) {
+      const icons =
+        host === NEITHER
+          ? (['apple-touch-icon'] as const)
+          : (['favicon', 'apple-touch-icon'] as const)
+      for (const icon of icons) {
         const location = (await call('customer', icon)).headers.get('Location')
         expect(location ?? '').not.toMatch(PLATFORM_ICON)
       }
