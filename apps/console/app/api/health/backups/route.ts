@@ -51,6 +51,7 @@
  * listing backups additionally requires `roles/datastore.backupsViewer`
  * (granted 2026-08-13 — `datastore.backups.get/list`, nothing else).
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import { getApp } from 'firebase-admin/app'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling health route.
@@ -221,20 +222,22 @@ export async function GET(): Promise<Response> {
   const [backups, exports] = await Promise.all([backupsProbe(), exportsProbe()])
   const checks = { backups, exports }
   const status = healthStatus(checks)
-  return Response.json(
-    healthBody({
-      service: 'console-backups',
-      checks,
-      commit: deploymentCommitRef(),
-      // Which VERSION of the platform answered. The commit above is only
-      // set off Vercel if the operator stamped it; this one is inlined
-      // from package.json by every build, so a self-hoster always has
-      // something to quote in a bug report (AGL-2091).
-      version: platformVersion(),
-      environment: deploymentEnvironmentLabel(),
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      healthBody({
+        service: 'console-backups',
+        checks,
+        commit: deploymentCommitRef(),
+        // Which VERSION of the platform answered. The commit above is only
+        // set off Vercel if the operator stamped it; this one is inlined
+        // from package.json by every build, so a self-hoster always has
+        // something to quote in a bug report (AGL-2091).
+        version: platformVersion(),
+        environment: deploymentEnvironmentLabel(),
+        region: process.env['VERCEL_REGION'] ?? null,
+      }),
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 

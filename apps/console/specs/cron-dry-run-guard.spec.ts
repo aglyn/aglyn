@@ -118,6 +118,7 @@ describe('the routes are WIRED to it', () => {
     'admin/reverify-plugin-versions',
     'admin/finish-domain-attachments',
     'admin/consent-group-changes',
+    'admin/operator-alerts/tick',
   ]
 
   it.each(guarded)('%s calls the shared helper', (route) => {
@@ -133,14 +134,15 @@ describe('the routes are WIRED to it', () => {
     // The three things a run does that a later run cannot undo, each
     // downstream of the flag: the Storage write and the batch delete sit
     // behind the `if (dryRun) … continue`, and the staff email behind its
-    // own `!dryRun`.
+    // own `!dryRun`: a dry run resolves no recipients (AGL-3375), so the
+    // send loop has nobody to mail.
     const guardIndex = source.indexOf('const dryRun = isCronDryRun(')
     expect(guardIndex).toBeGreaterThan(-1)
     for (const irreversible of ['.save(', 'batch.delete(', 'sendEmail(']) {
       expect(source.indexOf(irreversible)).toBeGreaterThan(guardIndex)
     }
     expect(source).toMatch(/if \(dryRun\) \{/)
-    expect(source).toMatch(/staffEmail && !dryRun/)
+    expect(source).toMatch(/due\.length && !dryRun \? await resolveStaffAlertRecipients\(\)/)
   })
 
   it('no route re-implements the rule inline any more', () => {

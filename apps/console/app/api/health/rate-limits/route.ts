@@ -45,6 +45,7 @@
  * instance. The body carries COUNTS and an age — never limiter keys, which
  * are hashed client IPs, and never bucket ids.
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import { getApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 // Imported for its side effect too: guarantees the firebase-admin default app
@@ -165,20 +166,22 @@ const rateLimitsProbe = memoizeWithTtl<RateLimitsCheck>(
 export async function GET(): Promise<Response> {
   const checks = { rateLimits: await rateLimitsProbe() }
   const status = healthStatus(checks)
-  return Response.json(
-    healthBody({
-      service: 'console-rate-limits',
-      checks,
-      commit: deploymentCommitRef(),
-      // Which VERSION of the platform answered. The commit above is only
-      // set off Vercel if the operator stamped it; this one is inlined
-      // from package.json by every build, so a self-hoster always has
-      // something to quote in a bug report (AGL-2091).
-      version: platformVersion(),
-      environment: deploymentEnvironmentLabel(),
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      healthBody({
+        service: 'console-rate-limits',
+        checks,
+        commit: deploymentCommitRef(),
+        // Which VERSION of the platform answered. The commit above is only
+        // set off Vercel if the operator stamped it; this one is inlined
+        // from package.json by every build, so a self-hoster always has
+        // something to quote in a bug report (AGL-2091).
+        version: platformVersion(),
+        environment: deploymentEnvironmentLabel(),
+        region: process.env['VERCEL_REGION'] ?? null,
+      }),
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 

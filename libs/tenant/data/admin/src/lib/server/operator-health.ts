@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-import firebaseAdmin from './firebase-admin'
-
 /**
  * HEALTH TRANSITIONS (AGL-3377): the health checks, remembered.
  *
@@ -34,8 +32,14 @@ import firebaseAdmin from './firebase-admin'
  *
  * Cheap on the hot path: each instance remembers the last state it wrote, so
  * a poll that finds nothing changed costs no Firestore round trip at all.
- * Never throws.
+ * The Admin SDK is loaded on the first write rather than at import, so every
+ * health route can import this without initializing anything. Never throws.
  */
+
+async function firestore(): Promise<any> {
+  const { default: firebaseAdmin } = await import('./firebase-admin')
+  return firebaseAdmin.app().firestore()
+}
 
 export const OPERATOR_HEALTH_COLLECTION = 'operatorHealthState'
 
@@ -84,9 +88,9 @@ export async function recordHealthState(
   const label = String(options.label ?? '').trim() || id
   const summary = String(detail ?? '').trim().slice(0, 1_000)
   try {
-    const firestore = firebaseAdmin.app().firestore()
-    const ref = firestore.collection(OPERATOR_HEALTH_COLLECTION).doc(id)
-    const edge = await firestore.runTransaction(async (transaction: any) => {
+    const db = await firestore()
+    const ref = db.collection(OPERATOR_HEALTH_COLLECTION).doc(id)
+    const edge = await db.runTransaction(async (transaction: any) => {
       const snapshot = await transaction.get(ref)
       const prior = (snapshot.exists ? snapshot.data() : null) as
         | Partial<OperatorHealthStateDoc>
@@ -131,6 +135,10 @@ export async function recordHealthState(
     }
     return edge.transition
   } catch (error) {
+    // Once per verdict per instance: a store that is down must not turn
+    // every poll of a public endpoint into another log line. The next
+    // change of verdict tries again.
+    lastWritten.set(id, status)
     console.error(`[operator-health] ${id} could not be recorded`, error)
     return null
   }
@@ -139,11 +147,7 @@ export async function recordHealthState(
 /** Every recorded check, for the staff page and the sweep's report. */
 export async function listHealthStates(): Promise<OperatorHealthStateDoc[]> {
   try {
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection(OPERATOR_HEALTH_COLLECTION)
-      .get()
+    const snapshot = await (await firestore()).collection(OPERATOR_HEALTH_COLLECTION).get()
     return snapshot.docs.map((doc: any) => doc.data() as OperatorHealthStateDoc)
   } catch (error) {
     console.error('[operator-health] states unreadable', error)
@@ -185,4 +189,50 @@ export function healthStateOfBody(
         : `The endpoint answered ${httpStatus ?? 'nothing'}.`
       : 'All checks pass.',
   }
+}
+
+/**
+ * What each health endpoint is called on the board and in an alert, keyed by
+ * the `service` its body names. An unlisted service is called by its name.
+ */
+export const HEALTH_SERVICE_LABELS: Readonly<Record<string, string>> = {
+  console: 'Console serving',
+  'console-auth-doors': 'Ways in',
+  'console-backups': 'Backups & exports',
+  'console-billing': 'Billing webhook',
+  'console-crons': 'Scheduled jobs',
+  'console-error-beacon': 'Console error beacon',
+  'console-journeys': 'Console journeys',
+  'console-rate-limits': 'Rate limiters',
+  'console-server-errors': 'Server errors',
+  'console-signup-volume': 'Signup volume',
+  'console-email': 'Email delivery',
+  tenant: 'Site serving',
+  'tenant-error-beacon': 'Site error beacon',
+  'tenant-funnel': 'Site capture funnel',
+  'tenant-render-site': 'Site rendering',
+  'tenant-render-marketing': 'Marketing site rendering',
+}
+
+/**
+ * Records a health endpoint's own response and hands it back unchanged
+ * (AGL-3377): `return recordHealthResponse(Response.json(healthBody(…)))`.
+ * The check id is the body's `service`, so the endpoint, the scheduled sweep
+ * and any other poller all write the same state. Costs nothing while the
+ * verdict is the one this instance last wrote. Never throws.
+ */
+export async function recordHealthResponse(response: Response): Promise<Response> {
+  try {
+    const body = (await response.clone().json()) as Record<string, unknown> | null
+    const service = String(body?.['service'] ?? '').trim()
+    if (service) {
+      const { status, detail } = healthStateOfBody(body, response.status)
+      await recordHealthState(service, status, detail, {
+        label: HEALTH_SERVICE_LABELS[service] ?? service,
+      })
+    }
+  } catch (error) {
+    console.error('[operator-health] a health response could not be recorded', error)
+  }
+  return response
 }

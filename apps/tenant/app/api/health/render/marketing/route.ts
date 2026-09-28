@@ -33,6 +33,7 @@
  * SELF-CLEARING. Nothing latches; a page that renders again clears the red
  * within one probe TTL.
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import {
   deploymentCommitRef,
   deploymentEnvironmentLabel,
@@ -65,16 +66,18 @@ const renderProbe = memoizeWithTtl<RenderCheck>(PROBE_TTL_MS, () =>
 export async function GET(): Promise<Response> {
   const checks = { render: await renderProbe() }
   const status = healthStatus(checks)
-  return Response.json(
-    healthBody({
-      service: 'tenant-render-marketing',
-      checks,
-      commit: deploymentCommitRef(),
-      version: platformVersion(),
-      environment: deploymentEnvironmentLabel(),
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      healthBody({
+        service: 'tenant-render-marketing',
+        checks,
+        commit: deploymentCommitRef(),
+        version: platformVersion(),
+        environment: deploymentEnvironmentLabel(),
+        region: process.env['VERCEL_REGION'] ?? null,
+      }),
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 

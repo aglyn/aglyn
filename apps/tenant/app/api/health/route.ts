@@ -33,6 +33,7 @@
  * outage. Uptime asks whether the runtime is serving, not whether one site is
  * configured.
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   deploymentCommitRef,
@@ -92,25 +93,27 @@ const firestoreHealth = memoizeWithTtl<HealthCheck>(PROBE_TTL_MS, async () => {
 export async function GET(): Promise<Response> {
   const checks = { firestore: await firestoreHealth() }
   const status = healthStatus(checks)
-  return Response.json(
-    healthBody({
-      service: 'tenant',
-      checks,
-      // Which build answered. Without it a probe cannot tell a recovered
-      // deploy from a rolled-back one, and an incident timeline has no anchor.
-      commit: deploymentCommitRef(),
-      // Which VERSION of the platform answered. The commit above is only
-      // set off Vercel if the operator stamped it; this one is inlined
-      // from package.json by every build, so a self-hoster always has
-      // something to quote in a bug report (AGL-2091).
-      version: platformVersion(),
-      // Not `VERCEL_ENV ?? 'development'`: off Vercel that reported a
-      // self-hoster's production container as "development" — to them and to
-      // whatever monitoring reads this (AGL-2436).
-      environment: deploymentEnvironmentLabel(),
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      healthBody({
+        service: 'tenant',
+        checks,
+        // Which build answered. Without it a probe cannot tell a recovered
+        // deploy from a rolled-back one, and an incident timeline has no anchor.
+        commit: deploymentCommitRef(),
+        // Which VERSION of the platform answered. The commit above is only
+        // set off Vercel if the operator stamped it; this one is inlined
+        // from package.json by every build, so a self-hoster always has
+        // something to quote in a bug report (AGL-2091).
+        version: platformVersion(),
+        // Not `VERCEL_ENV ?? 'development'`: off Vercel that reported a
+        // self-hoster's production container as "development" — to them and to
+        // whatever monitoring reads this (AGL-2436).
+        environment: deploymentEnvironmentLabel(),
+        region: process.env['VERCEL_REGION'] ?? null,
+      }),
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 

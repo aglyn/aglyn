@@ -2551,6 +2551,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Finishes every consent group change an admin started and then left: the refusals carried between separating sites, the new declaration, the re-homed records and the delayed sweep (AGL-3320). If it stops, a change whose editor was closed stays where it stopped — before the flip the old groups stay in force, after it the records keyed by the old groups wait to move — and no further change can start until it finishes.',
   },
   {
+    id: 'operator-alerts',
+    label: 'Operator alerts',
+    // The eighth route on the `consoleFastCrons` job (AGL-3377). It asks
+    // every health endpoint so a degraded one alerts the operator without an
+    // external monitor, and it carries the support SLA sweep and the daily
+    // operator digest.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons \u2192 console /api/admin/operator-alerts/tick',
+    graceMinutes: 45,
+    drives:
+      'Asks every health check on the install so a degraded one emails the operator even with no uptime monitor watching; flags support tickets past their response time; sends the daily operator digest (AGL-3377). If it stops, a check that goes red is only noticed by whoever reads it, overdue tickets say nothing, and digest alerts pile up unsent — while every immediate alert still goes out.',
+  },
+  {
     id: 'ai-jobs-beat',
     label: 'AI jobs beat',
     // Its own Cloud Scheduler job, every minute (AGL-3026): the console route

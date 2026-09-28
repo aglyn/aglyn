@@ -42,6 +42,7 @@
  * SELF-CLEARING. Nothing latches; a funnel that is wired correctly again
  * clears the red within one probe TTL.
  */
+import { recordHealthResponse } from '@aglyn/tenant-data-admin/server/operator-health'
 import {
   deploymentCommitRef,
   deploymentEnvironmentLabel,
@@ -79,16 +80,18 @@ export async function GET(): Promise<Response> {
   const { intake, routing } = await funnelProbe()
   const checks = { intake, routing }
   const status = healthStatus(checks)
-  return Response.json(
-    healthBody({
-      service: 'tenant-funnel',
-      checks,
-      commit: deploymentCommitRef(),
-      version: platformVersion(),
-      environment: deploymentEnvironmentLabel(),
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
-    { status: healthHttpStatus(status), headers: healthHeaders(status) },
+  return recordHealthResponse(
+    Response.json(
+      healthBody({
+        service: 'tenant-funnel',
+        checks,
+        commit: deploymentCommitRef(),
+        version: platformVersion(),
+        environment: deploymentEnvironmentLabel(),
+        region: process.env['VERCEL_REGION'] ?? null,
+      }),
+      { status: healthHttpStatus(status), headers: healthHeaders(status) },
+    ),
   )
 }
 
