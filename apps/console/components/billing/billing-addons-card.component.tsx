@@ -42,6 +42,7 @@ import { useCallback, useEffect, useState } from 'react'
 import useBranding from '../../hooks/use-branding'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { finishPendingCharge } from '../../utils/finish-pending-charge'
 
 /**
  * Human labels for `org.seatAddons` kinds — shared with the current-plan
@@ -380,6 +381,30 @@ export default function BillingAddonsCardComponent({
             kind: row.kind,
             quantity,
           })
+          // The charge did not go through on the spot (AGL-3358): the bank
+          // wants the customer to confirm it, or the card was declined.
+          // Stripe holds the new quantity until the invoice is paid, so the
+          // card keeps showing what the workspace has now. A confirmed
+          // challenge pays it; the reload picks up what Stripe then applies.
+          if (applied?.paymentPending) {
+            const finished = await finishPendingCharge(
+              applied,
+              'the change takes effect',
+            )
+            if (!finished.confirmed) {
+              enqueueSnackbar(finished.message, {
+                variant: 'warning',
+                persist: false,
+              })
+              return
+            }
+            setRetryNonce((nonce) => nonce + 1)
+            enqueueSnackbar(`Payment confirmed. ${row.label} updated.`, {
+              variant: 'success',
+              persist: false,
+            })
+            return
+          }
           if (applied?.quantities) {
             setState((previous) =>
               previous

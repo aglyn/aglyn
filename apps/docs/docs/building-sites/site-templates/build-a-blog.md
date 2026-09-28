@@ -93,8 +93,9 @@ list's query, so they look through the whole collection, not only the page you'r
 and each filter in force shows as a chip above the table. While the list is filtered or
 searched it sorts by Published or Updated, and a date filter sorts by the date it
 filters; a note above the table says when the order moved. A combination that cannot be
-asked at once — a Title filter beside a search, or two date ranges — is left out, and
-the table says which one and why. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+asked at once — a Title filter beside a search, two date ranges, or **is any of** picks
+that multiply past thirty combinations — is left out, and the table says which one and
+why. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
@@ -148,11 +149,13 @@ them, and pick one per entry.
 
 <!-- screenshot: content/authors-tab.png per SCREENSHOT_PLAN.md -->
 
-The Authors table's toolbar filters it: **Filters** narrows it by name (a word of it, or
-the whole name) or **Type** (Person or Organization), and **Search** finds an author by
-the start of any word of their name. Both are part of the table's query, so they look at
-every author on the site, not only the page on screen, and the table lists authors by
-name.
+The Authors table's toolbar filters it: **Filters** narrows it by **Author** (a word of
+the name, or the whole name) or **Type** (Person or Organization), and **Search** finds an
+author by the start of any word of their name. Both are part of the table's query, so they
+look at every author on the site, not only the page on screen, and the table lists authors
+by name; its column headers do not re-sort it. An **Author** "contains" filter cannot be
+asked beside a search, and the table says so rather than applying it. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 Each author is either a **Person** or an **Organization**, and the choice is a real
 one — they are different `schema.org` types with different fields, so the editor shows

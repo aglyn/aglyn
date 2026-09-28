@@ -153,9 +153,11 @@ paged, newest first, with **Email**, **Name**, **Joined**, and
 **Status** columns. Its search box finds a member by the start of any word of
 their name or their email address — `rae`, `donovan` or `example.com` all find
 Rae Donovan at rae@example.com, and a member who never gave a name is found by
-their address. **Filters** in the table's toolbar narrows it by **Email** (the
-whole address), **Name** (a word of it, or the whole name), **Joined** (on a day,
-or before or after a date) and **Status** (Active or Suspended). The filters and
+their address. **Filters** in the table's toolbar narrows it by **Email**
+(**equals** the whole address), **Name** (**contains** a word of it, or **equals**
+the whole name), **Joined** (**is**, **is after**, **is on or after**, **is
+before** or **is on or before** a day) and **Status** (**is** Active or
+Suspended). The filters and
 the search add up, and every one is answered by the query that reads the list,
 across every member rather than the page on screen. **Name contains** and the
 search each look for one word, and one query can look for only one: while a search

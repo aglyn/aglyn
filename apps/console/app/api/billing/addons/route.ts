@@ -62,6 +62,12 @@ import {
   isCapacityAddonKind,
   readCapacityCounts,
 } from '../../../../utils/server/capacity-in-use'
+import {
+  ensureAutomaticTax,
+  immediateChargeParams,
+  pendingChargeResponse,
+  readImmediateCharge,
+} from '../../../../utils/server/immediate-charge'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
@@ -434,8 +440,10 @@ const addonMax = addonMaxForBaseline
  * the base plan item), so quantity changes prorate like plan switches:
  * - `get`     → current quantities + per-kind catalog for the org's plan
  * - `preview` → prorated amount for a quantity change today
- * - `set`     → create/update/delete the item with prorations, then
- *   mirror `org.seatAddons` immediately (the webhook confirms; AGL-527)
+ * - `set`     → an increase is invoiced and charged now and applies only
+ *   once that invoice is paid (AGL-3358), then mirrors `org.seatAddons`
+ *   (the webhook confirms; AGL-527); an unpaid one answers `paymentPending`.
+ *   A reduction waits for the period end on a schedule.
  * Free/dead-subscription orgs get `upgrade_required` — add-ons need a
  * live subscription to bill on. 501 without Stripe env.
  */
@@ -851,53 +859,70 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    const params = new URLSearchParams({
-      /*
-       * Capacity bought now is INVOICED now.
-       *
-       * `create_prorations` files the proration as a pending invoice item and
-       * settles it on the next renewal, so a customer who bought a site at the
-       * start of a period waited a month to be charged for it and the console
-       * had nothing to show them in between. `always_invoice` draws the
-       * proration onto an invoice immediately and charges the default payment
-       * method, which is what "buy capacity" already implies to the person
-       * clicking it.
-       *
-       * The charge is what changes, not the proration arithmetic: the amount
-       * is the same figure either behaviour computes for the remainder of the
-       * period. `automatic_tax` below applies to that invoice, so the amount
-       * taken is tax-inclusive and the confirm has to quote it that way.
-       */
-      proration_behavior: 'always_invoice',
-      // Stripe Tax (AGL-1537): an add-on purchase is a subscription update,
-      // and updates are where subscriptions created before automatic tax
-      // gain it — same rule as the plan-switch route. No-op when already on.
-      'automatic_tax[enabled]': 'true',
-    })
+    /*
+     * Capacity bought now is INVOICED now, and granted once it is PAID.
+     *
+     * `create_prorations` files the proration as a pending invoice item and
+     * settles it on the next renewal, so a customer who bought a site at the
+     * start of a period waited a month to be charged for it and the console
+     * had nothing to show them in between. `always_invoice` draws the
+     * proration onto an invoice immediately and charges the default payment
+     * method, which is what "buy capacity" already implies to the person
+     * clicking it.
+     *
+     * `pending_if_incomplete` (AGL-3358) makes the new quantity conditional on
+     * that charge. Without it a declined card still got the seats, with an
+     * unpaid invoice beside them — the same pay-later leak the plan switch
+     * had, one door over. Now Stripe holds the item change until the invoice
+     * is paid, and the subscription keeps the quantity that was paid for.
+     *
+     * The charge is what changes, not the proration arithmetic: the amount
+     * is the same figure either behaviour computes for the remainder of the
+     * period. Automatic tax applies to that invoice, so the amount taken is
+     * tax-inclusive and the confirm has to quote it that way.
+     */
+    const params = new URLSearchParams(immediateChargeParams(subscription))
     for (const [key, value] of itemParams) {
       params.set(`items[0][${key}]`, value)
     }
     // The invoice `always_invoice` raises, expanded on the same call that
-    // causes it. Under `create_prorations` there was nothing to report — the
-    // proration sat as a pending item and no money moved — so `ok: true` was
-    // the whole truth. It is not any more: this request now charges a card,
-    // and a charge that fails has to reach the customer as a failure rather
-    // than as a purchase that quietly did not get paid for.
+    // causes it, so a charge that fails reaches the customer as a failure
+    // rather than as a purchase that quietly did not get paid for.
     params.set('expand[]', 'latest_invoice.payment_intent')
+    // Stripe Tax (AGL-1537): an add-on purchase is a subscription update, and
+    // updates are where subscriptions created before automatic tax gain it —
+    // same rule as the plan-switch route. Its own call, because Stripe refuses
+    // `automatic_tax` alongside `pending_if_incomplete`; none when already on.
+    await ensureAutomaticTax(
+      (method, path, body) => stripeRequest(secretKey, method, path, body),
+      subscription,
+    )
     const updated = await stripeRequest(
       secretKey,
       'POST',
       `subscriptions/${subscription.id}`,
       params,
     )
+    const charge = readImmediateCharge(updated)
+    if (!charge.applied) {
+      // NOTHING IS GRANTED. The subscription still carries the quantity that
+      // was paid for, so nothing is mirrored, no schedule is refreshed and no
+      // feed row is written — each of those describes a change that has not
+      // happened. Paying the invoice (3DS in the browser, or the hosted page)
+      // applies it, and the webhook mirrors it then.
+      return Response.json(
+        {
+          ok: false,
+          quantities: addonQuantitiesFromItems(items),
+          ...pendingChargeResponse(charge),
+        },
+        { status: 200 },
+      )
+    }
     const addonInvoice = updated?.latest_invoice ?? null
-    const addonIntent = addonInvoice?.payment_intent ?? null
-    // `paid` is the only affirmative. An invoice can be `open` because the
-    // card was declined, or because the issuer wants authentication — the
-    // second is recoverable from the browser and the first is not, so they are
-    // named apart rather than collapsed into "something went wrong".
-    const chargePaid = addonInvoice ? addonInvoice.status === 'paid' : true
-    const chargeRequiresAction = addonIntent?.status === 'requires_action'
+    // `paid` is the only affirmative, and with the change applied it is the
+    // only outcome: an unpaid charge returns above.
+    const chargePaid = charge.paid
     // A pending downgrade holds an item list snapshotted when it was
     // requested (AGL-2150) — refresh it, or the seats just bought and
     // prorated disappear at the period end.
@@ -944,19 +969,10 @@ async function handler(request: Request): Promise<Response> {
       {
         ok: true,
         quantities,
-        // The capacity is granted either way — Stripe applied the item, and
-        // the webhook mirrors it — so this reports the CHARGE, not the change.
-        // A customer whose card failed still has the seats and now has an
-        // unpaid invoice, and the page has to be able to say so.
+        // What the purchase cost, from the invoice that paid for it.
         chargedNowCents: Number(addonInvoice?.amount_due ?? 0),
         chargeCurrency: String(addonInvoice?.currency ?? 'usd'),
         chargePaid,
-        ...(chargeRequiresAction && addonIntent?.client_secret
-          ? {
-              chargeRequiresAction: true,
-              chargeClientSecret: String(addonIntent.client_secret),
-            }
-          : {}),
         ...(scheduleRefreshFailed ? { scheduleRefreshFailed: true } : {}),
       },
       { status: 200 },

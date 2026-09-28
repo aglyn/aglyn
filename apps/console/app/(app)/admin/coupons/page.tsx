@@ -670,8 +670,9 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   // as tall as its codes.
                   getRowHeight={() => 'auto'}
                   // The route answers one page at a time; the footer below
-                  // walks the pages.
+                  // walks the pages, and a header sort would order only one.
                   hideFooter
+                  disableColumnSorting
                   noRowsLabel={
                     couponList.loading ? 'Loading coupons…' : 'No coupons match these filters'
                   }

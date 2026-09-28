@@ -542,6 +542,19 @@ describe('the campaigns table', () => {
     ).not.toMatch(/alignRight/)
   })
 
+  it('names the name column by what it filters: Campaign, then Subject for single sends', async () => {
+    const nameHeader = () =>
+      (document.querySelector('[role="columnheader"][data-field="name"]')?.textContent ?? '').trim()
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+    expect(nameHeader()).toBe('Campaign')
+
+    await showSingleSends()
+    await waitFor(() => expect(screen.getByText('Last week’s news')).toBeTruthy())
+    // A single send's `name` filter reads its subject (`campaignSingleSendsListQuery`).
+    expect(nameHeader()).toBe('Subject')
+  })
+
   it('does not list a send as a single send when it belongs to a campaign', async () => {
     await mount()
     await waitFor(() => expect(cells()).toContain('Spring sale'))

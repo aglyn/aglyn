@@ -409,8 +409,11 @@ export default function StaffEmailSuppressionsCard() {
             getRowHeight={() => 'auto'}
             // One page of a cursor walk, turned by the footer below: the grid
             // neither slices it nor filters it and calls that the list. The
-            // route answers the panel and the search.
+            // route answers the panel and the search. Nor does it sort: the
+            // rows keep the query's order, and a header sort would order one
+            // page of it.
             hideFooter
+            disableColumnSorting
             filterMode="server"
             quickFilter
             filterModel={gridFilter.filterModel}

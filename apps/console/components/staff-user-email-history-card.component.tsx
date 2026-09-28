@@ -271,7 +271,7 @@ export function StaffUserEmailHistoryCard({
         // An imported row carries no sender: the provider's history has no
         // tags, so we know what was sent and not which of our senders produced
         // it. Rendered by the grid as a plain value, which also keeps it
-        // sortable and filterable.
+        // filterable.
         valueFormatter: (value: string | null) => value || '—',
         renderCell: (params) =>
           params.row.context ? (
@@ -475,8 +475,9 @@ export function StaffUserEmailHistoryCard({
             hideFooter
             /*
              * The route answers every filter and the search; the grid holds
-             * one page and never narrows it.
+             * one page and never narrows or reorders it.
              */
+            disableColumnSorting
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}

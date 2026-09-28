@@ -40,7 +40,7 @@ import {
 } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { type GridColDef, type GridSortModel } from '@mui/x-data-grid'
+import { type GridColDef } from '@mui/x-data-grid'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   type ListFilterOption,
@@ -136,9 +136,6 @@ const ORG_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption
 }
 const ORG_SELECT_FIELDS = Object.keys(ORG_LIST_FILTER_OPTIONS)
 
-/** The grid's sort model with nothing sorted: one array, so a reset is a no-op. */
-const NO_GRID_SORT: GridSortModel = []
-
 /** What a plugin column's cell receives for its row: the row, and its org id. */
 const orgRowProps = (row: any) => ({ row, orgId: String(row.$id) })
 
@@ -195,41 +192,26 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const orgIdsKey = JSON.stringify(orgs.map((org: any) => String(org.$id)))
   const orgIds = useMemo(() => JSON.parse(orgIdsKey) as string[], [orgIdsKey])
   /*
-   * ONE sort at a time, across the grid's columns and the plugins'. A plugin
-   * column orders the rows by a comparator its header hands over, and taking
-   * the sort sets the grid's own aside; sorting on a grid column hands the
-   * order back from the plugin column.
+   * The grid's own columns do not sort: the rows are one page of the query's
+   * id-ordered walk, and a header sort would order that page and read as the
+   * whole list's. A plugin column that draws its own header may still order
+   * the page by a comparator it hands over — its figures are the plugin's,
+   * absent from the org document, so no query could order by them.
    */
   const {
     rows: sortedOrgs,
     sortedBy: pluginSortedBy,
     onSort: onPluginSort,
   } = usePluginColumnSort(orgs)
-  const [gridSortModel, setGridSortModel] =
-    useState<GridSortModel>(NO_GRID_SORT)
-  const onPluginColumnSort = useCallback(
-    (widgetId: string, compare: ((a: any, b: any) => number) | null) => {
-      if (compare) setGridSortModel(NO_GRID_SORT)
-      onPluginSort(widgetId, compare)
-    },
-    [onPluginSort],
-  )
-  const onGridSortModelChange = useCallback(
-    (model: GridSortModel) => {
-      setGridSortModel(model)
-      if (model.length > 0 && pluginSortedBy) onPluginSort(pluginSortedBy, null)
-    },
-    [onPluginSort, pluginSortedBy],
-  )
   const pluginGridCols = useMemo(
     () =>
       pluginGridColumns(pluginColumns, {
         slotProps: { orgIds },
         sortedBy: pluginSortedBy,
-        onSort: onPluginColumnSort,
+        onSort: onPluginSort,
         rowProps: orgRowProps,
       }),
-    [pluginColumns, orgIds, pluginSortedBy, onPluginColumnSort],
+    [pluginColumns, orgIds, pluginSortedBy, onPluginSort],
   )
 
   // Usage drill-down (AGL-205): last 12 monthly org rollups with deltas.
@@ -580,10 +562,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   rows={sortedOrgs}
                   columns={orgColumns}
                   loading={loading}
-                  // One sort at a time with the plugin columns — see
-                  // `onGridSortModelChange`.
-                  sortModel={gridSortModel}
-                  onSortModelChange={onGridSortModelChange}
+                  // The walk's order; see `usePluginColumnSort` above.
+                  disableColumnSorting
                   /*
                    * The grid must NOT also filter. With the server answering
                    * the clauses and the search, a second client-side pass over

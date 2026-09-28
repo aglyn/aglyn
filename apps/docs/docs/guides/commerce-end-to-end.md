@@ -207,11 +207,16 @@ cart intact.
 
 ## 5. Run orders from the console
 
-The **Products** hub's **Orders** tab lists every sale with product, period,
-status, and channel filters plus **Export CSV** and **Draft order** (build an
+The **Products** hub's **Orders** tab lists every sale, newest first. Its
+**Search** finds an order by the start of a word in its number, the buyer's
+email or an item's name, and **Filters** narrows it by order number, product,
+date, status, channel, customer and dispute — across every order in the store,
+not only the page on screen (see [The Orders screen](../commerce-and-bookings/commerce/overview.md#orders-screen)
+for what combines). Beside it sit **Export CSV** and **Draft order** (build an
 order by hand and send a payment link).
 
-**Export CSV** writes the orders currently shown — the filters apply — as
+**Export CSV** writes every order the filters and the search match, up to
+5,000, as
 `orders.csv`, one row per order: `date`, `product`, `amountUsd`, `feeUsd`,
 `customerEmail`, `coupon`, `orderId`, `status`, `channel`, `refundedUsd`,
 `netUsd`. `amountUsd` is the gross charge, so subtract `refundedUsd` (or read

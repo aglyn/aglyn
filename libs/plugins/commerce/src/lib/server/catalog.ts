@@ -365,6 +365,9 @@ const SORT_LABELS: Readonly<Record<string, string>> = {
   createdAtMs: 'Newest',
 }
 
+/** The operators that make a field a range, which must lead the order. */
+const RANGE_OPS: ReadonlySet<string> = new Set(['<', '<=', '>', '>=', '!='])
+
 /**
  * The plan, ordered the way the visitor asked when a range forced its field.
  *
@@ -372,20 +375,29 @@ const SORT_LABELS: Readonly<Record<string, string>> = {
  * "price under" rule) is set the query is ordered by price: "high to low"
  * stays high to low, and any other sort — Name, Newest — becomes low to high
  * and is SAID to, rather than silently replaced (AGL-3321).
+ *
+ * The notice names the cause. The slider is the visitor's to clear, so the
+ * sort they chose returns when they do; a collection's rule is in the scope
+ * (`request.base`), which no visitor can clear, so that notice says the
+ * collection is always ordered by price.
  */
 function planFor(request: ListQueryRequest, sort: ListQuerySort): ListQueryPlan {
   const plan = planListQuery(STOREFRONT_CATALOG_DECLARATION, request, nameSearchNormalizers)
   if (plan.orderBy.path !== sort.path) {
     const asked = SORT_LABELS[sort.path]
-    return asked
-      ? {
-          ...plan,
-          notices: [
-            ...plan.notices,
-            `Sorted by price, low to high, while a price range is set — ${asked} applies again when it is cleared.`,
-          ],
-        }
-      : plan
+    if (!asked) return plan
+    const byRule = (request.base ?? []).some(
+      (filter) => filter.path === plan.orderBy.path && RANGE_OPS.has(filter.op),
+    )
+    return {
+      ...plan,
+      notices: [
+        ...plan.notices,
+        byRule
+          ? `Sorted by price, low to high — this collection picks its products by price, so it cannot be sorted by ${asked}.`
+          : `Sorted by price, low to high, while a price range is set — ${asked} applies again when it is cleared.`,
+      ],
+    }
   }
   return plan.orderBy.direction !== sort.direction ? { ...plan, orderBy: sort } : plan
 }

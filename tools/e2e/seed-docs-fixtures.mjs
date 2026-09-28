@@ -43,6 +43,10 @@ import { orderListFieldsOf } from '../scripts/backfill-orders-list-fields.mjs'
 const withProductListFields = (product) => ({ ...product, ...productListFields(product) })
 // The Inbox list's search keys, as the submit route stamps them (AGL-3321).
 import { messageSearchFields } from '../scripts/lib/message-search.mjs'
+// A run's summary tokens, as `runSummaryFields` stamps them (AGL-3321).
+import { nameSearchTokens } from '../scripts/lib/name-search-tokens.mjs'
+// A staff audit row's index fields, as `withAdminAuditIndex` stamps them.
+import { stampAdminAuditIndex } from '../scripts/lib/admin-audit-index.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -436,6 +440,85 @@ await put(
     createdAtMs: now.toMillis(),
   }),
 )
+
+// ── Run history (AGL-3321) ────────────────────────────────────────────────
+// The Runs dialog of seed-e2e's `DozenQuote` workflow reads its runs from the
+// site's activity feed by query: this automation's entries (`target.id`) that
+// carry a `result`, newest first, searched through `summaryTokens`. Each entry
+// is the shape `run-event-workflows.ts` writes, so the dialog pages, filters
+// and searches these exactly as it would a live automation's.
+console.log('Run history (the DozenQuote Runs dialog):')
+const runs = [
+  { id: 'docs-run-1', hoursAgo: 2, result: 'succeeded', summary: 'OrderTotal returned 48' },
+  { id: 'docs-run-2', hoursAgo: 4, result: 'succeeded', summary: 'OrderTotal returned 48' },
+  {
+    id: 'docs-run-3',
+    hoursAgo: 7,
+    result: 'failed',
+    summary: 'OrderTotal failed: Qty is required',
+  },
+  { id: 'docs-run-4', hoursAgo: 11, result: 'succeeded', summary: 'OrderTotal returned 48' },
+]
+for (const run of runs) {
+  const failed = run.result === 'failed'
+  await firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('activity')
+    .doc(run.id)
+    .set(
+      {
+        action: failed
+          ? `Workflow ran on formSubmission with errors: ${run.summary}`
+          : 'Workflow ran on formSubmission',
+        result: run.result,
+        trigger: 'formSubmission',
+        summary: run.summary,
+        summaryTokens: nameSearchTokens(run.summary),
+        status: failed ? 'error' : 'ok',
+        durationMs: 140,
+        target: { type: 'workflow', id: 'seed-quote', name: 'DozenQuote' },
+        createdAt: Timestamp.fromMillis(now.toMillis() - run.hoursAgo * 60 * 60 * 1000),
+      },
+      { merge: true },
+    )
+  console.log(`  hosts/${hostId}/activity/${run.id}`)
+}
+
+// ── Staff audit log (AGL-3321) ────────────────────────────────────────────
+// The staff Audit Log is one query over `adminAudit`, filtered by Action
+// group and searched through `searchTokens`, both of which every writer
+// stamps through `withAdminAuditIndex`. These rows carry the same stamp
+// (`stampAdminAuditIndex`), so the page lists them as it would live ones.
+console.log('Staff audit log:')
+const auditRows = [
+  {
+    id: 'docs-audit-1',
+    hoursAgo: 1,
+    action: 'org.override',
+    target: `orgs/${orgId}`,
+    reason: 'goodwill',
+    note: 'Extra seats while the team onboards',
+  },
+  { id: 'docs-audit-2', hoursAgo: 5, action: 'user.ai-usage-viewed', target: 'users/e2e-nonstaff-owner' },
+  { id: 'docs-audit-3', hoursAgo: 28, action: 'org.acquisition-viewed', target: `orgs/${orgId}` },
+]
+for (const row of auditRows) {
+  const { id, hoursAgo, ...entry } = row
+  await firestore
+    .collection('adminAudit')
+    .doc(id)
+    .set(
+      stampAdminAuditIndex({
+        actorUid: 'e2e-owner',
+        actorEmail: 'e2e@aglyn.test',
+        ...entry,
+        at: Timestamp.fromMillis(now.toMillis() - hoursAgo * 60 * 60 * 1000),
+      }),
+      { merge: true },
+    )
+  console.log(`  adminAudit/${id}`)
+}
 
 // ── The staff-only guard's subject (AGL-3319) ─────────────────────────────
 // The capture preflight has to SEE the one nav tab that ships flagged off,

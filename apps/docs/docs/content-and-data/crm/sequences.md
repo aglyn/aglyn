@@ -277,8 +277,8 @@ and how many people it has enrolled, and how many of them are still active,
 replied, bounced or opted out.
 
 The list is newest first, a page at a time. The table's toolbar filters it.
-**Filters** narrows it by **Status** or **Mailbox** (pick one or several), by the
-name (a word in it, or the whole name), or by the day it was **Created** (on,
+**Filters** narrows it by **Status** or **Mailbox** (pick one or several), by
+**Name** (a word in it, or the whole name), or by the day it was **Created** (on,
 before or after a date). **Search** finds a sequence by the start of any word
 of its name. Every filter and the search are answered by the database across
 all your sequences, not only the page on screen, and each filter in force shows
@@ -517,10 +517,10 @@ marked **Lead** until the lead converts. For each one you can:
   stops them in every other sequence too.
 
 The tab lists the people newest enrolled first, a page at a time, and its
-toolbar filters them. **Filters** narrows them by **Status**, **Enrolled as**
-(contact or lead) and **Stop reason** (pick one or several), by the whole
-**Email** address, or by the day they were **Enrolled** (on, before or after a
-date). **Search** finds a person by the start of any word of their name or of
+toolbar filters them. **Filters** narrows them by **Status** or **Stop
+reason** (pick one or several), by **Enrolled as** (contact or lead), by the
+whole **Email** address, or by the day they were **Enrolled** (on, before or
+after a date). **Search** finds a person by the start of any word of their name or of
 their address — `casey`, `morgan` or `example.com` all find
 casey.morgan@example.com. Every filter and the search are answered by the
 database across everyone in the sequence, not only the page on screen; a
