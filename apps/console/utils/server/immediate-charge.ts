@@ -177,3 +177,49 @@ export function pendingChargeResponse(outcome: ImmediateChargeOutcome) {
       : {}),
   }
 }
+
+/**
+ * Did THIS subscription event carry a held update being applied?
+ *
+ * A change sent with `pending_if_incomplete` that was not paid on the spot is
+ * applied later — when the customer passes their bank's check, or pays the
+ * hosted invoice — and nobody is in the request that asked for it any more.
+ * Stripe reports the moment as a `customer.subscription.updated` whose object
+ * has no `pending_update` and whose `previous_attributes` names one (measured
+ * in test mode: `previous_attributes` keys `items, pending_update`, preceded
+ * by `customer.subscription.pending_update_applied`, which this platform does
+ * not subscribe to).
+ *
+ * Keyed on that positive pair rather than on "an update with items changed",
+ * so a renewal, a phase flip or a dashboard edit never reads as one.
+ */
+export function heldUpdateApplied(
+  subscription: { pending_update?: unknown } | null | undefined,
+  previousAttributes: { pending_update?: unknown } | null | undefined,
+): boolean {
+  return (
+    !subscription?.pending_update &&
+    Boolean(previousAttributes?.pending_update)
+  )
+}
+
+/** A `StripeCall` bound to a secret key, for callers with no route helper. */
+export function stripeCallWithKey(secretKey: string): StripeCall {
+  return async (method, path, body) => {
+    const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        ...(body
+          ? { 'Content-Type': 'application/x-www-form-urlencoded' }
+          : {}),
+      },
+      ...(body ? { body: body.toString() } : {}),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(payload?.error?.message ?? `Stripe ${path} failed`)
+    }
+    return payload
+  }
+}
