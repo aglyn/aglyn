@@ -355,6 +355,7 @@ async function handler(request: Request): Promise<Response> {
             // inherited nothing would leave a deliberate cancellation
             // looking Stripe-initiated.
             'metadata[actorUid]': decoded.uid,
+            'metadata[actorEmail]': decoded.email ?? '',
             'metadata[actorAction]': action,
           }),
         )
@@ -776,6 +777,7 @@ async function handler(request: Request): Promise<Response> {
         // the flip, so this also retires the stamp that authorized whatever
         // came before it.
         params.set('phases[1][metadata][actorUid]', decoded.uid)
+        params.set('phases[1][metadata][actorEmail]', decoded.email ?? '')
         params.set('phases[1][metadata][actorAction]', 'downgrade')
         // Same tax posture as an instant switch (AGL-1537).
         params.set('phases[1][automatic_tax][enabled]', 'true')
@@ -921,6 +923,7 @@ async function handler(request: Request): Promise<Response> {
         // webhook can attribute the plan change this call causes and nothing
         // else.
         'metadata[actorUid]': decoded.uid,
+        'metadata[actorEmail]': decoded.email ?? '',
         'metadata[actorAction]': 'switch',
       })
       itemChanges.forEach((change, index) => {

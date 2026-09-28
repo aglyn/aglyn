@@ -615,8 +615,14 @@ async function handler(request: Request): Promise<Response> {
        * cancelled a subscription they did nothing to. Pairing the uid with
        * the act it authorized means a stamp can only ever sign the kind of
        * event it was written for; see the reader in the webhook.
+       *
+       * `actorEmail` is the address the person had AT THIS CLICK, so the
+       * feed can name them the way every console-written entry does. An
+       * empty value deletes the key in Stripe, so a stale address never
+       * outlives the uid it was stamped beside.
        *=========================================*/
       'metadata[actorUid]': decoded.uid,
+      'metadata[actorEmail]': decoded.email ?? '',
       'metadata[actorAction]': 'subscribe',
     })
     // The SAME metered item the session attached, resolved the same way, so
