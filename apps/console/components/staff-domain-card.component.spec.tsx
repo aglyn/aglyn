@@ -282,7 +282,7 @@ describe('the staff host page actually renders it', () => {
   const page = readFileSync(
     join(
       __dirname,
-      '../app/(app)/admin/orgs/[orgId]/host/[hostId]/page.tsx',
+      '../app/(app)/admin/sites/[hostId]/page.tsx',
     ),
     'utf8',
   )

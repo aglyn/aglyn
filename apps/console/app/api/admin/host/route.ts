@@ -26,6 +26,7 @@ import {
   isImpersonationSession,
   isPlatformReservedDomain,
   projectDomainStatus,
+  syncHostProjectionForMembers,
   updateExisting,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -161,6 +162,13 @@ async function handler(request: Request): Promise<Response> {
       after: { subdomain },
       at: FieldValue.serverTimestamp(),
     })
+    // Same as the owner-facing rename: the members' Sites rows and the staff
+    // Sites list find a site by its subdomain, so both move with it — this
+    // path used to leave the old label searchable and the new one not.
+    const owningOrgId = hostSnapshot.get('orgId')
+    if (typeof owningOrgId === 'string' && owningOrgId) {
+      await syncHostProjectionForMembers(owningOrgId, hostId).catch(() => undefined)
+    }
     // Same as the owner-facing rename: the label this host answered to a
     // moment ago must stop resolving now, not when the TTL happens to lapse.
     if (before) {

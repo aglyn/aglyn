@@ -253,6 +253,41 @@ chip that says **uncapped** and **dormant** where they apply. The override
 dialog's comp chip does the same, and the organization's AI card says when an
 uncapped comp is why the workspace has no AI credit band.
 
+### Site management {#sites-admin}
+
+**Sites** lists every site on the platform, across every organization, read
+server-side with the Admin SDK so it shows sites you are not a member of. Each
+row names the site and its subdomain, the **Organization** it belongs to (a link
+to that organization's staff page), the organization's **Owner**, the custom
+domain, how many pages it publishes, and when it was created. Clicking a row
+opens the site's staff page.
+
+The row menu holds the ways out of the list:
+
+- **Visit live site** opens the site's public address in a new tab — its custom
+  domain when it has one, otherwise its platform subdomain.
+- **Open preview** opens the site's home page as its draft renders, in a new
+  tab, without joining the site or impersonating anyone. It is unavailable, and
+  says so, for a site that publishes no home page; open the site to preview any
+  other page.
+- **Open organization** and **Open owner** go to the staff pages for the
+  organization and its owner.
+
+#### Filter the site list {#filter-the-site-list}
+
+The grid's toolbar filters and searches every site, not the page on screen.
+**Filters** offers **Site** (*is* the whole name), **Subdomain** (*is*), **Custom
+domain** (connected or none), **Custom domain address** (*is*), **Org ID** (*is*,
+or *is any of*), **Site ID** (*is*, or *is any of*) and **Created** (on, after, or
+before a day). **Search** matches the start of any word of the site's name, its
+subdomain or its custom domain, so `bakery` finds `harbor-bakery.com`.
+
+The list is in site-id order, except while **Created** is filtered, when it runs
+newest first. A filter one query cannot hold alongside the rest is named above
+the grid with its reason and not applied. Organization name and owner are not
+filters because a site does not store them: filter by **Org ID**, or open the
+organization, whose page lists its sites.
+
 ### Users admin {#users-admin}
 
 Staff-claim management and disabling users, with gated listing; a whole email

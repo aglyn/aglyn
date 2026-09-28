@@ -202,6 +202,20 @@ export function buildScreenLiveUrl(
   return buildLiveUrlForSlug(host, String(slug), consoleHostname)
 }
 
+/**
+ * The live URL of a site's home, on the same origin rules as a screen's: the
+ * custom domain, else the platform subdomain, else — on a preview or local
+ * console — the tenant preview origin with `?tenantHost=`.
+ */
+export function buildSiteLiveUrl(
+  host: Pick<AglynHost, 'subdomain' | 'cname'> | undefined,
+  consoleHostname: string | undefined = typeof window !== 'undefined'
+    ? window.location.hostname
+    : undefined,
+): string | undefined {
+  return buildLiveUrlForSlug(host as AglynHost | undefined, '/', consoleHostname)
+}
+
 /** The live URL for a site-relative slug on this host's real origin. */
 function buildLiveUrlForSlug(
   host: AglynHost | undefined,

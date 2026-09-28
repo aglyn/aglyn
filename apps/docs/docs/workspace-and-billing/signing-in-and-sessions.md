@@ -44,6 +44,22 @@ its own identity provider, no other method can be linked — see
 [Manage Account](manage-account.md#sign-in-methods) for why, and for what happens
 to methods linked before your organization enabled enforcement.
 
+## Verifying your email
+
+A new email-and-password account is verified before it can open a workspace. Right after
+you sign up, the console emails you a link and waits on a **Verify your email** screen.
+
+- **Open the link from the email.** It opens a new tab (on a phone, often inside your mail
+  app) that confirms **Email verified**. You can close that tab: the tab you signed up in
+  moves on by itself as soon as you return to it. If you would rather carry on in the new
+  tab, choose **Continue to Aglyn**, or **Sign in to continue** if that browser isn't
+  signed in.
+- **Opened it twice?** A link works once. If the account signed in on that browser is
+  already verified, the screen says **You're already verified** and offers to continue, so
+  there is nothing to fix.
+- **No email?** Choose **Resend verification email** on the waiting screen. If a link has
+  expired, the same button sends a fresh one.
+
 ## Resetting your password
 
 Forgot your password? From the sign-in screen, choose **Account recovery** and enter your

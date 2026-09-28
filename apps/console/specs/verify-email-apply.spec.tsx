@@ -31,6 +31,10 @@
  *     bounces, not the layout's continue-URL redirect;
  *  2. a failed apply is never silent — the error renders, in every session
  *     state, instead of a success-shaped redirect.
+ *
+ * AGL-3384 adds the other half: a click that WORKED says so. The tab a mail
+ * client opens lands on a success page and moves on only when asked, while
+ * the tab the person signed up in carries on by itself.
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -190,8 +194,13 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
       'CODE123',
     )
 
-    // Once the apply RESOLVES, the navigation is welcome.
+    // Once the apply RESOLVES, the page says so, and the navigation is the
+    // person's to ask for.
     await act(async () => resolveApply())
+    await flush()
+    expect(screen.getByText('Email verified')).toBeTruthy()
+    expect(mockAssign).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText(/Continue to/))
     await flush()
     expect(mockAssign).toHaveBeenCalledWith('/')
   })
@@ -209,13 +218,14 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
     // Red before the fix: the page redirected to /signin the moment the
     // apply settled, discarding the failure entirely.
     expect(mockReplace).not.toHaveBeenCalledWith('/signin')
-    expect(screen.getByText(/didn’t work/)).toBeTruthy()
     expect(screen.getByText(/expired or was already used/)).toBeTruthy()
+    // A used link is the common case, and it means the address IS verified.
+    expect(screen.getByText(/your email is verified/)).toBeTruthy()
     // The only useful next step for a signed-out visitor.
     expect(screen.getByText('Sign in')).toBeTruthy()
   })
 
-  it('a failed apply under a verified session stays on the error, not the app', async () => {
+  it('a failed apply under a verified session says it is verified, and waits to be asked (AGL-3384)', async () => {
     const sessionUser = makeUser(true)
     mockCurrentUser = sessionUser
     mockSigninCheck = {
@@ -230,12 +240,20 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
     await flush()
 
     expect(mockAssign).not.toHaveBeenCalled()
-    expect(screen.getByText(/didn’t work/)).toBeTruthy()
-    // Says why this browser's state is confusing, and offers the app.
+    // Where they stand leads, not a red error: the production report was a
+    // person who had opened their own link twice.
+    expect(screen.getByText('You’re already verified')).toBeTruthy()
+    expect(screen.getByText('session@example.com')).toBeTruthy()
+    expect(screen.queryByText(/new one below/)).toBeNull()
+    // The rarer story still has a way out.
     expect(screen.getByText(/different account/)).toBeTruthy()
+
+    fireEvent.click(screen.getByText(/Continue to/))
+    await flush()
+    expect(mockAssign).toHaveBeenCalledWith('/')
   })
 
-  it('the signed-in unverified click still applies, reloads, and lands in the app', async () => {
+  it('the signed-in unverified click applies, reloads, and shows the success page', async () => {
     const sessionUser = makeUser(false)
     mockCurrentUser = sessionUser
     mockSigninCheck = {
@@ -252,10 +270,16 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
       'CODE123',
     )
     expect(sessionUser.reload).toHaveBeenCalled()
+    expect(screen.getByText('Email verified')).toBeTruthy()
+    expect(screen.getByText(/close this one/)).toBeTruthy()
+    expect(screen.getByText('Signed in as session@example.com')).toBeTruthy()
+
+    fireEvent.click(screen.getByText(/Continue to/))
+    await flush()
     expect(mockAssign).toHaveBeenCalledWith('/')
   })
 
-  it('a signed-out click whose apply succeeds goes to /signin?verified=1', async () => {
+  it('a signed-out click whose apply succeeds shows the success page with sign-in (AGL-3384)', async () => {
     mockCurrentUser = null
     mockSigninCheck = { status: 'success', data: { signedIn: false, user: null } }
     mockApplyActionCode.mockResolvedValue(undefined)
@@ -263,7 +287,139 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
     render(<VerifyEmail />)
     await flush()
 
-    expect(mockReplace).toHaveBeenCalledWith('/signin?verified=1')
+    // Before: a bare /signin that said nothing about the verification — the
+    // "it went nowhere" in the production report.
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(screen.getByText('Email verified')).toBeTruthy()
+    expect(
+      screen.getByText('Sign in to continue').closest('a')?.getAttribute('href'),
+    ).toBe('/signin')
+  })
+
+  it('the success page stays put while the signed-in check still reads unverified', async () => {
+    // The apply resolved, but the session the hook reports has not caught up
+    // yet. Neither the mount send (whose `alreadyVerified` answer navigates)
+    // nor the poll may carry the person off the success page.
+    jest.useFakeTimers()
+    try {
+      const sessionUser = makeUser(false)
+      mockCurrentUser = sessionUser
+      mockSigninCheck = {
+        status: 'success',
+        data: { signedIn: true, user: { ...sessionUser } },
+      }
+      sessionUser.reload = jest.fn(async () => {
+        sessionUser.emailVerified = true
+        return undefined
+      })
+      mockApplyActionCode.mockResolvedValue(undefined)
+
+      render(<VerifyEmail />)
+      await flush()
+      await act(async () => {
+        jest.advanceTimersByTime(20_000)
+      })
+      await flush()
+
+      expect(screen.getByText('Email verified')).toBeTruthy()
+      expect(global.fetch).not.toHaveBeenCalled()
+      expect(mockAssign).not.toHaveBeenCalled()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})
+
+describe('AGL-3384 · the tab the person signed up in carries on by itself', () => {
+  /** A same-process stand-in: jsdom does not provide BroadcastChannel. */
+  class FakeBroadcastChannel {
+    static open: FakeBroadcastChannel[] = []
+    onmessage: ((event: { data: unknown }) => void) | null = null
+    constructor(public name: string) {
+      FakeBroadcastChannel.open.push(this)
+    }
+    postMessage(data: unknown) {
+      for (const other of FakeBroadcastChannel.open)
+        if (other !== this && other.name === this.name) other.onmessage?.({ data })
+    }
+    close() {
+      FakeBroadcastChannel.open = FakeBroadcastChannel.open.filter(
+        (channel) => channel !== this,
+      )
+    }
+  }
+
+  const originalChannel = (globalThis as { BroadcastChannel?: unknown })
+    .BroadcastChannel
+  beforeEach(() => {
+    FakeBroadcastChannel.open = []
+    ;(globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      FakeBroadcastChannel
+    setLocation('')
+  })
+  afterEach(() => {
+    ;(globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      originalChannel
+  })
+
+  const waitingTab = () => {
+    const sessionUser = makeUser(false)
+    mockCurrentUser = sessionUser
+    mockSigninCheck = {
+      status: 'success',
+      data: { signedIn: true, user: { ...sessionUser } },
+    }
+    // Verified elsewhere: the next reload sees it.
+    sessionUser.reload = jest.fn(async () => {
+      sessionUser.emailVerified = true
+      return undefined
+    })
+    return sessionUser
+  }
+
+  it('a redeemed link in another tab moves the waiting tab into the app at once', async () => {
+    waitingTab()
+    render(<VerifyEmail />)
+    await flush()
+    expect(mockAssign).not.toHaveBeenCalled()
+
+    // What the redeeming tab's `announceVerified` sends.
+    await act(async () => {
+      new FakeBroadcastChannel('aglyn:email-verified').postMessage('verified')
+    })
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith('/')
+  })
+
+  it('returning to the tab re-checks at once instead of waiting for a poll tick', async () => {
+    waitingTab()
+    render(<VerifyEmail />)
+    await flush()
+    expect(mockAssign).not.toHaveBeenCalled()
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith('/')
+    expect(screen.getByText(/Taking you to/)).toBeTruthy()
+  })
+
+  it('the redeeming tab announces the verification', async () => {
+    const listener = new FakeBroadcastChannel('aglyn:email-verified')
+    const heard = jest.fn()
+    listener.onmessage = heard
+    setLocation('?mode=verifyEmail&oobCode=CODE123')
+    mockCurrentUser = null
+    mockSigninCheck = { status: 'success', data: { signedIn: false, user: null } }
+    mockApplyActionCode.mockResolvedValue(undefined)
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(heard).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -285,6 +441,8 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
 
     render(<VerifyEmail />)
     await flush()
+    fireEvent.click(screen.getByText(/Continue to/))
+    await flush()
 
     expect(mockAssign).toHaveBeenCalledWith(
       '/acme/billing?plan=pro&interval=year',
@@ -298,6 +456,8 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
 
     render(<VerifyEmail />)
     await flush()
+    fireEvent.click(screen.getByText(/Continue to/))
+    await flush()
 
     expect(mockAssign).toHaveBeenCalledWith('/')
   })
@@ -310,6 +470,8 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
     mockApplyActionCode.mockResolvedValue(undefined)
 
     render(<VerifyEmail />)
+    await flush()
+    fireEvent.click(screen.getByText(/Continue to/))
     await flush()
 
     expect(mockAssign).toHaveBeenCalledWith('/')
@@ -387,6 +549,9 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
 
     await act(async () => resolveApply())
     await flush()
+    expect(mockAssign).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText(/Continue to/))
+    await flush()
     expect(mockAssign).toHaveBeenCalledWith('/acme/billing')
   })
 })
@@ -428,5 +593,26 @@ describe('AGL-1524 · the layout holds its redirects while a code is on the URL'
     await flush()
 
     expect(mockPushContinued).toHaveBeenCalledWith('/')
+  })
+
+  it('an unverified session on /verify-email is not pushed onto the page it is on (AGL-3384)', async () => {
+    const sessionUser = makeUser(false)
+    mockCurrentUser = sessionUser
+    mockSigninCheck = {
+      status: 'success',
+      data: { signedIn: true, user: sessionUser },
+    }
+
+    render(
+      <AuthenticatingLayout requireEmailVerification>
+        <div>{'page'}</div>
+      </AuthenticatingLayout>,
+    )
+    await flush()
+
+    // Re-ran on every poll's reload: a page refetch each tick, and the
+    // `?continue=` destination dropped on the first.
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(mockPushContinued).not.toHaveBeenCalled()
   })
 })

@@ -153,6 +153,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   updateExisting: (...args: unknown[]) => mockUpdateExisting(...args),
+  syncHostProjectionForMembers: async () => undefined,
 }))
 
 jest.mock('firebase-admin/firestore', () => ({
