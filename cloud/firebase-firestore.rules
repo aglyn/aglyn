@@ -3133,16 +3133,22 @@ service cloud.firestore {
       match /forms/{formId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
-        // `retired` mirrors `archivedAt` for the Forms list (AGL-3330); a
-        // write touching either keeps them agreeing.
+        // For the Forms list (AGL-3330): every edit moves `updatedAt`;
+        // `retired` mirrors `archivedAt` and `inCampaign` `campaignIds`.
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            request.resource.data.get('updatedAt', null) !=
+              resource.data.get('updatedAt', null) &&
             !request.resource.data.diff(resource.data)
               .affectedKeys().hasAny(['stats']) &&
             (!request.resource.data.diff(resource.data)
                 .affectedKeys().hasAny(['archivedAt', 'retired']) ||
               request.resource.data.get('retired', false) ==
-                (request.resource.data.get('archivedAt', null) != null)));
+                (request.resource.data.get('archivedAt', null) != null)) &&
+            (!request.resource.data.diff(resource.data)
+                .affectedKeys().hasAny(['campaignIds', 'inCampaign']) ||
+              request.resource.data.get('inCampaign', false) ==
+                (request.resource.data.get('campaignIds', []).size() > 0)));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
 

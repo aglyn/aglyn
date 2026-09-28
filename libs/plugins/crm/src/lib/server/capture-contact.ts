@@ -23,6 +23,7 @@ import {
   CONTACT_SOURCE_LABELS,
   type ContactSource,
 } from '@aglyn/aglyn/app-utils/contacts'
+import { formLeadSource } from '@aglyn/aglyn/app-utils/forms'
 import {
   type CrmLeadFields,
   isCrmLeadOpen,
@@ -32,7 +33,7 @@ import {
 import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
-  addHostLead,
+  addHostLeadOutcome,
   findContactByEmail,
   firebaseAdmin,
   orgDataCollectionForHost,
@@ -173,9 +174,9 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
   const { formId } = entryPointOf(request.detail)
   const source =
     request.interaction.source === 'form' && formId
-      ? `form:${formId}`
+      ? formLeadSource(formId)
       : request.interaction.source
-  const stored = await addHostLead({
+  const outcome = await addHostLeadOutcome({
     hostRef,
     hostId: request.hostId,
     lead: {
@@ -189,7 +190,7 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
       ? { touch: campaignTouchOf(request.detail).campaignTouch }
       : {}),
   })
-  if (!stored) {
+  if (!outcome.stored) {
     return {
       ok: false,
       reason: 'band',
@@ -204,7 +205,7 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
       ...(request.identity.name ? { name: request.identity.name } : {}),
     })
   }
-  return { ok: true, record: 'lead', leadId: key, created }
+  return { ok: true, record: 'lead', leadId: key, created, sourceAdded: outcome.sourceAdded }
 }
 
 /** The capture as a CONTACT — what every capture was before the rule above. */

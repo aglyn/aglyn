@@ -143,7 +143,7 @@ interface MemberRow {
  *     the same submissions count toward every campaign the form is filed
  *     under. Rows say so and the total refuses to present itself as
  *     exclusive.
- *  3. **A counter nobody wrote is not a zero.** `stats.leads` is incremented
+ *  3. **A counter nobody wrote is not a zero.** `stats.leads` is counted
  *     only for a form whose `routing.lead` is set, and `stats.views` only by
  *     the analytics beacon. Both reach the shared `Figure`, which draws an em
  *     dash and the words "not recorded" rather than a confident 0.

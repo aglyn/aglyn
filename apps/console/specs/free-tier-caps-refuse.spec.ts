@@ -705,14 +705,15 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
     // bookings paths and the form route hand the capture to the CRM through
     // `recordCapturedContact`, and the CRM's writer, its import and its New
     // lead route are the three places a lead is filed — each through
-    // `addHostLead`, the one writer the ceiling lives in.
+    // `addHostLead`, the one writer the ceiling lives in, or its
+    // `addHostLeadOutcome`, which is that writer answering in full (AGL-3330).
     for (const file of [
       'libs/plugins/crm/src/lib/server/capture-contact.ts',
       'libs/plugins/crm/src/lib/server/leads-import.ts',
       'libs/plugins/crm/src/lib/server/lead-create.ts',
     ]) {
       const code = codeOf(file)
-      expect(`${file}: ${code.includes('addHostLead(') ? 'bounded' : 'UNBOUNDED'}`)
+      expect(`${file}: ${/\baddHostLead(?:Outcome)?\(/.test(code) ? 'bounded' : 'UNBOUNDED'}`)
         .toBe(`${file}: bounded`)
     }
     for (const file of [

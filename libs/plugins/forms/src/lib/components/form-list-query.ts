@@ -49,6 +49,9 @@ import type {
  *  - Status: `retired`, the queryable mirror of `archivedAt`.
  *  - Lead routing: `routing.lead`, a boolean on every form.
  *  - Campaign: `campaignIds`, any of the picked campaigns, as stored.
+ *  - In a campaign: `inCampaign`, the boolean every writer of `campaignIds`
+ *    stamps beside it (`formCampaignFields`), because "in no campaign" is an
+ *    empty array, which no query can ask for.
  *
  * ## The index budget, and what it bought
  *
@@ -61,12 +64,15 @@ import type {
  *
  * Three ranges — Submissions, Last submission, Updated — are the visible
  * columns with no other honest operator. Leads is asked by equality (a
- * count, or none), Display name by a word, Slug exactly, so none of those
- * adds an order; a Leads range would be a fourth order and seven more
- * composites. Eight equality fields (the search tokens, the name tokens,
- * Slug, the two counters' equalities, `retired`, Lead routing, Campaign)
- * times three orders, less the Submissions equality against its own order,
- * is 23. `form-list-query.spec.ts` pins every one against the index file.
+ * count, or none — a lead-routing form holds `0` until its first lead, so
+ * "= 0" and "is empty" are different questions), Display name by a word,
+ * Slug exactly, so none of those adds an order; a Leads range would be a
+ * fourth order and more composites. Nine equality fields (the search tokens,
+ * the name tokens, Slug, the two counters' equalities, `retired`, Lead
+ * routing, Campaign, In a campaign) times three orders, less the Submissions
+ * equality against its own order, is 26 — In a campaign is the last three,
+ * the whole of what "in no campaign" costs. `form-list-query.spec.ts` pins
+ * every one against the index file.
  *=========================================*/
 
 /** Every filter the forms grid offers, in the `ListFilterField` grammar. */
@@ -111,6 +117,7 @@ export const FORM_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     tokensPath: 'campaignIds',
     operators: ['isAnyOf'],
   },
+  { column: 'inCampaign', kind: 'boolean', path: 'inCampaign', operators: ['equals'] },
 ]
 
 /** The forms list's query: its fields, its one order, and its search. */
@@ -132,6 +139,7 @@ export const FORM_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   status: 'Status',
   leadRouting: 'Lead routing',
   campaignIds: 'Campaign',
+  inCampaign: 'In a campaign',
 }
 
 /** Status is the stored `retired`, picked by name. */
@@ -146,8 +154,19 @@ export const FORM_LEAD_ROUTING_OPTIONS = [
   { value: 'false', label: 'Off' },
 ]
 
+/** Whether a form is in any campaign, picked by name. */
+export const FORM_IN_CAMPAIGN_OPTIONS = [
+  { value: 'true', label: 'Yes' },
+  { value: 'false', label: 'No' },
+]
+
 /** The fields picked from choices rather than typed. */
-export const FORM_LIST_SELECT_FIELDS = ['status', 'leadRouting', 'campaignIds'] as const
+export const FORM_LIST_SELECT_FIELDS = [
+  'status',
+  'leadRouting',
+  'campaignIds',
+  'inCampaign',
+] as const
 
 /**
  * A retired form is a tombstone the list leaves out unless the reader asks

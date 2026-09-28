@@ -438,8 +438,9 @@ narrowed to source Form and this form.
   only when the popup opens. Views of the form in the besigner or in Preview are never
   counted — that would put you in your own numbers.
 - **Submissions** — everything filed under this form's id.
-- **Lead captures** — submissions this form filed to **Members & leads**. One person is
-  one lead, so someone who submits twice is two captures and one lead.
+- **Leads** — the people this form filed to **CRM → Leads** that are still there. One
+  person is one lead, so someone who submits twice is two submissions and one lead, and
+  a lead you erase stops counting.
 - **Views that became a submission**, **Started and never submitted**, and **Submissions
   that became a lead** — each printed with the population it is over, so you can see what
   is being divided by what.
@@ -482,17 +483,24 @@ The **Forms** table filters through its toolbar by every column it shows:
 - **Slug**, exactly.
 - **Submissions**, as a number: equal to, over or under a number, or empty. A form that
   hasn't had a submission shows a dash, and *is empty* finds it.
-- **Leads**, equal to a number, or empty. A form counts a lead only once it files
-  one, so a form that doesn't route to leads, or hasn't filed its first, shows a dash.
-  *Is empty* finds those forms. No form stores a zero, so **Leads** = 0 finds none.
+- **Leads**, equal to a number, or empty. **Leads** counts the people the form filed as
+  leads that are still in **CRM → Leads**: a visitor who submits twice is one lead. A
+  form with the lead switch on shows 0 until its first lead, so **Leads** = 0 finds the
+  lead forms that haven't filed one yet. A form that has never routed to leads shows a
+  dash, and *is empty* finds it.
 - **Last submission** and **Updated**, as days: on, before or after a date. **Last
   submission** *is set* finds every form that has had a submission.
 
-Two more columns stay hidden until you show them from **Columns**, and the **Filters**
-panel offers them either way: **Status** (active or retired) and **Lead routing** (on or
-off, the switch on the form's **CRM routing** card). **Campaign** finds the forms filed
-under any of the campaigns you pick. The panel lists the site's campaigns once you open
-it.
+Three more columns stay hidden until you show them from **Columns**, and the **Filters**
+panel offers them either way: **Status** (active or retired), **Lead routing** (on or
+off, the switch on the form's **CRM routing** card) and **In a campaign** (yes or no;
+*no* finds the forms filed under no campaign). **Campaign** finds the forms filed under
+any of the campaigns you pick. The panel lists the site's campaigns once you open it.
+
+**Submissions**, **Leads** and **Last submission** are recounted from what's left
+whenever a submission is deleted from the Inbox or a lead is erased, so they never count
+something you removed. Retiring or restoring a form, and taking it out of a deleted
+campaign, moves its **Updated** date.
 
 **Search** finds a form by a word of its name or slug, or by its ID. It looks for one
 word, the first you type, and says so when you type more.

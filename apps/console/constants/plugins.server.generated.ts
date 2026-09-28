@@ -12,6 +12,12 @@ import type { PluginLoadManifest } from '@aglyn/aglyn/server'
 
 export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
   {
+    id: 'forms',
+    apiPrefixes: ["forms"],
+    register: {"consoleApi":"registerFormsConsoleApi"},
+    load: () => import('@aglyn/plugins-forms/server'),
+  },
+  {
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"consoleApi":"registerBookingsConsoleApi"},

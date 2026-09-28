@@ -1,0 +1,62 @@
+{
+  "note": "Worked examples of the form counter recount (AGL-3330). libs/aglyn/src/lib/app-utils/forms.spec.ts asserts formCountersFromSource and formCounterDrift answer these; tools/scripts/lib/site-form-stats-recount.test.mjs asserts the script twin (tools/scripts/lib/site-form-stats-recount.mjs) does. Regenerate neither by hand from one side only.",
+  "toleranceMs": 600000,
+  "cases": [
+    {
+      "name": "drift measured on production: 5 and 4 stored over two submissions and one lead",
+      "source": { "submissions": 2, "leads": 1, "newestSubmissionAtMs": 1789981151711, "routesLeads": true },
+      "stored": { "submissions": 5, "leads": 4, "lastSubmissionAtMs": 1788796032645 },
+      "recounted": { "submissions": 2, "leads": 1, "lastSubmissionAtMs": 1789981151711 },
+      "drift": ["submissions", "leads", "lastSubmissionAtMs"]
+    },
+    {
+      "name": "every submission deleted: the counters go back to none",
+      "source": { "submissions": 0, "leads": 0, "newestSubmissionAtMs": null, "routesLeads": true },
+      "stored": { "submissions": 1, "leads": 1, "lastSubmissionAtMs": 1788249072109 },
+      "recounted": { "submissions": null, "leads": 0, "lastSubmissionAtMs": null },
+      "drift": ["submissions", "leads", "lastSubmissionAtMs"]
+    },
+    {
+      "name": "a lead-routing form that has filed nobody holds 0, not null",
+      "source": { "submissions": 0, "leads": 0, "newestSubmissionAtMs": null, "routesLeads": true },
+      "stored": { "submissions": null, "leads": null, "lastSubmissionAtMs": null },
+      "recounted": { "submissions": null, "leads": 0, "lastSubmissionAtMs": null },
+      "drift": ["leads"]
+    },
+    {
+      "name": "a form that never routed leads holds null leads",
+      "source": { "submissions": 3, "leads": 0, "newestSubmissionAtMs": 5000000, "routesLeads": false },
+      "stored": { "submissions": 3, "leads": null, "lastSubmissionAtMs": 5000000 },
+      "recounted": { "submissions": 3, "leads": null, "lastSubmissionAtMs": 5000000 },
+      "drift": []
+    },
+    {
+      "name": "routing switched off keeps the leads it filed",
+      "source": { "submissions": 3, "leads": 2, "newestSubmissionAtMs": 5000000, "routesLeads": false },
+      "stored": { "submissions": 3, "leads": 2, "lastSubmissionAtMs": 5000000 },
+      "recounted": { "submissions": 3, "leads": 2, "lastSubmissionAtMs": 5000000 },
+      "drift": []
+    },
+    {
+      "name": "the submit path stamps its own clock a moment after the row: agrees",
+      "source": { "submissions": 2, "leads": 1, "newestSubmissionAtMs": 1789981151711, "routesLeads": true },
+      "stored": { "submissions": 2, "leads": 1, "lastSubmissionAtMs": 1789981152261 },
+      "recounted": { "submissions": 2, "leads": 1, "lastSubmissionAtMs": 1789981151711 },
+      "drift": []
+    },
+    {
+      "name": "the newest submission deleted: last submission moves back beyond the tolerance",
+      "source": { "submissions": 1, "leads": 0, "newestSubmissionAtMs": 1000000, "routesLeads": false },
+      "stored": { "submissions": 2, "leads": null, "lastSubmissionAtMs": 9000000 },
+      "recounted": { "submissions": 1, "leads": null, "lastSubmissionAtMs": 1000000 },
+      "drift": ["submissions", "lastSubmissionAtMs"]
+    },
+    {
+      "name": "counters absent altogether: each is stamped, since is-empty cannot find an absent field",
+      "source": { "submissions": 0, "leads": 0, "newestSubmissionAtMs": null, "routesLeads": false },
+      "stored": {},
+      "recounted": { "submissions": null, "leads": null, "lastSubmissionAtMs": null },
+      "drift": ["submissions", "leads", "lastSubmissionAtMs"]
+    }
+  ]
+}

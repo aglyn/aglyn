@@ -319,6 +319,9 @@ jobs:
       - run: npm run test:name-search-tokens
       - run: npm run test:media-filter-keys
       - run: npm run test:site-form-list-fields
+      # AGL-3330. The form counter recount's script twin, held to the same
+      # fixtures the library's recount is.
+      - run: npm run test:site-form-stats-recount
 
       # AGL-1734. The demo org has to be several visibly different businesses:
       # the 30-minute demo spends its largest block switching between sites in

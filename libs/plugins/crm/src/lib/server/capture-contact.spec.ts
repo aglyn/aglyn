@@ -280,7 +280,13 @@ describe('a lead surface', () => {
     const verdict = await captureContactForCrm(
       request({ surface: 'lead', marketingConsent: true }),
     )
-    expect(verdict).toEqual({ ok: true, record: 'lead', leadId: personKey(EMAIL), created: true })
+    expect(verdict).toEqual({
+      ok: true,
+      record: 'lead',
+      leadId: personKey(EMAIL),
+      created: true,
+      sourceAdded: true,
+    })
     expect(docs.get(leadPath())).toMatchObject({
       email: EMAIL,
       name: 'Dana Marsh',
@@ -305,13 +311,30 @@ describe('a lead surface', () => {
   it('updates the lead the site already holds, and announces nothing', async () => {
     docs.set(leadPath(), { email: EMAIL, sources: ['booking'], submissionCount: 1, status: 'working' })
     const verdict = await captureContactForCrm(request({ surface: 'lead' }))
-    expect(verdict).toEqual({ ok: true, record: 'lead', leadId: personKey(EMAIL), created: false })
+    // A person first met through THIS form is one more lead for it (AGL-3330).
+    expect(verdict).toEqual({
+      ok: true,
+      record: 'lead',
+      leadId: personKey(EMAIL),
+      created: false,
+      sourceAdded: true,
+    })
     expect(docs.get(leadPath())).toMatchObject({
       sources: ['booking', 'form:form-1'],
       submissionCount: 2,
       status: 'working',
     })
     expect(events).toEqual([])
+  })
+
+  it('says a returning visitor is no new lead for the form that filed them (AGL-3330)', async () => {
+    // The form counts the PEOPLE it filed, which is what a recount of the
+    // leads' `sources` finds; a second submission through the same form
+    // updates the lead and moves no form's lead count.
+    docs.set(leadPath(), { email: EMAIL, sources: ['form:form-1'], submissionCount: 1 })
+    const verdict = await captureContactForCrm(request({ surface: 'lead' }))
+    expect(verdict).toMatchObject({ record: 'lead', created: false, sourceAdded: false })
+    expect(docs.get(leadPath())).toMatchObject({ submissionCount: 2 })
   })
 
   it('lands on the contact the workspace already holds, and files no lead', async () => {
@@ -343,7 +366,13 @@ describe('a touch', () => {
         marketingConsent: true,
       }),
     )
-    expect(verdict).toEqual({ ok: true, record: 'lead', leadId: personKey(EMAIL), created: false })
+    expect(verdict).toEqual({
+      ok: true,
+      record: 'lead',
+      leadId: personKey(EMAIL),
+      created: false,
+      sourceAdded: true,
+    })
     expect(docs.get(leadPath())).toMatchObject({ sources: ['form:form-1', 'newsletter'] })
     expect(readMarketingBasis(docs.get(leadPath()) ?? null, soloConsentGroup(HOST)).basis).toBe(
       'granted',
