@@ -30,7 +30,7 @@
  */
 
 import { useScopeTokens } from '@aglyn/tenant-feature-instance'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { addDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import { RecordActivityCard } from './record-activity-card'
@@ -94,17 +94,20 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({
     header,
+    HeaderProps,
     actions,
     children,
   }: {
     header: ReactNode
-    actions: ReactNode
+    HeaderProps?: { action?: ReactNode }
+    actions?: ReactNode
     children: ReactNode
   }) => (
     <section>
       <h2>{header}</h2>
-      {actions}
+      <div data-testid="card-header">{HeaderProps?.action}</div>
       {children}
+      {actions ? <div data-testid="card-foot">{actions}</div> : null}
     </section>
   ),
   MdiIcon: () => null,
@@ -133,10 +136,25 @@ beforeEach(() => {
 const renderCard = () =>
   render(<RecordActivityCard hostId="host-1" org={{}} companyId="co-1" />)
 
+const header = () => within(screen.getByTestId('card-header'))
+const nextPage = () => screen.getByRole('button', { name: 'Go to next page' }) as HTMLButtonElement
+
+/** A full first page: ten calls, newest first. */
+const tenRows = Array.from({ length: 10 }, (_, index) =>
+  row(`act-${index + 1}`, 'u-2', 10_000 - index),
+)
+
 describe('RecordActivityCard (AGL-2600)', () => {
+  it('carries Log activity and Expand all in its header, and no foot of buttons', () => {
+    renderCard()
+    expect(header().getByRole('button', { name: 'Log activity' })).toBeTruthy()
+    expect(header().getByRole('button', { name: 'Expand all' })).toBeTruthy()
+    expect(screen.queryByTestId('card-foot')).toBeNull()
+  })
+
   it('files a new activity against the company alone, with the full scope stamp', async () => {
     renderCard()
-    fireEvent.click(screen.getByRole('button', { name: 'Log activity' }))
+    fireEvent.click(header().getByRole('button', { name: 'Log activity' }))
     fireEvent.change(screen.getByLabelText('What happened'), {
       target: { value: 'Toured the roastery' },
     })
@@ -171,19 +189,29 @@ describe('RecordActivityCard (AGL-2600)', () => {
     expect(screen.getAllByLabelText('Delete activity')).toHaveLength(1)
   })
 
-  it('offers "Show more" only while the probe says more exists, and widens the window', () => {
+  it('pages ten at a time, and widens the window only when a page is turned past it', () => {
     mockPaged.mockReturnValue({
       ...mockPaged(),
+      data: [...tenRows, row('act-probe', 'u-2', 1)],
+      rows: tenRows,
+      pageSize: 10,
       hasMore: true,
     })
     renderCard()
-    fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(screen.getByText('Call act-1')).toBeTruthy()
+    expect(screen.getByText('Call act-10')).toBeTruthy()
+    expect(screen.queryByText('Call act-probe')).toBeNull()
+    // A full first page asks nothing more of the listener.
+    expect(setPage).not.toHaveBeenCalled()
+    expect(nextPage().disabled).toBe(false)
+    fireEvent.click(nextPage())
     expect(setPage).toHaveBeenCalledWith(1)
   })
 
-  it('has no foot when the window already holds everything', () => {
+  it('offers no next page when the window already holds everything', () => {
     renderCard()
-    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull()
+    expect(nextPage().disabled).toBe(true)
+    expect(setPage).not.toHaveBeenCalled()
   })
 })
 
@@ -203,12 +231,28 @@ describe('a sent email on the log (AGL-2615)', () => {
     return renderCard()
   }
 
-  it('shows its subject, its recipient and its delivery state', () => {
+  it('collapses to its subject, its recipient and its delivery state, and opens to the body', () => {
     renderWith([sentEmailRow('opened')])
     expect(screen.getByText('Quick question')).toBeTruthy()
-    expect(screen.getByText('Still keen?')).toBeTruthy()
     expect(screen.getByTestId('activity-delivery-state').textContent).toBe('Opened')
     expect(screen.getByText(/to ada@example\.com/)).toBeTruthy()
+    // Collapsed: the body is one click away, not on the row.
+    expect(screen.queryByText('Still keen?')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Quick question' }))
+    expect(screen.getByText('Still keen?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Quick question' }))
+    expect(screen.getByText('Quick question')).toBeTruthy()
+  })
+
+  it('opens every entry from the header, and closes them again', () => {
+    renderWith([sentEmailRow('opened'), { ...sentEmailRow('sent'), $id: 'act-mail-2', subject: 'Following up', body: 'Any news?' }])
+    expect(screen.queryByText('Still keen?')).toBeNull()
+    expect(screen.queryByText('Any news?')).toBeNull()
+    fireEvent.click(header().getByRole('button', { name: 'Expand all' }))
+    expect(screen.getByText('Still keen?')).toBeTruthy()
+    expect(screen.getByText('Any news?')).toBeTruthy()
+    fireEvent.click(header().getByRole('button', { name: 'Collapse all' }))
+    expect(header().getByRole('button', { name: 'Expand all' })).toBeTruthy()
   })
 
   it('reads a bounce as a failure', () => {

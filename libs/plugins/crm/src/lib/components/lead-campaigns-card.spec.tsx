@@ -25,7 +25,7 @@
  * says so in place of the picker.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { LeadCampaignsCard, leadCampaignNames } from './lead-campaigns-card'
 
 const updateDoc = jest.fn(async (..._args: unknown[]) => undefined)
@@ -64,6 +64,13 @@ beforeEach(() => {
   updateDoc.mockClear()
 })
 
+/** Save filing, which is the card's action and sits in its header (AGL-3334). */
+const saveFiling = () => {
+  const header = document.querySelector('.MuiCardHeader-action')
+  expect(header).not.toBeNull()
+  return within(header as HTMLElement).getByRole('button', { name: 'Save filing' })
+}
+
 describe('leadCampaignNames', () => {
   it('names the campaigns from the containers and drops an id nothing answers for', () => {
     expect(leadCampaignNames({ campaignIds: ['founder-icp2', 'gone', 'founder-icp1'] }, options)).toEqual([
@@ -96,7 +103,7 @@ describe('LeadCampaignsCard', () => {
     mount({ campaignIds: ['founder-icp1'] })
     expect(screen.getByRole('combobox', { name: 'Filed under campaigns' })).toBeTruthy()
     expect(screen.getByText('Your own filing. It never adds anyone to a send — a campaign mails its lists.')).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'Save filing' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((saveFiling() as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('saves the membership value on the lead’s own document and reports the diff', async () => {
@@ -106,7 +113,7 @@ describe('LeadCampaignsCard', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Founder · ICP 1' }))
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
-    const save = screen.getByRole('button', { name: 'Save filing' }) as HTMLButtonElement
+    const save = saveFiling() as HTMLButtonElement
     expect(save.disabled).toBe(false)
     fireEvent.click(save)
     await waitFor(() => expect(notices).toEqual(['Filing saved']))

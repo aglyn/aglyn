@@ -599,6 +599,20 @@ Three things about the timing are worth knowing:
 The statuses a scheduled campaign moves through are **Scheduled** → sending → sent, or
 **Canceled** if you cancel it in time, or **Failed** with the reason.
 
+### Held for review {#held-for-review}
+
+In a workspace's first two weeks, each campaign is checked before it sends for
+signs that it impersonates another business. Examples are a link to a lookalike
+of a well-known brand's domain, or a sender name that uses a brand that isn't
+yours. Most emails are never held.
+
+If an email is held, nothing is sent or counted, and it shows a **Held for
+review** chip in the Emails list and on its page. While it is held you can't
+send it now, reschedule it or edit it. Our team reviews it, and it sends on its
+own if it's approved, or it's canceled if it isn't. You can still cancel it
+yourself. If you contact support about it, quote the `HS-` reference shown on
+the email's page.
+
 ### Duplicate an email
 
 Any email on the Emails list — sent, scheduled or draft — has **Duplicate…**

@@ -210,6 +210,45 @@ interface AbuseReportRow {
   source: string | null
   /** The held send, when the screen filed this row (AGL-3356). */
   heldSend: HeldSendRow | null
+  /** A Stripe fraud signal, when the billing webhook filed this row (AGL-3356). */
+  paymentSignal: PaymentSignalRow | null
+}
+
+/**
+ * An early fraud warning, a Radar review or a dispute on a charge, as
+ * `paymentSignalPayload()` hands it over. Nothing was refunded or canceled;
+ * the row links the org's Subscription card, where staff decide.
+ */
+interface PaymentSignalRow {
+  kind: string | null
+  stripeObjectId: string | null
+  chargeId: string | null
+  paymentIntentId: string | null
+  amountCents: number | null
+  currency: string
+  detail: string | null
+  livemode: boolean
+  subscriptionCard: string | null
+  checks: {
+    cvcCheck: string | null
+    addressPostalCodeCheck: string | null
+    cardCountry: string | null
+    riskLevel: string | null
+    threeDSecure: string | null
+  } | null
+}
+
+const PAYMENT_SIGNAL_TITLES: Record<string, string> = {
+  'early-fraud-warning': 'Stripe early fraud warning',
+  'radar-review': 'Stripe Radar review opened',
+  dispute: 'Card dispute opened',
+}
+
+/** `56.00 USD`, or a sentence saying nothing recorded the amount. */
+function paymentSignalAmount(signal: PaymentSignalRow): string {
+  return signal.amountCents === null
+    ? 'amount not recorded'
+    : `${(signal.amountCents / 100).toFixed(2)} ${signal.currency.toUpperCase()}`
 }
 
 /**
@@ -1340,6 +1379,46 @@ function AdminAbuseReports() {
 
                     <Divider />
 
+                    {report.paymentSignal ? (
+                      <Alert severity="error">
+                        <Stack spacing={0.5}>
+                          <Typography variant="subtitle2">
+                            {`${
+                              PAYMENT_SIGNAL_TITLES[report.paymentSignal.kind ?? ''] ??
+                              'Stripe fraud signal'
+                            }${report.paymentSignal.livemode ? '' : ' (test mode)'}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`Workspace: ${report.orgId ?? 'none — not a workspace subscription charge'} · ` +
+                              `Charge: ${report.paymentSignal.chargeId ?? report.paymentSignal.paymentIntentId ?? 'not named'} · ` +
+                              `Amount: ${paymentSignalAmount(report.paymentSignal)}`}
+                          </Typography>
+                          {report.paymentSignal.detail ? (
+                            <Typography variant="body2">
+                              {`Stripe says: ${report.paymentSignal.detail}`}
+                            </Typography>
+                          ) : null}
+                          {report.paymentSignal.checks ? (
+                            <Typography variant="body2">
+                              {`Card: CVC ${report.paymentSignal.checks.cvcCheck ?? 'unknown'}, ` +
+                                `postal code ${report.paymentSignal.checks.addressPostalCodeCheck ?? 'unknown'}, ` +
+                                `issued in ${report.paymentSignal.checks.cardCountry ?? 'unknown'}, ` +
+                                `3DS ${report.paymentSignal.checks.threeDSecure ?? 'not used'}, ` +
+                                `Radar risk ${report.paymentSignal.checks.riskLevel ?? 'unknown'}`}
+                            </Typography>
+                          ) : null}
+                          <Typography variant="body2">
+                            {'Nothing has been refunded or canceled. Decide on the Subscription card, lock the workspace if it is fraud, then close this report with what you did.'}
+                          </Typography>
+                          {report.paymentSignal.subscriptionCard ? (
+                            <AppLink href={report.paymentSignal.subscriptionCard}>
+                              {'Open the workspace’s Subscription card'}
+                            </AppLink>
+                          ) : null}
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
                     {report.heldSend ? (
                       <Alert
                         severity={
@@ -1385,7 +1464,9 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {report.source === 'outbound-screen'
                           ? 'What the screen recorded'
-                          : 'What the reporter said'}
+                          : report.source === 'stripe-fraud-signal'
+                            ? 'What Stripe reported'
+                            : 'What the reporter said'}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -1399,7 +1480,11 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {'Who reported it'}
                       </Typography>
-                      {report.source === 'outbound-screen' ? (
+                      {report.source === 'stripe-fraud-signal' ? (
+                        <Typography variant="body2">
+                          {'Filed by the Stripe billing webhook, not a person. There is no reporter to reply to; the card holder and the workspace are the subject.'}
+                        </Typography>
+                      ) : report.source === 'outbound-screen' ? (
                         <Typography variant="body2">
                           {'Filed by the outbound phishing screen, not a person. There is no reporter to reply to; the workspace that composed the email is the subject.'}
                         </Typography>

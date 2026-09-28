@@ -33,6 +33,12 @@
  *       stamps through `outreachEnrollmentSearchTokens` — and `target:
  *       'contact'` where it is absent, which is what an enrollment with no
  *       target is (every enrollment was one, before leads could be sequenced);
+ *       and the two click filters' fields (AGL-3332): `clicked`, whether
+ *       `engagement.clicks` counts a person's click, which the enroll route
+ *       stamps `false` and the click route sets; and `engagement.links`
+ *       gains the `lastClickUrl` an earlier click is known by, which is a
+ *       destination the person did follow — the click route carries it the
+ *       same way on their next click;
  *   orgs/{orgId}/outreachDoNotContactDomains/{domain}
  *       `searchTokens` from `domain` and `detail` — what the one writer stamps
  *       through `outreachDomainSearchTokens`. An entry with no `addedAtMs` is
@@ -97,6 +103,15 @@ const args = parseDeployArgs({
 
 /** Documents read per page of the scan. */
 const PAGE = 1000
+
+/** `OUTREACH_ENGAGEMENT_LINKS_MAX`: the most destinations an enrollment keeps. */
+const ENGAGEMENT_LINKS_MAX = 20
+
+/** A count as `readOutreachEngagement` reads one. */
+const count = (value) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+}
 
 /*
  * WHAT AN ENROLLMENT AND A DOMAIN ARE SEARCHED BY, restated from
@@ -168,6 +183,16 @@ export function planRecord(path, data) {
     const tokens = enrollmentSearchTokens(data)
     if (!sameSearchTokens(data.searchTokens, tokens)) update.searchTokens = tokens
     if (data.target !== 'contact' && data.target !== 'lead') update.target = 'contact'
+    const engagement = data.engagement && typeof data.engagement === 'object' ? data.engagement : {}
+    const clicked = count(engagement.clicks) > 0
+    if (data.clicked !== clicked) update.clicked = clicked
+    const links = Array.isArray(engagement.links)
+      ? engagement.links.filter((entry) => typeof entry === 'string' && entry !== '')
+      : []
+    const last = typeof engagement.lastClickUrl === 'string' ? engagement.lastClickUrl : ''
+    if (clicked && last && !links.includes(last) && links.length < ENGAGEMENT_LINKS_MAX) {
+      update['engagement.links'] = [...links, last]
+    }
   } else {
     const tokens = domainSearchTokens({ domain: data.domain ?? path.split('/')[3], detail: data.detail })
     if (!sameSearchTokens(data.searchTokens, tokens)) update.searchTokens = tokens
@@ -175,6 +200,17 @@ export function planRecord(path, data) {
   }
   const extra = missingAddedAt ? { missingAddedAt } : {}
   return Object.keys(update).length ? { update, ...extra } : { skip: 'current', ...extra }
+}
+
+/** A document as `update()` leaves it: a dotted key writes the field inside its map. */
+function applyUpdate(data, update) {
+  const next = { ...data }
+  for (const [key, value] of Object.entries(update)) {
+    const [head, ...rest] = key.split('.')
+    if (!rest.length) next[head] = value
+    else next[head] = { ...(next[head] ?? {}), [rest.join('.')]: value }
+  }
+  return next
 }
 
 function selfTest() {
@@ -227,18 +263,52 @@ function selfTest() {
       'an enrollment made before leads could be sequenced',
       ENROLLMENT,
       casey,
-      { update: { searchTokens: enrollmentSearchTokens(casey), target: 'contact' } },
+      { update: { searchTokens: enrollmentSearchTokens(casey), target: 'contact', clicked: false } },
     ],
     [
       'a lead enrollment made before search',
       ENROLLMENT,
       { ...casey, target: 'lead' },
-      { update: { searchTokens: enrollmentSearchTokens(casey) } },
+      { update: { searchTokens: enrollmentSearchTokens(casey), clicked: false } },
     ],
     [
       'a current enrollment',
       ENROLLMENT,
-      { ...casey, target: 'lead', searchTokens: enrollmentSearchTokens(casey) },
+      { ...casey, target: 'lead', searchTokens: enrollmentSearchTokens(casey), clicked: false },
+      { skip: 'current' },
+    ],
+    [
+      'an enrollment clicked before each click was recorded',
+      ENROLLMENT,
+      {
+        ...casey,
+        target: 'lead',
+        searchTokens: enrollmentSearchTokens(casey),
+        engagement: { clicks: 2, lastClickUrl: 'https://shop.example/pricing' },
+      },
+      { update: { clicked: true, 'engagement.links': ['https://shop.example/pricing'] } },
+    ],
+    [
+      'an enrollment only a scanner clicked',
+      ENROLLMENT,
+      {
+        ...casey,
+        target: 'lead',
+        searchTokens: enrollmentSearchTokens(casey),
+        engagement: { machineClicks: 3 },
+      },
+      { update: { clicked: false } },
+    ],
+    [
+      'an enrollment whose clicks are recorded one by one',
+      ENROLLMENT,
+      {
+        ...casey,
+        target: 'lead',
+        searchTokens: enrollmentSearchTokens(casey),
+        clicked: true,
+        engagement: { clicks: 1, lastClickUrl: 'https://a.example/x', links: ['https://a.example/x'] },
+      },
       { skip: 'current' },
     ],
     [
@@ -261,7 +331,7 @@ function selfTest() {
       `${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`,
       JSON.stringify(got) === JSON.stringify(expected),
     )
-    const stamped = 'update' in got ? { ...data, ...got.update } : data
+    const stamped = 'update' in got ? applyUpdate(data, got.update) : data
     check(`${name}: re-run is a no-op`, 'skip' in planRecord(path, stamped))
   }
   console.log(failed ? `self-test: ${failed} of ${total} failed` : `self-test: ${total}/${total} passed`)

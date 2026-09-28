@@ -132,6 +132,8 @@ const STATE_COLOR: Partial<
 > = {
   sending: 'info',
   stopped: 'warning',
+  // Waiting on staff, not on the merchant (AGL-3356): worth finding on a scan.
+  held: 'warning',
 }
 
 /*

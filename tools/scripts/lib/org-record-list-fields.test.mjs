@@ -23,6 +23,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import {
+  crmFieldListFields,
+  crmFieldListFieldsBackfillPatch,
   crmListFields,
   crmListFieldsBackfillPatch,
   crmNewRecordListFields,
@@ -53,4 +55,14 @@ test('a backfill patch writes what is wrong and nothing on a level record', () =
   // A scheduled record keeps its date; an absent one is stamped null.
   assert.equal(crmListFieldsBackfillPatch('deals', { title: 'x', nextTaskAtMs: 5 }).nextTaskAtMs, undefined)
   assert.equal(crmListFieldsBackfillPatch('deals', { title: 'x' }).nextTaskAtMs, null)
+})
+
+test('a field definition’s list fields match the fixtures, and a backfill levels it (AGL-3335)', () => {
+  assert.ok(fixtures.fieldDefinitions.length > 0)
+  for (const { record, expected } of fixtures.fieldDefinitions) {
+    assert.deepEqual(crmFieldListFields(record), expected)
+    const patch = crmFieldListFieldsBackfillPatch(record)
+    assert.ok(Object.keys(patch).length > 0)
+    assert.deepEqual(crmFieldListFieldsBackfillPatch({ ...record, ...patch }), {})
+  }
 })

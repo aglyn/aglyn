@@ -158,6 +158,23 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
       })}
       contentGutterX
       contentGutterY
+      HeaderProps={{
+        action: (
+          <ReportExport
+            filename={reportFilename('conversion-by-source', period)}
+            columns={COLUMNS}
+            rows={() =>
+              conversion.rows.map((row) => [
+                labelOf(row.source),
+                row.captured,
+                row.customers,
+                percent(row.rate),
+              ])
+            }
+            disabled={!read || !conversion.rows.length}
+          />
+        ),
+      }}
     >
       <Stack spacing={2}>
         <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
@@ -223,20 +240,12 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
                   : '')}
             </Typography>
           ) : null}
-          <ReportExport
-            filename={reportFilename('conversion-by-source', period)}
-            columns={COLUMNS}
-            rows={() =>
-              conversion.rows.map((row) => [
-                labelOf(row.source),
-                row.captured,
-                row.customers,
-                percent(row.rate),
-              ])
-            }
-            disabled={!read || !conversion.rows.length}
-            caption={caption}
-          />
+          {/* What the table, and so the export, is drawn from when that is not everything. */}
+          {caption ? (
+            <Typography variant="caption" color="text.secondary">
+              {caption}
+            </Typography>
+          ) : null}
         </Section>
       </Stack>
     </CardDisplay>

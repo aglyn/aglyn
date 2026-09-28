@@ -732,3 +732,57 @@ describe('a send the phishing screen held (AGL-3356)', () => {
     expect(mockDecideHeldOutboundSend).not.toHaveBeenCalled()
   })
 })
+
+describe('a Stripe fraud signal the billing webhook filed (AGL-3356)', () => {
+  const SIGNAL_ID = 'd'.repeat(40)
+  beforeEach(() => {
+    state.reports[SIGNAL_ID] = {
+      reference: 'PF-DDDDDDDDDD',
+      status: 'open',
+      category: 'phishing',
+      severity: 'urgent',
+      source: 'stripe-fraud-signal',
+      url: null,
+      reportedHostname: null,
+      hostId: null,
+      orgId: 'org-9',
+      details: 'Early fraud warning from Stripe (issfr_1).',
+      reporterEmail: null,
+      reporterName: null,
+      reportCount: 1,
+      createdAt: stamp(1000),
+      updatedAt: stamp(3000),
+      dmca: null,
+      paymentSignal: {
+        kind: 'early-fraud-warning',
+        stripeObjectId: 'issfr_1',
+        chargeId: 'ch_1',
+        paymentIntentId: null,
+        amountCents: 5600,
+        currency: 'usd',
+        detail: 'unauthorized_use_of_card',
+        livemode: true,
+        subscriptionCard: '/admin/orgs/org-9#subscription',
+        checks: { cvcCheck: 'unavailable', cardCountry: 'NL' },
+      },
+    }
+  })
+
+  it('hands the page the org, charge, amount, checks and the Subscription card link', async () => {
+    asSupport()
+    const body = await (await get()).json()
+    const row = body.reports.find((report: any) => report.id === SIGNAL_ID)
+    expect(row.source).toBe('stripe-fraud-signal')
+    expect(row.orgId).toBe('org-9')
+    expect(row.paymentSignal).toMatchObject({
+      kind: 'early-fraud-warning',
+      chargeId: 'ch_1',
+      amountCents: 5600,
+      currency: 'usd',
+      subscriptionCard: '/admin/orgs/org-9#subscription',
+      checks: { cvcCheck: 'unavailable', cardCountry: 'NL', riskLevel: null },
+    })
+    // Not a held send: closing it decides nothing about one.
+    expect(row.heldSend).toBeNull()
+  })
+})

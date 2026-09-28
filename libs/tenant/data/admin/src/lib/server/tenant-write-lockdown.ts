@@ -54,6 +54,7 @@ import {
   type LockdownState,
   normalizeHostLockdown,
   normalizeOrgLockdown,
+  type PluginJobHostGate,
   resolveLockdown,
 } from '@aglyn/aglyn/server'
 import {
@@ -139,6 +140,31 @@ export async function getSiteLockdown(
       nowMs,
     )
     return isLockdownActive(state, nowMs) ? state : null
+  }
+}
+
+/**
+ * The background-work gate over {@link getSiteLockdown}: ANY active lock on
+ * the site answers locked (AGL-2495, AGL-3356).
+ *
+ * One definition, two doors. The tenant's job runner registers
+ * `isLocked` as core's job resolver (`apps/tenant/utils/plugin-job-lockdown`),
+ * and the `x-cron-secret` doors that drive the same scans by hand in the
+ * CONSOLE — abandoned carts, restock alerts, booking reminders — are handed
+ * it directly. Those doors used to call core's `pluginJobHostGate()`, which
+ * answers "not locked" in any process that never registered a resolver, and
+ * the console registers none: a forced pass mailed a suspended site's
+ * customers and stamped the rows done. Asking this instead needs no
+ * registration, so it holds in whichever app serves the route.
+ *
+ * Any active lock, not only a full one, for the reason the tenant resolver
+ * gives: every scan behind it mutates, and a skipped row is picked up
+ * unchanged on the first pass after the lift.
+ */
+export function siteLockdownJobGate(): PluginJobHostGate {
+  return {
+    isLocked: async (hostId: string) =>
+      Boolean(hostId) && (await getSiteLockdown(hostId)) !== null,
   }
 }
 

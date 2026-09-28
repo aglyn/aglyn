@@ -698,7 +698,11 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           <Chip
             size="small"
             color={
-              state === 'sending' ? 'info' : state === 'stopped' ? 'warning' : undefined
+              state === 'sending'
+                ? 'info'
+                : state === 'stopped' || state === 'held'
+                  ? 'warning'
+                  : undefined
             }
             label={value}
           />

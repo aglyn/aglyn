@@ -115,6 +115,9 @@ export const REQUIRED_WEBHOOK_EVENTS: readonly string[] = [
   'customer.updated',
   'payment_method.attached',
   'payment_method.detached',
+  // Fraud signals to staff (AGL-3356).
+  'radar.early_fraud_warning.created',
+  'review.opened',
 ]
 
 /**

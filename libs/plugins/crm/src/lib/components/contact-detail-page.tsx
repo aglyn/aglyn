@@ -41,7 +41,6 @@ import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import ContactAssociationsCard from './contact-associations-card'
-import ContactCustomFieldsCard from './contact-custom-fields-card'
 import ContactDuplicatesCard from './contact-duplicates-card'
 import ContactKnownByCard from './contact-known-by-card'
 import ContactMergeDialog, { useContactMergeDialog } from './contact-merge-dialog'
@@ -95,9 +94,10 @@ const contactDocsHelp = pluginDocsHelp('contacts', {
  * ## The cards
  *
  * Each in its own file, so a card can grow without this page growing:
- * properties (the editable profile), the relationship (sources, attribution,
- * consent, campaign filing) and the timeline. Other CRM sections add a card
- * here by inserting one import and one line.
+ * properties (the editable profile, with the org's custom fields under it),
+ * the relationship (sources, attribution, consent, campaign filing) and the
+ * timeline. Other CRM sections add a card here by inserting one import and
+ * one line.
  *
  * ## Delete is a detach
  *
@@ -521,14 +521,6 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             basePath={basePath}
             bookingsHref={bookingsHref}
           />
-          {/*
-            On a plan without the CRM, the cards that only work a record —
-            custom fields, deals, tasks, files — are named in the notice above
-            rather than drawn as four upsells in a row.
-          */}
-          {suiteIncluded ? (
-            <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
-          ) : null}
           <ContactTimelineCard
             hostId={hostId}
             org={org}
@@ -537,6 +529,11 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             campaignHref={campaignHref}
             suiteLocked={!suiteIncluded}
           />
+          {/*
+            On a plan without the CRM, the cards that only work a record —
+            deals, tasks, files — are named in the notice above rather than
+            drawn as upsells in a row.
+          */}
           {suiteIncluded ? (
             <>
               <ContactDealsCard

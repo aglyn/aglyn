@@ -67,8 +67,16 @@ const gate = { isLocked: async (hostId: string) => {
 // Doubles
 // ---------------------------------------------------------------------------
 
+/** Console routes, captured when `registerBookingsConsoleApi` runs. */
+const routes = new Map<string, (req: unknown, res: unknown) => Promise<unknown>>()
+
 jest.mock('@aglyn/aglyn/server', () => ({
-  registerPluginApiRoute: () => undefined,
+  registerPluginApiRoute: (
+    path: string,
+    handler: (req: unknown, res: unknown) => Promise<unknown>,
+  ) => {
+    routes.set(path, handler)
+  },
   registerPluginConfigSchema: () => undefined,
   registerBillingWebhookHandler: () => undefined,
   registerPluginJob: (job: {
@@ -77,10 +85,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }) => {
     registered.set(job.name, job.handler)
   },
-  // The manual `bookings/reminders` door mints its own gate from this. Not
-  // exercised here (the door is not what the beat calls), but it must exist
-  // or `server.ts` fails to load.
-  pluginJobHostGate: () => gate,
+  // Core's registry gate. The manual door must NOT use it (AGL-3356): the
+  // console registers no resolver, so this answers "not locked" there. A
+  // double that says UNLOCKED for everything proves the door does not ask it.
+  pluginJobHostGate: () => ({ isLocked: async () => false }),
   checkEntitlement: () => true,
   resolveBrandingProfile: () => ({ name: 'Acme', fromName: 'Acme' }),
   resolveTransactionFeeCents: () => 0,
@@ -213,6 +221,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   renderHostEmailWithTokens: () => ({ subject: 's', text: 't' }),
 }))
 
+// The site-lockdown gate the console's manual door is handed (AGL-3356).
+jest.mock('@aglyn/tenant-data-admin/server/tenant-write-lockdown', () => ({
+  siteLockdownJobGate: () => gate,
+}))
+
 jest.mock('@aglyn/tenant-data-admin/server/stripe-account-mode', () => ({
   connectLinkageIsReady: () => true,
 }))
@@ -220,11 +233,13 @@ jest.mock('@aglyn/tenant-data-admin/server/stripe-account-mode', () => ({
 // `require`, not `import`. A static import is hoisted above the module-scope
 // `const`s this file's doubles close over, so `server.ts` would run its
 // registrations while `registered` was still in the temporal dead zone.
-const { scanBookingReminders } = require('./server') as {
+const { scanBookingReminders, registerBookingsConsoleApi } = require('./server') as {
   scanBookingReminders: (gate: {
     isLocked: (hostId: string) => Promise<boolean>
   }) => Promise<{ sent: number; skippedLocked: number }>
+  registerBookingsConsoleApi: () => void
 }
+registerBookingsConsoleApi()
 
 const realFetch = global.fetch
 
@@ -342,6 +357,65 @@ describe('AGL-2495 · bookings#booking-reminders honours a lockdown', () => {
     lockedHosts.delete('locked')
     const after = await scanBookingReminders(gate)
     expect(after.sent).toBe(1)
+    expect(emails).toEqual(['guest@example.com'])
+  })
+})
+
+/*
+ * THE CONSOLE'S MANUAL DOOR (AGL-3356). `POST bookings/reminders` with the
+ * cron secret drives the same scan by hand, served by the console — where
+ * core's job registry has no resolver and answered "not locked" for every
+ * site. The door now takes the site-lockdown gate directly.
+ */
+describe('AGL-3356 · the manual bookings/reminders door honours a lockdown', () => {
+  const callDoor = async () => {
+    const captured: { status: number; body: any } = { status: 0, body: null }
+    const res: any = {
+      status: (code: number) => {
+        captured.status = code
+        return res
+      },
+      json: (body: unknown) => {
+        captured.body = body
+        return res
+      },
+    }
+    await routes.get('bookings/reminders')?.(
+      { method: 'POST', headers: { 'x-cron-secret': 'cron' } },
+      res,
+    )
+    return captured
+  }
+  const previous = process.env['CRON_SECRET']
+  beforeEach(() => {
+    process.env['CRON_SECRET'] = 'cron'
+    jest.spyOn(Date, 'now').mockReturnValue(NOW)
+  })
+  afterEach(() => {
+    if (previous === undefined) delete process.env['CRON_SECRET']
+    else process.env['CRON_SECRET'] = previous
+    jest.restoreAllMocks()
+  })
+
+  it('skips a locked site, leaves the row unstamped, and sends after the lift', async () => {
+    const row = bookingDoc('locked', 'b1', {
+      status: 'confirmed',
+      email: 'guest@example.com',
+      name: 'Guest',
+      serviceName: 'Massage',
+      startsAtMs: STARTS_AT,
+    })
+    upcoming = [row]
+    lockedHosts.add('locked')
+    const locked = await callDoor()
+    expect(locked.status).toBe(200)
+    expect(locked.body).toMatchObject({ sent: 0, skippedLocked: 1 })
+    expect(asked).toEqual(['locked'])
+    expect(emails).toEqual([])
+    expect(row.data()['reminderSentAt']).toBeUndefined()
+
+    lockedHosts.delete('locked')
+    expect((await callDoor()).body).toMatchObject({ sent: 1 })
     expect(emails).toEqual(['guest@example.com'])
   })
 })

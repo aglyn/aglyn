@@ -100,6 +100,14 @@ import {
   livemodeDecision,
 } from '../../../../utils/server/stripe-livemode'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+// The leaf, not the barrel: the webhook's specs substitute the barrel, and
+// the row a fraud signal files must be the real one under them (AGL-3356).
+import {
+  type PaymentFraudCardChecks,
+  type PaymentFraudSignalKind,
+  readStripeChargeForSignal,
+  recordPaymentFraudSignal,
+} from '@aglyn/tenant-data-admin/server/payment-fraud-signal'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
 // org PAYS through; a 423 here would block the recovery it needs.
@@ -250,6 +258,60 @@ async function recordOrphanedSubscription(entry: {
     at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
     .catch(() => undefined)
+}
+
+/**
+ * The workspace, amount and card checks behind a fraud signal's charge
+ * (AGL-3356).
+ *
+ * A subscription invoice's `platformRevenue` row first — the same ownership
+ * test the dispute branch uses, by payment intent and then by charge — and
+ * then one READ of the charge from Stripe for the card's own checks, whose
+ * customer resolves a charge no row names through the `stripeCustomers`
+ * index. Never throws: a signal whose subject cannot be read is still filed,
+ * saying so.
+ */
+async function fraudSignalSubject(
+  firestore: FirebaseFirestore.Firestore,
+  input: { chargeId: string; paymentIntentId: string },
+): Promise<{
+  orgId: string | null
+  amountCents: number | null
+  currency: string | null
+  checks: PaymentFraudCardChecks | null
+}> {
+  let orgId: string | null = null
+  let amountCents: number | null = null
+  try {
+    const revenue = firestore.collection('platformRevenue')
+    for (const [field, value] of [
+      ['paymentIntentId', input.paymentIntentId],
+      ['chargeId', input.chargeId],
+    ] as const) {
+      if (orgId || !value) continue
+      const found = (await revenue.where(field, '==', value).limit(1).get())
+        .docs[0]
+      if (found) {
+        orgId = String(found.get('orgId') ?? '') || null
+        const gross = Number(found.get('grossCents'))
+        amountCents = Number.isFinite(gross) ? gross : null
+      }
+    }
+  } catch {
+    // The row lookup is a courtesy; the charge read below can still answer.
+  }
+  const charge = await readStripeChargeForSignal(input.chargeId, {
+    secretKey: process.env.STRIPE_SECRET_KEY,
+  })
+  if (!orgId && charge?.customerId) {
+    orgId = await findOrgIdByStripeCustomer(charge.customerId).catch(() => null)
+  }
+  return {
+    orgId,
+    amountCents: amountCents ?? charge?.amountCents ?? null,
+    currency: charge?.currency ?? null,
+    checks: charge?.checks ?? null,
+  }
 }
 
 /**
@@ -1951,6 +2013,79 @@ async function handler(request: Request): Promise<Response> {
         // A dispute carrying neither a payment intent nor a charge — nothing
         // to join on in any direction. Nothing to do, said out loud.
         ledger.skip('dispute-carries-no-charge-reference')
+      }
+    }
+
+    /*==========================================
+     * STRIPE'S FRAUD SIGNALS, TO STAFF (AGL-3356).
+     *
+     * An issuer's early fraud warning, a Radar review and a dispute each say
+     * a card may not be its holder's. The 9/26 fraud paid for Pro on exactly
+     * such a card, and until now the first two were not subscribed and the
+     * third reached `adminAudit` only. Each is filed as an urgent row in the
+     * abuse queue naming the workspace, the charge and the amount, linking
+     * the org's Subscription card, and staff are notified once — see
+     * `payment-fraud-signal.ts`.
+     *
+     * NOTHING IS REFUNDED OR CANCELED HERE. Staff decide.
+     *
+     * Which charges: a warning or a review on ANY charge of this account is
+     * filed, because both are rare and a review holds the payment in Stripe
+     * until someone closes it. A dispute is filed only when the charge bills
+     * a WORKSPACE; a storefront or marketplace chargeback is the merchant's,
+     * handled by its plugin, and filing those would bury the ones about us.
+     *=========================================*/
+    if (
+      type === 'radar.early_fraud_warning.created' ||
+      type === 'review.opened' ||
+      type === 'charge.dispute.created'
+    ) {
+      dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
+      const kind: PaymentFraudSignalKind =
+        type === 'radar.early_fraud_warning.created'
+          ? 'early-fraud-warning'
+          : type === 'review.opened'
+            ? 'radar-review'
+            : 'dispute'
+      const refOf = (value: unknown) =>
+        typeof value === 'string'
+          ? value
+          : String((value as { id?: unknown } | null)?.id ?? '')
+      const chargeId = refOf(object?.charge)
+      const paymentIntentId = refOf(object?.payment_intent)
+      const subject = await fraudSignalSubject(observed(), {
+        chargeId,
+        paymentIntentId,
+      })
+      const orgId = subject.orgId
+      if (kind === 'dispute' && !orgId) {
+        // A storefront or marketplace chargeback, or one the platform-fault
+        // branch below reports. Not a workspace's card; said out loud.
+        ledger.skip('dispute-is-not-a-workspace-charge')
+      } else {
+        const disputeAmount = Number(object?.amount)
+        await recordPaymentFraudSignal(
+          {
+            kind,
+            stripeObjectId: String(object?.id ?? event?.id ?? ''),
+            chargeId: chargeId || null,
+            paymentIntentId: paymentIntentId || null,
+            orgId,
+            // The dispute names its own amount; the other two do not.
+            amountCents:
+              kind === 'dispute' && Number.isFinite(disputeAmount)
+                ? disputeAmount
+                : subject.amountCents,
+            currency: String(object?.currency ?? subject.currency ?? 'usd'),
+            detail: String(
+              object?.fraud_type ?? object?.reason ?? object?.opened_reason ?? '',
+            ),
+            checks: subject.checks,
+            livemode: event?.livemode === true,
+          },
+          { firestore: observed(), notify: notifyStaff },
+        )
       }
     }
 

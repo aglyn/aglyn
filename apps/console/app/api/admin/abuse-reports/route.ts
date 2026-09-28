@@ -252,6 +252,41 @@ function rowPayload(
      */
     source: asString(data['source']),
     heldSend: heldSendPayload(data['heldSend']),
+    paymentSignal: paymentSignalPayload(data['paymentSignal']),
+  }
+}
+
+/**
+ * A Stripe fraud signal, shaped for the page (AGL-3356): which signal, the
+ * charge and amount, what the card's checks said, and the org page's
+ * Subscription card to act on. Staff-internal ids only; nothing a reporter
+ * wrote.
+ */
+function paymentSignalPayload(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const signal = value as Record<string, unknown>
+  const checks = (signal['checks'] ?? null) as Record<string, unknown> | null
+  const amount = Number(signal['amountCents'])
+  return {
+    kind: asString(signal['kind']),
+    stripeObjectId: asString(signal['stripeObjectId']),
+    chargeId: asString(signal['chargeId']),
+    paymentIntentId: asString(signal['paymentIntentId']),
+    amountCents:
+      signal['amountCents'] === null || !Number.isFinite(amount) ? null : amount,
+    currency: asString(signal['currency']) ?? 'usd',
+    detail: asString(signal['detail']),
+    livemode: signal['livemode'] === true,
+    subscriptionCard: asString(signal['subscriptionCard']),
+    checks: checks
+      ? {
+          cvcCheck: asString(checks['cvcCheck']),
+          addressPostalCodeCheck: asString(checks['addressPostalCodeCheck']),
+          cardCountry: asString(checks['cardCountry']),
+          riskLevel: asString(checks['riskLevel']),
+          threeDSecure: asString(checks['threeDSecure']),
+        }
+      : null,
   }
 }
 

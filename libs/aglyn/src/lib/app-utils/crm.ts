@@ -73,6 +73,7 @@ import { type EmailState, isEmailStateStatus } from './email-state'
 import {
   NAME_TOKEN_MAX_PREFIX,
   nameSearchKey,
+  nameSearchTokens,
   SCOPED_SEARCH_JOIN,
   scopedSearchTokens,
 } from './name-search'
@@ -1189,6 +1190,34 @@ export function fieldDefinitionObject(
   definition: Pick<ContactFieldDefinition, 'object'> | null | undefined,
 ): CrmFieldObject {
   return isCrmFieldObject(definition?.object) ? definition.object : 'contact'
+}
+
+/**
+ * What the CRM › Fields table's query reads on a definition (AGL-3335):
+ *
+ *   object        which tab it belongs to, stored even for a contact's, because
+ *                 a query cannot find a field's absence;
+ *   required      a boolean on every definition, for the Required filter;
+ *   searchTokens  every word prefix of its name and of its key, the key read
+ *                 whole and split at `_`, `-` and `.`, so "plan" finds
+ *                 `plan_interest` and "interest" does too.
+ *
+ * Its script-side twin is `crmFieldListFields` in
+ * `tools/scripts/lib/org-record-list-fields.mjs`; both answer the
+ * `fieldDefinitions` of `org-record-list-fields.fixtures.json`.
+ */
+export function crmFieldListFields(definition: Record<string, unknown> | null | undefined): {
+  object: CrmFieldObject
+  required: boolean
+  searchTokens: string[]
+} {
+  const label = typeof definition?.['label'] === 'string' ? definition['label'] : ''
+  const key = typeof definition?.['key'] === 'string' ? definition['key'] : ''
+  return {
+    object: fieldDefinitionObject(definition as Pick<ContactFieldDefinition, 'object'>),
+    required: definition?.['required'] === true,
+    searchTokens: nameSearchTokens([label, key, key.replace(/[_.-]+/g, ' ')].join(' ')),
+  }
 }
 
 /**

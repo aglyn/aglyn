@@ -21,7 +21,7 @@
  * bound is per site when any site had more than its window.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CrmOrgMountProvider } from '../../hooks/use-crm-org-mount'
 import { crmRoutes } from '../../model/crm-routes'
@@ -71,16 +71,19 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({
     header,
     subheader,
+    HeaderProps,
     children,
   }: {
     header: ReactNode
     subheader?: ReactNode
+    HeaderProps?: { action?: ReactNode }
     children: ReactNode
   }) => (
     <section>
       <h2>{header}</h2>
+      <div data-testid="card-header">{HeaderProps?.action}</div>
       {subheader ? <p>{subheader}</p> : null}
-      {children}
+      <div data-testid="card-body">{children}</div>
     </section>
   ),
 }))
@@ -94,10 +97,15 @@ jest.mock('@aglyn/shared-ui-jsx/components/measured-figures.component', () => ({
   ),
 }))
 jest.mock('./report-export', () => ({
-  ReportExport: ({ caption }: { caption?: string }) => (
-    <p data-testid="caption">{caption ?? ''}</p>
+  ReportExport: ({ disabled }: { disabled?: boolean }) => (
+    <button type="button" disabled={disabled}>
+      {'Export CSV'}
+    </button>
   ),
 }))
+
+/** The caption under the funnel that says what it was placed from. */
+const windowCaption = () => screen.queryByText(/^Placed from the /)
 
 const NOW = 1_700_000_000_000
 const DAY = 24 * 60 * 60 * 1000
@@ -168,7 +176,12 @@ describe('LeadFunnelCard at the organization level', () => {
     await waitFor(() => expect(screen.getByText('5')).toBeTruthy())
     await waitFor(() => expect(screen.getByText('No budget')).toBeTruthy())
     expect(screen.getByText('40% of those captured')).toBeTruthy()
-    expect(screen.getByTestId('caption').textContent).toBe('')
+    expect(windowCaption()).toBeNull()
+    // The export is the card's action, in its header, and nothing is under the funnel but the funnel.
+    expect(
+      within(screen.getByTestId('card-header')).getByRole('button', { name: 'Export CSV' }),
+    ).toBeTruthy()
+    expect(within(screen.getByTestId('card-body')).queryByRole('button')).toBeNull()
   })
 
   it('says the window is bounded when the org had more than the ceiling', async () => {
@@ -177,7 +190,7 @@ describe('LeadFunnelCard at the organization level', () => {
     }
     render(<LeadFunnelCard report={report} hostId={null} />, { wrapper: orgMount(TWO_SITES) })
     await waitFor(() =>
-      expect(screen.getByTestId('caption').textContent).toContain(
+      expect(windowCaption()?.textContent).toContain(
         `Placed from the ${LEAD_CEILING} most recently captured leads — at most ${LEAD_CEILING}`,
       ),
     )

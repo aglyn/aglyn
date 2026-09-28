@@ -868,16 +868,8 @@ service cloud.firestore {
       match /outreachSequences/{sequenceId} {
         allow read: if canReadOutreach();
         allow write: if false;
-        // The sequence's per-destination click rollup (AGL-3239):
-        // `reports/links`, one document holding an aggregate the report card
-        // reads instead of reading every enrollment. Its own match, because
-        // the parent's does NOT reach a subcollection — without this the
-        // console's listener is denied, and a denied listen is billed as
-        // well as broken.
-        //
-        // Server-written like everything else here: the click route writes
-        // it through the Admin SDK, and a client that could write it could
-        // invent the numbers a rep is judging a sequence by.
+        // The click rollup (AGL-3239), `reports/links`: its own match, as the
+        // parent's does not reach a subcollection. Admin SDK writes only.
         match /reports/{reportId} {
           allow read: if canReadOutreach();
           allow write: if false;
@@ -886,6 +878,11 @@ service cloud.firestore {
       match /outreachEnrollments/{enrollmentId} {
         allow read: if canReadOutreach();
         allow write: if false;
+        // A person's clicks and actions (AGL-3332); Admin SDK writes only.
+        match /history/{entryId} {
+          allow read: if canReadOutreach();
+          allow write: if false;
+        }
       }
       // Compliance settings and the do-not-contact list (AGL-2980).
       match /outreachSettings/{settingsId} {
