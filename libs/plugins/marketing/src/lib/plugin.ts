@@ -38,6 +38,7 @@ import {
   MARKETING_ORG_CONSOLE_SECTIONS,
 } from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { StaffOrgEmailCard } from './components/staff-org-email-card.component'
 import { registerMarketingRecordRoutes } from './model/marketing-record-routes'
 
 /** Code-split: the Marketing console page only loads when opened. */
@@ -211,6 +212,14 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-inbox-record-attribution',
         title: 'Campaign attribution',
         Component: RecordAttributionWidget,
+      },
+      // The staff organization page's sends and campaigns (AGL-3380), read
+      // only: staff see what the organization sent without joining it.
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.adminOrgDetail,
+        widgetId: 'marketing-staff-org-email',
+        title: 'Email campaigns',
+        Component: StaffOrgEmailCard,
       },
     ],
     navItems: [

@@ -999,6 +999,8 @@ describe('POST /v1/leads/{id}/convert', () => {
     // 1. The contact, through the capture door, as a sales record.
     expect(mockCapture).toHaveBeenCalledTimes(1)
     expect(mockCapture).toHaveBeenCalledWith({
+      // The key converting it set off whatever runs on the contact (AGL-3376).
+      actor: { kind: 'apiKey', apiKeyName: null },
       hostId: HOST,
       email: 'ann@acme.com',
       name: 'Ann Lee',

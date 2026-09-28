@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { homeScreenId } from '../../../../utils/staff-site-links'
 
 const PAGE_SIZE = 200
 
@@ -141,10 +142,17 @@ async function handler(request: Request): Promise<Response> {
     // Identity only, plus the AGL-1681 counters join above. A host document
     // carries screens, layouts and directory maps; projecting them into a
     // picker would ship kilobytes per row for three fields.
+    //
+    // The custom domain and the home page ride along for the org page's row
+    // menu (AGL-3380) — Visit live site and Open preview — as the one entry
+    // of the routing map a row needs, never the map itself.
     const hosts = pageDocs.map((docSnap) => ({
       $id: docSnap.id,
       displayName: docSnap.get('displayName') ?? null,
       subdomain: docSnap.get('subdomain') ?? null,
+      cname: docSnap.get('cname') ?? null,
+      cnameAttachmentPending: docSnap.get('cnameAttachmentPending') === true,
+      homeScreenId: homeScreenId(docSnap.get('screens')),
       orgId: docSnap.get('orgId') ?? null,
       forms: formsByHostId.get(docSnap.id) ?? null,
     }))

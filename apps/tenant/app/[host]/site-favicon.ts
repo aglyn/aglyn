@@ -41,6 +41,12 @@ import {
  * domain. AGL-1421 emitted a link only when the site had configured one and
  * noted the fallback in a comment; this closes the half it left open.
  *
+ * Since AGL-3382 the origin's `/favicon.ico` is no longer a static file: the
+ * middleware answers it per host with the site's own icon, or a transparent
+ * blank, so `undefined` no longer puts our mark in a free site's tab either.
+ * `data:,` still matters on a white-label site, because it spares the browser
+ * that second request entirely.
+ *
  * `'data:,'` is the standard suppressing form: a valid, empty data URL. The
  * empty STRING would be worse than nothing, because it resolves against the
  * page and makes the browser fetch the page itself as an icon.

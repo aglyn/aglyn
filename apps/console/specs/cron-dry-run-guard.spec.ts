@@ -134,14 +134,15 @@ describe('the routes are WIRED to it', () => {
     // The three things a run does that a later run cannot undo, each
     // downstream of the flag: the Storage write and the batch delete sit
     // behind the `if (dryRun) … continue`, and the staff email behind its
-    // own `!dryRun`: a dry run resolves no recipients (AGL-3375), so the
-    // send loop has nobody to mail.
+    // own `!dryRun` on the recipient lookup.
     const guardIndex = source.indexOf('const dryRun = isCronDryRun(')
     expect(guardIndex).toBeGreaterThan(-1)
     for (const irreversible of ['.save(', 'batch.delete(', 'sendEmail(']) {
       expect(source.indexOf(irreversible)).toBeGreaterThan(guardIndex)
     }
     expect(source).toMatch(/if \(dryRun\) \{/)
+    // The recipients are resolved only when the run is not dry (AGL-3375),
+    // so a dry run neither looks the inbox up nor mails it.
     expect(source).toMatch(/due\.length && !dryRun \? await resolveStaffAlertRecipients\(\)/)
   })
 

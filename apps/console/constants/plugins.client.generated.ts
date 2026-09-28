@@ -111,8 +111,8 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
-    register: {"console":"registerMarketingConsole","site":"registerMarketingPlugin"},
-    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["crmRecordAttribution","emailMessages","emailTemplateRecipients","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
+    register: {"console":"registerMarketingConsole","staff":"registerMarketingConsole","site":"registerMarketingPlugin"},
+    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["adminOrgDetail","crmRecordAttribution","emailMessages","emailTemplateRecipients","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
     load: () => import('@aglyn/plugins-marketing'),
     loads: {
       site: () => import('@aglyn/plugins-marketing/site'),
@@ -127,8 +127,8 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'workflows',
     apiPrefixes: ["hooks","automations"],
-    register: {"console":"registerWorkflowsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["hostActivity"]}},
+    register: {"console":"registerWorkflowsConsole","staff":"registerWorkflowsConsole"},
+    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["adminOrgDetail","hostActivity","staffSite"]}},
     load: () => import('@aglyn/plugins-workflows'),
   },
   {

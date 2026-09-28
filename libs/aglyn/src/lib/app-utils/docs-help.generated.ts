@@ -277,6 +277,11 @@ export const PLUGIN_DOCS = {
     title: 'Sequences',
     excerpt: 'One-to-one email sequences a rep sends to a person from their own connected mailbox, kept with the CRM. Rolling out.',
   },
+  staffConsole: {
+    path: '/staff-console/overview',
+    title: 'Staff Console (internal)',
+    excerpt: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
+  },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
@@ -336,6 +341,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   redirects: ['#manage-redirects', '#sending-visitors-to-another-site', '#metrics', '#match-modes-v2', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#sequences', '#build-a-sequence', '#send-a-test', '#sequence-status', '#enroll', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
+  staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-content', '#staff-automations', '#emails-sent', '#users-admin', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#platform-suppressions', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#existing-coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
 } as const satisfies Partial<Record<PluginDocsKey, readonly `#${string}`[]>>
 

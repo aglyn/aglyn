@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.204",
+  "version": "1.0.0-beta.206",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -89,7 +89,7 @@
     "test:outreach-list-search-backfill": "node tools/scripts/backfill-outreach-list-search.mjs --self-test",
     "test:org-record-list-fields": "node --test tools/scripts/lib/org-record-list-fields.test.mjs",
     "test:email-search-tokens": "node --test tools/scripts/lib/email-search-tokens.test.mjs && node tools/scripts/backfill-email-suppression-filters.mjs --self-test && node tools/scripts/backfill-email-delivery-search.mjs --self-test",
-    "test:staff-list-backfills": "node tools/scripts/backfill-org-name-search.mjs --self-test && node tools/scripts/backfill-csp-search-tokens.mjs --self-test",
+    "test:staff-list-backfills": "node tools/scripts/backfill-org-name-search.mjs --self-test && node tools/scripts/backfill-csp-search-tokens.mjs --self-test && node tools/scripts/backfill-host-search-fields.mjs --self-test",
     "test:admin-audit-index": "node --test tools/scripts/lib/admin-audit-index.test.mjs && node tools/scripts/backfill-admin-audit-index.mjs --self-test",
     "test:product-collection-ids": "node --test tools/scripts/lib/product-collection-ids.test.mjs && node tools/scripts/backfill-product-collection-ids.mjs --self-test",
     "test:british-spellings": "node --test tools/scripts/lib/british-spellings.test.mjs",

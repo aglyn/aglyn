@@ -160,6 +160,10 @@ const PLUGIN_TOPICS = {
   // The abuse/report triage topic: the marketplace's report queue moved into
   // the plugin with its staff page in AGL-3080 and links here.
   abuseReports: '/staff-console/abuse-reports',
+  // The staff site and organization pages' plugin cards — Automations and
+  // Email campaigns (AGL-3379, AGL-3380) — link to their staff-console
+  // headings.
+  staffConsole: '/staff-console/overview',
   deals: '/content-and-data/crm/deals',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',

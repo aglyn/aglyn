@@ -349,12 +349,18 @@ describe('the write', () => {
       updatedAt: { __serverTimestamp: true },
     })
     expect(mockEmit).toHaveBeenCalledTimes(1)
-    expect(mockEmit).toHaveBeenCalledWith(HOST, 'contactStageChanged', {
-      contactId: 'con-1',
-      email: 'ada@example.test',
-      lifecycleStage: 'customer',
-      previousStage: 'lead',
-    })
+    expect(mockEmit).toHaveBeenCalledWith(
+      HOST,
+      'contactStageChanged',
+      {
+        contactId: 'con-1',
+        email: 'ada@example.test',
+        lifecycleStage: 'customer',
+        previousStage: 'lead',
+      },
+      // The member who moved it set off whatever runs on it (AGL-3376).
+      { actor: { kind: 'member', uid: 'user-1', email: null } },
+    )
     // The event reports a write that has already landed.
     expect(mockUpdate.mock.invocationCallOrder[0]).toBeLessThan(
       mockEmit.mock.invocationCallOrder[0],

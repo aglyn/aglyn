@@ -65,6 +65,12 @@ const runEntries = Array.from({ length: RUNS }, (_, index) => {
     result: index === 40 ? 'failed' : 'succeeded',
     summary,
     summaryTokens: tokens(summary),
+    // Who set each run off (AGL-3376); runs before it recorded nobody.
+    ...(index === 0
+      ? { triggeredBy: { kind: 'member', uid: 'u1', email: 'rep@example.test' } }
+      : index === 1
+        ? { triggeredBy: { kind: 'visitor', email: 'guest@example.test' } }
+        : {}),
   }
 })
 const otherEntries = Array.from({ length: NON_RUNS }, (_, index) => ({
@@ -184,6 +190,14 @@ describe('the run history is one query, paged by it (AGL-3321)', () => {
     expect(renderedSummaries()).toEqual(
       Array.from({ length: TABLE_PAGE_SIZE_DEFAULT }, (_, index) => `Run ${pad(index)}`),
     )
+  })
+
+  it('names who set each run off, and says when that was not recorded (AGL-3376)', () => {
+    render(<HostRunHistoryCard hostId="host-1" targetId="wf-1" />)
+    expect(screen.getByRole('columnheader', { name: /^Who/ })).toBeTruthy()
+    expect(screen.getByText('rep@example.test')).toBeTruthy()
+    expect(screen.getByText('Site visitor (guest@example.test)')).toBeTruthy()
+    expect(screen.getAllByText('Not recorded').length).toBe(TABLE_PAGE_SIZE_DEFAULT - 2)
   })
 
   it('reaches older runs by paging the query', async () => {

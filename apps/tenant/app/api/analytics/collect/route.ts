@@ -1066,7 +1066,7 @@ export async function POST(request: Request): Promise<Response> {
     // what read-only freezes everywhere else on this runtime. `!== 'auto…'`
     // rather than `=== 'none'` so an absent verdict emits — the same
     // fail-open direction as the gate above.
-    if (freeze !== 'automations') void emitHostEvent(hostId, 'pageView', { path })
+    if (freeze !== 'automations') void emitHostEvent(hostId, 'pageView', { path }, { actor: { kind: 'visitor' } })
   } catch (error) {
     console.error(error)
   }

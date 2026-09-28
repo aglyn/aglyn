@@ -296,6 +296,38 @@ describe('THE NOTICE PAGE the middleware rewrites to', () => {
     expect(html).toContain('Temporarily unavailable')
   })
 
+  it('a capped site’s notice carries the SITE’s icons (AGL-3382)', async () => {
+    // A busy month is not a takedown: a link shared while the cap holds
+    // should still preview as the customer's site, and never as ours.
+    setOrg(cappedFreeOrg)
+    const withIcons = {
+      ...HOST,
+      seo: { favicon: 'media:org:o1/fav', appIcon: 'media:org:o1/app' },
+    }
+    mockGetHostNamed.mockResolvedValue({ host: withIcons, error: null })
+    const html = await (await fetchNotice()).text()
+    expect(html).toContain(
+      '<link rel="icon" href="/api/media/cdn/org:o1:host-1/fav">',
+    )
+    expect(html).toContain(
+      '<link rel="apple-touch-icon" href="/api/media/cdn/org:o1:host-1/app">',
+    )
+  })
+
+  it('a LOCKED site’s notice carries no site icon (AGL-3382)', async () => {
+    // A takedown stops advertising the site, icons included.
+    setOrg({
+      ...cappedFreeOrg,
+      suspendedAt: { seconds: 1_700_000_000 },
+      suspendedReasonCode: 'security',
+    })
+    const withIcons = { ...HOST, seo: { favicon: 'media:org:o1/fav' } }
+    mockGetHostNamed.mockResolvedValue({ host: withIcons, error: null })
+    const html = await (await fetchNotice()).text()
+    expect(html).not.toContain('rel="icon"')
+    expect(html).not.toContain('apple-touch-icon')
+  })
+
   it('a LOCK outranks a cap, and is worded as a lock', async () => {
     // Both refusals answer 503 from this one route, so precedence is the only
     // thing keeping a staff takedown from being described as a traffic limit.

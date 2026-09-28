@@ -156,3 +156,52 @@ describe('dispatchHostAutomation', () => {
     ).resolves.toEqual([])
   })
 })
+
+describe('who caused the event (AGL-3376)', () => {
+  it('hands every listener the actor beside the payload, never inside it', async () => {
+    const heard: unknown[] = []
+    registerHostEventListener('engine', {
+      onEvent: async (_hostId, _event, payload, context) => {
+        heard.push({ payload, context })
+      },
+    })
+    await emitHostEvent(
+      'site-1',
+      'contactStageChanged',
+      { contactId: 'c1' },
+      { actor: { kind: 'member', uid: 'u1', email: 'rep@example.test' } },
+    )
+    expect(heard).toEqual([
+      {
+        payload: { contactId: 'c1' },
+        context: { actor: { kind: 'member', uid: 'u1', email: 'rep@example.test' } },
+      },
+    ])
+  })
+
+  it('hands a listener an empty context when the door did not say', async () => {
+    const contexts: unknown[] = []
+    registerHostEventListener('engine', {
+      onEvent: async (_hostId, _event, _payload, context) => {
+        contexts.push(context)
+      },
+    })
+    await emitHostEvent('site-1', 'pageView', { path: '/' })
+    expect(contexts).toEqual([{}])
+  })
+
+  it('forwards the actor on a page-dispatched automation too', async () => {
+    const contexts: unknown[] = []
+    registerHostEventListener('engine', {
+      onEvent: async () => undefined,
+      onDispatch: async (_hostId, _id, _event, _payload, context) => {
+        contexts.push(context)
+      },
+    })
+    await dispatchHostAutomation('site-1', 'action-9', 'elementClick', {}, {
+      actor: { kind: 'visitor' },
+    })
+    expect(contexts).toEqual([{ actor: { kind: 'visitor' } }])
+  })
+})
+

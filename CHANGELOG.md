@@ -9,6 +9,44 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.206 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/5c53af612...v1.0.0-beta.206)
+
+### Added
+
+- **staff:** a Sites list of every site, with its org, owner, live link and preview ([AGL-3378](https://linear.app/aglyn/issue/AGL-3378), [AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+### Fixed
+
+- **auth:** verify-email confirms the click and the waiting tab carries on ([AGL-3384](https://linear.app/aglyn/issue/AGL-3384))
+
+## v1.0.0-beta.205 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.204...v1.0.0-beta.205)
+
+### Added
+
+- **activity:** every activity surface says who acted, run history too ([AGL-3376](https://linear.app/aglyn/issue/AGL-3376))
+- **email:** fraud and risk alerts email the operator on every install ([AGL-3375](https://linear.app/aglyn/issue/AGL-3375))
+- **outreach:** a due enrollment reads "Queued", not a past next-send time ([AGL-3366](https://linear.app/aglyn/issue/AGL-3366))
+
+### Fixed
+
+- **runtime:** the capture-actor imports follow its rename ([AGL-3376](https://linear.app/aglyn/issue/AGL-3376))
+
+### Changed
+
+- **runtime:** the capture-actor rule lives under a generic name ([AGL-3376](https://linear.app/aglyn/issue/AGL-3376))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **linear-ids:** raise the ceiling to AGL-3380, read from Linear ([AGL-3380](https://linear.app/aglyn/issue/AGL-3380), [AGL-3376](https://linear.app/aglyn/issue/AGL-3376))
+- **linear-ids:** raise the ceiling to AGL-3375, read from Linear ([AGL-3375](https://linear.app/aglyn/issue/AGL-3375))
+
+</details>
+
 ## v1.0.0-beta.204 — 2026-09-28
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.203...v1.0.0-beta.204)

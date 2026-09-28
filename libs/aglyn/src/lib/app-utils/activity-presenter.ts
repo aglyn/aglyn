@@ -256,6 +256,45 @@ export function activityActorLabel(entry: ActivityEntryLike): string {
 }
 
 /**
+ * Who set a run off (AGL-3376), as a run row stores it: the actor the event's
+ * door named, carried through the engine. `webhook` is an inbound webhook's
+ * caller, named by the hook.
+ */
+export interface RunTriggeredByLike {
+  kind?: string
+  uid?: string
+  email?: string
+  apiKeyName?: string
+  name?: string
+}
+
+/**
+ * The run history's Who: whoever set the run off, never the automation
+ * itself — every row in a run history is that automation, so naming it
+ * again would answer nothing. A run written before its trigger was recorded
+ * says so rather than guessing from the event's name.
+ */
+export function runTriggeredByLabel(entry: {
+  triggeredBy?: RunTriggeredByLike | null
+}): string {
+  const by = entry.triggeredBy
+  switch (by?.kind) {
+    case 'member':
+      return by.email || (by.uid ? `Account ${by.uid}` : 'A member')
+    case 'apiKey':
+      return by.apiKeyName ? apiKeyActorLabel(by.apiKeyName) : 'API key'
+    case 'visitor':
+      return by.email ? `Site visitor (${by.email})` : 'Site visitor'
+    case 'webhook':
+      return by.name ? `Inbound webhook ${by.name}` : 'Inbound webhook'
+    case 'platform':
+      return PLATFORM_BRAND_NAME
+    default:
+      return 'Not recorded'
+  }
+}
+
+/**
  * A deep link to the resource an entry points at, or `undefined` when it
  * cannot be built (missing context, or a type with nowhere sensible to go).
  * `buildRoute` emits `<orgSlug?>` placeholders for missing params, so every

@@ -22,7 +22,10 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { readActorActivity } from '../../../../utils/server/actor-activity'
+import {
+  readActorActivity,
+  withResolvedActors,
+} from '../../../../utils/server/actor-activity'
 import {
   auditLogSearchWords,
   readAuditLogFilters,
@@ -78,7 +81,11 @@ async function handler(request: Request): Promise<Response> {
       clauses,
       search: auditLogSearchWords(query['search']),
     })
-    return Response.json(page, { status: 200 })
+    // A row that recorded the uid alone names the address it has now.
+    return Response.json(
+      { ...page, entries: await withResolvedActors(page.entries, { staff: true }) },
+      { status: 200 },
+    )
   } catch (error) {
     // A refused credential is a 401, not a 500 (AGL-1993): an expired token
     // answered as a server error tells the client to retry the same dead

@@ -82,6 +82,8 @@ interface HostMeta {
   cname?: string
   /** When the site was created: set once, by `claimHostForOrg`, and never moved. */
   createdAt?: unknown
+  /** Whether the site document was there to read. */
+  exists?: boolean
 }
 
 const orgHostIds = async (
@@ -113,6 +115,7 @@ const readHostMeta = async (
         favicon: snap.get('seo')?.favicon,
         cname: snap.get('cname'),
         createdAt: snap.get('createdAt'),
+        exists: snap.exists,
       },
     ]),
   )
@@ -192,6 +195,27 @@ export function hostMembershipSearchTokens(
  */
 export const hasCustomDomain = (meta: Pick<HostMeta, 'cname'> | undefined): boolean =>
   typeof meta?.cname === 'string' && meta.cname.trim() !== ''
+
+/**
+ * The keys the staff Sites list (`/admin/sites`) queries on the SITE document
+ * itself: the same name key, search tokens and custom-domain flag the
+ * membership rows carry, so staff find a site by its name, subdomain or
+ * domain across every organization without walking anyone's projection.
+ *
+ * Stamped by `syncHostProjectionForMembers` — the funnel every create,
+ * rename, domain attach and domain release already calls — and by
+ * `tools/scripts/backfill-host-search-fields.mjs` on the sites written before
+ * it. `hasCustomDomain` is stored as `false`, never left out, for the reason
+ * the membership row gives: a query cannot find a document by a field it
+ * lacks.
+ */
+export const hostSearchFields = (
+  meta: Pick<HostMeta, 'displayName' | 'subdomain' | 'cname'> | undefined,
+) => ({
+  nameLower: nameSearchKey(meta?.displayName ?? ''),
+  searchTokens: hostMembershipSearchTokens(meta),
+  hasCustomDomain: hasCustomDomain(meta),
+})
 
 /** A Firestore timestamp, as opposed to a legacy number or string. */
 const isTimestamp = (value: unknown): boolean =>
@@ -330,6 +354,17 @@ export async function syncHostProjectionForMembers(
     else batch.delete(ref)
   })
   await commitChunked(db, ops)
+  // The staff Sites list's keys, on the site itself. `update`, never a
+  // merge-set: a site erased since the read must not be minted back as a
+  // phantom carrying only these three keys (the AGL-1765 shape). Outside the
+  // batch so a site gone missing cannot fail its members' rows.
+  if (hostMeta?.exists) {
+    await db
+      .collection('hosts')
+      .doc(hostId)
+      .update(hostSearchFields(hostMeta))
+      .catch(() => undefined)
+  }
 }
 
 /** Delete every projection row for a member across the org's hosts (member removed). */

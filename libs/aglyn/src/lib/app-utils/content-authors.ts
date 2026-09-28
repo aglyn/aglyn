@@ -16,6 +16,14 @@
  */
 
 import { HostEntityType } from '../foundation/definitions/platform.types'
+import {
+  type LocalBusinessType,
+  PAYMENT_ACCEPTED_MAX_LENGTH,
+  PRICE_RANGE_MAX_LENGTH,
+  localBusinessType,
+  normalizeAreaServed,
+  parseOpeningHours,
+} from './local-business'
 import { MEDIA_ALT_MAX_LENGTH } from './media-metadata'
 import { absoluteMediaSrc } from './media-ref'
 import { urlSlugSegment } from './url-slug'
@@ -739,6 +747,39 @@ export interface HostSeoEntity {
     postalCode?: string
     addressCountry?: string
   }
+  /**
+   * A `schema.org` LocalBusiness subtype (AGL-3383), checked against
+   * `LOCAL_BUSINESS_TYPES`. The four fields below it publish only when this
+   * does.
+   */
+  businessType?: string
+  /** Areas served, one per entry; a newline-separated string is read too. */
+  areaServed?: string[] | string
+  /** Opening hours, one `Mo-Fr 09:00-17:00` line per set of days. */
+  openingHours?: string
+  priceRange?: string
+  paymentAccepted?: string
+}
+
+/**
+ * The `@type` the SITE entity publishes under — {@link contentAuthorSchemaType}
+ * with one refinement (AGL-3383): an entity that is not a Person and names a
+ * business type on the allow-list publishes as that type.
+ *
+ * Person wins over a business type, because `schema.org` gives a Person none
+ * of the properties a business type exists to carry. The stored `type` stays
+ * Organization or Person either way; every LocalBusiness subtype IS an
+ * Organization, so a consumer reading this as one is still right.
+ *
+ * Shared by the standalone node and the nested `publisher`, which carry the
+ * same `@id` and must therefore not disagree about what they are.
+ */
+export function siteEntitySchemaType(
+  entity: HostSeoEntity | null | undefined,
+): 'Person' | 'Organization' | LocalBusinessType {
+  const base = contentAuthorSchemaType(entity?.type)
+  if (base === 'Person') return base
+  return localBusinessType(entity?.businessType) ?? base
 }
 
 /**
@@ -764,7 +805,7 @@ export function hostSeoEntityJsonLd(
   const name = text(entity?.name, 400)
   if (!name) return undefined
   return {
-    '@type': contentAuthorSchemaType(entity?.type),
+    '@type': siteEntitySchemaType(entity),
     name,
   }
 }
@@ -1100,7 +1141,11 @@ export function siteEntityJsonLd(
     addressCountry: text(entity?.address?.addressCountry, 120),
   }
   const address = Object.entries(addressFields).filter(([, value]) => value)
-  const schemaType = contentAuthorSchemaType(entity?.type)
+  const schemaType = siteEntitySchemaType(entity)
+  const business =
+    schemaType !== 'Person' && schemaType !== 'Organization'
+      ? localBusinessJsonLd(entity, telephone)
+      : {}
 
   return {
     '@context': 'https://schema.org',
@@ -1118,5 +1163,51 @@ export function siteEntityJsonLd(
     ...(address.length
       ? { address: { '@type': 'PostalAddress', ...Object.fromEntries(address) } }
       : {}),
+    ...business,
+  }
+}
+
+/**
+ * The properties only a LocalBusiness carries (AGL-3383), spread after
+ * everything an Organization publishes so an Organization's output is
+ * unchanged key for key.
+ *
+ * - `telephone` on the node itself as well as on its `contactPoint`: a
+ *   LocalBusiness has the property directly, and it is where a local result
+ *   reads the number from.
+ * - `areaServed` as named `City` places. A service-area business commonly has
+ *   no street address to publish, and this is what says where it works.
+ * - `openingHoursSpecification` from the hours text, invalid lines dropped.
+ *
+ * Every one of them is omitted when empty, never published as `[]` or `''`.
+ */
+function localBusinessJsonLd(
+  entity: HostSeoEntity | null | undefined,
+  telephone: string,
+): Record<string, unknown> {
+  const areaServed = normalizeAreaServed(entity?.areaServed)
+  const hours = parseOpeningHours(entity?.openingHours)
+  const priceRange = text(entity?.priceRange, PRICE_RANGE_MAX_LENGTH)
+  const paymentAccepted = text(
+    entity?.paymentAccepted,
+    PAYMENT_ACCEPTED_MAX_LENGTH,
+  )
+  return {
+    ...(telephone ? { telephone } : {}),
+    ...(areaServed.length
+      ? { areaServed: areaServed.map((name) => ({ '@type': 'City', name })) }
+      : {}),
+    ...(hours.length
+      ? {
+          openingHoursSpecification: hours.map((row) => ({
+            '@type': 'OpeningHoursSpecification',
+            dayOfWeek: row.days,
+            opens: row.opens,
+            closes: row.closes,
+          })),
+        }
+      : {}),
+    ...(priceRange ? { priceRange } : {}),
+    ...(paymentAccepted ? { paymentAccepted } : {}),
   }
 }

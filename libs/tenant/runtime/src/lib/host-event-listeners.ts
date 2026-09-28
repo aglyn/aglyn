@@ -48,6 +48,32 @@ import type { HostActionAlert } from '@aglyn/aglyn/server'
 /** What an event carries into everything that listens for it. */
 export type HostEventPayload = Record<string, string | number | boolean>
 
+/**
+ * Who caused an event (AGL-3376): the console member who moved the deal, the
+ * integration's key that added the contact, the visitor who submitted the
+ * form, or the platform acting on its own (a Stripe webhook, a schedule).
+ *
+ * Kept OUT of the payload on purpose. The payload seeds a workflow's
+ * expression scope and condition editor, and a site's automations have no
+ * business reading a console member's address; this rides beside it, for
+ * the record of who set a run off.
+ */
+export interface HostEventActor {
+  kind: 'member' | 'visitor' | 'apiKey' | 'platform'
+  /** The acting account, for a member. */
+  uid?: string | null
+  /** The address the actor had when they acted, when the door knew it. */
+  email?: string | null
+  /** The key's name, for an integration. */
+  apiKeyName?: string | null
+}
+
+/** What rides beside an event's payload. */
+export interface HostEventContext {
+  /** Absent when the door that raised the event did not know. */
+  actor?: HostEventActor
+}
+
 export interface HostEventListener {
   /**
    * Runs whatever this plugin does when `event` happens on the site.
@@ -59,6 +85,7 @@ export interface HostEventListener {
     hostId: string,
     event: string,
     payload: HostEventPayload,
+    context?: HostEventContext,
   ): Promise<readonly HostActionAlert[] | void>
   /**
    * Runs ONE automation, by id, that a published page fired for a site event
@@ -72,6 +99,7 @@ export interface HostEventListener {
     automationId: string,
     event: string,
     payload: HostEventPayload,
+    context?: HostEventContext,
   ): Promise<readonly HostActionAlert[] | void>
 }
 
@@ -127,6 +155,7 @@ export async function runHostEventListeners(
   hostId: string,
   event: string,
   payload: HostEventPayload = {},
+  context: HostEventContext = {},
 ): Promise<HostActionAlert[]> {
   if (!registrations.length) {
     /*
@@ -148,7 +177,7 @@ export async function runHostEventListeners(
   const settled = await Promise.all(
     registrations.map(async ({ pluginId, listener }) => {
       try {
-        return alertsOf(await listener.onEvent(hostId, event, payload))
+        return alertsOf(await listener.onEvent(hostId, event, payload, context))
       } catch (error) {
         console.error(`[host-events] ${pluginId} failed on ${event}`, hostId, error)
         return []
@@ -167,13 +196,16 @@ export async function dispatchHostAutomation(
   automationId: string,
   event: string,
   payload: HostEventPayload = {},
+  context: HostEventContext = {},
 ): Promise<HostActionAlert[]> {
   const alerts: HostActionAlert[] = []
   for (const { pluginId, listener } of registrations) {
     if (!listener.onDispatch) continue
     try {
       alerts.push(
-        ...alertsOf(await listener.onDispatch(hostId, automationId, event, payload)),
+        ...alertsOf(
+          await listener.onDispatch(hostId, automationId, event, payload, context),
+        ),
       )
     } catch (error) {
       console.error(

@@ -85,7 +85,10 @@ import MediaUrlField from '../../../../../components/media-url-field.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
+import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
+import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
+import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
@@ -299,6 +302,17 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [isStaff, orgId, user])
+  // Site names by id, for the tables that name the site a row came from.
+  const siteNames = useMemo(
+    () =>
+      Object.fromEntries(
+        (hostDocs ?? []).map((host: any) => [
+          String(host.$id),
+          String(host.displayName ?? host.subdomain ?? host.$id),
+        ]),
+      ),
+    [hostDocs],
+  )
   const { data: memberDocs } = useFirestoreCollection<any>(
     () =>
       query(
@@ -722,35 +736,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       // The org is read once from the server now, not through a live listener
       // (AGL-937), so a successful write has to ask for it again — otherwise
       // the card above keeps showing what staff just changed away from.
-      setOrgNonce((nonce) => nonce + 1)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setOrgEditBusy(false)
-    }
-  }
-
-  // Ownership transfer (AGL-390): staff hands the org to another member
-  // via the audited settings API.
-  const [transferTarget, setTransferTarget] = useState('')
-  const handleTransferOwnership = async () => {
-    if (!transferTarget || orgEditBusy) return
-    setOrgEditBusy(true)
-    try {
-      const response = await authorizedFetch(user, '/api/orgs/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orgId,
-          action: 'transfer-ownership',
-          targetUid: transferTarget,
-        }),
-      })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}))
-        throw new Error(payload?.error ?? 'Transfer failed')
-      }
-      setTransferTarget('')
       setOrgNonce((nonce) => nonce + 1)
     } catch (error) {
       console.error(error)
@@ -1267,42 +1252,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         >
                           {orgEditBusy ? 'Saving…' : 'Save organization'}
                         </Button>
-                        {/* Ownership transfer (AGL-390): staff can hand
-                            the org to another member; audited. */}
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'flex-start', mt: 1 }}
-                        >
-                          <TextField
-                            select
-                            size="small"
-                            label="Transfer ownership to"
-                            value={transferTarget}
-                            onChange={(event) =>
-                              setTransferTarget(event.target.value)
-                            }
-                            sx={{ flex: 1 }}
-                          >
-                            <MenuItem value="">{'Select a member…'}</MenuItem>
-                            {(memberDocs ?? [])
-                              .filter((m: any) => m.$id !== org?.ownerUid)
-                              .map((m: any) => (
-                                <MenuItem key={m.$id} value={m.$id}>
-                                  {m.displayName ?? m.email ?? m.$id}
-                                </MenuItem>
-                              ))}
-                          </TextField>
-                          <Button
-                            size="small"
-                            color="error"
-                            disabled={orgEditBusy || !transferTarget}
-                            onClick={() => void handleTransferOwnership()}
-                            sx={{ mt: 0.5 }}
-                          >
-                            {'Transfer'}
-                          </Button>
-                        </Stack>
+                        {/* Ownership transfer (AGL-390): staff hand the
+                            org to another member, after a confirmation, and
+                            a refusal is shown rather than logged. */}
+                        <StaffOrgOwnershipTransfer
+                          orgId={orgId}
+                          orgName={org?.name}
+                          ownerUid={org?.ownerUid}
+                          onTransferred={() => setOrgNonce((nonce) => nonce + 1)}
+                        />
                       </Stack>
                     </CardDisplay>
                   ),
@@ -1350,12 +1308,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 alignItems: 'center',
                               }}
                             >
-                              {/* Host detail page link (AGL-392). */}
+                              {/* The site's staff page (AGL-392, moved
+                                  to /admin/sites by AGL-3378). */}
                               <AppLink
-                                href={buildRoute(
-                                  Route.ADMIN_ORG_HOST_DETAIL,
-                                  { orgId, hostId: host.$id },
-                                )}
+                                href={buildRoute(Route.ADMIN_SITE_DETAIL, {
+                                  hostId: host.$id,
+                                })}
                                 color="primary"
                                 underline="hover"
                                 variant="body2"
@@ -1383,6 +1341,14 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 >
                                   {host.subdomain ?? host.$id}
                                 </Typography>
+                                {/* The Sites list's own row menu, so the
+                                    two lists offer the same ways out. */}
+                                <StaffSiteRowActions
+                                  site={{
+                                    ...host,
+                                    ownerUid: org?.ownerUid ?? null,
+                                  }}
+                                />
                               </Stack>
                             </Stack>
                           ))
@@ -2403,6 +2369,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 },
               ]}
             />
+            {/* Full width below the columns: a wide table. */}
+            <Stack sx={{ mt: 3 }}>
+              <StaffEmailDeliveriesCard orgId={orgId} siteNames={siteNames} />
+            </Stack>
           </>
         </StaffOnly>
         {/* Plugin zone (AGL-433): staff adminOrgDetail widgets. */}

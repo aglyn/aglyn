@@ -266,7 +266,12 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
     })
     // Event trigger (AGL-128/148). A sign-up is no longer a lead (AGL-3232),
     // so the `lead` event is the lead surfaces' to emit.
-    await emitHostEvent(hostId, 'memberSignUp', { email })
+    await emitHostEvent(
+      hostId,
+      'memberSignUp',
+      { email },
+      { actor: { kind: 'visitor', email } },
+    )
     setMemberCookie(res, hostId, mintMemberSession(hostId, memberRef.id))
     return res.status(200).json({ ok: true })
   } catch (error) {

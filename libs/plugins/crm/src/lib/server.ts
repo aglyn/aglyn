@@ -160,15 +160,18 @@ type Refusal = { ok: false; status: number; error: string }
 async function authorizeSiteEditor(
   req: PluginApiRequest,
   hostId: string,
-): Promise<{ ok: true; uid: string } | Refusal> {
+): Promise<{ ok: true; uid: string; email: string | null } | Refusal> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined
   if (!idToken) return { ok: false, status: 401, error: 'Unauthenticated' }
   let uid: string
+  let email: string | null
   try {
-    uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    uid = decoded.uid
+    email = typeof decoded.email === 'string' ? decoded.email : null
   } catch (error) {
     // A refused credential is the caller's 401; a failure to check one is
     // ours and keeps a 5xx (AGL-2852).
@@ -189,7 +192,7 @@ async function authorizeSiteEditor(
   if (memberRole !== 'admin' && memberRole !== 'editor') {
     return { ok: false, status: 403, error: 'Not a site admin or editor' }
   }
-  return { ok: true, uid }
+  return { ok: true, uid, email }
 }
 
 /**
@@ -286,12 +289,17 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
     // Awaited, not floated: a serverless response ending cancels in-flight
     // work, and the event is the reason this route exists. A clear has none.
     if (!clearing) {
-      await emitHostEvent(hostId, 'contactStageChanged', {
-        contactId,
-        email: String(snapshot.get('email') ?? ''),
-        lifecycleStage,
-        previousStage,
-      })
+      await emitHostEvent(
+        hostId,
+        'contactStageChanged',
+        {
+          contactId,
+          email: String(snapshot.get('email') ?? ''),
+          lifecycleStage,
+          previousStage,
+        },
+        { actor: { kind: 'member', uid: caller.uid, email: caller.email } },
+      )
     }
     res
       .status(200)
@@ -485,6 +493,11 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       ...(name ? { name } : {}),
       source: 'manual',
       interaction: { summary: 'Added by hand' },
+      actor: {
+        kind: 'member',
+        uid: decoded.uid,
+        email: typeof decoded.email === 'string' ? decoded.email : null,
+      },
       marketingConsent,
       ...(marketingConsent && disclosedConsentGroup
         ? { disclosedConsentGroup }

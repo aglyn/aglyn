@@ -23,6 +23,7 @@
 // One brand string is not worth that edge.
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import { useContinueUrlDecoded } from '@aglyn/shared-util-next'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import {
@@ -50,10 +51,32 @@ import { verifiedContinueTarget } from '../../../utils/verified-continue-target'
 const POLL_MS = 4000
 
 /**
+ * Same-browser hand-off from the tab that redeemed the link to the tab still
+ * waiting on this page (AGL-3384). The waiting tab otherwise learns about the
+ * verification only from its poll — and a backgrounded tab's timers are
+ * suspended (iOS Safari suspends them outright), so the tab the person
+ * returns to could sit on "we sent a link" until the next tick lands.
+ */
+const VERIFIED_CHANNEL = 'aglyn:email-verified'
+
+/** Tell every other tab in this browser that a code was just redeemed. */
+function announceVerified(): void {
+  if (typeof BroadcastChannel === 'undefined') return
+  try {
+    const channel = new BroadcastChannel(VERIFIED_CHANNEL)
+    channel.postMessage('verified')
+    channel.close()
+  } catch {
+    // A browser without the API still has the poll and the focus re-check.
+  }
+}
+
+/**
  * The one-shot code's lifecycle on this page (AGL-1524).
  *
- * `pending` and `failed` both mean "this page is the redemption surface for a
- * code right now", and while either holds, NOTHING may navigate away:
+ * `pending`, `applied` and `failed` all mean "this page is the redemption
+ * surface for a code right now", and while any holds, NOTHING may navigate
+ * away on its own:
  *
  * - `pending`: the apply call is in flight. `window.location.assign` (a hard
  *   navigation) aborts in-flight fetches, so any bounce that fires here can
@@ -68,8 +91,13 @@ const POLL_MS = 4000
  *   signed-out click that failed was silently redirected to /signin and a
  *   verified-session click that failed was bounced into the app — both
  *   success-shaped exits from a failure.
+ * - `applied`: the code worked, and the page says so (AGL-3384). A mail client
+ *   opened this tab, and the tab the person signed up in is usually still
+ *   open and carries on by itself. So the success page lets them close this
+ *   one and moves on only when asked. Navigating away at once, or to a bare
+ *   /signin when this browser had no session, read as "it went nowhere".
  */
-type ApplyState = 'pending' | 'failed' | null
+type ApplyState = 'pending' | 'applied' | 'failed' | null
 
 function VerifyEmail() {
   const firebaseAuth = useAuth()
@@ -83,7 +111,11 @@ function VerifyEmail() {
     signInCheckResult?.user?.email ?? firebaseAuth.currentUser?.email
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Verified and on the way into the app: the navigation is a token refresh
+  // plus a full page load, and the page says what is happening meanwhile.
+  const [continuing, setContinuing] = useState(false)
   const sentOnceRef = useRef(false)
+  const checkingRef = useRef(false)
 
   // Where the layout sent them from (AGL-1730). Every exit from this page
   // used to hard-navigate to `/`, so a deep link that hit the verification
@@ -105,6 +137,11 @@ function VerifyEmail() {
     await resolveIdToken(user, { forceRefresh: true }).catch(() => undefined)
     hardNavigate(verifiedContinueTarget(continueUrl) ?? '/')
   }, [continueUrl, firebaseAuth])
+
+  const continueToApp = useCallback(() => {
+    setContinuing(true)
+    void goToApp()
+  }, [goToApp])
 
   /**
    * `automatic` marks the send this page fires from a mount, as opposed to the
@@ -184,11 +221,21 @@ function VerifyEmail() {
   )
 
   // Re-check verification: reload the user, and if verified, head to the app.
+  // The poll, the focus re-check and the other tab's broadcast can all land
+  // at once, so overlapping checks collapse into the one already running.
   const checkNow = useCallback(async () => {
     const user = firebaseAuth.currentUser
-    if (!user) return
-    await user.reload().catch(() => undefined)
-    if (user.emailVerified) await goToApp()
+    if (!user || checkingRef.current) return
+    checkingRef.current = true
+    try {
+      await user.reload().catch(() => undefined)
+      if (user.emailVerified) {
+        setContinuing(true)
+        await goToApp()
+      }
+    } finally {
+      checkingRef.current = false
+    }
   }, [firebaseAuth, goToApp])
 
   // Redeem the code from the emailed link (AGL-1112).
@@ -221,17 +268,13 @@ function VerifyEmail() {
     void (async () => {
       try {
         await applyActionCode(firebaseAuth, oobCode)
-        const user = firebaseAuth.currentUser
-        if (user) {
-          // Refresh so `email_verified` is true on the next token the gate
-          // reads; without this the app bounces straight back here. When the
-          // session belongs to a different (already verified) account, the
-          // reload is a harmless no-op and the bounce below is correct.
-          await user.reload().catch(() => undefined)
-          await goToApp()
-          return
-        }
-        router.replace('/signin?verified=1')
+        // Refresh so `email_verified` is true on the next token the gate
+        // reads when the person continues from here; without it the app
+        // bounces straight back. For a session that belongs to a different,
+        // already verified account the reload is a harmless no-op.
+        await firebaseAuth.currentUser?.reload().catch(() => undefined)
+        announceVerified()
+        setApplyState('applied')
       } catch {
         // Expired, already used, or malformed. `failed` pins the error on
         // screen: the redirects below stay held so the person who clicked
@@ -243,7 +286,7 @@ function VerifyEmail() {
         setApplyState('failed')
       }
     })()
-  }, [applying, firebaseAuth, goToApp, router])
+  }, [applying, firebaseAuth])
 
   // Signed out (or session lost) — nothing to verify here. Held while a code
   // is pending (an out-of-browser click must not be redirected away
@@ -273,9 +316,13 @@ function VerifyEmail() {
   // repeat sends actually came from (AGL-2584). Held while a code is being
   // applied, and never for a verified session — `sendLink` answers a verified
   // caller with `alreadyVerified`, whose `goToApp` is one more hard navigation
-  // that must not race the apply.
+  // that must not race the apply. Held on the success page too: the signed-in
+  // check can still report the session unverified for a beat after the apply,
+  // and either exit here would carry the person off a page that exists to let
+  // them choose (AGL-3384).
+  const redeemed = applying || applyState === 'applied'
   useEffect(() => {
-    if (applying || authLoading || !signedIn || sessionVerified) return
+    if (redeemed || authLoading || !signedIn || sessionVerified) return
     if (!sentOnceRef.current) {
       // Marked before the await so a dependency change mid-flight cannot
       // start a second send, and released again when `sendLink` reports it
@@ -289,7 +336,35 @@ function VerifyEmail() {
     }
     const timer = setInterval(() => void checkNow(), POLL_MS)
     return () => clearInterval(timer)
-  }, [applying, authLoading, signedIn, sessionVerified, sendLink, checkNow])
+  }, [redeemed, authLoading, signedIn, sessionVerified, sendLink, checkNow])
+
+  // The waiting tab moves on the moment the link is opened (AGL-3384): at
+  // once when another tab in this browser redeemed it, and on return when it
+  // was redeemed anywhere else — the phone's mail app, a second browser —
+  // rather than on whichever poll tick a resumed tab happens to reach next.
+  useEffect(() => {
+    if (applyState !== null || authLoading || !signedIn || sessionVerified)
+      return
+    const recheck = () => {
+      if (document.visibilityState === 'visible') void checkNow()
+    }
+    document.addEventListener('visibilitychange', recheck)
+    window.addEventListener('focus', recheck)
+    let channel: BroadcastChannel | null = null
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        channel = new BroadcastChannel(VERIFIED_CHANNEL)
+        channel.onmessage = () => void checkNow()
+      } catch {
+        channel = null
+      }
+    }
+    return () => {
+      document.removeEventListener('visibilitychange', recheck)
+      window.removeEventListener('focus', recheck)
+      channel?.close()
+    }
+  }, [applyState, authLoading, signedIn, sessionVerified, checkNow])
 
   if (applying) {
     return (
@@ -302,48 +377,120 @@ function VerifyEmail() {
     )
   }
 
-  // A failed apply with no unverified session to fall through to: the normal
-  // resend flow below needs a signed-in unverified user, so these two states
-  // get their own terminal view instead of a silent redirect (AGL-1524).
-  if (applyState === 'failed' && (!signedIn || sessionVerified)) {
+  if (continuing) {
     return (
       <AuthFormComponent
-        headingTop={'Verify your email'}
-        headingBottom={'That verification link didn’t work'}
+        headingTop={'Email verified'}
+        headingBottom={`Taking you to ${PLATFORM_BRAND_NAME}`}
+        headingBottomProps={{ sx: { pb: 4 }, component: LoadingTextComponent }}
+        headingAfter={<CircularProgress color="primary" />}
+      />
+    )
+  }
+
+  // The code worked. Say so, and let the person pick where to carry on.
+  if (applyState === 'applied') {
+    return (
+      <AuthFormComponent
+        headingTop={'Email verified'}
+        headingBottom={'Your email address is confirmed.'}
+        headingAfter={<CheckCircleIcon color="success" sx={{ fontSize: 56 }} />}
+      >
+        <Stack spacing={2} sx={{ mt: 2, alignItems: 'stretch' }}>
+          <Typography variant="body2" sx={{ textAlign: 'center' }}>
+            {'If you signed up in another tab, head back to it — it carries ' +
+              'on by itself, and you can close this one.'}
+          </Typography>
+          {signedIn ? (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={continueToApp}
+            >
+              {`Continue to ${PLATFORM_BRAND_NAME}`}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              color="primary"
+              component={AppLink}
+              href="/signin"
+            >
+              {'Sign in to continue'}
+            </Button>
+          )}
+          {signedIn && email ? (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ textAlign: 'center' }}
+            >
+              {`Signed in as ${email}`}
+            </Typography>
+          ) : null}
+        </Stack>
+      </AuthFormComponent>
+    )
+  }
+
+  // The code did not redeem, but this browser's account is already verified.
+  // A used code cannot say whose it was, and by far the likeliest story is
+  // that it was this person's and they opened the link twice — so this
+  // leads with where they stand, not with an error (AGL-3384).
+  if (applyState === 'failed' && sessionVerified) {
+    return (
+      <AuthFormComponent
+        headingTop={'You’re already verified'}
+        headingBottom={
+          <>
+            <b>{email ?? 'This account'}</b>
+            {' is verified, so this link has nothing left to do — it has ' +
+              'most likely been used already.'}
+          </>
+        }
+        headingAfter={<CheckCircleIcon color="success" sx={{ fontSize: 56 }} />}
         paperAfter={
           <Typography component="div" variant="body2">
-            {sessionVerified ? (
-              <Link
-                component="button"
-                type="button"
-                onClick={() => void goToApp()}
-              >
-                {`Continue to ${PLATFORM_BRAND_NAME}`}
-              </Link>
-            ) : (
-              <>
-                {'Sign in to request a new one: '}
-                <AppLink href="/signin">{'Sign in'}</AppLink>
-              </>
-            )}
+            {'Meant to verify a different account? '}
+            <AppLink href="/signout">{'Sign out'}</AppLink>
+            {' and sign in as that one.'}
           </Typography>
         }
       >
-        <Typography
-          color="error"
-          variant="body2"
-          sx={{ mt: 2, textAlign: 'center' }}
-        >
-          {error ?? 'That verification link has expired or was already used.'}
-        </Typography>
-        {sessionVerified ? (
-          <Typography variant="body2" sx={{ mt: 1.5, textAlign: 'center' }}>
-            {'This browser is signed in to an account that is already ' +
-              'verified — the link may belong to a different account. Open ' +
-              'it in the browser you signed up in, or sign in as that ' +
-              'account first.'}
+        <Stack spacing={1.5} sx={{ mt: 2, alignItems: 'stretch' }}>
+          <Button variant="contained" color="primary" onClick={continueToApp}>
+            {`Continue to ${PLATFORM_BRAND_NAME}`}
+          </Button>
+        </Stack>
+      </AuthFormComponent>
+    )
+  }
+
+  // A failed apply with no session to fall through to: the resend flow below
+  // needs a signed-in unverified user, so this gets its own terminal view
+  // instead of a silent redirect (AGL-1524). A link that was already used is
+  // the common case, and it means the address IS verified — the copy says so
+  // rather than sending them hunting for a fresh one they do not need.
+  if (applyState === 'failed' && !signedIn) {
+    return (
+      <AuthFormComponent
+        headingTop={'Verify your email'}
+        headingBottom={'This link has expired or was already used'}
+      >
+        <Stack spacing={2} sx={{ mt: 2, alignItems: 'stretch' }}>
+          <Typography variant="body2" sx={{ textAlign: 'center' }}>
+            {'If you already opened it once, your email is verified — sign ' +
+              'in to continue. If not, sign in and we’ll send you a new link.'}
           </Typography>
-        ) : null}
+          <Button
+            variant="contained"
+            color="primary"
+            component={AppLink}
+            href="/signin"
+          >
+            {'Sign in'}
+          </Button>
+        </Stack>
       </AuthFormComponent>
     )
   }

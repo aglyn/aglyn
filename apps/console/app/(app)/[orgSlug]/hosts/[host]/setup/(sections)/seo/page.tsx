@@ -97,6 +97,7 @@ export default function HostSetupSeoSection() {
       <HostSettingsForm schemaId="hostSeoEntity" />
       <EntityLogoCard hostId={hostId} />
       <HostSettingsForm schemaId="hostSeoAddress" />
+      <HostSettingsForm schemaId="hostSeoLocalBusiness" />
       <HostSettingsForm schemaId="hostSeoAgent" />
       <SearchIndexingCard hostId={hostId} />
     </Stack>

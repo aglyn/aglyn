@@ -520,8 +520,13 @@ export function planListQuery(
         (sort) => sort.path === request.sort?.path && sort.direction === request.sort?.direction,
       )
     : undefined
+  // A range leads the order with the field it ranges over — in the asked
+  // direction when the asked order IS that field, since a declared order has
+  // its composites either way.
   const orderBy = inequality
-    ? rangeOrder(
+    ? asked?.path === inequality
+      ? asked
+      : rangeOrder(
         declaration,
         declaration.fields.find(
           (field) =>

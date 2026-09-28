@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { nameSearchToken } from '@aglyn/aglyn/app-utils/name-search'
-import { hostMembershipSearchTokens, membershipRow } from './host-memberships'
+import { hostMembershipSearchTokens, hostSearchFields, membershipRow } from './host-memberships'
 
 /**
  * AGL-1071. The site switcher renders from this projection, so the favicon
@@ -151,5 +151,21 @@ describe('membershipRow carries what the Sites list queries (AGL-3321)', () => {
     expect(membershipRow('org1', { displayName: 'Old' }, 'admin').createdAt).toBeNull()
     expect(membershipRow('org1', { displayName: 'Old', createdAt: 1_700_000_000_000 }, 'admin').createdAt).toBeNull()
     expect('createdAt' in membershipRow('org1', undefined, 'admin')).toBe(true)
+  })
+})
+
+describe('hostSearchFields stamps the staff Sites list keys on the site (AGL-3378)', () => {
+  it('carries the same name key, tokens and domain flag as a member row', () => {
+    const meta = { displayName: 'Harbor Bakery', subdomain: 'harbor-bakery', cname: 'shop.harbor.example' }
+    const row = membershipRow('org1', meta, 'viewer')
+    expect(hostSearchFields(meta)).toEqual({
+      nameLower: row.nameLower,
+      searchTokens: row.searchTokens,
+      hasCustomDomain: row.hasCustomDomain,
+    })
+  })
+
+  it('says false for a site with no domain, rather than leaving the key out', () => {
+    expect(hostSearchFields({ displayName: 'A' }).hasCustomDomain).toBe(false)
   })
 })
