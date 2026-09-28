@@ -29,6 +29,7 @@ import {
   orgActivityScopePaths,
   planActivityQuery,
   readOrgWideActivity,
+  withResolvedActors,
 } from '../../../../utils/server/actor-activity'
 import {
   auditLogSearchWords,
@@ -178,7 +179,10 @@ async function handler(request: Request): Promise<Response> {
         base: activityActorBase(actorId),
         paths: await orgActivityScopePaths(orgId),
       })
-      return Response.json(page, { status: 200 })
+      return Response.json(
+        { ...page, entries: await withResolvedActors(page.entries) },
+        { status: 200 },
+      )
     }
     /**
      * The whole organization, sites included.
@@ -218,6 +222,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json(
         {
           ...page,
+          entries: await withResolvedActors(page.entries),
           refused: [...refused, ...page.refused],
           ...(facets ? { facets } : {}),
         },
@@ -280,7 +285,7 @@ async function handler(request: Request): Promise<Response> {
     })
     return Response.json(
       {
-        entries,
+        entries: await withResolvedActors(entries),
         nextCursor:
           snapshot.docs.length > pageSize
             ? (pageDocs[pageDocs.length - 1]?.id ?? null)

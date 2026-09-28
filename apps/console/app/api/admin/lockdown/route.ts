@@ -105,6 +105,7 @@ import {
   applyHostLockdown,
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
+import { listRecurringChargeSources } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export const dynamic = 'force-dynamic'
@@ -745,9 +746,6 @@ async function pauseMoneyAfterLock(options: {
     const secretKey = process.env.STRIPE_SECRET_KEY
     if (options.renewals) {
       const { serverPluginLoader } = await import('../../../../utils/server-plugin-loader')
-      const { listRecurringChargeSources } = await import(
-        '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
-      )
       await serverPluginLoader.ensureAll(['consoleApi'])
       const renewals = await billing.pauseMembershipRenewals({
         firestore: options.firestore,

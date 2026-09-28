@@ -117,3 +117,11 @@ export function lockdownCancelsBillingByDefault(reason: unknown): boolean {
 export function lockdownPausesSiteMoneyByDefault(reason: unknown): boolean {
   return reason === 'security'
 }
+
+/**
+ * How every staff cancellation's `cancellation_details.comment` begins — the
+ * brand name, then this. Stripe reports a staff cancel as
+ * `cancellation_requested`, the same word it uses for a customer's own, so
+ * this prefix is how the webhook tells the workspace feed which one it was.
+ */
+export const STAFF_CANCELLATION_COMMENT_MARKER = 'staff cancellation via'

@@ -984,16 +984,20 @@ async function handler(request: Request): Promise<Response> {
               typeof object?.cancellation_details?.reason === 'string'
                 ? object.cancellation_details.reason
                 : null,
+            cancellationComment:
+              typeof object?.cancellation_details?.comment === 'string'
+                ? object.cancellation_details.comment
+                : null,
             metadata: object?.metadata,
           })
           if (entry) {
             await logOrgActivity(
               String(orgId),
-              // NO EMAIL, on any of these. The webhook holds a uid at best
-              // and never an address, and resolving one would mean a lookup
-              // that answers with whoever holds that uid TODAY — a different
-              // claim from "this is the address that acted".
-              { uid: entry.actorUid, email: null },
+              // The address is the one STAMPED at the console act, or none.
+              // It is never resolved from the uid here: that lookup answers
+              // with whoever holds the uid TODAY — a different claim from
+              // "this is the address that acted".
+              { uid: entry.actorUid, email: entry.actorEmail },
               entry.action,
               {
                 type: 'subscription',

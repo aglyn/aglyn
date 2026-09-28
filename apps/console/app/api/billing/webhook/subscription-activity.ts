@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { STAFF_CANCELLATION_COMMENT_MARKER } from '../../../../constants/subscription-cancel'
+
 /**
  * WHICH SUBSCRIPTION EVENTS REACH THE WORKSPACE ACTIVITY LOG, AND WHOSE NAME
  * GOES ON THEM (AGL-118).
@@ -96,6 +99,8 @@ export interface SubscriptionActivityInput {
   plan: string
   /** `cancellation_details.reason`, verbatim, or null when absent. */
   cancellationReason: string | null
+  /** `cancellation_details.comment`, verbatim, or null when absent. */
+  cancellationComment?: string | null
   /** The subscription's `metadata`, as delivered. */
   metadata: Record<string, unknown> | null | undefined
 }
@@ -105,6 +110,11 @@ export interface SubscriptionActivityEntry {
   action: string
   /** The uid to attribute, or null when nobody may honestly be named. */
   actorUid: string | null
+  /**
+   * The address stamped beside that uid when the person acted, or null —
+   * never looked up, so it is the address that acted, not today's.
+   */
+  actorEmail: string | null
   /** The plan the entry is ABOUT — the one left, on a cancellation. */
   plan: string
 }
@@ -122,7 +132,14 @@ export interface SubscriptionActivityEntry {
 export function subscriptionActivityEntry(
   input: SubscriptionActivityInput,
 ): SubscriptionActivityEntry | null {
-  const { canceled, previousPlan, plan, cancellationReason, metadata } = input
+  const {
+    canceled,
+    previousPlan,
+    plan,
+    cancellationReason,
+    cancellationComment,
+    metadata,
+  } = input
   const previous = String(previousPlan || 'free')
   const next = String(plan || 'free')
 
@@ -143,7 +160,17 @@ export function subscriptionActivityEntry(
   // stamped. `null` is included — an event carrying no reason at all is not
   // evidence that a person asked.
   const stripeEndedIt = kind === 'canceled' && cancellationReason !== REQUESTED
-  const actorUid = signed && stampedUid && !stripeEndedIt ? stampedUid : null
+  // RULE THREE: a cancellation Aglyn staff made is not the customer's, even
+  // over a `cancel` stamp the customer left when they scheduled one earlier.
+  const staffEndedIt =
+    kind === 'canceled' &&
+    (cancellationComment ?? '').startsWith(
+      `${PLATFORM_BRAND_NAME} ${STAFF_CANCELLATION_COMMENT_MARKER}`,
+    )
+  const actorUid =
+    signed && stampedUid && !stripeEndedIt && !staffEndedIt ? stampedUid : null
+  const stampedEmail = String(metadata?.['actorEmail'] ?? '').trim()
+  const actorEmail = actorUid && stampedEmail ? stampedEmail : null
 
   if (kind === 'canceled') {
     return {
@@ -154,10 +181,13 @@ export function subscriptionActivityEntry(
       action:
         cancellationReason === 'payment_failed'
           ? 'Subscription canceled after failed payments'
-          : cancellationReason === REQUESTED
-            ? 'Canceled the subscription'
-            : 'Subscription canceled',
+          : staffEndedIt
+            ? `Subscription canceled by ${PLATFORM_BRAND_NAME}`
+            : cancellationReason === REQUESTED
+              ? 'Canceled the subscription'
+              : 'Subscription canceled',
       actorUid,
+      actorEmail,
       // The plan being LEFT. `next` is `'free'` on every cancellation, so
       // naming it would make each of these entries say the same nothing.
       plan: previous,
@@ -170,6 +200,7 @@ export function subscriptionActivityEntry(
         ? `Started the ${next} subscription`
         : `Changed the plan from ${previous} to ${next}`,
     actorUid,
+    actorEmail,
     plan: next,
   }
 }
