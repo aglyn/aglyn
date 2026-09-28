@@ -946,13 +946,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
     },
     {
       key: 'operator-alert',
-      name: 'Operator alert: fraud and risk',
+      name: 'Operator alert',
       description:
-        'Emailed to the operator for every fraud or risk alert staff get in ' +
-        'the console: card testing, a flagged or disputed payment, a held ' +
-        'phishing email, a seller under review, a DMCA counter-notice. Goes ' +
-        'to STAFF_ALERT_EMAIL, else the operator support address, else every ' +
-        'staff account.',
+        'Emailed to the operator for every operator alert delivered right ' +
+        'away: fraud and risk, a lost dispute, a failed erasure, a degraded ' +
+        'health check, a webhook failing its signature, and every other type ' +
+        'listed on Staff → Operator alerts. Goes to STAFF_ALERT_EMAIL, else ' +
+        'the operator support address, else every staff account.',
       deliveredBy: 'resend',
       defaultSubject: '{{alert.title}}',
       mergeTokens: [
@@ -981,8 +981,58 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       footerReason:
         'You’re receiving this because this address gets ' +
-        '{{brand.productName}}’s fraud and risk alerts.',
-      source: 'libs/tenant/data/admin/src/lib/server/staff-alert-email.ts',
+        '{{brand.productName}}’s operator alerts.',
+      source: 'libs/tenant/data/admin/src/lib/server/operator-alerts.ts',
+    },
+    {
+      key: 'operator-alert-digest',
+      name: 'Operator alert digest',
+      description:
+        'Once a day, every operator alert set to the digest on Staff → ' +
+        'Operator alerts — new support tickets and replies, listings waiting ' +
+        'for review, and any type staff moved there — in one email. Goes to ' +
+        'the same inbox as the operator alert.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{digest.count}} operator alerts on {{digest.date}}',
+      mergeTokens: [
+        {
+          name: 'digest.date',
+          description: 'The day the digest covers, UTC',
+          sample: '2026-09-28',
+        },
+        {
+          name: 'digest.count',
+          description: 'How many alerts it holds',
+          sample: '3',
+        },
+        {
+          name: 'digest.body',
+          description: 'The alerts, one paragraph each',
+          sample:
+            '• New support ticket: Checkout button missing\n' +
+            'northwind opened a ticket.\n\n' +
+            '• Plugin listing waiting for review\n' +
+            'Acme Forms 2.1.0 was submitted for review.',
+        },
+        {
+          name: 'digest.url',
+          description: 'The staff console',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/admin/operator-alerts`,
+        },
+      ],
+      defaultBody: [
+        {
+          block: 'text',
+          text: '{{digest.count}} operator alerts on {{digest.date}}',
+          variant: 'heading',
+        },
+        { block: 'text', text: '{{digest.body}}', variant: 'body' },
+        { block: 'button', label: 'Open the staff console', href: '{{digest.url}}' },
+      ],
+      footerReason:
+        'You’re receiving this because this address gets ' +
+        '{{brand.productName}}’s operator alerts.',
+      source: 'libs/tenant/data/admin/src/lib/server/operator-alerts.ts',
     },
     {
       key: 'support-ticket-alert',

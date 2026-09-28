@@ -143,11 +143,10 @@ export async function sendStaffAlertEmail(input: {
 }
 
 /**
- * A fraud or risk alert for the operator (AGL-3375), as the `operator-alert`
- * system email: the alert, a button to the item it is about, in the
- * operator's own brand. Sent by `notifyStaff` for every
- * `OPERATOR_ALERT_NOTIFICATION_TYPES` notification, beside the console one.
- * Never throws.
+ * One operator alert (AGL-3375, AGL-3377), as the `operator-alert` system
+ * email: the alert, a button to the item it is about, in the operator's own
+ * brand. Sent by `raiseOperatorAlert` for every alert delivered immediately;
+ * nothing else should call it. Never throws.
  */
 export async function sendOperatorAlertEmail(input: {
   title: string
@@ -171,6 +170,44 @@ export async function sendOperatorAlertEmail(input: {
     return await sendToOperators(content, input.context)
   } catch (error) {
     console.error('[staff-alert-email] operator alert failed', error)
+    return { sent: false, reason: 'network' }
+  }
+}
+
+/**
+ * The day's batched operator alerts (AGL-3377), as the
+ * `operator-alert-digest` system email. Sent by `sendOperatorAlertDigest`.
+ * Never throws.
+ */
+export async function sendOperatorAlertDigestEmail(input: {
+  /** The UTC day, `YYYY-MM-DD`. */
+  date: string
+  count: number
+  /** The alerts, composed as one block of text. */
+  body: string
+  /** Absolute link to the staff console, when there is one. */
+  url?: string | null
+}): Promise<SendEmailResult> {
+  try {
+    const { renderSystemEmailContent, systemEmailBrand } = await import(
+      './render-system-email'
+    )
+    const subject = `${input.count} operator alert${input.count === 1 ? '' : 's'} on ${input.date}`
+    const url = String(input.url ?? '').trim()
+    const content = await renderSystemEmailContent(
+      'operator-alert-digest',
+      {
+        'digest.date': input.date,
+        'digest.count': String(input.count),
+        'digest.body': input.body,
+        'digest.url': url,
+      },
+      systemEmailBrand(null),
+      { subject, text: [subject, input.body, url].filter(Boolean).join('\n\n') },
+    )
+    return await sendToOperators(content, 'operator-alert-digest')
+  } catch (error) {
+    console.error('[staff-alert-email] operator digest failed', error)
     return { sent: false, reason: 'network' }
   }
 }

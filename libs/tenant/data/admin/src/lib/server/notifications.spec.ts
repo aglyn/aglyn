@@ -72,6 +72,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // And the brand resolver, which decides whose header and footer the email
   // wears (AGL-3367).
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/plan-entitlements'),
+  // And the operator alert registry (AGL-3377), which decides which staff
+  // notifications are alerts.
+  ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/operator-alerts'),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({

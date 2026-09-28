@@ -270,6 +270,9 @@ export * from './expand-repeatables'
 export * from './org-roles'
 export * from './markdown-lite'
 export * from './notifications'
+// The operator alert registry (AGL-3377); OPERATOR_ALERT_NOTIFICATION_TYPES
+// lives here now, derived from it.
+export * from './operator-alerts'
 export * from './definition-canvas-tree'
 export * from './ensure-canvas-root'
 export * from './repair-canvas-nodes'
