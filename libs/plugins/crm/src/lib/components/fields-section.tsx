@@ -189,7 +189,10 @@ interface FieldsTableProps {
  * say so rather than disappear.
  *
  * The panel and the search narrow the rows here, over the tab's whole list
- * (`filterListRows`), and the grid sorts and pages what it is handed.
+ * (`filterListRows`), and the grid sorts and pages what it is handed. The
+ * definitions are read whole — at most `CONTACT_FIELDS_MAX_PER_ORG` — so a
+ * clause matched here is matched against every field there is, and there
+ * is no later page for it to miss.
  */
 function FieldsTable(props: FieldsTableProps) {
   const { definitions, busyId, onMove, rowActions } = props
