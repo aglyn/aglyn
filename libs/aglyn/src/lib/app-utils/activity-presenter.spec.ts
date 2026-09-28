@@ -205,6 +205,16 @@ describe('activityActorLabel', () => {
     )
   })
 
+  it('tells a staff reader which staff member acted for the platform', () => {
+    expect(
+      activityActorLabel({
+        actorId: null,
+        staffActorEmail: 'staff@example.test',
+        target: { type: 'subscription' },
+      }),
+    ).toBe(`${PLATFORM_BRAND_NAME} staff (staff@example.test)`)
+  })
+
   it('names the platform for any other entry no person wrote', () => {
     expect(activityActorLabel({})).toBe(PLATFORM_BRAND_NAME)
     expect(activityActorLabel({ actorId: null, actorEmail: null })).toBe(

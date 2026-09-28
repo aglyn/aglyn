@@ -136,6 +136,16 @@ custom role until you grant it. Revoking it does not merely hide the card — th
 feed is served by an API that checks the permission, so a member without it
 cannot read the log by any route.
 
+**Who** is always someone you can narrow down:
+
+- a person, by the address they had when they acted — or, for the few entries that recorded
+  only their account (subscription changes made before the log carried the address), the
+  address that account has now;
+- an integration, as **API key** and the name you gave the key;
+- a workflow run, as **Workflow** and the workflow's name;
+- **Aglyn**, for what the platform did on its own — a subscription Stripe ended after
+  failed payments, a cancellation made by Aglyn staff, inbound CRM mail, a background AI job.
+
 Entries name the thing that changed and link straight to it, so "Saved the screen — Home"
 takes you to that screen. Entries recorded before this shipped show a plain description
 instead of a link.
@@ -172,7 +182,7 @@ stays newest first. See
 ### AI actions in the log {#ai-actions}
 
 Everything the AI does in your workspace is recorded in the same feed, attributed to the
-member who asked for it — or to nobody, when nothing a person did caused it (a generation
+member who asked for it — or to **Aglyn**, when nothing a person did caused it (a generation
 that paused because the included band ran out, or the add-on leaving at the end of a billing
 period). The feed's **AI** chip keeps only these rows, across the whole log; press it again to
 see everything.
