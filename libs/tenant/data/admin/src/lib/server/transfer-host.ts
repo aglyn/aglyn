@@ -324,39 +324,44 @@ async function moveDocument(
  *
  * The ownership flip is one transaction over the site and both organization
  * documents, re-reading the site's organization inside it, so two transfers
- * of one site cannot both land. Everything after it is a projection of that
- * flip, recomputed from the documents rather than carried from the plan, so
- * a failure part-way is finished by running the transfer's projections
- * again ({@link syncOrgAuthProjections} and the membership sync).
+ * of one site cannot both land. The site's access list is rebuilt straight
+ * after it, before anything else. Everything after the flip is a projection
+ * of it, recomputed from the documents rather than carried from the plan, so
+ * a failure part-way is finished by running the projections again
+ * ({@link syncOrgAuthProjections} and the membership sync).
+ *
+ * A site that belongs to no organization — left behind by a failed create or
+ * a hand edit — is given one the same way, with nothing to release.
  */
 export async function transferHost(input: PlanHostTransferInput): Promise<HostTransferPlan> {
   const plan = await planHostTransfer(input)
-  if (plan.holds.length || !plan.fromOrgId) throw new HostTransferRefusedError(plan)
+  if (plan.holds.length) throw new HostTransferRefusedError(plan)
   const db = firestore()
-  const { hostId, toOrgId } = plan
-  const fromOrgId = plan.fromOrgId
+  const { hostId, toOrgId, fromOrgId } = plan
   const hostRef = db.collection('hosts').doc(hostId)
-  const fromRef = db.collection('orgs').doc(fromOrgId)
+  const fromRef = fromOrgId ? db.collection('orgs').doc(fromOrgId) : null
   const toRef = db.collection('orgs').doc(toOrgId)
 
   await db.runTransaction(async (tx) => {
     const current = await tx.get(hostRef)
-    if (current.get('orgId') !== fromOrgId) {
+    if ((current.get('orgId') ?? null) !== fromOrgId) {
       throw new HostTransferRefusedError({
         ...plan,
         holds: [{ code: 'same-organization', message: 'The site changed organization while this ran.' }],
       })
     }
-    tx.set(
-      fromRef,
-      {
-        hosts: { [hostId]: FieldValue.delete() },
-        registerAllocations: { [hostId]: FieldValue.delete() },
-        collaboratorAllocations: { [hostId]: FieldValue.delete() },
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    )
+    if (fromRef) {
+      tx.set(
+        fromRef,
+        {
+          hosts: { [hostId]: FieldValue.delete() },
+          registerAllocations: { [hostId]: FieldValue.delete() },
+          collaboratorAllocations: { [hostId]: FieldValue.delete() },
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    }
     tx.set(
       toRef,
       { hosts: { [hostId]: true }, updatedAt: FieldValue.serverTimestamp() },
@@ -365,35 +370,39 @@ export async function transferHost(input: PlanHostTransferInput): Promise<HostTr
     tx.update(hostRef, { orgId: toOrgId, updatedAt: FieldValue.serverTimestamp() })
   })
 
+  // FIRST after the flip: the site's access list, rebuilt whole from the new
+  // roster. Until this lands the old organization's people still hold the
+  // keys the rules read, so nothing may run ahead of it.
+  await syncOrgAuthProjections(toOrgId, hostId)
   // Routing names the new owner.
   await db.collection('hostIndex').doc(hostId).set({ orgId: toOrgId }, { merge: true })
 
-  // The old roster's per-site grants on this site, then its projections.
-  const grants = await fromRef.collection('members').get()
-  for (let at = 0; at < grants.docs.length; at += 400) {
-    const batch = db.batch()
-    for (const member of grants.docs.slice(at, at + 400)) {
-      const access = member.get('hostAccess') ?? {}
-      const permissions = member.get('hostPermissions') ?? {}
-      if (!(hostId in access) && !(hostId in permissions)) continue
-      batch.update(member.ref, {
-        [`hostAccess.${hostId}`]: FieldValue.delete(),
-        [`hostPermissions.${hostId}`]: FieldValue.delete(),
-      })
+  if (fromRef && fromOrgId) {
+    // The old roster's per-site grants on this site, then its projections.
+    const grants = await fromRef.collection('members').get()
+    for (let at = 0; at < grants.docs.length; at += 400) {
+      const batch = db.batch()
+      for (const member of grants.docs.slice(at, at + 400)) {
+        const access = member.get('hostAccess') ?? {}
+        const permissions = member.get('hostPermissions') ?? {}
+        if (!(hostId in access) && !(hostId in permissions)) continue
+        batch.update(member.ref, {
+          [`hostAccess.${hostId}`]: FieldValue.delete(),
+          [`hostPermissions.${hostId}`]: FieldValue.delete(),
+        })
+      }
+      await batch.commit()
     }
-    await batch.commit()
+    await deleteHostProjectionForAllMembers(fromOrgId, hostId)
+    await syncOrgAuthProjections(fromOrgId)
   }
-  await deleteHostProjectionForAllMembers(fromOrgId, hostId)
-  await syncOrgAuthProjections(fromOrgId)
-  // The site's access list, rebuilt whole from the new roster.
-  await syncOrgAuthProjections(toOrgId, hostId)
   await syncHostProjectionForMembers(toOrgId, hostId)
 
   // The dedicated sending domain and its click-tracking host.
   const current = await hostRef.get()
   const domain = normalizeSendingDomain(String(current.get('sendingDomain') ?? '')) || null
   const label = String(current.get('sendingLabel') ?? '').trim()
-  if (domain) {
+  if (domain && fromRef) {
     for (const collection of [SENDING_DOMAINS_COLLECTION, TRACKING_HOSTS_COLLECTION]) {
       await moveDocument(
         fromRef.collection(collection).doc(domain),

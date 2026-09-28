@@ -299,10 +299,12 @@ describe('transferring a site', () => {
     // The collaborator keeps the OTHER site, and loses this one.
     expect(store.get('orgs/from/members/collab')?.['hostAccess']).toEqual({ h2: 'viewer' })
     expect(store.get('orgs/from/members/collab')?.['hostPermissions']).toEqual({})
+    // The site's access list is rebuilt FIRST: until then the old roster
+    // still holds the keys the rules read.
     expect(calls).toEqual([
+      'syncOrgAuthProjections to h1',
       'deleteHostProjectionForAllMembers from h1',
       'syncOrgAuthProjections from',
-      'syncOrgAuthProjections to h1',
       'syncHostProjectionForMembers to h1',
     ])
     // History and media stay where they were.
@@ -323,5 +325,15 @@ describe('transferring a site', () => {
     expect(store.get('orgs/to/sendingDomains/harbor.mail.example')).toEqual({ providerDomainId: 'p1' })
     expect(store.get('orgs/to/trackingHosts/harbor.mail.example')).toEqual({ status: 'serving' })
     expect(store.get('sendingLabels/harbor')?.['orgId']).toBe('to')
+  })
+
+  it('gives a site that belongs to no organization one, releasing nothing', async () => {
+    seed({ 'hosts/h1': { displayName: 'Harbor', subdomain: 'harbor' } })
+    const plan = await transferHost({ hostId: 'h1', toOrgId: 'to' })
+    expect(plan.fromOrgId).toBeNull()
+    expect(store.get('hosts/h1')?.['orgId']).toBe('to')
+    expect(store.get('orgs/to')?.['hosts']).toEqual({ h9: true, h1: true })
+    expect(store.get('orgs/from')?.['hosts']).toEqual({ h1: true, h2: true })
+    expect(calls).toEqual(['syncOrgAuthProjections to h1', 'syncHostProjectionForMembers to h1'])
   })
 })
