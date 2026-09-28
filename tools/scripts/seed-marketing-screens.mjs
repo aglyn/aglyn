@@ -9,7 +9,7 @@
  * against the existing docs:
  *
  *   hosts/{h}/screens/{id}                 displayName, description, slug,
- *                                          nameLower, versionId, parentId?,
+ *                                          name keys, versionId, parentId?,
  *                                          order?, layoutId?, createdAt,
  *                                          updatedAt, publishedAt
  *   hosts/{h}/screens/{id}/versions/{vid}  screenId, createdAt, updatedAt,
@@ -44,6 +44,7 @@
 import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { randomBytes } from 'node:crypto'
+import { displayNameSearchFields } from './lib/name-search-tokens.mjs'
 
 const apply = process.argv.includes('--apply')
 const HOST = 'DXnRbPH4CQ'
@@ -235,7 +236,10 @@ if (apply) {
       displayName: p.name,
       description: p.description,
       slug: p.slug,
-      nameLower: p.name.toLowerCase(),
+      // The keys the screen switcher and lists find it by (AGL-835, AGL-3321).
+      ...displayNameSearchFields(p.name),
+      // Stored, not absent: a campaign's screens list asks `deletedAt == null`.
+      deletedAt: null,
       versionId: p.versionId,
       layoutId: LAYOUT,
       createdAt: now,

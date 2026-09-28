@@ -45,15 +45,29 @@ The **Products** page is the catalog manager:
 - **Payments** — Stripe Connect onboarding status and your plan's fee
   ladder.
 
-The product list filters through its own toolbar. **Search** looks for the
-text in the field **Search in** names — **Name**, **SKU (whole)** or
-**Barcode (whole)** — and reaches the whole catalog, not only the rows on
-screen. **Filters** offers **Status** (Active, Draft, Archived); on its own it
-also reaches the whole catalog, and beside a search it narrows that search's
-matches. Each filter in force shows as a chip above the table; remove the chip
-to clear it. A search reads up to 500 matching products and uses the first word
-you type, matched on the start of a word. See
+The product list filters through its own toolbar, and every filter and the
+search reach the whole catalog, not only the rows on screen. The list is in name
+order and pages through whatever matches.
+
+- **Search** matches the start of a word in a product's name, using the first
+  word you type.
+- **Filters** offers **Product** (the name contains a word, is, or starts
+  with), **Status** (Active, Draft, Archived), **Type** (Physical, Digital,
+  Service), **Slug**, **SKU** and **Barcode**. A SKU or barcode is matched
+  whole, the way you copy or scan it; **is any of** takes several, separated by
+  commas.
+
+Filters combine. The one exception: the search, a **Product contains** filter,
+and a **SKU** or **Barcode** filter each look a word or code up in a list, and
+only one of those lookups can apply at a time. The list says which one it set
+aside, above the table, rather than applying it to some products and not
+others. Each filter in force shows as a chip above the table; remove the chip to
+clear it. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+
+**Export** writes every product the filters and search match, in the same order
+— up to 10,000 in one file. With nothing filtered, that is the whole catalog
+except deleted products.
 
 ## Inventory
 
@@ -94,23 +108,28 @@ the shelf in front of the cashier is the truth.
 **Inventory → Stock movements** is the history behind every tracked count —
 the answer to "the shelf says four and the console says six, what happened?"
 
-Five things write to it and they all appear in one list, newest first: a paid
-sale, a refunded return, a canceled order putting stock back, a point-of-sale
-sale at the register, and any hand adjustment you make from the products hub.
+Four things write to it and they all appear in one list, newest first: a paid
+sale, a canceled order putting stock back, a point-of-sale sale at the
+register, and any hand adjustment you make from the products hub (a restock, a
+correction, damage or a refunded return).
 Each row carries **when**, **which product** (and variant, when the product has
 options), **how much the count changed**, the **reason** — Sale, Refund return,
 Restock, Correction, Damaged, Order canceled — and the **source** that wrote
 it.
 
-The table's toolbar narrows it: **Filters** offers **Product**, **Reason** and
-**When**, and **Search** finds a product name, or a variant, order or location by
-its id. Each filter in force shows as a chip above the table; see
+The table's toolbar narrows it: **Filters** offers **Product** and **Reason**
+(is, or is any of), **When** (a date or a range of dates), and **Order** and
+**Location** by their id. Each filter in force shows as a chip above the
+table; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+There is no search box: a movement names its product by id, so you pick the
+product from the **Product** filter instead.
 
-The list holds the most recent 100 movements. Filtering and search happen
-inside that window, so a product with no recent movement will not appear in
-the Product filter at all — that is the absence of a movement, not a missing
-row.
+Every filter reaches the whole history, however far back it goes, and the
+pages under the table are pages of the answer. The **Product** filter offers
+the first 500 products of your catalog to pick from. A combination too large
+for one query — many products and many reasons at once — is not applied, and a
+notice above the table names the filter it left out.
 
 :::note A change and an applied change can differ
 A row shows two numbers when they disagree. The first is the change that was
@@ -135,8 +154,10 @@ Cards arrive two ways:
   store credit.
 
 Balances apply automatically at checkout; a shopper enters the code and the
-card is drawn down by what the order uses. Search the list by code or by
-recipient email to find one.
+card is drawn down by what the order uses. **Search by code or email** finds a
+card anywhere in the list, not only on the page in front of you: type the start
+of its code (with or without `GC-`) or a word of the recipient's address. Search
+matches one word at a time and reads the first 12 characters of it.
 
 :::caution Outstanding balance is a liability, not revenue
 The **outstanding** total at the top is money customers have already paid you
@@ -161,12 +182,16 @@ about fifteen minutes after that checkout has been idle for an hour. A checkout
 that gets completed stops reminding itself, and one that is never completed is
 given up on after seven days. The card shows how many are due a reminder, how
 many are still inside the first hour, and how many have already been reminded,
-with the most recent few named. Pro plan and above.
+with the five most recent open checkouts named. Pro plan and above.
 
 **Back-in-stock alerts** — anyone who used *"Notify me when it's back"* on a
 sold-out product is emailed once its stock goes above zero. The count of
 shoppers waiting is a demand signal worth restocking against. Available on
 every plan that includes commerce.
+
+Every figure is counted across the whole queue, however long it is, and
+counted again when a checkout changes. Until a count arrives its chip shows a
+dash rather than a zero.
 
 Both are read-only here on purpose. Sending is the scheduled job's to do, and a
 "send now" button would race it for a reminder you cannot un-send.
@@ -206,24 +231,31 @@ sale the tab is an invitation rather than a table: it explains where orders come
 and offers **Draft order**, so you can invoice a customer you already have. The
 table and **Export CSV** appear once there are rows to filter.
 
-The table filters through its own toolbar. **Search** finds an order number, a
-buyer's email or the name of the order's first product. **Filters** offers:
+The table filters through its own toolbar. **Search** matches the start of a word
+in the order number (`1042` or `#1042`), the buyer's email address (`jane`, `acme`,
+`acme.com`) or the name of any item on the order. It reads one word at a time.
+**Filters** offers:
 
 | Filter | Choices |
 | --- | --- |
-| **Order** | The order number, typed. |
-| **Product** | One or more products — matched against the order's line items, so carts, POS and draft orders are found too. The list offers your first 100 products. |
+| **Order** | The order number, or its start, typed. |
+| **Product** | One or more products — matched against every line item, so carts, POS and draft orders are found too. The choices are your first 100 products. |
 | **Date** | On, before or after a day — the order date. |
 | **Status** | One or more of the seven below. |
 | **Channel** | One or more of the four below. |
-| **Customer** | A buyer's email address, or part of one — `acme.com` finds every buyer at a company. Filled in for you when you arrive from a contact's page in the CRM. |
-| **Disputes** | **Open dispute** or **Charged back**. |
+| **Customer** | **is** a whole email address, or **contains** part of one — `acme.com` finds every buyer at a company. Filled in for you when you arrive from a contact's page in the CRM. |
+| **Disputes** | **Open dispute**, **Charged back**, **Dispute won** or **Dispute closed**. |
 
 Each filter in force shows as a chip above the table; remove the chip to clear
-it. The table reads the 200 most recent orders, and the filters and the search
-look through those, not only the page on screen; see
-[Filter and search a list](../../getting-started/console-tour.md#filter-and-search). Beside the table, **Export CSV** writes the rows the filters leave, and
-**Draft order** builds an order by hand and sends the buyer a payment link.
+it. The filters and the search run across **every** order in the store, newest
+first, and the footer pages through what they match; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+The search, **Customer contains**, **Order** and **Product** can't be combined with
+each other: add a second one and a notice above the table says it is not applied,
+rather than showing a partial answer. Beside the table, **Export CSV** writes every
+order the filters and the search match, up to 5,000 (it tells you when there are
+more), and **Draft order** builds an order by hand and sends the buyer a payment
+link.
 
 **Disputes is its own filter, not a status.** An open dispute sits on an order that is
 still **Paid**, and a lost one sits on **Refunded** beside every ordinary refund, so
@@ -251,7 +283,7 @@ the dialog offers **View customer in CRM** — the [CRM's](../../content-and-dat
 Contacts list asked for that address, which moves straight on to the person's record.
 The CRM links back: **Open order** on a captured entry of a contact's timeline opens
 this list with that order's dialog already open (`?order={id}`), reading the order on
-its own when it is older than the two hundred the list holds, and the order count on
+its own when it is not on a page the list has loaded, and the order count on
 the contact's header opens this list filtered to their address.
 
 ### Statuses and channels {#order-statuses}
@@ -309,11 +341,12 @@ Two behaviors here look like bugs and are not:
   that isn't true. The same rule governs the
   [traffic delta in analytics](../../marketing-and-automation/analytics/overview.md#traffic-delta).
 
-:::caution The tiles summarize the loaded window, not your books
-The screen loads a bounded page of recent orders — 200 — and the tiles summarize what
-is loaded. A store past that many orders in 60 days is reading a slice, at the same
-bound the commerce analytics card has always had. Use **Export CSV** and your Stripe
-payouts to reconcile; use the tiles to see which way the last month went.
+:::caution The tiles summarize recent orders, not your books
+The tiles read the last 60 days of orders on their own, apart from the table and its
+filters, up to the 500 most recent — the same bound as the commerce analytics card.
+A store past that many orders in 60 days is reading a slice, and a line under the
+tiles says so. Use **Export CSV** and your Stripe payouts to reconcile; use the tiles
+to see which way the last month went.
 :::
 
 ### If a dispute is lost, the money comes back out of your payout {#a-lost-dispute}

@@ -151,6 +151,38 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
 }))
 
+/** The emails table's list query, as the card last asked it. */
+let listQueried: any = null
+
+/*
+ * The emails TABLE is its own query (AGL-3321), answered by the shared
+ * double over the staged sends as the backfilled corpus holds them: each
+ * dated (first in the array newest), filed under `camp-1` and sent as
+ * `host-1` unless it says otherwise.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: any) => {
+    // The emails table's query; the assigned screens and forms below it are
+    // tables of their own, over the site's collections.
+    const emails = String(options.collection?.path ?? '').endsWith('/campaigns')
+    if (emails) listQueried = options
+    return jest
+      .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+      .useListQueryDouble(
+        () =>
+          emails
+            ? sends.map((send, at) => ({
+                createdAtMs: 1_000_000 - at,
+                emailCampaignId: 'camp-1',
+                hostId: 'host-1',
+                ...send,
+              }))
+            : [],
+        options,
+      )
+  },
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
@@ -257,6 +289,7 @@ beforeEach(() => {
       $id: 'send-1',
       subject: 'First mailing',
       status: 'sent',
+      createdAtMs: 1_760_000_000_000,
       sentAt: { seconds: 1_760_000_000 },
       stats: { sent: 100, recipients: 100, delivered: 98, uniqueOpens: 40 },
     },
@@ -264,12 +297,14 @@ beforeEach(() => {
       $id: 'send-2',
       subject: 'Second mailing',
       status: 'sent',
+      createdAtMs: 1_770_000_000_000,
       sentAt: { seconds: 1_770_000_000 },
       stats: { sent: 50, recipients: 50, delivered: 50, uniqueOpens: 5 },
     },
   ]
   filters = []
   limits = []
+  listQueried = null
   pushed = []
   writes = []
   posted = []
@@ -365,8 +400,33 @@ describe('an id that names a campaign', () => {
       op: 'array-contains-any',
       value: ['host:host-1'],
     })
+    // The TABLE is its own query: the campaign, and under a site the emails
+    // sent as it — an equality, so the table's search keeps its array clause.
+    expect(listQueried.collection.path).toBe('orgs/org-1/campaigns')
+    expect(listQueried.request.base).toEqual([
+      { path: 'emailCampaignId', op: '==', value: 'camp-1' },
+      { path: 'hostId', op: '==', value: 'host-1' },
+    ])
     expect(screen.getByText('First mailing')).toBeTruthy()
     expect(screen.getByText('Second mailing')).toBeTruthy()
+  })
+
+  it('finds an email past the table’s first page by searching its subject', async () => {
+    sends = Array.from({ length: 14 }, (_, index) => ({
+      $id: `send-${String(index).padStart(2, '0')}`,
+      subject: index === 13 ? 'Autumn preview' : `Mailing ${index}`,
+      subjectTokens: index === 13 ? ['a', 'au', 'aut', 'autumn'] : [],
+      status: 'sent',
+      stats: { sent: 1 },
+    }))
+    await mount('camp-1')
+    expect(screen.queryByText('Autumn preview')).toBeNull()
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'aut' } })
+    })
+    await waitFor(() => expect(screen.getByText('Autumn preview')).toBeTruthy())
+    expect(screen.queryAllByText(/^Mailing \d+$/)).toHaveLength(0)
   })
 
   it('rolls the figures up across every email', async () => {
@@ -546,14 +606,12 @@ describe('an id that names a campaign', () => {
     expect(cell('subject').className).not.toMatch(/textRight/)
   })
 
-  it('reads one email past the ceiling and says when the ceiling bit', async () => {
+  it('reads one email past the figures’ ceiling and says when the ceiling bit', async () => {
     /*
-     * The window is bounded and cannot be ordered on any date — a sent send
-     * carries `sentAt`, a scheduled one `sendAtMs`, and `orderBy` on either
-     * would DROP the other half rather than mis-sort it. So the read is
-     * document-name ordered, capped, and probes one past the cap: "this
-     * campaign has more emails than are listed" is then a fact, and the
-     * figures above the list say what they cover.
+     * The FIGURES are a sum over a bounded read — document-name ordered,
+     * capped, probing one past the cap — so "these figures cover fifty of
+     * this campaign's emails" is a fact. The TABLE is its own query and
+     * pages all of them.
      */
     sends = Array.from({ length: 51 }, (_, index) => ({
       $id: `send-${String(index).padStart(2, '0')}`,
@@ -987,7 +1045,7 @@ describe('the state of each email in the campaign', () => {
     expect(stateCells()[0]).toMatch(/^Scheduled · /)
   })
 
-  it('orders a draft by when it was created, not last', async () => {
+  it('orders the emails by when each was created, newest first, on the query', async () => {
     sends = [
       {
         $id: 'sent-1',

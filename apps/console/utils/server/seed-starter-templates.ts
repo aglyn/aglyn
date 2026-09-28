@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { encodeStoredNodes } from '@aglyn/aglyn/server'
 import {
   buildAllStarterTemplateDocs,
@@ -164,6 +165,9 @@ export async function materializeStarterTemplate(
     batch.set(templates.doc(entry.id), {
       ...entry.data,
       ...(packed ? { nodes: Buffer.from(packed) } : {}),
+      // The keys the templates library finds it by (AGL-3321): the starter's
+      // name on every page, and its first page as the starter's one row.
+      ...artifactCreateListKeys('templates', entry.data),
       hostId,
       createdAt: now,
       updatedAt: now,

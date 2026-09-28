@@ -131,8 +131,8 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
   )
 
   /*
-   * One row per member, and the whole month is in hand, so the grid pages,
-   * sorts and searches it itself. The row opens the member's page, which is
+   * One row per member, and the whole month is in hand, so the grid pages
+   * and sorts it itself. The row opens the member's page, which is
    * where the split by site and by kind lives.
    */
   const columns = useMemo<GridColDef<OrgAiUsageRowWire>[]>(
@@ -275,6 +275,11 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
           getRowId={(row: OrgAiUsageRowWire) => row.uid}
           rowHeight={TABLE_ROW_HEIGHT}
           onOpen={(uid) => router.push(memberHref(uid))}
+          // The month for every current member, computed whole by the route
+          // from the roster the plan's seats bound: a readout, not a list to
+          // filter — the grid would narrow only the rows it holds (AGL-3321).
+          disableColumnFilter
+          quickFilter={false}
         />
       )}
     </Stack>

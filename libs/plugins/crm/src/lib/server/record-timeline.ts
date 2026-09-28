@@ -33,6 +33,7 @@ import {
   crmActivityLogHasRoom,
   crmCapturedEmailKey,
   crmScopeTokens,
+  crmTaskListFields,
   crmTaskReminderAfterEdit,
   isCrmActivityKind,
   isCrmTaskKind,
@@ -258,7 +259,8 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
         hostId: request.hostId,
         visibleTo,
       }
-      const created = await createOnce(ref, task as unknown as Record<string, unknown>)
+      // What the Tasks list searches by (AGL-3321), beside the task.
+      const created = await createOnce(ref, { ...task, ...crmTaskListFields(task) })
       if (created) {
         // The records the task names carry `nextTaskAtMs` (AGL-2661); a figure
         // that could not move is the Fields section's recompute's.

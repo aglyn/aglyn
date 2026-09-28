@@ -80,9 +80,17 @@ worse than seeing all of it.
 
 Press a finding's count, or pick it under **Finding** in the grid's Filters, to narrow
 the table to its rows and read what it means. **Bucketed as** is a picker too, and the
-search matches the invoice id, organization or jurisdiction across every row the
-return read, not the page shown. **Invoice** and **Paid** filter as a typed value and a
-date. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+search matches the invoice id, organization or jurisdiction. **Invoice** and **Paid**
+filter as a typed value and a date. Every filter and the search combine, and apply to
+every flagged row of the period rather than the page shown: the return's own read
+answers them and hands back one page at a time.
+
+A finding is worked out from the rows rather than stored anywhere, so the filters run
+where the whole period was read. When a period holds more rows than one read can take —
+the same cap that makes the figures a floor — none of them is applied: each shows in a
+note above the table as *"… is not applied: the period holds more rows than one read
+can take, so a match would answer over part of it — narrow the period."* Narrow the
+period and filter again. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 A count is only ever as good as the rows behind it, so the count and the list are
 computed by the same predicate. If a response arrives without per-row findings, the card

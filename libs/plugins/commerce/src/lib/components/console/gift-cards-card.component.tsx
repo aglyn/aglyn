@@ -18,6 +18,11 @@
 
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -30,20 +35,16 @@ import {
   collection,
   count,
   getAggregateFromServer,
-  limit,
-  orderBy,
   query,
   sum,
   where,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  usePagedCollection,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useCallback, useEffect, useState } from 'react'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { GIFT_CARD_SEARCH_TOKENS_PATH } from '../../model/gift-card-search'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 
 export interface GiftCardsCardProps {
@@ -51,6 +52,19 @@ export interface GiftCardsCardProps {
 }
 
 const usd = (cents: number | undefined) => `$${((cents ?? 0) / 100).toFixed(2)}`
+
+/**
+ * The card list's one query (AGL-3321): newest first, and the search an
+ * `array-contains` on the tokens every card writer stamps from its code and
+ * its recipient's address (`giftCardSearchTokens`), so a card on page forty
+ * is found exactly as one on page one is. One composite:
+ * `(searchTokens CONTAINS, createdAtMs DESC)`.
+ */
+export const GIFT_CARD_LIST_QUERY: ListQueryDeclaration = {
+  fields: [],
+  sorts: [{ path: 'createdAtMs', direction: 'desc' }],
+  search: { tokensPath: GIFT_CARD_SEARCH_TOKENS_PATH },
+}
 
 const giftCardsHelp = pluginDocsHelp('commerce', {
   anchor: '#gift-cards',
@@ -87,45 +101,31 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const [search, setSearch] = useState('')
   /*
-   * Ordered by the server, and a growing window rather than a fixed 300.
-   *
-   * `limit(300)` with no `orderBy` returns DOCUMENT-ID order, and a gift card
-   * is keyed by its CODE, so the window was three hundred cards chosen by
-   * code — sorted by date afterwards to look newest-first. Past three hundred
-   * cards, one issued this morning was not in it.
+   * Ordered by the server and paged by it, and the search is the QUERY's
+   * (AGL-3321): it used to match the code and the address over the page in
+   * front of the merchant, and said so.
    */
   const {
-    rows: allCards,
+    rows: cards,
     hasMore,
     page,
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      query(
-        collection(firestore, 'hosts', hostId, 'giftCards'),
-        orderBy('createdAtMs', 'desc'),
-        limit(pageLimit),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const [search, setSearch] = useState('')
+    plan,
+  } = useListQuery<any>({
+    collection: collection(firestore, 'hosts', hostId, 'giftCards'),
+    declaration: GIFT_CARD_LIST_QUERY,
+    request: { clauses: [], search: search.trim() ? [search.trim()] : [] },
+    deps: [firestore, hostId],
+    idField: '$id',
+  })
   const [amount, setAmount] = useState('')
   const [recipient, setRecipient] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const cards = useMemo(() => {
-    const term = search.trim().toUpperCase()
-    if (!term) return allCards
-    return allCards.filter(
-      (card: any) =>
-        card.$id.includes(term) ||
-        String(card.recipientEmail ?? '').toUpperCase().includes(term),
-    )
-  }, [allCards, search])
 
   /*==========================================
    * OUTSTANDING LIABILITY IS A SERVER AGGREGATE, not a page total.
@@ -330,11 +330,18 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
           </Stack>
 
           <TextField
-            label="Find in the cards below"
+            label="Search by code or email"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(0)
+            }}
             size="small"
             sx={{ maxWidth: 320 }}
+          />
+          <ListQueryNotices
+            refused={listQueryRefusals(plan.refused, { fields: GIFT_CARD_LIST_QUERY.fields })}
+            notices={plan.notices}
           />
 
           {cards.length ? (
@@ -382,9 +389,8 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
             </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              {search
-                ? 'No gift card on this page matches that code or email — ' +
-                  'the search reads the page in front of you.'
+              {search.trim()
+                ? 'No gift card matches that code or email.'
                 : 'No gift cards yet. Sell a gift-card product, or issue one above.'}
             </Typography>
           )}

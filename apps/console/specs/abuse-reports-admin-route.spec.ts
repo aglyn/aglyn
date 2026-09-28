@@ -42,7 +42,12 @@ const mockVerifyIdToken = jest.fn()
 const state: {
   reports: Record<string, Record<string, unknown>>
   audit: Record<string, unknown>[]
-  lastQuery: { where?: [string, string, unknown]; order?: string; limit?: number }
+  lastQuery: {
+    wheres?: Array<[string, string, unknown]>
+    order?: string
+    limit?: number
+    counted?: boolean
+  }
 } = { reports: {}, audit: [], lastQuery: {} }
 
 const stamp = (millis: number) => ({ toMillis: () => millis })
@@ -82,37 +87,79 @@ const emptyListing = () => {
     limit: () => build(),
     where: () => build(),
     select: () => build(),
+    startAfter: () => build(),
+    count: () => ({ get: async () => ({ data: () => ({ count: 0 }) }) }),
     get: async () => ({ docs: [] }),
     doc: (id: string) => docHandle(id),
   })
   return build()
 }
 
+/**
+ * The reports, queried: `==` and `in` predicates, the `updatedAt` order the
+ * list pages in, a document cursor and a limit — the shapes the route's plan
+ * (`runStaffListQuery`) and its summary counts put on the query. Every
+ * predicate is recorded, so a test can see what reached the query.
+ */
 const listing = () => {
-  const build = () => ({
-    orderBy: (field: string) => {
-      state.lastQuery.order = field
-      return build()
-    },
-    limit: (count: number) => {
-      state.lastQuery.limit = count
-      return build()
-    },
-    where: (field: string, op: string, value: unknown) => {
-      state.lastQuery.where = [field, op, value]
-      return build()
-    },
-    select: () => build(),
-    get: async () => {
-      const rows = Object.entries(state.reports).filter(([, data]) =>
-        state.lastQuery.where
-          ? data[state.lastQuery.where[0]] === state.lastQuery.where[2]
-          : true,
-      )
-      return { docs: rows.map(([id, data]) => ({ id, data: () => data })) }
-    },
-  })
-  return build()
+  const build = (query: {
+    wheres: Array<[string, string, unknown]>
+    after?: string
+    limit?: number
+  }): any => {
+    const rows = () => {
+      const matched = Object.entries(state.reports)
+        .filter(([, data]) =>
+          query.wheres.every(([field, op, value]) =>
+            op === 'in'
+              ? (value as unknown[]).includes(data[field])
+              : data[field] === value,
+          ),
+        )
+        .sort(
+          ([, a], [, b]) =>
+            ((b['updatedAt'] as any)?.toMillis?.() ?? 0) -
+            ((a['updatedAt'] as any)?.toMillis?.() ?? 0),
+        )
+      const from = query.after
+        ? matched.findIndex(([id]) => id === query.after) + 1
+        : 0
+      const page = matched.slice(from)
+      return query.limit == null ? page : page.slice(0, query.limit)
+    }
+    return {
+      orderBy: (field: string) => {
+        state.lastQuery.order = field
+        return build(query)
+      },
+      limit: (count: number) => {
+        state.lastQuery.limit = count
+        return build({ ...query, limit: count })
+      },
+      where: (field: string, op: string, value: unknown) => {
+        const wheres = [...query.wheres, [field, op, value] as [string, string, unknown]]
+        state.lastQuery.wheres = wheres
+        return build({ ...query, wheres })
+      },
+      startAfter: (snapshot: { id: string }) => build({ ...query, after: snapshot.id }),
+      select: () => build(query),
+      count: () => ({
+        get: async () => {
+          state.lastQuery.counted = true
+          return { data: () => ({ count: rows().length }) }
+        },
+      }),
+      get: async () => ({
+        docs: rows().map(([id, data]) => ({
+          id,
+          data: () => data,
+          get: (field: string) => data[field],
+          ref: { path: `abuseReports/${id}` },
+        })),
+      }),
+    }
+  }
+  return build({ wheres: [] })
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -123,6 +170,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
       firestore: () => ({
+        // The list cursor is a document path, read back to start after it.
+        doc: (path: string) => docHandle(path.split('/').pop() as string),
         collection: (name: string) => {
           if (name === 'adminAudit') {
             return {
@@ -369,7 +418,6 @@ describe('the reporter’s identity is a super-tier fact', () => {
     expect(phishing.receiptStatus).toBe('failed')
     expect(phishing.receiptReason).toBe('rejected')
     expect(phishing.receiptAttemptedAtMs).toBe(4000)
-    expect(body.receiptsFailed).toBe(1)
   })
 
   it('reports an unrecorded receipt as UNKNOWN, and counts it as nothing', async () => {
@@ -380,7 +428,6 @@ describe('the reporter’s identity is a super-tier fact', () => {
     asSuper()
     const body = await (await get()).json()
     for (const row of body.reports) expect(row.receiptStatus).toBeNull()
-    expect(body.receiptsFailed).toBe(0)
   })
 
   it('does not count a SENT receipt, or a status it does not recognise', async () => {
@@ -395,7 +442,6 @@ describe('the reporter’s identity is a super-tier fact', () => {
     const dmca = body.reports.find((row: any) => row.id === DMCA_ID)
     expect(phishing.receiptStatus).toBe('sent')
     expect(dmca.receiptStatus).toBeNull()
-    expect(body.receiptsFailed).toBe(0)
   })
 
   it('never redacts what the queue is actually triaged on', async () => {
@@ -412,31 +458,80 @@ describe('the reporter’s identity is a super-tier fact', () => {
   })
 })
 
+const filters = (clauses: Array<{ field: string; op: string; value: string }>) =>
+  `filters=${encodeURIComponent(JSON.stringify(clauses))}`
+
 describe('the listing', () => {
-  it('surfaces the open urgent count and says when it is only a page', async () => {
+  it('counts the open urgent backlog across the whole queue, not a page', async () => {
     asSuper()
-    const body = await (await get()).json()
-    expect(body.openUrgent).toBe(1)
+    const body = await (await get('?view=summary')).json()
     // Two rows, both open; only the phishing one is urgent (`dmca` is high).
-    expect(body.count).toBe(2)
-    expect(body.truncated).toBe(false)
+    expect(body.openUrgent).toBe(1)
+    expect(state.lastQuery.counted).toBe(true)
+    expect(state.lastQuery.wheres).toEqual([
+      ['status', '==', 'open'],
+      ['category', 'in', ['phishing', 'csam', 'malware']],
+    ])
+    expect(body.actorRole).toBe('super')
   })
 
-  it('filters by status, and ignores a status that is not one of ours', async () => {
+  it('filters by status and category on the query, not over a page', async () => {
     asSuper()
     state.reports[REPORT_ID].status = 'actioned'
 
-    const filtered = await (await get('?status=actioned')).json()
-    expect(state.lastQuery.where).toEqual(['status', '==', 'actioned'])
+    const filtered = await (
+      await get(`?${filters([{ field: 'status', op: 'equals', value: 'actioned' }])}`)
+    ).json()
+    expect(state.lastQuery.wheres).toEqual([['status', '==', 'actioned']])
+    expect(state.lastQuery.order).toBe('updatedAt')
     expect(filtered.reports.map((row: any) => row.id)).toEqual([REPORT_ID])
+    expect(filtered.refused).toEqual([])
 
-    // A junk filter must fall back to the whole queue rather than composing a
-    // `where status == 'nonsense'` that quietly returns nothing — an empty
-    // abuse queue is the most reassuring wrong answer this page can give.
-    state.lastQuery = {}
-    const unfiltered = await (await get('?status=nonsense')).json()
-    expect(state.lastQuery.where).toBeUndefined()
-    expect(unfiltered.count).toBe(2)
+    const both = await (
+      await get(
+        `?${filters([
+          { field: 'status', op: 'isAnyOf', value: 'open,actioned' },
+          { field: 'category', op: 'equals', value: 'dmca' },
+        ])}`,
+      )
+    ).json()
+    expect(state.lastQuery.wheres).toEqual([
+      ['status', 'in', ['open', 'actioned']],
+      ['category', '==', 'dmca'],
+    ])
+    expect(both.reports.map((row: any) => row.id)).toEqual([DMCA_ID])
+  })
+
+  it('refuses by name a clause the query cannot hold, and applies none of it', async () => {
+    asSuper()
+    // A junk filter must not compose a predicate that quietly returns
+    // nothing — an empty abuse queue is the most reassuring wrong answer
+    // this page can give — nor vanish while its chip says it applied.
+    const body = await (
+      await get(`?${filters([{ field: 'status', op: 'startsWith', value: 'act' }])}`)
+    ).json()
+    expect(state.lastQuery.wheres).toBeUndefined()
+    expect(body.reports).toHaveLength(2)
+    expect(body.refused).toHaveLength(1)
+    expect(body.refused[0].clause).toEqual({ field: 'status', op: 'startsWith', value: 'act' })
+
+    expect((await get('?filters=not-json')).status).toBe(400)
+  })
+
+  it('pages the whole queue by a cursor in its own order', async () => {
+    asSuper()
+    const first = await (await get('?pageSize=1')).json()
+    // Newest update first: the phishing row was updated last.
+    expect(first.reports.map((row: any) => row.id)).toEqual([REPORT_ID])
+    expect(first.hasMore).toBe(true)
+    expect(first.nextCursor).toBe(`abuseReports/${REPORT_ID}`)
+
+    const second = await (
+      await get(`?pageSize=1&cursor=${encodeURIComponent(first.nextCursor)}`)
+    ).json()
+    expect(second.reports.map((row: any) => row.id)).toEqual([DMCA_ID])
+    expect(second.hasMore).toBe(false)
+    expect(second.nextCursor).toBeNull()
   })
 })
 

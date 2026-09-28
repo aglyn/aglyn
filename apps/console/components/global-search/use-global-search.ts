@@ -376,7 +376,7 @@ export function useGlobalSearch(
    * The org-level answer for a collection that has none: a lead lives under
    * `hosts/{hostId}/leads` by path, there is no `orgId` on the document to
    * group by, and no rule admits a collection-group read — which is the same
-   * reasoning `useOrgLeads` records for the org-level Leads list. So the
+   * reasoning the org-level Leads list once recorded. So the
    * fan-out is one query per site, merged into a single window that matches,
    * caches, caps and reports truncation exactly like every other one.
    *

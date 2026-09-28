@@ -41,12 +41,12 @@
  *
  *  1. ADD IS REFUSED over the band the window hid. Red before the fix.
  *  2. THE IMPORTER'S BATCH CHECK reads the same number. Red before.
- *  3. THE LIST KEEPS ITS CAP, and the filtered view still drives the table.
+ *  3. THE TABLE IS ONE PAGE OF ITS QUERY (AGL-3321), never the catalog.
  *  4. A CREATE RE-READS THE COUNT — a one-shot goes stale exactly where the
  *     listener refreshed for free.
  *  5. AN UNANSWERED AGGREGATE DOES NOT ANSWER THE QUESTION: pending or
- *     denied it falls back to the live-row count, a lower bound and this
- *     card's prior behaviour, never to 0.
+ *     denied it falls back to the live rows the table's query read, a lower
+ *     bound, never to 0.
  *
  * No counting RULE moves: `checkQuota` is untouched and `report-usage`
  * meters contacts, storage and API requests, never the catalog.
@@ -55,6 +55,8 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { productSearchFields } from '../../model/commerce'
 
 import type { ReactNode } from 'react'
 
@@ -66,17 +68,27 @@ const ORG_PLAN = { org: { $id: 'org-1', plan: 'pro' }, ready: true }
 
 /** What the server says the site actually has. */
 const SERVER_PRODUCTS = 3_000
-/** What the `limit(500)` listener can ever hand back. */
+/** Products the store holds for the table's query to page through. */
 const PRODUCT_ROWS = 500
+/** What the table's query reads: one page and the probe row past it. */
+const READ_ROWS = TABLE_PAGE_SIZE_DEFAULT + 1
 
-const productDocs = Array.from({ length: PRODUCT_ROWS }, (_, index) => ({
-  $id: `prod-${index}`,
-  name: `Product ${String(index).padStart(4, '0')}`,
-  slug: `product-${index}`,
-  status: 'active',
-  type: 'physical',
-  variants: [{ id: 'v1', priceUsd: 10, inventory: 1 }],
-}))
+const productDocs = Array.from({ length: PRODUCT_ROWS }, (_, index) => {
+  const name = `Product ${String(index).padStart(4, '0')}`
+  const variants = [{ id: 'v1', priceUsd: 10, inventory: 1 }]
+  return {
+    $id: `prod-${index}`,
+    ...productSearchFields({ name, variants }),
+    deletedAt: null,
+    slug: `product-${index}`,
+    status: 'active',
+    type: 'physical',
+    variants,
+  }
+})
+
+/** What the list query double answers from. */
+const mockProductRows = () => productDocs
 const collections: Record<string, Array<Record<string, unknown>>> = {
   products: productDocs,
   locations: [],
@@ -93,6 +105,16 @@ const aggregate: { count: number | null } = { count: SERVER_PRODUCTS }
  */
 const FIRESTORE = {}
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'prod-new' })
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(mockProductRows, options),
+  }
+})
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The real hook resolves through two async `getDoc` round-trips, so it
@@ -304,18 +326,15 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
     expect(mockCreateResource).not.toHaveBeenCalled()
   })
 
-  it('keeps the list capped — the cap was never the defect', async () => {
+  it('keeps the table to a page of its query — the count is a separate question', async () => {
     mount()
     await gatingOn(SERVER_PRODUCTS)
 
     // Fixing the head-count must not turn this table into a 3,000-row
-    // stream. That the two questions now have two answers is the point.
-    //
-    // 501, not 500: the listener asks for one document PAST the ceiling so
-    // that "this catalog is larger than the table" is a fact rather than a
-    // guess from `length === 500` (AGL-2501). The probe row is never rendered,
-    // exported or counted, and the ceiling itself has not moved.
-    expect(limitSpy).toHaveBeenCalledWith(501)
+    // stream. The table pages its query (AGL-3321); the aggregate answers
+    // how many the site has. That the two questions have two answers is the
+    // point.
+    expect(document.querySelectorAll('.MuiDataGrid-row')).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
     expect(limitSpy).not.toHaveBeenCalledWith(3_000)
   })
 
@@ -349,13 +368,13 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
     mount()
     await readRejected()
 
-    // 500 known live rows stand in — a lower bound, and this card's prior
-    // behaviour. A defaulted 0 would report "no products used" on a site
-    // that is over its band, which is the flattering direction again.
+    // The live rows the table's query read stand in — a lower bound. A
+    // defaulted 0 would report "no products used" on a site that is over its
+    // band, which is the flattering direction again.
     expect(mockCheckQuota).toHaveBeenCalledWith(
       expect.anything(),
       'productsPerHost',
-      PRODUCT_ROWS,
+      READ_ROWS,
     )
     fireEvent.click(screen.getByText('Add product'))
 

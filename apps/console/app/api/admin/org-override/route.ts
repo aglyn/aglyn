@@ -180,6 +180,7 @@ import {
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import { FieldValue } from 'firebase-admin/firestore'
+import { setAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export const dynamic = 'force-dynamic'
 
@@ -701,7 +702,7 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
-    batch.set(firestore.collection('adminAudit').doc(), {
+    setAdminAudit(batch, firestore, {
       actorUid: decoded.uid,
       action: 'org.override',
       target: `orgs/${orgId}`,

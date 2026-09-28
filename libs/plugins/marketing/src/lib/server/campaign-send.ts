@@ -43,6 +43,7 @@ import {
   consentGroupForSite,
   orgDataCollectionForHost,
   orgDataQueryForHost,
+  filterDeliverableRecipients,
   filterSendableForHost,
   filterTopicSendable,
   firebaseAdmin,
@@ -109,6 +110,7 @@ import {
   orgEmailCampaigns,
   sendIsOnHost,
 } from './campaign-org-refs'
+import { campaignSendSearchFields } from '../model/campaign-list-query'
 /*
  * The LEAF module for the reputation controls too, and for the same reason
  * as the three above it: every spec that reaches this file mocks the
@@ -435,6 +437,13 @@ export interface CampaignSendOptions {
   /** Test sends (AGL-349) skip the campaign record and stats. */
   recordCampaign?: boolean
   /**
+   * The `campaignId` names a record that does not exist yet, so this send
+   * MINTS it and stamps what a new record carries — its creation date, and
+   * `emailCampaignId: null` when it is filed under no campaign. Without it a
+   * caller naming an id is taken to address an existing record.
+   */
+  mintsRecord?: boolean
+  /**
    * SEND THIS EMAIL AGAIN, TO PEOPLE IT HAS NOT REACHED.
    *
    * Set with a `campaignId` naming a send that has already gone out. The send
@@ -753,6 +762,14 @@ export interface CampaignSendResult {
    * never a person.
    */
   cadenceHeld?: number
+  /**
+   * Dry run only (AGL-3328): of the paced recipients, how many the
+   * deliverability check took out because their domain has no mail server,
+   * and how many because their mail gateway refused this sending domain
+   * twice in thirty days and delivered nothing.
+   */
+  noMailServer?: number
+  gatewayHeld?: number
   /** Dry run only: which sending identity this campaign would leave on. */
   identity?: string
   /**
@@ -808,6 +825,27 @@ export interface CampaignSendResult {
  * `@aglyn/shared-ui-email-campaigns`, which the campaign page reads.
  */
 const LIST_UNSUBSCRIBE_RECORD_FIELD = 'listUnsubscribe'
+
+/**
+ * The deliverability check over one batch (AGL-3328), against the domain the
+ * campaign leaves from. Fails OPEN — an unreadable check, or one this
+ * deployment did not install, keeps everyone — because the check prevents
+ * bounces and a campaign that stopped for want of it would prevent mail.
+ */
+async function checkCampaignDeliverability(
+  emails: string[],
+  identity: { domain?: string | null; from?: string | null },
+): Promise<{ deliverable: string[]; noMailServer: string[]; gatewayHeld: string[] }> {
+  const fromAddress = String(identity?.from ?? '').match(/<([^>]+)>/)?.[1] ?? String(identity?.from ?? '')
+  const sendingDomain =
+    identity?.domain || (fromAddress.includes('@') ? fromAddress.slice(fromAddress.lastIndexOf('@') + 1).trim() : null)
+  try {
+    return await filterDeliverableRecipients({ emails, sendingDomain, purpose: 'bulk' })
+  } catch (error) {
+    console.error('[campaign] deliverability check unavailable — sending to everyone', error)
+    return { deliverable: emails, noMailServer: [], gatewayHeld: [] }
+  }
+}
 
 export async function performCampaignSend(
   options: CampaignSendOptions,
@@ -1780,10 +1818,26 @@ export async function performCampaignSend(
    * pace is not a stop, and the two suppression lists above have already
    * removed everybody who asked us to stop entirely.
    */
-  const sendable = await filterCadenceSendable(hostId, onTopic, {
+  const paced = await filterCadenceSendable(hostId, onTopic, {
     firestore,
     group: consentGroup,
   })
+  /*
+   * THE FIFTH FILTER: who this send would bounce off (AGL-3328).
+   *
+   * An address whose domain has no mail server is a hard bounce charged to
+   * the sending domain, and an address behind a gateway that refused this
+   * sending domain twice in thirty days is the third refusal in a row —
+   * each one making the next more likely, at that company and at every
+   * other behind the same gateway. `sendEmail` refuses both one message at
+   * a time as well; subtracting them HERE is what makes the count on screen
+   * true before Send, the reason the cadence filter above sits here too.
+   *
+   * Fails OPEN: an audience that could not be checked is mailed as it was
+   * before the check existed.
+   */
+  const deliverability = await checkCampaignDeliverability(paced, sendingIdentity)
+  const sendable = deliverability.deliverable
   /*
    * NOBODY IN THIS BATCH, BUT SOMEBODY AFTER IT.
    *
@@ -1799,16 +1853,20 @@ export async function performCampaignSend(
   if (!sendable.length && consentSplit.mailable.length <= recipients.length) {
     if (options.continuation) return finishContinuation()
     /*
-     * Which of the four filters emptied the batch, because the answer changes
+     * Which of the five filters emptied the batch, because the answer changes
      * what the merchant should do. An audience that unsubscribed is one they
      * have to rebuild; an audience holding for its own cadence is one that
      * becomes mailable on its own, and telling them it "unsubscribed" would
-     * send them looking for a problem that is not there.
+     * send them looking for a problem that is not there. An audience the
+     * deliverability check emptied has addresses that would bounce.
      */
     throw new CampaignSendError(
-      onTopic.length
-        ? 'Every recipient has asked this site for mail less often than this'
-        : 'Every recipient has unsubscribed or been suppressed',
+      paced.length
+        ? 'Every recipient would bounce: their domains have no mail server, ' +
+            'or their mail gateway refused this sender twice this month'
+        : onTopic.length
+          ? 'Every recipient has asked this site for mail less often than this'
+          : 'Every recipient has unsubscribed or been suppressed',
       400,
     )
   }
@@ -1900,7 +1958,12 @@ export async function performCampaignSend(
        * did is the netting this readout has refused everywhere else.
        */
       suppressed: recipients.length - onTopic.length,
-      cadenceHeld: onTopic.length - sendable.length,
+      cadenceHeld: onTopic.length - paced.length,
+      // Who the deliverability check took out, by why (AGL-3328): "N
+      // recipients excluded: no mail server · M behind a gateway that
+      // refused this sender".
+      noMailServer: deliverability.noMailServer.length,
+      gatewayHeld: deliverability.gatewayHeld.length,
       /*
        * What this send will NOT reach on its first pass, so the composer can
        * say "3,000 people, 500 in the first batch, the rest over the next few
@@ -1970,7 +2033,7 @@ export async function performCampaignSend(
    * move an email's creation date forward every time it was sent again, and
    * the emails list orders drafts on exactly that field.
    */
-  const mintsRecord = !options.campaignId
+  const mintsRecord = !options.campaignId || options.mintsRecord === true
 
   // Designed email template (AGL-349): loaded once; rendered per
   // recipient with their merge values.
@@ -2709,6 +2772,8 @@ export async function performCampaignSend(
        */
       ...campaignSendSiteStamp(hostId),
       subject,
+      // What the lists' search reads (AGL-3321), beside the subject it is of.
+      ...campaignSendSearchFields(subject),
       body,
       audience,
       /*
@@ -2775,9 +2840,18 @@ export async function performCampaignSend(
       }),
       ...(options.preheader ? { preheader: options.preheader } : {}),
       ...(options.displayName ? { displayName: options.displayName } : {}),
+      /*
+       * The campaign it is filed under. A record this send MINTS with none
+       * is stamped `null` — a single send — because the lists ask
+       * `emailCampaignId == null` for those, and a query cannot find a field
+       * that is missing (AGL-3321). A record addressed by id keeps whatever
+       * it was filed under unless this send names a campaign.
+       */
       ...(options.emailCampaignId
         ? { emailCampaignId: options.emailCampaignId }
-        : {}),
+        : mintsRecord
+          ? { emailCampaignId: null }
+          : {}),
       /*
        * WHAT THIS EMAIL DID WITH THE UNSUBSCRIBE HEADER, and why (AGL-3307).
        * Written absolutely on every batch; a batch after a forced one is
@@ -2876,7 +2950,9 @@ export async function performCampaignSend(
             }
           : {}),
         suppressed: additive(recipients.length - onTopic.length),
-        cadenceHeld: additive(onTopic.length - sendable.length),
+        cadenceHeld: additive(onTopic.length - paced.length),
+        noMailServer: additive(deliverability.noMailServer.length),
+        gatewayHeld: additive(deliverability.gatewayHeld.length),
         /*
          * That this send's links were trackable at all.
          *
@@ -4088,6 +4164,8 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         {
           ...campaignSendSiteStamp(hostId),
           subject,
+          // What the lists' search reads (AGL-3321), beside its subject.
+          ...campaignSendSearchFields(subject),
           body,
           audience,
           /*
@@ -4143,7 +4221,16 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           ...(senderId ? { senderId } : {}),
           ...(preheader ? { preheader } : {}),
           ...(displayName ? { displayName } : {}),
-          ...(emailCampaignId ? { emailCampaignId } : {}),
+          /*
+           * A record this write CREATES with no campaign is a single send,
+           * stored `null` so the lists can ask for it (AGL-3321); one that
+           * exists keeps its campaign unless a new one is named.
+           */
+          ...(emailCampaignId
+            ? { emailCampaignId }
+            : targetSnapshot.exists
+              ? {}
+              : { emailCampaignId: null }),
           ...(scheduling
             ? {
                 status: 'scheduled',
@@ -4338,11 +4425,14 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
      * earlier sends recorded.
      *=========================================*/
     const sendId = String(req.body?.campaignId ?? '')
+    /** The id names no record yet, so this send mints it (AGL-3321). */
+    let mintsNamedRecord = false
     if (sendId) {
       if (!isDocumentId(sendId)) {
         return res.status(400).json({ error: 'Invalid campaignId' })
       }
       const existing = await orgSends.doc(sendId).get()
+      mintsNamedRecord = !existing.exists
       if (existing.exists && !sendIsOnHost(existing, hostId)) {
         return res.status(404).json({ error: 'Unknown email' })
       }
@@ -4371,6 +4461,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       topicId: topicId || undefined,
       emails: Array.isArray(req.body?.emails) ? req.body.emails : undefined,
       campaignId: sendId,
+      ...(mintsNamedRecord ? { mintsRecord: true } : {}),
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
       ...(plainText ? { plainText } : {}),

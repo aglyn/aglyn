@@ -23,6 +23,18 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  COUPON_FILTER_FIELDS,
+  COUPON_READ_BOUND,
+  COUPON_SEARCH_PATHS,
+  type CouponRow,
+  couponListRow,
+  PROMOTION_CODE_READ_BOUND,
+  STRIPE_LIST_PAGE,
+} from '../../../../utils/coupon-list-query'
+import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
+import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 /**
  * Staff coupon management (AGL-1105). Coupons live in Stripe — the source of
@@ -30,6 +42,13 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  *   GET  — lists existing Stripe coupons (with any promotion codes) so the
  *          staff Coupons page and the per-org apply picker can show them.
+ *          Every coupon and every code, paging Stripe to the end; past the
+ *          read bounds it answers 413 rather than a first page of them.
+ *          `view=list` is the Coupons page's list: the staff list wire
+ *          (`readStaffListQuery`), its Filters clauses and search matched
+ *          over that complete read (`utils/coupon-list-query.ts` says why
+ *          Stripe cannot be asked instead). Without it, the whole set as
+ *          `{ coupons }`, which the apply picker reads.
  *   POST — dispatches on `action`, defaulting to `create`:
  *
  *          `create` builds a Stripe coupon (percent OR fixed amount; once/
@@ -112,8 +131,40 @@ function serializeCoupon(coupon: any, promotionCodes: any[] = []) {
   }
 }
 
+/**
+ * Every object of one Stripe list, paged by `starting_after` to the end, or
+ * `complete: false` when there are more than `bound` of them. A failed page
+ * is a failed read: the caller gets Stripe's status, never a partial list.
+ */
+async function readAllStripe(
+  secretKey: string,
+  path: string,
+  bound: number,
+): Promise<
+  | { ok: true; data: any[]; complete: boolean }
+  | { ok: false; status: number; body: any }
+> {
+  const data: any[] = []
+  let after: string | null = null
+  for (;;) {
+    const page = await stripe(
+      secretKey,
+      `${path}?limit=${STRIPE_LIST_PAGE}${after ? `&starting_after=${encodeURIComponent(after)}` : ''}`,
+    )
+    if (!page.ok) return { ok: false, status: page.status, body: page.body }
+    const objects: any[] = Array.isArray(page.body?.data) ? page.body.data : []
+    data.push(...objects)
+    const last = objects[objects.length - 1]?.id
+    if (page.body?.has_more !== true || typeof last !== 'string') {
+      return { ok: true, data, complete: true }
+    }
+    if (data.length >= bound) return { ok: true, data, complete: false }
+    after = last
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
-  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, body, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -136,23 +187,51 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (method === 'GET') {
-      const [couponsRes, codesRes] = await Promise.all([
-        stripe(secretKey, 'coupons?limit=100'),
-        stripe(secretKey, 'promotion_codes?limit=100'),
+      const listView = String(query?.['view'] ?? '') === 'list'
+      const listRequest = listView ? readStaffListQuery(query ?? {}) : null
+      if (listView && !listRequest) {
+        return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+      }
+      const [couponsRead, codesRead] = await Promise.all([
+        readAllStripe(secretKey, 'coupons', COUPON_READ_BOUND),
+        readAllStripe(secretKey, 'promotion_codes', PROMOTION_CODE_READ_BOUND),
       ])
-      if (!couponsRes.ok) {
+      if (!couponsRead.ok || !codesRead.ok) {
+        const failed = [couponsRead, codesRead].find((read) => 'body' in read)
+        const message = failed && 'body' in failed ? failed.body?.error?.message : null
         return Response.json(
-          { error: couponsRes.body?.error?.message ?? 'Stripe lookup failed' },
+          { error: message ?? 'Stripe lookup failed' },
           { status: 502 },
         )
       }
-      const promotionCodes = Array.isArray(codesRes.body?.data)
-        ? codesRes.body.data
-        : []
-      const coupons = (couponsRes.body?.data ?? []).map((coupon: any) =>
-        serializeCoupon(coupon, promotionCodes),
+      // A coupon's codes come from the code list, so a code list cut short
+      // would show coupons without codes they have. Both must be whole.
+      if (!couponsRead.complete || !codesRead.complete) {
+        return Response.json(
+          {
+            error:
+              `Stripe holds more than ${COUPON_READ_BOUND} coupons or ` +
+              `${PROMOTION_CODE_READ_BOUND} promotion codes. This list reads ` +
+              'every one to filter them, and will not answer from part of them.',
+          },
+          { status: 413 },
+        )
+      }
+      const coupons: CouponRow[] = couponsRead.data.map((coupon: any) =>
+        serializeCoupon(coupon, codesRead.data),
       )
-      return Response.json({ coupons }, { status: 200 })
+      if (!listRequest) return Response.json({ coupons }, { status: 200 })
+      // Newest first, the order Stripe lists them in.
+      return Response.json(
+        answerStaffCompleteList({
+          rows: coupons.map(couponListRow),
+          fields: COUPON_FILTER_FIELDS,
+          searchPaths: COUPON_SEARCH_PATHS,
+          request: listRequest,
+          cursorOf: (row) => row.id,
+        }),
+        { status: 200 },
+      )
     }
 
     if (method !== 'POST') {
@@ -225,22 +304,18 @@ async function handler(request: Request): Promise<Response> {
         )
       }
 
-      await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('adminAudit')
-        .add({
-          actorUid: decoded.uid,
-          action: 'coupon.promotion_code.update',
-          target: `stripe/promotion_codes/${promotionCodeId}`,
-          before: { active: wasActive },
-          after: {
-            active: updated.body?.active === true,
-            code: updated.body?.code ?? null,
-            couponId: updated.body?.coupon?.id ?? null,
-          },
-          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
+        actorUid: decoded.uid,
+        action: 'coupon.promotion_code.update',
+        target: `stripe/promotion_codes/${promotionCodeId}`,
+        before: { active: wasActive },
+        after: {
+          active: updated.body?.active === true,
+          code: updated.body?.code ?? null,
+          couponId: updated.body?.coupon?.id ?? null,
+        },
+        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
 
       // Answer with a fresh read of what was written, so the console renders
       // Stripe's state rather than the state it asked for.
@@ -365,25 +440,21 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'coupon.create',
-        target: `stripe/coupons/${coupon.id}`,
-        before: null,
-        after: {
-          couponId: coupon.id,
-          percentOff: hasPercent ? percentOff : null,
-          amountOffUsd: hasAmount ? amountOffUsd : null,
-          duration,
-          code: promotionCode?.code ?? null,
-          maxRedemptions: maxRedemptions > 0 ? maxRedemptions : null,
-        },
-        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'coupon.create',
+      target: `stripe/coupons/${coupon.id}`,
+      before: null,
+      after: {
+        couponId: coupon.id,
+        percentOff: hasPercent ? percentOff : null,
+        amountOffUsd: hasAmount ? amountOffUsd : null,
+        duration,
+        code: promotionCode?.code ?? null,
+        maxRedemptions: maxRedemptions > 0 ? maxRedemptions : null,
+      },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
 
     return Response.json(
       { coupon: serializeCoupon(coupon, promotionCode ? [promotionCode] : []) },

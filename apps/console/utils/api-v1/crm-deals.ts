@@ -65,12 +65,18 @@ import {
   type CrmDealStage,
   type CrmDealStatus,
   createResourceUid,
+  crmNewRecordListFields,
   dealStageById,
   lineItemsTotalCents,
   normalizeCrmMediaIds,
   readDealLineItems,
 } from '@aglyn/aglyn/server'
-import { apiJson, ApiErrors, floorContactLifecycleStage } from '@aglyn/tenant-data-admin'
+import {
+  apiJson,
+  ApiErrors,
+  floorContactLifecycleStage,
+  restampCrmListFieldsAt,
+} from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, requireScope } from '../api-v1'
 import { orderedStages, type ResolvedPipeline, resolvePipeline } from './crm-pipelines'
@@ -485,7 +491,7 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
     // One clock: the stage move is stamped with the instant the record's own
     // `createdAt` carries, so a deal created won closed the moment it began.
     const stamp = crmCreateStamp(ctx, site.siteId)
-    await collection.doc(id).create({
+    const record: Record<string, unknown> = {
       title,
       titleLower: (title ?? '').toLowerCase(),
       pipelineId: resolved.id,
@@ -498,7 +504,9 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
         ? { custom: createPayload(customValues) }
         : {}),
       ...stamp,
-    })
+    }
+    // What the console's Deals list searches and filters by (AGL-3321).
+    await collection.doc(id).create({ ...record, ...crmNewRecordListFields('deals', record) })
     // A deal created won is a won deal: its contact is a customer from birth.
     if (stage.kind === 'won') {
       await floorWonDealContact(ctx, { contactId: rest.contactId, hostId: site.siteId })
@@ -576,6 +584,8 @@ async function updateDeal(
   }
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: now })
+    // What the console's Deals list searches (AGL-3321).
+    if ('title' in update) await restampCrmListFieldsAt(ref, 'deals')
   }
   if (won) {
     await floorWonDealContact(ctx, {

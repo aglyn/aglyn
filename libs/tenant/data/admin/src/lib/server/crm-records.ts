@@ -27,6 +27,12 @@ import {
   crmEmailUsageDayKey,
   type CrmRecordsQuotaResult,
 } from '@aglyn/aglyn/server'
+/*
+ * By module path, not the barrel: the capture door's specs substitute a
+ * fixture barrel (see `upsert-contact.ts`), and the restamp is reached from
+ * the door.
+ */
+import { type CrmListCollection, crmListFieldsPatch } from '@aglyn/aglyn/app-utils/crm'
 import {
   type EmailRampVerdict,
   rampedDailyAllowance,
@@ -317,3 +323,84 @@ export async function releaseCrmEmailSend(
     console.error('crm email reservation release failed', error)
   }
 }
+
+/*==========================================
+ * THE LIST FIELDS, RESTAMPED FROM WHAT WAS STORED (AGL-3321).
+ *
+ * A CRM list queries fields derived from the record — its search tokens, a
+ * lead's status and verdict keys, a contact's facet keys (`crmListFields`
+ * in `@aglyn/aglyn`). A writer that holds the whole document spreads them;
+ * a writer that PATCHED an input — a dotted facet field, an `arrayUnion` of
+ * tags, a merged capture — cannot know the result without reading it, so
+ * it restamps here after its own write: the record is read back in a
+ * transaction and only the list fields it now carries wrongly are written.
+ *
+ * Never throws. A restamp is a consequence of a write that already landed,
+ * and failing the caller would report the write as failed; a record left
+ * stale is what the one-time backfill (`backfill-crm-list-fields.mjs`)
+ * brings level, and the next write to it restamps it again.
+ *=========================================*/
+
+export interface CrmListFieldsRestamp {
+  /** Records whose list fields were written. */
+  restamped: number
+  /** Records already current. */
+  current: number
+  /** Records that no longer exist. */
+  missing: number
+}
+
+/** Restamp one record's list fields from the record as stored. */
+export async function restampCrmListFieldsAt(
+  ref: FirebaseFirestore.DocumentReference,
+  collection: CrmListCollection,
+): Promise<'restamped' | 'current' | 'missing'> {
+  try {
+    return await ref.firestore.runTransaction(async (tx) => {
+      const snapshot = await tx.get(ref)
+      if (!snapshot.exists) return 'missing' as const
+      const patch = crmListFieldsPatch(collection, snapshot.data() ?? {})
+      if (!Object.keys(patch).length) return 'current' as const
+      tx.update(ref, patch)
+      return 'restamped' as const
+    })
+  } catch (error) {
+    console.error(`[crm] list fields restamp failed for ${ref.path}`, error)
+    return 'current'
+  }
+}
+
+/** Restamp several records of one collection, a few at a time. */
+export async function restampCrmListFieldsOf(
+  refs: readonly FirebaseFirestore.DocumentReference[],
+  collection: CrmListCollection,
+): Promise<CrmListFieldsRestamp> {
+  const result: CrmListFieldsRestamp = { restamped: 0, current: 0, missing: 0 }
+  const queue = [...new Map(refs.map((ref) => [ref.path, ref])).values()]
+  // Each is its own small transaction on its own record.
+  const worker = async () => {
+    for (let ref = queue.shift(); ref !== undefined; ref = queue.shift()) {
+      const outcome = await restampCrmListFieldsAt(ref, collection)
+      result[outcome] += 1
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(RESTAMP_CONCURRENCY, queue.length) }, worker))
+  return result
+}
+
+/** Restamp several records of one collection under `orgs/{orgId}/`, by id. */
+export async function restampCrmListFields(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  collection: CrmListCollection,
+  ids: readonly string[],
+): Promise<CrmListFieldsRestamp> {
+  const records = firestore.collection('orgs').doc(orgId).collection(collection)
+  return restampCrmListFieldsOf(
+    [...new Set(ids.filter(Boolean))].map((id) => records.doc(id)),
+    collection,
+  )
+}
+
+/** Records restamped at once by {@link restampCrmListFields}. */
+const RESTAMP_CONCURRENCY = 8

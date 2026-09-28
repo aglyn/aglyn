@@ -64,6 +64,7 @@
 import {
   type ContactFieldDefinition,
   CRM_COLLECTIONS,
+  crmNewRecordListFields,
   nameSearchFields,
   type PluginApiHandler,
   visibleToTokens,
@@ -185,6 +186,8 @@ async function resolveCompany(
     createdByUid: context.uid,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+    // What the Companies list searches and filters by (AGL-3321).
+    ...crmNewRecordListFields('companies', { ...fields, visibleTo: context.scopeTokens }),
   })
   tally.created += 1
   const made = { id: created.id, name }

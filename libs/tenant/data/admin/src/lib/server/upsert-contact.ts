@@ -36,7 +36,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
-import { countCrmRecords } from './crm-records'
+import { countCrmRecords, restampCrmListFieldsAt } from './crm-records'
 import { attributeOrderToEmail } from './email-revenue-attribution'
 import { hostRefusesCaptureForErasure } from './email-suppression'
 import {
@@ -63,6 +63,7 @@ import {
   CONTACT_FIELD_KEY_PATTERN,
   type ContactCustomValue,
   CRM_COLLECTIONS,
+  crmNewRecordListFields,
   isContactLifecycleStage,
   planContactCompanyLink,
   readContactCompanyLink,
@@ -819,6 +820,9 @@ export async function upsertHostContact(
         { merge: true },
       )
       await settleCompanyContactsCounts(companiesBeside(contactsRef), link)
+      // The merged facet, name and scope are what the Contacts list
+      // searches and filters by (AGL-3321): restamped from the stored row.
+      await restampCrmListFieldsAt(docSnapshot.ref, 'contacts')
       return { contactId: docSnapshot.id, created: false }
     }
 
@@ -883,7 +887,7 @@ export async function upsertHostContact(
     if (advanced) profile.lifecycleStage = advanced
     if (profile.address === null) delete profile.address
 
-    const created = await contactsRef.add({
+    const record: Record<string, unknown> = {
       hostId: options.hostId,
       /*
        * WHICH SITES HAVE MET THIS PERSON — attribution, and separate from
@@ -958,6 +962,12 @@ export async function upsertHostContact(
       ...consentFields,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+    }
+    const created = await contactsRef.add({
+      ...record,
+      // What the Contacts list searches and filters by (AGL-3321), from the
+      // row as written — and nothing scheduled against a new person.
+      ...crmNewRecordListFields('contacts', record),
     })
     // The address now resolves to this row (AGL-2625). Its own catch inside
     // the writer, so an index the capture could not reach costs nothing.

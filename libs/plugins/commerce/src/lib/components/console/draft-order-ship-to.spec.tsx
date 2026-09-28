@@ -62,6 +62,7 @@ const PRODUCT = {
 const ORDER = {
   $id: 'order-1',
   number: 1,
+  createdAtMs: 1_790_000_000_000,
   status: 'paid',
   channel: 'online',
   lineItems: [
@@ -77,11 +78,23 @@ const ORDER = {
   },
 }
 
+/** The list's query (AGL-3321), answered by the contract's double. */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(() => [ORDER], options),
+  }
+})
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => path.join('/'),
   query: (ref: string) => ref,
   limit: () => undefined,
   orderBy: () => undefined,
+  where: () => undefined,
   documentId: () => '__name__',
 }))
 
@@ -109,10 +122,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
    */
   useOrgPlan: () => ORG_PLAN,
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
-  useFirestoreCollection: (build: () => string) => {
+  useFirestoreCollection: (build: () => string | null) => {
     const path = build()
-    if (path.endsWith('/products')) return { data: [PRODUCT] }
-    if (path.endsWith('/orders')) return { data: [ORDER] }
+    if (path?.endsWith('/products')) return { data: [PRODUCT] }
     return { data: [] }
   },
 }))

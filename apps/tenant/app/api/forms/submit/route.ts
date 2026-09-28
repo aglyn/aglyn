@@ -30,6 +30,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+// The leaf: the Inbox list's search keys, the same function its backfill
+// restates and its query's normalizers read (AGL-3321).
+import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
 import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
 // The leaf, not the barrel: this route's specs substitute the barrel wholesale,
 // and the verification must be the real one under them.
@@ -609,6 +612,15 @@ export async function POST(request: Request): Promise<Response> {
       formName: resolvedFormName,
       path: String(path ?? '').slice(0, 500),
       fields: sanitizedFields,
+      /*
+       * WHAT THE INBOX'S LIST ASKS (AGL-3321). Its From filter and its
+       * search are `array-contains` on these word-prefix arrays, and Read is
+       * an equality on `read` — so every row carries all three from the
+       * moment it exists. The fields never change after this write, so no
+       * other writer restamps them; `backfill-form-submission-filters.mjs`
+       * stamps the rows written before.
+       */
+      ...messageSearchFields(sanitizedFields),
       read: false,
       createdAt: FieldValue.serverTimestamp(),
       // Accepted while the durable limiter was degraded (AGL-1667).

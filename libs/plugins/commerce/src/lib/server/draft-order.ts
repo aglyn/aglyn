@@ -581,7 +581,8 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       const counter = await transaction.get(counterRef)
       const number = Number(counter.get('next') ?? 1)
       transaction.set(counterRef, { next: number + 1 }, { merge: true })
-      transaction.set(orderRef, {
+      // With the fields the orders list queries by (AGL-3321).
+      transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
         number,
         status: 'pending',
         channel: 'draft',
@@ -611,7 +612,7 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         ],
         createdAtMs: Date.now(),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+      }))
     })
 
     // The tax rate is minted here, BELOW the claim, because it creates a real

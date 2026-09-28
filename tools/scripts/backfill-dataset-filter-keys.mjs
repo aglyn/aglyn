@@ -1,5 +1,6 @@
 /**
- * Stamp `filterKeys` onto the dataset records written before the field.
+ * Stamp `filterKeys` and `filterValues` onto the dataset records written
+ * before those fields.
  *
  *   gcloud auth application-default login
  *   GOOGLE_CLOUD_PROJECT=<project-id> \
@@ -13,45 +14,59 @@
  * project; without it the credentials' own project is used, and the run
  * prints which one it is before it reads anything.
  *
- * ## What the field is
+ * ## What the fields are
  *
- * A record's `filterKeys` is the token array the records table's Filters
- * panel and quick search query with `array-contains` (see
- * `datasetFilterKeys` in `libs/aglyn/src/lib/app-utils/dataset-models.ts`). Every writer stamps
- * it now, through `datasetIntegrityFields` / `datasetIntegrityUpdate`; a
- * record written before that carries none, and so answers no served filter
- * until it is edited or this script reaches it.
+ * The records table's Filters panel and quick search are ONE Firestore query
+ * (AGL-3321): its equalities ask `filterValues.<field> ==` (one scalar per
+ * field, `datasetFilterValues`), and its one word-level clause — a text
+ * `contains`, a list member, or the search word — asks `filterKeys
+ * array-contains` (`datasetFilterKeys`), both in
+ * `libs/aglyn/src/lib/app-utils/dataset-models.ts`. Every writer stamps them
+ * through `datasetIntegrityFields` / `datasetIntegrityUpdate`; a record
+ * written before carries neither, or only `filterKeys`, and answers no
+ * filter that asks the missing one until it is edited or this script
+ * reaches it.
  *
- * It needs no index deploy: Firestore's automatic single-field index serves
- * the query. This script is the only step an existing project needs.
+ * It needs no index deploy: Firestore's automatic single-field indexes serve
+ * the query by index merging. This script is the only step an existing
+ * project needs.
  *
  * ## What it touches
  *
  * Every `records` collection under `orgs/{orgId}/datasets/{id}` and the
  * legacy `hosts/{hostId}/datasets/{id}`. It reads each dataset's `model` (or
  * derives one from a v1 `fields` list, exactly as the writers do), computes
- * each record's tokens from its `values`, and UPDATES `filterKeys` alone —
- * nothing else on the record changes, and nothing is ever deleted except the
- * field itself on a record that no longer has a filterable value.
+ * each record's filter fields from its `values` with the script-side copy in
+ * `lib/record-filter-keys.mjs`, and UPDATES `filterKeys` and `filterValues`
+ * alone — whichever of the two moved; nothing else on the record changes,
+ * and nothing is ever deleted except those fields on a record that no longer
+ * has a filterable value.
  *
  * ## Idempotence and interruption
  *
- * A record whose stored `filterKeys` already equals the computed array is
- * counted as current and not written, so a second run writes nothing. Writes
- * are one field per document in batches of {@link BATCH_SIZE}, so an
- * interruption leaves a partially stamped dataset — which is exactly what a
- * re-run finishes. Re-running after a schema change re-stamps the records
- * whose tokens the change moved (a text field made an enum, a field
- * removed).
+ * A record whose stored fields already equal the computed ones (the map
+ * compared key by key, in any order) is counted as current and not written,
+ * so a second run writes nothing. Writes go in batches of
+ * {@link BATCH_SIZE}, so an interruption leaves a partially stamped dataset —
+ * which is exactly what a re-run finishes. Re-running after a schema change
+ * re-stamps the records whose fields the change moved (a text field made an
+ * enum, a field removed).
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  datasetFilterKeys,
+  datasetFilterToken,
+  datasetFilterValuePath,
+  datasetFilterValues,
+  datasetSearchToken,
+  effectiveModel,
+  modelShimAgrees,
+} from './lib/record-filter-keys.mjs'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = join(here, '..', '..')
-const APP_UTILS = join(REPO_ROOT, 'libs', 'aglyn', 'src', 'lib', 'app-utils')
 
 /*
  * ARGUMENTS FAIL CLOSED (AGL-1489): `--aply` would otherwise leave a run the
@@ -88,308 +103,50 @@ const args = parseDeployArgs({
 /** Records read, and at most written, per batch. Firestore allows 500. */
 const BATCH_SIZE = 400
 
-/*
- * THE TOKEN BUILDER, restated — KEEP IN SYNC with `datasetFilterKeys` and
- * its helpers in `libs/aglyn/src/lib/app-utils/dataset-models.ts`, which a
- * plain Node script cannot import (it imports other modules at run time).
- * The two are held to the same worked examples,
- * `lib/dataset-filter-keys.fixtures.json`: the library's spec asserts them
- * and so does the self-test below, so the backfill cannot stamp a spelling
- * the writers and the query do not use.
- */
-/**
- * A dataset record's FILTER TOKENS: every question the records table can ask
- * of a record, flattened into one array of strings Firestore indexes on its
- * own.
- *
- * ## Why a token array, and not the values
- *
- * A record's fields live under `values`, a user-defined, unbounded map that
- * the index configuration exempts from indexing — auto-indexing it can exceed
- * Firestore's per-document index-entry limit — so `where('values.<field>', …)`
- * is refused. A composite index per dataset would need an admin call per
- * dataset, runs into the project's composite-index cap, and is deleted by the
- * next `firestore:indexes` deploy of a file that does not list it.
- *
- * `filterKeys` needs none of that. Firestore's AUTOMATIC single-field index
- * serves `where('filterKeys', 'array-contains', token)` with
- * `orderBy(documentId())`, so one clause, or one search word, reaches every
- * record of any dataset on any project, with no index deploy.
- *
- * ## The token grammar
- *
- *   `f:<fieldId>=<value>`   a field equals a value. Enum (a text field with
- *                           `validation.options`) values are kept exactly;
- *                           plain text is lower-cased, trimmed and clipped to
- *                           {@link DATASET_FILTER_VALUE_MAX} characters;
- *                           booleans are `true`/`false`; numbers are
- *                           `String(number)`; a `sorted` list contributes one
- *                           token per member.
- *   `f:<fieldId>^<prefix>`  a word of a plain text field starts with this.
- *   `s:<prefix>`            a word of ANY text value (enums and list members
- *                           included) starts with this — the quick search.
- *
- * Timestamps, references, maps, bytes, coordinates and nil fields carry no
- * field tokens: a timestamp is asked in ranges, which one token cannot serve,
- * and the rest are not asked about by value.
- *
- * The array is sorted, de-duplicated and capped at
- * {@link DATASET_FILTER_KEYS_MAX}. Past the cap, the `=` tokens are kept
- * first, then the per-field word prefixes, then the search prefixes, so a
- * very long record loses search reach before it loses exact matches.
- */
-const DATASET_FILTER_KEYS_MAX = 500
-
-/** Plain text values are clipped to this many characters in an `=` token. */
-const DATASET_FILTER_VALUE_MAX = 64
-/** Word prefixes run from 1 to this many characters. */
-const DATASET_FILTER_PREFIX_MAX = 12
-/** Only the first this-many words of a value contribute prefixes. */
-const DATASET_FILTER_WORDS_MAX = 40
-
-/** One clause of the records table's filter: `{ field, op, value }`. */
-
-/**
- * The words of a text value: split on anything that is not a letter or a
- * digit, lower-cased, at most {@link DATASET_FILTER_WORDS_MAX} of them.
- */
-function datasetFilterWords(text) {
-  return String(text)
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean)
-    .slice(0, DATASET_FILTER_WORDS_MAX)
-}
-
-/** A word's prefixes, 1 to {@link DATASET_FILTER_PREFIX_MAX} characters. */
-function prefixes(word) {
-  const chars = Array.from(word).slice(0, DATASET_FILTER_PREFIX_MAX)
-  return chars.map((_char, at) => chars.slice(0, at + 1).join(''))
-}
-
-/** A word clipped the way its stored prefixes are. */
-function clipWord(word) {
-  return Array.from(word).slice(0, DATASET_FILTER_PREFIX_MAX).join('')
-}
-
-const isEnum = (field) =>
-  field.type === 'text' && (field.validation?.options?.length ?? 0) > 0
-
-const isNumeric = (field) =>
-  field.type === 'int32' || field.type === 'int64' || field.type === 'float'
-
-/**
- * A stored value as text, or null. Numbers are accepted because a form or an
- * automation stores every value as text and an import may do the reverse.
- */
-function asText(value) {
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-  return null
-}
-
-/** Plain text as its `=` token's value: lower-cased, trimmed, clipped. */
-function textKey(value) {
-  return Array.from(value.trim().toLowerCase())
-    .slice(0, DATASET_FILTER_VALUE_MAX)
-    .join('')
-}
-
-/** A stored number (or its text form) as its `=` token's value. */
-function numberKey(value) {
-  const number =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && value.trim() !== ''
-        ? Number(value)
-        : Number.NaN
-  return Number.isFinite(number) ? String(number) : null
-}
-
-/** A stored boolean (or its text form) as its `=` token's value. */
-function boolKey(value) {
-  if (typeof value === 'boolean') return String(value)
-  if (value === 'true' || value === 'false') return value
-  return null
-}
-
-/** Every field a model declares, in display order and then the rest. */
-function modelFieldIds(model) {
-  return [
-    ...new Set([...(model.order ?? []), ...Object.keys(model.fields ?? {})]),
-  ]
-}
-
-/** The tokens described in {@link DATASET_FILTER_KEYS_MAX}'s comment. */
-function datasetFilterKeys(model, values) {
-  const exact = []
-  const fieldWords = []
-  const search = []
-  const searchable = (text) => {
-    for (const word of datasetFilterWords(text)) {
-      for (const prefix of prefixes(word)) search.push(`s:${prefix}`)
-    }
-  }
-  for (const fieldId of modelFieldIds(model)) {
-    const field = model.fields?.[fieldId]
-    const stored = values?.[fieldId]
-    if (!field || stored == null) continue
-    if (field.type === 'text') {
-      const text = asText(stored)
-      if (text == null || !text.trim()) continue
-      if (isEnum(field)) {
-        exact.push(`f:${fieldId}=${text}`)
-      } else {
-        exact.push(`f:${fieldId}=${textKey(text)}`)
-        for (const word of datasetFilterWords(text)) {
-          for (const prefix of prefixes(word)) {
-            fieldWords.push(`f:${fieldId}^${prefix}`)
-          }
-        }
-      }
-      searchable(text)
-    } else if (field.type === 'bool') {
-      const key = boolKey(stored)
-      if (key) exact.push(`f:${fieldId}=${key}`)
-    } else if (isNumeric(field)) {
-      const key = numberKey(stored)
-      if (key) exact.push(`f:${fieldId}=${key}`)
-    } else if (field.type === 'sorted') {
-      for (const member of Array.isArray(stored) ? stored : [stored]) {
-        const text = asText(member)?.trim()
-        if (!text) continue
-        exact.push(`f:${fieldId}=${text}`)
-        searchable(text)
-      }
-    }
-  }
-  const kept = [...new Set([...exact, ...fieldWords, ...search])].slice(
-    0,
-    DATASET_FILTER_KEYS_MAX,
-  )
-  return kept.sort()
-}
-
-/**
- * The one token that serves a filter clause over every record, or null when
- * no token can: the clause is then matched over a window of records instead.
- *
- *  - enum, boolean, number and list `equals` → the `=` token of the value;
- *  - plain text `equals` → the lower-cased `=` token;
- *  - plain text `contains` → the `^` token of the value's FIRST word, so a
- *    served `contains` is a word-prefix match, not a mid-string one;
- *  - everything else — ranges, dates, `isEmpty`, `isAnyOf`, negations — null.
- *
- * `clause.field` is the field id. The operator names are the grid's: a
- * select's `equals`, a number's `=`, a boolean's `is`, a list's `contains`.
- */
-function datasetFilterToken(model, clause) {
-  const field = model.fields?.[clause.field]
-  if (!field) return null
-  const { op } = clause
-  const value = String(clause.value ?? '')
-  if (!value.trim()) return null
-  const equals = op === 'equals' || op === '=' || op === 'is'
-  if (field.type === 'text') {
-    if (isEnum(field)) return equals ? `f:${clause.field}=${value}` : null
-    if (equals) return `f:${clause.field}=${textKey(value)}`
-    if (op === 'contains') {
-      const [first] = datasetFilterWords(value)
-      return first ? `f:${clause.field}^${clipWord(first)}` : null
-    }
-    return null
-  }
-  if (field.type === 'bool') {
-    const key = boolKey(value.trim())
-    return equals && key ? `f:${clause.field}=${key}` : null
-  }
-  if (isNumeric(field)) {
-    const key = numberKey(value)
-    return equals && key ? `f:${clause.field}=${key}` : null
-  }
-  if (field.type === 'sorted') {
-    return equals || op === 'contains'
-      ? `f:${clause.field}=${value.trim()}`
-      : null
-  }
-  return null
-}
-
-/**
- * The quick-search token for one typed word, or null for a word with no
- * letters or digits. A word with punctuation inside it is asked by its first
- * run — split the search text with {@link datasetFilterWords} to ask for
- * every run.
- */
-function datasetSearchToken(word) {
-  const [first] = datasetFilterWords(word)
-  return first ? `s:${clipWord(first)}` : null
-}
-
-/**
- * `effectiveDatasetModel`, restated — KEEP IN SYNC with
- * `libs/aglyn/src/lib/app-utils/dataset-models.ts` (checked by
- * {@link modelShimAgrees} in the self-test).
- *
- * `dataset-models.ts` itself cannot be imported here: it imports other
- * modules at run time, which type stripping does not resolve. Only field ids
- * and types reach the tokens, so the v1 shim is reduced to those: every v1
- * column is a text field.
- */
-function effectiveModel(dataset) {
-  const model = dataset.model
-  if (model?.fields && model.order?.length) return model
-  const fields = Array.isArray(dataset.fields) ? dataset.fields : []
-  return {
-    fields: Object.fromEntries(
-      fields.map((name) => [name, { name, type: 'text' }]),
-    ),
-    order: [...fields],
-  }
-}
-
-/** The source guard: the shim above still restates the library's rule. */
-function modelShimAgrees(source) {
-  const code =
-    source ?? readFileSync(join(APP_UTILS, 'dataset-models.ts'), 'utf8')
-  const at = code.indexOf('export function effectiveDatasetModel(')
-  if (at < 0) {
-    return {
-      ok: false,
-      why: '`effectiveDatasetModel` not found in dataset-models.ts',
-    }
-  }
-  const body = code.slice(at, at + 400)
-  const ok =
-    body.includes('dataset.model?.fields && dataset.model.order?.length') &&
-    body.includes('deriveModelFromFields(dataset.fields ?? [])')
-  return {
-    ok,
-    why: ok
-      ? '`effectiveDatasetModel` matches the shim'
-      : '`effectiveDatasetModel` changed — update `effectiveModel` here',
-  }
-}
-
 const sameKeys = (left, right) =>
   left.length === right.length && left.every((key, at) => key === right[at])
 
 /**
+ * Whether a stored `filterValues` map holds exactly the computed entries.
+ * Key ORDER is not compared: a map read back from Firestore need not list
+ * its keys in the order they were written.
+ */
+const sameValues = (stored, computed) => {
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return false
+  const keys = Object.keys(computed)
+  return (
+    Object.keys(stored).length === keys.length &&
+    keys.every((key) => Object.is(stored[key], computed[key]))
+  )
+}
+
+/**
  * One record's verdict, so the dry run and the apply run cannot disagree.
- * `write` is the array to store, or `null` to remove the field.
+ * `write` holds only the fields that moved: an array or map to store, or
+ * `null` to remove the field.
  */
 export function planRecord(model, data) {
   const values = data?.values
   if (values != null && (typeof values !== 'object' || Array.isArray(values))) {
     return { action: 'skip', reason: '`values` is not a map' }
   }
-  const computed = datasetFilterKeys(model, values ?? undefined)
-  const stored = data?.filterKeys
-  if (stored !== undefined && !Array.isArray(stored)) {
-    return { action: 'update', write: computed.length ? computed : null }
-  }
-  if (sameKeys(stored ?? [], computed)) return { action: 'current' }
-  return { action: 'update', write: computed.length ? computed : null }
+  const write = {}
+  const keys = datasetFilterKeys(model, values ?? undefined)
+  const storedKeys = data?.filterKeys
+  const keysCurrent =
+    storedKeys === undefined
+      ? keys.length === 0
+      : Array.isArray(storedKeys) && sameKeys(storedKeys, keys)
+  if (!keysCurrent) write.filterKeys = keys.length ? keys : null
+
+  const filterValues = datasetFilterValues(model, values ?? undefined)
+  const storedValues = data?.filterValues
+  const empty = Object.keys(filterValues).length === 0
+  const valuesCurrent =
+    storedValues === undefined ? empty : sameValues(storedValues, filterValues)
+  if (!valuesCurrent) write.filterValues = empty ? null : filterValues
+
+  return Object.keys(write).length ? { action: 'update', write } : { action: 'current' }
 }
 
 async function run() {
@@ -424,7 +181,15 @@ async function run() {
       ).docs
     : (await firestore.collectionGroup('datasets').get()).docs
 
-  const totals = { datasets: 0, scanned: 0, current: 0, updated: 0, skipped: 0 }
+  const totals = {
+    datasets: 0,
+    scanned: 0,
+    current: 0,
+    updated: 0,
+    skipped: 0,
+    keys: 0,
+    values: 0,
+  }
   const skipReasons = new Map()
   const skip = (reason, count = 1) => {
     totals.skipped += count
@@ -443,13 +208,13 @@ async function run() {
       fields: datasetDoc.get('fields'),
     })
     const recordsRef = datasetDoc.ref.collection('records')
-    const counts = { scanned: 0, current: 0, updated: 0, skipped: 0 }
+    const counts = { scanned: 0, current: 0, updated: 0, skipped: 0, keys: 0, values: 0 }
     let cursor = null
     for (;;) {
       // Paged by document name: every record has one, so the walk is total.
       let pageQuery = recordsRef
         .orderBy(FieldPath.documentId())
-        .select('values', 'filterKeys')
+        .select('values', 'filterKeys', 'filterValues')
         .limit(BATCH_SIZE)
       if (cursor) pageQuery = pageQuery.startAfter(cursor)
       const page = await pageQuery.get()
@@ -466,9 +231,19 @@ async function run() {
         } else {
           counts.updated += 1
           writes += 1
-          batch.update(recordDoc.ref, {
-            filterKeys: verdict.write ?? FieldValue.delete(),
-          })
+          if ('filterKeys' in verdict.write) counts.keys += 1
+          if ('filterValues' in verdict.write) counts.values += 1
+          // `update` replaces each field whole — `filterValues` included,
+          // so an entry the record no longer holds leaves with the rest.
+          batch.update(
+            recordDoc.ref,
+            Object.fromEntries(
+              Object.entries(verdict.write).map(([field, value]) => [
+                field,
+                value ?? FieldValue.delete(),
+              ]),
+            ),
+          )
         }
       }
       if (args.apply && writes) await batch.commit()
@@ -478,6 +253,8 @@ async function run() {
     totals.scanned += counts.scanned
     totals.current += counts.current
     totals.updated += counts.updated
+    totals.keys += counts.keys
+    totals.values += counts.values
     if (counts.updated || counts.skipped) {
       console.log(
         `${datasetDoc.ref.path}: ${counts.scanned} scanned, ${counts.current} current, ` +
@@ -489,7 +266,8 @@ async function run() {
   console.log(
     `\n${totals.datasets} dataset(s): ${totals.scanned} record(s) scanned, ` +
       `${totals.current} already current, ${totals.updated} ` +
-      `${args.apply ? 'updated' : 'would be updated'}, ${totals.skipped} skipped`,
+      `${args.apply ? 'updated' : 'would be updated'}, ${totals.skipped} skipped` +
+      ` (filterKeys on ${totals.keys}, filterValues on ${totals.values})`,
   )
   for (const [reason, count] of skipReasons)
     console.log(`  skipped ${count}: ${reason}`)
@@ -540,6 +318,20 @@ function runSelfTest() {
   fixtures.search.forEach((one, at) =>
     check(`fixture search #${at}`, datasetSearchToken(one.word), one.expected),
   )
+  // A map is compared by its entries, in key order: the fixture file and
+  // the builder need not list keys alike.
+  const entries = (map) => Object.entries(map ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))
+  check('the fixtures carry filterValues cases', (fixtures.values ?? []).length > 0, true)
+  ;(fixtures.values ?? []).forEach((one, at) =>
+    check(
+      `fixture values #${at}`,
+      entries(datasetFilterValues(fixtures.model, one.values)),
+      entries(one.expected),
+    ),
+  )
+  ;(fixtures.paths ?? []).forEach((one, at) =>
+    check(`fixture path #${at}`, datasetFilterValuePath(one.fieldId), one.expected),
+  )
 
   check(
     'reads the token builder beside this script',
@@ -548,31 +340,53 @@ function runSelfTest() {
       keys.includes('s:red'),
     true,
   )
+  const filterValues = { name: 'red kettle', status: 'Open' }
   check(
-    'stamps a record that carries no tokens',
+    'stamps a record that carries neither field',
     planRecord(model, { values: { name: 'Red Kettle', status: 'Open' } }),
-    { action: 'update', write: keys },
+    { action: 'update', write: { filterKeys: keys, filterValues } },
   )
   check(
-    'is idempotent: a stamped record is current',
+    'stamps only filterValues on a record the first backfill reached',
     planRecord(model, {
       values: { name: 'Red Kettle', status: 'Open' },
       filterKeys: keys,
     }),
+    { action: 'update', write: { filterValues } },
+  )
+  check(
+    'is idempotent: a stamped record is current, whatever its map key order',
+    planRecord(model, {
+      values: { name: 'Red Kettle', status: 'Open' },
+      filterKeys: keys,
+      filterValues: { status: 'Open', name: 'red kettle' },
+    }),
     { action: 'current' },
   )
   check(
-    're-stamps a record whose values moved',
-    planRecord(model, { values: { status: 'Open' }, filterKeys: keys }).action,
-    'update',
+    're-stamps a record whose values moved, dropping a cleared entry',
+    planRecord(model, {
+      values: { status: 'Open' },
+      filterKeys: keys,
+      filterValues,
+    }).write?.filterValues,
+    { status: 'Open' },
   )
   check(
-    'removes the field from a record with nothing filterable',
-    planRecord(model, { values: {}, filterKeys: ['s:x'] }),
-    { action: 'update', write: null },
+    'a number stored as text is stamped as the number',
+    planRecord(
+      { order: ['price'], fields: { price: { name: 'Price', type: 'float' } } },
+      { values: { price: '19.50' }, filterKeys: ['f:price=19.5'] },
+    ),
+    { action: 'update', write: { filterValues: { price: 19.5 } } },
   )
   check(
-    'leaves a record with nothing filterable and no field alone',
+    'removes both fields from a record with nothing filterable',
+    planRecord(model, { values: {}, filterKeys: ['s:x'], filterValues: { name: 'x' } }),
+    { action: 'update', write: { filterKeys: null, filterValues: null } },
+  )
+  check(
+    'leaves a record with nothing filterable and no fields alone',
     planRecord(model, { values: {} }),
     { action: 'current' },
   )
@@ -587,6 +401,14 @@ function runSelfTest() {
       email: 'A@B.co',
     }).includes('f:email=a@b.co'),
     true,
+  )
+  check(
+    'a v1 column no query path can name gets no filterValues entry',
+    datasetFilterValues(effectiveModel({ fields: ['e.mail', 'Unit price'] }), {
+      'e.mail': 'A@B.co',
+      'Unit price': 'Four',
+    }),
+    { 'Unit price': 'four' },
   )
   check(
     'the source guard reads a matching rule',

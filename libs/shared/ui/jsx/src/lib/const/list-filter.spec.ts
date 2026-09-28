@@ -29,6 +29,7 @@ import {
   listFilterOperatorLabel,
   matchListFilter,
 } from './list-filter'
+import { listFilterClauseSentence } from './list-filter-sentence'
 
 const FIELDS: readonly ListFilterField[] = [
   {
@@ -205,4 +206,15 @@ describe('a date clause names a calendar day, wherever the reader is (AGL-3317)'
     expect(matchListFilter({ at: early17 }, [field], { field: 'at', op: 'onOrAfter', value })).toBe(true)
     expect(matchListFilter({ at: early17 }, [field], { field: 'at', op: 'is', value })).toBe(true)
   })
+
+  it.each(['2026-09-17', '2026-09-17T00:00:00.000Z'])(
+    'names %s as Sep 17 on its chip and in a refusal, the day the query reads',
+    (value) => {
+      const sentence = listFilterClauseSentence(
+        { field: 'at', op: 'after', value },
+        { fields: [field], headers: { at: 'Created' } },
+      )
+      expect(sentence).toBe(`Created after ${new Date(2026, 8, 17).toLocaleDateString()}`)
+    },
+  )
 })

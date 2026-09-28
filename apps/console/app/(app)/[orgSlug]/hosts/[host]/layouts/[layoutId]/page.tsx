@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { mdiPageLayoutBody } from '@aglyn/shared-data-mdi'
 import {
@@ -175,7 +176,13 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
     const dequeue = queueLoading()
     try {
       await updateDoc(doc(firestore, 'hosts', hostId, 'layouts', layoutId), {
-        ...(name != null ? { displayName: name.trim() } : {}),
+        ...(name != null
+          ? {
+              displayName: name.trim(),
+              // The keys the layouts list finds it by (AGL-3321).
+              ...artifactRenameListKeys('layouts', name.trim()),
+            }
+          : {}),
         ...(description != null ? { description: description.trim() } : {}),
         // '' clears it: deleteField() would be the tidier write, but an
         // absent field and an empty one both read as "no parent" here and

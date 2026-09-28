@@ -30,6 +30,7 @@ import {
   uploadAcceptAttribute,
   uploadAcceptForPickerKind,
 } from '../../utils/media-upload-limits'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MediaLibraryComponent } from './media-library.component'
 
 // ---------------------------------------------------------------------------
@@ -346,6 +347,9 @@ function seedHostLibrary(assets = ASSETS) {
         // Distinct, so Newest has one order to draw.
         createdAt: { seconds: CREATED - index },
         tags: [],
+        // As every writer stores them (AGL-3327).
+        ...mediaFilterKeys({ fileName, contentType }),
+        folderId: null,
       },
     })),
   )
@@ -360,36 +364,16 @@ function seedHostLibrary(assets = ASSETS) {
   })
 }
 
-/**
- * A bound as a person can read it in a failure message: every character
- * outside printable ASCII is spelled as its `\u` escape, so a missing U+F8FF
- * shows up as a difference instead of as two identical-looking strings.
- */
-const spelled = (value: unknown) =>
-  typeof value === 'string'
-    ? value.replace(
-        /[^\x20-\x7e]/g,
-        (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
-      )
-    : value
-
-/** The `contentType` bounds of one grid query, or null when it has none. */
-function contentTypeRange(query: { constraints?: MockConstraint[] }) {
-  const bounds = (query.constraints ?? [])
-    .filter((c) => c.kind === 'where' && c.args[0] === 'contentType')
-    .map((c) => [c.args[1], c.args[2]] as [string, string])
-  if (!bounds.length) return null
-  return {
-    lower: spelled(bounds.find(([op]) => op === '>=')?.[1]),
-    upper: spelled(bounds.find(([op]) => op === '<')?.[1]),
-  }
+/** The `kind` a grid query asked for, or null when it asked for none. */
+function kindAsked(query: { constraints?: MockConstraint[] } | undefined) {
+  const clause = (query?.constraints ?? []).find(
+    (c) => c.kind === 'where' && c.args[0] === 'kind',
+  )
+  return clause ? { op: clause.args[1], value: clause.args[2] } : null
 }
 
-/** The last grid query that narrowed by content type. */
-function lastTypedQuery() {
-  const typed = mockGridQueries.filter((query) => contentTypeRange(query))
-  return typed[typed.length - 1]
-}
+/** The last read of the media collection the grid made. */
+const lastQuery = () => mockGridQueries[mockGridQueries.length - 1]
 
 /** Lets every pending read resolve and every state update it causes land. */
 async function settle() {
@@ -412,14 +396,8 @@ async function renderLibrary(
   return view
 }
 
-/** The Type select, found by its label rather than by position. */
-const typeSelect = () => screen.getByRole('combobox', { name: /^Type\b/ })
-
-async function chooseType(label: string) {
-  fireEvent.mouseDown(typeSelect())
-  fireEvent.click(await screen.findByRole('option', { name: label }))
-  await settle()
-}
+/** A bespoke Type select, which the library no longer draws (AGL-3327). */
+const typeSelect = () => screen.queryByRole('combobox', { name: /^Type\b/ })
 
 beforeEach(() => {
   mockDb.collections.clear()
@@ -438,40 +416,31 @@ beforeEach(() => {
 })
 
 /**
- * The Images and Video filters under a date sort (AGL-2952).
+ * The Type clause on the query (AGL-2952, AGL-3327).
  *
- * Newest and Oldest move the Type facet into the query as a RANGE on
- * `contentType`: at least `video/`, and below `video/` followed by U+F8FF, a
- * character that sorts above everything a content type is spelled with. The
- * upper bound is what makes the range a prefix match. Without the U+F8FF the
- * two bounds are the same string, no content type is both at least it and
- * below it, and the filter answers "No media matches these filters" in a
- * library full of video.
- *
- * Newest is the default sort, so this is the filter as most people meet it.
- * The model above applies the query to the seeded documents, which is what
- * turns a wrong bound into the empty grid rather than into a string nobody
- * looks at.
+ * AGL-2952 was a Type filter that answered "No media matches these filters"
+ * in a library full of video: the clause was a prefix RANGE on `contentType`
+ * whose upper bound had lost its U+F8FF. Since AGL-3327 the family is stored
+ * as `kind` and asked by equality, which has no bound to lose and stands on
+ * the query under every sort. The model above applies the query to the
+ * seeded documents, so a wrong clause is the empty grid a person would see.
+ * Driven through a picker's fixed kind, which is the same clause the Filters
+ * panel writes (`media-filter.spec.ts` plans the panel's).
  */
-describe('the Type filter under a date sort (AGL-2952)', () => {
+describe('the Type clause on the query (AGL-2952, AGL-3327)', () => {
   const FAMILIES = [
-    ['Video', 'video/'],
-    ['Images', 'image/'],
+    ['video', 'video/'],
+    ['image', 'image/'],
   ] as const
 
   it.each(FAMILIES)(
-    '%s bounds the range above every %s type',
-    async (label, family) => {
-      await renderLibrary()
-      await chooseType(label)
+    '%s asks for its family, and every %s file answers',
+    async (kind, family) => {
+      await renderLibrary({ kind, onSelect: jest.fn() }, filesOf(family)[0])
 
-      const query = lastTypedQuery()
-      expect(query).toBeDefined()
-      expect(contentTypeRange(query)).toEqual({
-        lower: family,
-        upper: `${family}\\uf8ff`,
-      })
-      // Every file of the family is inside the range, and nothing else is.
+      const query = lastQuery()
+      expect(kindAsked(query)).toEqual({ op: '==', value: kind })
+      // Every file of the family is in the answer, and nothing else is.
       expect(
         mockAnswer(query)
           .map((row) => row.data['fileName'])
@@ -483,11 +452,9 @@ describe('the Type filter under a date sort (AGL-2952)', () => {
 
   it.each(FAMILIES)(
     '%s lists every %s file rather than an empty grid',
-    async (label, family) => {
-      await renderLibrary()
-      await chooseType(label)
+    async (kind, family) => {
+      await renderLibrary({ kind, onSelect: jest.fn() }, filesOf(family)[0])
 
-      expect(lastTypedQuery()).toBeDefined()
       expect(screen.queryByText('No media matches these filters')).toBeNull()
       for (const fileName of filesOf(family)) {
         expect(screen.getByText(fileName)).toBeTruthy()
@@ -496,20 +463,6 @@ describe('the Type filter under a date sort (AGL-2952)', () => {
     },
     120_000,
   )
-
-  /**
-   * The bound is one invisible character, and a literal copy of it is what an
-   * editor or a formatter can drop without anyone seeing the diff. The source
-   * spells it as an escape, and holds no literal U+F8FF anywhere.
-   */
-  it('spells the bound as an escape in the source', () => {
-    const source = readFileSync(
-      join(__dirname, 'media-library.component.tsx'),
-      'utf8',
-    )
-    expect(source).toContain("where('contentType', '<', `${prefix}\\uf8ff`)")
-    expect(source).not.toMatch(/\uf8ff/)
-  })
 })
 
 /** The library's own upload input, as opposed to the card replace input. */
@@ -542,11 +495,7 @@ describe('a library narrowed to one kind (AGL-2953)', () => {
   it('asks for and lists only that kind before the Type control is touched', async () => {
     await renderLibrary({ kind: 'video', onSelect: jest.fn() })
 
-    const query = mockGridQueries[mockGridQueries.length - 1]
-    expect(contentTypeRange(query)).toEqual({
-      lower: 'video/',
-      upper: 'video/\\uf8ff',
-    })
+    expect(kindAsked(lastQuery())).toEqual({ op: '==', value: 'video' })
     for (const fileName of filesOf('video/')) {
       expect(screen.getByText(fileName)).toBeTruthy()
     }
@@ -555,17 +504,17 @@ describe('a library narrowed to one kind (AGL-2953)', () => {
     }
   }, 120_000)
 
-  it('narrows the client-side pass too, when the sort keeps the type out of the query', async () => {
+  it('keeps the kind on the query under every sort (AGL-3327)', async () => {
     await renderLibrary({ kind: 'video', onSelect: jest.fn() })
     fireEvent.mouseDown(screen.getByRole('combobox', { name: /^Sort\b/ }))
     fireEvent.click(await screen.findByRole('option', { name: 'Name' }))
     await settle()
 
-    // Sorted by name, the query carries no type at all and answers everything.
-    const query = mockGridQueries[mockGridQueries.length - 1]
-    expect(contentTypeRange(query)).toBeNull()
-    expect(mockAnswer(query)).toHaveLength(ASSETS.length)
-    // So the only thing standing between the grid and an image is the pass.
+    // Sorted by name, the query still asks for the family — an equality
+    // stands beside any order — so no image is ever read, let alone drawn.
+    const query = lastQuery()
+    expect(kindAsked(query)).toEqual({ op: '==', value: 'video' })
+    expect(mockAnswer(query)).toHaveLength(filesOf('video/').length)
     for (const fileName of filesOf('video/')) {
       expect(screen.getByText(fileName)).toBeTruthy()
     }
@@ -574,11 +523,13 @@ describe('a library narrowed to one kind (AGL-2953)', () => {
     }
   }, 120_000)
 
-  it('shows the kind in the Type control, and offers no other', async () => {
+  it('shows the kind as a chip nobody can remove, and offers no other Type', async () => {
     await renderLibrary({ kind: 'video', onSelect: jest.fn() })
-    const control = typeSelect()
-    expect(control.getAttribute('aria-disabled')).toBe('true')
-    expect(control.textContent).toBe('Video')
+    const chip = screen.getByText('Type is Video').closest('.MuiChip-root')
+    expect(chip).toBeTruthy()
+    // No delete affordance: the picker's field can hold nothing else.
+    expect(chip?.querySelector('.MuiChip-deleteIcon')).toBeNull()
+    expect(typeSelect()).toBeNull()
   }, 120_000)
 
   it('offers only that kind in the upload chooser', async () => {
@@ -636,7 +587,7 @@ describe('a library narrowed to one kind (AGL-2953)', () => {
 })
 
 describe('a library with no kind is unchanged (AGL-2953)', () => {
-  it('leaves the Type control, the chooser and the empty state to the person', async () => {
+  it('leaves the type, the chooser and the empty state to the person', async () => {
     const { container } = await renderLibrary()
     expect(uploadInput(container).accept).toBe(
       uploadAcceptAttribute({ video: true }),
@@ -645,10 +596,9 @@ describe('a library with no kind is unchanged (AGL-2953)', () => {
     for (const [fileName] of ASSETS) {
       expect(screen.getByText(fileName)).toBeTruthy()
     }
-    // And the Type control is the person's to set.
-    expect(typeSelect().getAttribute('aria-disabled')).not.toBe('true')
-    await chooseType('Video')
-    expect(typeSelect().textContent).toBe('Video')
+    // No type is fixed: the Filters panel is the person's to set it from.
+    expect(screen.queryByText(/^Type is /)).toBeNull()
+    expect(kindAsked(lastQuery())).toBeNull()
   }, 120_000)
 
   it('still calls an empty library empty, for every family', async () => {

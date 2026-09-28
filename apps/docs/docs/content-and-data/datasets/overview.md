@@ -46,35 +46,49 @@ type, so data stays clean.
 ## Filter and search the records {#filter-records}
 
 The records table filters through its own toolbar: **Filters** opens the filter panel,
-where every field of the dataset's model is a column, and **Search** finds records by the
-words in their text. A field with a fixed list of options, and a true/false field, are
-picked from a list; numbers and dates take a value; reference, map, bytes, coordinates
-and null fields are not filterable. Each filter shows as a chip above the table, and
+where each filterable field of the dataset's model is a column, and **Search** finds
+records by the words in their text. Each filter shows as a chip above the table, and
 removing the chip removes the filter. The panel and chips work as on every console
-list — see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search); what differs here is how far a filter
-reaches.
+list — see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
-**One condition reaches every record.** A single filter or a single search word is
-answered across the whole dataset and paged like the unfiltered table, when it is:
+**Every filter and the search reach the whole dataset.** They are answered by the
+database across every record, and the table pages through the matches exactly as it pages
+through the unfiltered dataset — nothing is matched only against the records already on
+screen. What each field type offers:
 
-- a field **equals** a value — for a text field, ignoring case;
-- a text field **contains** a word, which matches words that **start with** what you
-  typed (`kett` finds *Kettle*, `ttle` does not);
-- a list field **contains** one of its entries;
-- one **search** word, which likewise matches the start of any word in the record's text
-  fields, option fields and lists.
+| Field | Filters |
+| -- | -- |
+| Text with a fixed list of options | *is*, *is any of* — picked from the options |
+| True/false | *is* — picked |
+| Number | *=* |
+| Plain text | *equals* and *is any of*, ignoring case; *contains* a word |
+| List | *contains* one of its entries, spelled exactly as stored |
 
-Its chip is highlighted. **Anything more is matched over the first 1,000 records** that
-the first condition finds (or the first 1,000 records of the dataset, when none of the
-conditions can be answered that way): a second filter or search word, a filter that
-contains several words, **number and date ranges**, *is empty*, *is not*, and *is any
-of*. When there were more than 1,000 to look through, the table says so. A word is matched
-on its first 12 characters, and a text value's first 40 words are searchable.
+Dates, references, maps, bytes, coordinates and null fields are not filterable, and no
+field offers ranges (*greater than*, *before*, *after*), *is not*, or *is empty* — the
+panel does not show what the database cannot answer this way.
+
+**Contains and search match the start of a word.** `kett` finds *Kettle*; `ttle` finds
+nothing. The search looks at every text field, option field and list of the record.
+Each asks for **one word**: type several and the table uses the first and says so above
+the records. A word is matched on its first 12 characters, a text value's first 40 words
+are searchable, and *equals* compares the first 64 characters of a text value.
+
+**Combine as many *is*, *equals*, *is any of* and *=* filters as you like, but only one
+*contains* or search at a time.** A second one — a *contains* while a search word is typed,
+or a *contains* on a second field — is not applied, and the table says which one and why
+above the records rather than showing a partial answer. Clear the search, or remove the
+other *contains*, to use it. *Is any of* takes at most 30 values, and several *is any of*
+filters together may ask for at most 30 combinations.
+
+On a dataset created before field reference IDs were checked, a field whose ID contains a
+character such as `.` or `/` offers only *contains*.
 
 This needs no database index — nothing to deploy on a self-hosted project. Records keep
-their filter terms in a `filterKeys` field that every write keeps current. **Records
-written before the field existed** are found only once it is stamped onto them, which the
-operator does once per project:
+their filter terms in two fields every write keeps current: `filterValues`, one value per
+filterable field, and `filterKeys`, the words a *contains* or a search looks for. **Records
+written before a field existed** are found by the filters that read it only once it is
+stamped onto them, which the operator does once per project:
 
 ```bash
 # Dry run: counts what would change and writes nothing.

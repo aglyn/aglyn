@@ -16,7 +16,7 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { memberNameSearchFields } from './member-name-search'
+import { memberNameSearchFields, memberSearchTokens } from './member-name-search'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -74,7 +74,17 @@ export const membershipAccountHandler: PluginApiHandler = async (req, res) => {
         : undefined
       await memberRef.set(
         {
-          ...(displayName ? memberNameSearchFields(displayName) : {}),
+          ...(displayName
+            ? {
+                ...memberNameSearchFields(displayName),
+                // The Site users list's search reads the new name beside
+                // the address the member signed up with (AGL-3321).
+                searchTokens: memberSearchTokens(
+                  displayName,
+                  String(memberSnapshot.get('email') ?? ''),
+                ),
+              }
+            : {}),
           ...(addresses ? { addresses } : {}),
         },
         { merge: true },

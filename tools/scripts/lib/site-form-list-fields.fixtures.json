@@ -1,0 +1,248 @@
+{
+  "note": "Worked examples of formListFields (AGL-3330). libs/aglyn/src/lib/app-utils/forms.spec.ts asserts the library answers these; tools/scripts/lib/site-form-list-fields.test.mjs asserts the script twin (tools/scripts/lib/site-form-list-fields.mjs) does. Regenerate neither by hand from one side only.",
+  "forms": [
+    {
+      "form": {
+        "id": "fDemoRequest001",
+        "displayName": "Demo request",
+        "slug": "demo-request"
+      },
+      "expected": {
+        "nameLower": "demo request",
+        "nameTokens": [
+          "d",
+          "de",
+          "dem",
+          "demo",
+          "r",
+          "re",
+          "req",
+          "requ",
+          "reque",
+          "reques",
+          "request"
+        ],
+        "nameReversed": "tseuqer omed",
+        "searchTokens": [
+          "d",
+          "de",
+          "dem",
+          "demo",
+          "r",
+          "re",
+          "req",
+          "requ",
+          "reque",
+          "reques",
+          "request",
+          "f",
+          "fd",
+          "fde",
+          "fdem",
+          "fdemo",
+          "fdemor",
+          "fdemore",
+          "fdemoreq",
+          "fdemorequ",
+          "fdemoreque",
+          "fdemoreques",
+          "fdemorequest"
+        ]
+      }
+    },
+    {
+      "form": {
+        "id": "Kq2mBrandAuditXyZ",
+        "displayName": "  Multi-brand   site audit ",
+        "slug": "multi-brand-site-audit"
+      },
+      "expected": {
+        "nameLower": "multi-brand site audit",
+        "nameTokens": [
+          "m",
+          "mu",
+          "mul",
+          "mult",
+          "multi",
+          "multi-",
+          "multi-b",
+          "multi-br",
+          "multi-bra",
+          "multi-bran",
+          "multi-brand",
+          "s",
+          "si",
+          "sit",
+          "site",
+          "a",
+          "au",
+          "aud",
+          "audi",
+          "audit"
+        ],
+        "nameReversed": "tidua etis dnarb-itlum",
+        "searchTokens": [
+          "m",
+          "mu",
+          "mul",
+          "mult",
+          "multi",
+          "multi-",
+          "multi-b",
+          "multi-br",
+          "multi-bra",
+          "multi-bran",
+          "multi-brand",
+          "s",
+          "si",
+          "sit",
+          "site",
+          "a",
+          "au",
+          "aud",
+          "audi",
+          "audit",
+          "b",
+          "br",
+          "bra",
+          "bran",
+          "brand",
+          "k",
+          "kq",
+          "kq2",
+          "kq2m",
+          "kq2mb",
+          "kq2mbr",
+          "kq2mbra",
+          "kq2mbran",
+          "kq2mbrand",
+          "kq2mbranda",
+          "kq2mbrandau",
+          "kq2mbrandaud"
+        ]
+      }
+    },
+    {
+      "form": {
+        "id": "f1",
+        "displayName": "Book a call",
+        "slug": "contact"
+      },
+      "expected": {
+        "nameLower": "book a call",
+        "nameTokens": [
+          "b",
+          "bo",
+          "boo",
+          "book",
+          "a",
+          "c",
+          "ca",
+          "cal",
+          "call"
+        ],
+        "nameReversed": "llac a koob",
+        "searchTokens": [
+          "b",
+          "bo",
+          "boo",
+          "book",
+          "a",
+          "c",
+          "ca",
+          "cal",
+          "call",
+          "co",
+          "con",
+          "cont",
+          "conta",
+          "contac",
+          "contact",
+          "f",
+          "f1"
+        ]
+      }
+    },
+    {
+      "form": {
+        "id": "fNoName",
+        "slug": "untitled"
+      },
+      "expected": {
+        "nameLower": "",
+        "nameTokens": [],
+        "nameReversed": "",
+        "searchTokens": [
+          "u",
+          "un",
+          "unt",
+          "unti",
+          "untit",
+          "untitl",
+          "untitle",
+          "untitled",
+          "f",
+          "fn",
+          "fno",
+          "fnon",
+          "fnona",
+          "fnonam",
+          "fnoname"
+        ]
+      }
+    },
+    {
+      "form": {
+        "id": "fCafe",
+        "displayName": "Café Supercalifragilistic",
+        "slug": "cafe-supercalifragilistic"
+      },
+      "expected": {
+        "nameLower": "café supercalifragilistic",
+        "nameTokens": [
+          "c",
+          "ca",
+          "caf",
+          "café",
+          "s",
+          "su",
+          "sup",
+          "supe",
+          "super",
+          "superc",
+          "superca",
+          "supercal",
+          "supercali",
+          "supercalif",
+          "supercalifr",
+          "supercalifra"
+        ],
+        "nameReversed": "citsiligarfilacrepus éfac",
+        "searchTokens": [
+          "c",
+          "ca",
+          "caf",
+          "café",
+          "s",
+          "su",
+          "sup",
+          "supe",
+          "super",
+          "superc",
+          "superca",
+          "supercal",
+          "supercali",
+          "supercalif",
+          "supercalifr",
+          "supercalifra",
+          "cafe",
+          "f",
+          "fc",
+          "fca",
+          "fcaf",
+          "fcafe"
+        ]
+      }
+    }
+  ]
+}

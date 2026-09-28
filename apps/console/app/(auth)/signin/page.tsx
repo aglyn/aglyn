@@ -66,6 +66,7 @@ import { AuthLegalNotice } from '../../../components/auth-legal-consent.componen
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
+import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
 import { authSignInHost } from '../../../utils/auth-delegation'
 import { isNewAccount, sendToConsentGate } from '../../../utils/legal-consent'
 import {
@@ -176,6 +177,14 @@ function SignIn() {
   const rejectUnconsentedNewAccount = useCallback(
     async (credential: UserCredential): Promise<boolean> => {
       if (!isNewAccount(credential)) return false
+      // This IS the account's creation (AGL-3355), so it records where the
+      // visit came from — before the stand-down, while the user can still
+      // mint a token. The server measures its window from the auth record's
+      // creation time, so a person who takes longer than that to consent on
+      // /signup would otherwise be recorded by nobody: /signup's call finds
+      // an account too old to be new, and one who never comes back leaves an
+      // account with no record at all.
+      await rememberAccountAcquisition(credential.user)
       markInteractiveSignOut()
       await signOut(firebaseAuth).catch((error) => {
         console.error('could not stand down unconsented new account', error)

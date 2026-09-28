@@ -238,6 +238,9 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     serverTimestamp: () => '__now__',
     delete: () => DELETE_SENTINEL,
+    // The listing refresh stamps a missing `installCount` as `increment(0)`
+    // (AGL-3321); against an absent field that is the zero it stores.
+    increment: (by: number) => by,
   },
 }))
 
@@ -983,21 +986,29 @@ describe('revoking a version does not un-review it', () => {
     ).toBe(undefined)
   })
 
-  it('SOURCE PIN: the queue keys on the version state, never the summary', () => {
-    // The one-line change that would resurrect every killed version into the
-    // review queue as though it had never been read.
+  it('PIN: the queue asks for the summary values that mean "not approved", never `revoked`', () => {
+    // The queue is a query now (AGL-3321), so it reads the listing's summary
+    // rather than each version doc — and the summary's `revoked` is the one
+    // value a version keeps its `approved` under. The one-line change that
+    // would resurrect every killed version into the queue as though it had
+    // never been read is adding `revoked` here, or asking `!= 'approved'`.
+    const { AWAITING_REVIEW_STATES, reviewQueueBase } = jest.requireActual(
+      '../model/listing-query',
+    ) as typeof import('../model/listing-query')
+    expect([...AWAITING_REVIEW_STATES]).toEqual(['pending', 'rejected'])
+    expect(reviewQueueBase('queue', [])).toContainEqual({
+      path: 'latestVersionReviewState',
+      op: 'in',
+      value: ['pending', 'rejected'],
+    })
     const source = require('node:fs').readFileSync(
       require('node:path').join(__dirname, 'admin-reviews.ts'),
       'utf8',
     ) as string
-    expect(source).toContain(
-      "rows.filter((row) => row.latestReviewState !== 'approved')",
-    )
+    expect(source).not.toContain("latestVersionReviewState', '!='")
+    // A row still shows the version's own verdict.
     expect(source).toContain(
       "latestReviewState: String(latest?.get('reviewState') ?? 'pending')",
-    )
-    expect(source).not.toContain(
-      "row.latestVersionReviewState !== 'approved'",
     )
   })
 })

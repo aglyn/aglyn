@@ -23,6 +23,7 @@ import {
   firebaseAdmin,
   resolveMarketplacePluginVersion,
 } from '@aglyn/tenant-data-admin'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Remote SERVER handler bundles for the plugin API dispatcher (AGL-420).
@@ -56,15 +57,13 @@ export async function ensureRemoteServerBundles(): Promise<void> {
     audited = true
     const firestore = firebaseAdmin.app().firestore()
     for (const bundle of loaded) {
-      await firestore
-        .collection('adminAudit')
-        .add({
-          actorUid: 'system',
-          action: 'plugins.remoteServer.load',
-          target: `marketplaceListings/${bundle.listingId}/pluginVersions/${bundle.version}`,
-          after: { sha256: bundle.sha256, app: 'tenant' },
-          at: new Date(),
-        })
+      await addAdminAudit(firestore, {
+        actorUid: 'system',
+        action: 'plugins.remoteServer.load',
+        target: `marketplaceListings/${bundle.listingId}/pluginVersions/${bundle.version}`,
+        after: { sha256: bundle.sha256, app: 'tenant' },
+        at: new Date(),
+      })
         .catch(() => undefined)
     }
   }

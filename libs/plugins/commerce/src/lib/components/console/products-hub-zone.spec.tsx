@@ -30,6 +30,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostResourceApi: () => mockCreate,
 }))
 
+/*
+ * The host's smart collections, which every product write asks the store for
+ * to stamp `collectionIds` (AGL-3321): none on this site.
+ */
+jest.mock('./smart-collections', () => ({
+  readSmartCollections: async () => [],
+  productCollectionFields: async () => ({ collectionIds: [] }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }),
   collection: (_db: unknown, ...path: string[]) => path.join('/'),
@@ -201,8 +210,13 @@ describe('proposed products, categories and discounts', () => {
 
   it('creates each product as an unpriced draft through the resources API, under a slug of its own', async () => {
     mockCreate.mockResolvedValueOnce({ id: 'p-new-1' }).mockResolvedValueOnce({ id: 'p-new-2' })
-    const { props, onCreated, roomFor } = renderZone()
-    // Names of their own, whose slugs the hub's candle already has.
+    // The candle is in the STORE: slugs are asked of it, never of the page of
+    // rows the hub shows (AGL-3321).
+    mockExisting['hosts/host-1/products'] = [
+      { name: 'Wild mint soy candle', nameLower: 'wild mint soy candle', slug: 'wild-mint-soy-candle' },
+    ]
+    const { props, onCreated, roomFor } = renderZone({ products: [] })
+    // Names of their own, whose slugs the store's candle already has.
     const ids = await props.createProductDrafts([
       { ...PROPOSAL, name: 'Wild-mint soy candle' },
       { ...PROPOSAL, name: 'Wild mint soy candle!' },
@@ -218,7 +232,8 @@ describe('proposed products, categories and discounts', () => {
     expect(created.every((call) => call.data.variants.every((variant: object) => !('priceUsd' in variant)))).toBe(true)
   })
 
-  it('passes over a proposal named like a product the hub holds, asking the allowance only for the rest', async () => {
+  it('passes over a proposal named like a product the store holds, asking the allowance only for the rest', async () => {
+    mockExisting['hosts/host-1/products'] = [{ name: 'Desk lamp', nameLower: 'desk lamp', slug: 'desk-lamp' }]
     mockCreate.mockResolvedValueOnce({ id: 'p-new-1' })
     const { props, roomFor } = renderZone()
     const ids = await props.createProductDrafts([
@@ -249,6 +264,11 @@ describe('proposed products, categories and discounts', () => {
       {
         path: 'hosts/host-1/products',
         constraints: [{ field: 'nameLower', op: 'in', value: ['beeswax taper', 'retired tin'] }],
+      },
+      // The created draft's slug, asked of the store before it is claimed.
+      {
+        path: 'hosts/host-1/products',
+        constraints: [{ field: 'slug', op: 'in', value: ['retired-tin'] }],
       },
     ])
   })

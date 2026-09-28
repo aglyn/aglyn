@@ -22,11 +22,16 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import {
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -50,13 +55,17 @@ import {
   Typography,
 } from '@mui/material'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
+import {
+  ORG_MARGIN_FILTER_FIELDS,
+  ORG_MARGIN_FILTER_HEADERS,
+} from '../../../../utils/org-list-query'
 import {
   MARGIN_SCOPE_NOTE,
   UTILIZATION_BAND_LABELS,
@@ -94,37 +103,34 @@ import {
  * a median over part of the fleet presented as the whole one is not, so every
  * aggregate here is captioned with the number of organizations behind it and
  * the banner stays up while a cursor remains.
+ *
+ * ## Filters choose what the scan reads (AGL-3321)
+ *
+ * The per-organization table's Filters panel and search go to the route with
+ * every scan, which plans them onto its Firestore query: Organization, Stored
+ * plan and the name search are fields of the org document, so the walk reads
+ * only the organizations that match, and every figure on the page is over
+ * those. Month, revenue, margin and the bands are COMPUTED from a rollup the
+ * route reads after the query, so no query can narrow by them and the panel
+ * does not offer them — a filter over the rows already scanned would answer
+ * "none" for an organization the walk had not reached yet. The worst-first
+ * ORDER is computed the same way, and is the order of the organizations read.
  */
 
 /** Rows rendered in the per-org table. Beyond it the fold is still complete. */
 const TABLE_CEILING = 200
 
-/*
- * What the per-org grid filters and searches by. The page holds every row
- * the scan read, so both answer over all of them, worst margin first, and
- * only then is the rendering capped at `TABLE_CEILING`.
- */
-const MARGIN_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('plan', 'select'),
-  inMemoryListField('month', 'text'),
-  inMemoryListField('netRevenueUsd', 'number'),
-  inMemoryListField('marginPct', 'number'),
-]
-const MARGIN_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'Organization',
-  plan: 'Plan',
-  month: 'Month',
-  netRevenueUsd: 'Net revenue',
-  marginPct: 'Margin (fraction)',
-}
+/** The stored plan is picked from the plans, not typed. */
 const MARGIN_FILTER_OPTIONS = {
   plan: (Object.keys(PLAN_LABELS) as Array<keyof typeof PLAN_LABELS>).map((plan) => ({
     value: plan,
     label: PLAN_LABELS[plan],
   })),
 }
-const MARGIN_SEARCH_PATHS = ['name', 'orgId', 'plan', 'month']
+const MARGIN_SELECT_FIELDS = ['plan']
+
+/** The debounce on the search box, in milliseconds: each settled word is a scan. */
+const SEARCH_SETTLE_MS = 300
 
 const pct = (fraction: number | null): string =>
   fraction === null ? '—' : `${(fraction * 100).toFixed(fraction < 0.1 ? 1 : 0)}%`
@@ -250,18 +256,52 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
   const [reads, setReads] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refused, setRefused] = useState<ListQueryRefusal[]>([])
+  const [notices, setNotices] = useState<string[]>([])
 
+  /*
+   * The table's Filters panel and search — the question the scan asks, not a
+   * filter over what it read. Only the stored fields are offered.
+   */
+  const gridFilter = useListGridFilter({ selectFields: MARGIN_SELECT_FIELDS })
+  const typed = gridFilter.searchWords.join(' ').trim()
+  const [settled, setSettled] = useState(typed)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(typed), SEARCH_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [typed])
+  const filtering = gridFilter.clauses.length > 0 || typed.length > 0
+  // The question as data: its JSON is its identity, so an equal question
+  // from a new array is not a new scan.
+  const questionKey = JSON.stringify({
+    clauses: gridFilter.clauses.map(({ field, op, value }) => ({ field, op, value })),
+    search: settled,
+  })
+
+  /** The newest scan asked for; an answer to any older one is dropped. */
+  const latestScan = useRef(0)
   const scan = useCallback(
     async (after: string | null) => {
       if (!user) return
+      const asked = (latestScan.current += 1)
+      const question = JSON.parse(questionKey) as {
+        clauses: Array<{ field: string; op: string; value: string }>
+        search: string
+      }
+      const params = new URLSearchParams()
+      if (question.clauses.length) params.set('filters', JSON.stringify(question.clauses))
+      if (question.search) params.set('search', question.search)
+      if (after) params.set('cursor', after)
+      const search = params.toString()
       setLoading(true)
       setError(null)
       try {
         const response = await authorizedFetch(
           user,
-          `/api/admin/margin-utilization${after ? `?after=${encodeURIComponent(after)}` : ''}`,
+          `/api/admin/margin-utilization${search ? `?${search}` : ''}`,
         )
         const payload = await response.json()
+        if (asked !== latestScan.current) return
         if (!response.ok) {
           setError(payload?.error ?? 'Scan failed')
           return
@@ -272,41 +312,44 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
         setRows((previous) => (after ? [...previous, ...payload.rows] : payload.rows))
         setCursor(payload.nextCursor ?? null)
         setReads((previous) => (after ? previous + payload.reads : payload.reads))
+        setRefused(Array.isArray(payload.refused) ? payload.refused : [])
+        setNotices(Array.isArray(payload.notices) ? payload.notices : [])
         setScannedAt(new Date().toISOString())
       } catch {
-        setError('Scan failed')
+        if (asked === latestScan.current) setError('Scan failed')
       } finally {
-        setLoading(false)
+        if (asked === latestScan.current) setLoading(false)
       }
     },
-    [user],
+    [user, questionKey],
   )
+
+  /*
+   * A new question is a new walk. Once a scan has run, changing a filter or
+   * the search rescans from the start — the rows of the old walk answer a
+   * different question. Before the first scan nothing is read: the page
+   * still reads only when asked.
+   */
+  const askedKey = useRef(questionKey)
+  useEffect(() => {
+    if (askedKey.current === questionKey) return
+    askedKey.current = questionKey
+    if (scannedAt !== null) void scan(null)
+  }, [questionKey, scan, scannedAt])
 
   const fleet = useMemo(() => fleetUtilization(rows), [rows])
   const ordered = useMemo(
     () => [...rows].sort(byWorstMargin).map((row) => ({ ...row, $id: row.orgId })),
     [rows],
   )
-  const marginFilter = useListRowsFilter({
-    rows: ordered,
-    fields: MARGIN_FILTER_FIELDS,
-    options: MARGIN_FILTER_OPTIONS,
-    headers: MARGIN_FILTER_HEADERS,
-    search: MARGIN_SEARCH_PATHS,
-  })
-  // Bounded, and it says when it bit. The FOLD above is over every row read,
-  // and the filter over every row too; only the rendering is capped, so no
-  // aggregate and no match changes with this number.
-  const table = useMemo(
-    () => ceilingedWindow(marginFilter.rows, TABLE_CEILING),
-    [marginFilter.rows],
-  )
+  // Bounded, and it says when it bit. The FOLD above is over every row read;
+  // only the rendering is capped, so no aggregate changes with this number.
+  const table = useMemo(() => ceilingedWindow(ordered, TABLE_CEILING), [ordered])
 
   const bands = fleet.distributions
-  const { filterColumns: marginFilterColumns } = marginFilter
   const orgColumns = useMemo(
     () =>
-      marginFilterColumns([
+      listFilterGridColumns([
         {
           field: 'name',
           headerName: 'Organization',
@@ -398,8 +441,8 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
         listActionsColumn((row: OrgMarginRow) => <RowActions orgId={row.orgId} />, {
           width: 72,
         }),
-      ] as GridColDef<OrgMarginRow>[] as GridColDef[]),
-    [marginFilterColumns, bands],
+      ] as GridColDef<OrgMarginRow>[] as GridColDef[], ORG_MARGIN_FILTER_FIELDS, MARGIN_FILTER_OPTIONS, ORG_MARGIN_FILTER_HEADERS),
+    [bands],
   )
 
   return (
@@ -476,10 +519,10 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
             {cursor ? (
               <Alert severity="warning">
                 <AlertTitle>This is part of the fleet, not all of it</AlertTitle>
-                More organizations exist past the {fleet.orgs.toLocaleString()}{' '}
-                read so far. Every figure below describes those{' '}
-                {fleet.orgs.toLocaleString()} and no others. Keep scanning to
-                complete it.
+                More {filtering ? 'matching ' : ''}organizations exist past the{' '}
+                {fleet.orgs.toLocaleString()} read so far. Every figure below
+                describes those {fleet.orgs.toLocaleString()} and no others.
+                Keep scanning to complete it.
               </Alert>
             ) : null}
 
@@ -490,7 +533,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                 here is the absence of a measurement, not a report that margin
                 is healthy.
               </Alert>
-            ) : fleet.orgs === 0 ? (
+            ) : fleet.orgs === 0 && !filtering ? (
               <Alert severity="info">
                 <AlertTitle>No organizations exist</AlertTitle>
                 The scan completed and found no organizations at all. There is
@@ -499,6 +542,8 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
               </Alert>
             ) : (
               <>
+                {fleet.orgs > 0 ? (
+                <>
                 <CardDisplay
                   header="Utilization across the fleet"
                   help={docsHelp('staffConsole', {
@@ -654,6 +699,8 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                     </Typography>
                   </Stack>
                 </CardDisplay>
+                </>
+                ) : null}
 
                 <CardDisplay
                   header="By organization, worst margin first"
@@ -666,23 +713,49 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                   contentGutterY
                 >
                   <Stack spacing={2}>
+                    {filtering ? (
+                      <Typography variant="caption" color="text.secondary">
+                        The filters and the search choose which organizations
+                        the scan reads, across all of them. Every figure on
+                        this page describes the organizations that match.
+                      </Typography>
+                    ) : null}
                     {table.truncated ? (
                       <Alert severity="info">
                         Showing the {TABLE_CEILING} worst of{' '}
-                        {marginFilter.rows.length.toLocaleString()}{' '}
-                        {marginFilter.filtering
-                          ? 'organizations that match'
-                          : 'organizations read'}
+                        {ordered.length.toLocaleString()}{' '}
+                        {filtering ? 'organizations that match' : 'organizations read'}
                         .
                         Every figure above still covers all of them.
                       </Alert>
                     ) : null}
-                    <ListFilterChips {...marginFilter.chipsProps} />
+                    <ListFilterChips
+                      fields={ORG_MARGIN_FILTER_FIELDS}
+                      headers={ORG_MARGIN_FILTER_HEADERS}
+                      options={MARGIN_FILTER_OPTIONS}
+                      clauses={gridFilter.clauses}
+                      onChange={gridFilter.setClauses}
+                    />
+                    {/* What the query could not hold, by name — not applied,
+                        rather than applied to the rows already read. */}
+                    <ListQueryNotices
+                      refused={listQueryRefusals(refused, {
+                        fields: ORG_MARGIN_FILTER_FIELDS,
+                        headers: ORG_MARGIN_FILTER_HEADERS,
+                        options: MARGIN_FILTER_OPTIONS,
+                      })}
+                      notices={notices}
+                    />
                     <ListTable
                       aria-label="By organization, worst margin first"
                       rows={table.rows}
                       columns={orgColumns}
-                      {...marginFilter.gridProps}
+                      // The route answers the panel and the search; the grid
+                      // must not narrow the rows it is handed a second time.
+                      filterMode="server"
+                      quickFilter
+                      filterModel={gridFilter.filterModel}
+                      onFilterModelChange={gridFilter.onFilterModelChange}
                       // A band reading stacks a figure over a bar, so a row
                       // is as tall as its tallest reading.
                       getRowHeight={() => 'auto'}

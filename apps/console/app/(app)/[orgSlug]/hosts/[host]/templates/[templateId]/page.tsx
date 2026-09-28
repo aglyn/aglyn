@@ -16,6 +16,10 @@
  */
 'use client'
 
+import {
+  artifactDeleteListKeys,
+  artifactRenameListKeys,
+} from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { mdiBookmarkOutline } from '@aglyn/shared-data-mdi'
 import {
@@ -48,7 +52,14 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  query,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import ArtifactNotFound from '../../../../../../../components/artifact-not-found.component'
@@ -142,21 +153,31 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
   // `!== 'loading'` and not `=== 'success'` — see the component detail page
   // (AGL-1066).
   const notFound = status !== 'loading' && !template
+  const starterId = template?.source?.starterId as string | undefined
+  /*
+   * The starter's pages, asked for BY STARTER (AGL-3321). This read was an
+   * unordered `limit(100)` over the whole library narrowed to the starter in
+   * memory, so on a library past a hundred templates a starter's pages could
+   * sit outside the window and the page list below would be missing them.
+   * A starter is a fixed handful of pages, so the query is its whole set.
+   */
   const { data: templateDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'templates'), limit(100)),
-    [firestore, hostId],
+    () =>
+      starterId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'templates'),
+            where('source.starterId', '==', starterId),
+          )
+        : null,
+    [firestore, hostId, starterId],
     { idField: '$id' },
   )
 
-  const starterId = template?.source?.starterId as string | undefined
   // Sibling pages of the same starter bundle, in authored order.
   const siblings = useMemo(() => {
     if (!starterId) return []
     return (templateDocs ?? [])
-      .filter(
-        (entry: any) =>
-          !entry.deletedAt && entry.source?.starterId === starterId,
-      )
+      .filter((entry: any) => !entry.deletedAt)
       .sort(
         (a: any, b: any) =>
           Number(a.source?.starterOrder ?? 0) -
@@ -193,11 +214,22 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
       if (!confirmed) return
       const dequeue = queueLoading()
       try {
-        // Soft delete, matching the library card.
-        await updateDoc(
-          doc(firestore, 'hosts', hostId, 'templates', entry.$id),
-          { deletedAt: Timestamp.now() },
-        )
+        // Soft delete, matching the library card — and the library's row
+        // (AGL-3321): a deleted page is no longer one, and if it LED the
+        // starter's row, the next live page takes it, or the starter would
+        // vanish from the library with pages still in it.
+        const batch = writeBatch(firestore)
+        batch.update(doc(firestore, 'hosts', hostId, 'templates', entry.$id), {
+          deletedAt: Timestamp.now(),
+          ...artifactDeleteListKeys('templates'),
+        })
+        const heir = siblings.find((other: any) => other.$id !== entry.$id)
+        if (entry.libraryRow === true && heir) {
+          batch.update(doc(firestore, 'hosts', hostId, 'templates', heir.$id), {
+            libraryRow: true,
+          })
+        }
+        await batch.commit()
         enqueueSnackbar('Page deleted', { variant: 'success', persist: false })
         // Deleting the page you are looking at leaves this route pointing at
         // a soft-deleted document, which renders as not-found (AGL-706) —
@@ -242,7 +274,14 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
     const dequeue = queueLoading()
     try {
       await updateDoc(doc(firestore, 'hosts', hostId, 'templates', templateId), {
-        ...(name != null ? { displayName: name.trim() } : {}),
+        ...(name != null
+          ? {
+              displayName: name.trim(),
+              // The keys the library finds it by (AGL-3321) — a starter's
+              // page keeps the starter's, which is the row it is listed under.
+              ...artifactRenameListKeys('templates', name.trim(), { source: template?.source }),
+            }
+          : {}),
         ...(description != null ? { description: description.trim() } : {}),
         updatedAt: Timestamp.now(),
       })
@@ -262,6 +301,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
     firestore,
     hostId,
     templateId,
+    template,
     name,
     description,
     queueLoading,

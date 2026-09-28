@@ -19,26 +19,31 @@ import {
   EMAIL_STATE_LABELS,
   EMAIL_STATE_STATUSES,
   CRM_LEAD_STATUS_LABELS,
+  CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
+  CRM_LEAD_STATUSES,
   type EmailStateStatus,
-  type CrmLeadFields,
   type CrmLeadStatus,
-  emailStateForbidsEmail,
-  crmLeadStatus,
-  isCrmLeadOpen,
-  normalizeCrmPicklistLabel,
-  readCampaignIds,
-  readEmailState,
+  crmLeadSourceKey,
 } from '@aglyn/aglyn'
 import type { CrmViewFilterClause } from '@aglyn/aglyn'
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { type ListGridFilterCodec, listSelectCodec, listRowMatchesSearch } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { SCOPED_SEARCH_JOIN } from '@aglyn/aglyn/app-utils/name-search'
+import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { type ListGridFilterCodec, listSelectCodec } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  CRM_LIST_SEARCH,
+  type CrmClauseAsked,
+  crmAnyOf,
+  crmClauseValues,
+  crmSelectField,
+} from './crm-list-query'
 
 /**
  * What the Leads section's `Show` control offers (AGL-2608): the two
  * aggregate views and each status on its own. `open` is the default — the
- * list opens on the work — and it is the one view a Firestore query cannot
- * express, because a lead nobody has touched carries no status field at all;
- * see the section for why the filter runs over a loaded window.
+ * list opens on the work — asked of the query as `status in [new, working]`,
+ * which every lead answers because every lead writer stores a status, `new`
+ * for one nobody has touched (`crmLeadListFields`, AGL-3321).
  */
 export type LeadFilter = 'open' | 'all' | CrmLeadStatus
 
@@ -58,16 +63,6 @@ export const LEAD_FILTER_LABELS: Record<LeadFilter, string> = {
   working: CRM_LEAD_STATUS_LABELS.working,
   qualified: CRM_LEAD_STATUS_LABELS.qualified,
   unqualified: CRM_LEAD_STATUS_LABELS.unqualified,
-}
-
-/** Whether a lead belongs in a filter's view. An absent status is `new`. */
-export function leadMatchesFilter(
-  lead: Pick<CrmLeadFields, 'status'>,
-  filter: LeadFilter,
-): boolean {
-  if (filter === 'all') return true
-  if (filter === 'open') return isCrmLeadOpen(lead)
-  return crmLeadStatus(lead) === filter
 }
 
 /**
@@ -93,81 +88,12 @@ export const LEAD_EMAIL_FILTER_LABELS: Record<LeadEmailFilter, string> = {
   ...EMAIL_STATE_LABELS,
 }
 
-/** Whether a lead belongs in an email filter's view. */
-export function leadMatchesEmailFilter(
-  lead: Readonly<Record<string, unknown>>,
-  filter: LeadEmailFilter,
-): boolean {
-  if (filter === 'any') return true
-  const state = readEmailState(lead)
-  if (filter === 'none') return state === null
-  if (filter === 'problem') return emailStateForbidsEmail(state)
-  return state?.status === filter
-}
-
-/**
- * The Leads section's `Campaign` control (AGL-3254): every lead, or the
- * ones filed under one campaign — read off the lead's own `campaignIds`,
- * the field every campaign member carries. `''` is every lead, which is
- * what the control opens on; the ids are the site's containers', and the
- * section resolves their names for the menu.
- */
-export function leadMatchesCampaignFilter(
-  lead: Readonly<Record<string, unknown>>,
-  campaignId: string,
-): boolean {
-  if (!campaignId) return true
-  return readCampaignIds(lead).includes(campaignId)
-}
-
-/**
- * The fields the Leads section's search box reads (AGL-3246): who the lead
- * is and where they work — the words a person types to find one — plus the
- * tags, which are how an import names its batch (`sal-15`). `name` and
- * `email` are the capture door's fields rather than the CRM's, so the row is
- * read as a record rather than through `CrmLeadFields`.
- */
-export const LEAD_SEARCH_FIELDS = ['name', 'email', 'company', 'jobTitle', 'tags'] as const
-
-/**
- * Whether a lead answers a search term.
- *
- * Case-insensitive, and every whitespace-separated word of the term must
- * appear in SOME searched field: `morgan lamphere` and `lamphere sal-15`
- * both find Morgan Lamphere, `morgan smith` does not. A blank term matches
- * every lead, so the box emptied is the list unfiltered.
- */
-export function leadMatchesSearch(
-  lead: Readonly<Record<string, unknown>>,
-  term: string,
-): boolean {
-  // Tags are a list; a stray string there is no tag of the lead's.
-  const tags = Array.isArray(lead['tags']) ? lead['tags'] : undefined
-  return listRowMatchesSearch({ ...lead, tags }, LEAD_SEARCH_FIELDS, term.trim().split(/\s+/))
-}
-
 /**
  * The `Lead source` control's "no lead source" choice (AGL-3298). Held in
  * the saved view as an `isEmpty` clause, never as this string; it is only
  * the select's own value for the choice.
  */
 export const LEAD_SOURCE_FILTER_NONE = '\u0000none'
-
-/**
- * The Leads section's `Lead source` control (AGL-3298): every lead (`''`),
- * the ones holding one value — compared the way the picklist compares
- * labels, so a value typed in another case before the list existed is
- * still found — or the ones holding none.
- */
-export function leadMatchesLeadSourceFilter(
-  lead: Readonly<Record<string, unknown>>,
-  filter: string,
-): boolean {
-  if (!filter) return true
-  const held = normalizeCrmPicklistLabel(lead['leadSource']).toLowerCase()
-  if (filter === LEAD_SOURCE_FILTER_NONE) return held === ''
-  return held === normalizeCrmPicklistLabel(filter).toLowerCase()
-}
 
 /*==========================================
  * THE LEADS GRID'S FILTERS (AGL-3313).
@@ -181,8 +107,8 @@ export function leadMatchesLeadSourceFilter(
  *   campaignIds  `contains <campaign id>`
  *   leadSource   `equals <label>`, or `isEmpty` for the leads holding none
  *
- * Every one narrows the loaded window, never the query — see the section's
- * `LEADS_WINDOW` for why a status cannot be asked of Firestore.
+ * Every one is asked of the Leads query (AGL-3321) through the field a
+ * writer stores for it — see {@link leadQueryClause}.
  *=========================================*/
 
 /** The fields the grid's panel offers on Leads. */
@@ -248,46 +174,6 @@ export function leadClausesToStore(
   return [...shown]
 }
 
-const listed = (clause: CrmViewFilterClause): string[] =>
-  clause.op === 'isAnyOf'
-    ? clause.value.split(',').map((entry) => entry.trim()).filter(Boolean)
-    : [clause.value]
-
-/** Whether a lead answers every clause the grid shows. */
-export function leadMatchesClauses(
-  lead: Readonly<Record<string, unknown>> & Pick<CrmLeadFields, 'status'>,
-  clauses: readonly CrmViewFilterClause[],
-): boolean {
-  return clauses.every((clause) => {
-    switch (clause.field) {
-      case 'status':
-        return listed(clause).some((value) =>
-          (LEAD_FILTERS as readonly string[]).includes(value)
-            ? leadMatchesFilter(lead, value as LeadFilter)
-            : true,
-        )
-      case 'emailState':
-        return listed(clause).some((value) =>
-          (LEAD_EMAIL_FILTERS as readonly string[]).includes(value)
-            ? leadMatchesEmailFilter(lead, value as LeadEmailFilter)
-            : true,
-        )
-      case 'campaignIds':
-        return listed(clause).some((value) => leadMatchesCampaignFilter(lead, value))
-      case 'leadSource':
-        return clause.op === 'isEmpty'
-          ? leadMatchesLeadSourceFilter(lead, LEAD_SOURCE_FILTER_NONE)
-          : listed(clause).some((value) => leadMatchesLeadSourceFilter(lead, value))
-      case 'ownerUid':
-        return listed(clause).includes(String(lead['ownerUid'] ?? ''))
-      default:
-        // A clause on a field this list does not answer narrows nothing,
-        // rather than emptying the list.
-        return true
-    }
-  })
-}
-
 /** Campaign clauses were stored as `contains`; the panel's select says `is`. */
 export const LEAD_CAMPAIGN_CODEC: ListGridFilterCodec = {
   toItem: (clause) =>
@@ -319,4 +205,175 @@ export const LEAD_SOURCE_CODEC: ListGridFilterCodec = {
 export const LEAD_FILTER_CODECS: Readonly<Record<string, ListGridFilterCodec>> = {
   campaignIds: LEAD_CAMPAIGN_CODEC,
   leadSource: LEAD_SOURCE_CODEC,
+}
+
+/*==========================================
+ * THE LEADS QUERY (AGL-3321).
+ *
+ * `orgs/{orgId}/leads`, newest seen first, under a site narrowed by the
+ * `visibleTo` scope clause. Each grid clause is asked through a field every
+ * lead writer stores (`crmLeadListFields` in `@aglyn/aglyn`):
+ *
+ *   status       `status`, stored `new` on a lead nobody has touched, so
+ *                Open is `status in [new, working]`
+ *   emailState   `emailStatus`, the verdict's status or `none`; "Cannot be
+ *                emailed" is every verdict but `ok`
+ *   leadSource   `leadSourceKey`, the label as the picklist compares it, or
+ *                `null` for none
+ *   ownerUid     as stored
+ *   campaignIds  `array-contains` on the lead's own campaigns; under a site,
+ *                `scopedCampaignIds` — the campaign behind each of the
+ *                site's scope tokens — which stands in the scope clause's
+ *                place, so the one array clause answers both
+ *
+ * and the search box reads `searchTokens` — word prefixes of the name,
+ * address, company, title and tags. Every equality rides one
+ * `(field, lastSeenAtMs DESC)` composite; the campaign and the search are
+ * array clauses, so the two do not stand together (nor under a site, where
+ * the scope clause is the query's one array clause, save the search, which
+ * folds into it for a reader who may drop it).
+ *=========================================*/
+
+/** The one order the Leads list takes: newest seen first. */
+export const LEAD_LIST_SORTS: readonly ListQuerySort[] = [{ path: 'lastSeenAtMs', direction: 'desc' }]
+
+/** The fields the Leads query asks — each a stored field, as named. */
+export const LEAD_QUERY_FIELDS: readonly ListFilterField[] = [
+  crmSelectField('status'),
+  crmSelectField('emailStatus'),
+  crmSelectField('ownerUid'),
+  {
+    column: 'leadSourceKey',
+    kind: 'exact',
+    path: 'leadSourceKey',
+    presence: 'nullable',
+    operators: ['equals', 'isAnyOf', 'isEmpty'],
+  },
+  {
+    column: 'campaignIds',
+    kind: 'exact',
+    path: 'campaignIds',
+    tokensPath: 'campaignIds',
+    operators: ['contains'],
+  },
+  {
+    // A campaign under a site: the lead's campaigns behind its scope.
+    column: CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
+    kind: 'exact',
+    path: CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
+    tokensPath: CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
+    operators: ['isAnyOf'],
+  },
+]
+
+export const LEAD_LIST_DECLARATION: ListQueryDeclaration = {
+  fields: LEAD_QUERY_FIELDS,
+  sorts: LEAD_LIST_SORTS,
+  search: CRM_LIST_SEARCH,
+}
+
+/**
+ * A collaborator's search (see `prefixSearch` in `useCrmListQuery`): the
+ * start of the address, beside the scope clause — the `(visibleTo, email)`
+ * composite the Inbox's leads list reads too.
+ */
+export const LEAD_PREFIX_SEARCH = {
+  field: {
+    column: 'email',
+    kind: 'text',
+    path: 'email',
+    lowerPath: 'email',
+    presence: 'always',
+    operators: ['startsWith'],
+  } satisfies ListFilterField,
+  notice: 'Search matches the start of a lead’s address for access limited to specific sites.',
+}
+
+/** Whether an asked clause stands in for the scope clause: a campaign behind the site's scope. */
+export const leadClauseImpliesScope = (clause: ListFilterRequest): boolean =>
+  clause.field === CRM_LEAD_SCOPED_CAMPAIGNS_FIELD
+
+/** The verdicts a member must not email to: every one but `ok`. */
+const EMAIL_PROBLEMS = EMAIL_STATE_STATUSES.filter((status) => status !== 'ok')
+
+/** Who is asking, for the one clause whose shape depends on it: the Campaign. */
+export interface LeadQueryReader {
+  /** The site's scope tokens, or `null` at the organization level. */
+  scopeTokens: readonly string[] | null
+  /** Whether the reader may run a query without the scope clause (`useCrmFoldsScope`). */
+  foldsScope: boolean
+}
+
+const ORG_READER: LeadQueryReader = { scopeTokens: null, foldsScope: true }
+
+/**
+ * One grid clause as the clause the Leads query asks — see the block above.
+ * A value the list does not know is refused by name rather than dropped, so
+ * a stored view that names a retired choice says so.
+ */
+export function leadQueryClause(
+  clause: CrmViewFilterClause | ListFilterRequest,
+  reader: LeadQueryReader = ORG_READER,
+): CrmClauseAsked {
+  const values = crmClauseValues(clause)
+  switch (clause.field) {
+    case 'status': {
+      const statuses: string[] = []
+      for (const value of values) {
+        if (value === 'open') statuses.push('new', 'working')
+        else if ((CRM_LEAD_STATUSES as readonly string[]).includes(value)) statuses.push(value)
+        else return { refused: `${value} is not a lead status` }
+      }
+      return crmAnyOf('status', statuses)
+    }
+    case 'emailState': {
+      const keys: string[] = []
+      for (const value of values) {
+        if (value === 'problem') keys.push(...EMAIL_PROBLEMS)
+        else if (value === 'none') keys.push('none')
+        else if ((EMAIL_STATE_STATUSES as readonly string[]).includes(value)) keys.push(value)
+        else return { refused: `${value} is not an email verdict` }
+      }
+      return crmAnyOf('emailStatus', keys)
+    }
+    case 'leadSource': {
+      if (clause.op === 'isEmpty' || (values.length === 1 && values[0] === LEAD_SOURCE_FILTER_NONE)) {
+        return { field: 'leadSourceKey', op: 'isEmpty', value: '' }
+      }
+      if (values.includes(LEAD_SOURCE_FILTER_NONE)) {
+        return { refused: '"No lead source" cannot be picked beside a value' }
+      }
+      const keys = values.map((value) => crmLeadSourceKey(value)).filter((key): key is string => Boolean(key))
+      return crmAnyOf('leadSourceKey', keys)
+    }
+    case 'ownerUid':
+      return crmAnyOf('ownerUid', values)
+    case 'campaignIds': {
+      if (values.length !== 1) return { refused: 'pick one campaign' }
+      if (!reader.scopeTokens) return { field: 'campaignIds', op: 'contains', value: values[0] }
+      if (!reader.foldsScope) {
+        return {
+          refused:
+            'your access is limited to specific sites, which this filter cannot be combined with — an organization administrator can use it',
+        }
+      }
+      return {
+        field: CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
+        op: 'isAnyOf',
+        value: reader.scopeTokens.map((token) => `${token}${SCOPED_SEARCH_JOIN}${values[0]}`).join(','),
+      }
+    }
+    default:
+      return { refused: 'this list does not filter by that' }
+  }
+}
+
+/**
+ * The query shape the Leads list can send beyond its own declaration, for
+ * the index pin (AGL-3321): a collaborator's address prefix beside the
+ * equalities they may set.
+ */
+export function leadIndexShapes(): ListQueryDeclaration[] {
+  const equalities = LEAD_QUERY_FIELDS.filter((field) => !field.tokensPath)
+  return [{ fields: [LEAD_PREFIX_SEARCH.field, ...equalities], sorts: [] }]
 }

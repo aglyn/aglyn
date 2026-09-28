@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// The leaf module, not the server barrel: specs stage that barrel as a
+// closed world, and the list keys every create stamps (AGL-3321) are
+// nothing they have reason to name.
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { hostRoleCanPublish, hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   ACTIONS_MAX_PER_HOST,
@@ -25,7 +29,7 @@ import {
   createResourceUid,
   encodeStoredNodes,
   ENTRIES_MAX_PER_COLLECTION,
-  nameSearchKey,
+  newFormListFields,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   type OrgEntitlements,
   type OrgFeatureFlags,
@@ -47,6 +51,10 @@ import {
 import { isDuplicableHostResourceKind } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { isReusableComponentKind } from '@aglyn/aglyn/app-utils/reusable-component-kind'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
+import {
+  contentAuthorQueryFields,
+  entryTitleSearchFields,
+} from '@aglyn/aglyn/app-utils/content-query-fields'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
   billableScreenIds,
@@ -342,6 +350,13 @@ const RESOURCES: Record<string, {
       'nameReversed',
       'skus',
       'barcodes',
+      // The storefront catalog's price and In stock keys (AGL-3321), from
+      // `productSearchFields` / `productStockFields` on the same payload.
+      'priceFromCents',
+      'soldOut',
+      // The smart collections its rules answer (AGL-3321), from
+      // `productCollectionIds` on the same payload and the host's rules.
+      'collectionIds',
       // Legacy Commerce Starter fields, still written by every caller.
       'priceUsd',
       'inventory',
@@ -872,13 +887,23 @@ async function handler(request: Request): Promise<Response> {
      */
     const packedNodes = encodeStoredNodes(doc['nodes'])
     if (packedNodes) doc['nodes'] = Buffer.from(packedNodes)
-    // Normalized search key for the name-prefix query (AGL-835). Only screens
-    // are queried by name (the switcher loads the rest client-side), so only
-    // screens carry the field — stamping it on every resource kind would be an
-    // index field nothing reads.
-    const nameLower =
-      resourceKey === 'screen' && typeof doc['displayName'] === 'string'
-        ? { nameLower: nameSearchKey(doc['displayName'] as string) }
+    // The keys the site artifact lists query by (AGL-835, AGL-3321): the name
+    // keys on a screen, layout, component or template — stamped even for a
+    // create with no name, so a list ordered by `nameLower` still reaches it —
+    // and the stored kind a component or template is otherwise only READ as.
+    // Nothing for any other kind.
+    const listKeys = artifactCreateListKeys(resource.collection, doc)
+    // A form is born with the fields its list queries (AGL-3330): the search
+    // keys, and an explicit value for each filter a query could not answer by
+    // a field's absence. `routing` is rewritten with its lead switch set.
+    const formListFields =
+      resourceKey === 'form'
+        ? newFormListFields({
+            id,
+            displayName: doc['displayName'],
+            slug: doc['slug'],
+            routing: doc['routing'] as Parameters<typeof newFormListFields>[0]['routing'],
+          })
         : {}
 
     /*
@@ -1003,7 +1028,8 @@ async function handler(request: Request): Promise<Response> {
       }
       tx.create(collectionRef.doc(id), {
         ...doc,
-        ...nameLower,
+        ...listKeys,
+        ...formListFields,
         ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
         // A redirect that leaves the platform carries the uid of the publisher
         // who chose that (AGL-1881). `matchRedirect` refuses to serve an
@@ -1035,6 +1061,19 @@ async function handler(request: Request): Promise<Response> {
         // above and stamped instead. Publishing stays the client `updateDoc`
         // the entries rule block already gates on `canPublishHostContent`.
         ...(resourceKey === 'entry' ? { status: 'draft' } : {}),
+        // The words the entries table searches by (AGL-3321), derived from
+        // the title the allow-list kept, and off the allow-list itself: a
+        // client that could send them could make an entry findable by words
+        // it does not carry.
+        ...(resourceKey === 'entry' ? entryTitleSearchFields(doc['title']) : {}),
+        // What the Authors table queries (AGL-3321) — the name's key and
+        // tokens, and the schema type as one word — derived the same way.
+        ...(resourceKey === 'author' ? contentAuthorQueryFields(doc) : {}),
+        // A product is born LIVE, said with an explicit null (AGL-3321): the
+        // products table's query is scoped `deletedAt == null`, and Firestore
+        // cannot match a field that is absent. Off the allow-list above, so a
+        // duplicate never carries its source's soft delete.
+        ...(resourceKey === 'product' ? { deletedAt: null } : {}),
         // Unconditional now that no allow-list carries them: the client cannot
         // supply either, so there is no client value left to preserve. The
         // callers already relied on this — a Timestamp does not survive the

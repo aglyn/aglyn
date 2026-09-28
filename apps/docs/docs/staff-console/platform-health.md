@@ -122,11 +122,25 @@ Three things to read carefully:
 Unlike the health probes, this data is staff-only rather than public: the rows carry
 customer site hostnames and page paths.
 
-The **Window** picker chooses which days are read. Within them, the table's toolbar
-filters and searches every row the window returned: **App**, **Directive** and **Blocked
-or measured** are pickers over the values present, and the day, blocked origin and count
-filter as typed values. The search also matches the last site and path a row was seen on.
-See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+The **Window** picker chooses which days are read: the directive chips, the totals and
+the blocked alert are counted over the whole window. The table below them reads its own
+pages from the same window, newest day first, and its toolbar filters and searches the
+whole window, not only the page shown:
+
+- **App**, **Directive** and **Blocked or measured** are pickers (App and Directive offer
+  the values the window holds); each takes one value or any of several.
+- **Blocked origin** is typed and matches exactly, or any of several separated by commas.
+- **Day** takes *starts with*: `2026-09-17` is that day, `2026-09` that month.
+- The **search** finds a counter by the start of its blocked origin, its directive or its
+  app — whole, or any part between dots and dashes, so `googletagmanager`, `cdn.example`
+  and `elem` all work. It reads one word; with two, a notice says which one it used. It
+  does not match the last site or path a row was seen on.
+
+Every filter combines with every other and with the search. The count is not a filter:
+the window is already the table's one range, and a second range beside it cannot be
+asked. A combination the table cannot ask — a second "any of" beside the search, say —
+shows a notice above it, "*Filter* is not applied: *why*", and is left out rather than
+applied to some rows. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ## Sharing-scope drift
 
@@ -173,9 +187,14 @@ Each row answers the one question worth asking:
 - **Holding** — the 7-day hold has not expired. Nothing will run, and nothing should.
 - **Due** — the hold has expired. The next scheduled run will take it.
 
-The table's **Filters** picks **State** (*Due* or *Holding*) and matches the organization
-name; the search matches its name, slug or id. Both look at every erasure the listing
-read.
+The table's **Filters** picks **State** (*Due* or *Holding*) and **Organization**
+(*contains* a word of the name); the search finds an organization by the start of any
+word of its name, using the first word you type. Both apply to the whole queue rather
+than the page on screen, oldest request first, and State combines with either. The
+Organization filter and the search read the same name words, so they do not combine:
+with a search in the box, an Organization filter is not applied, and a note above the
+list says *"Organization contains … is not applied: cannot be combined with the search —
+clear the search to use it."*
 
 **Run due erasures now** is for when a deadline will not wait for the schedule. Three
 things about it:
@@ -192,8 +211,8 @@ A **skipped** organization is not a retry — `eraseOrg` has already written a d
 `org.erase-failed` audit row by the time the card reports it, and the request stays
 queued. Read that row before running again.
 
-Listing is capped, and the card says so when it hits the cap. Treat the length as a
-floor.
+The **due now** and **in the queue** chips count the whole queue, not the page on screen,
+and the list pages through all of it with the footer below the table.
 
 ### People waiting beside the workspaces
 
@@ -236,11 +255,17 @@ age. Age is the whole signal: a claim seconds old is a request in flight, and on
 old is a process that is not coming back. The **stranded** threshold is the card's own,
 not a property of the claim.
 
-Listing is capped, and the card says so when it hits the cap. Treat the count as a floor.
+The two chips count every pending claim, not the page on screen, and the list pages
+through all of them, oldest first, with the footer below the table. A claim written
+without the time it was taken has no age, so it cannot be placed in that order: the
+card says how many such claims there are, above the table, rather than listing them.
 
-The table's toolbar filters and searches every claim read: **State** picks *stranded* or
-*in flight*, and the operation, scope, organization and age (in milliseconds) filter
-as typed values; the search matches the operation, scope, organization or claim id.
+The table's **Filters** narrows the whole list: **State** picks *stranded* or *in
+flight*, **Age (ms)** compares the age with *greater than* or *less than*, and
+**Operation** (one or several), **Scope** and **Org** match an exact value. Every
+combination applies at once. There is no search box: every value on a claim is an
+identifier, which the exact filters match. A filter the list cannot apply — an age that
+is not a number, say — is left off entirely and named in a note above the table.
 
 ## Resolved server config {#resolved-server-config}
 

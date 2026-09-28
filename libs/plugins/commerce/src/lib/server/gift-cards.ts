@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { randomBytes } from 'crypto'
+import { giftCardSearchTokens } from '../model/gift-card-search'
 import {
   firebaseAdmin,
   getOrgForHost,
@@ -160,6 +161,8 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
       orderId: null,
       issuedBy: decoded.uid,
       ...(note ? { note } : {}),
+      // What the console's Gift cards search asks (AGL-3321).
+      searchTokens: giftCardSearchTokens(code, recipientEmail || null),
       createdAtMs: Date.now(),
     })
 

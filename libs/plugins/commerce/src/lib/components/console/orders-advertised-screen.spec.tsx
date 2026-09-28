@@ -31,8 +31,22 @@
 
 import { render, screen, within } from '@testing-library/react'
 import HostOrdersCard from './host-orders-card.component'
+import { orderListFields } from '../../model/order-list-fields'
 
 let orderDocs: Array<Record<string, unknown>> = []
+/*
+ * The table is the list's query (AGL-3321), answered by the contract's double
+ * over the fixture orders; the tiles are their own bounded read, below.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(() => orderDocs, options),
+  }
+})
 /** Mutated per case; a STABLE object, like the real memoised hook. */
 const orgPlan: { org: unknown; ready: boolean } = { org: {}, ready: true }
 
@@ -50,7 +64,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: jest.fn() } }),
   useOrgPlan: () => orgPlan,
-  useFirestoreCollection: (build: () => { __collection?: string }) => ({
+  // The money tiles' sixty-day read of `orders`, and the product picker.
+  useFirestoreCollection: (build: () => { __collection?: string } | null) => ({
     data: build()?.__collection === 'orders' ? orderDocs : [],
   }),
 }))
@@ -61,6 +76,7 @@ jest.mock('firebase/firestore', () => ({
   }),
   limit: () => ({}),
   orderBy: () => ({}),
+  where: () => ({}),
   documentId: () => '__name__',
   query: (ref: unknown) => ref,
 }))
@@ -79,12 +95,16 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 const NOW = Date.UTC(2026, 7, 18, 12, 0)
 const DAY = 86_400_000
 
+/**
+ * An order with the fields the list queries by stamped UNDER it, so a case
+ * that writes a legacy row (no channel) keeps it legacy.
+ */
 const order = (
   id: string,
   overrides: Record<string, unknown> = {},
   agoDays = 1,
   cents = 8800,
-) => ({
+) => stampUnder({
   $id: id,
   status: 'paid',
   channel: 'online',
@@ -108,6 +128,10 @@ const order = (
   timeline: [],
   ...overrides,
 })
+
+function stampUnder(row: Record<string, unknown>) {
+  return { ...orderListFields(row, String(row.$id)), ...row }
+}
 
 beforeEach(() => {
   jest.spyOn(Date, 'now').mockReturnValue(NOW)

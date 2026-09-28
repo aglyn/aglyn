@@ -90,6 +90,7 @@ const snapshotOf = (path: string, projection?: string[]) => {
   return {
     exists: raw != null,
     id: path.split('/').pop() as string,
+    ref: { path },
     data: () => data,
     get: (field: string) => data?.[field],
   }
@@ -119,18 +120,13 @@ const docRef = (path: string): any => ({
 
 const collectionRef = (prefix: string): any => {
   const query = (state: {
-    where?: [string, string, any]
+    wheres: Array<[string, string, any]>
     order?: [string, string]
+    after?: string
     limit?: number
     projection?: string[]
-  }): any => ({
-    where: (field: string, op: string, value: any) =>
-      query({ ...state, where: [field, op, value] }),
-    orderBy: (field: string, direction = 'asc') =>
-      query({ ...state, order: [field, direction] }),
-    limit: (count: number) => query({ ...state, limit: count }),
-    select: (...fields: string[]) => query({ ...state, projection: fields }),
-    get: async () => {
+  }): any => {
+    const matching = () => {
       // Direct children of `prefix` only — a subcollection is not a member of
       // its parent collection, and a double that returned one would let the
       // strike ledger read the reports collection.
@@ -139,25 +135,47 @@ const collectionRef = (prefix: string): any => {
           path.startsWith(`${prefix}/`) &&
           !path.slice(prefix.length + 1).includes('/'),
       )
-      if (state.where) {
-        const [field, , value] = state.where
-        rows = rows.filter((path) => store[path][field] === value)
+      for (const [field, op, value] of state.wheres) {
+        rows = rows.filter((path) => {
+          const held = store[path][field]
+          if (op === 'in') return (value as unknown[]).includes(held)
+          if (op === '<=') return held != null && held <= value
+          return held === value
+        })
       }
       if (state.order) {
         const [field, direction] = state.order
-        rows = [...rows].sort((a, b) => {
-          const left = store[a][field] ?? 0
-          const right = store[b][field] ?? 0
-          return direction === 'desc'
-            ? Number(right) - Number(left)
-            : Number(left) - Number(right)
-        })
+        // A Timestamp double orders by its millis, a number by itself.
+        const orderOf = (path: string) => {
+          const held = store[path][field]
+          return Number(held?.toMillis?.() ?? held ?? 0)
+        }
+        rows = [...rows].sort((a, b) =>
+          direction === 'desc' ? orderOf(b) - orderOf(a) : orderOf(a) - orderOf(b),
+        )
       }
+      if (state.after) rows = rows.slice(rows.indexOf(state.after) + 1)
       if (state.limit != null) rows = rows.slice(0, state.limit)
-      return { docs: rows.map((path) => snapshotOf(path, state.projection)) }
-    },
-  })
-  return Object.assign(query({}), {
+      return rows
+    }
+    return {
+      where: (field: string, op: string, value: any) =>
+        query({ ...state, wheres: [...state.wheres, [field, op, value]] }),
+      orderBy: (field: string, direction = 'asc') =>
+        query({ ...state, order: [field, direction] }),
+      limit: (count: number) => query({ ...state, limit: count }),
+      startAfter: (snapshot: { ref: { path: string } }) =>
+        query({ ...state, after: snapshot.ref.path }),
+      select: (...fields: string[]) => query({ ...state, projection: fields }),
+      count: () => ({
+        get: async () => ({ data: () => ({ count: matching().length }) }),
+      }),
+      get: async () => ({
+        docs: matching().map((path) => snapshotOf(path, state.projection)),
+      }),
+    }
+  }
+  return Object.assign(query({ wheres: [] }), {
     doc: (id: string) => docRef(`${prefix}/${id}`),
     add: async (row: Record<string, any>) => {
       if (prefix === 'adminAudit') {
@@ -178,7 +196,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
-      firestore: () => ({ collection: (name: string) => collectionRef(name) }),
+      firestore: () => ({
+        collection: (name: string) => collectionRef(name),
+        // The list cursor is a document path, read back to start after it.
+        doc: (path: string) => docRef(path),
+      }),
     }),
   },
   isImpersonationSession: () => false,
@@ -237,12 +259,22 @@ const post = (body: Record<string, unknown>, token = 'super-token') =>
     }),
   )
 
-const get = (token = 'super-token') =>
+const get = (token = 'super-token', search = '') =>
   GET(
-    new Request('https://console.aglyn.com/api/admin/abuse-reports', {
+    new Request(`https://console.aglyn.com/api/admin/abuse-reports${search}`, {
       headers: { authorization: `Bearer ${token}` },
     }),
   )
+
+/** The counter-notice queue: the route's second list, paged on its own. */
+const getQueue = (token = 'super-token') => get(token, '?queue=counterNotices')
+
+/** The queue's counts, each a query over the whole queue. */
+const getSummary = (token = 'super-token') => get(token, '?view=summary')
+
+/** One report's row off the reports list, strike verdict included. */
+const reportRow = (body: any, id = NOTICE_ID) =>
+  body.reports.find((row: any) => row.id === id)
 
 const strikeRows = () =>
   Object.entries(store).filter(([path]) =>
@@ -727,13 +759,14 @@ describe('the queue shows the deadline', () => {
       reference: 'CN-NEWER00001',
       receivedAtMs: nowMs - 86_400_000,
     }
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     expect(body.counterNotices).toHaveLength(2)
     expect(body.counterNotices[0].reference).toBe('CN-9F8E7D6C5B')
     expect(body.counterNotices[0].restoreAtMs).toBe(
       counterNoticeClock(nowMs - 20 * 86_400_000).restoreAtMs,
     )
-    expect(body.awaitingForward).toBe(2)
+    // Counted over the whole queue, not the page the list is on.
+    expect((await (await getSummary()).json()).awaitingForward).toBe(2)
   })
 
   it('flags a restoration that is already late', async () => {
@@ -742,9 +775,11 @@ describe('the queue shows the deadline', () => {
     // because a queue was quiet.
     const longAgo = nowMs - 60 * 86_400_000
     seedDispute(longAgo)
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     expect(body.counterNotices[0].overdue).toBe(true)
-    expect(body.overdueRestorations).toBe(1)
+    const summary = await (await getSummary()).json()
+    expect(summary.overdueRestorations).toBe(1)
+    expect(summary.overdueAtLeast).toBe(false)
     expect(body.counterNotices[0].latestRestoreMs).toBe(
       counterNoticeClock(longAgo).latestMs,
     )
@@ -754,9 +789,18 @@ describe('the queue shows the deadline', () => {
   it('stops flagging once the notice is no longer heading for a put-back', async () => {
     seedDispute(nowMs - 60 * 86_400_000)
     store[`dmcaCounterNotices/${COUNTER_ID}`].status = 'suitFiled'
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     expect(body.counterNotices[0].overdue).toBe(false)
-    expect(body.overdueRestorations).toBe(0)
+    expect((await (await getSummary()).json()).overdueRestorations).toBe(0)
+  })
+
+  it('does not count a notice still inside its window as overdue', async () => {
+    // Old enough to be read as a candidate (past the calendar-day floor),
+    // young enough that its business-day ceiling has not passed.
+    seedDispute(nowMs - 15 * 86_400_000)
+    const notice = (await (await getQueue()).json()).counterNotices[0]
+    expect(notice.latestRestoreMs).toBeGreaterThan(nowMs)
+    expect((await (await getSummary()).json()).overdueRestorations).toBe(0)
   })
 
   /*==========================================
@@ -781,20 +825,18 @@ describe('the queue shows the deadline', () => {
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'failed'
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptReason = 'rejected'
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptAttemptedAtMs = nowMs - 500
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     expect(body.counterNotices[0].receiptStatus).toBe('failed')
     expect(body.counterNotices[0].receiptReason).toBe('rejected')
     expect(body.counterNotices[0].receiptAttemptedAtMs).toBe(nowMs - 500)
-    expect(body.receiptsFailed).toBe(1)
   })
 
   it('does not count a SENT receipt as work', async () => {
     seedDispute()
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'sent'
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptReason = null
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     expect(body.counterNotices[0].receiptStatus).toBe('sent')
-    expect(body.receiptsFailed).toBe(0)
   })
 
   it('reports an unrecorded receipt as UNKNOWN, never as failed', async () => {
@@ -802,9 +844,8 @@ describe('the queue shows the deadline', () => {
     // well have been received; nothing measured it, and the queue must not
     // invent either answer.
     seedDispute()
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     expect(body.counterNotices[0].receiptStatus).toBeNull()
-    expect(body.receiptsFailed).toBe(0)
   })
 
   it('refuses to pass through a receipt status it does not recognise', async () => {
@@ -813,9 +854,8 @@ describe('the queue shows the deadline', () => {
     // be exhaustive.
     seedDispute()
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'queued'
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     expect(body.counterNotices[0].receiptStatus).toBeNull()
-    expect(body.receiptsFailed).toBe(0)
   })
 
   it('shows the failed receipt to the SUPPORT tier as well', async () => {
@@ -826,7 +866,7 @@ describe('the queue shows the deadline', () => {
     seedDispute()
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'failed'
     store[`dmcaCounterNotices/${COUNTER_ID}`].receiptReason = 'unconfigured'
-    const body = await (await get('support-token')).json()
+    const body = await (await getQueue('support-token')).json()
     expect(body.identityVisible).toBe(false)
     expect(body.counterNotices[0].subscriberEmail).toBeNull()
     expect(body.counterNotices[0].receiptStatus).toBe('failed')
@@ -842,9 +882,9 @@ describe('the queue shows the deadline', () => {
     // this as three.
     store[`orgs/${ORG}/dmcaStrikes/prior-3`] = { withdrawnAt: 'server-timestamp' }
     const body = await (await get()).json()
-    expect(body.strikes[ORG].strikes).toBe(2)
-    expect(body.strikes[ORG].level).toBe('final')
-    expect(body.strikesTruncated).toBe(false)
+    expect(reportRow(body).strike.strikes).toBe(2)
+    expect(reportRow(body).strike.level).toBe('final')
+    expect(reportRow(body).strikeUnknown).toBe(false)
   })
 
   /*==========================================
@@ -889,11 +929,11 @@ describe('the queue shows the deadline', () => {
     }
 
     const body = await (await get()).json()
-    const ledger = body.strikes[ORG].ledger
+    const ledger = reportRow(body).strike.ledger
 
     // The count is unchanged by any of this — the arithmetic and the
     // evidence read the same rows.
-    expect(body.strikes[ORG].strikes).toBe(2)
+    expect(reportRow(body).strike.strikes).toBe(2)
     expect(ledger).toHaveLength(3)
 
     // NEWEST FIRST. Seeded in ascending order, so insertion order and the
@@ -963,7 +1003,8 @@ describe('the queue shows the deadline', () => {
     seedDispute()
     store[`abuseReports/${NOTICE_ID}`].category = 'phishing'
     const body = await (await get()).json()
-    expect(body.strikes[ORG]).toBeUndefined()
+    expect(reportRow(body).strike).toBeNull()
+    expect(reportRow(body).strikeUnknown).toBe(false)
   })
 })
 
@@ -973,7 +1014,7 @@ describe('redaction reaches the counter-notice too', () => {
     // phone number, so this is the most personal data anywhere in the queue —
     // and data the filer had no choice about supplying.
     seedDispute()
-    const body = await (await get('support-token')).json()
+    const body = await (await getQueue('support-token')).json()
     const notice = body.counterNotices[0]
     expect(notice.identityVisible).toBe(false)
     expect(notice.subscriberAddress).toBeNull()
@@ -990,7 +1031,7 @@ describe('redaction reaches the counter-notice too', () => {
 
   it('shows a super-tier reader who filed it', async () => {
     seedDispute()
-    const body = await (await get()).json()
+    const body = await (await getQueue()).json()
     const notice = body.counterNotices[0]
     expect(notice.identityVisible).toBe(true)
     expect(notice.subscriberName).toBe('Dana Okonkwo')
@@ -1040,7 +1081,7 @@ describe('the staff gate still holds on the new branch', () => {
 describe('the statutory window is what the page is told', () => {
   it('reports the ceiling so the surface can show it', async () => {
     seedDispute()
-    const body = await (await get()).json()
+    const body = await (await getSummary()).json()
     expect(body.restoreBusinessDays).toBeLessThanOrEqual(
       COUNTER_NOTICE_MAX_BUSINESS_DAYS,
     )

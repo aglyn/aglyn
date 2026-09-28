@@ -44,23 +44,20 @@ const hostAddress = (
     cname: typeof host.cname === 'string' ? host.cname : undefined,
     subdomain: typeof host.subdomain === 'string' ? host.subdomain : undefined,
   }
-import { Container } from '@aglyn/shared-ui-jsx'
+import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import ListTable, {
-  listActionsColumn,
-} from '@aglyn/shared-ui-jsx/components/list-table.component'
-import {
-  inMemoryListField,
-  type ListFilterOption,
-} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
-import { liveCustomDomain } from '@aglyn/aglyn/app-utils/host-naming'
-import { Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
-import type { GridColDef } from '@mui/x-data-grid'
+import ListFilterToolbar from '@aglyn/shared-ui-jsx/components/list-filter-toolbar.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { Alert, Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
+import { collection, type Firestore } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CreateHostDialog from '../../../../components/create-host-dialog.component'
 import EmptyState from '../../../../components/empty-state.component'
 import HostIcon from '../../../../components/host-icon.component'
@@ -71,6 +68,7 @@ import PluginWidgetSlot from '../../../../components/plugin-widget-slot.componen
 import OrgInvitesBanner from '../../../../components/org-invites-banner.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useBranding from '../../../../hooks/use-branding'
@@ -81,110 +79,322 @@ import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import {
   describeHostStatus,
   describeSiteAllowance,
-  HOST_STATUS_LABELS,
-  type HostStatus,
 } from '../../../../utils/host-status'
+import {
+  SITE_CARDS_PAGE_SIZE,
+  SITE_FILTER_FIELDS,
+  SITE_FILTER_HEADERS,
+  SITE_FILTER_OPTIONS,
+  SITE_LIST_DECLARATION,
+  siteListBase,
+} from '../../../../utils/site-list-query'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { usePendingInvites } from '../../../../hooks/use-pending-invites'
 
-/** A site as the list reads it: its document, plus what its row derives. */
-interface SiteRow extends OrgHost {
-  status: HostStatus
-  /** `status.key`, where the Status filter reads it. */
-  statusKey: HostStatus['key']
-  /** The platform address, `name.<apex>`, which every site has. */
-  platformDomain: string
-  /** Whether the custom domain serves, is claimed but not serving, or is unset. */
-  customDomainState: CustomDomainState
+function HostInfoItem({ label, value }) {
+  return (
+    <>
+      <Typography component="div">
+        <Typography
+          variant="caption"
+          sx={{
+            display: "inline",
+            textTransform: 'uppercase'
+          }}>
+          <b>{label}:</b>
+        </Typography>{' '}
+        <Typography
+          variant="body1"
+          sx={[{
+            display: "inline"
+          }, (theme) => {
+            const tv = (theme as any).vars || theme
+            return {
+              bgcolor: `rgba(${tv.palette.secondary.lightChannel} / 0.18)`,
+              border: `1px solid rgba(${tv.palette.secondary.lightChannel} / 0.72)`,
+              borderRadius: '0.3em',
+              px: 0.5,
+              py: 0.15,
+              wordBreak: 'break-word',
+              fontSize: '0.8rem',
+            }
+          }]}>
+          {value || <i>{'None'}</i>}
+        </Typography>
+      </Typography>
+    </>
+  );
+}
+
+interface SiteCardProps {
+  host: OrgHost
+  orgSlug: string
+  /** The org's resolved brand, which names the platform domain row. */
+  productName: string
+}
+
+/** One site's card: its name and address, its status pill, Visit and Manage. */
+function SiteCard(props: SiteCardProps) {
+  const { host, orgSlug, productName } = props
+  return (
+    <CardDisplay
+      contentGutterX
+      contentGutterY
+      contentBordered="bottom"
+      HeaderProps={{
+        // The site's own favicon when it has one (AGL-647),
+        // falling back to the generic glyph. This list reads real
+        // host docs; the switcher reads the hostMemberships
+        // projection, which had to learn the field separately
+        // before the two actually matched (AGL-1071).
+        // The Live/Draft pill sits in the header's ACTION slot
+        // (top-right) rather than above the domain rows: inline in
+        // the content it shared a line with the first
+        // `HostInfoItem` label and read as part of it.
+        action: (() => {
+          const status = describeHostStatus(host as never)
+          return (
+            <Tooltip title={status.detail}>
+              <Chip
+                size="small"
+                label={status.label}
+                color={status.color}
+                variant={
+                  status.color === 'default' ? 'outlined' : 'filled'
+                }
+              />
+            </Tooltip>
+          )
+        })(),
+        avatar: (
+          <HostIcon
+            host={host}
+            size={28}
+            fontSize="large"
+            color="primary"
+          />
+        ),
+        slotProps: {
+          title: {
+            // variant: 'h6',
+            noWrap: true,
+            sx: {
+              // Function callbacks and textOverflow must live
+              // inside sx — passing them as direct Typography
+              // props causes React DOM attribute warnings in v9.
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
+              fontSize: ({ typography }) =>
+                typography.subtitle1.fontSize,
+              fontWeight: ({ typography }) =>
+                typography.h6.fontWeight,
+            },
+          },
+          subheader: {
+            sx: {
+              fontSize: ({ typography }) =>
+                typography.caption.fontSize,
+            },
+          },
+        },
+      }}
+      subheader={hostDisplayDomain(hostAddress(host))}
+      header={host?.displayName}
+      help={docsHelp('gettingStarted', {
+        anchor: '#what-a-site-contains',
+        title: 'Your sites',
+        excerpt:
+          'Each site has its own screens, media, users, and ' +
+          'settings. Visit opens the live site; Manage opens ' +
+          'its dashboard.',
+      })}
+      actions={
+        <>
+          <AppLink
+            componentVariant="button"
+            // `?aglyn-edit` arms the admin bar without the
+            // chord (AGL-1842): on a foreign CUSTOM domain no
+            // hint can exist by construction — a console
+            // visitor is an editor, so the console's own visit
+            // link is the chord-free path there. Harmless
+            // everywhere else (same arming the param always
+            // did).
+            // hostDisplayDomain, not a re-derived apex
+            // (AGL-2172): tenant-links.ts exists so this does not
+            // have to know the apex, and re-deriving it here meant
+            // a self-hoster's Sites list linked every one of their
+            // sites at OUR domain.
+            href={`https://${hostDisplayDomain(hostAddress(host))}/?aglyn-edit`}
+            target={'_blank'}
+            rel={'nofollow'}
+          >
+            {'Visit'}
+          </AppLink>
+          <AppLink
+            componentVariant="button"
+            href={buildRoute(Route.HOST_DASHBOARD, {
+              orgSlug,
+              host: host.subdomain,
+            })}
+          >
+            {'Manage'}
+          </AppLink>
+        </>
+      }
+    >
+      <Typography color="textSecondary" component="div">
+        <HostInfoItem
+          label={`${productName} Domain`}
+          value={hostPlatformDomain(hostAddress(host))}
+        />
+        <HostInfoItem
+          label={'Custom Domain'}
+          value={host?.cname}
+        />
+      </Typography>
+    </CardDisplay>
+  )
+}
+
+interface SitesCardsProps {
+  firestore: Firestore
+  uid: string | undefined
+  /** The workspace, `null` for an account with none, `undefined` while resolving. */
+  orgId: string | null | undefined
+  /** Every site the page read (`useOrgHosts`) — what each card is drawn from. */
+  hosts: readonly OrgHost[]
+  orgSlug: string
+  productName: string
 }
 
 /**
- * A custom domain's state, from the fields the domain routes write:
- * `connected` is a domain `liveCustomDomain` would send visitors to;
- * `pending` is a `cname` held while its attach or release is unfinished;
- * `none` is no `cname` at all.
- */
-type CustomDomainState = 'connected' | 'pending' | 'none'
-const CUSTOM_DOMAIN_STATE_LABELS: Readonly<Record<CustomDomainState, string>> = {
-  connected: 'Connected',
-  pending: 'Pending',
-  none: 'None',
-}
-
-const customDomainState = (host: OrgHost): CustomDomainState =>
-  liveCustomDomain({
-    cname: host.cname,
-    cnameAttachmentPending: host.cnameAttachmentPending,
-    cnameDetachmentPending: host.cnameDetachmentPending,
-  })
-    ? 'connected'
-    : host.cname
-      ? 'pending'
-      : 'none'
-
-/*
- * What the Sites grid's Filters panel and quick search offer. The page holds
- * EVERY site the reader has in this workspace — `useOrgHosts` reads each one
- * by id from the membership mirror, with no query over `hosts` to narrow and
- * no page to stop at — so every filter and the search are answered over the
- * whole list, not a window of it.
+ * THE SITE CARDS, FILTERED AND SEARCHED BY THEIR QUERY (AGL-3321).
  *
- * Only what a host document stores, or derives from what it stores: the plan
- * belongs to the organization rather than the site, and nothing records who
- * created a site or which template it began from, so none of those is
+ * The page is cards and stays cards. The search box and the Filters panel
+ * above them (`ListFilterToolbar`, the toolbar a list that is not a table
+ * gets), the chips for the clauses in force and the notices for what the
+ * query could not take are the same pieces every table has. What they drive
+ * is ONE Firestore query over the reader's `users/{uid}/hostMemberships`
+ * rows — scoped to the workspace, every clause and the search word on it,
+ * ordered by name (or newest first, under a Created range) — and each
+ * card is the host document the page already holds (`useOrgHosts`) for a
+ * row the query returned, joined by id and never used to narrow anything.
+ * See `utils/site-list-query.ts` for what it offers and why the rest is not
  * offered.
+ *
+ * Paged by the query: the cards grow twelve at a time under "Load more",
+ * whose presence is the query's answer (a probe row past the page), not a
+ * guess from the count on screen. A row whose host the page could not read
+ * has nothing to draw and is left out.
  */
-const SITE_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text'),
-  inMemoryListField('status', 'select', 'statusKey'),
-  inMemoryListField('platformDomain', 'text'),
-  inMemoryListField('cname', 'text'),
-  inMemoryListField('customDomainState', 'select'),
-  inMemoryListField('createdAt', 'date'),
-  inMemoryListField('updatedAt', 'date'),
-]
-/** The chips' names for each field; the platform domain's carries the brand. */
-const siteFilterHeaders = (
-  productName: string,
-): Readonly<Record<string, string>> => ({
-  displayName: 'Site',
-  status: 'Status',
-  platformDomain: `${productName} domain`,
-  cname: 'Custom domain',
-  customDomainState: 'Custom domain status',
-  createdAt: 'Created',
-  updatedAt: 'Updated',
-})
-const SITE_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>> = {
-  status: Object.entries(HOST_STATUS_LABELS).map(([value, label]) => ({
-    value,
-    label,
-  })),
-  customDomainState: Object.entries(CUSTOM_DOMAIN_STATE_LABELS).map(
-    ([value, label]) => ({ value, label }),
-  ),
-}
-/** The grid's own columns; every other field is a panel-only column. */
-const SITE_COLUMNS = [
-  'displayName',
-  'status',
-  'platformDomain',
-  'cname',
-  'createdAt',
-  'updatedAt',
-]
-/** Name, both addresses, and the slug the platform address is built from. */
-const SITE_SEARCH_FIELDS = [
-  'displayName',
-  'subdomain',
-  'platformDomain',
-  'cname',
-] as const
+function SitesCards(props: SitesCardsProps) {
+  const { firestore, uid, orgId, hosts, orgSlug, productName } = props
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const memberships = useMemo(
+    () =>
+      uid && orgId !== undefined
+        ? collection(firestore, 'users', uid, 'hostMemberships')
+        : null,
+    [firestore, uid, orgId],
+  )
+  const listed = useListQuery<{ $id: string }>({
+    collection: memberships,
+    declaration: SITE_LIST_DECLARATION,
+    request: {
+      clauses,
+      search: searchWords,
+      base: siteListBase(orgId ?? null),
+    },
+    deps: [firestore, uid, orgId],
+    idField: '$id',
+    pageSize: SITE_CARDS_PAGE_SIZE,
+  })
+  const { plan, page, pageSize, hasMore, setPage } = listed
+  const hostsById = useMemo(
+    () => new Map(hosts.map((host) => [host.$id, host])),
+    [hosts],
+  )
+  // Every page read so far, in the query's order: "Load more" adds to the
+  // cards rather than replacing them.
+  const shown = useMemo(
+    () =>
+      (listed.data ?? [])
+        .slice(0, pageSize * (page + 1))
+        .flatMap((row) => {
+          const host = hostsById.get(row.$id)
+          return host ? [host] : []
+        }),
+    [listed.data, page, pageSize, hostsById],
+  )
+  const loading = listed.status === 'loading'
+  const filtering = clauses.length > 0 || searchWords.length > 0
 
-/** A Firestore timestamp as the grid's date column takes it. */
-const timestampDate = (value: { toDate?: () => Date } | null | undefined) =>
-  value?.toDate?.() ?? null
+  return (
+    <Stack spacing={2}>
+      <ListFilterToolbar
+        fields={SITE_FILTER_FIELDS}
+        headers={SITE_FILTER_HEADERS}
+        options={SITE_FILTER_OPTIONS}
+        clauses={clauses}
+        onChange={setClauses}
+        search={{
+          words: searchWords,
+          onChange: setSearchWords,
+          placeholder: 'Search sites by name or domain',
+        }}
+      />
+      <ListFilterChips
+        fields={SITE_FILTER_FIELDS}
+        headers={SITE_FILTER_HEADERS}
+        options={SITE_FILTER_OPTIONS}
+        clauses={clauses}
+        onChange={setClauses}
+      />
+      <ListQueryNotices
+        refused={listQueryRefusals(plan.refused, {
+          fields: SITE_FILTER_FIELDS,
+          headers: SITE_FILTER_HEADERS,
+          options: SITE_FILTER_OPTIONS,
+        })}
+        notices={plan.notices}
+      />
+      {listed.status === 'error' ? (
+        <Alert severity="warning">{'These sites could not be loaded.'}</Alert>
+      ) : !shown.length && !loading && filtering ? (
+        <Typography color="text.secondary">
+          {'No sites match these filters.'}
+        </Typography>
+      ) : null}
+      <GridItems
+        // Site tiles, all one shape, read left to right. Rows are the point.
+        masonry={false}
+        spacing={3}
+        items={shown.map((host) => ({
+          size: {
+            xs: 12,
+            md: 4,
+          },
+          children: (
+            <SiteCard host={host} orgSlug={orgSlug} productName={productName} />
+          ),
+        }))}
+      />
+      {hasMore ? (
+        <Stack direction="row" sx={{ justifyContent: 'center' }}>
+          <Button
+            variant="outlined"
+            disabled={loading}
+            onClick={() => setPage(page + 1)}
+          >
+            {'Load more'}
+          </Button>
+        </Stack>
+      ) : null}
+    </Stack>
+  )
+}
 
 function HostsContent() {
   const { data: user } = useUser()
@@ -268,145 +478,6 @@ function HostsContent() {
         hostsReady,
       }),
     [orgId, orgSlug, data, hostsReady],
-  )
-
-  const siteRows = useMemo<SiteRow[]>(
-    () =>
-      (data ?? []).map((host) => {
-        const status = describeHostStatus(host as never)
-        return {
-          ...host,
-          status,
-          statusKey: status.key,
-          platformDomain: hostPlatformDomain(hostAddress(host)) ?? '',
-          customDomainState: customDomainState(host),
-        }
-      }),
-    [data],
-  )
-  // Filters the rows the grid draws, never `data`: the site meter, the
-  // dashboard row and the plugin slot above count every site, filtered or not.
-  const siteHeaders = useMemo(
-    () => siteFilterHeaders(branding.productName),
-    [branding.productName],
-  )
-  const siteFilter = useListRowsFilter({
-    rows: siteRows,
-    fields: SITE_FILTER_FIELDS,
-    options: SITE_FILTER_OPTIONS,
-    headers: siteHeaders,
-    search: SITE_SEARCH_FIELDS,
-  })
-  const siteColumns = useMemo<GridColDef[]>(
-    () => [
-      {
-        field: 'displayName',
-        headerName: 'Site',
-        flex: 1.4,
-        minWidth: 220,
-        renderCell: ({ row }: { row: SiteRow }) => (
-          <Stack
-            direction="row"
-            spacing={1.5}
-            sx={{ alignItems: 'center', minWidth: 0, py: 1 }}
-          >
-            {/* The site's own favicon when it has one (AGL-647), falling
-                back to the generic glyph. */}
-            <HostIcon host={row} size={28} fontSize="large" color="primary" />
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle2" noWrap>
-                {row.displayName}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                component="div"
-                noWrap
-              >
-                {hostDisplayDomain(hostAddress(row))}
-              </Typography>
-            </Box>
-          </Stack>
-        ),
-      },
-      {
-        field: 'status',
-        headerName: 'Status',
-        width: 140,
-        // Sorted and filtered by the key; drawn as the pill.
-        valueGetter: (_value: unknown, row: SiteRow) => row.statusKey,
-        renderCell: ({ row }: { row: SiteRow }) => (
-          <Tooltip title={row.status.detail}>
-            <Chip
-              size="small"
-              label={row.status.label}
-              color={row.status.color}
-              variant={row.status.color === 'default' ? 'outlined' : 'filled'}
-            />
-          </Tooltip>
-        ),
-      },
-      {
-        field: 'platformDomain',
-        headerName: siteHeaders.platformDomain,
-        flex: 1,
-        minWidth: 180,
-      },
-      {
-        field: 'cname',
-        headerName: 'Custom domain',
-        flex: 1,
-        minWidth: 160,
-        valueFormatter: (value: unknown) => (value as string) || 'None',
-      },
-      {
-        field: 'createdAt',
-        headerName: 'Created',
-        minWidth: 170,
-        type: 'date',
-        valueGetter: timestampDate,
-        valueFormatter: (value: Date | null) => value?.toLocaleString() || '--',
-      },
-      {
-        field: 'updatedAt',
-        headerName: 'Updated',
-        minWidth: 170,
-        type: 'date',
-        valueGetter: timestampDate,
-        valueFormatter: (value: Date | null) => value?.toLocaleString() || '--',
-      },
-      listActionsColumn(
-        (row: SiteRow) => (
-          <Stack direction="row" spacing={0.5}>
-            <AppLink
-              componentVariant="button"
-              // `?aglyn-edit` arms the admin bar without the chord
-              // (AGL-1842): on a foreign CUSTOM domain no hint can exist by
-              // construction, so the console's own visit link is the
-              // chord-free path there. hostDisplayDomain rather than a
-              // re-derived apex (AGL-2172), so a self-hosted deployment links
-              // its sites at its own domain.
-              href={`https://${hostDisplayDomain(hostAddress(row))}/?aglyn-edit`}
-              target={'_blank'}
-              rel={'nofollow'}
-            >
-              {'Visit'}
-            </AppLink>
-            <AppLink
-              componentVariant="button"
-              href={buildRoute(Route.HOST_DASHBOARD, {
-                orgSlug,
-                host: row.subdomain,
-              })}
-            >
-              {'Manage'}
-            </AppLink>
-          </Stack>
-        ),
-        { width: 190 },
-      ),
-    ],
-    [siteHeaders, orgSlug],
   )
 
   return (
@@ -501,26 +572,13 @@ function HostsContent() {
               basePath={buildRoute(Route.HOST_LIST, { orgSlug })}
             />
           )}
-        <ListFilterChips {...siteFilter.chipsProps} />
-        <ListTable
-          aria-label="Sites"
-          rows={siteFilter.rows}
-          columns={siteFilter.filterColumns(siteColumns)}
-          // Two lines: the name over the address a visitor types.
-          getRowHeight={() => 'auto'}
-          // The panel and the search are the grid's; the page answers them
-          // over every site it read, and the grid's own footer pages what
-          // matches.
-          {...siteFilter.gridProps}
-          noRowsLabel="No sites match these filters"
-          initialState={{
-            columns: {
-              columnVisibilityModel: hiddenFilterVisibility(
-                SITE_FILTER_FIELDS,
-                SITE_COLUMNS,
-              ),
-            },
-          }}
+        <SitesCards
+          firestore={firestore}
+          uid={user?.uid}
+          orgId={orgsLoading ? undefined : (currentOrg?.$id ?? null)}
+          hosts={data ?? []}
+          orgSlug={orgSlug}
+          productName={branding.productName}
         />
         </>
         )}

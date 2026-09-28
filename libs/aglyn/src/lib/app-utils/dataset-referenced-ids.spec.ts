@@ -190,14 +190,36 @@ describe('every record write path carries the index', () => {
   it('a `mergeFields` write names every field the helper returns', () => {
     // `mergeFields` writes ONLY the paths it lists, so a field the helper
     // returns but the list omits is silently dropped from the write — the
-    // filter tokens would describe the record's previous values.
-    const card = read(CARD)
-    const lists = card.match(/mergeFields: \[[^\]]*\]/g) ?? []
-    expect(lists.length).toBeGreaterThan(0)
-    for (const list of lists) {
-      if (!list.includes("'values'")) continue
-      expect(list).toContain("'referencedIds'")
-      expect(list).toContain("'filterKeys'")
+    // filter fields would describe the record's previous values.
+    const helperFields = Object.keys(
+      datasetIntegrityUpdate({ order: [], fields: {} }, {}, null),
+    )
+    expect(helperFields).toEqual(['referencedIds', 'filterKeys', 'filterValues'])
+    for (const path of [CARD, EVENT_ACTIONS]) {
+      const lists = read(path).match(/mergeFields: \[[^\]]*\]/g) ?? []
+      expect({ path, lists: lists.length > 0 }).toEqual({ path, lists: true })
+      for (const list of lists) {
+        if (!list.includes("'values'")) continue
+        for (const field of helperFields) expect(list).toContain(`'${field}'`)
+      }
+    }
+  })
+
+  it('no record write merges `filterValues` key by key', () => {
+    // `set(…, { merge: true })` folds a map into the stored one, so a value
+    // cleared by the write would go on answering its old equality. The
+    // merging writers name their fields in `mergeFields` instead.
+    for (const path of [CARD, EVENT_ACTIONS]) {
+      const source = read(path)
+      for (const at of [...source.matchAll(/datasetIntegrityUpdate\(/g)].map((m) => m.index ?? 0)) {
+        const write = source.slice(at, at + 900)
+        const options = write.match(/\{\s*merge: true\s*\}/)
+        expect({ path, at, mergesWithMergeTrue: Boolean(options) }).toEqual({
+          path,
+          at,
+          mergesWithMergeTrue: false,
+        })
+      }
     }
   })
 

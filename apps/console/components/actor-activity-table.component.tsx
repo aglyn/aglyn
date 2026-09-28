@@ -22,21 +22,29 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { listPluginActivityFilters } from '@aglyn/aglyn'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
-import { type ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   type ListFilterClause,
   listFilterGridColumns,
+  upsertListFilterClause,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ACTIVITY_LIST_FILTER_FIELDS,
   ACTIVITY_LIST_FILTER_HEADERS,
 } from '../utils/list-filters'
+import {
+  ACTIVITY_SEARCH_HINT,
+} from '../utils/activity-list-query'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { Chip } from '@mui/material'
+import { Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ActivityTable from './activity-table.component'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
@@ -48,6 +56,8 @@ export interface ActorActivityEntry {
   scopeId: string
   action?: string
   target?: Record<string, unknown> | null
+  actorEmail?: string | null
+  apiKeyName?: string
   createdAt?: { seconds: number } | null
 }
 
@@ -70,12 +80,14 @@ export interface ActorActivityTableProps {
  * cursor walk, which is the half that is actually about one person's
  * activity.
  *
- * Forward-only, because that is what the underlying query is: a
- * collection-group walk resumed from a document path. `HostActivityTable`
- * keeps every cursor it has seen and can therefore go back; this one is
- * filtered server-side, so the page a cursor lands on is not necessarily the
- * page it produced, and offering Previous would be offering a promise the
- * query cannot keep. A visited cursor stack gives Back honestly instead.
+ * Paged by the cursor the route hands back — a document path on the staff
+ * feed, a merge position on the member feed — and a visited cursor stack
+ * gives Back.
+ *
+ * Every clause in the grid's Filters panel, every group chip and the search
+ * box go to the route, which puts them all on its query (AGL-3321); a change
+ * to any of them is a different query, so the walk starts again at page one.
+ * What the route could not put on the query it says, and the table shows.
  *
  * "Found nothing" and "could not look" are separate states, for the same
  * reason the host table separates them: a failed read rendered as an empty
@@ -96,53 +108,51 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [unreadable, setUnreadable] = useState(false)
+  const [refused, setRefused] = useState<ListQueryRefusal[]>([])
+  const [notices, setNotices] = useState<string[]>([])
 
   /*
-   * The filter the next request carries, in a ref.
-   *
-   * `loadPage` is a `useCallback` dependency of the effect that starts the
-   * feed, so a filter held in state alone would rebuild it and restart the
-   * walk. Written by the grid's change handler BEFORE it asks for page 0 —
-   * during render is a tick too late, and the request would carry the filter
-   * from before the reader changed it.
+   * The grid's Filters panel and search box, bound to clauses the list
+   * holds. `action` stays a typed field, not a select: most actions are the
+   * prose sentence their writer stored, so there is no catalog to pick
+   * from; the group chips above are the named slices that DO have one.
    */
-  const filterRef = useRef<ListFilterRequest | null>(null)
-  /*
-   * One chip per plugin-declared action group (AGL-2929, AGL-2940): a
-   * plugin's rows are stored as catalog codes, and the route already
-   * answers `action isAnyOf …`, so a chip is that one request with the
-   * group's codes as its value. It replaces the grid's clause while it is
-   * on and hands it back when it is off, so a reader who had narrowed by
-   * date does not lose the narrowing by asking for one group.
-   */
-  const [groupOnly, setGroupOnly] = useState<string | null>(null)
-  const gridFilterRef = useRef<ListFilterRequest | null>(null)
-  const groupFilters = listPluginActivityFilters()
-  const groupFilter = (groupId: string): ListFilterRequest | null => {
-    const match = groupFilters.find((entry) => entry.group.id === groupId)
-    return match
-      ? { field: 'action', op: 'isAnyOf', value: match.actions.join(',') }
-      : null
-  }
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const gridFilter = useListGridFilter({
+    clauses,
+    onChange: setClauses,
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  const search = searchWords.join(' ').trim()
 
+  /*
+   * Only the newest request may write: two page clicks in quick succession,
+   * or a page change racing the reload a filter change triggers, otherwise
+   * land in whatever order the network returns them.
+   */
+  const requestRef = useRef(0)
   const loadPage = useCallback(
     async (targetPage: number, cursor: string | null) => {
+      const request = (requestRef.current += 1)
+      const current = () => requestRef.current === request
       setLoading(true)
       try {
         const url = new URL(endpoint, window.location.origin)
         url.searchParams.set('pageSize', String(pageSize))
-        const filter = filterRef.current
-        if (filter) {
-          url.searchParams.set('filterField', filter.field)
-          url.searchParams.set('filterOp', filter.op)
-          url.searchParams.set('filterValue', filter.value)
+        if (clauses.length) {
+          url.searchParams.set(
+            'filters',
+            JSON.stringify(clauses.map(({ field, op, value }) => ({ field, op, value }))),
+          )
         }
-        // The cursor is the last document the route READ under this same
-        // filter, so it resumes the narrowed walk. Every filter change resets
-        // the cursors and asks for page 0 with none, so a cursor never
-        // crosses from one filter's walk into another's.
+        if (search) url.searchParams.set('search', search)
+        // The cursor is where the route's walk under this same query ended.
+        // Every change of query resets the cursors and asks for page 0 with
+        // none, so a cursor never crosses from one query's walk to another.
         if (cursor) url.searchParams.set('cursor', cursor)
         const response = await authorizedFetch(userRef.current, url.toString())
+        if (!current()) return
         if (!response.ok) {
           setUnreadable(true)
           setRows([])
@@ -151,55 +161,44 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         const payload = (await response.json()) as {
           entries?: ActorActivityEntry[]
           nextCursor?: string | null
+          refused?: ListQueryRefusal[]
+          notices?: string[]
         }
+        if (!current()) return
         setUnreadable(false)
         setRows(payload?.entries ?? [])
         setNextCursor(payload?.nextCursor ?? null)
+        setRefused(payload?.refused ?? [])
+        setNotices(payload?.notices ?? [])
         setPage(targetPage)
       } catch {
+        if (!current()) return
         setUnreadable(true)
         setRows([])
       } finally {
-        setLoading(false)
+        if (current()) setLoading(false)
       }
     },
-    [endpoint, pageSize],
+    [endpoint, pageSize, clauses, search],
   )
 
-  /*
-   * The grid's Filters panel, bound to the ONE clause the route serves
-   * (`single`): a clause set in the panel replaces the last, and each change
-   * restarts the feed at page 0 under it.
-   *
-   * `action` stays a typed field, not a select. Most actions are the prose
-   * sentence their writer stored, so there is no catalog to pick from; the
-   * group chips above are the named slices that DO have one.
-   *
-   * No quick search: the route answers no free-text term, and a search over
-   * the page on screen would call one page the whole feed.
-   */
-  const [clauses, setClauses] = useState<ListFilterClause[]>([])
-  const onClausesChange = useCallback((next: ListFilterClause[]) => {
-    setClauses(next)
-    gridFilterRef.current = next[0] ?? null
-    // A clause from the panel is the reader choosing; it takes over from
-    // the chip rather than being silently ignored under it.
-    setGroupOnly(null)
-    filterRef.current = gridFilterRef.current
-    setCursors([null])
-    void loadPage(0, null)
-  }, [loadPage])
-  const gridFilter = useListGridFilter({
-    single: true,
-    clauses,
-    onChange: onClausesChange,
-  })
-
+  // A new filter, search or page size is a different query: page one, no
+  // cursor.
   useEffect(() => {
     if (!uid) return
     setCursors([null])
     void loadPage(0, null)
   }, [uid, loadPage])
+
+  /*
+   * One chip per plugin-declared action group (AGL-2929, AGL-2940): a
+   * plugin's rows are stored as catalog codes, so a chip is Action `is any
+   * of` those codes — a clause like any other, on the route's query, shown
+   * with the others and removed like them.
+   */
+  const groupFilters = listPluginActivityFilters()
+  const actionClause = clauses.find((clause) => clause.field === 'action')
+  const groupValue = (actions: readonly string[]) => actions.join(',')
 
   const scopeLabel = (entry: ActorActivityEntry): string => {
     if (entry.scopeType === 'org') return 'Organization'
@@ -269,58 +268,79 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
     [scopeNames],
   )
 
+  const filtering = clauses.length > 0 || Boolean(search)
+  const refusals = listQueryRefusals(refused, {
+    fields: ACTIVITY_LIST_FILTER_FIELDS,
+    headers: ACTIVITY_LIST_FILTER_HEADERS,
+  })
   return (
     <ActivityTable
       header={header}
       help={help}
       description={description}
-      toolbar={groupFilters.map(({ group }) => (
-        <Chip
-          key={group.id}
-          size="small"
-          label={group.label}
-          clickable
-          color={groupOnly === group.id ? 'primary' : 'default'}
-          variant={groupOnly === group.id ? 'filled' : 'outlined'}
-          aria-pressed={groupOnly === group.id}
-          onClick={() => {
-            const next = groupOnly === group.id ? null : group.id
-            setGroupOnly(next)
-            filterRef.current = next
-              ? groupFilter(next)
-              : gridFilterRef.current
-            setCursors([null])
-            void loadPage(0, null)
-          }}
-        />
-      ))}
+      toolbar={groupFilters.map(({ group, actions }) => {
+        const pressed =
+          actionClause?.op === 'isAnyOf' && actionClause.value === groupValue(actions)
+        return (
+          <Chip
+            key={group.id}
+            size="small"
+            label={group.label}
+            clickable
+            color={pressed ? 'primary' : 'default'}
+            variant={pressed ? 'filled' : 'outlined'}
+            aria-pressed={pressed}
+            onClick={() =>
+              setClauses((current) =>
+                upsertListFilterClause(
+                  current,
+                  'action',
+                  pressed
+                    ? null
+                    : { field: 'action', op: 'isAnyOf', value: groupValue(actions) },
+                ),
+              )
+            }
+          />
+        )
+      })}
       filterChips={
         <ListFilterChips
           fields={ACTIVITY_LIST_FILTER_FIELDS}
           headers={ACTIVITY_LIST_FILTER_HEADERS}
-          clauses={gridFilter.clauses}
-          onChange={gridFilter.setClauses}
-          // A group chip replaces the panel's clause while it is on and
-          // hands it back when it is off, so the clause is shown, dimmed,
-          // as the one that is waiting rather than the one in force.
-          disabled={groupOnly !== null}
+          clauses={clauses}
+          onChange={setClauses}
         />
       }
-      filtering={clauses.length > 0 || groupOnly !== null}
+      filterNotices={
+        refusals.length || notices.length || search ? (
+          <Stack spacing={1}>
+            <ListQueryNotices refused={refusals} notices={notices} />
+            {search ? (
+              <Typography variant="caption" color="text.secondary">
+                {ACTIVITY_SEARCH_HINT}
+              </Typography>
+            ) : null}
+          </Stack>
+        ) : null
+      }
+      filtering={filtering}
       columns={activityColumns}
       rows={rows}
       getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
       loading={loading}
       unreadable={unreadable}
       /*
-       * The grid must NOT also filter. The feed is paged, so a client-side
-       * pass would narrow the rows on screen and call that the answer — on an
-       * audit log, "nothing happened" is the wrong answer to give about
-       * everything that is not on this page. Passing a handler is what puts
-       * the grid in server-filter mode.
+       * The grid must NOT also filter, search or sort. The feed is paged, so
+       * a client-side pass would narrow or reorder the rows on screen and
+       * call that the answer — on an audit log, "nothing happened" is the
+       * wrong answer to give about everything that is not on this page.
+       * Passing a handler is what puts the grid in server-filter mode.
        */
       filterModel={gridFilter.filterModel}
       onFilterModelChange={gridFilter.onFilterModelChange}
+      quickFilter
+      disableColumnSorting
       page={page}
       pageSize={pageSize}
       hasMore={Boolean(nextCursor)}
@@ -329,7 +349,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         if (next === page) return
         if (next > page) {
           const cursor = nextCursor
-          setCursors((current) => [...current, cursor])
+          setCursors((current) => [...current.slice(0, next), cursor])
           void loadPage(next, cursor)
           return
         }

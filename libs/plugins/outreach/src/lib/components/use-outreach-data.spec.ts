@@ -16,15 +16,21 @@
  */
 
 import { renderHook } from '@testing-library/react'
+import { OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY } from '../model/do-not-contact-domain-list-query'
+import { OUTREACH_ENROLLMENT_LIST_QUERY } from '../model/enrollment-list-query'
+import { OUTREACH_SEQUENCE_LIST_QUERY } from '../model/sequence-list-query'
 import {
-  OUTREACH_SEQUENCES_LIMIT,
-  useOutreachSequences,
+  useOutreachDoNotContactDomainList,
+  useOutreachEnrollmentList,
+  useOutreachSequenceList,
 } from './use-outreach-data'
 
-/** How many sequence documents the fake collection holds. */
-let mockStored = 0
-/** The `limit` each listen asked for. */
-let mockLimits: number[] = []
+/**
+ * The Outreach lists read through the shared list query (AGL-3321): each
+ * hands `useListQuery` its collection, its declaration and the reader's
+ * request, and answers in the module's four states with each document read
+ * through its stored-record reader.
+ */
 
 /** One instance, as the real hook returns: the listen is keyed on it. */
 const mockFirestore = {}
@@ -34,52 +40,125 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 jest.mock('../model/stored-records', () => ({
   readStoredOutreachEnrollment: () => null,
-  readStoredOutreachSequence: (id: string, data: { createdAtMs: number }) => ({
-    id,
-    createdAtMs: data.createdAtMs,
-  }),
+  readStoredOutreachSequence: (id: string, data: { createdAtMs?: number; broken?: boolean }) =>
+    data.broken ? null : { id, createdAtMs: data.createdAtMs },
 }))
 
 jest.mock('firebase/firestore', () => ({
-  collection: () => ({ constraints: [] }),
+  collection: (_firestore: unknown, ...path: string[]) => ({ path: path.join('/') }),
   doc: () => ({}),
   documentId: () => '__name__',
   where: () => ({}),
   orderBy: () => ({}),
-  limit: (value: number) => ({ limit: value }),
-  query: (_base: unknown, ...constraints: Array<{ limit?: number }>) => ({
-    cap: constraints.find((entry) => typeof entry.limit === 'number')?.limit,
-  }),
-  onSnapshot: (built: { cap: number }, next: (snapshot: unknown) => void) => {
-    mockLimits.push(built.cap)
-    const count = Math.min(mockStored, built.cap)
-    next({
-      docs: Array.from({ length: count }, (_unused, at) => ({
-        id: `seq-${at}`,
-        data: () => ({ createdAtMs: 10_000 - at }),
-      })),
-    })
-    return () => undefined
+  limit: () => ({}),
+  query: () => ({}),
+  onSnapshot: () => () => undefined,
+}))
+
+let mockListed: Record<string, unknown>
+let mockOptions: Array<Record<string, unknown>> = []
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: Record<string, unknown>) => {
+    mockOptions.push(options)
+    return mockListed
   },
 }))
 
-beforeEach(() => {
-  mockLimits = []
+const listed = (extra: Record<string, unknown> = {}) => ({
+  data: [],
+  rows: [],
+  status: 'success',
+  error: undefined,
+  fromCache: false,
+  serverDenied: false,
+  hasMore: false,
+  page: 0,
+  setPage: jest.fn(),
+  pageSize: 10,
+  setPageSize: jest.fn(),
+  plan: { filters: [], orderBy: { path: 'createdAtMs', direction: 'desc' }, served: [], searched: null, refused: [], notices: [] },
+  ...extra,
 })
 
-describe('useOutreachSequences reports its cap honestly (AGL-3321)', () => {
-  it('reads one past the cap and lists no more than the cap', () => {
-    mockStored = OUTREACH_SEQUENCES_LIMIT + 5
-    const { result } = renderHook(() => useOutreachSequences('org-1'))
-    expect(mockLimits).toEqual([OUTREACH_SEQUENCES_LIMIT + 1])
-    expect(result.current.data).toHaveLength(OUTREACH_SEQUENCES_LIMIT)
-    expect(result.current.truncated).toBe(true)
+beforeEach(() => {
+  mockOptions = []
+  mockListed = listed()
+})
+
+describe('useOutreachSequenceList (AGL-3321)', () => {
+  it('asks the org’s sequences with the list’s declaration and the reader’s request', () => {
+    const request = { clauses: [{ field: 'status', op: 'equals', value: 'active' }], search: ['win'] }
+    renderHook(() => useOutreachSequenceList('org-1', request))
+    const options = mockOptions.at(-1) as Record<string, any>
+    expect(options['collection']).toEqual({ path: 'orgs/org-1/outreachSequences' })
+    expect(options['declaration']).toBe(OUTREACH_SEQUENCE_LIST_QUERY)
+    expect(options['request']).toBe(request)
+    expect(options['idField']).toBe('$id')
   })
 
-  it('is not truncated at exactly the cap', () => {
-    mockStored = OUTREACH_SEQUENCES_LIMIT
-    const { result } = renderHook(() => useOutreachSequences('org-1'))
-    expect(result.current.data).toHaveLength(OUTREACH_SEQUENCES_LIMIT)
-    expect(result.current.truncated).toBe(false)
+  it('asks nothing until the organization is known', () => {
+    renderHook(() => useOutreachSequenceList(null, { clauses: [] }))
+    expect((mockOptions.at(-1) as Record<string, unknown>)['collection']).toBeNull()
+  })
+
+  it('reads each row through the stored-record reader, leaving out one it cannot read', () => {
+    mockListed = listed({
+      rows: [
+        { $id: 'seq-1', createdAtMs: 2 },
+        { $id: 'seq-2', broken: true },
+      ],
+      hasMore: true,
+    })
+    const { result } = renderHook(() => useOutreachSequenceList('org-1', { clauses: [] }))
+    expect(result.current.status).toBe('ready')
+    expect(result.current.rows).toEqual([{ id: 'seq-1', createdAtMs: 2 }])
+    expect(result.current.hasMore).toBe(true)
+  })
+
+  it('says a refusal as refused and any other failure as an error', () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockListed = listed({ status: 'error', error: { code: 'permission-denied' } })
+    expect(renderHook(() => useOutreachSequenceList('org-1', { clauses: [] })).result.current.status).toBe('refused')
+    mockListed = listed({ status: 'error', error: { code: 'failed-precondition' } })
+    expect(renderHook(() => useOutreachSequenceList('org-1', { clauses: [] })).result.current.status).toBe('error')
+    mockListed = listed({ status: 'loading' })
+    expect(renderHook(() => useOutreachSequenceList('org-1', { clauses: [] })).result.current.status).toBe('loading')
+    spy.mockRestore()
+  })
+})
+
+describe('useOutreachEnrollmentList (AGL-3321)', () => {
+  it('asks the org’s enrollments narrowed to the sequence, with the table’s declaration', () => {
+    const request = { clauses: [{ field: 'status', op: 'equals', value: 'replied' }], search: ['casey'] }
+    renderHook(() => useOutreachEnrollmentList('org-1', 'seq-1', request))
+    const options = mockOptions.at(-1) as Record<string, any>
+    expect(options['collection']).toEqual({ path: 'orgs/org-1/outreachEnrollments' })
+    expect(options['declaration']).toBe(OUTREACH_ENROLLMENT_LIST_QUERY)
+    expect(options['request']).toEqual({
+      ...request,
+      base: [{ path: 'sequenceId', op: '==', value: 'seq-1' }],
+    })
+  })
+
+  it('asks nothing until both the organization and the sequence are known', () => {
+    renderHook(() => useOutreachEnrollmentList('org-1', null, { clauses: [] }))
+    expect((mockOptions.at(-1) as Record<string, unknown>)['collection']).toBeNull()
+    renderHook(() => useOutreachEnrollmentList(null, 'seq-1', { clauses: [] }))
+    expect((mockOptions.at(-1) as Record<string, unknown>)['collection']).toBeNull()
+  })
+})
+
+describe('useOutreachDoNotContactDomainList (AGL-3321)', () => {
+  it('asks the org’s domains with the list’s declaration, each row named by its id', () => {
+    mockListed = listed({ rows: [{ $id: 'acme.com', reason: 'manual', addedAtMs: 1 }] })
+    const request = { clauses: [], search: ['acme'] }
+    const { result } = renderHook(() => useOutreachDoNotContactDomainList('org-1', request))
+    const options = mockOptions.at(-1) as Record<string, any>
+    expect(options['collection']).toEqual({ path: 'orgs/org-1/outreachDoNotContactDomains' })
+    expect(options['declaration']).toBe(OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY)
+    expect(options['request']).toBe(request)
+    expect(result.current.rows).toEqual([
+      expect.objectContaining({ domain: 'acme.com', reason: 'manual', addedAtMs: 1 }),
+    ])
   })
 })

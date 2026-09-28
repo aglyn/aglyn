@@ -240,6 +240,25 @@ describe('AGL-2495 · commerce#abandoned-checkout-recovery honours a lockdown', 
     expect(result.skippedLocked).toBe(0)
   })
 
+  it('a stale checkout with no address, or already reminded, is expired too', async () => {
+    // Skipped while still `open`, these used to stay open forever and fill
+    // the 200-checkout pass (AGL-3321).
+    const old = Date.now() - 30 * 24 * 60 * 60 * 1000
+    rows['checkouts'] = [
+      hostDoc('healthy', 'checkouts', 'c1', { status: 'open', createdAtMs: old }),
+      hostDoc('healthy', 'checkouts', 'c2', {
+        status: 'open',
+        email: 'shopper@example.com',
+        remindedAtMs: old + 60 * 60 * 1000,
+        createdAtMs: old,
+      }),
+    ]
+    await scanAbandonedCheckouts(gate)
+    expect(stored['hosts/healthy/checkouts/c1'].status).toBe('expired')
+    expect(stored['hosts/healthy/checkouts/c2'].status).toBe('expired')
+    expect(emails).toEqual([])
+  })
+
   it('a locked host has NOTHING written and NOTHING mailed', async () => {
     abandoned('locked')
     lockedHosts.add('locked')

@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// The leaf module, not the server barrel: the list keys every artifact
+// create stamps (AGL-3321), which the install specs' closed-world barrel
+// mocks have no reason to stage.
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { createResourceUid, isPluginRevoked } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import type { PluginRevocation } from '@aglyn/aglyn/server'
@@ -232,6 +236,8 @@ export const installEmailStarterHandler: PluginApiHandler = async (req, res) => 
      */
     batch.set(screenRef, {
       displayName,
+      // The keys the email templates list finds it by (AGL-3321).
+      ...artifactCreateListKeys('screens', { displayName }),
       kind: 'email',
       versionId,
       ...(subject && { emailSubject: subject }),

@@ -24,7 +24,9 @@ import {
   pluginDocsHelp,
   SITE_EVENT_TYPES,
 } from '@aglyn/aglyn'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { describeVariantComparison, experimentResultRows, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
+import { EXPERIMENT_LIST_QUERY } from '../model/experiment-list-query'
 import {
   mdiChartBar,
   mdiDeleteOutline,
@@ -34,14 +36,17 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -73,18 +78,18 @@ import {
   doc,
   getDocs,
   limit,
-  orderBy,
   query,
   setDoc,
+  where,
 } from 'firebase/firestore'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
   useHostActivityLogger,
-  usePagedCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   ExperimentResultZone,
   ExperimentVariantsZone,
@@ -112,15 +117,11 @@ export const EXPERIMENT_STATUS_COLORS: Record<
 }
 
 /*
- * What the experiments grid's Filters panel offers (AGL-3317). The list is a
- * paged listener, so a filter matches over what its window has read, which
- * the first filter widens (`usePagedRowsFilter`).
+ * What the experiments grid's Filters panel offers: the fields of the list's
+ * query declaration (`EXPERIMENT_LIST_QUERY`), every one served by Firestore
+ * (AGL-3321).
  */
-const EXPERIMENT_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('target', 'select'),
-  inMemoryListField('status', 'select'),
-]
+const EXPERIMENT_FILTER_FIELDS = EXPERIMENT_LIST_QUERY.fields
 const EXPERIMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
   name: 'Experiment',
   target: 'Tests',
@@ -137,7 +138,6 @@ const EXPERIMENT_FILTER_OPTIONS = {
     label: status.charAt(0).toUpperCase() + status.slice(1),
   })),
 }
-const EXPERIMENT_SEARCH_FIELDS = ['name'] as const
 
 /**
  * Experiments manager (AGL-252): create screen/section/email A/B tests
@@ -154,8 +154,18 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
   const logActivity = useHostActivityLogger(hostId)
   const entitled = checkEntitlement(org, 'abTesting')
 
+  /*
+   * The Filters panel and the search box are the grid's; the clauses and the
+   * words go onto ONE query over the site's experiments, ordered by name, and
+   * each page is a page of that query's matches (AGL-3321). A clause the
+   * query cannot hold beside the others is not applied, and the notice above
+   * the list says which and why — never answered over the experiments that
+   * happen to be loaded.
+   */
+  const gridFilter = useListGridFilter({ selectFields: ['target', 'status'] })
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
   const {
-    data: experimentData,
     rows: experimentRows,
     hasMore: hasMoreExperiments,
     page: experimentPage,
@@ -173,61 +183,44 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
      * one, along with reverting its variant weights and goal.
      */
     fromCache: experimentsFromCache,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      query(
-        collection(firestore, 'hosts', hostId, 'experiments'),
-        /*
-         * Ordered by the server and paged (AGL-2501, AGL-2292).
-         *
-         * `limit(50)` with no `orderBy` is answered in DOCUMENT-ID order over
-         * ids from `createResourceUid()`, so the window was an arbitrary fifty
-         * that a `localeCompare` in the browser arranged into a convincing A-to-Z
-         * page. A site past fifty experiments could not reach the rest, and
-         * the ones missing left no gap on screen.
-         *
-         * `name` is safe to order on, checked against the writers rather than
-         * assumed: this card is the only thing that creates an experiment,
-         * `newExperiment()` seeds `name: ''` and `validateExperiment` refuses
-         * a save without one, the two server paths (`email-events`,
-         * `campaign-send`) only ever `update` an existing document, and
-         * `experiments` is not in `IMPORTABLE_FIELDS`. There is no writer that
-         * can produce a nameless experiment for `orderBy` to drop.
-         */
-        orderBy('name'),
-        limit(pageLimit),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
+    plan: experimentPlan,
+  } = useListQuery<ExperimentDraft>({
+    collection: collection(firestore, 'hosts', hostId, 'experiments'),
+    /*
+     * Ordered by the server and paged (AGL-2501, AGL-2292): the declaration's
+     * one order is `name`, which every writer sets — the editor refuses a save
+     * without one (`validateExperiment`), the besigner's section shortcut
+     * names its draft, the two send-path readers only ever write the stats
+     * beneath an experiment, and `experiments` is not in `IMPORTABLE_FIELDS`.
+     * There is no writer that can produce a nameless experiment for `orderBy`
+     * to drop.
+     *
+     * Nothing is dropped after the query either. An experiment is never
+     * soft-deleted — Delete below is a `deleteDoc` — so every row the query
+     * returns is live, and a page holds as many rows as its size.
+     */
+    declaration: EXPERIMENT_LIST_QUERY,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    deps: [firestore, hostId],
+    idField: '$id',
+  })
+  const experiments: ExperimentDraft[] = experimentRows
+  const experimentColumnsFor = (columns: GridColDef[]) =>
+    listFilterGridColumns(
+      columns,
+      EXPERIMENT_FILTER_FIELDS,
+      EXPERIMENT_FILTER_OPTIONS,
+      EXPERIMENT_FILTER_HEADERS,
+    )
+  const experimentRefusals = useMemo(
+    () =>
+      listQueryRefusals(experimentPlan.refused, {
+        fields: EXPERIMENT_FILTER_FIELDS,
+        headers: EXPERIMENT_FILTER_HEADERS,
+        options: EXPERIMENT_FILTER_OPTIONS,
+      }),
+    [experimentPlan.refused],
   )
-  /*
-   * Soft-deleted rows are dropped HERE and not in the query, which is why a
-   * page can render fewer rows than its size: Firestore cannot ask for
-   * documents that LACK a field, and a live experiment has no `deletedAt` at
-   * all. The rows are not re-sorted — the server already ordered them, and
-   * re-sorting a page of a name-ordered walk is the lie the old code told.
-   */
-  const experimentsLive: ExperimentDraft[] = experimentRows.filter(
-    (experiment: any) => !experiment.deletedAt,
-  )
-  const experimentFilter = usePagedRowsFilter<ExperimentDraft>(
-    {
-      data: (experimentData ?? []).filter((experiment: any) => !experiment.deletedAt),
-      rows: experimentsLive,
-      hasMore: hasMoreExperiments,
-      page: experimentPage,
-      setPage: setExperimentPage,
-      pageSize: experimentPageSize,
-      setPageSize: setExperimentPageSize,
-    },
-    {
-      fields: EXPERIMENT_FILTER_FIELDS,
-      options: EXPERIMENT_FILTER_OPTIONS,
-      headers: EXPERIMENT_FILTER_HEADERS,
-      search: EXPERIMENT_SEARCH_FIELDS,
-    },
-  )
-  const experiments = experimentFilter.rows
   const [editor, setEditor] = useState<ExperimentDraft | null>(null)
   /*
    * The screens and their versions fill the EDITOR's pickers and nothing
@@ -381,6 +374,13 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
             doc(firestore, 'hosts', hostId, 'experiments', id),
             {
               ...JSON.parse(JSON.stringify(payload)),
+              /*
+               * The name's search keys, from the name being written — the
+               * list's Experiment filter and its search box read them
+               * (AGL-3321). After the payload, so keys copied from the stored
+               * row cannot outlive a rename.
+               */
+              ...nameSearchFields(editor.name ?? ''),
               // Clearing the end date / auto-winner must overwrite — a
               // merge-set keeps absent keys otherwise (AGL-273).
               endAtMs: editor.endAtMs ?? null,
@@ -420,15 +420,27 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     winnerVariantId?: string,
   ) => {
     if (!experiment.$id) return
-    // One running experiment per screen (AGL-265): the page runner only
-    // serves the first, so a second would silently never split traffic.
+    /*
+     * One running experiment per screen (AGL-265): the page runner only
+     * serves the first, so a second would silently never split traffic.
+     *
+     * Asked of Firestore, not of the rows on screen: the list is one page of
+     * a query the reader may have narrowed, and the running test on the same
+     * screen is as likely to be on another page, or filtered out, as on this
+     * one. Two equalities, served by merging their single-field indexes.
+     */
     if (status === 'running' && experiment.screenId) {
-      const clash = experimentsLive.find(
-        (candidate) =>
-          candidate.$id !== experiment.$id &&
-          candidate.status === 'running' &&
-          candidate.screenId === experiment.screenId,
+      const running = await getDocs(
+        query(
+          collection(firestore, 'hosts', hostId, 'experiments'),
+          where('status', '==', 'running'),
+          where('screenId', '==', experiment.screenId),
+          limit(2),
+        ),
       )
+      const clash = running.docs
+        .map((entry) => ({ ...(entry.data() as HostExperiment), $id: entry.id }))
+        .find((candidate) => candidate.$id !== experiment.$id)
       if (clash) {
         return void enqueueSnackbar(
           `"${clash.name}" is already running on that screen — pause or ` +
@@ -596,32 +608,42 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           >
             {'New experiment'}
           </Button>
-          {experimentsLive.length === 0 && !hasMoreExperiments && !experimentFilter.filtering ? null : (
+          {experiments.length === 0 && !hasMoreExperiments && experimentPage === 0 && !filtering ? null : (
             <>
-            <ListFilterChips {...experimentFilter.chipsProps} />
-            {experimentFilter.filtering && hasMoreExperiments ? (
-              <Typography variant="caption" color="text.secondary">
-                {`Filtering the ${experimentFilter.read} experiments read so far — the next page reads more.`}
-              </Typography>
-            ) : null}
+            <ListFilterChips
+              fields={EXPERIMENT_FILTER_FIELDS}
+              headers={EXPERIMENT_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={EXPERIMENT_FILTER_OPTIONS}
+            />
+            <ListQueryNotices refused={experimentRefusals} notices={experimentPlan.notices} />
             <ListTable
               aria-label="Experiments"
               rows={experiments}
-              columns={experimentFilter.filterColumns(experimentColumns as GridColDef[])}
+              columns={experimentColumnsFor(experimentColumns as GridColDef[])}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, experiment) => void openResults(experiment)}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search are the grid's; the card answers
-              // them over what its window read (AGL-3317).
-              {...experimentFilter.gridProps}
+              /*
+               * The panel and the search are the grid's; every clause and the
+               * search word are on the list's query (AGL-3321), so the grid
+               * never narrows the page it is handed.
+               */
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
               noRowsLabel="No experiments match these filters"
             />
             <ListPagination
-              // The rows LEFT after the soft-delete filter (and any grid
-              // filter), not the page the server returned: the footer must
-              // describe what is on screen.
-              {...experimentFilter.pagination}
+              page={experimentPage}
+              pageSize={experimentPageSize}
+              rowCount={experiments.length}
+              hasMore={hasMoreExperiments}
+              onPageChange={setExperimentPage}
+              onPageSizeChange={setExperimentPageSize}
             />
             </>
           )}

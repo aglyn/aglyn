@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { messageSender } from '@aglyn/aglyn/app-utils/message-search'
+
 /**
  * How the Inbox renders one submission (AGL-2168).
  *
@@ -25,33 +27,6 @@
  * …`, so the name was in there somewhere, at the mercy of whatever order
  * the author happened to define the fields in.
  */
-
-/**
- * Field names that mean "this is who submitted it", most specific first.
- *
- * Compared against a key REDUCED to lowercase letters and digits, because
- * the same field reaches us as `Full Name`, `full_name` and `fullname`
- * depending on who built the form — and an exact-match lookup silently
- * finds none of the three.
- */
-const NAME_KEYS = ['name', 'fullname', 'yourname', 'firstname', 'contactname']
-
-const EMAIL_KEYS = ['email', 'emailaddress']
-
-/** Reduced key → the value the author submitted. */
-function normalizeKeys(
-  fields: Record<string, unknown> | undefined,
-): Map<string, string> {
-  const map = new Map<string, string>()
-  for (const [key, value] of Object.entries(fields ?? {})) {
-    const text = String(value ?? '').trim()
-    if (!text) continue
-    const reduced = key.toLowerCase().replace(/[^a-z0-9]/g, '')
-    // First spelling wins, so `name` beats a later `Name`.
-    if (!map.has(reduced)) map.set(reduced, text)
-  }
-  return map
-}
 
 export interface SubmissionSender {
   /** Best available display name — a name, else an email, else a fallback. */
@@ -74,9 +49,10 @@ export function submissionSender(
   fields: Record<string, unknown> | undefined,
   fallback = 'Someone',
 ): SubmissionSender {
-  const map = normalizeKeys(fields)
-  const email = EMAIL_KEYS.map((key) => map.get(key)).find(Boolean)
-  const name = NAME_KEYS.map((key) => map.get(key)).find(Boolean)
+  // The platform's one convention for who wrote in — the one the list's
+  // From filter and search are stamped from (AGL-3321), so the name a row
+  // draws is the name it is found by.
+  const { name, email } = messageSender(fields)
   const label = name ?? email ?? fallback
   return { label, ...(email ? { email } : {}), initials: initialsOf(label) }
 }

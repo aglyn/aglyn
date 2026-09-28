@@ -16,18 +16,21 @@
  */
 
 import {
+  getGridBooleanOperators,
+  getGridDateOperators,
+  getGridNumericOperators,
   getGridSingleSelectOperators,
+  getGridStringOperators,
   type GridColDef,
   type GridFilterItem,
+  type GridFilterOperator,
 } from '@mui/x-data-grid'
 import {
   gridFilterRequests,
-  hiddenFilterColumns,
   type ListFilterField,
+  type ListFilterKind,
   type ListFilterRequest,
-  listFilterColumn,
   listFilterOperators,
-  matchListFilter,
 } from './list-filter'
 
 /*
@@ -59,42 +62,86 @@ export interface ListFilterOption {
   label: string
 }
 
-/**
- * A field of a list that holds its rows and answers the panel in memory.
- *
- * The grammar's derived operators describe what a FIRESTORE query can
- * serve, so a text field with no lower-case twin offers nothing. A list
- * that matches over rows it already has is not held to that: plain
- * JavaScript answers a mid-string `contains` and both empty operators, so
- * the field names them (`operators`), and `matchListFilter` answers them.
- * `select` is a field picked from choices — the list passes them as the
- * field's options, and the panel shows a select over them.
-  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
- * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
- * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
-*/
-export function inMemoryListField(
-  column: string,
-  kind: 'text' | 'select' | 'number' | 'date' | 'boolean',
-  path: string = column,
-): ListFilterField {
+const operatorPool = (kind: ListFilterKind): GridFilterOperator[] => {
   switch (kind) {
-    case 'text':
-      return {
-        column,
-        path,
-        kind: 'text',
-        operators: ['contains', 'doesNotContain', 'equals', 'startsWith', 'endsWith', 'isEmpty', 'isNotEmpty'],
-      }
-    case 'select':
-      return { column, path, kind: 'exact', operators: ['equals', 'doesNotEqual', 'isAnyOf'] }
+    case 'boolean':
+      return getGridBooleanOperators()
     case 'number':
-      return { column, path, kind: 'number', presence: 'nullable' }
+      return getGridNumericOperators()
     case 'date':
-      return { column, path, kind: 'date', presence: 'nullable' }
+      return getGridDateOperators()
     default:
-      return { column, path, kind: 'boolean' }
+      return getGridStringOperators()
   }
+}
+
+/**
+ * The MUI operators for a field — the same list `listFilterOperators` names,
+ * resolved to the grid's own operator objects so the panel keeps its native
+ * inputs (a date picker for a date, a number field for a number).
+ */
+export function gridFilterOperators(
+  field: ListFilterField,
+): GridFilterOperator[] {
+  const allowed = listFilterOperators(field)
+  return operatorPool(field.kind).filter((operator) =>
+    allowed.includes(operator.value),
+  )
+}
+
+/**
+ * Spread onto a `GridColDef` to make a column filterable exactly as far as the
+ * query can serve it. A column with NO declared field is turned off entirely —
+ * deliberately, because the alternative is a funnel icon that opens a panel
+ * nothing honours.
+ */
+export function listFilterColumn(
+  fields: readonly ListFilterField[],
+  column: string,
+): { filterable: boolean; filterOperators?: GridFilterOperator[] } {
+  const field = fields.find((entry) => entry.column === column)
+  if (!field) return { filterable: false }
+  const operators = gridFilterOperators(field)
+  return operators.length
+    ? { filterable: true, filterOperators: operators }
+    : { filterable: false }
+}
+
+/**
+ * Fields a reader can filter by that are NOT columns on the table.
+ *
+ * MUI's filter panel lists COLUMNS — `gridFilterableColumnDefinitionsSelector`
+ * reads every column definition, hidden ones included — so a filterable field
+ * with no column is a field nobody can reach however well the route answers it.
+ * Declaring it as a permanently hidden column keeps one source of truth, the
+ * field list, instead of a second list of "extra filters" that drifts from it.
+ *
+ * `hideable: false` keeps them out of Manage columns as well: a column with no
+ * `renderCell` and no width has nothing to show, and a reader who unhid one
+ * would get a strip of blank cells for their trouble.
+ *
+ * Pair with {@link hiddenFilterVisibility}, which is what actually hides them.
+ */
+export function hiddenFilterColumns(
+  fields: readonly ListFilterField[],
+  visible: readonly string[],
+  headers: Readonly<Record<string, string>> = {},
+): Array<{
+  field: string
+  headerName: string
+  hideable: boolean
+  filterable: boolean
+  filterOperators?: GridFilterOperator[]
+}> {
+  return fields
+    .filter((field) => !visible.includes(field.column))
+    .map((field) => ({
+      field: field.column,
+      headerName: headers[field.column] ?? field.column,
+      hideable: false,
+      ...listFilterColumn(fields, field.column),
+    }))
+    .filter((column) => column.filterable)
 }
 
 /** The grid operator each stored select operator shows as. */
@@ -261,30 +308,6 @@ export function listRowMatchesSearch(
 }
 
 /**
- * The rows that answer every clause and the quick search — for a list that
- * holds its whole data set (or the window its query already narrowed) and
- * so answers the panel itself. A clause `skip` names is one the query
- * already served, and is not matched again.
-  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
- * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
- * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
-*/
-export function filterListRows<Row extends object>(
-  rows: readonly Row[],
-  fields: readonly ListFilterField[],
-  clauses: readonly ListFilterClause[],
-  search: { paths: readonly string[]; words: readonly string[] },
-  skip?: (clause: ListFilterClause) => boolean,
-): Row[] {
-  const applied = skip ? clauses.filter((clause) => !skip(clause)) : clauses
-  return rows.filter(
-    (row) =>
-      applied.every((clause) => matchListFilter(row, fields, clause)) &&
-      listRowMatchesSearch(row, search.paths, search.words),
-  )
-}
-
-/**
  * The clauses with one field's clause set: replaced in place where the field
  * already had one, appended where it did not, removed when `next` is null.
  * A field holds ONE clause, which is what the panel edits.
@@ -300,3 +323,5 @@ export function upsertListFilterClause<Clause extends ListFilterClause>(
   if (at === -1) return [...rest, next]
   return [...rest.slice(0, at), next, ...rest.slice(at)]
 }
+
+export { listFilterClauseSentence } from './list-filter-sentence'

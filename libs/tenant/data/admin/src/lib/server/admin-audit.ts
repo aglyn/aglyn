@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { isPluginStaffAuditAccess } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
+import { withAdminAuditIndex } from '@aglyn/aglyn/app-utils/admin-audit-index'
 import { attributableAccountForAddress } from './account-addresses'
+import { ADMIN_AUDIT_COLLECTION } from './admin-audit-write'
 import { emailSuppressionKey } from './email-suppression'
 import { firebaseAdmin } from './firebase-admin'
 
@@ -39,7 +40,8 @@ import { firebaseAdmin } from './firebase-admin'
  *     read my email" a query rather than a manual trawl.
  */
 
-export const ADMIN_AUDIT_COLLECTION = 'adminAudit'
+export { ADMIN_AUDIT_COLLECTION }
+export { addAdminAudit, setAdminAudit } from './admin-audit-write'
 
 /**
  * How close together two identical acts must be to count as ONE act
@@ -59,43 +61,15 @@ export const ADMIN_AUDIT_COLLECTION = 'adminAudit'
  */
 export const ADMIN_AUDIT_DEDUPE_WINDOW_MS = 10_000
 
-/** Access looked at data; change altered something or acted on someone. */
-export type AdminAuditKind = 'access' | 'change'
-
-/**
- * The actions that only LOOKED.
- *
- * An exception list, not a classification of everything, and the default
- * matters more than the membership: anything absent is a `change`. A change
- * is the louder half of the console's audit card, so an action nobody has
- * classified yet gets the MORE prominent treatment rather than the quieter
- * one. The failure mode of the opposite default is an unclassified
- * impersonation rendering as routine browsing.
- *
- * An export is deliberately NOT here. Data leaving the platform is a
- * high-consequence act even though it mutates nothing, and it belongs beside
- * the impersonations rather than beside the record views.
+/*
+ * Whether an act only looked is stamped on the row (`kind`, AGL-3321), so the
+ * rule that decides it lives beside the other stamped fields.
  */
-const ADMIN_AUDIT_ACCESS_ACTIONS: ReadonlySet<string> = new Set([
-  'email.message-viewed',
-  // The acquisition card (AGL-3289): where an account or a workspace came
-  // from, cross-checked against the sales workspace's people. Read only.
-  'user.acquisition-viewed',
-  'org.acquisition-viewed',
-])
-
-/**
- * An access when the platform or a plugin declares the action a read — a
- * plugin's staff card opening on an org or an account names its own read
- * actions through its activity group (AGL-2939) — and a change otherwise.
- */
-export function adminAuditKind(
-  action: string | null | undefined,
-): AdminAuditKind {
-  return action && (ADMIN_AUDIT_ACCESS_ACTIONS.has(action) || isPluginStaffAuditAccess(action))
-    ? 'access'
-    : 'change'
-}
+export {
+  ADMIN_AUDIT_ACCESS_ACTIONS,
+  type AdminAuditKind,
+  adminAuditKind,
+} from '@aglyn/aglyn/app-utils/admin-audit-index'
 
 export interface AdminAuditWrite {
   /** The staff account performing the act. */
@@ -214,7 +188,9 @@ export async function recordAdminAudit(entry: AdminAuditWrite): Promise<void> {
       return
     }
 
-    transaction.create(collection.doc(), {
+    // Stamped like every other row (`withAdminAuditIndex`): the audit
+    // page's Action group filter and search query these fields.
+    transaction.create(collection.doc(), withAdminAuditIndex({
       actorUid: entry.actorUid,
       action: entry.action,
       target: entry.target,
@@ -240,7 +216,7 @@ export async function recordAdminAudit(entry: AdminAuditWrite): Promise<void> {
        */
       lastAt: now,
       repeatCount: 1,
-    })
+    }))
   })
 }
 

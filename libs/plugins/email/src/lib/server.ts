@@ -43,6 +43,7 @@ import {
   confirmTopicSubscription,
   consentGroupForSite,
   EMAIL_FREQUENCY_SUBCOLLECTION,
+  emailSearchTokens,
   firebaseAdmin,
   mirrorPlatformResubscribe,
   mirrorPlatformUnsubscribe,
@@ -526,6 +527,8 @@ async function writeSiteSuppression(
       ref,
       {
         email: fields.email,
+        // What the Suppressions list's search queries (AGL-3321).
+        emailTokens: emailSearchTokens(fields.email),
         reason: UNSUBSCRIBE_SUPPRESSION_REASON,
         suppressedAt: FieldValue.serverTimestamp(),
         // WHICH mailing they left over. Written on the suppression itself as

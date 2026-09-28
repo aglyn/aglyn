@@ -46,10 +46,12 @@
  *  - **The boundary is tested from both sides.** A claim just under the
  *    threshold must read "in flight" and one just over must read "stranded";
  *    a card that called everything stranded would pass any one-sided check.
- *  - **The query cannot be one that throws.** `where('status','==','pending')`
- *    plus a range on `createdAtMs` needs a composite index that does not
- *    exist. The recorded query is asserted, so re-adding that range fails
- *    here rather than in production.
+ *  - **Every clause is on the query (AGL-3321).** The recorded query is
+ *    asserted: `status == 'pending'`, the panel's clauses, and Age and State
+ *    as ranges over `createdAtMs`, the order the list pages by — each shape
+ *    a composite the index file carries (`idempotency-claims-list-query.spec.ts`).
+ *  - **The two numbers are totals.** They are COUNT aggregations over every
+ *    pending claim, not counts of the page on screen.
  */
 
 /*==========================================
@@ -57,9 +59,30 @@
  *=========================================*/
 const mockVerifyIdToken = jest.fn()
 const mockGet = jest.fn()
-/** Every constraint the route hands Firestore, so the query is assertable. */
-const mockWhere = jest.fn()
-const mockLimit = jest.fn()
+/** Every read, with the constraints it carried, so the query is assertable. */
+const mockReads: Array<{ wheres: Array<[string, string, unknown]>; orderBy: string[]; limit: number | null; count: boolean }> = []
+
+type Read = (typeof mockReads)[number]
+const mockChain = (name: string, read: Read): any => ({
+  where: (field: unknown, op: string, value: unknown) =>
+    mockChain(name, { ...read, wheres: [...read.wheres, [String(field), op, value]] }),
+  orderBy: (field: unknown, direction: string) =>
+    mockChain(name, { ...read, orderBy: [...read.orderBy, `${String(field)} ${direction}`] }),
+  limit: (count: number) => mockChain(name, { ...read, limit: count }),
+  startAfter: () => mockChain(name, read),
+  count: () => ({
+    get: async () => {
+      mockReads.push({ ...read, count: true })
+      return { data: () => ({ count: mockCount(read) }) }
+    },
+  }),
+  get: () => {
+    mockReads.push(read)
+    return mockGet(name, read)
+  },
+})
+/** A count over the fixture, honoring the `createdAtMs` ranges it was asked. */
+let mockCount: (read: Read) => number = () => 0
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -69,20 +92,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
       firestore: () => ({
-        collection: (name: string) => {
-          const chain: any = {
-            where: (field: string, op: string, value: unknown) => {
-              mockWhere(field, op, value)
-              return chain
-            },
-            limit: (count: number) => {
-              mockLimit(count)
-              return chain
-            },
-            get: () => mockGet(name),
-          }
-          return chain
-        },
+        collection: (name: string) =>
+          mockChain(name, { wheres: [], orderBy: [], limit: null, count: false }),
+        doc: (path: string) => ({ get: async () => ({ exists: false, path }) }),
       }),
     }),
   },
@@ -135,23 +147,38 @@ const DOCS = [
   },
 ]
 
-const asSnapshot = (docs: typeof DOCS) => ({
-  size: docs.length,
-  docs: docs.map((doc) => ({
-    id: doc.id,
-    get: (field: string) => (doc.fields as Record<string, unknown>)[field],
-  })),
-})
+/** Oldest first, as the query's order returns them. */
+const asSnapshot = (docs: typeof DOCS) => {
+  const ordered = [...docs].sort((a, b) => a.fields.createdAtMs - b.fields.createdAtMs)
+  return {
+    size: ordered.length,
+    docs: ordered.map((doc) => ({
+      id: doc.id,
+      ref: { path: `apiIdempotency/${doc.id}` },
+      get: (field: string) => (doc.fields as Record<string, unknown>)[field],
+    })),
+  }
+}
 
-const call = (token = 'staff-token') =>
+const call = (search = '', token = 'staff-token') =>
   GET(
-    new Request('https://console.aglyn.com/api/admin/idempotency-claims', {
+    new Request(`https://console.aglyn.com/api/admin/idempotency-claims${search}`, {
       headers: token ? { authorization: `Bearer ${token}` } : {},
     }),
   )
 
+const inRange = (value: number, op: string, bound: number) =>
+  op === '<' ? value < bound : op === '<=' ? value <= bound : op === '>' ? value > bound : value >= bound
+
 beforeEach(() => {
   jest.clearAllMocks()
+  mockReads.length = 0
+  mockCount = (read) =>
+    DOCS.filter((doc) =>
+      read.wheres
+        .filter(([field]) => field === 'createdAtMs')
+        .every(([, op, bound]) => inRange(doc.fields.createdAtMs, op, Number(bound))),
+    ).length
   jest.spyOn(Date, 'now').mockReturnValue(NOW)
   mockVerifyIdToken.mockResolvedValue({
     uid: 'u-staff',
@@ -166,30 +193,25 @@ afterEach(() => {
 })
 
 describe('the stranded-claim query (AGL-2329)', () => {
-  it('asks only for pending, so it cannot need an index that does not exist', async () => {
-    await call()
-    expect(mockWhere).toHaveBeenCalledTimes(1)
-    expect(mockWhere).toHaveBeenCalledWith('status', '==', 'pending')
-    // A second `where` on `createdAtMs` would be an equality plus a range on
-    // a DIFFERENT field — a composite index `apiIdempotency` does not have.
-    // Asserting the call COUNT is what makes re-adding it fail here instead
-    // of in production.
-    expect(
-      mockWhere.mock.calls.some(([field]) => field === 'createdAtMs'),
-    ).toBe(false)
+  it('lists the pending claims, oldest first, on one query', async () => {
+    const body = await (await call()).json()
+    expect(mockReads[0].wheres).toEqual([['status', '==', 'pending']])
+    expect(mockReads[0].orderBy).toEqual(['createdAtMs asc'])
+    // Over-fetched by one, so "is there more" is observed.
+    expect(mockReads[0].limit).toBe(26)
+    // Seeded youngest-first, so insertion order and the required order
+    // disagree and an unordered read is visibly wrong.
+    expect(body.rows.map((claim: any) => claim.id)).toEqual([
+      'digest-dead',
+      'digest-edge',
+      'digest-fresh',
+    ])
+    expect(body.refused).toEqual([])
   })
 
   it('separates in-flight from stranded on the age of each claim', async () => {
     const body = await (await call()).json()
-
-    expect(body.pending).toBe(3)
-    // Only ONE of the three is past ten minutes. A constant, a copy of
-    // `pending`, or an inverted comparison each gives a different number.
-    expect(body.stranded).toBe(1)
-
-    const byId = Object.fromEntries(
-      body.claims.map((claim: any) => [claim.id, claim]),
-    )
+    const byId = Object.fromEntries(body.rows.map((claim: any) => [claim.id, claim]))
     expect(byId['digest-dead'].stranded).toBe(true)
     // 9m59s. The boundary from the near side — the case an off-by-one in the
     // comparison flips and nothing else catches.
@@ -203,15 +225,48 @@ describe('the stranded-claim query (AGL-2329)', () => {
     expect(byId['digest-fresh'].kind).toBe('checkout')
   })
 
-  it('puts the longest-stuck claim first', async () => {
-    const body = await (await call()).json()
-    // Seeded youngest-first, so insertion order and the required order
-    // disagree and an unsorted response is visibly wrong.
-    expect(body.claims.map((claim: any) => claim.id)).toEqual([
-      'digest-dead',
-      'digest-edge',
-      'digest-fresh',
+  it('counts pending and stranded over every claim, not a page', async () => {
+    const body = await (await call('?view=summary')).json()
+    expect(body.pending).toBe(3)
+    // Only ONE of the three is past ten minutes. A constant, a copy of
+    // `pending`, or an inverted comparison each gives a different number.
+    expect(body.stranded).toBe(1)
+    expect(body.untimed).toBe(0)
+    expect(mockReads.every((read) => read.count)).toBe(true)
+    expect(mockReads.every((read) => read.wheres[0][0] === 'status')).toBe(true)
+  })
+
+  it('serves the panel on the query: equalities, and Age and State as claim-time ranges', async () => {
+    const filters = encodeURIComponent(
+      JSON.stringify([
+        { field: 'kind', op: 'equals', value: 'refund' },
+        { field: 'stranded', op: 'equals', value: 'stranded' },
+        { field: 'ageMs', op: '<', value: String(180 * MINUTE) },
+      ]),
+    )
+    const body = await (await call(`?filters=${filters}`)).json()
+    expect(body.refused).toEqual([])
+    expect(mockReads[0].wheres).toEqual([
+      ['status', '==', 'pending'],
+      ['createdAtMs', '<=', NOW - 10 * MINUTE],
+      ['createdAtMs', '>', NOW - 180 * MINUTE],
+      ['kind', '==', 'refund'],
     ])
+    expect(mockReads[0].orderBy).toEqual(['createdAtMs asc'])
+  })
+
+  it('names a clause it cannot apply, and applies none of it', async () => {
+    const filters = encodeURIComponent(JSON.stringify([{ field: 'stranded', op: 'equals', value: 'maybe' }]))
+    const body = await (await call(`?filters=${filters}`)).json()
+    expect(body.refused).toEqual([
+      { clause: { field: 'stranded', op: 'equals', value: 'maybe' }, reason: 'pick stranded or in flight' },
+    ])
+    expect(mockReads[0].wheres).toEqual([['status', '==', 'pending']])
+  })
+
+  it('refuses an unreadable ask rather than listing everything', async () => {
+    expect((await call('?filters=nope')).status).toBe(400)
+    expect(mockGet).not.toHaveBeenCalled()
   })
 
   it('refuses a non-staff caller without reading the collection', async () => {
@@ -219,6 +274,6 @@ describe('the stranded-claim query (AGL-2329)', () => {
     const response = await call()
     expect(response.status).toBe(403)
     expect(mockGet).not.toHaveBeenCalled()
+    expect(mockReads).toHaveLength(0)
   })
 })
-

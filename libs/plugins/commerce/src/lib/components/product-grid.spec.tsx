@@ -23,23 +23,43 @@ jest.mock('@aglyn/aglyn', () => ({
   useSite: () => ({ hostId: 'host-1' }),
 }))
 
-const item = (name: string) => ({
+const item = (name: string, tags?: string[]) => ({
   id: name,
   name,
   slug: name.toLowerCase().replace(/ /g, '-'),
   priceUsd: 10,
   maxPriceUsd: 10,
   soldOut: false,
+  ...(tags ? { tags } : {}),
 })
 
 function payloadFor(url: string) {
   const params = new URL(`http://test${url}`).searchParams
-  if (Number(params.get('offset') ?? 0) > 0) {
+  if (params.get('after')) {
     return { items: [item('More product')] }
   }
+  if (params.get('q') && params.get('categoryId')) {
+    // The catalog's own answer to two array clauses (AGL-3321).
+    return {
+      items: [item('Searched product')],
+      // The plan's refusal as the handler returns it; the grid names it.
+      refused: [
+        {
+          clause: { field: 'category', op: 'contains', value: params.get('categoryId') },
+          reason: 'cannot be combined with the search — clear the search to use it',
+        },
+      ],
+    }
+  }
+  if (params.get('tag')) {
+    return { items: [item('Tagged product', ['summer'])] }
+  }
+  if (params.get('inStock') === '1') {
+    return { items: [item('Stocked product')] }
+  }
   return {
-    items: [item('First product'), item('Second product')],
-    nextOffset: 2,
+    items: [item('First product', ['summer']), item('Second product', ['winter'])],
+    nextCursor: 'cursor-2',
     categories: [{ id: 'c1', name: 'Apparel', slug: 'apparel' }],
     priceBounds: { minCents: 1200, maxCents: 4900 },
   }
@@ -71,7 +91,9 @@ describe('product grid catalog controls', () => {
 
     fireEvent.click(screen.getByText('Load more'))
     await screen.findByText('More product')
-    expect(lastUrl()).toContain('offset=2')
+    // Paged by the query's own cursor (AGL-3321), not by a position.
+    expect(lastUrl()).toContain('after=cursor-2')
+    expect(lastUrl()).not.toContain('offset=')
     expect(lastUrl()).not.toContain('facets=1')
     // Appended, not replaced.
     expect(screen.getByText('First product')).toBeTruthy()
@@ -114,6 +136,65 @@ describe('product grid catalog controls', () => {
     expect(lastUrl()).toContain('maxPriceCents=4900')
     // One debounced request for the two drags, like search keystrokes.
     expect(fetchMock.mock.calls.length).toBe(initialCalls + 1)
+  })
+
+  /**
+   * A tag chip ASKS the catalog for that tag (AGL-3321). It used to hide the
+   * loaded cards that lacked it, so a product carrying the tag one page
+   * further on was answered "not here".
+   *
+   * Forced red by restoring the in-memory `visible.filter` on `activeTag`:
+   * no request then carries `tag=summer`.
+   */
+  it('asks the server for a picked tag rather than narrowing the cards', async () => {
+    render(<ProductGrid showFilters />)
+    await screen.findByText('First product')
+    fireEvent.click(screen.getByText('summer'))
+    await waitFor(() => expect(lastUrl()).toContain('tag=summer'))
+    await screen.findByText('Tagged product')
+  })
+
+  /**
+   * The In stock chip ASKS the catalog (`inStock=1`, served as
+   * `soldOut == false`) rather than hiding the sold-out cards on screen.
+   *
+   * Forced red by restoring the in-memory `visible.filter(!soldOut)`: no
+   * request then carries `inStock=1`.
+   */
+  it('asks the server for in-stock products rather than hiding cards', async () => {
+    render(<ProductGrid showFilters />)
+    await screen.findByText('First product')
+    fireEvent.click(screen.getByText('In stock'))
+    await waitFor(() => expect(lastUrl()).toContain('inStock=1'))
+    await screen.findByText('Stocked product')
+  })
+
+  it('says which control the query could not apply', async () => {
+    render(<ProductGrid showSearch showCategories />)
+    await screen.findByText('Apparel')
+    fireEvent.click(screen.getByText('Apparel'))
+    await waitFor(() => expect(lastUrl()).toContain('categoryId=c1'))
+    fireEvent.change(screen.getByLabelText('Search products'), {
+      target: { value: 'hat' },
+    })
+    await screen.findByText('Searched product')
+    expect(
+      await screen.findByText(
+        'Category contains Apparel is not applied: cannot be combined with the search — clear the search to use it.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('clears the search when a category chip is picked', async () => {
+    render(<ProductGrid showSearch showCategories />)
+    await screen.findByText('Apparel')
+    const input = screen.getByLabelText('Search products') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'hat' } })
+    await waitFor(() => expect(lastUrl()).toContain('q=hat'))
+    fireEvent.click(screen.getByText('Apparel'))
+    await waitFor(() => expect(lastUrl()).toContain('categoryId=c1'))
+    expect(lastUrl()).not.toContain('q=')
+    expect(input.value).toBe('')
   })
 
   it('passes the authored sort through to the catalog API', async () => {

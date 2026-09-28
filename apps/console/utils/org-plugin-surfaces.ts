@@ -105,6 +105,11 @@ export interface OrgPluginNavTab {
   id: string
   label: string
   href: string
+  /**
+   * The tab is holding its place while the member read settles: drawn, but
+   * not yet something to open. Absent on a tab the reader may open.
+   */
+  disabled?: boolean
 }
 
 /**
@@ -112,12 +117,18 @@ export interface OrgPluginNavTab {
  *
  * A tab is dropped when the member's settled permissions refuse the surface,
  * or when the organization's settled plan refuses it and the refusal would
- * sell nothing (see {@link orgPluginRefusalSellsSomething}). Either verdict
- * still PENDING drops it too. The console's own org tabs show while
- * permissions load, because every workspace has them and hiding them would
- * be a flash of a narrower strip; a plugin tab is the opposite case, gated
- * for most readers, so showing it early would be a tab that appears and
- * then disappears.
+ * sell nothing (see {@link orgPluginRefusalSellsSomething}).
+ *
+ * The two unsettled verdicts are NOT treated alike, because they are not
+ * alike. A PENDING PLAN drops the tab: most organizations are not entitled
+ * to a given plugin, so drawing it early would be a tab that appears and then
+ * disappears for most readers. A PENDING PERMISSION, once the plan has
+ * answered, keeps the tab in its place as a disabled placeholder: the
+ * organization has the surface, the member read is the slower of the two on
+ * a cold load, and dropping the tab for the length of that read tells the
+ * owner, who is the reader most likely to be holding the link, that the
+ * surface is gone. A placeholder promises nothing it cannot keep; it becomes
+ * the live tab, or leaves, when the member's role is known.
  *
  * The RELEASE flag is not answered here: the tab carries the nav item's
  * `navTabId` as its id, and the secondary nav bar hides it by that id (or
@@ -140,7 +151,7 @@ export function orgPluginNavTabItems(
         loaded: answers.permissionsLoaded,
       },
     )
-    if (permission !== 'granted') return []
+    if (permission === 'refused') return []
     const entitlement = resolveExtensionEntitlement(
       extension.featureFlag,
       answers.org,
@@ -154,20 +165,19 @@ export function orgPluginNavTabItems(
       return []
     }
     const slug = navItem.href.replace(/^\//, '')
-    return [
-      {
-        id:
-          navItem.navTabId ??
-          `nav-org-plugin-${navItem.href.replace(/[^\w]+/g, '-')}`,
-        label: navItem.label,
-        href: buildRoute(Route.ORG_PLUGIN, {
-          orgSlug,
-          pluginSlug: [
-            slug,
-            ...(navItem.sections?.length ? [navItem.sections[0].id] : []),
-          ].join('/'),
-        }),
-      },
-    ]
+    const tab: OrgPluginNavTab = {
+      id:
+        navItem.navTabId ??
+        `nav-org-plugin-${navItem.href.replace(/[^\w]+/g, '-')}`,
+      label: navItem.label,
+      href: buildRoute(Route.ORG_PLUGIN, {
+        orgSlug,
+        pluginSlug: [
+          slug,
+          ...(navItem.sections?.length ? [navItem.sections[0].id] : []),
+        ].join('/'),
+      }),
+    }
+    return [permission === 'pending' ? { ...tab, disabled: true } : tab]
   })
 }

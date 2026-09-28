@@ -85,6 +85,8 @@ export function MarketplaceReportsPage() {
   const { enqueueSnackbar } = useSnackbar()
   const [reports, setReports] = useState<MarketplaceReportRow[] | null>(null)
   const [identityVisible, setIdentityVisible] = useState(false)
+  /** The status holds more reports than the route read (AGL-3321). */
+  const [more, setMore] = useState(false)
   const [statusFilter, setStatusFilter] = useState('open')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -118,6 +120,7 @@ export function MarketplaceReportsPage() {
           setError(body?.error ?? 'Report lookup failed')
         } else {
           setReports((body?.reports ?? []) as MarketplaceReportRow[])
+          setMore(Boolean(body?.more))
           setIdentityVisible(Boolean(body?.identityVisible))
         }
       } catch {
@@ -220,6 +223,13 @@ export function MarketplaceReportsPage() {
                 ),
               }}
             >
+              {more ? (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  {'These are the most recently updated reports in this ' +
+                    'state, and there are older ones not shown. Moving a ' +
+                    'report on takes it out of this list.'}
+                </Alert>
+              ) : null}
               {!identityVisible ? (
                 <Alert severity="info" sx={{ mb: 2 }}>
                   {'Reporter accounts are hidden at your access level. Every ' +

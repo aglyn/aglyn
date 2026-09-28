@@ -21,12 +21,14 @@
  * the in-memory half of the shared filter path (AGL-3317).
  */
 
-import {
-  filterListRows,
-  inMemoryListField,
-  listFilterGridColumns,
-  listRowMatchesSearch,
-} from './list-grid-filter'
+import type { ListFilterField } from './list-filter'
+import { listFilterGridColumns, listRowMatchesSearch } from './list-grid-filter'
+
+/** A text field that offers a mid-string contains, and a picked field. */
+const field = (column: string, kind: 'text' | 'select'): ListFilterField =>
+  kind === 'text'
+    ? { column, path: column, kind: 'text', operators: ['contains', 'equals'] }
+    : { column, path: column, kind: 'exact', operators: ['equals', 'doesNotEqual', 'isAnyOf'] }
 
 describe('listRowMatchesSearch', () => {
   const deal = { title: 'Acme Coffee — annual renewal', tags: ['q4', 'Priority'] }
@@ -46,53 +48,11 @@ describe('listRowMatchesSearch', () => {
   })
 })
 
-describe('filterListRows', () => {
-  const fields = [inMemoryListField('name', 'text'), inMemoryListField('status', 'select')]
-  const rows = [
-    { name: 'Welcome series', status: 'active' },
-    { name: 'Renewal nudge', status: 'paused' },
-    { name: 'Win-back', status: 'active' },
-  ]
-
-  it('answers every clause and the search over the whole set', () => {
-    expect(
-      filterListRows(rows, fields, [{ field: 'status', op: 'equals', value: 'active' }], {
-        paths: ['name'],
-        words: ['back'],
-      }),
-    ).toEqual([rows[2]])
-    expect(
-      filterListRows(rows, fields, [{ field: 'status', op: 'isAnyOf', value: 'active,paused' }], {
-        paths: ['name'],
-        words: [],
-      }),
-    ).toHaveLength(3)
-    expect(
-      filterListRows(rows, fields, [{ field: 'status', op: 'doesNotEqual', value: 'active' }], {
-        paths: ['name'],
-        words: [],
-      }),
-    ).toEqual([rows[1]])
-  })
-
-  it('does not match again a clause the query already served', () => {
-    expect(
-      filterListRows(
-        rows,
-        fields,
-        [{ field: 'status', op: 'equals', value: 'nothing-has-this' }],
-        { paths: ['name'], words: [] },
-        (clause) => clause.field === 'status',
-      ),
-    ).toHaveLength(3)
-  })
-})
-
 describe('listFilterGridColumns', () => {
   it('turns a picked field into a select over its choices, and a text field keeps mid-string contains', () => {
     const [name, status, count] = listFilterGridColumns(
       [{ field: 'name' }, { field: 'status' }, { field: 'enrolled' }],
-      [inMemoryListField('name', 'text'), inMemoryListField('status', 'select')],
+      [field('name', 'text'), field('status', 'select')],
       { status: [{ value: 'active', label: 'Active' }] },
     )
     expect(name.filterOperators?.map((operator) => operator.value)).toContain('contains')
@@ -105,7 +65,7 @@ describe('listFilterGridColumns', () => {
 })
 
 describe('a column made a select keeps what it drew (AGL-3321)', () => {
-  const fields = [inMemoryListField('actorId', 'select'), inMemoryListField('status', 'select')]
+  const fields = [field('actorId', 'select'), field('status', 'select')]
   const options = {
     actorId: [{ value: 'uid-1', label: 'ann@example.test' }],
     status: [{ value: 'open', label: 'Open' }],

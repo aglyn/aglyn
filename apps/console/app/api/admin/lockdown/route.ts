@@ -94,6 +94,7 @@ import {
   applyHostLockdown,
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export const dynamic = 'force-dynamic'
 
@@ -222,7 +223,7 @@ async function audit(options: {
   before: Record<string, unknown>
   after: Record<string, unknown>
 }): Promise<void> {
-  await firebaseAdmin.app().firestore().collection('adminAudit').add({
+  await addAdminAudit(firebaseAdmin.app().firestore(), {
     actorUid: options.actorUid,
     actorEmail: options.actorEmail ?? null,
     action: options.action,

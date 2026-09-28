@@ -273,8 +273,14 @@ describe('syncOrgAuthProjections writes the resolved permission map', () => {
   it('REPLACES the projection on write, so a withdrawn key cannot survive a merge', async () => {
     await syncOrgAuthProjections(ORG)
     for (const uid of Object.keys(members)) {
+      // Each field is replaced whole; the roster's list fields (AGL-3321)
+      // ride the same write and are replaced whole too.
       expect(writeOptions[uid]).toEqual({
-        mergeFields: ['scopeTokens', 'resolvedPermissions'],
+        mergeFields: ['scopeTokens', 'resolvedPermissions', 'consoleUserType', 'searchTokens'],
+      })
+      expect(written[uid]).toMatchObject({
+        consoleUserType: expect.stringMatching(/^(manager|collaborator)$/),
+        searchTokens: expect.any(Array),
       })
     }
   })

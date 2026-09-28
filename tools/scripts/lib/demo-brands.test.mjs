@@ -73,6 +73,7 @@ import {
   DEFAULT_BRAND,
   resolveBrand,
 } from './demo-brands.mjs'
+import { nameSearchKey, nameSearchReversed } from './name-search-tokens.mjs'
 import { seedBrand } from './seed-demo.mjs'
 
 // ── A recording Firestore ───────────────────────────────────────────────────
@@ -355,6 +356,14 @@ const intersect = (a, b) => [...a].filter((item) => b.has(item))
  * launder pack copy through the exemption.
  */
 const ENGINE_CHROME = new Set(['Welcome email'])
+/**
+ * The exempt lines, plus the list keys every write derives from a name
+ * (AGL-3321): a lower-cased and a reversed copy of engine prose is still
+ * engine prose.
+ */
+const ENGINE_CHROME_KEYS = new Set(
+  [...ENGINE_CHROME].flatMap((line) => [line, nameSearchKey(line), nameSearchReversed(line)]),
+)
 
 // ── 1. The packs are several businesses ─────────────────────────────────────
 
@@ -525,7 +534,7 @@ test('seeding two brands produces two demonstrably different sites', async () =>
   const shared = intersect(
     seededProse(store, hostA),
     seededProse(store, hostB),
-  ).filter((line) => !ENGINE_CHROME.has(line))
+  ).filter((line) => !ENGINE_CHROME_KEYS.has(line))
   assert.equal(
     shared.length,
     0,

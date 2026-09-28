@@ -71,6 +71,10 @@ import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadSourceSelect } from './lead-source-select'
 import { LeadStatusChip } from './lead-status-chip'
+import { crmClientListFields, CRM_CLIENT_SEARCH_FIELDS } from '../model/crm-list-query'
+
+/** The Leads list's fields a profile save rewrites; the verdict key is the server's. */
+const LEAD_CLIENT_LIST_FIELDS = [...CRM_CLIENT_SEARCH_FIELDS, 'leadSourceKey'] as const
 
 const NOTES_MAX = Aglyn.CRM_LEAD_NOTES_MAX
 const TEXT_MAX = Aglyn.CRM_LEAD_TEXT_MAX
@@ -374,11 +378,19 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     setSavingProfile(true)
     const verdict = await writeGuardedBySeed(
       { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
-      () =>
-        write(
-          { ...profileWrite(patch), ...crmCustomDraftWrites(storedCustom, custom) },
+      () => {
+        const profileFields = profileWrite(patch)
+        return write(
+          {
+            ...profileFields,
+            ...crmCustomDraftWrites(storedCustom, custom),
+            // The company, title, tags and lead source are what the Leads
+            // list searches and filters by (AGL-3321).
+            ...crmClientListFields('leads', lead, profileFields, LEAD_CLIENT_LIST_FIELDS),
+          },
           'Lead saved',
-        ),
+        )
+      },
     )
     setSavingProfile(false)
     if (!verdict.ok) {

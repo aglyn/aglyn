@@ -18,6 +18,7 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { eraseOrg, eraseUser } from './erase'
+import { addAdminAudit } from './admin-audit-write'
 
 /**
  * How long `adminAudit` rows stay queryable before `/api/admin/audit-archive`
@@ -239,22 +240,20 @@ export async function replayErasuresSince(options: {
   // a real run only: a plan did not replay anything, and an audit row saying
   // it did is the mistake this shape has to make impossible.
   if (!dryRun) {
-    await firestore
-      .collection('adminAudit')
-      .add({
-        actorUid,
-        action: 'erasures.replayed',
-        target: `restore/${new Date(sinceMs).toISOString()}`,
-        before: { examined: rows.size },
-        after: {
-          sinceMs,
-          incomplete: incomplete ?? null,
-          replayed: entries.filter((e) => e.outcome === 'replayed').length,
-          absent: entries.filter((e) => e.outcome === 'absent').length,
-          blocked: entries.filter((e) => e.outcome === 'blocked').length,
-        },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firestore, {
+      actorUid,
+      action: 'erasures.replayed',
+      target: `restore/${new Date(sinceMs).toISOString()}`,
+      before: { examined: rows.size },
+      after: {
+        sinceMs,
+        incomplete: incomplete ?? null,
+        replayed: entries.filter((e) => e.outcome === 'replayed').length,
+        absent: entries.filter((e) => e.outcome === 'absent').length,
+        blocked: entries.filter((e) => e.outcome === 'blocked').length,
+      },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
   }
 

@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// The leaf module, not the server barrel: the list keys every artifact
+// create stamps (AGL-3321), which the install specs' closed-world barrel
+// mocks have no reason to stage.
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   checkEntitlement,
   createResourceUid,
@@ -243,6 +247,13 @@ export const installHandler: PluginApiHandler = async (req, res) => {
         // from here (AGL-2932).
         ...(props && { props }),
         deletedAt: null,
+        // The keys the components list finds it by (AGL-3321): the listing's
+        // name, and — on a first install — the stored kind; a re-install
+        // keeps the kind the copy already has.
+        ...artifactCreateListKeys('components', {
+          displayName: listing.displayName,
+          kind: existing.empty ? undefined : existing.docs[0].get('kind'),
+        }),
         marketplace: {
           listingId,
           profileId: listing.profileId,

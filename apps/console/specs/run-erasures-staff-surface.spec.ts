@@ -45,7 +45,9 @@
  *    refused without one. `eraseOrg` audits each erasure; nothing said who
  *    asked for the batch or why it could not wait for 04:00 UTC.
  * 5. The preview separates DUE from HOLDING, which is the only question the
- *    operator has.
+ *    operator has — per row, and as totals over the whole queue.
+ * 6. The preview's list is ONE query (AGL-3321): oldest request first, the
+ *    State filter a range over the request time, paged by a cursor.
  */
 
 // A module, not a script.
@@ -59,22 +61,48 @@ let mockOrgs: Array<{ id: string; data: Record<string, unknown> }> = []
 
 const HOLD_MS = 7 * 24 * 60 * 60 * 1000
 
+/** Every `where` and `orderBy` a read of `orgs` carried, per read. */
+let mockOrgReads: Array<{ wheres: Array<[string, string, unknown]>; orderBy: string[] }> = []
+
 function mockSnapshot(entry: { id: string; data: Record<string, unknown> }) {
   return {
     id: entry.id,
     data: () => entry.data,
     get: (field: string) => entry.data[field],
-    ref: { id: entry.id },
+    ref: { id: entry.id, path: `orgs/${entry.id}` },
   }
 }
 
-function mockOrgsQuery(limit: number | null = null) {
+/** The instant a bound names — a Date, or the Timestamp the plan made of one. */
+const mockMillis = (bound: any): number =>
+  bound instanceof Date ? bound.getTime() : typeof bound?.toMillis === 'function' ? bound.toMillis() : Number(bound)
+
+function mockOrgsQuery(
+  limit: number | null = null,
+  read: { wheres: Array<[string, string, unknown]>; orderBy: string[] } = { wheres: [], orderBy: [] },
+): any {
+  const matching = () =>
+    mockOrgs.filter((entry) =>
+      read.wheres.every(([field, op, bound]) => {
+        if (field !== 'erasureRequestedAt') return true
+        const at = (entry.data[field] as { toMillis: () => number }).toMillis()
+        const edge = mockMillis(bound)
+        return op === '<=' ? at <= edge : op === '<' ? at < edge : op === '>' ? at > edge : at >= edge
+      }),
+    )
   return {
-    orderBy: () => mockOrgsQuery(limit),
-    where: () => mockOrgsQuery(limit),
-    limit: (count: number) => mockOrgsQuery(count),
+    orderBy: (field: string, direction: string) =>
+      mockOrgsQuery(limit, { ...read, orderBy: [...read.orderBy, `${field} ${direction}`] }),
+    where: (field: string, op: string, value: unknown) =>
+      mockOrgsQuery(limit, { ...read, wheres: [...read.wheres, [String(field), op, value]] }),
+    limit: (count: number) => mockOrgsQuery(count, read),
+    startAfter: () => mockOrgsQuery(limit, read),
+    count: () => ({
+      get: async () => ({ data: () => ({ count: matching().length }) }),
+    }),
     get: async () => {
-      const rows = mockOrgs.map(mockSnapshot)
+      mockOrgReads.push(read)
+      const rows = matching().map(mockSnapshot)
       const sliced = limit == null ? rows : rows.slice(0, limit)
       return { size: sliced.length, docs: sliced }
     },
@@ -85,6 +113,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
+    query: Object.fromEntries(new URL(request.url).searchParams),
     body:
       request.method === 'POST'
         ? await request.json().catch(() => ({}))
@@ -140,6 +169,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           }
           return mockOrgsQuery()
         },
+        doc: (path: string) => ({ get: async () => ({ exists: false, path }) }),
       }),
     }),
     firestore: { FieldValue: { serverTimestamp: () => '__now__' } },
@@ -160,8 +190,9 @@ function request(
   method: 'GET' | 'POST',
   headers: Record<string, string>,
   body?: unknown,
+  search = '',
 ) {
-  return new Request('https://app.aglyn.com/api/admin/run-erasures', {
+  return new Request(`https://app.aglyn.com/api/admin/run-erasures${search}`, {
     method,
     headers: {
       ...headers,
@@ -178,6 +209,7 @@ describe('the erasure queue is reachable, and GET no longer deletes (AGL-2165)',
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV, CRON_SECRET: 'cron-fake' } as NodeJS.ProcessEnv
     mockAudit = []
+    mockOrgReads = []
     mockEraseOrg.mockReset().mockResolvedValue({ ok: true })
     mockVerifyIdToken.mockReset().mockResolvedValue({
       uid: 'uid-staff',
@@ -222,10 +254,9 @@ describe('the erasure queue is reachable, and GET no longer deletes (AGL-2165)',
   it('GET separates DUE from HOLDING and states the hold expiry', async () => {
     const response = await load().GET(request('GET', STAFF))
     const payload = await response.json()
-    expect(payload.dueCount).toBe(1)
-    expect(payload.pending).toHaveLength(2)
-    const due = payload.pending.find((row: any) => row.orgId === 'org-due')
-    const holding = payload.pending.find(
+    expect(payload.rows).toHaveLength(2)
+    const due = payload.rows.find((row: any) => row.orgId === 'org-due')
+    const holding = payload.rows.find(
       (row: any) => row.orgId === 'org-holding',
     )
     expect(due.due).toBe(true)
@@ -233,6 +264,38 @@ describe('the erasure queue is reachable, and GET no longer deletes (AGL-2165)',
     // "Waiting on the hold, or waiting on us?" is unanswerable without this.
     expect(holding.holdExpiresAtMs).toBeGreaterThan(Date.now())
     expect(due.holdExpiresAtMs).toBeLessThanOrEqual(Date.now())
+    // The queue is the request order: oldest first, no other predicate.
+    expect(mockOrgReads[0]).toEqual({ wheres: [], orderBy: ['erasureRequestedAt asc'] })
+  })
+
+  it('GET ?view=summary counts the whole queue, due and queued', async () => {
+    const payload = await (await load().GET(request('GET', STAFF, undefined, '?view=summary'))).json()
+    expect(payload.dueCount).toBe(1)
+    expect(payload.queued).toBe(2)
+    expect(payload.maxPerRun).toBe(5)
+    expect(payload.people).toMatchObject({ pending: 0 })
+  })
+
+  it('serves State on the query as a range over the request time', async () => {
+    const filters = encodeURIComponent(JSON.stringify([{ field: 'due', op: 'equals', value: 'due' }]))
+    const payload = await (await load().GET(request('GET', STAFF, undefined, `?filters=${filters}`))).json()
+    expect(payload.refused).toEqual([])
+    expect(payload.rows.map((row: any) => row.orgId)).toEqual(['org-due'])
+    expect(mockOrgReads[0].wheres.map(([field, op]) => `${field} ${op}`)).toEqual([
+      'erasureRequestedAt <=',
+    ])
+    expect(mockOrgReads[0].orderBy).toEqual(['erasureRequestedAt asc'])
+  })
+
+  it('serves the search on the name tokens, and names what it cannot apply', async () => {
+    const filters = encodeURIComponent(JSON.stringify([{ field: 'due', op: 'equals', value: 'soon' }]))
+    const payload = await (
+      await load().GET(request('GET', STAFF, undefined, `?search=Overdue&filters=${filters}`))
+    ).json()
+    expect(mockOrgReads[0].wheres).toEqual([['nameTokens', 'array-contains', 'overdue']])
+    expect(payload.refused).toEqual([
+      { clause: { field: 'due', op: 'equals', value: 'soon' }, reason: 'pick Due or Holding' },
+    ])
   })
 
   it('a staff POST runs the batch and records the actor AND the reason', async () => {

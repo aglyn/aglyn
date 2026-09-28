@@ -145,20 +145,25 @@ screen:
 
 - **Filters** narrows it by **Action** — picked from the actions the log records as named
   entries, such as the AI entries below — by **Who** (one of the organization's members), by
-  **Where** (the organization itself or one of its sites), and by **When** (before or after a
-  date). They add up, and every one is answered by the log's own query.
-- **Search** matches the address of the person who made the change and the name of what
-  changed. It reads the log as it goes, up to 250 entries a page, so a page of results can come
-  back short; **Next** carries on from where it stopped.
+  **Where** (the organization itself or one of its sites), and by **When** (on a day, or before
+  or after a date). They add up, and every one is answered by the log's own query.
+- **Search** finds an entry by the start of a word of the address of the person who made the
+  change (or the API key's name, for an entry an integration wrote) and of the name of what
+  changed — `ada`, `example.com` or `home` — across the whole log. It matches one word at a
+  time: type two and the log says it searched the first.
+
+Every filter and the search are on the log's own query. Anything that query cannot take is not
+applied, and a notice above the table names it.
 
 Changing a filter or the search starts the log again at its first page. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
-A site's own activity log, on its **Setup** page, filters through its table's toolbar:
-**Filters** narrows it to one **Action** (or several, with **is any of**) — typed as
-the action is recorded, since the panel offers no list of them — or to entries before or
-after a date, and the two add up, across the whole log rather than the page on screen.
-It has no search box, because nothing can search the whole log by word. See
+A site's own activity log, on its **Setup** page, filters and searches through its table's
+toolbar, across the whole log rather than the page on screen: **Filters** narrows it to one
+**Action** (or several, with **is any of**) — typed as the action is recorded, since the
+panel offers no list of them — or to a day, or entries before or after a date, and
+**Search** finds entries the same way the organization's log does. They add up, and the log
+stays newest first. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### AI actions in the log {#ai-actions}

@@ -125,6 +125,8 @@ jest.mock('./firebase-admin', () => ({
 }))
 
 jest.mock('./crm-records', () => ({
+  // The list-fields restamp (AGL-3321) is `crm-records`' own; a no-op here.
+  restampCrmListFieldsAt: async () => 'current',
   countCrmRecords: async (_orgRef: unknown, contacts: any) => {
     const contactsCount = (await contacts.count().get()).data().count
     return { contactsCount, companiesCount: 0, dealsCount: 0, crmRecordsCount: contactsCount }

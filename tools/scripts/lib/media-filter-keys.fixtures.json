@@ -1,0 +1,217 @@
+{
+  "//": "Worked examples for mediaFilterKeys in libs/aglyn/src/lib/app-utils/media-metadata.ts and its script-side restatement tools/scripts/lib/media-filter-keys.mjs. Asserted by media-metadata.spec.ts and by media-filter-keys.test.mjs (AGL-3327).",
+  "kinds": [
+    {
+      "contentType": "image/svg+xml",
+      "kind": "image"
+    },
+    {
+      "contentType": "IMAGE/PNG",
+      "kind": "image"
+    },
+    {
+      "contentType": "video/quicktime",
+      "kind": "video"
+    },
+    {
+      "contentType": "application/pdf",
+      "kind": "pdf"
+    },
+    {
+      "contentType": "application/zip",
+      "kind": "document"
+    },
+    {
+      "contentType": null,
+      "kind": "document"
+    }
+  ],
+  "orientations": [
+    {
+      "media": {
+        "width": 1600,
+        "height": 900
+      },
+      "orientation": "landscape"
+    },
+    {
+      "media": {
+        "width": 900,
+        "height": 1600
+      },
+      "orientation": "portrait"
+    },
+    {
+      "media": {
+        "width": 512,
+        "height": 512
+      },
+      "orientation": "square"
+    },
+    {
+      "media": {
+        "video": {
+          "durationMs": 1000,
+          "width": 1080,
+          "height": 1920
+        }
+      },
+      "orientation": "portrait"
+    },
+    {
+      "media": {
+        "width": 0,
+        "height": 900
+      },
+      "orientation": null
+    },
+    {
+      "media": {
+        "width": "1600",
+        "height": 900
+      },
+      "orientation": null
+    },
+    {
+      "media": {},
+      "orientation": null
+    }
+  ],
+  "keys": [
+    {
+      "media": {
+        "fileName": "Hero-Banner_2x.PNG",
+        "contentType": "image/png",
+        "alt": "A red door",
+        "width": 1600,
+        "height": 900
+      },
+      "keys": {
+        "kind": "image",
+        "nameLower": "hero-banner_2x.png",
+        "nameTokens": [
+          "h",
+          "he",
+          "her",
+          "hero",
+          "b",
+          "ba",
+          "ban",
+          "bann",
+          "banne",
+          "banner",
+          "2",
+          "2x",
+          "p",
+          "pn",
+          "png"
+        ],
+        "hasAlt": true,
+        "orientation": "landscape"
+      }
+    },
+    {
+      "media": {
+        "fileName": "Quarterly report (final).pdf",
+        "contentType": "application/pdf",
+        "alt": "   "
+      },
+      "keys": {
+        "kind": "pdf",
+        "nameLower": "quarterly report (final).pdf",
+        "nameTokens": [
+          "q",
+          "qu",
+          "qua",
+          "quar",
+          "quart",
+          "quarte",
+          "quarter",
+          "quarterl",
+          "quarterly",
+          "r",
+          "re",
+          "rep",
+          "repo",
+          "repor",
+          "report",
+          "f",
+          "fi",
+          "fin",
+          "fina",
+          "final",
+          "p",
+          "pd",
+          "pdf"
+        ],
+        "hasAlt": false,
+        "orientation": null
+      }
+    },
+    {
+      "media": {
+        "fileName": "launch.mp4",
+        "contentType": "video/mp4",
+        "video": {
+          "durationMs": 12000,
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "keys": {
+        "kind": "video",
+        "nameLower": "launch.mp4",
+        "nameTokens": [
+          "l",
+          "la",
+          "lau",
+          "laun",
+          "launc",
+          "launch",
+          "m",
+          "mp",
+          "mp4"
+        ],
+        "hasAlt": false,
+        "orientation": "landscape"
+      }
+    },
+    {
+      "media": {
+        "fileName": "Café menu.jpg",
+        "contentType": "image/jpeg",
+        "width": 800,
+        "height": 800
+      },
+      "keys": {
+        "kind": "image",
+        "nameLower": "café menu.jpg",
+        "nameTokens": [
+          "c",
+          "ca",
+          "caf",
+          "café",
+          "m",
+          "me",
+          "men",
+          "menu",
+          "j",
+          "jp",
+          "jpg"
+        ],
+        "hasAlt": false,
+        "orientation": "square"
+      }
+    },
+    {
+      "media": {},
+      "keys": {
+        "kind": "document",
+        "nameLower": "",
+        "nameTokens": [],
+        "hasAlt": false,
+        "orientation": null
+      }
+    }
+  ]
+}

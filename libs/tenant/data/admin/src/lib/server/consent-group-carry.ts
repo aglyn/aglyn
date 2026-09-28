@@ -95,6 +95,8 @@ const CATCH_UP_FIELDS: Readonly<Record<ConsentGroupCarryStore, { field: string; 
 const SUPPRESSION_ROW_FIELDS = [
   'reason',
   'email',
+  // The address's search tokens travel with it (AGL-3321).
+  'emailTokens',
   'createdAt',
   'suppressedAt',
   'note',

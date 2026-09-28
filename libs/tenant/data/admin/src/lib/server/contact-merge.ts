@@ -61,6 +61,7 @@ import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { FieldValue } from 'firebase-admin/firestore'
 import { settleCompanyContactsCounts } from './contact-company-link'
 import { recomputeCrmNextTaskAt } from './crm-next-activity'
+import { restampCrmListFieldsAt } from './crm-records'
 import { logHostActivity } from './organizations'
 
 /** How many pointing rows one repoint pass reads — and one batch writes. */
@@ -266,6 +267,9 @@ export async function mergeContacts(
   })
   if ('reason' in swapped) return { ok: false, reason: swapped.reason }
   const { plan } = swapped
+  // The survivor now carries both records' addresses, holders and facets —
+  // what the Contacts list searches and filters by (AGL-3321).
+  await restampCrmListFieldsAt(survivorRef, 'contacts')
 
   /*
    * The companies both records named counted two people and now count one

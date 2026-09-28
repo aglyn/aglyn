@@ -40,20 +40,22 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
-  usePagedCollection: () => ({
-    rows: [],
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
-    status: 'success',
-    fromCache: false,
-  }),
 }))
+
+// The list's query (AGL-3321): an empty inbox, through the shared double. The
+// submission the URL names is read by id, never looked for in the list.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(
+      () => [],
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
+)
 
 jest.mock('firebase/firestore', () => ({
   collection: () => ({}),
+  collectionGroup: () => ({}),
   query: () => ({}),
   limit: () => undefined,
   orderBy: () => undefined,

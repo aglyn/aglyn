@@ -16,10 +16,14 @@ Aglyn has two kinds of people: your **team** (who build and manage the site) and
 ![The organization Team page: the invite row above the members roster, with each member's role, access and AI credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/org-team-page.png)
 
 The **Team** page's roster filters through its table's toolbar: **Filters** narrows it
-by **Member** (the name), **Role** or **Access** (team manager or site collaborator), and
-**Search** matches any word of a member's name, email, or title. Both look at the whole
-roster, not only the page on screen, and each filter in force shows as a chip above
-the table; see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The role pickers and **Permissions** in each row work as before.
+by **Role** (one role, or several at once) or **Access** (team manager or site
+collaborator), and **Search** finds a member by the start of any word of their name,
+email address or job title — `ada`, `lovelace` or `example.com` all find Ada Lovelace at
+ada@example.com. The filters and the search add up, and they are answered by the query
+that reads the roster, so the table lists every member who matches, not a narrowing of
+the rows already on screen. Each filter in force shows as a chip above the table; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The
+role pickers and **Permissions** in each row work as before.
 
 ## Team roles
 

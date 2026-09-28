@@ -27,6 +27,7 @@ import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
@@ -438,6 +439,14 @@ async function handler(request: Request): Promise<Response> {
       url,
       storagePath: objectPath,
       folderId,
+      // What the library filters and searches by (AGL-3327) — a query cannot
+      // find a document that lacks the field it asks about.
+      ...mediaFilterKeys({
+        fileName,
+        contentType,
+        ...(dimensions ?? {}),
+        video: videoFields['video'],
+      }),
       ...(dimensions ?? {}),
       // AGL-2742 — `video`, `poster`, `posterError`, or no keys at all for a
       // non-video. See the signed route for the same spread and the same

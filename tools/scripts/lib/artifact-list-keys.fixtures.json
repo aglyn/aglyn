@@ -1,0 +1,422 @@
+{
+  "//": "Worked examples for artifactCreateListKeys / artifactRenameListKeys (libs/aglyn/src/lib/app-utils/artifact-list-keys.ts). Asserted by artifact-list-keys.spec.ts and by tools/scripts/backfill-artifacts-list-keys.mjs --self-test (AGL-3321).",
+  "create": [
+    {
+      "name": "a named screen",
+      "collection": "screens",
+      "doc": {
+        "displayName": "Home Page",
+        "kind": "page"
+      },
+      "expected": {
+        "nameLower": "home page",
+        "nameTokens": [
+          "h",
+          "ho",
+          "hom",
+          "home",
+          "p",
+          "pa",
+          "pag",
+          "page"
+        ],
+        "nameReversed": "egap emoh",
+        "deletedAt": null
+      }
+    },
+    {
+      "name": "a nameless email screen still gets keys",
+      "collection": "screens",
+      "doc": {
+        "kind": "email"
+      },
+      "expected": {
+        "nameLower": "",
+        "nameTokens": [],
+        "nameReversed": "",
+        "deletedAt": null
+      }
+    },
+    {
+      "name": "a screen created with deletedAt: null already keeps it null",
+      "collection": "screens",
+      "doc": {
+        "displayName": "Promo",
+        "deletedAt": null
+      },
+      "expected": {
+        "nameLower": "promo",
+        "nameTokens": [
+          "p",
+          "pr",
+          "pro",
+          "prom",
+          "promo"
+        ],
+        "nameReversed": "omorp",
+        "deletedAt": null
+      }
+    },
+    {
+      "name": "a deleted screen gets no keys, so a cleared tombstone stays off the ordered list",
+      "collection": "screens",
+      "doc": {
+        "displayName": "Old promo",
+        "kind": "email",
+        "deletedAt": {
+          "seconds": 1
+        }
+      },
+      "expected": {}
+    },
+    {
+      "name": "a layout",
+      "collection": "layouts",
+      "doc": {
+        "displayName": "Main  Chrome"
+      },
+      "expected": {
+        "nameLower": "main chrome",
+        "nameTokens": [
+          "m",
+          "ma",
+          "mai",
+          "main",
+          "c",
+          "ch",
+          "chr",
+          "chro",
+          "chrom",
+          "chrome"
+        ],
+        "nameReversed": "emorhc niam"
+      }
+    },
+    {
+      "name": "a component stored before its kind",
+      "collection": "components",
+      "doc": {
+        "displayName": "Hero"
+      },
+      "expected": {
+        "nameLower": "hero",
+        "nameTokens": [
+          "h",
+          "he",
+          "her",
+          "hero"
+        ],
+        "nameReversed": "oreh",
+        "kind": "site"
+      }
+    },
+    {
+      "name": "an email block keeps its kind",
+      "collection": "components",
+      "doc": {
+        "displayName": "Footer",
+        "kind": "email"
+      },
+      "expected": {
+        "nameLower": "footer",
+        "nameTokens": [
+          "f",
+          "fo",
+          "foo",
+          "foot",
+          "foote",
+          "footer"
+        ],
+        "nameReversed": "retoof"
+      }
+    },
+    {
+      "name": "a component with an unknown kind is a page component",
+      "collection": "components",
+      "doc": {
+        "displayName": "Odd",
+        "kind": "banner"
+      },
+      "expected": {
+        "nameLower": "odd",
+        "nameTokens": [
+          "o",
+          "od",
+          "odd"
+        ],
+        "nameReversed": "ddo",
+        "kind": "site"
+      }
+    },
+    {
+      "name": "a template stored before kind and source",
+      "collection": "templates",
+      "doc": {
+        "displayName": "About"
+      },
+      "expected": {
+        "nameLower": "about",
+        "nameTokens": [
+          "a",
+          "ab",
+          "abo",
+          "abou",
+          "about"
+        ],
+        "nameReversed": "tuoba",
+        "kind": "page",
+        "source": {
+          "type": "authored"
+        },
+        "libraryRow": true
+      }
+    },
+    {
+      "name": "a starter page carries its starter name",
+      "collection": "templates",
+      "doc": {
+        "displayName": "Contact",
+        "kind": "page",
+        "source": {
+          "type": "starter",
+          "starterId": "bakery",
+          "starterName": "Bakery Shop",
+          "starterOrder": 2
+        }
+      },
+      "expected": {
+        "nameLower": "bakery shop",
+        "nameTokens": [
+          "b",
+          "ba",
+          "bak",
+          "bake",
+          "baker",
+          "bakery",
+          "s",
+          "sh",
+          "sho",
+          "shop"
+        ],
+        "nameReversed": "pohs yrekab",
+        "libraryRow": false
+      }
+    },
+    {
+      "name": "a marketplace template keeps its provenance",
+      "collection": "templates",
+      "doc": {
+        "displayName": "X Widgets",
+        "kind": "component",
+        "source": {
+          "type": "marketplace",
+          "listingId": "l1"
+        }
+      },
+      "expected": {
+        "nameLower": "x widgets",
+        "nameTokens": [
+          "x",
+          "w",
+          "wi",
+          "wid",
+          "widg",
+          "widge",
+          "widget",
+          "widgets"
+        ],
+        "nameReversed": "stegdiw x",
+        "libraryRow": true
+      }
+    },
+    {
+      "name": "a source without a type is saved here",
+      "collection": "templates",
+      "doc": {
+        "displayName": "Kept",
+        "kind": "layout",
+        "source": {
+          "listingId": "l2"
+        }
+      },
+      "expected": {
+        "nameLower": "kept",
+        "nameTokens": [
+          "k",
+          "ke",
+          "kep",
+          "kept"
+        ],
+        "nameReversed": "tpek",
+        "source": {
+          "listingId": "l2",
+          "type": "authored"
+        },
+        "libraryRow": true
+      }
+    },
+    {
+      "name": "a collection no artifact list queries",
+      "collection": "forms",
+      "doc": {
+        "displayName": "Contact"
+      },
+      "expected": {}
+    },
+    {
+      "name": "the first page of a starter leads its row",
+      "collection": "templates",
+      "doc": {
+        "displayName": "Home",
+        "kind": "page",
+        "source": {
+          "type": "starter",
+          "starterId": "bakery",
+          "starterName": "Bakery Shop",
+          "starterOrder": 0
+        }
+      },
+      "expected": {
+        "nameLower": "bakery shop",
+        "nameTokens": [
+          "b",
+          "ba",
+          "bak",
+          "bake",
+          "baker",
+          "bakery",
+          "s",
+          "sh",
+          "sho",
+          "shop"
+        ],
+        "nameReversed": "pohs yrekab",
+        "libraryRow": true
+      }
+    },
+    {
+      "name": "a deleted template is no library row",
+      "collection": "templates",
+      "doc": {
+        "displayName": "Old",
+        "kind": "page",
+        "source": {
+          "type": "authored"
+        },
+        "deletedAt": {
+          "seconds": 1
+        }
+      },
+      "expected": {
+        "nameLower": "old",
+        "nameTokens": [
+          "o",
+          "ol",
+          "old"
+        ],
+        "nameReversed": "dlo",
+        "libraryRow": false
+      }
+    },
+    {
+      "name": "a detached copy's legacy workspace source is saved here",
+      "collection": "templates",
+      "doc": {
+        "displayName": "Chrome",
+        "kind": "layout",
+        "source": {
+          "type": "workspace",
+          "listingId": "listing-2"
+        }
+      },
+      "expected": {
+        "nameLower": "chrome",
+        "nameTokens": [
+          "c",
+          "ch",
+          "chr",
+          "chro",
+          "chrom",
+          "chrome"
+        ],
+        "nameReversed": "emorhc",
+        "source": {
+          "type": "authored",
+          "listingId": "listing-2"
+        },
+        "libraryRow": true
+      }
+    }
+  ],
+  "rename": [
+    {
+      "name": "a layout renamed",
+      "collection": "layouts",
+      "displayName": "New Chrome",
+      "doc": {
+        "displayName": "Main"
+      },
+      "expected": {
+        "nameLower": "new chrome",
+        "nameTokens": [
+          "n",
+          "ne",
+          "new",
+          "c",
+          "ch",
+          "chr",
+          "chro",
+          "chrom",
+          "chrome"
+        ],
+        "nameReversed": "emorhc wen"
+      }
+    },
+    {
+      "name": "a starter page renamed keeps its starter name",
+      "collection": "templates",
+      "displayName": "Get in touch",
+      "doc": {
+        "displayName": "Contact",
+        "source": {
+          "type": "starter",
+          "starterName": "Bakery Shop"
+        }
+      },
+      "expected": {
+        "nameLower": "bakery shop",
+        "nameTokens": [
+          "b",
+          "ba",
+          "bak",
+          "bake",
+          "baker",
+          "bakery",
+          "s",
+          "sh",
+          "sho",
+          "shop"
+        ],
+        "nameReversed": "pohs yrekab"
+      }
+    },
+    {
+      "name": "a rename to nothing",
+      "collection": "screens",
+      "displayName": "",
+      "doc": {},
+      "expected": {
+        "nameLower": "",
+        "nameTokens": [],
+        "nameReversed": ""
+      }
+    },
+    {
+      "name": "a rename outside the artifact lists",
+      "collection": "variables",
+      "displayName": "x",
+      "doc": {},
+      "expected": {}
+    }
+  ]
+}

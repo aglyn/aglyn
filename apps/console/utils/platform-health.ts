@@ -520,10 +520,16 @@ export function summarizePlatformHealth(
 }
 
 export interface CspAggregateRow {
+  /** The counter's document id — the table's row id and page cursor. */
+  id?: string
   day?: string
   app?: string
   directive?: string
-  blockedOrigin?: string
+  /**
+   * The blocked origin as the collector keys it: the host of `blocked-uri`,
+   * or its bare keyword (`inline`, `eval`, `data`). Stored as `origin`.
+   */
+  origin?: string
   count?: number
   lastSite?: string
   lastPath?: string
@@ -622,7 +628,7 @@ export function readCspReport(
       entry.blocked += safe
       // The aggregate keys an inline refusal on the bare keyword, the same
       // string the browser reports as `blocked-uri`.
-      if (row?.blockedOrigin === 'inline') blockedInline += safe
+      if (row?.origin === 'inline') blockedInline += safe
       const seen = Number(row?.lastSeenMs ?? 0)
       if (Number.isFinite(seen) && seen > 0) {
         entry.lastBlockedMs = Math.max(entry.lastBlockedMs ?? 0, seen)

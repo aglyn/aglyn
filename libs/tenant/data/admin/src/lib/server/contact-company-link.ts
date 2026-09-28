@@ -38,6 +38,7 @@ import {
   planContactCompanyLink,
   readContactCompanyLink,
 } from '@aglyn/aglyn/app-utils/crm'
+import { restampCrmListFieldsAt } from './crm-records'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -159,5 +160,7 @@ export async function writeContactCompanyLink(
     )
   }
   await batch.commit()
+  // The company is what the Contacts list filters by (AGL-3321).
+  await restampCrmListFieldsAt(contactRef, 'contacts')
   return plan
 }

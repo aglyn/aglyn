@@ -39,13 +39,9 @@ export interface ListGridFilterOptions {
   /** A field whose stored clauses predate the panel, translated its own way. */
   codecs?: Readonly<Record<string, ListGridFilterCodec>>
   /**
-   * The query serves ONE clause, so the panel's replaces every other — a
-   * server-paged list, which has no loaded window to narrow further.
-   * `keepAlongside` names the clauses that do narrow the loaded page and so
-   * may stand beside it.
+   * The query serves ONE clause, so the panel's replaces every other.
    */
   single?: boolean
-  keepAlongside?: (clause: ListFilterClause) => boolean
   /**
    * The quick search's words, held by the list when it needs them before
    * the grid's columns exist; the hook holds them itself otherwise.
@@ -86,15 +82,15 @@ const NO_CLAUSES: readonly ListFilterClause[] = []
  *
  * ## The list answers, never the grid
  *
- * Every list passes `filterMode="server"`: the grid holds one page, or a
- * window the query already narrowed, so a filter the grid ran itself would
- * answer "no match" for a row on the next page. The list reads the clauses
- * — onto its query where it can, over its loaded rows where it cannot
- * (`filterListRows`) — and the quick search's words, and hands the grid the
- * rows that answer.
+ * Every list passes `filterMode="server"`: the grid holds one page, so a
+ * filter the grid ran itself would answer "no match" for a row on the next
+ * page. The list puts the clauses and the quick search's words on its query
+ * (`planListQuery`, AGL-3321), refuses by name what one query cannot hold,
+ * and hands the grid the page that query returned. Nothing is matched over
+ * rows already loaded.
  */
 export function useListGridFilter(options: ListGridFilterOptions = {}): ListGridFilter {
-  const { selectFields = [], codecs = {}, single = false, keepAlongside } = options
+  const { selectFields = [], codecs = {}, single = false } = options
 
   const [ownClauses, setOwnClauses] = useState<ListFilterClause[]>([])
   const controlled = options.clauses !== undefined
@@ -170,12 +166,9 @@ export function useListGridFilter(options: ListGridFilterOptions = {}): ListGrid
         return
       }
       setPending(null)
-      // A clause that stands alongside the served one is added beside it;
-      // any other replaces whatever the query was serving.
-      const base =
-        single && !keepAlongside?.(clause)
-          ? clauses.filter((entry) => entry.field === field || keepAlongside?.(entry))
-          : clauses
+      // On a single-clause list the new clause replaces whatever the query
+      // was serving.
+      const base = single ? clauses.filter((entry) => entry.field === field) : clauses
       const next = upsertListFilterClause(base, field, clause)
       const same =
         next.length === clauses.length &&
@@ -187,7 +180,7 @@ export function useListGridFilter(options: ListGridFilterOptions = {}): ListGrid
         )
       if (!same) onChange(next)
     },
-    [searchWords, setSearchWords, shownField, clauses, onChange, codecFor, single, keepAlongside],
+    [searchWords, setSearchWords, shownField, clauses, onChange, codecFor, single],
   )
 
   return { filterModel, onFilterModelChange, searchWords, clauses, setClauses: onChange }

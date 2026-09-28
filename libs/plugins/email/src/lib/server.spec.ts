@@ -364,6 +364,10 @@ describe('email/unsubscribe', () => {
     expect(reply.body).toContain("You're unsubscribed")
     expect(docs.get(SUPPRESSION_PATH)).toEqual({
       email: RECIPIENT,
+      // What the Suppressions list's search asks for (AGL-3321).
+      emailTokens: jest
+        .requireActual('@aglyn/tenant-data-admin/server/email-suppression')
+        .emailSearchTokens(RECIPIENT),
       reason: 'unsubscribe',
       // `suppressedAt` is written before the conditional `createdAt`, so it
       // takes the earlier tick. Both are asserted by exact value so a

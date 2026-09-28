@@ -59,6 +59,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -154,19 +155,15 @@ async function handler(request: Request): Promise<Response> {
     // others converge within the config TTL. No deploy anywhere in this.
     invalidateFreeWorkspaceCapConfigCache()
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'freeWorkspaceCap.update',
-        target: `${RATE_LIMIT_COLLECTION}/${FREE_WORKSPACE_CAP_CONFIG_DOC}`,
-        before: { limit: before.limit, enabled: before.enabled },
-        after: { limit: write.limit, enabled: write.enabled },
-        ...(note ? { note } : {}),
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'freeWorkspaceCap.update',
+      target: `${RATE_LIMIT_COLLECTION}/${FREE_WORKSPACE_CAP_CONFIG_DOC}`,
+      before: { limit: before.limit, enabled: before.enabled },
+      after: { limit: write.limit, enabled: write.enabled },
+      ...(note ? { note } : {}),
+      at: FieldValue.serverTimestamp(),
+    })
 
     return Response.json(
       { ok: true, config: normalizeFreeWorkspaceCapConfig(write, { ready: true }) },

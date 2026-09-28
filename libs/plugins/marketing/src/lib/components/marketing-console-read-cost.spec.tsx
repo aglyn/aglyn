@@ -396,12 +396,17 @@ const SECTION_COLLECTIONS = {
  * The campaigns section's ceiling, in documents.
  *
  * Campaigns is the most expensive section on this surface, and this is the
- * number that says how expensive it is allowed to be. Three listens, and each
- * of the three is drawn on screen:
+ * number that says how expensive it is allowed to be. At the default page,
+ * three listens, and each of the three is drawn on screen:
  *
- *   31   `campaigns`       the send ceiling, plus the probe that says there
- *                          are more
- *   51   `emailCampaigns`  the container ceiling, plus its probe
+ *   11   `emailCampaigns`  one page of the list's query (AGL-3321), plus the
+ *                          probe row that says another page exists
+ *   51   `campaigns`       the emails of the campaigns ON THAT PAGE, for
+ *                          their figures — `emailCampaignId in` the page's
+ *                          ids, capped, plus its probe. Issued only when the
+ *                          page holds a campaign, so the empty harness below
+ *                          meters two listens; `campaigns-table.spec.tsx`
+ *                          holds the query and its cap.
  *   50   `lists`           so the Lists column names what a campaign is aimed
  *                          at rather than printing document ids
  *
@@ -417,7 +422,7 @@ const SECTION_COLLECTIONS = {
  * Firestore is asked to RETURN, and a card that listens with `limit(200)` to
  * render twenty rows is buying two hundred.
  */
-const CAMPAIGNS_DOCUMENT_CEILING = 132
+const CAMPAIGNS_DOCUMENT_CEILING = 112
 
 function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
@@ -695,7 +700,7 @@ describe('marketing console read cost (AGL-2501)', () => {
    */
   it('CONTROL: the campaigns section itself still reads its collection', async () => {
     await renderConsole('campaigns')
-    expect(listenedCollections()).toContain('campaigns')
+    expect(listenedCollections()).toContain('emailCampaigns')
     expect(documentCeiling(mockListens)).toBeGreaterThan(2)
   })
 
@@ -709,21 +714,25 @@ describe('marketing console read cost (AGL-2501)', () => {
    * unresolved promise is not a cheap section, it is an unmeasured one.
    *=========================================*/
   describe('the campaigns section', () => {
-    it('opens THREE listens, inside the page budget', async () => {
+    it('opens a page of campaigns and the lists, inside the page budget', async () => {
       await renderConsole('campaigns')
       summarize('campaigns section', mockListens)
-      expect(mockListens).toHaveLength(3)
-      expect(documentCeiling(mockListens)).toBeLessThanOrEqual(
+      // An empty page: the page's emails are read only for campaigns on it.
+      expect(mockListens).toEqual([
+        { path: 'orgs/org1/emailCampaigns', limit: 11 },
+        { path: 'orgs/org1/lists', limit: 50 },
+      ])
+      expect(documentCeiling(mockListens) + 51).toBeLessThanOrEqual(
         CAMPAIGNS_DOCUMENT_CEILING,
       )
     })
 
     it('reads only the collections the table DRAWS', async () => {
       await renderConsole('campaigns')
-      // Each of the three has a column or a chip that needs it: the sends and
-      // the containers are the rows, the lists are the Lists column.
+      // Each has a column that needs it: the containers are the rows, the
+      // lists are the Lists column. No single sends are read while the
+      // table shows campaigns — that kind is its own query, behind its toggle.
       expect([...listenedCollections()].sort()).toEqual([
-        'campaigns',
         'emailCampaigns',
         'lists',
       ])
@@ -871,11 +880,11 @@ describe('the org Marketing hub’s read cost', () => {
 
     const paths = mockListens.map((listen) => listen.path)
     expect(paths).toContain('orgs/org1/emailCampaigns')
-    expect(paths).toContain('orgs/org1/campaigns')
     expect(paths.some((path) => path.startsWith('hosts/'))).toBe(false)
+    // One page of the list's query, plus its probe row (AGL-3321).
     expect(
-      mockListens.find((listen) => listen.path === 'orgs/org1/campaigns')?.limit,
-    ).toBe(31)
+      mockListens.find((listen) => listen.path === 'orgs/org1/emailCampaigns')?.limit,
+    ).toBe(11)
   })
 
   /*

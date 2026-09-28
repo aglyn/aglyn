@@ -19,6 +19,7 @@ import {
   checkEntitlement,
   consentGroupForHost,
   CRM_COLLECTIONS,
+  crmTaskListFields,
   type CrmActivity,
   type CrmActivityLink,
   type CrmTask,
@@ -316,7 +317,10 @@ export async function recordCrmBooking(
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }
-      const written = await orgRef.collection(CRM_COLLECTIONS.tasks).add(task)
+      // What the Tasks list searches by (AGL-3321), beside the task.
+      const written = await orgRef
+        .collection(CRM_COLLECTIONS.tasks)
+        .add({ ...task, ...crmTaskListFields(task) })
       taskId = written.id
     }
 

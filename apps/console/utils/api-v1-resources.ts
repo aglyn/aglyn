@@ -20,6 +20,7 @@
  * org-scoped from the authenticated key (see api-v1.ts). Datasets/records are
  * the headline CRUD surface; sites, form submissions, and contacts are read.
  */
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
@@ -90,6 +91,7 @@ import {
   getMediaQuarantine,
   listResponse,
   parseLimit,
+  restampCrmListFieldsAt,
   settleCompanyContactsCounts,
 } from '@aglyn/tenant-data-admin'
 // The leaf, not the barrel: the console's API specs substitute the barrel
@@ -2301,6 +2303,13 @@ async function createMedia(
       folderId,
       ...dimensions,
       ...(body.alt ? { alt: String(body.alt).slice(0, 500) } : {}),
+      // What the console library filters and searches by (AGL-3327).
+      ...mediaFilterKeys({
+        fileName,
+        contentType,
+        alt: body.alt ? String(body.alt).slice(0, 500) : '',
+        ...dimensions,
+      }),
       contentHash,
       contentSha256,
       variants: (variants as { variants?: number[] })?.variants ?? [],
@@ -3212,11 +3221,17 @@ async function createContact(
       // can see which people an integration put there.
       sources: { api: true },
       interactions: [],
+      // Nothing is scheduled against a new person, which the console's
+      // "No next activity" filter asks as `null` (AGL-3321).
+      nextTaskAtMs: null,
       // AGL-1044/AGL-1037: without this the contact matches no scoped read.
       visibleTo: [ORG_SCOPE_TOKEN],
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     })
+    // What the console's Contacts list searches and filters by (AGL-3321),
+    // from the row as it was created, nested facet and all.
+    await restampCrmListFieldsAt(collection.doc(id), 'contacts')
     // The company the body named has one more contact naming it (AGL-2613);
     // a fresh row's plan is the trivial one, and `crmRefErrors` has already
     // required the company to exist.
@@ -3367,6 +3382,8 @@ async function updateContact(
   // to special-case it.
   if (Object.keys(update).length > 0) {
     await contactRef.update({ ...update, updatedAt: Timestamp.now() })
+    // What the console's Contacts list searches and filters by (AGL-3321).
+    await restampCrmListFieldsAt(contactRef, 'contacts')
     // The companies the link moved off or onto, counted after the contact
     // is written (AGL-2613); `crmRefErrors` has already required the new
     // company to exist.

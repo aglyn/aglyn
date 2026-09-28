@@ -1,4 +1,7 @@
 /**
+ * @jest-environment node
+ */
+/**
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -20,103 +23,113 @@ import type {
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
 import {
+  type QueryFakeFirestore,
+  queryFakeFirestore,
+} from '@aglyn/tenant-data-admin/server/test-firestore-queries'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  listQueryIndexes,
+  missingListQueryIndexes,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { FieldPath, Timestamp } from 'firebase-admin/firestore'
+import {
+  PRODUCT_LIST_INDEX_BASE,
+  PRODUCT_LIST_QUERY,
+} from '../constants/product-list-query'
+import {
+  STOREFRONT_CATALOG_BASE_PATHS,
+  STOREFRONT_CATALOG_DECLARATION,
+} from '../constants/storefront-catalog-query'
+import { productCollectionIds, productSearchFields, productStockFields } from '../model/commerce'
+import {
   catalogHandler,
   createCatalogReadScope,
-  matchesCatalogQuery,
   queryPublicCatalog,
 } from './catalog'
 
-interface MockRow {
-  id: string
-  data: Record<string, unknown>
-}
-
-// Seedable host subcollections; the chainable stub mirrors only the
-// call shapes the handler makes (same convention as the membership
-// login spec).
-const mockDb: Record<string, MockRow[]> = {
-  products: [],
-  productCategories: [],
-  collections: [],
-}
-
-/**
- * How many times each subcollection was actually READ, by name.
- *
- * The seed's cost is not visible in its output — four grids sharing one read
- * and four grids each doing their own return identical items. Only the call
- * count separates them, so it is counted here and asserted directly.
+/*
+ * The storefront catalog against a fake that ANSWERS queries (AGL-3321):
+ * filters, orders, cursors and limits evaluated the way Firestore evaluates
+ * them — a document missing an ordered or filtered field is not returned. The
+ * old spec's stub returned every seeded product for any query, which is the
+ * one thing that let a handler narrowing `limit(500)` in memory pass.
  */
-const mockReads: Record<string, number> = {}
+
+let fake: QueryFakeFirestore
+/** Reads per collection name, counted at `get()` and `getAll()`. */
+const reads: Record<string, number> = {}
+
+function counted(target: any, path: string): any {
+  return new Proxy(target, {
+    get(object, property) {
+      const value = object[property]
+      if (typeof value !== 'function') return value
+      return (...args: any[]) => {
+        if (property === 'get' || property === 'getAll') {
+          const segments = path.split('/').filter(Boolean)
+          const name =
+            property === 'getAll'
+              ? 'getAll'
+              : segments.length % 2 === 1
+                ? segments[segments.length - 1]
+                : segments[segments.length - 2]
+          reads[name] = (reads[name] ?? 0) + 1
+        }
+        const out = value.apply(object, args)
+        if (
+          out &&
+          typeof out === 'object' &&
+          typeof out.then !== 'function' &&
+          ['collection', 'doc', 'where', 'orderBy', 'limit', 'startAfter'].includes(
+            String(property),
+          )
+        ) {
+          const next =
+            property === 'collection' || property === 'doc'
+              ? `${path}/${String(args[0])}`
+              : path
+          return counted(out, next)
+        }
+        return out
+      }
+    },
+  })
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  /*
-   * The real resolution's shape: an org that declared no pooling resolves
-   * every site to a group of ONE. Faked rather than imported because this
-   * file mocks the whole module — but faked to the NARROW answer, which is
-   * the direction a wrong group may fail in.
-   */
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
   firebaseAdmin: {
-    app: () => ({
-      firestore: () => ({
-        collection: () => ({
-          doc: () => ({
-            collection: (name: string) => {
-              const rows = () => mockDb[name] ?? []
-              const toDocs = (list: MockRow[]) => {
-                mockReads[name] = (mockReads[name] ?? 0) + 1
-                return {
-                  docs: list.map((row) => ({
-                    id: row.id,
-                    data: () => row.data,
-                  })),
-                }
-              }
-              return {
-                limit: () => ({ get: async () => toDocs(rows()) }),
-                get: async () => toDocs(rows()),
-                where: (field: string, _op: string, value: unknown) => ({
-                  limit: () => ({
-                    get: async () =>
-                      toDocs(
-                        rows().filter((row) => row.data[field] === value),
-                      ),
-                  }),
-                }),
-                doc: (id: string) => ({
-                  get: async () => {
-                    const row = rows().find((entry) => entry.id === id)
-                    return { exists: Boolean(row), data: () => row?.data }
-                  },
-                }),
-              }
-            },
-          }),
-        }),
-      }),
-    }),
+    app: () => ({ firestore: () => counted(fake, '') }),
+    firestore: { FieldPath, Timestamp },
   },
 }))
 
-function product(id: string, overrides: Record<string, unknown> = {}): MockRow {
-  return {
-    id,
-    data: {
-      name: id,
-      slug: id,
-      type: 'physical',
-      status: 'active',
-      variants: [{ id: 'default', priceUsd: 10, inventory: null }],
-      ...overrides,
-    },
-  }
+const HOST = 'hosts/host-1'
+
+/**
+ * A product as the writers store it: live (`deletedAt: null`, as the create
+ * route stamps it), its keys stamped by `productSearchFields` and
+ * `productStockFields`.
+ */
+function seedProduct(id: string, overrides: Record<string, unknown> = {}) {
+  const variants = (overrides['variants'] as any[]) ?? [
+    { id: 'default', priceUsd: 10, inventory: null },
+  ]
+  const name = String(overrides['name'] ?? id)
+  fake.seed(`${HOST}/products/${id}`, {
+    slug: id.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    type: 'physical',
+    status: 'active',
+    createdAtMs: 1,
+    deletedAt: null,
+    ...overrides,
+    ...productSearchFields({ name, variants }),
+    ...productStockFields({
+      variants,
+      oversellPolicy: overrides['oversellPolicy'] as never,
+    }),
+    variants,
+  })
 }
 
 function makeRequest(query: Record<string, string>): PluginApiRequest {
@@ -165,32 +178,43 @@ async function run(query: Record<string, string>) {
 const names = (result: { body: any }) =>
   (result.body?.items ?? []).map((item: any) => item.name)
 
+beforeEach(() => {
+  fake = queryFakeFirestore()
+  for (const key of Object.keys(reads)) delete reads[key]
+})
+
 describe('catalog handler params (AGL-561)', () => {
   beforeEach(() => {
-    mockDb.products = [
-      product('Blue Hat', {
-        tags: ['summer'],
-        categoryIds: ['cat-apparel'],
-        createdAtMs: 300,
-        variants: [{ id: 'default', priceUsd: 30, inventory: null }],
-      }),
-      product('Red Scarf', {
-        description: 'Warm wool for winter',
-        categoryIds: ['cat-apparel'],
-        createdAtMs: 100,
-        variants: [{ id: 'default', priceUsd: 20, inventory: null }],
-      }),
-      product('Ebook', {
-        type: 'digital',
-        createdAtMs: 200,
-        variants: [{ id: 'default', priceUsd: 5, inventory: null }],
-      }),
-    ]
-    mockDb.productCategories = [
-      { id: 'cat-apparel', data: { name: 'Apparel', slug: 'apparel', order: 2 } },
-      { id: 'cat-books', data: { name: 'Books', slug: 'books', order: 1 } },
-    ]
-    mockDb.collections = []
+    seedProduct('blue-hat', {
+      name: 'Blue Hat',
+      tags: ['summer'],
+      categoryIds: ['cat-apparel'],
+      createdAtMs: 300,
+      variants: [{ id: 'default', priceUsd: 30, inventory: null }],
+    })
+    seedProduct('red-scarf', {
+      name: 'Red Scarf',
+      description: 'Warm wool for winter',
+      categoryIds: ['cat-apparel'],
+      createdAtMs: 100,
+      variants: [{ id: 'default', priceUsd: 20, inventory: null }],
+    })
+    seedProduct('ebook', {
+      name: 'Ebook',
+      type: 'digital',
+      createdAtMs: 200,
+      variants: [{ id: 'default', priceUsd: 5, inventory: null }],
+    })
+    fake.seed(`${HOST}/productCategories/cat-apparel`, {
+      name: 'Apparel',
+      slug: 'apparel',
+      order: 2,
+    })
+    fake.seed(`${HOST}/productCategories/cat-books`, {
+      name: 'Books',
+      slug: 'books',
+      order: 1,
+    })
   })
 
   it('rejects a missing hostId', async () => {
@@ -202,11 +226,22 @@ describe('catalog handler params (AGL-561)', () => {
     expect(result.status).toBe(400)
   })
 
-  it('searches name, description, and tags case-insensitively via q', async () => {
+  it('searches by a word prefix of the product name via q', async () => {
     expect(names(await run({ q: 'BLUE' }))).toEqual(['Blue Hat'])
-    expect(names(await run({ q: 'wool' }))).toEqual(['Red Scarf'])
-    expect(names(await run({ q: 'summer' }))).toEqual(['Blue Hat'])
+    expect(names(await run({ q: 'sca' }))).toEqual(['Red Scarf'])
+    // Word-prefix, over the name only: the description and the tags are not
+    // searched, and a mid-word fragment finds nothing.
+    expect(names(await run({ q: 'wool' }))).toEqual([])
+    expect(names(await run({ q: 'carf' }))).toEqual([])
     expect(names(await run({ q: '  ' }))).toHaveLength(3)
+  })
+
+  it('says search reads the first word of a longer query', async () => {
+    const result = await run({ q: 'blue hat' })
+    expect(names(result)).toEqual(['Blue Hat'])
+    expect(result.body.notices).toEqual([
+      'Search matches one word at a time: showing results for "blue".',
+    ])
   })
 
   it('filters by categoryId and resolves a category slug', async () => {
@@ -219,6 +254,10 @@ describe('catalog handler params (AGL-561)', () => {
       'Red Scarf',
     ])
     expect(names(await run({ category: 'no-such' }))).toHaveLength(3)
+  })
+
+  it('filters by tag', async () => {
+    expect(names(await run({ tag: 'summer' }))).toEqual(['Blue Hat'])
   })
 
   it('filters by product type, ignoring unknown values', async () => {
@@ -246,20 +285,22 @@ describe('catalog handler params (AGL-561)', () => {
     expect(names(await run({}))).toEqual(['Blue Hat', 'Ebook', 'Red Scarf'])
   })
 
-  it('pages with offset/limit and reports nextOffset while more remain', async () => {
+  it('pages by the cursor it returns, with no gap and no repeat', async () => {
     const first = await run({ limit: '2' })
     expect(names(first)).toEqual(['Blue Hat', 'Ebook'])
-    expect(first.body.nextOffset).toBe(2)
-    const second = await run({ limit: '2', offset: '2' })
+    expect(typeof first.body.nextCursor).toBe('string')
+    const second = await run({ limit: '2', after: first.body.nextCursor })
     expect(names(second)).toEqual(['Red Scarf'])
-    expect(second.body.nextOffset).toBeUndefined()
+    expect(second.body.nextCursor).toBeUndefined()
   })
 
   it('applies q before paging so filtered sets page correctly', async () => {
-    const result = await run({ q: 'a', limit: '1' })
-    // 'a' matches Blue Hat ("Hat") and Red Scarf ("Scarf" + "Warm").
+    seedProduct('blue-mug', { name: 'Blue Mug' })
+    const result = await run({ q: 'blue', limit: '1' })
     expect(names(result)).toEqual(['Blue Hat'])
-    expect(result.body.nextOffset).toBe(1)
+    const next = await run({ q: 'blue', limit: '1', after: result.body.nextCursor })
+    expect(names(next)).toEqual(['Blue Mug'])
+    expect(next.body.nextCursor).toBeUndefined()
   })
 
   it('returns ordered category facets only when facets=1', async () => {
@@ -276,8 +317,8 @@ describe('catalog handler params (AGL-561)', () => {
   // Blue Hat 3000, Red Scarf 2000, Ebook 500.
   it('filters by minPriceCents/maxPriceCents inclusively', async () => {
     expect(names(await run({ minPriceCents: '1000' }))).toEqual([
-      'Blue Hat',
       'Red Scarf',
+      'Blue Hat',
     ])
     expect(names(await run({ maxPriceCents: '2000' }))).toEqual([
       'Ebook',
@@ -292,16 +333,22 @@ describe('catalog handler params (AGL-561)', () => {
     ).toHaveLength(3)
   })
 
+  it('keeps a high-to-low sort while the price slider orders by price', async () => {
+    // A range leads the order, and the order it leads with is the one asked.
+    expect(
+      names(await run({ minPriceCents: '1000', sort: 'price-desc' })),
+    ).toEqual(['Blue Hat', 'Red Scarf'])
+  })
+
   it('filters multi-price products on their displayed (lowest) price', async () => {
-    mockDb.products.push(
-      product('Variant Pack', {
-        variants: [
-          { id: 'a', priceUsd: 40, inventory: null },
-          { id: 'b', priceUsd: 90, inventory: null },
-        ],
-      }),
-    )
-    // Displayed as "From $40" — in range even though one variant is $90.
+    seedProduct('variant-pack', {
+      name: 'Variant Pack',
+      variants: [
+        { id: 'a', priceUsd: 90, inventory: null },
+        { id: 'b', priceUsd: 40, inventory: null },
+      ],
+    })
+    // Displayed as "From $40" — in range even though its first variant is $90.
     expect(names(await run({ maxPriceCents: '4000' }))).toContain(
       'Variant Pack',
     )
@@ -318,7 +365,7 @@ describe('catalog handler params (AGL-561)', () => {
       minCents: 500,
       maxCents: 3000,
     })
-    expect(names(narrowed)).toEqual(['Blue Hat', 'Red Scarf'])
+    expect(names(narrowed)).toEqual(['Red Scarf', 'Blue Hat'])
     // …but respect every other filter.
     const typed = await run({ facets: '1', type: 'digital' })
     expect(typed.body.priceBounds).toEqual({ minCents: 500, maxCents: 500 })
@@ -326,107 +373,290 @@ describe('catalog handler params (AGL-561)', () => {
     const empty = await run({ facets: '1', q: 'zzz' })
     expect(empty.body.priceBounds).toBeUndefined()
   })
+
+  it('refuses by name a category it cannot combine with a search', async () => {
+    const result = await run({ q: 'red', categoryId: 'cat-apparel' })
+    // The search is served over the WHOLE catalog, and the category is said
+    // to be unapplied rather than applied to whatever happened to load.
+    expect(names(result)).toEqual(['Red Scarf'])
+    // The plan's own refusal, which the grid names (`listQueryRefusals`).
+    expect(result.body.refused).toEqual([
+      {
+        clause: { field: 'category', op: 'contains', value: 'cat-apparel' },
+        reason: 'cannot be combined with the search — clear the search to use it',
+      },
+    ])
+  })
+
+  /**
+   * A delete stamps `deletedAt` and leaves `status` alone, so the scope has to
+   * ask for both. Forced red by dropping `deletedAt == null` from
+   * `STOREFRONT_CATALOG_BASE`: "Gone Hat", deleted while active, is listed.
+   */
+  it('never lists a deleted or unpublished product', async () => {
+    seedProduct('gone', { name: 'Gone Hat', status: 'active', deletedAt: 5 })
+    seedProduct('archived', { name: 'Archived Hat', status: 'archived' })
+    seedProduct('draft', { name: 'Draft Hat', status: 'draft' })
+    expect(names(await run({ q: 'hat' }))).toEqual(['Blue Hat'])
+    expect(names(await run({ ids: 'gone,archived,draft,blue-hat' }))).toEqual(['Blue Hat'])
+  })
+
+  /**
+   * The In stock chip is a query (`soldOut == false`), not a filter over the
+   * cards returned. Forced red by answering `inStock` in memory over the page:
+   * with `limit=1` the first page holds only the sold-out product.
+   */
+  it('serves the In stock chip on the query', async () => {
+    seedProduct('aa-gone', {
+      name: 'Aardvark Mug',
+      variants: [{ id: 'default', priceUsd: 5, inventory: 0 }],
+    })
+    seedProduct('backorder', {
+      name: 'Backorder Mug',
+      oversellPolicy: 'backorder',
+      variants: [{ id: 'default', priceUsd: 5, inventory: 0 }],
+    })
+    const all = await run({ q: 'mug' })
+    expect(names(all)).toEqual(['Aardvark Mug', 'Backorder Mug'])
+    expect(all.body.items[0].soldOut).toBe(true)
+    expect(names(await run({ q: 'mug', inStock: '1', limit: '1' }))).toEqual(['Backorder Mug'])
+    expect(names(await run({ inStock: '1' }))).toEqual([
+      'Backorder Mug',
+      'Blue Hat',
+      'Ebook',
+      'Red Scarf',
+    ])
+  })
+
+  it('says a price range orders by price rather than the sort chosen', async () => {
+    const result = await run({ minPriceCents: '1000', sort: 'name' })
+    expect(names(result)).toEqual(['Red Scarf', 'Blue Hat'])
+    expect(result.body.notices).toEqual([
+      'Sorted by price, low to high, while a price range is set — Name applies again when it is cleared.',
+    ])
+    expect((await run({ sort: 'newest' })).body.notices).toBeUndefined()
+  })
 })
 
-describe('matchesCatalogQuery', () => {
-  it('matches on name, description, or tag and blanks match all', () => {
-    const item = {
-      name: 'Canvas Tote',
-      description: 'Everyday carry',
-      tags: ['bags'],
+/**
+ * THE REGRESSION (AGL-3321). The handler read `limit(500)` products with no
+ * order and narrowed them in memory, so every control answered "no products
+ * match" for a product past that window. Six hundred products, and the one
+ * being looked for sorts last by id.
+ *
+ * Forced red by reverting `queryPublicCatalog` to the `limit(500)` read: all
+ * three lookups below then come back empty.
+ */
+describe('a catalog past the old 500-product window', () => {
+  beforeEach(() => {
+    for (let index = 0; index < 600; index += 1) {
+      seedProduct(`p${String(index).padStart(4, '0')}`, {
+        name: `Plain Item ${index}`,
+      })
     }
-    expect(matchesCatalogQuery(item, 'tote')).toBe(true)
-    expect(matchesCatalogQuery(item, 'CARRY')).toBe(true)
-    expect(matchesCatalogQuery(item, 'bag')).toBe(true)
-    expect(matchesCatalogQuery(item, '')).toBe(true)
-    expect(matchesCatalogQuery(item, '  ')).toBe(true)
-    expect(matchesCatalogQuery(item, 'shoes')).toBe(false)
-    expect(matchesCatalogQuery({ name: 'Bare' }, 'bare')).toBe(true)
+    seedProduct('zz-last', {
+      name: 'Walnut Chair',
+      categoryIds: ['cat-furniture'],
+      tags: ['wood'],
+      variants: [{ id: 'default', priceUsd: 900, inventory: null }],
+    })
+  })
+
+  it('finds it by search, by category, by tag and by price', async () => {
+    expect(names(await run({ q: 'walnut' }))).toEqual(['Walnut Chair'])
+    expect(names(await run({ categoryId: 'cat-furniture' }))).toEqual(['Walnut Chair'])
+    expect(names(await run({ tag: 'wood' }))).toEqual(['Walnut Chair'])
+    expect(names(await run({ minPriceCents: '50000' }))).toEqual(['Walnut Chair'])
+  })
+
+  it('reads a page, not the catalog', async () => {
+    const result = await run({ limit: '24' })
+    expect(result.body.items).toHaveLength(24)
+    expect(typeof result.body.nextCursor).toBe('string')
+  })
+})
+
+describe('collections', () => {
+  beforeEach(() => {
+    for (let index = 0; index < 600; index += 1) {
+      seedProduct(`p${String(index).padStart(4, '0')}`, { name: `Plain Item ${index}` })
+    }
+    seedProduct('zz-chair', { name: 'Walnut Chair', tags: ['wood'] })
+    seedProduct('zz-table', { name: 'Walnut Table', tags: ['wood'], type: 'digital' })
+    seedProduct('zz-draft', { name: 'Walnut Draft', tags: ['wood'], status: 'draft' })
+  })
+
+  it('reads a manual collection whole, by id, in the merchant order', async () => {
+    fake.seed(`${HOST}/collections/picks`, {
+      kind: 'catalog',
+      name: 'Picks',
+      slug: 'picks',
+      mode: 'manual',
+      productIds: ['zz-table', 'zz-draft', 'zz-chair', 'p0003'],
+    })
+    expect(names(await run({ collectionId: 'picks' }))).toEqual([
+      'Walnut Table',
+      'Walnut Chair',
+      'Plain Item 3',
+    ])
+    // Every visitor control answers over the WHOLE collection.
+    expect(names(await run({ collectionId: 'picks', q: 'walnut' }))).toEqual([
+      'Walnut Table',
+      'Walnut Chair',
+    ])
+    expect(names(await run({ collectionSlug: 'picks', type: 'digital' }))).toEqual([
+      'Walnut Table',
+    ])
+  })
+
+  it('serves a smart collection whose rules a query can hold', async () => {
+    fake.seed(`${HOST}/collections/wood`, {
+      kind: 'catalog',
+      name: 'Wood',
+      slug: 'wood',
+      mode: 'smart',
+      rules: [{ field: 'tag', op: 'eq', value: 'wood' }],
+    })
+    expect(names(await run({ collectionId: 'wood' }))).toEqual([
+      'Walnut Chair',
+      'Walnut Table',
+    ])
+    expect(names(await run({ collectionId: 'wood', type: 'digital' }))).toEqual([
+      'Walnut Table',
+    ])
+  })
+
+  it('reads a smart collection no query can express by its stored membership', async () => {
+    const rules = [{ field: 'name' as const, op: 'contains' as const, value: 'walnut' }]
+    fake.seed(`${HOST}/collections/named`, {
+      kind: 'catalog',
+      name: 'Named',
+      slug: 'named',
+      mode: 'smart',
+      rules,
+    })
+    // Stamped as every writer (and the membership route) stamps it — the
+    // members sit past the old 500-product window.
+    const named = [{ id: 'named', rules }]
+    const membership = (name: string) =>
+      productCollectionIds({ name, variants: [], type: 'physical' }, named)
+    seedProduct('zz-chair', { name: 'Walnut Chair', tags: ['wood'], collectionIds: membership('Walnut Chair') })
+    seedProduct('zz-table', {
+      name: 'Walnut Table',
+      tags: ['wood'],
+      type: 'digital',
+      collectionIds: membership('Walnut Table'),
+    })
+    seedProduct('zz-draft', {
+      name: 'Walnut Draft',
+      tags: ['wood'],
+      status: 'draft',
+      collectionIds: membership('Walnut Draft'),
+    })
+    expect(membership('Plain Item 3')).toEqual([])
+    const result = await run({ collectionId: 'named' })
+    expect(names(result)).toEqual(['Walnut Chair', 'Walnut Table'])
+    expect(result.body.notices ?? []).toEqual([])
+    // The collection holds the query's one array clause, so the search is
+    // refused by name rather than answered over some of it.
+    const searched = await run({ collectionId: 'named', q: 'walnut' })
+    expect(searched.body.refused?.map((entry: { clause: unknown }) => entry.clause)).toEqual([
+      'search',
+    ])
+  })
+})
+
+describe('explicit id lists', () => {
+  it('keeps the given order and drops what is not on sale', async () => {
+    seedProduct('a', { name: 'Alpha' })
+    seedProduct('b', { name: 'Beta', status: 'draft' })
+    seedProduct('c', { name: 'Gamma' })
+    expect(names(await run({ ids: 'c,missing,b,a' }))).toEqual(['Gamma', 'Alpha'])
   })
 })
 
 /**
  * A storefront page can carry several product grids, and each one seeds
- * itself through `queryPublicCatalog`. The products read does not vary with
- * the query — the whole catalog comes back and is filtered in memory — so
- * four grids meant four identical 500-document reads per server render, three
- * of them discarded.
- *
- * These assert the number of READS, never the items. A grid that re-read the
- * catalog returns exactly the same products as one that shared a read, so an
- * item assertion cannot tell the two apart and would pass on the shape it was
- * written to reject.
+ * itself through `queryPublicCatalog`. Grids asking the SAME question share
+ * one answer; each different question reads only its own page.
  */
 describe('catalog read scope', () => {
   beforeEach(() => {
-    for (const key of Object.keys(mockReads)) delete mockReads[key]
-    mockDb.products = [product('a'), product('b')]
-    mockDb.productCategories = []
-    mockDb.collections = []
+    seedProduct('a', { name: 'Alpha' })
+    seedProduct('b', { name: 'Beta' })
   })
 
   /**
    * Forced red by dropping `reads` from the four calls below: `products`
    * then reports 4 instead of 1.
    */
-  it('reads the catalog once for four grids sharing a scope', async () => {
-    const reads = createCatalogReadScope()
+  it('answers four identical grids sharing a scope with one read', async () => {
+    const scope = createCatalogReadScope()
     const results = await Promise.all([
-      queryPublicCatalog({ hostId: 'host-1', reads }),
-      queryPublicCatalog({ hostId: 'host-1', reads }),
-      queryPublicCatalog({ hostId: 'host-1', reads }),
-      queryPublicCatalog({ hostId: 'host-1', reads }),
+      queryPublicCatalog({ hostId: 'host-1', reads: scope }),
+      queryPublicCatalog({ hostId: 'host-1', reads: scope }),
+      queryPublicCatalog({ hostId: 'host-1', reads: scope }),
+      queryPublicCatalog({ hostId: 'host-1', reads: scope }),
     ])
 
-    expect(mockReads['products']).toBe(1)
-    // Every grid is still served — sharing the READ must not cost a grid its
-    // result. A page that seeded three of four grids would render a skeleton.
-    expect(results).toHaveLength(4)
+    expect(reads['products']).toBe(1)
     for (const result of results) {
       expect(result.items.map((item) => item.id).sort()).toEqual(['a', 'b'])
     }
   })
 
-  /**
-   * The scope is opt-in. A caller with nothing to share — the API route —
-   * must keep reading for itself rather than inheriting another request's
-   * snapshot.
-   *
-   * Forced red by making `sharedProducts` memoize on a module-level scope
-   * instead of the passed one: `products` then reports 1 and two separate
-   * requests silently share a catalog.
-   */
   it('reads once per call when no scope is passed', async () => {
     await queryPublicCatalog({ hostId: 'host-1' })
     await queryPublicCatalog({ hostId: 'host-1' })
 
-    expect(mockReads['products']).toBe(2)
+    expect(reads['products']).toBe(2)
   })
 
-  /**
-   * Facets are the other query-invariant read. Only grids that show a
-   * category or price control ask for them, so the count must follow the
-   * ASK rather than the grid count.
-   *
-   * Forced red by having `sharedCategories()` run unconditionally instead of
-   * behind `wantFacets`: `productCategories` then reports 1 for the
-   * facet-less pair below.
-   */
-  it('does not read facets for grids that show no filter controls', async () => {
-    const reads = createCatalogReadScope()
+  it('reads the taxonomy once for every faceted grid, and not at all without', async () => {
+    const scope = createCatalogReadScope()
     await Promise.all([
-      queryPublicCatalog({ hostId: 'host-1', reads }),
-      queryPublicCatalog({ hostId: 'host-1', reads }),
+      queryPublicCatalog({ hostId: 'host-1', reads: scope }),
+      queryPublicCatalog({ hostId: 'host-1', reads: scope, sort: 'newest' }),
     ])
-
-    expect(mockReads['productCategories']).toBeUndefined()
+    expect(reads['productCategories']).toBeUndefined()
 
     const faceted = createCatalogReadScope()
     await Promise.all([
       queryPublicCatalog({ hostId: 'host-1', reads: faceted, facets: true }),
-      queryPublicCatalog({ hostId: 'host-1', reads: faceted, facets: true }),
+      queryPublicCatalog({ hostId: 'host-1', reads: faceted, facets: true, sort: 'newest' }),
     ])
+    expect(reads['productCategories']).toBe(1)
+  })
+})
 
-    expect(mockReads['productCategories']).toBe(1)
+/**
+ * Every shape the storefront can ask has its composite (AGL-3321): the
+ * declaration's equalities and array clauses under each order it offers, the
+ * scope's two equalities included. The console products table's composites
+ * are pinned beside them, and the storefront reuses those four it shares.
+ */
+describe('the index file serves every storefront shape', () => {
+  const indexFile = JSON.parse(
+    readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'cloud/firebase-firestore.indexes.json'), 'utf8'),
+  )
+  const storefront = listQueryIndexes(STOREFRONT_CATALOG_DECLARATION, STOREFRONT_CATALOG_BASE_PATHS)
+  const hub = listQueryIndexes(PRODUCT_LIST_QUERY, PRODUCT_LIST_INDEX_BASE)
+  const shape = (index: { fields: Array<{ fieldPath: string; order?: string; arrayConfig?: string }> }) =>
+    index.fields.map((field) => `${field.fieldPath}:${field.order ?? field.arrayConfig}`).join(',')
+
+  it('holds every composite both products lists need', () => {
+    expect(missingListQueryIndexes(indexFile, 'products', storefront, 'COLLECTION')).toEqual([])
+    expect(missingListQueryIndexes(indexFile, 'products', hub, 'COLLECTION')).toEqual([])
+  })
+
+  it('needs eight predicates under four orders, four of them shared with the table', () => {
+    expect(storefront).toHaveLength(32)
+    const hubShapes = new Set(hub.map(shape))
+    expect(storefront.map(shape).filter((entry) => hubShapes.has(entry)).sort()).toEqual([
+      'deletedAt:ASCENDING,nameLower:ASCENDING',
+      'nameTokens:CONTAINS,nameLower:ASCENDING',
+      'status:ASCENDING,nameLower:ASCENDING',
+      'type:ASCENDING,nameLower:ASCENDING',
+    ])
   })
 })

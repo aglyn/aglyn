@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { reportHandledError } from '@aglyn/aglyn/app-utils/error-beacon'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { addDoc, collection } from 'firebase/firestore'
@@ -117,9 +118,10 @@ export function useHostActivityLogger(hostId: string | undefined) {
   return useCallback(
     (action: string, target: HostActivityTarget) => {
       if (!hostId || !user) return
+      const actorEmail = user.email ?? null
       void addDoc(collection(firestore, 'hosts', hostId, 'activity'), {
         actorId: user.uid,
-        actorEmail: user.email ?? null,
+        actorEmail,
         action,
         target: {
           type: target.type,
@@ -127,6 +129,9 @@ export function useHostActivityLogger(hostId: string | undefined) {
           ...(target.name ? { name: target.name } : {}),
           ...(target.versionId ? { versionId: target.versionId } : {}),
         },
+        // What the log's search box finds the entry by (AGL-3321). The host
+        // catch-all rule validates no keys, so the field needs no rule.
+        searchTokens: activitySearchTokens({ actorEmail, target }),
         createdAt: Timestamp.now(),
       }).catch(reportDroppedEntry)
     },

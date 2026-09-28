@@ -31,6 +31,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   notifyUsers,
+  restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -380,6 +381,8 @@ async function assignOwner(policy: Policy): Promise<OwnerAssignment> {
       },
     )
     if (verdict.outcome !== 'assigned') return verdict
+    // The owner is what the Contacts list filters by (AGL-3321).
+    await restampCrmListFieldsAt(contactRef, 'contacts')
 
     if (
       !verdict.leadMirrored &&

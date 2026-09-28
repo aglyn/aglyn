@@ -1,5 +1,5 @@
 {
-  "note": "Worked examples for the dataset filter-token builder (AGL-3321). Asserted by libs/aglyn/src/lib/app-utils/dataset-filter-keys.spec.ts against datasetFilterKeys in dataset-models.ts, and by tools/scripts/backfill-dataset-filter-keys.mjs --self-test against its own copy. Regenerate only from the library, never by hand.",
+  "note": "Worked examples for the dataset filter builders (AGL-3321): datasetFilterKeys, datasetFilterToken, datasetSearchToken, datasetFilterValues and datasetFilterValuePath. Asserted by libs/aglyn/src/lib/app-utils/dataset-filter-keys.spec.ts against dataset-models.ts, and by tools/scripts/backfill-dataset-filter-keys.mjs --self-test against the script-side copy in tools/scripts/lib/record-filter-keys.mjs. Regenerate only from the library, never by hand.",
   "model": {
     "order": [
       "title",
@@ -9,7 +9,8 @@
       "tags",
       "due",
       "owner",
-      "notes"
+      "notes",
+      "legacy.col"
     ],
     "fields": {
       "title": {
@@ -51,6 +52,10 @@
       },
       "notes": {
         "name": "Notes",
+        "type": "text"
+      },
+      "legacy.col": {
+        "name": "Legacy column",
         "type": "text"
       }
     }
@@ -384,6 +389,79 @@
     {
       "word": "aaaaaaaaaaaaaaaaaaaa",
       "expected": "s:aaaaaaaaaaaa"
+    }
+  ],
+  "values": [
+    {
+      "values": {
+        "title": "  Red Kettle — 1.7 L ",
+        "status": "Open",
+        "done": false,
+        "price": 57.5,
+        "tags": [
+          "kitchen",
+          "Gift"
+        ],
+        "due": {
+          "seconds": 1
+        },
+        "owner": "p1",
+        "notes": "",
+        "legacy.col": "Kept out"
+      },
+      "expected": {
+        "title": "red kettle — 1.7 l",
+        "status": "Open",
+        "done": false,
+        "price": 57.5
+      }
+    },
+    {
+      "values": {
+        "title": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX tail",
+        "status": "Closed",
+        "done": "true",
+        "price": "12.50"
+      },
+      "expected": {
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "status": "Closed",
+        "done": true,
+        "price": 12.5
+      }
+    },
+    {
+      "values": {
+        "title": "   ",
+        "done": "yes",
+        "price": "abc",
+        "notes": 7
+      },
+      "expected": {
+        "notes": "7"
+      }
+    }
+  ],
+  "paths": [
+    {
+      "fieldId": "title",
+      "expected": "filterValues.title"
+    },
+    {
+      "fieldId": "Unit price",
+      "expected": "filterValues.Unit price"
+    },
+    {
+      "fieldId": "legacy.col",
+      "expected": null
+    },
+    {
+      "fieldId": "a/b",
+      "expected": null
+    },
+    {
+      "fieldId": "__name__",
+      "expected": null
     }
   ]
 }

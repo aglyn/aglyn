@@ -17,6 +17,7 @@
 'use client'
 
 import { createResourceUid, pluginDocsHelp } from '@aglyn/aglyn'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   mdiDeleteOutline,
   mdiEyeOutline,
@@ -25,15 +26,18 @@ import {
 import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -43,19 +47,18 @@ import {
   collection,
   doc,
   getCountFromServer,
-  limit,
-  orderBy,
-  query,
   setDoc,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  usePagedCollection,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import {
+  EMAIL_LIST_FILTER_HEADERS,
+  EMAIL_LIST_FILTER_OPTIONS,
+  EMAIL_LIST_QUERY,
+} from '../constants/list-queries'
 import { useEmailDataScope } from './email-org-mount'
 
 export interface OrgListsCardProps {
@@ -65,34 +68,8 @@ export interface OrgListsCardProps {
   basePath: string
 }
 
-/*
- * What the lists grid's Filters panel offers (AGL-3317). The list is a paged
- * listener, so a filter matches over what its window has read, which the
- * first filter widens (`usePagedRowsFilter`). Membership reads `kindKey`,
- * the stored kind with a list that predates `kind` counted as manual, which
- * is how the column draws it.
- */
-const LIST_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('kind', 'select', 'kindKey'),
-]
-const LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'List',
-  kind: 'Membership',
-}
-const LIST_FILTER_OPTIONS = {
-  kind: [
-    { value: 'manual', label: 'Manual' },
-    { value: 'dynamic', label: 'Rule' },
-  ],
-}
-const LIST_SEARCH_FIELDS = ['name'] as const
-
-/** A list row with the membership kind the filter matches on. */
-const withKindKey = (list: any) => ({
-  ...list,
-  kindKey: list.kind === 'dynamic' ? 'dynamic' : 'manual',
-})
+/** The Membership filter's choices are picked, so the panel shows a select. */
+const LIST_SELECT_FIELDS = ['kind']
 
 /**
  * Email lists (AGL-254): static audiences at `orgs/{orgId}/lists`, shared
@@ -143,48 +120,37 @@ export function OrgListsCard(props: OrgListsCardProps) {
    * newsletter enrollment both resolve an existing list and deliberately
    * never create one, and `lists` is absent from `IMPORTABLE_FIELDS`, so no
    * restore path can produce a nameless document for `orderBy` to drop.
+   *
+   * Every filter and search word is a predicate on the same query
+   * (AGL-3321), so a page is a page of the matches — see `EMAIL_LIST_QUERY`.
    */
+  const gridFilter = useListGridFilter({ selectFields: LIST_SELECT_FIELDS })
   const {
-    data: listData,
-    rows: listRows,
+    rows: lists,
     hasMore,
     page,
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      scope
-        ? query(
-            collection(firestore, scope[0], scope[1], 'lists'),
-            orderBy('name'),
-            limit(pageLimit),
-          )
-        : null,
-    [firestore, scope],
-    { idField: '$id' },
+    plan,
+  } = useListQuery<any>({
+    collection: scope ? collection(firestore, scope[0], scope[1], 'lists') : null,
+    declaration: EMAIL_LIST_QUERY,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    deps: [firestore, scope?.[0], scope?.[1]],
+    idField: '$id',
+  })
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: EMAIL_LIST_QUERY.fields,
+        headers: EMAIL_LIST_FILTER_HEADERS,
+        options: EMAIL_LIST_FILTER_OPTIONS,
+      }),
+    [plan.refused],
   )
-  const listWindow = useMemo(() => listData?.map(withKindKey), [listData])
-  const listPage = useMemo(() => listRows.map(withKindKey), [listRows])
-  const listFilter = usePagedRowsFilter<any>(
-    {
-      data: listWindow,
-      rows: listPage,
-      hasMore,
-      page,
-      setPage,
-      pageSize,
-      setPageSize,
-    },
-    {
-      fields: LIST_FILTER_FIELDS,
-      options: LIST_FILTER_OPTIONS,
-      headers: LIST_FILTER_HEADERS,
-      search: LIST_SEARCH_FIELDS,
-    },
-  )
-  // The rows on screen: the page, or the page of the matches.
-  const lists = listFilter.rows
   const [counts, setCounts] = useState<Record<string, number>>({})
   useEffect(() => {
     // `lists` can only be non-empty when `scope` resolved, but the
@@ -243,7 +209,8 @@ export function OrgListsCard(props: OrgListsCardProps) {
     const id = createResourceUid()
     try {
       await setDoc(doc(firestore, scope[0], scope[1], 'lists', id), {
-        name,
+        // The name and the search keys the table queries (AGL-3321).
+        ...nameSearchFields(name),
         /*
          * Manual until somebody says otherwise.
          *
@@ -362,7 +329,8 @@ export function OrgListsCard(props: OrgListsCardProps) {
       headerName: 'Membership',
       flex: 1,
       minWidth: 220,
-      valueGetter: (_value, row) => row.kindKey,
+      // A list that predates `kind` is a manual one.
+      valueGetter: (_value, row) => (row.kind === 'dynamic' ? 'dynamic' : 'manual'),
       renderCell: ({ row }) =>
         row.kind === 'dynamic' ? (
           <Chip
@@ -450,28 +418,46 @@ export function OrgListsCard(props: OrgListsCardProps) {
           }
           includeDescription={false}
         />
-        {listRows.length === 0 && !hasMore && !listFilter.filtering ? null : (
+        {lists.length === 0 && !hasMore && !filtering ? null : (
           <>
-            <ListFilterChips {...listFilter.chipsProps} />
-            {listFilter.filtering && hasMore ? (
-              <Typography variant="caption" color="text.secondary">
-                {`Filtering the ${listFilter.read} lists read so far — the next page reads more.`}
-              </Typography>
-            ) : null}
+            <ListFilterChips
+              fields={EMAIL_LIST_QUERY.fields}
+              headers={EMAIL_LIST_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={EMAIL_LIST_FILTER_OPTIONS}
+            />
+            <ListQueryNotices refused={refusals} notices={plan.notices} />
             <ListTable
               aria-label="Email lists"
               rows={lists}
-              columns={listFilter.filterColumns(columns)}
+              columns={listFilterGridColumns(
+                columns,
+                EMAIL_LIST_QUERY.fields,
+                EMAIL_LIST_FILTER_OPTIONS,
+                EMAIL_LIST_FILTER_HEADERS,
+              )}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, row) => router.push(listHref(row))}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search are the grid's; the card answers
-              // them over what its window read.
-              {...listFilter.gridProps}
+              // The panel and the search go to the query; the grid neither
+              // filters nor sorts the page it holds.
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
               noRowsLabel="No lists match these filters"
             />
-            <ListPagination {...listFilter.pagination} />
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={lists.length}
+              hasMore={hasMore}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </>
         )}
       </Stack>

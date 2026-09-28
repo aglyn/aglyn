@@ -39,6 +39,7 @@
 
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { stampAdminAuditIndex } from './lib/admin-audit-index.mjs'
 
 const args = process.argv.slice(2)
 const orgId = args.find((a) => !a.startsWith('--'))
@@ -177,7 +178,8 @@ await ref.set(
   { plan: 'enterprise', updatedAt: FieldValue.serverTimestamp() },
   { merge: true },
 )
-await firestore.collection('adminAudit').add({
+// Stamped with the fields the staff audit page queries (AGL-3321).
+await firestore.collection('adminAudit').add(stampAdminAuditIndex({
   actorUid: 'script:migrate-enterprise-plan',
   action: 'org.override',
   target: `orgs/${orgId}`,
@@ -185,6 +187,6 @@ await firestore.collection('adminAudit').add({
   after: { plan: 'enterprise' },
   reason: 'AGL-1118 — enterprise is a real OrgPlan',
   at: FieldValue.serverTimestamp(),
-})
+}))
 const after = (await ref.get()).data() ?? {}
 console.log(`\nDone. plan is now: ${after.plan}`)
