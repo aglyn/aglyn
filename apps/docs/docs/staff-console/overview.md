@@ -629,6 +629,13 @@ staff of GDPR erasure requests past their 7-day hold.
 A staff toggle that serves 503s on the org's sites and shows the
 owner a banner.
 
+### [Operator alerts](operator-alerts.md) {#operator-alerts}
+
+Every event the operator must hear about (a lost dispute, a failed erasure, a red health
+check, a webhook failing its signature) with its switch and its delivery: immediately, or
+in one daily digest. Also shows where alert email goes, whether the out-of-band webhook is
+set, and a **Send test** for each type. Reading is any staff role; changing is super.
+
 ### [AI monitoring](ai-monitoring.md) {#ai-monitoring}
 
 One organization's AI in full on its staff page — the add-on, the credit

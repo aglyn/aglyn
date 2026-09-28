@@ -24,7 +24,7 @@ report is more expensive than it looks.
 
 ## Fraud and risk alerts by email {#fraud-and-risk-alerts-by-email}
 
-Every urgent alert this queue raises is also emailed to the operator, so nobody has to be
+Every urgent alert this queue raises is also an **operator alert**, so nobody has to be
 watching the console to hear about it. That covers:
 
 - card testing on a checkout
@@ -36,12 +36,21 @@ watching the console to hear about it. That covers:
 - a DMCA counter-notice
 - a billing webhook that only half applied
 
+A **DMCA takedown, impersonation or illegal-content report** is an operator alert too, on
+its first submission. These are the high-severity categories: they are not urgent enough to
+jump the queue, but each carries a response duty measured in days.
+
 The email goes to `STAFF_ALERT_EMAIL`. When that isn't set, it goes to the operator support
 address (`NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`). When neither is set, it goes to every staff
 account. So a self-hosted or open-source install that configured nothing still hears about
-fraud. Every staff member still gets the console notification, and anyone who switched on
-email for these alerts isn't sent a second copy. The email is the **Operator alert: fraud
-and risk** system email, which you can redesign under [System emails](overview.md#system-emails).
+fraud. With `OPERATOR_ALERT_WEBHOOK_URL` set, the same alert is also posted there. Every
+staff member still gets the console notification, and anyone who switched on email for
+these alerts isn't sent a second copy. The email is the **Operator alert** system email,
+which you can redesign under [System emails](overview.md#system-emails).
+
+Each type can be switched off or moved into the daily digest on
+[Operator alerts](operator-alerts.md), which also lists every other alert the platform
+raises.
 
 ## Where reports come from {#where-reports-come-from}
 
