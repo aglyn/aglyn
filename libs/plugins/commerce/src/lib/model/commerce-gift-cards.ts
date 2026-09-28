@@ -64,9 +64,15 @@ export interface GiftCardHold {
 
 /**
  * Why a card cannot be redeemed for now (AGL-3363): the payment that bought
- * it drew an issuer's early fraud warning, a Radar review, or a dispute.
+ * it drew an issuer's early fraud warning, a Radar review, or a dispute; or
+ * part of it was refunded outside the console and the refund could not be
+ * matched to the order's lines (`refund-review`).
  */
-export type GiftCardFreezeReason = 'early-fraud-warning' | 'radar-review' | 'dispute'
+export type GiftCardFreezeReason =
+  | 'early-fraud-warning'
+  | 'radar-review'
+  | 'dispute'
+  | 'refund-review'
 
 /** Why a card's balance was taken back rather than spent. */
 export type GiftCardVoidReason = 'refund' | 'dispute-lost'

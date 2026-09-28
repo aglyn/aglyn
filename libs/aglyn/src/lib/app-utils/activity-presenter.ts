@@ -71,6 +71,11 @@ export interface ActivityEntryLike {
    * Admin SDK, for an entry that recorded a uid and no address.
    */
   actorEmailNow?: string | null
+  /**
+   * For a STAFF reader only: the staff member behind an entry the workspace
+   * did not perform (a staff cancellation), resolved by the route.
+   */
+  staffActorEmail?: string | null
   /** The name of the API key that wrote the entry, when a key did (AGL-2632). */
   apiKeyName?: string | null
 }
@@ -228,7 +233,7 @@ export function apiKeyActorLabel(name: string): string {
  * leaves `actorId` null is a platform process, so the feed names it: a
  * workflow run by its workflow, anything else — the billing webhook,
  * inbound CRM mail, a background AI job, a staff cancellation — as the
- * platform. Never "Someone", which read as a person nobody could identify
+ * platform; a staff reader is also told which staff member. Never "Someone", which read as a person nobody could identify
  * (AGL-3369).
  */
 export function activityActorLabel(entry: ActivityEntryLike): string {
@@ -243,6 +248,9 @@ export function activityActorLabel(entry: ActivityEntryLike): string {
   if ((target?.type ?? entry.type) === 'workflow') {
     const name = target?.name?.trim()
     return name ? `Workflow ${name}` : 'Workflow'
+  }
+  if (entry.staffActorEmail) {
+    return `${PLATFORM_BRAND_NAME} staff (${entry.staffActorEmail})`
   }
   return PLATFORM_BRAND_NAME
 }

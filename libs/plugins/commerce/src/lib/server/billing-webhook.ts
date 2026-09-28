@@ -46,6 +46,12 @@ import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/e
 import { paymentRiskEventFrom } from '@aglyn/aglyn/app-utils/payment-risk'
 import { recordPaymentRiskOnRecord } from '@aglyn/tenant-data-admin/server/payment-risk-record'
 import {
+  isTransientStripeStatus,
+  reverseDestinationTransfer,
+  type TransferReversalFailure,
+} from '@aglyn/tenant-data-admin/server/stripe-transfer-reversal'
+import {
+  applyExternalRefundToGiftCards,
   applyGiftCardRiskToOrder,
   type GiftCardRiskAction,
   notifyGiftCardHold,
@@ -450,6 +456,61 @@ function disputeFromEvent(dispute: StripeDispute): CommerceModel.OrderDispute {
 }
 
 /**
+ * Record, once, the part of `charge.amount_refunded` the order does not
+ * already account for (AGL-3363): the console's own refunds are reserved in
+ * `refundedCents` before Stripe is asked, and earlier Dashboard refunds are
+ * in `externalRefundedCents`. Returns the new amount and the order's lines,
+ * or null when there is nothing new — a console refund's own event, or a
+ * redelivery. One transaction, so two deliveries cannot both count it.
+ */
+async function recordExternalRefund(
+  orderRef: FirebaseFirestore.DocumentReference,
+  charge: any,
+): Promise<{
+  newCents: number
+  fullyRefunded: boolean
+  lines: { productId: string; totalCents: number }[]
+} | null> {
+  const stripeRefundedCents = Math.max(0, Math.round(Number(charge?.amount_refunded ?? 0)))
+  if (!(stripeRefundedCents > 0)) return null
+  return firebaseAdmin
+    .app()
+    .firestore()
+    .runTransaction(async (transaction) => {
+      const fresh = await transaction.get(orderRef)
+      if (!fresh.exists) return null
+      const data = (fresh.data() ?? {}) as Record<string, unknown>
+      const order = CommerceModel.liftLegacyOrder(data as never)
+      const consoleCents = Math.max(0, Number(order.refundedCents ?? 0))
+      const externalCents = Math.max(0, Number(data['externalRefundedCents'] ?? 0))
+      const newCents = stripeRefundedCents - consoleCents - externalCents
+      if (!(newCents > 0)) return null
+      transaction.set(
+        orderRef,
+        {
+          externalRefundedCents: externalCents + newCents,
+          timeline: CommerceModel.appendOrderEvent(
+            order,
+            'refund',
+            `$${(newCents / 100).toFixed(2)} refunded outside the dashboard (in Stripe)`,
+          ),
+        },
+        { merge: true },
+      )
+      return {
+        newCents,
+        fullyRefunded: charge?.refunded === true,
+        lines: (order.lineItems ?? []).map((line) => ({
+          productId: String(line.productId ?? ''),
+          totalCents:
+            Math.round(Number(line.unitAmountCents ?? 0)) *
+            Math.max(1, Math.round(Number(line.quantity ?? 1))),
+        })),
+      }
+    })
+}
+
+/**
  * Apply a gift-card risk action to the cards an order issued (AGL-3363). The
  * order doc id is the Checkout Session id every issued card carries as its
  * `orderId`. Never throws.
@@ -813,11 +874,6 @@ async function stopLapsedStorefrontSubscription(
       'Restore your plan before it ends to keep billing them.',
     link: `/${hostId}/products`,
   })
-}
-
-/** Stripe failures a redelivery can actually fix. */
-function isTransientStripeStatus(status: number): boolean {
-  return status === 429 || status >= 500
 }
 
 /** One authorized GET against the Stripe API, body parsed either way. */
@@ -1763,160 +1819,49 @@ async function reverseSellerShare(
       })
   }
 
-  const chargeId = String(dispute?.charge ?? '')
-  if (!chargeId) {
-    console.error('Dispute carries no charge; seller share not reversed', {
-      disputeId,
-    })
-    await settle(
-      0,
-      null,
-      'Seller share not reversed — no charge on the dispute',
-    )
-    return 0
-  }
-  const charge = await stripeGet(
-    `https://api.stripe.com/v1/charges/${chargeId}`,
-    stripeKey,
-  )
-  if (!charge.ok) {
-    if (isTransientStripeStatus(charge.status)) {
-      throw new Error(
-        `Stripe charge read failed (${charge.status}) for dispute ${disputeId}`,
-      )
-    }
-    console.error(
-      'Stripe refused the charge read; seller share not reversed',
-      charge.body?.error,
-    )
-    await settle(
-      0,
-      null,
-      'Seller share not reversed — charge not found at Stripe',
-    )
-    return 0
-  }
-  const transferId = String(charge.body?.transfer ?? '')
-  const chargeAmountCents = Math.round(Number(charge.body?.amount ?? 0))
-  if (!transferId || !(chargeAmountCents > 0)) {
-    // An order from before destination charges, or a charge Stripe holds no
-    // transfer for. Logged, recorded, let go.
-    console.error(
-      'No transfer on the disputed charge; seller share not reversed',
-      {
-        disputeId,
-        chargeId,
-      },
-    )
-    await settle(
-      0,
-      null,
-      'Seller share not reversed — no transfer on the charge',
-    )
-    return 0
-  }
-  const transfer = await stripeGet(
-    `https://api.stripe.com/v1/transfers/${transferId}`,
-    stripeKey,
-  )
-  if (!transfer.ok) {
-    if (isTransientStripeStatus(transfer.status)) {
-      throw new Error(
-        `Stripe transfer read failed (${transfer.status}) for dispute ${disputeId}`,
-      )
-    }
-    console.error(
-      'Stripe refused the transfer read; seller share not reversed',
-      transfer.body?.error,
-    )
-    await settle(
-      0,
-      null,
-      'Seller share not reversed — transfer not found at Stripe',
-    )
-    return 0
-  }
-  // The crash window's backstop: the POST landed on a previous delivery and
-  // the record did not. Adopt what exists rather than creating a second one.
-  const existing = ((transfer.body?.reversals?.data ?? []) as any[]).find(
-    (item) => String(item?.metadata?.disputeId ?? '') === disputeId,
-  )
-  if (existing) {
-    const adoptedCents = Math.round(Number(existing.amount ?? 0))
-    // Announced on adoption too: the delivery that created this reversal died
-    // before recording it, so it died before notifying. The money left the
-    // connected account either way and the merchant has not been told yet.
-    const wrote = await settle(
-      adoptedCents,
-      String(existing.id ?? ''),
-      `$${(adoptedCents / 100).toFixed(2)} seller share reversed for lost dispute`,
-    )
-    return wrote ? adoptedCents : 0
-  }
-  const transferCents = Math.round(Number(transfer.body?.amount ?? 0))
-  const alreadyReversedCents = Math.round(
-    Number(transfer.body?.amount_reversed ?? 0),
-  )
-  const remainingCents = Math.max(0, transferCents - alreadyReversedCents)
-  const shareCents = Math.min(
-    chargeAmountCents > 0
-      ? Math.floor((principalCents * transferCents) / chargeAmountCents)
-      : 0,
-    remainingCents,
-  )
-  if (!(shareCents > 0)) {
-    console.error(
-      'Transfer has nothing left to reverse; seller share not reversed',
-      { disputeId, transferId, transferCents, alreadyReversedCents },
-    )
-    await settle(
-      0,
-      null,
-      'Seller share already reversed on the transfer — nothing left to pull back',
-    )
-    return 0
-  }
-  const params = new URLSearchParams({
-    amount: String(shareCents),
-    'metadata[disputeId]': disputeId,
-    'metadata[orderId]': orderRef.id,
-  })
-  const response = await fetch(
-    `https://api.stripe.com/v1/transfers/${transferId}/reversals`,
+  // The Stripe half is the shared seam (AGL-3363): the booking deposit's lost
+  // dispute pulls back through the same function, so the two cannot drift.
+  const outcome = await reverseDestinationTransfer(
     {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${stripeKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Idempotency-Key': `dispute-reversal-${disputeId}`,
-      },
-      body: params.toString(),
+      kind: 'dispute',
+      id: disputeId,
+      amountCents: principalCents,
+      chargeId: String(dispute?.charge ?? ''),
+      metadata: { orderId: orderRef.id },
     },
+    { stripeKey },
   )
-  const reversal = await response.json().catch(() => null)
-  if (!response.ok) {
-    if (isTransientStripeStatus(response.status)) {
-      throw new Error(
-        `Stripe transfer reversal failed (${response.status}) for dispute ${disputeId}`,
-      )
-    }
-    console.error('Stripe refused the transfer reversal', reversal?.error)
-    await settle(
-      0,
-      null,
-      'Seller share not reversed — Stripe refused the reversal',
+  if (outcome.kind === 'skipped') return 0
+  if (outcome.kind === 'not-reversed') {
+    console.error(
+      outcome.reason === 'transfer-fully-reversed'
+        ? 'Transfer has nothing left to reverse; seller share not reversed'
+        : 'Seller share not reversed',
+      { disputeId, reason: outcome.reason },
     )
+    await settle(0, null, SELLER_SHARE_NOT_REVERSED_NOTE[outcome.reason])
     return 0
   }
-  const reversedTransferCents = Math.round(
-    Number(reversal?.amount ?? shareCents),
-  )
+  // Announced on adoption too: the delivery that created an adopted reversal
+  // died before recording it, so it died before notifying. The money left the
+  // connected account either way and the merchant has not been told yet.
   const wrote = await settle(
-    reversedTransferCents,
-    String(reversal?.id ?? ''),
-    `$${(reversedTransferCents / 100).toFixed(2)} seller share reversed for lost dispute`,
+    outcome.cents,
+    outcome.reversalId,
+    `$${(outcome.cents / 100).toFixed(2)} seller share reversed for lost dispute`,
   )
-  return wrote ? reversedTransferCents : 0
+  return wrote ? outcome.cents : 0
+}
+
+/** The order timeline's words for each final reason nothing was pulled back. */
+const SELLER_SHARE_NOT_REVERSED_NOTE: Record<TransferReversalFailure, string> = {
+  'no-charge-on-cause': 'Seller share not reversed — no charge on the dispute',
+  'charge-read-refused': 'Seller share not reversed — charge not found at Stripe',
+  'no-transfer-on-charge': 'Seller share not reversed — no transfer on the charge',
+  'transfer-read-refused': 'Seller share not reversed — transfer not found at Stripe',
+  'transfer-fully-reversed':
+    'Seller share already reversed on the transfer — nothing left to pull back',
+  'reversal-refused': 'Seller share not reversed — Stripe refused the reversal',
 }
 
 /**
@@ -4698,6 +4643,50 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
       }
     }
+
+  // A refund made OUTSIDE the console (AGL-3363) — in the Stripe Dashboard.
+  // `refund.ts` reserves `refundedCents` on the order before it asks Stripe,
+  // so by the time its own `charge.refunded` arrives the order already counts
+  // it; whatever Stripe has refunded beyond the order's count, and beyond the
+  // Dashboard refunds already recorded here, is new. The order's gift cards
+  // then follow the in-console rules (`applyExternalRefundToGiftCards`), and
+  // the refund is written on the order's timeline. Nothing else is moved: a
+  // Dashboard refund is staff's act, and they chose its transfer reversal.
+  if (type === 'charge.refunded') {
+    const paymentIntentId =
+      typeof object?.payment_intent === 'string'
+        ? object.payment_intent
+        : String(object?.payment_intent?.id ?? '')
+    const lookup: DisputeLookup = paymentIntentId
+      ? await findOrderForDispute(paymentIntentId)
+      : { kind: 'not-ours' }
+    if (lookup.kind !== 'order') return
+    const snapshot = lookup.snapshot
+    const hostId = String(snapshot.ref.parent.parent?.id ?? '')
+    const external = await recordExternalRefund(snapshot.ref, object)
+    if (external && hostId && snapshot.ref.parent.parent) {
+      const outcome = await applyExternalRefundToGiftCards({
+        firestore: firebaseAdmin.app().firestore(),
+        hostRef: snapshot.ref.parent.parent,
+        orderId: snapshot.id,
+        lines: external.lines,
+        refundCents: external.newCents,
+        fullyRefunded: external.fullyRefunded,
+      })
+      if (outcome.kind === 'frozen-for-review') {
+        await notifyGiftCardHold(
+          {
+            hostId,
+            orderLabel: `Order ${snapshot.id}`,
+            cards: outcome.cards,
+            reason: 'refund-review',
+          },
+          notifyHostManagers,
+        )
+      }
+    }
+    return { claimed: true, hostId }
+  }
 
   // Fraud signals on a store's sale (AGL-3360): an issuer's early fraud
   // warning and a Radar review. The merchant decides what to do for their

@@ -140,6 +140,8 @@ const FREEZE_CAUSE: Record<CommerceModel.GiftCardFreezeReason, string> = {
   'early-fraud-warning': 'the card issuer reported the payment as possibly fraudulent',
   'radar-review': 'the payment is being reviewed for fraud',
   dispute: 'the payment is disputed',
+  'refund-review':
+    'part of the payment was refunded outside your dashboard and the refund could not be matched to the gift cards',
 }
 
 /** The notifier's shape: `notifyHostManagers` from the admin barrel. */
@@ -171,9 +173,104 @@ export async function notifyGiftCardHold(
     title: `${input.cards === 1 ? 'A gift card is' : 'Gift cards are'} on hold`,
     body:
       `The ${plural} bought with ${input.orderLabel} cannot be redeemed for now, ` +
-      `because ${FREEZE_CAUSE[input.reason]}. The balance is kept. If you are ` +
-      'satisfied the payment is genuine, release it from Gift cards. If the ' +
-      'payment is refunded or the dispute is lost, the balance is voided for you.',
+      `because ${FREEZE_CAUSE[input.reason]}. The balance is kept. ` +
+      (input.reason === 'refund-review' ? 'If the customer ' : 'If you are ') +
+      (input.reason === 'refund-review'
+        ? 'kept the gift cards, release them from Gift cards; if the refund was ' +
+          'for them, void them there.'
+        : 'satisfied the payment is genuine, release it from Gift cards. If the ' +
+          'payment is refunded or the dispute is lost, the balance is voided for you.'),
     link: `/${input.hostId}/products`,
   }).catch(() => undefined)
+}
+
+/** One line of the order, as far as matching a refund to it goes. */
+export interface GiftCardRefundLine {
+  productId: string
+  /** What the line cost in total: unit price × quantity. */
+  totalCents: number
+}
+
+/** What a refund made outside the console did to the order's cards. */
+export type ExternalRefundGiftCardOutcome =
+  | { kind: 'no-cards' }
+  | { kind: 'voided'; cards: number }
+  /** Matched to a line that bought no gift card: nothing to take back. */
+  | { kind: 'matched-other-line' }
+  | { kind: 'frozen-for-review'; cards: number }
+
+/**
+ * Apply a refund made OUTSIDE the console — in the Stripe Dashboard — to the
+ * gift cards the order bought, the way an in-console refund does (AGL-3363).
+ *
+ * - A charge refunded in full voids every card the order issued.
+ * - A partial refund is matched to lines by amount: when it equals exactly
+ *   one line's total, or exactly the total of every gift-card line, the
+ *   cards those lines bought are voided (a line that bought no card voids
+ *   nothing, which is the refund of a mug).
+ * - Anything else cannot be told apart — two lines of the same price, a
+ *   goodwill amount — so the order's cards are FROZEN for the merchant to
+ *   review rather than voided or left spendable.
+ */
+export async function applyExternalRefundToGiftCards(input: {
+  firestore: FirebaseFirestore.Firestore
+  hostRef: FirebaseFirestore.DocumentReference
+  orderId: string
+  lines: readonly GiftCardRefundLine[]
+  refundCents: number
+  fullyRefunded: boolean
+  nowMs?: number
+}): Promise<ExternalRefundGiftCardOutcome> {
+  const { firestore, hostRef, orderId } = input
+  let cardProducts: string[]
+  try {
+    const snapshot = await hostRef
+      .collection('giftCards')
+      .where('orderId', '==', orderId)
+      .limit(CARDS_PER_ORDER_READ)
+      .get()
+    const live = (snapshot.docs ?? []).filter(
+      (card) => !(Number(card.get?.('voidedAtMs') ?? card.data?.()?.['voidedAtMs']) > 0),
+    )
+    if (live.length === 0) return { kind: 'no-cards' }
+    cardProducts = live.map((card) =>
+      String(card.get?.('productId') ?? card.data?.()?.['productId'] ?? ''),
+    )
+  } catch (error) {
+    console.error('[gift-card-risk] could not read the order’s cards', orderId, error)
+    return { kind: 'no-cards' }
+  }
+  const apply = (action: GiftCardRiskAction) =>
+    applyGiftCardRiskToOrder({ firestore, hostRef, orderId, action, nowMs: input.nowMs })
+
+  if (input.fullyRefunded) {
+    return { kind: 'voided', cards: await apply({ kind: 'void', reason: 'refund' }) }
+  }
+  const refundCents = Math.round(input.refundCents)
+  const single = input.lines.filter((line) => line.totalCents === refundCents)
+  const singleProducts = new Set(single.map((line) => line.productId))
+  if (single.length > 0 && singleProducts.size === 1) {
+    const [productId] = [...singleProducts]
+    if (!cardProducts.includes(productId)) return { kind: 'matched-other-line' }
+    return {
+      kind: 'voided',
+      cards: await apply({ kind: 'void', reason: 'refund', productIds: [productId] }),
+    }
+  }
+  const giftLines = input.lines.filter((line) => cardProducts.includes(line.productId))
+  const giftTotal = giftLines.reduce((sum, line) => sum + line.totalCents, 0)
+  if (single.length === 0 && giftLines.length > 0 && giftTotal === refundCents) {
+    return {
+      kind: 'voided',
+      cards: await apply({
+        kind: 'void',
+        reason: 'refund',
+        productIds: [...new Set(giftLines.map((line) => line.productId))],
+      }),
+    }
+  }
+  return {
+    kind: 'frozen-for-review',
+    cards: await apply({ kind: 'freeze', reason: 'refund-review' }),
+  }
 }
