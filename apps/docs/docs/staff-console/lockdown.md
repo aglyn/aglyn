@@ -1036,6 +1036,116 @@ If you need the counters frozen as well — a reconciliation of the analytics
 documents themselves — use a **full** lock on that site. "Read-only, but also
 stop the meter" is not a mode we offer.
 
+## Stopping billing: cancel the subscription {#cancel-billing}
+
+A lock does not touch Stripe. A locked workspace keeps its subscription, and
+the subscription keeps renewing. For a fraudster that renewal usually lands on a
+stolen card and comes back later as a chargeback. So when the reason is fraud
+or abuse, stopping billing is part of the lock.
+
+You can cancel billing from two places. Both use the same server helper and
+write the same audit row.
+
+- **With the lock, on Staff → Lockdown.**
+  - With the **Workspace (org)** scope, tick **Also cancel its subscription now
+    (no refund)**.
+  - With the **Account (user)** scope, tick **Also lock and cancel workspaces
+    this user solely owns**. This locks every workspace the account *owns*
+    (`orgs.ownerUid`) with the same reason, through the same org-lock path,
+    and then cancels each one's subscriptions. Workspaces the account only
+    belongs to are not touched. A workspace that is already locked keeps its
+    existing lock and still has its billing cancelled. One account lock
+    covers at most 25 owned workspaces. Lock any beyond that by org id.
+- **On the staff org page (Staff → Organizations → the org).** The
+  **Subscription** card lists every subscription with its plan, status and next
+  renewal. **Cancel subscription…** is in the card header. It asks for:
+  - **When:** *now* or *at period end*.
+  - **A reason.** *Other* also needs a note.
+  - **The workspace's slug**, typed in to confirm.
+
+  Use *at period end* when the customer asked to leave and has paid for the
+  rest of the period.
+
+### Which lock cancels billing by default {#cancel-billing-defaults}
+
+The checkboxes start **on** only when the reason is `security`. Changing the
+reason resets them to that reason's default. You can still untick them for a
+`security` lock, or tick them for any other reason.
+
+| Scope | `security` | `billing` | `maintenance` | `manual` |
+|---|---|---|---|---|
+| Workspace (org) | cancels (box on) | does not (box off) | does not (box off) | does not (box off) |
+| Account (user) | locks and cancels owned workspaces (box on) | does not (box off) | does not (box off) | does not (box off) |
+| Platform, site, domain, feature | never | never | never | never |
+
+Billing, maintenance and manual locks must never end a subscription unless
+someone chooses to. A billing lock exists so the customer can fix their card
+and come back. The API infers nothing from the reason: without
+`cancelSubscription: true` (org) or `lockOwnedWorkspaces: true` (user), no
+lock cancels anything.
+
+### What a cancellation does, and what it never does
+
+- **It finds every subscription.** It lists the org's stored Stripe customer
+  (`status=all`) and also searches `metadata['orgId']`. The search finds a
+  subscription created against a different customer. If either lookup fails,
+  the result is **not confirmed**: "we cancelled what we found" is not the
+  same as "nothing is billing any more".
+- **Now:** Stripe deletes the subscription with `invoice_now=false` and
+  `prorate=false`. There is no final invoice, no proration credit and **no
+  refund**.
+- **At period end:** it sets `cancel_at_period_end`. If a pending downgrade
+  schedule is holding the subscription, it releases that first, the same way
+  a customer's own cancel does.
+- **It never refunds.** Money already collected stays collected. If a refund is
+  owed, issue it separately from the **Refund a charge** card, which has its
+  own audit trail.
+- **It is idempotent.** A subscription that has already ended, or is already
+  set to end at the period end when that is what you asked for, is reported
+  and not written again.
+- **It records the reason at Stripe.** The reason goes into Stripe's
+  `cancellation_details.comment`, along with the channel (`staff-console` or
+  `lockdown`) and your uid.
+- **It answers with a read-back.** Each subscription is re-read after the
+  write and reported with `confirmed`, the same way the lockdown route reports
+  a lock.
+- **It leaves the org doc to the webhook.** The existing webhook projects
+  `plan: free` and `billingStatus: canceled` onto the org, as it does for
+  every other cancellation.
+
+**Lifting a lock never recreates a subscription.** Unlocking the workspace or
+the account gives the customer access back, but their plan does not come
+back. To have a plan again, they have to subscribe again. An account unlock
+also does not unlock the workspaces its lock locked. Lift each workspace
+separately.
+
+### A cancel that fails does not undo the lock
+
+The lock is written and audited **first**. The cancel runs only after that.
+The lock response keeps its own `confirmed`. The cancel is reported beside it
+as `subscriptionCancel` (org scope) or as `ownedWorkspaces[].subscriptionCancel`
+(user scope), each with its own `confirmed`. **Actions taken in this session**
+shows the cancel on a separate line. A failed cancel appears there as
+`NOT CONFIRMED`, and an error snackbar says the lock is in place. In that case,
+finish the cancel from the org page's **Subscription** card. The cancel is
+idempotent, so running it again is safe.
+
+```bash
+# The same action outside the console (super role). No refund, ever.
+curl -X POST https://app.aglyn.com/api/admin/billing/cancel-subscription \
+  -H "Authorization: Bearer $STAFF_ID_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"orgId":"<org id>","when":"now","reason":"fraud","note":"phishing kit"}'
+# → { ok, confirmed, changed, lookupErrors, subscriptions: [{ id, outcome,
+#     confirmed, error, verified: { status, cancelAtPeriodEnd, … } }] }
+```
+
+`GET …/cancel-subscription?orgId=<id>` returns the subscriptions without
+changing anything. Any staff role can call it.
+
+Each cancellation writes an `adminAudit` row: `action: org.subscription-cancel`,
+`target: orgs/{id}`, the reason and note, `via`, `when`, `refunded: false`, and
+the outcome for each subscription. The row is written for a failed attempt too.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —
