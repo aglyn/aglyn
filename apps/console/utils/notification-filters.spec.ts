@@ -22,9 +22,13 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { notificationFilterWheres } from './notification-filters'
+import { planNotificationFilters } from './notification-filters'
 
-describe('notificationFilterWheres', () => {
+const notificationFilterWheres = (
+  clauses: Parameters<typeof planNotificationFilters>[0],
+) => planNotificationFilters(clauses).wheres
+
+describe('planNotificationFilters', () => {
   it('serves Type and Status together, by equality on the stored fields', () => {
     expect(
       notificationFilterWheres([
@@ -37,11 +41,27 @@ describe('notificationFilterWheres', () => {
     ])
   })
 
-  it('serves several types as `in`, capped at thirty', () => {
-    const many = Array.from({ length: 40 }, (_unused, at) => `t${at}`).join(',')
-    const [where] = notificationFilterWheres([{ field: 'type', op: 'isAnyOf', value: many }])
-    expect(where[1]).toBe('in')
-    expect(where[2]).toHaveLength(30)
+  it('serves up to thirty types as one `in`', () => {
+    const thirty = Array.from({ length: 30 }, (_unused, at) => `t${at}`)
+    const plan = planNotificationFilters([
+      { field: 'type', op: 'isAnyOf', value: thirty.join(',') },
+    ])
+    expect(plan.wheres).toEqual([['type', 'in', thirty]])
+    expect(plan.refused).toEqual([])
+  })
+
+  it('refuses a pick of more than thirty types by name, not a silent cut', () => {
+    const many = {
+      field: 'type',
+      op: 'isAnyOf',
+      value: Array.from({ length: 31 }, (_unused, at) => `t${at}`).join(','),
+    } as const
+    const status = { field: 'readAt', op: 'equals', value: 'false' } as const
+    const plan = planNotificationFilters([many, status])
+    expect(plan.wheres).toEqual([['read', '==', false]])
+    expect(plan.refused).toEqual([
+      { clause: many, reason: 'at most 30 values' },
+    ])
   })
 
   it('ignores a clause it cannot serve rather than guessing', () => {
