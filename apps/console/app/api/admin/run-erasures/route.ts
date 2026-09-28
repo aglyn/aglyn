@@ -29,6 +29,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   meterPlatformEmail,
+  raiseOperatorAlert,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
@@ -59,6 +60,14 @@ import {
  * bounded number per run and eraseOrg is safe to re-run on the rest.
  */
 const MAX_PER_RUN = 5
+
+/** `eraseOrg` answers that are the schedule working, not an erasure failing. */
+const ERASURE_SKIPS_THAT_ARE_NOT_FAILURES = new Set([
+  'hold-active',
+  'no-request',
+  'not-found',
+  'dry-run',
+])
 
 /**
  * Staff, or the scheduler (AGL-2165).
@@ -314,6 +323,20 @@ async function handler(request: Request): Promise<Response> {
       })
       if (!result.ok) {
         skipped.push({ orgId: org.id, reason: result.skippedReason })
+        // A skip that means "not yet" or "already gone" is the sweep doing its
+        // job; anything else is data held past the date it was promised gone
+        // (AGL-3377).
+        if (!ERASURE_SKIPS_THAT_ARE_NOT_FAILURES.has(String(result.skippedReason ?? ''))) {
+          await raiseOperatorAlert('data.orgErasureFailed', {
+            dedupeKey: org.id,
+            context: {
+              orgId: org.id,
+              orgName: String(org.get('name') ?? '') || org.id,
+              reason: String(result.skippedReason ?? 'unknown'),
+            },
+            orgId: org.id,
+          })
+        }
         continue
       }
       erased.push(org.id)

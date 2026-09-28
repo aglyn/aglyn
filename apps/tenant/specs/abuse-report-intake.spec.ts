@@ -102,7 +102,14 @@ let mockNotifications: Record<string, any>[] = []
 
 const mockPlatformEmailMeter: number[] = []
 
+const mockOperatorAlerts: Array<{ type: string; options: any }> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The operator alert pipeline (AGL-3377): what was raised, not how it is delivered.
+  raiseOperatorAlert: async (type: string, options: any = {}) => {
+    mockOperatorAlerts.push({ type, options })
+    return { outcome: 'delivered', type }
+  },
   __esModule: true,
   notifyStaff: async (payload: Record<string, any>) => {
     mockNotifications.push(payload)
@@ -569,6 +576,11 @@ describe('the DMCA path', () => {
     expect(row.dmca.goodFaith).toBe(true)
     expect(row.dmca.underPenalty).toBe(true)
     expect(row.reporterEmail).toBe('legal@studio.example')
+    // A takedown carries a response duty, so the operator hears it (AGL-3377),
+    // and never the reporter's address.
+    const alert = mockOperatorAlerts.find((entry) => entry.type === 'legal.abuseReportHigh')
+    expect(alert?.options.context).toMatchObject({ category: 'Copyright infringement (DMCA)' })
+    expect(JSON.stringify(alert)).not.toContain('legal@studio.example')
   })
 
   it('refuses an unsigned notice and says which field', async () => {

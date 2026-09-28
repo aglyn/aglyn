@@ -21,7 +21,7 @@ import { recordCronBeat } from '../../../../utils/cron-beat'
 import { getApp } from 'firebase-admin/app'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, same as the health/backups route.
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, raiseOperatorAlert } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -80,6 +80,7 @@ async function handler(request: Request): Promise<Response> {
       app.options.projectId ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
     const credential = app.options.credential
     if (!projectId || !credential) {
+      await reportExportFailed('no project id or service credential is available')
       return Response.json(
         { error: 'Firestore export is not configured (credentials).' },
         { status: 501 },
@@ -113,6 +114,7 @@ async function handler(request: Request): Promise<Response> {
       console.error(
         `firestore-export: exportDocuments returned ${response.status}`,
       )
+      await reportExportFailed(`the export API answered http-${response.status}`)
       return Response.json(
         { error: `Export request failed (http-${response.status})` },
         { status: 502 },
@@ -168,8 +170,23 @@ async function handler(request: Request): Promise<Response> {
     )
   } catch (error) {
     console.error(error)
+    await reportExportFailed(
+      error instanceof Error ? error.message.slice(0, 200) : 'the export threw',
+    )
     return Response.json({ error: 'Firestore export failed' }, { status: 500 })
   }
+}
+
+/**
+ * The run's beat is already stamped, so `/api/health/crons` reads this job
+ * as alive; only this says the export itself did not start (AGL-3377). A
+ * status code or a message, never Google's error body.
+ */
+async function reportExportFailed(reason: string): Promise<void> {
+  await raiseOperatorAlert('data.backupExportFailed', {
+    dedupeKey: 'firestore-export',
+    context: { reason },
+  })
 }
 
 export const dynamic = 'force-dynamic'

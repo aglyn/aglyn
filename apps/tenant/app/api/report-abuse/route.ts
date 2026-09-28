@@ -99,6 +99,7 @@ import {
   consumeRateLimit,
   firebaseAdmin,
   notifyStaff,
+  raiseOperatorAlert,
 } from '@aglyn/tenant-data-admin'
 import { type DocumentReference, FieldValue } from 'firebase-admin/firestore'
 import {
@@ -535,6 +536,25 @@ export async function POST(request: Request): Promise<Response> {
       title: `Urgent abuse report — ${report.category}`,
       body: `${report.reportedHostname || report.url} was reported as ${report.category}. Reference ${reference}.`,
       link: '/admin/abuse-reports',
+    })
+  }
+  // A takedown, an impersonation or an illegal-content report each carries a
+  // response duty measured in days, not the queue's leisure, so the operator
+  // hears it on the first report too (AGL-3377) — as its own alert, which
+  // staff may move to the digest on a busy install.
+  if (firstReport && report.severity === 'high') {
+    const category =
+      Aglyn.ABUSE_REPORT_CATEGORIES.find((entry) => entry.id === report.category)?.label ??
+      report.category
+    await raiseOperatorAlert('legal.abuseReportHigh', {
+      dedupeKey: reportId,
+      context: {
+        category,
+        site: report.reportedHostname || report.url,
+        reference,
+      },
+      ...(orgId ? { orgId } : {}),
+      ...(hostId ? { hostId } : {}),
     })
   }
 
