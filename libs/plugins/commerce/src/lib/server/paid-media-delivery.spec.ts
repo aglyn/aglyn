@@ -399,4 +399,86 @@ describe('createPaidMediaDeliveryIo', () => {
       'hostIndex/host-unindexed',
     ])
   })
+
+  it('signs attachment into a read that asks for it (AGL-3363)', async () => {
+    const configs: unknown[] = []
+    const io = createPaidMediaDeliveryIo({
+      firestore: { collection: () => ({ doc: () => ({}) }) } as never,
+      bucket: {
+        name: BUCKET,
+        file: () => ({
+          getSignedUrl: async (config: unknown) => {
+            configs.push(config)
+            return ['https://signed.example/v4']
+          },
+        }),
+      },
+    })
+    await io.signStorageRead('hosts/host-1/media/menu.pdf', NOW + TTL, { attachment: true })
+    expect(configs).toEqual([
+      { version: 'v4', action: 'read', expires: NOW + TTL, responseDisposition: 'attachment' },
+    ])
+  })
+})
+
+/*
+ * A paid file is a phishing vehicle two ways (AGL-3363): a hotlink the
+ * merchant points at a lookalike leaves from the shop's own domain, past
+ * every screen; and a signed Storage read of HTML or SVG renders in the
+ * buyer's browser. The first is refused, the second is saved, never shown.
+ */
+describe('a paid file is never a lure (AGL-3363)', () => {
+  function recordingIo() {
+    const { io } = makeIo()
+    const asked: { objectPath: string; attachment: boolean }[] = []
+    const recording: PaidMediaDeliveryIo = {
+      ...io,
+      signStorageRead: async (objectPath, expiresAtMs, options) => {
+        asked.push({ objectPath, attachment: options?.attachment === true })
+        return io.signStorageRead(objectPath, expiresAtMs)
+      },
+    }
+    return { io: recording, asked }
+  }
+
+  it('refuses a hotlink to a lookalike, naming its host for the caller to file', async () => {
+    const { io } = makeIo()
+    expect(await resolve('https://paypal-account-verify.com/statement.pdf', io)).toEqual({
+      ok: false,
+      refusal: 'lookalike',
+      host: 'paypal-account-verify.com',
+    })
+  })
+
+  it('still passes an ordinary hotlink (false-positive guard)', async () => {
+    const { io } = makeIo()
+    const delivery = await resolve('https://files.tanyasbakery.com/menu.pdf', io)
+    expect(delivery).toEqual({
+      ok: true,
+      via: 'external',
+      location: 'https://files.tanyasbakery.com/menu.pdf',
+    })
+  })
+
+  it('a downloaded PDF menu is signed as an attachment and still delivered (false-positive guard)', async () => {
+    const { io, asked } = recordingIo()
+    const delivery = await resolve(downloadUrl('hosts/host-1/media/Menus/menu.pdf'), io, {
+      cdnParams: [['download', '1']],
+    })
+    expect(delivery.ok && delivery.via).toBe('signed-storage')
+    expect(asked).toEqual([{ objectPath: 'hosts/host-1/media/Menus/menu.pdf', attachment: true }])
+  })
+
+  it('an HTML or SVG object is an attachment even when streamed', async () => {
+    const { io, asked } = recordingIo()
+    await resolve(downloadUrl('hosts/host-1/media/Lures/login.html'), io)
+    await resolve(downloadUrl('hosts/host-1/media/Lures/badge.svg'), io)
+    expect(asked.map((entry) => entry.attachment)).toEqual([true, true])
+  })
+
+  it('a streamed video stays inline', async () => {
+    const { io, asked } = recordingIo()
+    await resolve(downloadUrl('hosts/host-1/media/Programs/week-1.mp4'), io)
+    expect(asked).toEqual([{ objectPath: 'hosts/host-1/media/Programs/week-1.mp4', attachment: false }])
+  })
 })

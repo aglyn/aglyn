@@ -62,12 +62,79 @@ export interface GiftCardHold {
   expiresAtMs: number
 }
 
+/**
+ * Why a card cannot be redeemed for now (AGL-3363): the payment that bought
+ * it drew an issuer's early fraud warning, a Radar review, or a dispute.
+ */
+export type GiftCardFreezeReason = 'early-fraud-warning' | 'radar-review' | 'dispute'
+
+/** Why a card's balance was taken back rather than spent. */
+export type GiftCardVoidReason = 'refund' | 'dispute-lost'
+
 /** `hosts/{hostId}/giftCards/{code}` doc, as far as redemption cares. */
 export interface HostGiftCard {
   balanceCents?: number
   /** Session id → hold. Absent on every card issued before AGL-2449. */
   holds?: Record<string, GiftCardHold>
   voidedAtMs?: number
+  voidedReason?: GiftCardVoidReason
+  /** Set while the purchase is under a fraud signal; nothing can redeem it. */
+  frozenAtMs?: number
+  frozenReason?: GiftCardFreezeReason
+}
+
+/*==========================================
+ * GIFT CARDS ARE A CASH-OUT (AGL-3363).
+ *
+ * Buying store credit with a stolen card and spending it before the
+ * chargeback lands is the standard way to turn card data into goods. Three
+ * rules, all shared by every door that sells or redeems a card:
+ *
+ * 1. A PURCHASE HAS A CEILING. One checkout may buy at most
+ *    {@link GIFT_CARD_PURCHASE_LIMITS} of gift cards — lower while the
+ *    workspace is young, when a stolen-card storefront is likeliest — and
+ *    one visitor may buy gift cards only so many times a day. A real shop's
+ *    holiday order ($100 cards for a team) sits well inside both.
+ * 2. A SIGNAL FREEZES. An early fraud warning, a Radar review or a dispute
+ *    on the purchase freezes every card it issued (`frozenAtMs`): its balance
+ *    stays, and nothing can redeem it until the merchant releases it or the
+ *    dispute is won.
+ * 3. A REVERSAL VOIDS. A refund of the purchase, or a lost dispute, zeroes
+ *    what is left on its cards — the same zeroing the console's Void button
+ *    does, never a delete (AGL-1767).
+ *=========================================*/
+
+export const GIFT_CARD_PURCHASE_LIMITS = {
+  /** Gift-card value one checkout may buy. */
+  perOrderCents: 500_000,
+  /** …while the workspace is young (`isYoungWorkspace`). */
+  perOrderCentsYoung: 50_000,
+  /** Checkouts buying gift cards, per visitor address per day. */
+  perVisitorDaily: 5,
+  /** …while the workspace is young. */
+  perVisitorDailyYoung: 2,
+} as const
+
+/** The refusal a checkout gives past the per-order ceiling, or null. */
+export function giftCardPurchaseRefusal(input: {
+  giftCardCents: number
+  young: boolean
+}): string | null {
+  const ceiling = input.young
+    ? GIFT_CARD_PURCHASE_LIMITS.perOrderCentsYoung
+    : GIFT_CARD_PURCHASE_LIMITS.perOrderCents
+  if (!(input.giftCardCents > ceiling)) return null
+  // The ceiling is not named: a shopper who is testing it must not be told
+  // where it is. A real buyer of a large gift order is sent to the shop.
+  return (
+    'This order has more in gift cards than can be bought in one online ' +
+    'checkout. Please contact the shop to complete it.'
+  )
+}
+
+/** Is the card frozen by a fraud signal on the payment that bought it? */
+export function isGiftCardFrozen(card: HostGiftCard | undefined): boolean {
+  return Number(card?.frozenAtMs) > 0
 }
 
 /**
@@ -117,6 +184,9 @@ export function giftCardAvailableCents(
   card: HostGiftCard | undefined,
   nowMs: number,
 ): number {
+  // A frozen card offers nothing to a NEW checkout (AGL-3363). Settlement of
+  // a hold placed before the freeze is left alone: that shopper has paid.
+  if (isGiftCardFrozen(card)) return 0
   const held = Object.values(pruneGiftCardHolds(card?.holds, nowMs)).reduce(
     (sum, hold) => sum + hold.cents,
     0,

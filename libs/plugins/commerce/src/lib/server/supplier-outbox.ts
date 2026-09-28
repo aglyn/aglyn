@@ -17,7 +17,10 @@
 
 import { type PluginJobHostGate } from '@aglyn/aglyn/server'
 import {
+  describeConfiguredUrlRefusal,
+  fetchConfiguredPublicUrl,
   firebaseAdmin,
+  flagLookalikeDomain,
   notifyHostManagers,
 } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
@@ -341,7 +344,11 @@ async function attemptSupplierDelivery(
 
   let status: number
   try {
-    const response = await fetch(url, {
+    // A merchant-typed address, called from the platform's servers: https
+    // only, public addresses only (pinned), never a lookalike, never a
+    // followed redirect (AGL-3363). A bare `fetch` here reached any address a
+    // merchant typed, the cloud metadata endpoint included.
+    const called = await fetchConfiguredPublicUrl(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -360,8 +367,28 @@ async function attemptSupplierDelivery(
       body,
       signal: AbortSignal.timeout(SUPPLIER_DELIVERY_TIMEOUT_MS),
     })
-    status = Number(response?.status ?? 0)
-    if (!response?.ok) {
+    if (called.ok === false) {
+      if (called.refusal === 'lookalike' && called.host) {
+        await flagLookalikeDomain({
+          kind: 'link',
+          hostId,
+          orgId: null,
+          domain: called.host,
+          where: 'a supplier order webhook',
+        })
+      }
+      return recordFailure(
+        firestore,
+        snapshot,
+        data,
+        attempts,
+        now,
+        `the supplier's webhook address was not called: ${describeConfiguredUrlRefusal(called.refusal)}`,
+        undefined,
+      )
+    }
+    status = called.status
+    if (!(status >= 200 && status < 300)) {
       return recordFailure(
         firestore,
         snapshot,

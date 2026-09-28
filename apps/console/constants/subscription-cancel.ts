@@ -106,3 +106,32 @@ export function normalizeSubscriptionCancelReason(
 export function lockdownCancelsBillingByDefault(reason: unknown): boolean {
   return reason === 'security'
 }
+
+/**
+ * Should a tenant lock with this reason pause the money its sites take —
+ * membership renewals and the seller's payouts (AGL-3364)? Only `security`,
+ * for the reasons above: a billing, maintenance or manual lock must never
+ * stop a merchant's income unless someone ticks the box. The console's
+ * initial checkbox state; the route applies no default.
+ */
+export function lockdownPausesSiteMoneyByDefault(reason: unknown): boolean {
+  return reason === 'security'
+}
+
+/**
+ * How every staff cancellation's `cancellation_details.comment` begins — the
+ * brand name, then this. Stripe reports a staff cancel as
+ * `cancellation_requested`, the same word it uses for a customer's own, so
+ * this prefix is how the webhook tells the workspace feed which one it was.
+ */
+export const STAFF_CANCELLATION_COMMENT_MARKER = 'staff cancellation via'
+
+/**
+ * The staff uid a staff cancellation's comment names — `(actor <uid>; …)`,
+ * as `cancellationComment` writes it — or null when it names none. The
+ * workspace feed carries it so a staff reader can see WHICH of us acted;
+ * the route strips it for everyone else.
+ */
+export function staffCancellationActor(comment: string | null | undefined): string | null {
+  return /\(actor ([^;)\s]+)/.exec(comment ?? '')?.[1] ?? null
+}

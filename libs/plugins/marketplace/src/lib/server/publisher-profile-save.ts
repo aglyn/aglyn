@@ -34,6 +34,10 @@ import {
   PublisherHandleTakenError,
   PUBLISHER_PROFILES,
 } from './publisher-profile'
+import {
+  listingSubmissionRefusal,
+  publisherIdentityImpersonation,
+} from './listing-screen'
 
 /**
  * Record an org's acceptance of the marketplace publisher agreement
@@ -174,6 +178,29 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
         error: 'Only an organization owner or admin can edit the publisher profile',
       })
     }
+
+    // The publisher's public identity, screened before the handle is claimed
+    // (AGL-3365): a name or handle that wears the platform's name or speaks
+    // for a brand is refused, and the name, bio and links are read by the
+    // same phishing screen as a listing — the profile is what every one of
+    // its listings says it is from.
+    const official = decoded['staff'] === true
+    const impersonation = publisherIdentityImpersonation({ displayName, handle, official })
+    if (impersonation) {
+      return res.status(422).json({ error: impersonation, code: 'impersonation' })
+    }
+    const text = (key: string) =>
+      typeof req.body?.[key] === 'string' ? (req.body[key] as string) : null
+    const screened = await listingSubmissionRefusal({
+      publisherOrgId: orgId,
+      content: {
+        publisherName: displayName,
+        description: text('bio'),
+        urls: [text('website'), text('supportUrl'), text('supportEmail')],
+      },
+      official,
+    })
+    if (screened) return res.status(screened.status).json(screened.body)
 
     const ref = firestore.collection(PUBLISHER_PROFILES).doc(orgId)
     const previousHandle = (await ref.get()).get('handle') as string | undefined

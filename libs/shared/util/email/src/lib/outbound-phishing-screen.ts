@@ -98,6 +98,15 @@ export interface PhishingScreenBrand {
    * too — true for the marketplaces that run a site per country.
    */
   countryDomains?: boolean
+  /**
+   * Registrable domains the brand runs but where OTHER people's content lives —
+   * the platform's own tenant apex, where every site is `<name>.<apex>`. A
+   * host there never wears the brand as a disguise, so the lookalike rule
+   * skips it; but it is not the brand's own domain either, so a link to a
+   * neighbor's site still counts as "somewhere else" to the lure rules, and a
+   * workspace hosted there does not own the brand by being hosted there.
+   */
+  hostedDomains?: readonly string[]
 }
 
 export const PHISHING_SCREEN_BRANDS: readonly PhishingScreenBrand[] = [
@@ -232,6 +241,19 @@ export const PHISHING_SCREEN_BRANDS: readonly PhishingScreenBrand[] = [
     hostTokens: ['dhl'],
     officialDomains: ['dhl.com'],
     countryDomains: true,
+  },
+  {
+    // The platform itself (AGL-3365). A marketplace listing, a page or an
+    // email that wears the platform's name — "Aglyn Support", a link to
+    // `aglyn-billing.com`, "official Aglyn plugin" — is the one impersonation
+    // every customer is primed to trust. The workspace named for it (the
+    // platform's own org) owns it by name, as any brand's own workspace does.
+    id: 'aglyn',
+    label: 'Aglyn',
+    mention: /\baglyn\b/i,
+    hostTokens: ['aglyn'],
+    officialDomains: ['aglyn.com', 'aglyn.io', 'aglyn.dev'],
+    hostedDomains: ['aglyn.app'],
   },
 ]
 
@@ -438,6 +460,7 @@ export function lookalikeBrandForHost(host: string): PhishingScreenBrand | null 
   const registrable = registrableDomain(normalized)
   for (const brand of PHISHING_SCREEN_BRANDS) {
     if (isOfficialDomain(brand, registrable)) continue
+    if (brand.hostedDomains?.includes(registrable)) continue
     const labels = normalized.split('.')
     if (
       labels.some((label) =>
@@ -769,4 +792,39 @@ export function brandForSubdomainLabel(
     if (parts.some((part) => words.includes(part))) return brand
   }
   return null
+}
+
+/**
+ * The platform's own entry in {@link PHISHING_SCREEN_BRANDS} (AGL-3365). A
+ * workspace owns every other brand by carrying its name or domain; the
+ * platform's is owned only by the platform's staff, because a workspace NAMED
+ * for the platform is the cheapest disguise there is.
+ */
+export const PLATFORM_PHISHING_BRAND_ID = 'aglyn'
+
+/** The platform's brand entry. */
+export function platformPhishingBrand(): PhishingScreenBrand {
+  return PHISHING_SCREEN_BRANDS.find((brand) => brand.id === PLATFORM_PHISHING_BRAND_ID) as PhishingScreenBrand
+}
+
+/**
+ * Words that make a name claim to SPEAK FOR a brand rather than mention it:
+ * "PayPal Support", "Aglyn Official", "Apple ID Security Team".
+ */
+const OFFICIAL_CLAIM_PATTERN =
+  /\b(?:official|staff|team|verified|certified|support|helpdesk|admin|administrator|security|billing|trust|safety|compliance|core|headquarters|hq)\b/i
+
+/**
+ * The brand a display NAME claims to speak for (AGL-3365), or null.
+ *
+ * For names a stranger reads as an identity — a marketplace publisher, a
+ * listing's title — rather than copy. A name that merely mentions a brand
+ * ("Sync for PayPal", "Bookings for Airbnb hosts") passes: that is how an
+ * integration is named. A name that pairs the brand with a claim of
+ * officialness ("PayPal Support", "Aglyn Official Plugins") is the disguise.
+ */
+export function brandClaimedByName(name: string): PhishingScreenBrand | null {
+  const text = String(name ?? '')
+  if (!text.trim() || !OFFICIAL_CLAIM_PATTERN.test(text)) return null
+  return PHISHING_SCREEN_BRANDS.find((brand) => brand.mention.test(text)) ?? null
 }

@@ -36,6 +36,7 @@ import {
   createWebhookEffectLedger,
   NOTIFICATION_TYPE_LABELS,
   observeWrites,
+  PLAN_LABELS,
   Route,
   runBillingWebhookHandlers,
 } from '@aglyn/aglyn/server'
@@ -983,22 +984,27 @@ async function handler(request: Request): Promise<Response> {
               typeof object?.cancellation_details?.reason === 'string'
                 ? object.cancellation_details.reason
                 : null,
+            cancellationComment:
+              typeof object?.cancellation_details?.comment === 'string'
+                ? object.cancellation_details.comment
+                : null,
             metadata: object?.metadata,
           })
           if (entry) {
             await logOrgActivity(
               String(orgId),
-              // NO EMAIL, on any of these. The webhook holds a uid at best
-              // and never an address, and resolving one would mean a lookup
-              // that answers with whoever holds that uid TODAY — a different
-              // claim from "this is the address that acted".
-              { uid: entry.actorUid, email: null },
+              // The address is the one STAMPED at the console act, or none.
+              // It is never resolved from the uid here: that lookup answers
+              // with whoever holds the uid TODAY — a different claim from
+              // "this is the address that acted".
+              { uid: entry.actorUid, email: entry.actorEmail },
               entry.action,
               {
                 type: 'subscription',
                 ...(object?.id ? { id: String(object.id) } : {}),
                 name: entry.plan,
               },
+              entry.staffActorId ? { staffActorId: entry.staffActorId } : undefined,
             )
             // No `ledger.effect()` beside it, per the AGL-1954 rule this file
             // states above: `logOrgActivity` swallows its own failures and
@@ -1037,9 +1043,13 @@ async function handler(request: Request): Promise<Response> {
                     ? 'staff.subscriptionCanceled'
                     : 'staff.planChanged'
               const workspace = (orgSnapshot.get('name') as string) ?? String(orgId)
+              // Plans by the name the pricing page prints, never the id: this
+              // sentence is emailed as well as listed (AGL-3367).
+              const plan = (id: unknown): string =>
+                PLAN_LABELS[id as keyof typeof PLAN_LABELS] ?? String(id)
               const body =
                 entry.kind === 'started'
-                  ? `${workspace} subscribed on ${entry.plan}.`
+                  ? `${workspace} subscribed to the ${plan(entry.plan)} plan.`
                   : entry.kind === 'canceled'
                     ? // WHY it ended, in the sentence — the same distinction
                       // AGL-1877 put on the org doc. A workspace Stripe gave
@@ -1050,8 +1060,8 @@ async function handler(request: Request): Promise<Response> {
                         object?.cancellation_details?.reason === 'payment_failed'
                           ? ' after failed payments'
                           : ''
-                      }, from ${previousPlan}.`
-                    : `${workspace} moved from ${previousPlan} to ${entry.plan}.`
+                      }, leaving the ${plan(previousPlan)} plan.`
+                    : `${workspace} moved from ${plan(previousPlan)} to ${plan(entry.plan)}.`
               await notifyStaff({
                 type: staffType,
                 title: NOTIFICATION_TYPE_LABELS[staffType],
@@ -2170,11 +2180,18 @@ async function handler(request: Request): Promise<Response> {
     // its own record by now; staff hear only if this crosses the pattern.
     if (sellerFraudSignal) {
       const hostIds = dispatch?.hostIds ?? []
+      // A seller that is a WORKSPACE (a marketplace publisher, AGL-3365) is
+      // named by the plugin that sold it; a site's seller is read off the
+      // site. Either way the row names who was PAID, never who paid.
+      const orgIds = [...(dispatch?.orgIds ?? [])]
+      for (const orgId of await orgIdsForHosts(observed(), hostIds)) {
+        if (!orgIds.includes(orgId)) orgIds.push(orgId)
+      }
       await recordSellerFraudSignal(
         {
           ...sellerFraudSignal,
           hostIds,
-          orgIds: await orgIdsForHosts(observed(), hostIds),
+          orgIds,
         },
         { firestore: observed(), notify: notifyStaff },
       )

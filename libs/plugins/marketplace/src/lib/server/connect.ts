@@ -18,7 +18,9 @@
 import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import { resolvePlatformStripeMode } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
+import { orgAgeDays } from '@aglyn/tenant-data-admin/server/org-age'
 import { canActAsPublisher } from './publisher-profile'
+import { applyPublisherPayoutPolicy } from './sale-risk'
 
 async function stripe(path: string, params?: URLSearchParams) {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
@@ -146,9 +148,19 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       { merge: true },
     )
     const origin = req.headers.origin ?? `https://${req.headers.host}`
-    const orgSlug = (
-      await firestore.collection('orgs').doc(orgId).get()
-    ).get('slug') as string | undefined
+    const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
+    const orgSlug = orgSnapshot.get('slug') as string | undefined
+    // A young publisher's payouts are held (AGL-3365) — see
+    // `model/publisher-risk.ts`. Here, where the account is created and
+    // where the publisher comes back to it; the sale webhook applies the
+    // same policy, so a publisher who never returns still ages out of it.
+    // Never throws, and writes to Stripe only when the answer changes.
+    await applyPublisherPayoutPolicy({
+      firestore,
+      publisherOrgId: orgId,
+      ageDays: orgAgeDays(orgSnapshot.get('createdAt')),
+      stripeKey: process.env.STRIPE_SECRET_KEY,
+    })
     // Return people to the Marketplace page (AGL-861), not the retired
     // `/[orgSlug]/marketplace` surface. Stripe bakes these URLs into the
     // onboarding link, so an extra redirect hop mid-onboarding is avoidable.

@@ -167,7 +167,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       if (name === 'orgs') {
         return {
           doc: () => ({
-            get: async () => ({ get: () => undefined }),
+            get: async () => ({ get: () => undefined, data: () => undefined }),
             collection: () => ({ doc: () => installDoc }),
           }),
         }

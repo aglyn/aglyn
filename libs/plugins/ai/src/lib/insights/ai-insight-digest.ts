@@ -139,7 +139,15 @@ export interface AiInsightDigestDeps {
   mayGenerate: (orgId: string, hostId: string, member: AglynOrgMember) => Promise<boolean>
   paused: (orgId: string) => Promise<boolean>
   notify: (uid: string, payload: { title: string; body: string; link: string; orgId: string; hostId: string }) => Promise<void>
-  send: (email: { to: string; subject: string; text: string; fromName: string }) => Promise<AiInsightDigestSendResult>
+  send: (email: {
+    to: string
+    subject: string
+    text: string
+    fromName: string
+    /** The site the digest is about, and the org whose brand it wears (AGL-3367). */
+    siteName: string
+    org: Record<string, unknown>
+  }) => Promise<AiInsightDigestSendResult>
   /** The console's absolute origin for an email link, or `''` when none is configured. */
   consoleOrigin: string
   /** The call's working time; `AI_INSIGHT_DIGEST_RUN_BUDGET_MS` unless a spec holds it. */
@@ -366,6 +374,8 @@ async function deliverOrgDigest(
             settingsUrl: origin ? `${origin}/manage/notifications` : null,
           }),
           fromName: branding.fromName,
+          siteName: site.name,
+          org,
         })
         if (sent.rateLimited) {
           // Nothing is marked, so the next run delivers this site whole.

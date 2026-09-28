@@ -29,6 +29,10 @@ import {
  * happens to list, which is a check that reads as present and runs never.
  */
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
+import {
+  renderSystemEmailContent,
+  systemEmailBrand,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
 import { sendEmail } from '@aglyn/shared-util-email'
 
 /**
@@ -91,9 +95,17 @@ export async function emailPublisher(
       options?.firestore,
     )
     if (!recipients.length) return
+    // The `plugin-review-update` system email (AGL-3367), in the platform's
+    // brand: review is the platform talking about its own marketplace.
+    const content = await renderSystemEmailContent(
+      'plugin-review-update',
+      { 'review.subject': subject, 'review.body': text },
+      systemEmailBrand(null),
+      { subject, text },
+    )
     const results = await Promise.all(
       recipients.map((to) =>
-        sendEmail({ to, subject, text, context: 'plugin review update' }),
+        sendEmail({ to, ...content, context: 'plugin review update' }),
       ),
     )
     // Cost meter (AGL-1438). Platform-scoped: marketplace review is Aglyn's

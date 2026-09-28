@@ -19,6 +19,7 @@ import {
   buildRoute,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_SETTINGS_FIELD,
+  normalizeNotificationLink,
   notificationChannelEnabled,
   type AglynNotification,
   Route,
@@ -31,6 +32,13 @@ import { filterSuppressedEmails } from './email-suppression'
 import { meterOrgEmail, meterPlatformEmail } from './email-metering'
 import firebaseAdmin from './firebase-admin'
 import { listOrgMembers } from './organizations'
+import {
+  loadSystemEmail,
+  renderLoadedSystemEmail,
+  systemEmailBrand,
+  systemEmailContent,
+  type SystemEmailBrand,
+} from './render-system-email'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -50,6 +58,14 @@ export interface NotifyUsersOptions {
    * map is fine and passing none is correct.
    */
   emails?: Readonly<Record<string, string | null | undefined>>
+  /**
+   * Who the fan-out is for (AGL-3367). `staff` is the platform talking to its
+   * own people, so the email wears the platform's brand and is the platform's
+   * cost even when the notification is ABOUT an org, which a canceled
+   * subscription or a new ticket always is. Anything else speaks in the org's
+   * brand when the notification names one.
+   */
+  audience?: 'staff'
 }
 
 /** The console's absolute origin for an email link, or `''` when unset. */
@@ -84,15 +100,33 @@ const NOTIFY_EMAIL_MAX_SENDS = 50
  * out in the headers as well as the body, so a client that surfaces it shows
  * the person the page where the switch they want actually is.
  *
+ * Rendered through the `notification` system email (AGL-3367), which is what
+ * gives it the header and footer every other system email wears, and makes
+ * it designable on the staff System emails page. It used to hand `sendEmail`
+ * bare text, which is the unbranded card the fallback HTML part draws. The
+ * template is read once per fan-out and rendered per recipient.
+ *
  * Never throws, like everything else on this path.
  */
 async function emailNotification(
   uids: string[],
   payload: NotificationPayload,
   known: Readonly<Record<string, string | null | undefined>>,
+  audience: NotifyUsersOptions['audience'],
 ): Promise<void> {
   const origin = consoleOrigin()
   const settingsUrl = `${origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
+  const context = await notificationEmailContext(payload, audience)
+  const url = notificationEmailUrl(payload, context, origin)
+  const loaded = await loadSystemEmail('notification').catch(() => null)
+  const fallbackText = [
+    payload.title,
+    payload.body ?? '',
+    url,
+    origin ? `Change what you are emailed about: ${settingsUrl}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
   let lookups = 0
   let sent = 0
   for (const uid of uids) {
@@ -107,19 +141,26 @@ async function emailNotification(
     if (!address.includes('@')) continue
     const recipients = await filterSuppressedEmails([address])
     if (!recipients.length) continue
-    const link = payload.link && origin ? `${origin}${payload.link}` : ''
-    const body = [
-      payload.title,
-      payload.body ?? '',
-      link,
-      origin ? `Change what you are emailed about: ${settingsUrl}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n')
+    const rendered = loaded
+      ? renderLoadedSystemEmail(
+          loaded,
+          {
+            ...context.brand.merge,
+            'notification.title': payload.title,
+            'notification.body': payload.body ?? '',
+            'notification.url': url,
+            settingsUrl: origin ? settingsUrl : '',
+          },
+          context.brand.options,
+        )
+      : null
     const result = await sendEmail({
       to: recipients,
-      subject: payload.title,
-      text: body,
+      ...systemEmailContent(rendered, {
+        subject: payload.title,
+        text: fallbackText,
+      }),
+      ...(context.brand.fromName ? { fromName: context.brand.fromName } : {}),
       context: 'notification',
       ...(origin
         ? { headers: { 'List-Unsubscribe': `<${settingsUrl}>` } }
@@ -127,11 +168,81 @@ async function emailNotification(
     })
     if (!result.sent) continue
     sent += 1
-    // Whose cost it is: a notification about a workspace is that workspace's
-    // mail, and a staff alert or an account-level notice is the platform's.
-    await (payload.orgId ? meterOrgEmail(payload.orgId) : meterPlatformEmail())
-      .catch(() => undefined)
+    // Whose cost it is: a notification to a workspace's people is that
+    // workspace's mail, and a staff alert or an account-level notice is the
+    // platform's, whichever org it is about.
+    await (payload.orgId && audience !== 'staff'
+      ? meterOrgEmail(payload.orgId)
+      : meterPlatformEmail()
+    ).catch(() => undefined)
   }
+}
+
+/** What a notification email needs from the org and site it is about. */
+interface NotificationEmailContext {
+  brand: SystemEmailBrand
+  orgSlug?: string
+  hostSubdomain?: string
+}
+
+/**
+ * The org's brand, and the slug and subdomain its stored link is rewritten
+ * with (AGL-3367): at most two reads per fan-out, made only when someone is
+ * being emailed.
+ *
+ * A staff fan-out reads nothing. Its brand is the platform's, and its links
+ * are staff routes that need no rewriting.
+ */
+async function notificationEmailContext(
+  payload: NotificationPayload,
+  audience: NotifyUsersOptions['audience'],
+): Promise<NotificationEmailContext> {
+  if (audience === 'staff' || !payload.orgId) {
+    return { brand: systemEmailBrand(null) }
+  }
+  try {
+    const db = firestore()
+    const [org, host] = await Promise.all([
+      db.collection('orgs').doc(payload.orgId).get(),
+      payload.hostId
+        ? db.collection('hosts').doc(payload.hostId).get()
+        : Promise.resolve(null),
+    ])
+    const slug = org.get('slug')
+    const subdomain = host?.get('subdomain')
+    return {
+      brand: systemEmailBrand(org.exists ? (org.data() ?? null) : null),
+      ...(typeof slug === 'string' && slug ? { orgSlug: slug } : {}),
+      ...(typeof subdomain === 'string' && subdomain
+        ? { hostSubdomain: subdomain }
+        : {}),
+    }
+  } catch (error) {
+    console.error('notification email context failed', error)
+    return { brand: systemEmailBrand(null) }
+  }
+}
+
+/**
+ * Where the email's button goes: the notification's own link, rewritten onto
+ * today's routes the way the console rewrites it when it is clicked, else
+ * the notifications page. A stored host link is `/{hostDocId}/…`, which only
+ * that rewrite turns into a page that exists. Empty when the deployment has
+ * no console origin to make a link absolute with.
+ */
+function notificationEmailUrl(
+  payload: NotificationPayload,
+  context: NotificationEmailContext,
+  origin: string,
+): string {
+  const link = normalizeNotificationLink(payload.link, {
+    orgSlug: context.orgSlug,
+    hostId: payload.hostId,
+    hostSubdomain: context.hostSubdomain,
+  })
+  if (link && /^https?:\/\//i.test(link)) return link
+  if (!origin) return ''
+  return `${origin}${link?.startsWith('/') ? link : buildRoute(Route.MANAGE_NOTIFICATIONS)}`
 }
 
 /**
@@ -212,7 +323,12 @@ export async function notifyUsers(
       isEmailConfigured() &&
       !NOTIFICATION_SELF_SENT_EMAIL_TYPES.has(payload.type)
     ) {
-      await emailNotification(mailTo, payload, options.emails ?? {})
+      await emailNotification(
+        mailTo,
+        payload,
+        options.emails ?? {},
+        options.audience,
+      )
     }
   } catch (error) {
     console.error('notification fan-out failed', error)
@@ -250,7 +366,7 @@ async function listStaffUids(): Promise<string[]> {
  */
 export async function notifyStaff(payload: NotificationPayload): Promise<void> {
   try {
-    await notifyUsers(await listStaffUids(), payload)
+    await notifyUsers(await listStaffUids(), payload, { audience: 'staff' })
   } catch (error) {
     console.error('staff notification failed', error)
   }

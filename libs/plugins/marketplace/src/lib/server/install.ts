@@ -34,6 +34,7 @@ import { canActAsPublisher } from './publisher-profile'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
 import { requirePurchase } from './purchase-entitlement'
 import { recordVersionMove } from './version-stats'
+import { isPublisherSecurityLocked } from './sale-risk'
 
 /**
  * Installs (or updates) a marketplace listing into a host (AGL-44/46).
@@ -129,7 +130,9 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       //
       // No owner exemption, matching `install-plugin.ts`: a takedown is a
       // moderation decision about the artifact, not about who is asking.
-      listing.hiddenAt
+      listing.hiddenAt ||
+      // A publisher under a SECURITY lock hands nothing over (AGL-3365).
+      (await isPublisherSecurityLocked(firestore, listing.profileId))
     ) {
       return res.status(404).json({ error: 'Unknown listing' })
     }

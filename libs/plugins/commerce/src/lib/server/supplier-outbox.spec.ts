@@ -214,7 +214,28 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyHostManagers: async (hostId: string, payload: any) => {
     notifications.push({ hostId, ...payload })
   },
+  /*
+   * The REAL configured-URL rules (AGL-3363), with the DNS answer supplied:
+   * a public address for every name except the one a test marks private.
+   * The call itself still goes through the global `fetch` this file mocks.
+   */
+  fetchConfiguredPublicUrl: (url: string, init: any) =>
+    jest
+      .requireActual('../../../../../tenant/data/admin/src/lib/server/configured-url-fetch')
+      .fetchConfiguredPublicUrl(url, init, {
+        resolve: async (host: string) => (mockPrivateHosts.has(host) ? null : '203.0.113.10'),
+      }),
+  describeConfiguredUrlRefusal: jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/configured-url-fetch',
+  ).describeConfiguredUrlRefusal,
+  flagLookalikeDomain: async (input: any) => {
+    mockFlaggedLinks.push(input)
+    return 'flagged'
+  },
 }))
+
+const mockPrivateHosts = new Set<string>()
+const mockFlaggedLinks: any[] = []
 
 // ---------------------------------------------------------------------------
 
@@ -525,5 +546,50 @@ describe('the enqueue is idempotent (AGL-2473)', () => {
     })
     expect(result).toBe('skipped')
     expect([...docs.keys()].some((path) => path.includes('evil'))).toBe(false)
+  })
+})
+
+/*
+ * The supplier's webhook is an address the merchant typed, called from the
+ * platform's own servers (AGL-3363): https to a public address only, never a
+ * lookalike. A refusal is a failed delivery the merchant is shown, not a call.
+ */
+describe('the supplier webhook address is screened before it is called (AGL-3363)', () => {
+  async function deliverTo(webhookUrl: string) {
+    docs.set(`hosts/${HOST}/suppliers/${SUPPLIER}`, { name: 'Acme Supply', webhookUrl })
+    seedDelivery()
+    return scanSupplierDeliveries(OPEN_GATE, NOW)
+  }
+
+  beforeEach(() => {
+    mockPrivateHosts.clear()
+    mockFlaggedLinks.length = 0
+  })
+
+  it('calls a supplier on a public https address (false-positive guard)', async () => {
+    const result = await deliverTo('https://supplier.example.com/orders')
+    expect(result.delivered).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect((fetchMock.mock.calls[0] as any[])[1].redirect).toBe('manual')
+  })
+
+  it('never calls an address that resolves to a private network', async () => {
+    mockPrivateHosts.add('metadata.internal.example')
+    const result = await deliverTo('https://metadata.internal.example/computeMetadata')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.delivered).toBe(0)
+  })
+
+  it('never calls plain http', async () => {
+    await deliverTo('http://supplier.example.com/orders')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('never calls a lookalike, and files it', async () => {
+    await deliverTo('https://paypal-secure-orders.com/hook')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(mockFlaggedLinks).toEqual([
+      expect.objectContaining({ kind: 'link', hostId: HOST, domain: 'paypal-secure-orders.com' }),
+    ])
   })
 })

@@ -1802,3 +1802,58 @@ describe('an early fraud warning or a Radar review on an order (AGL-3360)', () =
     expect(managerNotices).toEqual([])
   })
 })
+
+/*
+ * Gift cards are a cash-out (AGL-3363): the cards an order bought are frozen
+ * by a fraud warning, a review or an open dispute on its payment, voided by
+ * a lost one, and released by a won one. The card's `orderId` is the order's
+ * id, which is how the cart's completion stamps it.
+ */
+describe('the gift cards a questioned payment bought (AGL-3363)', () => {
+  const card = () => docs.get('hosts/host-1/giftCards/GC-TEST1') ?? {}
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/giftCards/GC-TEST1', {
+      orderId: 'order-1',
+      productId: 'gift-50',
+      initialCents: 5000,
+      balanceCents: 5000,
+    })
+  })
+
+  it('an early fraud warning freezes them and tells the managers', async () => {
+    await deliver('radar.early_fraud_warning.created', {
+      id: 'issfr_gc',
+      object: 'radar.early_fraud_warning',
+      charge: 'ch_1',
+      payment_intent: 'pi_dispute_1',
+      fraud_type: 'unauthorized_use_of_card',
+      created: OPENED_AT_S,
+    })
+    expect(card()).toMatchObject({ balanceCents: 5000, frozenReason: 'early-fraud-warning' })
+    expect(managerNotices.some((notice) => /on hold/.test(String(notice.title)))).toBe(true)
+  })
+
+  it('an open dispute freezes them; a lost one voids what is left', async () => {
+    await deliver('charge.dispute.created', disputeEvent())
+    expect(card()).toMatchObject({ frozenReason: 'dispute' })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(card()).toMatchObject({ balanceCents: 0, voidedReason: 'dispute-lost' })
+  })
+
+  it('a won dispute releases them', async () => {
+    await deliver('charge.dispute.created', disputeEvent())
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'won' }))
+    expect(card()).toMatchObject({ balanceCents: 5000 })
+    expect(Number(card()['frozenAtMs']) > 0).toBe(false)
+  })
+
+  it('leaves another order’s card alone', async () => {
+    docs.set('hosts/host-1/giftCards/GC-OTHER', { orderId: 'order-2', balanceCents: 5000 })
+    await deliver('charge.dispute.created', disputeEvent())
+    expect(docs.get('hosts/host-1/giftCards/GC-OTHER')).toEqual({
+      orderId: 'order-2',
+      balanceCents: 5000,
+    })
+  })
+})

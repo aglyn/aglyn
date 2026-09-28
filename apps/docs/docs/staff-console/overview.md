@@ -504,8 +504,10 @@ accounts cannot be impersonated).
 
 ### System emails {#system-emails}
 
-The mail Aglyn itself sends (organization invites, the monthly
-usage summary, internal alerts). Each one ships with built-in copy and can be
+The mail Aglyn itself sends: organization invites, the monthly usage summary,
+the email copy of console notifications, staff alerts, workspace notices, the CRM
+digest and task reminders, the weekly insights digest, report receipts and plugin
+review updates. Each one ships with built-in copy and can be
 replaced with a designed template built in the besigner, using email-safe blocks
 only. Set the subject and preheader from the editor's **Properties** panel; merge
 tokens the email supplies are listed there, and any token left unresolved is blanked
@@ -515,11 +517,19 @@ system emails that exist — adding one is a code change. Password reset and ema
 verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
 payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
 
-The built-in copy goes out with a header and footer of its own: the Aglyn wordmark,
+Some of these emails are written fresh for each send: a digest's list, an alert's
+figures, a notification's title and detail. Their built-in copy is that text in one
+merge token, such as `{{digest.body}}` or `{{notification.title}}`. A design can put
+the token anywhere, add a heading or a button around it, and change the footer's
+reason line. Web addresses in a text block become links when the mail is sent.
+
+Every one of them goes out with a header and footer of its own: the Aglyn wordmark,
 linked to aglyn.com, above it, and below it a line saying why the recipient is getting
 the mail, a link to support, and the copyright line with Aglyn's postal address. A
 designed template that places none of the marketing site's email blocks goes out in the
-same header and footer. The editor's canvas doesn't draw them, because they are added
+same header and footer. Mail Aglyn sends to its own staff, and receipts to people who
+filed a report, always use Aglyn's brand. Mail to an organization's people uses that
+organization's brand. The editor's canvas doesn't draw them, because they are added
 when the mail is sent; a test send shows them.
 
 The editor also offers the platform marketing site's email blocks, such as its header

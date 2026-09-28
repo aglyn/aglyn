@@ -24,6 +24,7 @@ import {
   activityTypeLabel,
   activityEntryGroupId,
 } from './activity-presenter'
+import { PLATFORM_BRAND_NAME } from './platform-brand'
 import { registerPluginActivityActions } from '../plugin-manager/plugin-activity-actions'
 
 // The AI codes the feed shows, as the AI plugin declares them (AGL-2940):
@@ -146,9 +147,82 @@ describe('activityActorLabel', () => {
     )
   })
 
-  it('falls back to Someone for an entry that recorded neither', () => {
-    expect(activityActorLabel({})).toBe('Someone')
-    expect(activityActorLabel({ actorEmail: null })).toBe('Someone')
+  it('names a workflow run by its workflow, never Someone', () => {
+    expect(
+      activityActorLabel({
+        actorId: null,
+        actorEmail: null,
+        action: 'Workflow ran on contactCreated',
+        target: { type: 'workflow', id: 'w1', name: 'Welcome' },
+      }),
+    ).toBe('Workflow Welcome')
+    expect(
+      activityActorLabel({ actorId: null, target: { type: 'workflow' } }),
+    ).toBe('Workflow')
+  })
+
+  it('names the platform on a subscription event no console act signed', () => {
+    expect(
+      activityActorLabel({
+        actorId: null,
+        actorEmail: null,
+        action: 'Canceled the subscription',
+        target: { type: 'subscription', id: 'sub_1', name: 'pro' },
+      }),
+    ).toBe(PLATFORM_BRAND_NAME)
+  })
+
+  it('names a uid recorded without an address by the address it holds now', () => {
+    expect(
+      activityActorLabel({
+        actorId: 'uid-1',
+        actorEmail: null,
+        actorEmailNow: 'owner@example.test',
+        target: { type: 'subscription', name: 'pro' },
+      }),
+    ).toBe('owner@example.test')
+  })
+
+  it('prefers the address recorded then over the one looked up now', () => {
+    expect(
+      activityActorLabel({
+        actorId: 'uid-1',
+        actorEmail: 'then@example.test',
+        actorEmailNow: 'now@example.test',
+      }),
+    ).toBe('then@example.test')
+  })
+
+  it('names the uid of an account that no longer resolves', () => {
+    expect(activityActorLabel({ actorId: 'uid-1', actorEmail: null })).toBe(
+      'Account uid-1',
+    )
+  })
+
+  it('names a key written before its name was carried as an API key', () => {
+    expect(activityActorLabel({ actorId: 'api', actorEmail: null })).toBe(
+      'API key',
+    )
+  })
+
+  it('tells a staff reader which staff member acted for the platform', () => {
+    expect(
+      activityActorLabel({
+        actorId: null,
+        staffActorEmail: 'staff@example.test',
+        target: { type: 'subscription' },
+      }),
+    ).toBe(`${PLATFORM_BRAND_NAME} staff (staff@example.test)`)
+  })
+
+  it('names the platform for any other entry no person wrote', () => {
+    expect(activityActorLabel({})).toBe(PLATFORM_BRAND_NAME)
+    expect(activityActorLabel({ actorId: null, actorEmail: null })).toBe(
+      PLATFORM_BRAND_NAME,
+    )
+    expect(activityActorLabel({ actorId: 'system:stripe-webhook' })).toBe(
+      PLATFORM_BRAND_NAME,
+    )
   })
 })
 

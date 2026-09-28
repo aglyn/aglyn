@@ -36,6 +36,7 @@ import {
   resolvePublisherProfile,
 } from './publisher-profile'
 import { hasLivePurchase } from './purchase-entitlement'
+import { isOrgMember } from './sale-risk'
 
 /**
  * THE TAX CLASSIFICATION OF A MARKETPLACE SALE (AGL-1553).
@@ -225,7 +226,17 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     }
     // Publishing is org-owned (AGL-652): `profileId` IS the publisher org id.
     const sellerOrgId = String(listing.profileId ?? '')
-    if (await canActAsPublisher(firestore, decoded.uid, sellerOrgId)) {
+    // ANY member of the publishing workspace, and any purchase FOR it
+    // (AGL-3365). `canActAsPublisher` asks only for an owner or admin, so an
+    // editor of the publisher — or an owner buying "for" the publisher's own
+    // workspace through a role that can install — passed it, and a publisher
+    // could pay itself: the stolen-card cash-out the payout exists to make
+    // worth doing. A workspace one step removed is the sale screen's to flag.
+    if (
+      buyerOrgId === sellerOrgId ||
+      (await canActAsPublisher(firestore, decoded.uid, sellerOrgId)) ||
+      (await isOrgMember(firestore, sellerOrgId, decoded.uid))
+    ) {
       return res.status(400).json({ error: 'Your organization published this listing' })
     }
     // You cannot buy the same component twice (AGL-1697).
@@ -326,6 +337,14 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // stop publishing. Resolved per request; entitlements are never cached.
     const sellerOrgDoc = await firestore.collection('orgs').doc(sellerOrgId).get()
     const sellerOrg = (sellerOrgDoc.data() ?? {}) as any
+    // A LOCKED publisher sells nothing (AGL-3365). Any lock, not only a
+    // security one: a sale to a workspace staff have stopped is money moving
+    // to it, and the lockdown's payout pause cannot reach a share that is
+    // never charged. The same answer as a taken-down listing — a lock is not
+    // a buyer's business.
+    if (sellerOrg.suspendedAt != null) {
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
     if (!checkEntitlement(sellerOrg, 'marketplaceSelling')) {
       return res.status(409).json({
         error:

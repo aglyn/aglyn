@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { readSiteReturnHost, siteReturnOrigin } from '@aglyn/aglyn/app-utils/site-return-url'
 
 function escapeXml(text: string): string {
   return text
@@ -45,7 +46,14 @@ export const feedHandler: PluginApiHandler = async (req, res) => {
       .limit(500)
       .get()
     const requestHost = String(req.headers['host'] ?? '')
-    const base = `https://${requestHost}`
+    // The site's own origin, never the Host a request arrived on (AGL-3363):
+    // any site's domain answers `?hostId=` for any other, so a feed read
+    // through a stranger's site linked every product there.
+    const base = siteReturnOrigin({
+      candidates: [`https://${requestHost}`],
+      site: await readSiteReturnHost(hostRef),
+      requestHost,
+    })
     const items = productsSnapshot.docs
       .map((docSnapshot) => ({
         ...CommerceModel.liftLegacyProduct(docSnapshot.data() as any),
@@ -83,7 +91,7 @@ export const feedHandler: PluginApiHandler = async (req, res) => {
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">\n' +
       '  <channel>\n' +
-      `    <title>${escapeXml(requestHost)} products</title>\n` +
+      `    <title>${escapeXml(base.replace(/^https?:\/\//, ''))} products</title>\n` +
       `    <link>${escapeXml(base)}</link>\n` +
       '    <description>Product feed</description>\n' +
       items.join('\n') +

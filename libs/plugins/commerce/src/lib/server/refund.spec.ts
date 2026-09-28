@@ -1816,3 +1816,59 @@ describe('line-scoped refunds are reachable from this suite', () => {
     expect(storedOrder()['refundedCents']).toBe(8000)
   })
 })
+
+/*
+ * A refund takes back the gift cards its money bought (AGL-3363): otherwise
+ * a card bought with a stolen card and refunded to it stays spendable.
+ */
+describe('refund and the gift cards the order bought (AGL-3363)', () => {
+  const card = (code: string) => docs.get(`hosts/host-1/giftCards/${code}`) ?? {}
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/orders/order-1', {
+      status: 'paid',
+      channel: 'online',
+      customerEmail: 'buyer@example.com',
+      paymentIntentId: 'pi_live_1',
+      lineItems: [
+        { productId: 'gift-50', name: 'Gift card', quantity: 1, unitAmountCents: 5000 },
+        { productId: 'mug', name: 'Mug', quantity: 1, unitAmountCents: 3000 },
+      ],
+      totals: {
+        itemsCents: 8000,
+        shippingCents: 0,
+        taxCents: 0,
+        discountCents: 0,
+        feeCents: 0,
+        totalCents: 8000,
+      },
+    })
+    docs.set('hosts/host-1/giftCards/GC-REFUND', {
+      orderId: 'order-1',
+      productId: 'gift-50',
+      initialCents: 5000,
+      balanceCents: 4200,
+    })
+  })
+
+  it('a full refund voids what is left on the card', async () => {
+    await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(card('GC-REFUND')).toMatchObject({
+      balanceCents: 0,
+      voidedReason: 'refund',
+      voidedBalanceCents: 4200,
+    })
+  })
+
+  it('withdrawing the gift-card line voids it; withdrawing another line does not', async () => {
+    await post({ lineItemIds: [1] }, { 'idempotency-key': 'attempt-a' })
+    expect(card('GC-REFUND')).toMatchObject({ balanceCents: 4200 })
+    await post({ lineItemIds: [0] }, { 'idempotency-key': 'attempt-b' })
+    expect(card('GC-REFUND')).toMatchObject({ balanceCents: 0, voidedReason: 'refund' })
+  })
+
+  it('a refund by amount, naming no line, leaves the card alone', async () => {
+    await post({ amountCents: 1500 }, { 'idempotency-key': 'attempt-a' })
+    expect(card('GC-REFUND')).toMatchObject({ balanceCents: 4200 })
+  })
+})

@@ -63,6 +63,13 @@ import {
 // through the barrel would be silently replaced by whatever the factory
 // lists. Same reasoning as `usage-alert-email.ts`.
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
+import {
+  loadSystemEmail,
+  renderLoadedSystemEmail,
+  systemEmailBrand,
+  systemEmailContent,
+  type LoadedSystemEmail,
+} from '@aglyn/tenant-data-admin/server/render-system-email'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { brandSupportLine } from '../../_lib/brand-support-line'
@@ -387,6 +394,8 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
     : null
   const settingsUrl = `${ctx.origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
   const supportLine = brandSupportLine(branding)
+  const brand = systemEmailBrand(org)
+  let digestEmail: Promise<LoadedSystemEmail | null> | undefined
 
   const report: OrgReport = { digests: 0, notified: 0, emailed: 0, members: {} }
   if (hosts.truncated) report.hostsTruncated = true
@@ -454,19 +463,39 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
     if (!recipients.length) {
       emailReason = address.includes('@') ? 'suppressed' : 'no-recipient'
     } else {
+      const digestInput = {
+        digest,
+        nowMs,
+        timeZone,
+        productName: branding.productName,
+        tasksUrl: hub ? `${hub}/tasks` : ctx.origin,
+        leadsUrl: (hostId: string) => `${hubUrl(hostId) ?? ctx.origin}/leads`,
+        settingsUrl,
+        hostName,
+        supportLine,
+      }
+      const subject = composeCrmDigestSubject(counts)
+      // The `crm-daily-digest` system email (AGL-3367), in the org's brand,
+      // read once per org and rendered per member.
+      digestEmail ??= loadSystemEmail('crm-daily-digest').catch(() => null)
+      const loaded = await digestEmail
+      const rendered = loaded
+        ? renderLoadedSystemEmail(
+            loaded,
+            {
+              ...brand.merge,
+              'digest.subject': subject,
+              'digest.body': composeCrmDigestEmailText({ ...digestInput, omitClosing: true }),
+              settingsUrl,
+            },
+            brand.options,
+          )
+        : null
       const result = await sendEmail({
         to: recipients,
-        subject: composeCrmDigestSubject(counts),
-        text: composeCrmDigestEmailText({
-          digest,
-          nowMs,
-          timeZone,
-          productName: branding.productName,
-          tasksUrl: hub ? `${hub}/tasks` : ctx.origin,
-          leadsUrl: (hostId) => `${hubUrl(hostId) ?? ctx.origin}/leads`,
-          settingsUrl,
-          hostName,
-          supportLine,
+        ...systemEmailContent(rendered, {
+          subject,
+          text: composeCrmDigestEmailText(digestInput),
         }),
         fromName: branding.fromName,
         context: 'crm-daily-digest',

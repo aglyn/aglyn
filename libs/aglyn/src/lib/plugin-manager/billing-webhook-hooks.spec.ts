@@ -68,6 +68,7 @@ describe('runBillingWebhookHandlers claim fold (AGL-2429)', () => {
     return expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
       claimed: false,
       hostIds: [],
+      orgIds: [],
     })
   })
 
@@ -83,8 +84,21 @@ describe('runBillingWebhookHandlers claim fold (AGL-2429)', () => {
       await expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
         claimed: true,
         hostIds: [],
+        orgIds: [],
       })
     }
+  })
+
+  it('collects the workspaces claiming handlers name, once each (AGL-3365)', async () => {
+    const { registerBillingWebhookHandler, runBillingWebhookHandlers } =
+      freshHooks()
+    registerBillingWebhookHandler(async () => ({ claimed: true, orgId: 'o2' }))
+    registerBillingWebhookHandler(async () => ({ claimed: true, orgId: 'o1' }))
+    registerBillingWebhookHandler(async () => ({ claimed: true, orgId: 'o2' }))
+    await expect(runBillingWebhookHandlers(EVENT)).resolves.toMatchObject({
+      claimed: true,
+      orgIds: ['o2', 'o1'],
+    })
   })
 
   it('collects the sites claiming handlers name, once each (AGL-3360)', async () => {
@@ -97,6 +111,7 @@ describe('runBillingWebhookHandlers claim fold (AGL-2429)', () => {
     await expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
       claimed: true,
       hostIds: ['h1', 'h2'],
+      orgIds: [],
     })
   })
 
@@ -132,6 +147,7 @@ describe('runBillingWebhookHandlers claim fold (AGL-2429)', () => {
     await expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
       claimed: false,
       hostIds: [],
+      orgIds: [],
     })
   })
 

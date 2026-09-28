@@ -264,7 +264,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   getOrgForHost: async () => mockOrg,
+  // The gift-card purchase ceilings (AGL-3363): a counter that admits until a
+  // test says otherwise, and the workspace's age as a test sets it.
+  consumeRateLimit: async () => ({ allowed: mockGiftBuysAllowed }),
+  isYoungWorkspace: () => mockYoungWorkspace,
 }))
+
+let mockGiftBuysAllowed = true
+let mockYoungWorkspace = false
 
 // ---------------------------------------------------------------------------
 // Stripe boundary — counted, never reached
@@ -386,6 +393,8 @@ beforeEach(() => {
     stripeAccountId: 'acct_live_merchant',
     stripeChargesEnabled: true,
   })
+  mockGiftBuysAllowed = true
+  mockYoungWorkspace = false
 })
 
 // ---------------------------------------------------------------------------
@@ -570,5 +579,60 @@ describe('gift card hold arithmetic (AGL-2449)', () => {
       holds: { paid: { cents: 5000, expiresAtMs: now + 1 } },
     }
     expect(CommerceModel.giftCardSettlementCents(card, 'paid', now)).toBe(500)
+  })
+})
+
+/*
+ * Gift cards are a cash-out (AGL-3363): a frozen card redeems nothing, and
+ * buying gift cards has a ceiling per order and per visitor per day.
+ */
+describe('gift cards as a cash-out (AGL-3363)', () => {
+  function sellGiftCards(unitUsd: number, quantity: number) {
+    docs.set('hosts/host-1/products/gift', {
+      name: 'Gift card',
+      type: 'digital',
+      status: 'active',
+      giftCard: true,
+      variants: [{ id: 'default', priceUsd: unitUsd, inventory: null }],
+    })
+    docs.set('hosts/host-1/carts/cart-gift', {
+      lines: [{ productId: 'gift', quantity }],
+    })
+  }
+
+  it('a card frozen by a fraud signal on its purchase cannot be redeemed', async () => {
+    docs.set('hosts/host-1/giftCards/GC50', {
+      balanceCents: 5000,
+      frozenAtMs: Date.now(),
+      frozenReason: 'early-fraud-warning',
+    })
+    const result = await post('cart-a', 'attempt-frozen')
+    expect(result.status).toBe(400)
+    expect(sessionCalls()).toHaveLength(0)
+    expect(card().balanceCents).toBe(5000)
+  })
+
+  it('a real shop sells a team order of gift cards (false-positive guard)', async () => {
+    sellGiftCards(100, 10)
+    const result = await post('cart-gift', 'attempt-team', '')
+    expect(result.status).toBe(200)
+    expect(sessionCalls()).toHaveLength(1)
+  })
+
+  it('refuses a young workspace’s order past its lower ceiling, before Stripe', async () => {
+    mockYoungWorkspace = true
+    sellGiftCards(100, 10)
+    const result = await post('cart-gift', 'attempt-young', '')
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).not.toMatch(/\d/)
+    expect(sessionCalls()).toHaveLength(0)
+  })
+
+  it('refuses a visitor past the daily gift-card purchases', async () => {
+    mockGiftBuysAllowed = false
+    sellGiftCards(25, 1)
+    const result = await post('cart-gift', 'attempt-daily', '')
+    expect(result.status).toBe(409)
+    expect(sessionCalls()).toHaveLength(0)
   })
 })

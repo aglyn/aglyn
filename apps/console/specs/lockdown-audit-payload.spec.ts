@@ -92,6 +92,9 @@ const mockFirestore = {
     },
     doc: (id: string) => mockDocHandle(`${collection}/${id}`),
     limit: () => ({ get: async () => ({ docs: [] }) }),
+    // An org or host lift reads what its lock paused (AGL-3364); nothing
+    // here paused anything, so the answer is empty and it writes no row.
+    where: () => ({ get: async () => ({ docs: [] }) }),
   }),
 }
 

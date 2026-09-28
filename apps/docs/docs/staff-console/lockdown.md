@@ -1089,6 +1089,9 @@ reason resets them to that reason's default. You can still untick them for a
 | Account (user) | locks and cancels owned workspaces (box on) | does not (box off) | does not (box off) | does not (box off) |
 | Platform, site, domain, feature | never | never | never | never |
 
+The renewal and payout pauses follow the same rule for workspace and site
+locks; see [Stopping a tenant's money](#pause-site-money).
+
 Billing, maintenance and manual locks must never end a subscription unless
 someone chooses to. A billing lock exists so the customer can fix their card
 and come back. The API infers nothing from the reason: without
@@ -1156,6 +1159,102 @@ changing anything. Any staff role can call it.
 Each cancellation writes an `adminAudit` row: `action: org.subscription-cancel`,
 `target: orgs/{id}`, the reason and note, `via`, `when`, `refunded: false`, and
 the outcome for each subscription. The row is written for a failed attempt too.
+
+## Stopping a tenant's money: renewals and payouts {#pause-site-money}
+
+A locked site takes money from its own customers as well as paying us. Its
+membership renewals keep charging, and the seller's connected account keeps
+paying out. For a workspace or site lock, two more checkboxes stop both:
+
+- **Also pause the membership renewals it sells.**
+- **Also pause the seller's payouts.**
+
+Both start **on** for `security` and **off** for every other reason, and reset
+when you change the reason. The API infers nothing: without
+`pauseRenewals: true` or `pausePayouts: true` in the request, nothing is
+paused. Both run after the lock is written and audited, and neither can undo
+it.
+
+### What pausing renewals does {#pause-renewals}
+
+- **It finds the subscriptions from the plugin's own records.** Each plugin
+  that sells subscriptions tells the lockdown which live ones a site sells.
+  Commerce reads its `hosts/{hostId}/subscriptions` records. A workspace lock
+  covers every site of the workspace (up to 200). Nothing is searched in
+  Stripe.
+- **It pauses collection, with `void`.** Each live subscription gets
+  `pause_collection[behavior]=void`. While paused, every invoice is voided, so
+  no charge goes through. Nothing is canceled or refunded, and the customer is
+  not emailed. We chose `void` over `keep_as_draft` because these subscriptions
+  live on Aglyn's platform account, where the merchant cannot see or act on a
+  draft invoice. A security lock usually means the cards may be stolen, and a
+  draft is a charge waiting for someone to finalize it later. A voided invoice
+  is a final "not charged" record.
+- **It leaves a merchant's own pause alone.** A subscription that is already
+  paused when the lock lands is reported as `already-paused`. It is not
+  recorded, so the lift never resumes it.
+- **It records what it paused.** Each pause is written to
+  `lockdownBillingPauses` (Admin SDK only; no client can read it), naming the
+  lock that holds it.
+
+### What pausing payouts does {#pause-payouts}
+
+- **It finds the seller's account.** This is the connected account on the
+  workspace owner's profile, the one every sale of that owner's sites pays
+  into. If the owner runs several workspaces, their payouts pause too.
+- **It saves the schedule, then switches to manual.** The account's current
+  payout schedule (interval, anchor, delay) is saved in
+  `lockdownBillingPauses`, and the account is set to
+  `settings[payouts][schedule][interval]=manual`. Money stays in the account
+  balance and is not paid out.
+- **A Standard account is not controllable.** Aglyn creates Express accounts,
+  and the platform can set payouts only for Express and Custom accounts. For a
+  Standard account the result says **not controllable — pause them in the
+  Stripe Dashboard**. That is not a failure of the lock. Pause the payouts by
+  hand in the Dashboard: **Connect → Accounts → the account → Payouts**.
+
+### What the lift restores {#pause-site-money-lift}
+
+Unlocking the workspace or site resumes **exactly** the renewals that lock
+paused, and restores **exactly** the payout schedule it saved. It does not
+resume anything it did not pause.
+
+If two locks cover the same subscription or account (for example the
+workspace and one of its sites), each lock joins the hold instead of pausing
+again. The money is restored only when the **last** of those locks is lifted.
+Lifting the site while the workspace is still locked leaves everything
+paused.
+
+A lift that fails to resume keeps its record, so lifting again retries exactly
+what is left.
+
+### Reading the result
+
+**Actions taken in this session** shows each step on its own line, apart from
+the lock:
+
+- `Paused N membership renewal(s)`, with counts of any already held by another
+  lock or already paused by the merchant;
+- `Payouts for acct_… set to manual (was weekly; saved for the lift)`, or
+  `not controllable (Standard account) — pause them in the Stripe Dashboard`;
+- on a lift, `Resumed N membership renewal(s)` and
+  `Payouts for acct_… restored to weekly`.
+
+A step that failed shows as `NOT CONFIRMED` and the lock still stands. Each
+step writes its own `adminAudit` row (`lockdown.renewals-pause`,
+`lockdown.payouts-pause`, `lockdown.renewals-resume`,
+`lockdown.payouts-restore`) with `refunded: false` and `canceled: false`, and
+failed attempts are recorded too.
+
+```bash
+# The same lock outside the console (super role).
+curl -X POST https://app.aglyn.com/api/admin/lockdown \
+  -H "Authorization: Bearer $STAFF_ID_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"action":"lock","scope":"org","targetId":"<org id>","reason":"security",
+       "pauseRenewals":true,"pausePayouts":true}'
+# → { confirmed, verified, renewalsPause: { confirmed, subscriptions: [...] },
+#     payoutsPause: { outcome, accountId, schedule, confirmed, error } }
+```
 
 ## Operating it
 
