@@ -35,6 +35,7 @@ import { chromium } from 'playwright-core'
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
+import { displayNameSearchFields } from '../scripts/lib/name-search-tokens.mjs'
 import { listingQueryFieldsPatch } from '../scripts/lib/listing-query-fields.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
@@ -121,6 +122,8 @@ const FIXTURE_NODES = {
 const layoutRef = hostRef.collection('layouts').doc('e2e-layout')
 await layoutRef.set({
   displayName: 'E2E Layout',
+  // The keys each list searches by, as a create stamps them.
+  ...displayNameSearchFields('E2E Layout'),
   versionId: 'e2e-layout-v1',
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -133,6 +136,7 @@ await layoutRef.collection('versions').doc('e2e-layout-v1').set({
 })
 await hostRef.collection('components').doc('e2e-component').set({
   displayName: 'E2E Component',
+  ...displayNameSearchFields('E2E Component'),
   rootId: 'cmp-root',
   nodes: { 'cmp-root': { componentId: 'box' } },
   createdAt: new Date(),
@@ -339,6 +343,7 @@ try {
   await hostRef.collection('templates').doc('e2e-installed').set({
     kind: 'page',
     displayName: `${TEMPLATE_NAME} installed`,
+    ...displayNameSearchFields(`${TEMPLATE_NAME} installed`),
     nodes: { root: { componentId: 'box' } },
     source: { type: 'marketplace', listingId: 'listing-1', version: 3 },
     createdAt: new Date(),
@@ -371,6 +376,7 @@ try {
   await hostRef.collection('templates').doc('e2e-usable').set({
     kind: 'page',
     displayName: `${TEMPLATE_NAME} usable`,
+    ...displayNameSearchFields(`${TEMPLATE_NAME} usable`),
     // 'home' is already taken by the seed — proves de-confliction.
     slug: 'home',
     nodes: {

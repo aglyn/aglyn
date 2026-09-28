@@ -64,6 +64,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { chromium } from 'playwright-core'
 import sharp from 'sharp'
+import { displayNameSearchFields } from '../scripts/lib/name-search-tokens.mjs'
 import { serversHoldNoCredential } from '../scripts/lib/emulated-env.mjs'
 import { putMediaDocument } from '../scripts/lib/media-counter.mjs'
 import {
@@ -396,6 +397,8 @@ async function publish(screenId, slug, children) {
   })
   await screen.set({
     displayName: slug,
+    // The keys the screens list searches by, as a create stamps them.
+    ...displayNameSearchFields(slug),
     slug,
     versionId,
     createdAt: FieldValue.serverTimestamp(),
