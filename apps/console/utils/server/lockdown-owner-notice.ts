@@ -42,6 +42,7 @@
  * owners" (a legal hold); that is recorded as its own line, not as silence.
  *=========================================*/
 
+import { createHash } from 'crypto'
 import {
   lockdownFeatureLabel,
   lockdownNotice,
@@ -320,4 +321,359 @@ export function lockdownOwnerNoticeLine(step: LockdownOwnerNoticeStep): string {
     `Owner email (${step.kind}): sent to ${step.emailed} of ${step.recipients}` +
     (step.emailFailed ? `, ${step.emailFailed} FAILED` : '')
   )
+}
+
+/*==========================================
+ * RESEND THE OWNER NOTICE FOR LOCKS THAT ALREADY STAND (AGL-3368).
+ *
+ * Locks placed before owner notices existed told nobody. This sends each of
+ * them the lock email it would have sent — the lock's stored customer-facing
+ * message, what it affects, how to appeal — through the same lockdown kinds,
+ * for a LIST of targets at once, because one actor's accounts, workspaces
+ * and sites resolve to the same few people:
+ *
+ * - ONE email per distinct recipient, listing everything locked for them
+ *   (a user lock and the workspace that user owns are one email, not two);
+ * - idempotent per (lock, recipient): a lock is keyed by its scope, target
+ *   and the instant it was placed, so a second press reports "already sent
+ *   at …" rather than mailing again — unless staff tick "send again"; a lock
+ *   lifted and placed again is a new lock and is sent afresh.
+ *=========================================*/
+
+/** Admin-SDK only: which lock notices reached which recipient, and when. */
+export const LOCKDOWN_NOTICE_LEDGER_COLLECTION = 'lockdownNoticeLedger'
+
+/** How many targets one resend takes. */
+export const LOCKDOWN_RESEND_MAX_TARGETS = 50
+
+/** The scopes an existing lock can be re-announced for. */
+export const LOCKDOWN_RESEND_SCOPES: ReadonlySet<string> = new Set(['org', 'host', 'domain', 'user'])
+
+/** One lock that stands, as the resend reads it. */
+export interface StandingLock {
+  scope: 'org' | 'host' | 'domain' | 'user'
+  targetId: string
+  /** `scope:targetId:atMs` — a new lock on the same target is a new key. */
+  lockKey: string
+  reason: string
+  message: string | null
+  mode: string | null
+  untilMs: number | null
+  orgId: string | null
+  hostId: string | null
+  label: string
+  path: string | null
+}
+
+/** One person a resend writes to. */
+export interface LockRecipient {
+  uid: string
+  email: string
+}
+
+/** What one recipient got, for the route's answer and the log. */
+export interface ResendRecipientOutcome {
+  uid: string
+  email: string
+  /** Every lock this person is listed for, sent now or before. */
+  lockKeys: string[]
+  outcome: 'sent' | 'already-sent' | 'failed'
+  /** The locks this send newly covered. */
+  sentLockKeys: string[]
+  /** When the earliest already-covered lock was sent, for "already sent at …". */
+  alreadySentAtMs: number | null
+  error: string | null
+}
+
+export interface ResendTargetOutcome {
+  scope: string
+  targetId: string
+  locked: boolean
+  recipients: number
+  error: string | null
+}
+
+export interface LockdownResendResult {
+  targets: ResendTargetOutcome[]
+  recipients: ResendRecipientOutcome[]
+  /** Every standing lock reached every one of its people, now or before. */
+  confirmed: boolean
+}
+
+/** The ledger id for one (lock, recipient). Hex, like every other ledger. */
+export function lockNoticeLedgerId(lockKey: string, email: string): string {
+  return createHash('sha256')
+    .update(`lock-notice:${lockKey}:${email.trim().toLowerCase()}`)
+    .digest('hex')
+    .slice(0, 40)
+}
+
+/**
+ * Group standing locks by the person they reach, so each person gets one
+ * email. Pure: the input is each lock with its resolved recipients.
+ */
+export function groupLockNoticesByRecipient(
+  entries: ReadonlyArray<{ lock: StandingLock; recipients: readonly LockRecipient[] }>,
+): Array<{ recipient: LockRecipient; locks: StandingLock[] }> {
+  const byEmail = new Map<string, { recipient: LockRecipient; locks: StandingLock[] }>()
+  for (const entry of entries) {
+    for (const recipient of entry.recipients) {
+      const email = recipient.email.trim().toLowerCase()
+      if (!email.includes('@')) continue
+      const group = byEmail.get(email) ?? { recipient: { uid: recipient.uid, email }, locks: [] }
+      if (!group.locks.some((lock) => lock.lockKey === entry.lock.lockKey)) group.locks.push(entry.lock)
+      byEmail.set(email, group)
+    }
+  }
+  return [...byEmail.values()]
+}
+
+/** The kind one combined email is sent as: the broadest lock in it. */
+export function resendNoticeKind(locks: readonly StandingLock[]): RiskEventKind {
+  const scopes = new Set(locks.map((lock) => lock.scope))
+  if (scopes.has('user')) return 'account-locked'
+  if (scopes.has('org')) return 'workspace-locked'
+  if (scopes.has('host')) return 'site-locked'
+  return 'domain-locked'
+}
+
+/** `a, b and c`. */
+function listed(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts[0] ?? ''
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+}
+
+/** The customer-facing message a standing lock serves. */
+function standingMessage(lock: StandingLock): string {
+  return lockdownNotice({
+    scope: lock.scope as LockdownScope,
+    reason: (lock.reason || 'manual') as LockdownReasonCode,
+    ...(lock.message ? { message: lock.message } : {}),
+    ...(lock.mode ? { mode: lock.mode as never } : {}),
+    ...(lock.untilMs ? { untilMs: lock.untilMs } : {}),
+  }).body
+}
+
+/**
+ * Resend the owner notice for standing locks. Never throws; every target and
+ * every recipient comes back with its own outcome.
+ */
+export async function resendLockdownOwnerNotices(input: {
+  firestore: AdminFirestore
+  targets: ReadonlyArray<{ scope: string; targetId: string }>
+  sendAgain: boolean
+  notifyRisk: (event: RiskEventInput) => Promise<RiskNoticeResult>
+  /** The standing lock on a target, or null when it is not locked. */
+  readLock: (scope: StandingLock['scope'], targetId: string) => Promise<StandingLock | null>
+  /** The people a lock reaches: owners and admins, site managers, the account. */
+  recipientsFor: (lock: StandingLock) => Promise<LockRecipient[]>
+  nowMs?: number
+}): Promise<LockdownResendResult> {
+  const nowMs = input.nowMs ?? Date.now()
+  const targets: ResendTargetOutcome[] = []
+  const entries: Array<{ lock: StandingLock; recipients: LockRecipient[] }> = []
+  const seenTargets = new Set<string>()
+  for (const target of input.targets.slice(0, LOCKDOWN_RESEND_MAX_TARGETS)) {
+    const key = `${target.scope}:${target.targetId}`
+    if (seenTargets.has(key)) continue
+    seenTargets.add(key)
+    const outcome: ResendTargetOutcome = {
+      scope: target.scope,
+      targetId: target.targetId,
+      locked: false,
+      recipients: 0,
+      error: null,
+    }
+    targets.push(outcome)
+    if (!LOCKDOWN_RESEND_SCOPES.has(target.scope) || !target.targetId) {
+      outcome.error = 'Only an org, host, domain or user lock can be re-announced.'
+      continue
+    }
+    try {
+      const lock = await input.readLock(target.scope as StandingLock['scope'], target.targetId)
+      if (!lock) {
+        outcome.error = 'Not locked — there is nothing to announce.'
+        continue
+      }
+      outcome.locked = true
+      const recipients = await input.recipientsFor(lock)
+      outcome.recipients = recipients.length
+      if (!recipients.length) outcome.error = 'Nobody to email: no owner, admin or account address on record.'
+      entries.push({ lock, recipients })
+    } catch (error) {
+      outcome.error = (error as Error)?.message ?? String(error)
+    }
+  }
+
+  const ledger = input.firestore.collection(LOCKDOWN_NOTICE_LEDGER_COLLECTION)
+  const recipients: ResendRecipientOutcome[] = []
+  for (const group of groupLockNoticesByRecipient(entries)) {
+    const outcome: ResendRecipientOutcome = {
+      uid: group.recipient.uid,
+      email: group.recipient.email,
+      lockKeys: group.locks.map((lock) => lock.lockKey),
+      outcome: 'failed',
+      sentLockKeys: [],
+      alreadySentAtMs: null,
+      error: null,
+    }
+    recipients.push(outcome)
+    try {
+      const refs = group.locks.map((lock) => ledger.doc(lockNoticeLedgerId(lock.lockKey, group.recipient.email)))
+      const prior = await Promise.all(refs.map((ref) => ref.get()))
+      const sentAt = prior.map((snapshot) => (snapshot.exists ? Number(snapshot.get('sentAtMs') ?? 0) : 0))
+      const due = input.sendAgain ? group.locks : group.locks.filter((_lock, index) => !sentAt[index])
+      const already = sentAt.filter(Boolean)
+      if (already.length) outcome.alreadySentAtMs = Math.min(...already)
+      if (!due.length) {
+        outcome.outcome = 'already-sent'
+        continue
+      }
+      const kind = resendNoticeKind(due)
+      const messages = [...new Set(due.map(standingMessage))]
+      const firstOrg = due.find((lock) => lock.orgId)?.orgId ?? null
+      const result = await input.notifyRisk({
+        kind,
+        orgId: firstOrg,
+        hostId: due.length === 1 ? due[0].hostId : null,
+        userUid: due.find((lock) => lock.scope === 'user')?.targetId ?? null,
+        item: {
+          label: listed(due.map((lock) => lock.label)),
+          path: due.length === 1 ? due[0].path : null,
+        },
+        occurredAtMs: nowMs,
+        lock: {
+          message:
+            messages.length === 1
+              ? messages[0]
+              : due.map((lock) => `${lock.label}: ${standingMessage(lock)}`).join(' '),
+          affected: due
+            .map((lock) =>
+              `${due.length > 1 ? `For ${lock.label}: ` : ''}${lockdownAffectedText({
+                action: 'lock',
+                scope: lock.scope,
+                mode: lock.mode,
+              })}`,
+            )
+            .join(' '),
+          scope: due[0].scope,
+          targetId: due[0].targetId,
+        },
+        recipients: [group.recipient],
+        // One notice per (recipient, set of locks, send): a resend on purpose
+        // is a new notice, a double click within the same send is not.
+        dedupeKey: `lock-resend:${group.recipient.email}:${due
+          .map((lock) => lock.lockKey)
+          .sort()
+          .join('|')}${input.sendAgain ? `:${nowMs}` : ''}`,
+      })
+      if (result.error) {
+        outcome.error = result.error
+        continue
+      }
+      if (result.duplicate) {
+        outcome.outcome = 'already-sent'
+        continue
+      }
+      if (result.owners.emailed < 1) {
+        outcome.error = result.owners.emailSkipped ?? 'The email did not send.'
+        continue
+      }
+      await Promise.all(
+        due.map((lock) =>
+          ledger.doc(lockNoticeLedgerId(lock.lockKey, group.recipient.email)).set({
+            lockKey: lock.lockKey,
+            scope: lock.scope,
+            targetId: lock.targetId,
+            email: group.recipient.email,
+            uid: group.recipient.uid,
+            kind,
+            sentAtMs: nowMs,
+          }),
+        ),
+      )
+      outcome.outcome = 'sent'
+      outcome.sentLockKeys = due.map((lock) => lock.lockKey)
+    } catch (error) {
+      outcome.error = (error as Error)?.message ?? String(error)
+    }
+  }
+  return {
+    targets,
+    recipients,
+    confirmed:
+      targets.every((target) => target.locked && !target.error) &&
+      recipients.every((recipient) => recipient.outcome !== 'failed'),
+  }
+}
+
+/**
+ * A target's standing lock, from the lock state the lockdown route reads
+ * (`readLockState`), or null when it is not locked.
+ */
+export async function standingLockFrom(
+  firestore: AdminFirestore,
+  scope: StandingLock['scope'],
+  targetId: string,
+  state: {
+    locked: boolean
+    reason?: string | null
+    message?: string | null
+    mode?: string | null
+    untilMs?: number | null
+    atMs?: number | null
+  },
+): Promise<StandingLock | null> {
+  if (!state.locked) return null
+  const subject = await subjectFor(firestore, scope, targetId, null)
+  return {
+    scope,
+    targetId,
+    lockKey: `${scope}:${targetId}:${state.atMs ?? 0}`,
+    reason: state.reason ?? 'manual',
+    message: state.message ?? null,
+    mode: state.mode ?? null,
+    untilMs: state.untilMs ?? null,
+    orgId: subject.orgId,
+    hostId: subject.hostId,
+    label: subject.label,
+    path: subject.path,
+  }
+}
+
+/**
+ * The people a standing lock reaches, with their addresses: an account lock
+ * its own person; any other its workspace's owners and admins, and for a
+ * site or domain the site's managers too — the audience the lock notice
+ * itself goes to.
+ */
+export async function lockRecipientsFor(
+  firestore: AdminFirestore,
+  lock: StandingLock,
+  deps: {
+    listOwners: (orgId: string) => Promise<Array<{ uid: string; email: string | null }>>
+    lookupEmail: (uid: string) => Promise<string | null>
+  },
+): Promise<LockRecipient[]> {
+  const people = new Map<string, string | null>()
+  if (lock.scope === 'user') {
+    people.set(lock.targetId, null)
+  } else {
+    if (lock.orgId) {
+      for (const owner of await deps.listOwners(lock.orgId)) people.set(owner.uid, owner.email)
+    }
+    if (lock.hostId) {
+      const host = await firestore.collection('hosts').doc(lock.hostId).get()
+      const roles = (host.get('memberRoles') as Record<string, string> | undefined) ?? {}
+      for (const [uid, role] of Object.entries(roles)) {
+        if ((role === 'admin' || role === 'editor') && !people.has(uid)) people.set(uid, null)
+      }
+    }
+  }
+  const recipients: LockRecipient[] = []
+  for (const [uid, known] of people) {
+    const email = (known ?? (await deps.lookupEmail(uid).catch(() => null)) ?? '').trim().toLowerCase()
+    if (email.includes('@')) recipients.push({ uid, email })
+  }
+  return recipients
 }

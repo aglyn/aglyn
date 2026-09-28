@@ -1411,6 +1411,17 @@ export const RISK_NOTICE_WORKSPACE_BRANDED: ReadonlySet<RiskEventKind> = new Set
   'marketplace-sale-warning',
 ])
 
+/**
+ * The kinds that CLOSE another: a release, a rejection, a review's end. A
+ * closing notice never re-stamps its row, so the row keeps naming the kind
+ * it was opened as — and a second decision closes it again correctly.
+ */
+export const RISK_NOTICE_CLOSING_KINDS: ReadonlySet<RiskEventKind> = new Set<RiskEventKind>(
+  Object.values(RISK_NOTICE_CATALOG).flatMap((definition) =>
+    definition.closesWith ? [definition.closesWith.released, definition.closesWith.rejected] : [],
+  ),
+)
+
 /** The catalog entry for a kind. */
 export function riskNoticeDefinition(kind: RiskEventKind): RiskNoticeDefinition {
   return RISK_NOTICE_CATALOG[kind]

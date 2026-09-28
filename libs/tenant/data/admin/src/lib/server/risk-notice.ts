@@ -78,6 +78,7 @@ import {
   renderStaffRiskNotice,
   resolveOwnerRiskActions,
   RISK_NOTICE_CATALOG,
+  RISK_NOTICE_CLOSING_KINDS,
   RISK_NOTICE_DIGEST_EMAIL_KEY,
   RISK_NOTICE_HELP_PATH,
   RISK_NOTICE_WORKSPACE_BRANDED,
@@ -183,8 +184,13 @@ export interface RiskEventInput {
    * legal hold). The in-app notice and the record are still written.
    */
   emailOwners?: boolean
-  /** Extra recipients' uids (an account lock's owned workspaces' owner). */
-  extraOwnerUids?: readonly string[]
+  /**
+   * Exactly who the owner half goes to, in place of the workspace's owners
+   * and admins: a batch that already resolved its people and groups several
+   * events into one notice per person (the lockdown's "Resend owner
+   * notice").
+   */
+  recipients?: ReadonlyArray<{ uid: string; email: string | null }>
 }
 
 export interface RiskNoticeDelivery {
@@ -487,6 +493,11 @@ async function countBurst(
       const pendingStaff = Array.isArray(snapshot.get('pendingStaff'))
         ? (snapshot.get('pendingStaff') as unknown[])
         : []
+      // How many of each notice were folded, however many the list keeps.
+      const tally = (field: string, title: string) => {
+        const current = (snapshot.get(field) as Record<string, number> | undefined) ?? {}
+        return { ...current, [title]: Number(current[title] ?? 0) + 1 }
+      }
       transaction.set(
         ref,
         {
@@ -500,6 +511,7 @@ async function countBurst(
                   ...pendingOwners,
                   { kind: entry.kind, title: entry.title, noticeId: entry.noticeId, atMs: nowMs },
                 ].slice(-RISK_NOTICE_BURST.digestListMax),
+                pendingOwnerTally: tally('pendingOwnerTally', entry.title),
                 pendingOwnerCount: FieldValue.increment(1),
               }
             : {}),
@@ -509,6 +521,7 @@ async function countBurst(
                   ...pendingStaff,
                   { kind: entry.kind, title: entry.staffTitle, noticeId: entry.noticeId, atMs: nowMs },
                 ].slice(-RISK_NOTICE_BURST.digestListMax),
+                pendingStaffTally: tally('pendingStaffTally', entry.staffTitle),
                 pendingStaffCount: FieldValue.increment(1),
               }
             : {}),
@@ -533,6 +546,14 @@ async function ownerRecipients(
   const emails: Record<string, string | null> = {}
   const uids = new Set<string>()
   const definition = RISK_NOTICE_CATALOG[input.kind]
+  if (input.recipients) {
+    for (const recipient of input.recipients) {
+      if (!recipient.uid) continue
+      uids.add(recipient.uid)
+      if (recipient.email) emails[recipient.uid] = recipient.email
+    }
+    return { uids: [...uids], emails }
+  }
   if (input.kind === 'account-locked' || input.kind === 'account-unlocked') {
     if (input.userUid) uids.add(input.userUid)
   } else if (input.orgId) {
@@ -543,7 +564,6 @@ async function ownerRecipients(
     }
   }
   if (definition.includeSiteManagers) for (const uid of siteManagerUids) uids.add(uid)
-  for (const uid of input.extraOwnerUids ?? []) if (uid) uids.add(uid)
   return { uids: [...uids], emails }
 }
 
@@ -646,7 +666,7 @@ export async function notifyRiskEvent(
 
     // A row-backed notice stamps the row, so the staff queue renders the
     // catalog's text and actions and the owner surface finds the row.
-    if (input.reviewId) {
+    if (input.reviewId && !RISK_NOTICE_CLOSING_KINDS.has(input.kind)) {
       await deps.firestore
         .collection(ABUSE_REPORT_COLLECTION)
         .doc(input.reviewId)
@@ -891,6 +911,10 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
         pendingStaff: [],
         pendingOwnerCount: 0,
         pendingStaffCount: 0,
+        // Deleted rather than set to `{}`: a merge leaves an existing map's
+        // keys in place when handed an empty one.
+        pendingOwnerTally: FieldValue.delete(),
+        pendingStaffTally: FieldValue.delete(),
         ownerCount: 0,
         staffCount: 0,
         windowStartedAtMs: 0,
@@ -899,8 +923,8 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
       { merge: true },
     )
     return {
-      owners: (snapshot.get('pendingOwners') as Array<{ title: string }> | undefined) ?? [],
-      staff: (snapshot.get('pendingStaff') as Array<{ title: string }> | undefined) ?? [],
+      owners: (snapshot.get('pendingOwnerTally') as Record<string, number> | undefined) ?? {},
+      staff: (snapshot.get('pendingStaffTally') as Record<string, number> | undefined) ?? {},
       ownerCount,
       staffCount,
     }
@@ -908,12 +932,15 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
   if (!taken) return false
   const [scope, id] = [ledgerId.slice(0, ledgerId.indexOf(':')), ledgerId.slice(ledgerId.indexOf(':') + 1)]
   const orgId = scope === 'org' ? id : null
-  const summarize = (entries: Array<{ title: string }>, count: number) => {
-    const tally = new Map<string, number>()
-    for (const entry of entries) tally.set(entry.title, (tally.get(entry.title) ?? 0) + 1)
-    const lines = [...tally.entries()].map(([title, n]) => `• ${title}${n > 1 ? ` (${n})` : ''}`)
-    const unlisted = count - entries.length
-    if (unlisted > 0) lines.push(`• …and ${unlisted} more`)
+  const summarize = (tally: Record<string, number>, count: number) => {
+    const entries = Object.entries(tally).sort((a, b) => b[1] - a[1])
+    const lines = entries
+      .slice(0, RISK_NOTICE_BURST.digestListMax)
+      .map(([title, n]) => `• ${title}${n > 1 ? ` (${n})` : ''}`)
+    const listed = entries
+      .slice(0, RISK_NOTICE_BURST.digestListMax)
+      .reduce((total, [, n]) => total + n, 0)
+    if (count > listed) lines.push(`• …and ${count - listed} more`)
     return lines.join('\n')
   }
   if (taken.ownerCount > 0) {
@@ -1205,6 +1232,20 @@ export async function listOwnerRiskNotices(
     )
     for (const row of read) rows.set(row.id, row)
   }
+  // The reader's own console paths: the org's slug and each site's
+  // subdomain, read once for the page rather than per notice.
+  const org = await deps.firestore.collection('orgs').doc(input.orgId).get()
+  const orgSlug = String(org.get('slug') ?? '') || null
+  const hostIds = [
+    ...new Set(snapshot.docs.map((doc) => String(doc.get('hostId') ?? '')).filter(Boolean)),
+  ]
+  const subdomains = new Map<string, string | null>()
+  if (hostIds.length) {
+    const hosts = await deps.firestore.getAll(
+      ...hostIds.map((id) => deps.firestore.collection('hosts').doc(id)),
+    )
+    for (const host of hosts) subdomains.set(host.id, String(host.get('subdomain') ?? '') || null)
+  }
   const views: OwnerRiskNoticeView[] = []
   for (const doc of snapshot.docs) {
     const kind = doc.get('kind')
@@ -1223,7 +1264,15 @@ export async function listOwnerRiskNotices(
       kind,
       severity: definition.severity,
       ...copy,
-      actions: resolveOwnerRiskActions(kind, { ...params, noticeId: doc.id }),
+      actions: resolveOwnerRiskActions(kind, { ...params, noticeId: doc.id }).flatMap((action) => {
+        const hostId = String(doc.get('hostId') ?? '') || null
+        const href = emailPath(action.href, {
+          orgSlug,
+          hostId,
+          hostSubdomain: hostId ? (subdomains.get(hostId) ?? null) : null,
+        })
+        return href ? [{ ...action, href }] : []
+      }),
       reference: (doc.get('reference') as string | null) ?? null,
       occurredAtMs: Number(doc.get('occurredAtMs') ?? doc.get('createdAtMs') ?? 0),
       helpUrl: riskNoticeHelpUrl(definition.helpAnchor),

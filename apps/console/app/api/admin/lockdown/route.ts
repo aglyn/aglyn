@@ -96,6 +96,7 @@ import {
   invalidateTokenRevocationCache,
   invalidateUserLockdownCache,
   isImpersonationSession,
+  listOrgMembers,
   lockdownJsonResponse,
   notifyRiskEvent,
   readSignupsCreationTriggerStatus,
@@ -107,8 +108,13 @@ import {
   applyOrgLockdown,
 } from '../../../../utils/server/org-lockdown'
 import {
+  LOCKDOWN_RESEND_MAX_TARGETS,
   type LockdownNoticeEffects,
+  lockRecipientsFor,
+  resendLockdownOwnerNotices,
   sendLockdownOwnerNotice,
+  type StandingLock,
+  standingLockFrom,
 } from '../../../../utils/server/lockdown-owner-notice'
 import { listRecurringChargeSources } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
@@ -1172,6 +1178,82 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const action = String(body?.action ?? '')
+
+    /*==========================================
+     * RESEND OWNER NOTICE (AGL-3368)
+     *
+     * For locks that already stand — placed before owner notices existed,
+     * or whose email failed. `{ action: 'resend-notice', targets: [{ scope,
+     * targetId }], sendAgain?: boolean }`: each distinct person gets ONE
+     * email listing everything locked for them, and a (lock, person) pair
+     * already sent is reported, not re-sent, unless `sendAgain`. Super only
+     * (above), and audited.
+     *=========================================*/
+    if (action === 'resend-notice') {
+      const targets = Array.isArray(body?.targets)
+        ? (body.targets as unknown[])
+            .map((entry) => ({
+              scope: String((entry as { scope?: unknown })?.scope ?? ''),
+              targetId: String((entry as { targetId?: unknown })?.targetId ?? '').trim(),
+            }))
+            .filter((entry) => entry.scope && entry.targetId)
+        : []
+      if (!targets.length) {
+        return Response.json({ error: 'Name at least one target' }, { status: 400 })
+      }
+      if (targets.length > LOCKDOWN_RESEND_MAX_TARGETS) {
+        return Response.json(
+          { error: `At most ${LOCKDOWN_RESEND_MAX_TARGETS} targets per resend` },
+          { status: 400 },
+        )
+      }
+      const sendAgain = body?.sendAgain === true
+      const result = await resendLockdownOwnerNotices({
+        firestore,
+        targets,
+        sendAgain,
+        notifyRisk: notifyRiskEvent,
+        readLock: async (lockScope, lockTarget) =>
+          standingLockFrom(
+            firestore,
+            lockScope,
+            lockTarget,
+            (await readLockState(firestore, lockScope, lockTarget)) as never,
+          ),
+        recipientsFor: (lock: StandingLock) =>
+          lockRecipientsFor(firestore, lock, {
+            listOwners: async (orgId) =>
+              (await listOrgMembers(orgId))
+                .filter((member) => member.role === 'owner' || member.role === 'admin')
+                .map((member) => ({
+                  uid: String(member.$id),
+                  email: (member as { email?: string | null }).email ?? null,
+                })),
+            lookupEmail: async (uid) =>
+              String((await findUserByUidAcrossPools(uid))?.record?.email ?? '') || null,
+          }),
+      })
+      await audit({
+        actorUid: decoded.uid,
+        actorEmail: decoded.email ? String(decoded.email) : null,
+        action: 'lockdown.resend-notice',
+        scope: 'lockdown',
+        target: `lockdowns/resend-notice`,
+        before: { targets },
+        after: {
+          sendAgain,
+          confirmed: result.confirmed,
+          sent: result.recipients.filter((entry) => entry.outcome === 'sent').length,
+          alreadySent: result.recipients.filter((entry) => entry.outcome === 'already-sent').length,
+          failed: result.recipients.filter((entry) => entry.outcome === 'failed').length,
+        },
+      })
+      return Response.json(
+        { ok: true, action, sendAgain, ...result },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
     const scope = String(body?.scope ?? '')
     const targetId = String(body?.targetId ?? '').trim()
     if (action !== 'lock' && action !== 'unlock') {

@@ -333,6 +333,46 @@ Early fraud warnings and disputes on marketplace sales count toward the
 [seller fraud pattern](#seller-fraud-pattern) under the **publisher's**
 workspace, never the buyer's.
 
+## Risk notices: what the workspace is told {#risk-notices}
+
+Every row a risk source files — a held email, page or marketplace submission, a
+flagged or blocked domain or link, a Stripe fraud signal, a seller or
+marketplace-sale pattern, card-testing velocity — also tells the workspace's
+owners and admins, through one seam (`notifyRiskEvent`) and one catalog of
+words (`risk-notice-catalog.ts`). Locks, lifts and staff cancellations use the
+same seam; see [Lockdown](./lockdown.md#owner-notices).
+
+- **What owners read.** What happened, on what, and when; what it means for
+  them; numbered next steps; and actions that open the real control (the held
+  email, the order, billing, support). They are never told the rule, the brand
+  matched, or a number — a fraud actor reads the same notice. The customer help
+  page is [Why was something on my account held or flagged?](/help/holds-and-reviews).
+- **What staff read.** Each row shows the catalog's staff title and summary
+  above the evidence, and its actions: **Open in abuse queue**, **Waive /
+  release** and **Reject** (which set the status below to Dismissed or
+  Actioned — nothing changes until you save), **Lock workspace** / **Lock site**
+  (opens Lockdown pre-filled; it still waits for you to press Lock), **Cancel
+  subscription** (the org's Subscription card), **Open in Stripe**, and **View
+  workspace**. A staff alert links straight to its row:
+  `/admin/abuse-reports?report=<id>`.
+- **Owners cannot release anything.** Their only lever is **Request a review**
+  (on the notice, or under Settings → Holds & reviews). It appends a note to
+  THIS row — shown under "Review requested by the workspace" — and alerts staff
+  with a link here. It never changes the row's status or its held send.
+- **Closing a row tells them how it ended.** Dismissed sends the "released"
+  notice, Actioned sends "not approved"; a review with no held item sends
+  "complete, no action" or "found a problem". Put anything more you want them
+  to know in "What you did".
+- **Bursts.** Past five notices in an hour for one workspace (ten staff alerts),
+  the rest are folded into one summary sent when the hour closes, so a
+  workspace under attack gets a digest, not five hundred emails. Locks, lifts
+  and cancellations are never folded.
+- **Email.** Notices that stop someone's work are emailed as account mail from
+  the platform's sender — they ignore notification settings and reach a locked
+  workspace. Each kind is its own template on the **System emails** page
+  (`risk-…` keys). Notices about a workspace's own customers' payments wear the
+  workspace's brand; everything the platform does wears the platform's.
+
 ## Triage by severity {#triage-by-severity}
 
 Every category carries a severity. It is not a mood — it says how fast a human
