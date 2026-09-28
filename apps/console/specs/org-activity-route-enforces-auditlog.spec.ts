@@ -47,6 +47,7 @@ import { resolveOrgPermissions } from '@aglyn/aglyn'
 import { ACTOR_ACTIVITY_MAX_PAGE } from '../utils/server/actor-activity'
 
 const mockVerifyIdToken = jest.fn()
+const mockGetUsers = jest.fn()
 /** The member document `resolveOrgMembership` answers with. */
 let member: Record<string, unknown> | null = null
 /** Entries in `orgs/org-1/activity`, and the query the route built. */
@@ -104,6 +105,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
+        getUsers: (...args: unknown[]) => mockGetUsers(...args),
       }),
       firestore: () => ({
         collection: () => ({
@@ -180,6 +182,7 @@ beforeEach(() => {
     email_verified: true,
     staff: false,
   })
+  mockGetUsers.mockResolvedValue({ users: [], notFound: [] })
   member = { $id: 'u1', role: 'admin' }
   ;(global as any).__member = member
 })
@@ -350,5 +353,47 @@ describe('the feed pages', () => {
     // route that always filtered, which would render every feed empty.
     await get()
     expect(wheres).toEqual([])
+  })
+})
+
+describe('every row names someone a reader can narrow down', () => {
+  it('resolves a uid recorded without an address to the address it holds now', async () => {
+    // The billing webhook held a uid and no address; the feed printed
+    // "Someone" for a signed-in person it could have named.
+    activity = [
+      { $id: 'c', actorId: 'uid-7', actorEmail: null, action: 'Started the pro subscription', createdAt: { seconds: 300 } },
+      { $id: 'b', actorId: 'uid-8', actorEmail: 'then@example.test', action: 'Added a payment method', createdAt: { seconds: 200 } },
+      { $id: 'a', actorId: null, actorEmail: null, action: 'Canceled the subscription', createdAt: { seconds: 100 } },
+    ]
+    mockGetUsers.mockResolvedValue({
+      users: [{ uid: 'uid-7', email: 'owner@example.test' }],
+      notFound: [],
+    })
+
+    const payload = await (await get()).json()
+
+    // Only the uid that lacked an address is looked up.
+    expect(mockGetUsers).toHaveBeenCalledWith([{ uid: 'uid-7' }])
+    expect(payload.entries.map((entry: any) => entry.actorEmailNow ?? null)).toEqual([
+      'owner@example.test',
+      null,
+      null,
+    ])
+    // The snapshot is left as written.
+    expect(payload.entries[0].actorEmail).toBeNull()
+  })
+
+  it('still answers the page when the account lookup fails', async () => {
+    activity = [
+      { $id: 'c', actorId: 'uid-7', actorEmail: null, action: 'x', createdAt: { seconds: 300 } },
+    ]
+    mockGetUsers.mockRejectedValue(new Error('auth down'))
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await get()
+
+    expect(response.status).toBe(200)
+    expect((await response.json()).entries[0].actorEmailNow).toBeUndefined()
+    spy.mockRestore()
   })
 })

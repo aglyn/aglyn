@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /**
@@ -136,9 +137,10 @@ describe('the org feed and the AI rows (AGL-2929)', () => {
     expect(container.textContent).not.toContain('ai.addon.removed')
   })
 
-  it('an actorless AI row says Someone rather than naming a person', async () => {
-    const { findByText } = render(<OrgActivityCard orgId="org-1" />)
-    expect(await findByText('Someone')).toBeTruthy()
+  it('an actorless AI row names the platform, never a person or "Someone" (AGL-3369)', async () => {
+    const { findAllByText, container } = render(<OrgActivityCard orgId="org-1" />)
+    expect((await findAllByText(PLATFORM_BRAND_NAME)).length).toBeGreaterThan(0)
+    expect(container.textContent).not.toContain('Someone')
   })
 
   it('the AI chip asks the route for the AI codes, across the log, and hands the clause back', async () => {
