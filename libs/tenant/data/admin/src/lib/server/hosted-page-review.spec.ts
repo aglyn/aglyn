@@ -76,9 +76,11 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 const mockNotifyStaff = jest.fn(async (_payload: unknown) => undefined)
+const mockNotifyManagers = jest.fn(async (_hostId: string, _payload: unknown) => undefined)
 jest.mock('./notifications', () => ({
   __esModule: true,
   notifyStaff: (payload: unknown) => mockNotifyStaff(payload),
+  notifyHostManagers: (hostId: string, payload: unknown) => mockNotifyManagers(hostId, payload),
 }))
 
 const DAY = 24 * 60 * 60 * 1000
@@ -258,5 +260,33 @@ describe('a sending domain that wears a brand (AGL-3362)', () => {
       flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: 'org-1', domain: 'mail.harborviewhotel.com' }),
     ).resolves.toBe('clean')
     expect(store.size).toBe(0)
+  })
+})
+
+describe('a commerce link that wears a brand (AGL-3363)', () => {
+  it('is flagged once, and staff and the site’s managers are both told, with no rule in it', async () => {
+    mockNotifyStaff.mockClear()
+    mockNotifyManagers.mockClear()
+    const link = {
+      kind: 'link' as const,
+      hostId: 'host-1',
+      orgId: null,
+      domain: 'paypal-account-verify.com',
+      where: "a product's download link",
+    }
+    await expect(flagLookalikeDomain(link)).resolves.toBe('flagged')
+    await flagLookalikeDomain(link)
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+    expect(mockNotifyManagers).toHaveBeenCalledTimes(1)
+    const [hostId, payload] = mockNotifyManagers.mock.calls[0] as [string, { body: string }]
+    expect(hostId).toBe('host-1')
+    expect(payload.body).toMatch(/Replace it/)
+    expect(payload.body).not.toMatch(/lookalike|screen|rule/i)
+  })
+
+  it('leaves the shop’s own file host alone (false-positive guard)', async () => {
+    await expect(
+      flagLookalikeDomain({ kind: 'link', hostId: 'host-1', orgId: null, domain: 'files.harborviewhotel.com' }),
+    ).resolves.toBe('clean')
   })
 })

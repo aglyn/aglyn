@@ -82,7 +82,7 @@ import {
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
-import { notifyStaff } from './notifications'
+import { notifyHostManagers, notifyStaff } from './notifications'
 import { orgAgeDays } from './org-age'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
 import {
@@ -297,7 +297,11 @@ export async function recordServedPageVersion(
  *
  * - `site` — a custom domain a site is served on (the attach route);
  * - `sending` — a custom domain a workspace sends email as, when it is
- *   added and again when it verifies (`sending-domains.ts`).
+ *   added and again when it verifies (`sending-domains.ts`);
+ * - `link` — a link a merchant configured that a buyer or a server would
+ *   follow: a product's paid download or video hotlink, a supplier's order
+ *   webhook (AGL-3363). The link itself is refused where it is followed; this
+ *   files it, and tells the site's managers once ({@link notifyLookalikeLink}).
  *
  * Not refused, because the domain is the merchant's own registration and
  * the platform cannot tell a brand's own agency attaching `paypal-promo.com`
@@ -312,19 +316,26 @@ export async function recordServedPageVersion(
  * Never throws: the write it rides on has already happened.
  */
 export async function flagLookalikeDomain(input: {
-  kind: 'site' | 'sending'
+  kind: 'site' | 'sending' | 'link'
   hostId: string | null
   orgId: string | null
   domain: string
+  /** For a `link`: where it was configured, as staff read it. */
+  where?: string
 }): Promise<'flagged' | 'clean' | 'failed'> {
   const domain = String(input.domain ?? '').trim().toLowerCase()
   const brand = lookalikeBrandForHost(domain)
   if (!brand) return 'clean'
   const label = phishingScreenBrandLabel(brand.id)
   const sending = input.kind === 'sending'
+  const link = input.kind === 'link'
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const owner = sending ? `orgs/${input.orgId ?? ''}/sendingDomains` : `hosts/${input.hostId ?? ''}/cname`
+    const owner = sending
+      ? `orgs/${input.orgId ?? ''}/sendingDomains`
+      : link
+        ? `hosts/${input.hostId ?? ''}/links`
+        : `hosts/${input.hostId ?? ''}/cname`
     const reviewId = heldOutboundReviewId(owner, domain)
     const reference = heldOutboundReference(reviewId)
     const ref = firestore.collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
@@ -342,13 +353,18 @@ export async function flagLookalikeDomain(input: {
         details: [
           sending
             ? `A workspace added ${domain} as a domain to send email from.`
-            : `A site attached the custom domain ${domain}.`,
+            : link
+              ? `A site configured a link to ${domain} (${input.where ?? 'a commerce link'}).`
+              : `A site attached the custom domain ${domain}.`,
           `${domain} wears the ${label} name but is not ${label}'s domain.`,
           sending
             ? 'Email from it is held at the send seam for every workspace. Mark this actioned ' +
               'and lock the workspace if it is impersonation; dismiss it if the brand is theirs.'
-            : 'Its pages are still screened as they are served. Mark this actioned ' +
-              'and lock the site if it is impersonation; dismiss it if the brand is theirs.',
+            : link
+              ? 'Nobody is sent to it: the link is refused wherever it is followed. Mark this ' +
+                'actioned and lock the site if it is impersonation.'
+              : 'Its pages are still screened as they are served. Mark this actioned ' +
+                'and lock the site if it is impersonation; dismiss it if the brand is theirs.',
         ].join('\n'),
         reporterEmail: null,
         reporterName: null,
@@ -359,7 +375,15 @@ export async function flagLookalikeDomain(input: {
       },
       { merge: true },
     )
-    if (first) {
+    if (first && link) {
+      await notifyLookalikeLink({
+        hostId: input.hostId,
+        domain,
+        label,
+        where: input.where ?? 'a commerce link',
+        reference,
+      })
+    } else if (first) {
       await notifyStaff({
         type: 'system.abuseReportUrgent',
         title: sending
@@ -376,6 +400,44 @@ export async function flagLookalikeDomain(input: {
     console.error('[page-review] a lookalike domain could not be flagged', error)
     return 'failed'
   }
+}
+
+/**
+ * Tell staff and the site's managers, once per (site, domain), that a link
+ * the merchant configured was refused because it wears another brand's name
+ * (AGL-3363). The one notifier for this kind of signal, so a shared
+ * risk-notice seam can take it over whole. The merchant is told what was
+ * refused and how to fix it; never how the check works. Never throws.
+ */
+export async function notifyLookalikeLink(input: {
+  hostId: string | null
+  domain: string
+  label: string
+  where: string
+  reference: string
+}): Promise<void> {
+  await Promise.all([
+    notifyStaff({
+      type: 'system.abuseReportUrgent',
+      title: 'Commerce link flagged — possible brand impersonation',
+      body:
+        `A site configured ${input.where} to ${input.domain}, which looks like ${input.label}. ` +
+        `It is refused wherever it is followed. Reference ${input.reference}.`,
+      link: '/admin/abuse-reports',
+    }).catch(() => undefined),
+    input.hostId
+      ? notifyHostManagers(input.hostId, {
+          type: 'content.order',
+          title: 'A link on your store was blocked',
+          body:
+            `${input.where[0].toUpperCase()}${input.where.slice(1)} points to ${input.domain}, ` +
+            `which looks like another company's website, so nobody is sent there. ` +
+            'Replace it with a file from your media library or a link on your own domain. ' +
+            `If you think this is a mistake, contact support with reference ${input.reference}.`,
+          link: `/${input.hostId}/products`,
+        }).catch(() => undefined)
+      : Promise.resolve(),
+  ])
 }
 
 /** A site's custom domain, through {@link flagLookalikeDomain}. */
