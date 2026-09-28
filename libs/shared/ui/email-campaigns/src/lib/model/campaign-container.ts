@@ -301,6 +301,62 @@ export interface CampaignSend {
   resume?: CampaignResume
   /** What it did with the List-Unsubscribe header. Absent before AGL-3307. */
   listUnsubscribe?: CampaignListUnsubscribeRecord
+  /**
+   * Staff review of a send the outbound phishing screen held (AGL-3356).
+   * Written by the send core, decided only by staff. See
+   * {@link campaignSendHeldForReview}.
+   */
+  staffReview?: CampaignStaffReview
+}
+
+/** A held send's review, as the send core and the staff decision write it. */
+export interface CampaignStaffReview {
+  /** `held` until staff decide; then `released` or `rejected`. */
+  state?: string
+  /** `HS-…`, the reference the merchant quotes to support. */
+  reference?: string
+  reviewId?: string
+  heldAtMs?: number
+}
+
+/**
+ * Is this send waiting on a staff review (AGL-3356)?
+ *
+ * A held send is STORED as `scheduled`, parked at a send time no processor
+ * run reaches, so the review can put it back on the clock without a second
+ * record. Every surface that read the status alone therefore called it
+ * "Scheduled" and showed a due date in the year 9999 — and offered "Send
+ * now", "Reschedule" and the composer, none of which a merchant may use to
+ * release it. This is the one test, so no surface restates it.
+ */
+export function campaignSendHeldForReview(
+  send: Pick<CampaignSend, 'status' | 'staffReview'> | null | undefined,
+): boolean {
+  const status = String(send?.status ?? '')
+  return (
+    send?.staffReview?.state === 'held' &&
+    (status === 'scheduled' || status === 'draft')
+  )
+}
+
+/**
+ * What a held send's surfaces tell the merchant: that it is held, why in
+ * general terms, that they cannot release it, and what happens next. One
+ * sentence set, so the list, the page and the composer agree.
+ */
+export function campaignHeldForReviewNotice(
+  send: Pick<CampaignSend, 'staffReview'> | null | undefined,
+): string {
+  const reference = send?.staffReview?.reference
+  return (
+    'This email is held for review before it sends. New workspaces have ' +
+    'their first emails checked for impersonation of other businesses, and ' +
+    'this one needs a person to look at it. It cannot be released, ' +
+    'rescheduled or edited from here — our team reviews it, and it sends ' +
+    'automatically if it is approved or is canceled if it is not. ' +
+    'Nothing has been sent or counted.' +
+    (reference ? ` Quote ${reference} if you contact support.` : '')
+  )
 }
 
 /**
@@ -476,7 +532,7 @@ export function campaignSendProgress(
  * emails table all draw this, and four copies is how three of them come to
  * say "Scheduled" about a campaign that has delivered five hundred messages.
  */
-export type CampaignSendDisplayState = 'draft' | CampaignSendProgressState
+export type CampaignSendDisplayState = 'draft' | 'held' | CampaignSendProgressState
 
 export interface CampaignSendDisplay {
   state: CampaignSendDisplayState
@@ -490,6 +546,10 @@ export function campaignSendDisplay(
   send: CampaignSend | null | undefined,
 ): CampaignSendDisplay {
   const progress = campaignSendProgress(send)
+  // Before the draft test: a held send may be stored as either (AGL-3356).
+  if (campaignSendHeldForReview(send)) {
+    return { state: 'held', label: 'Held for review', progress }
+  }
   if (String(send?.status ?? '') === 'draft') {
     return { state: 'draft', label: 'Draft', progress }
   }

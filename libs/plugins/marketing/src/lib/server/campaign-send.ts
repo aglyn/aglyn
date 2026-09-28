@@ -36,7 +36,11 @@ import { renderRecipientEmail } from '@aglyn/aglyn/app-utils/recipient-email-ren
 import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 import type { EmailRenderProduct } from '@aglyn/shared-util-email'
 import { assignExperimentVariant, type HostExperiment } from '../model'
-import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model'
+import {
+  campaignHeldForReviewNotice,
+  campaignPlacedOnHost,
+  campaignSendHeldForReview,
+} from '@aglyn/shared-ui-email-campaigns/model'
 import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
@@ -4318,6 +4322,21 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       const rewritable = !targetSnapshot.exists ||
         targetState === 'draft' ||
         targetState === 'scheduled'
+      /*
+       * A SEND HELD FOR STAFF REVIEW IS NOT THE MERCHANT'S TO REWRITE
+       * (AGL-3356). Scheduling it would move `sendAtMs` off the parked time
+       * and put it on the clock without a decision, and a rewrite of its
+       * copy would reach staff as content they never reviewed. The name is
+       * still theirs (`update`), and so is canceling it.
+       */
+      if (
+        action !== 'update' &&
+        campaignSendHeldForReview(targetSnapshot.data() as never)
+      ) {
+        return res.status(409).json({
+          error: campaignHeldForReviewNotice(targetSnapshot.data() as never),
+        })
+      }
       if (action !== 'update' && !rewritable) {
         return res.status(409).json({
           error:
@@ -4504,6 +4523,12 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         return res.status(404).json({ error: 'Unknown email' })
       }
       const sendNowState = String(sendNowSnapshot.get('status') ?? '')
+      // Held for staff review (AGL-3356): "send now" is not a release.
+      if (campaignSendHeldForReview(sendNowSnapshot.data() as never)) {
+        return res.status(409).json({
+          error: campaignHeldForReviewNotice(sendNowSnapshot.data() as never),
+        })
+      }
       /*
        * Only an email that has not gone out yet. A sent one would be mailed a
        * second time to the whole audience under the same id — which is what
