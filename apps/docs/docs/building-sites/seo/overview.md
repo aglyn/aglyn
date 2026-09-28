@@ -310,7 +310,8 @@ context about your content.
 
 **Every page** carries two site-wide nodes:
 
-- a top-level **`Organization`** (or `Person`) describing who publishes the site —
+- a top-level **`Organization`** (or `Person`, or a local business type such as
+  `Plumber`) describing who publishes the site —
   the entity an assistant reads when someone asks who you are or how to reach you.
   It is filled in from **Setup → SEO → Entity**, and it falls back to your site name
   and description, so a site that has never touched that form still publishes a
@@ -338,6 +339,35 @@ Two fields are worth adding by hand, because nothing can guess them:
 - **Contact email / phone**, published as `contactPoint`;
 - **Address**, published as a `PostalAddress`. Partial is fine — a city and a country
   are still a real answer.
+
+### Local businesses
+
+If customers visit you, or you go to them, pick a **Business type** on the
+**Local business** card in Setup → SEO — `Plumber`, `Restaurant`, `Dentist`, or plain
+`LocalBusiness` when nothing narrower fits. The site entity is then published as
+that type instead of `Organization`, and four more fields appear:
+
+- **Areas served** — one city or area per line, published as `areaServed`. This is
+  how a business with no storefront says where it works; it does not need a street
+  address, and a region and a country on the Address card are enough.
+- **Hours** — one line per set of days, in 24-hour time:
+
+  ```
+  Mo-Fr 08:00-17:00
+  Sa 09:00-13:00
+  ```
+
+  Days can be written `Mo`, `Mon` or `Monday`, joined with `-` for a range or `,`
+  for a list (`Mo,We,Fr 07:00-15:00`). For open all day, use `00:00-23:59`. Each line
+  becomes an `openingHoursSpecification`; a line that does not read is left out
+  rather than guessed at, and the card tells you which one before you save.
+- **Price range** — free text such as `$$` or `$150–$400`, published as `priceRange`.
+- **Payment accepted** — free text such as `Cash, credit card, Zelle`, published as
+  `paymentAccepted`.
+
+Your **Contact phone** is published on the business itself as well as on its
+`contactPoint`, which is where a local search result reads it from. A business type
+has no effect while the entity **Type** is Person.
 
 ## AI agents
 

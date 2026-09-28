@@ -37,6 +37,9 @@ export * from './collection-entries'
 export * from './collection-kind'
 export * from './collection-slug'
 export * from './content-authors'
+// The LocalBusiness allow-list and parsers the site entity publishes through
+// (AGL-3383); the console's Setup → SEO card is built from the same list.
+export * from './local-business'
 export * from './content-query-fields'
 export * from './content-schema-type'
 export * from './content-author-profile'
