@@ -214,3 +214,41 @@ describe.each(['desktop', 'phone'] as const)(
     })
   },
 )
+
+describe('HubSections for a page that needs the whole row (AGL-3332)', () => {
+  /** The grid cell a node sits in. */
+  const cellOf = (node: Element | null): Element | null => {
+    let at = node
+    while (at && !(at.classList.contains('MuiGrid-root') && at.parentElement?.classList.contains('MuiGrid-container'))) {
+      at = at.parentElement
+    }
+    return at
+  }
+
+  it('draws the rail as a strip above the page on a desktop, and gives the page the full width', () => {
+    const { container } = render(
+      <ThemeProvider theme={themeAt('desktop')}>
+        <HubSections sections={SECTIONS} wide>
+          <div data-testid="body">{'Section body'}</div>
+        </HubSections>
+      </ThemeProvider>,
+    )
+    const strip = container.querySelector('.MuiTabs-root') as HTMLElement
+    expect(strip.classList.contains('MuiTabs-vertical')).toBe(false)
+    // The page's cell is sized exactly as the rail's, which spans the row.
+    const bodyCell = cellOf(screen.getByTestId('body')) as HTMLElement
+    const railCell = cellOf(strip) as HTMLElement
+    expect(bodyCell).not.toBe(railCell)
+    expect([...bodyCell.classList].sort()).toEqual([...railCell.classList].sort())
+    // The same sections, linked the same way.
+    expect(screen.getByRole('tab', { name: 'Contacts' }).getAttribute('href')).toBe('/acme/crm/contacts')
+  })
+
+  it('keeps the column beside the page without it, sized apart from the rail', () => {
+    const { container } = renderRail(SECTIONS, 'desktop')
+    const strip = container.querySelector('.MuiTabs-root') as HTMLElement
+    expect(strip.classList.contains('MuiTabs-vertical')).toBe(true)
+    const bodyCell = cellOf(screen.getByText('Section body')) as HTMLElement
+    expect([...bodyCell.classList].sort()).not.toEqual([...(cellOf(strip) as HTMLElement).classList].sort())
+  })
+})

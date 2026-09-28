@@ -31,6 +31,7 @@ import type {
   OutreachDoNotContactDomainsResponse,
   OutreachEnrollmentAction,
   OutreachEnrollmentActionResponse,
+  OutreachEnrollmentGatewayResponse,
   OutreachEnrollPersonRequest,
   OutreachEnrollPreviewResponse,
   OutreachEnrollResponse,
@@ -123,6 +124,8 @@ export interface OutreachApi {
     action: OutreachEnrollmentAction,
     detail?: string,
   ): Promise<OutreachEnrollmentActionResponse>
+  /** The mail gateway in front of one enrolled person's domain (AGL-3332). */
+  readEnrollmentGateway(enrollmentId: string): Promise<OutreachEnrollmentGatewayResponse>
   previewEmail(
     input: Omit<OutreachPreviewRequest, 'orgId'>,
   ): Promise<OutreachPreviewResponse>
@@ -264,6 +267,11 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
         call(OUTREACH_API_ROUTES.enrollmentsAction, {
           method: 'POST',
           body: { enrollmentId, action, ...(detail ? { detail } : {}) },
+        }),
+      readEnrollmentGateway: (enrollmentId) =>
+        call(OUTREACH_API_ROUTES.enrollmentsGateway, {
+          method: 'POST',
+          body: { enrollmentId },
         }),
       previewEmail: (input) =>
         call(OUTREACH_API_ROUTES.preview, {

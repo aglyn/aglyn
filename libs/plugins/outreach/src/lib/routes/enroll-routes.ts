@@ -711,6 +711,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         // What the enrollments table searches the person by (AGL-3321),
         // from the name and address this document captures for good.
         enrollment.searchTokens = outreachEnrollmentSearchTokens(enrollment)
+        // Nobody has clicked yet (AGL-3332): stored, because the "Clicked: No"
+        // filter is a query, and a query cannot find a field's absence.
+        enrollment.clicked = false
         try {
           await enrollments.doc(id).create(enrollment)
         } catch (error) {

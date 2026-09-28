@@ -229,6 +229,23 @@ export function ActivityCard(props: ActivityCardProps) {
       })}
       contentGutterX
       contentGutterY
+      HeaderProps={{
+        action: (
+          <ReportExport
+            filename={reportFilename('activity', period)}
+            columns={COLUMNS}
+            rows={() =>
+              rows.map((row) => [
+                nameOf(row),
+                ...Aglyn.CRM_ACTIVITY_KINDS.map((kind) => row.kinds[kind]),
+                row.activities,
+                tasksRead ? row.tasksDone : '',
+              ])
+            }
+            disabled={!activitiesRead || !rows.length}
+          />
+        ),
+      }}
     >
       <Stack spacing={2}>
         <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
@@ -307,20 +324,12 @@ export function ActivityCard(props: ActivityCardProps) {
               {'No teammate — activities an automation logged, and tasks completed with nobody assigned.'}
             </Typography>
           ) : null}
-          <ReportExport
-            filename={reportFilename('activity', period)}
-            columns={COLUMNS}
-            rows={() =>
-              rows.map((row) => [
-                nameOf(row),
-                ...Aglyn.CRM_ACTIVITY_KINDS.map((kind) => row.kinds[kind]),
-                row.activities,
-                tasksRead ? row.tasksDone : '',
-              ])
-            }
-            disabled={!activitiesRead || !rows.length}
-            caption={caption ? `${caption}; the tiles are counted on the server.` : undefined}
-          />
+          {/* What the table, and so the export, is grouped from when that is not everything. */}
+          {caption ? (
+            <Typography variant="caption" color="text.secondary">
+              {`${caption}; the tiles are counted on the server.`}
+            </Typography>
+          ) : null}
         </Section>
       </Stack>
     </CardDisplay>

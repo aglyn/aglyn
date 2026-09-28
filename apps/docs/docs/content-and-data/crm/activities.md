@@ -38,9 +38,27 @@ relationship reaches it, and an automation logging on every event cannot fill
 one person's log without limit. At the ceiling, **Log activity**, the
 **Log a CRM activity** step and `POST /v1/activities` refuse another entry on
 that record and say so; the timeline reads it a hundred entries at a time and
-offers **Show more activity** while older entries remain. Campaign email is
+reads the next hundred when you page past them. Campaign email is
 read from the delivery log the moment the page opens, over the newest fifty
 messages sent to the address.
+
+## Reading the timeline {#reading-the-timeline}
+
+Every entry — on a contact's **Timeline**, and on the **Activity** card of a
+lead, a company or a deal — is a collapsed row, newest first:
+
+- **Collapsed**, a row shows its kind and its chips (*Logged*, *Received*,
+  *Sent*, the delivery state, how a call went and how long it took), then its
+  subject, or a note's first line, and under it who logged it, to or from
+  whom, and when. An email reads as its subject, its recipient and its time.
+- **Opened** with the chevron at its start, a row shows the rest: an email's
+  body, a note's every line. A row with nothing more to show has no chevron.
+- **Expand all** in the card header opens every row; **Collapse all** closes
+  them again.
+- **Edit** and **Delete** stay on the row they act on.
+
+The list is paged ten at a time by the footer under it, the same footer as
+every list in the console, with a menu for how many rows a page holds.
 
 A logged or sent **Email** activity and a **Campaign** entry are different
 things and are drawn differently: the first is a message somebody on your team
@@ -101,8 +119,9 @@ re-engagement audience can be
 
 Open the record — a contact's page under **CRM › Contacts**, a company's under
 **Companies**, a deal's under **Deals**, or a lead's under **Leads** — and choose
-**Log activity**. The activity is filed against that record; there is no picker,
-because what you are looking at is what the activity is about.
+**Log activity** in the header of the **Timeline** or **Activity** card. The
+activity is filed against that record; there is no picker, because what you are
+looking at is what the activity is about.
 
 Logging an activity is part of the **CRM**, included from **Starter**. On Free the CRM
 is shown locked, so there is no record page to log from.
@@ -257,11 +276,13 @@ record it belongs to.
 
 ## The recent activity feed
 
-The **Contacts** section shows the newest activity logged across the CRM under
-the list — the last few calls, emails, meetings and notes anyone on the team
-filed against any record — each linking to the record it is about. It is a
-glance at what the team has been doing; the record's own page is where the
-whole log lives.
+The **Contacts** section shows the newest activity logged across the CRM in a
+**Recent activity** card of its own under the contacts list — the calls,
+emails, meetings and notes anyone on the team filed against any record — each
+linking to the record it is about. Its rows are collapsed like the timeline's
+and open the same way, **Expand all** is in its header, and it is paged ten at
+a time. The card appears once something has been logged. It is a glance at what
+the team has been doing; the record's own page is where the whole log lives.
 
 ## Related
 

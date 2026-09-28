@@ -1751,5 +1751,94 @@
         "dueAtMs": null
       }
     }
+  ],
+  "fieldDefinitions": [
+    {
+      "record": {
+        "key": "plan_interest",
+        "label": "Plan interest",
+        "type": "select",
+        "required": true,
+        "order": 0
+      },
+      "expected": {
+        "object": "contact",
+        "required": true,
+        "searchTokens": [
+          "p",
+          "pl",
+          "pla",
+          "plan",
+          "i",
+          "in",
+          "int",
+          "inte",
+          "inter",
+          "intere",
+          "interes",
+          "interest",
+          "plan_",
+          "plan_i",
+          "plan_in",
+          "plan_int",
+          "plan_inte",
+          "plan_inter",
+          "plan_intere",
+          "plan_interes"
+        ]
+      }
+    },
+    {
+      "record": {
+        "key": "region",
+        "label": "Region",
+        "type": "text",
+        "object": "company",
+        "order": 1
+      },
+      "expected": {
+        "object": "company",
+        "required": false,
+        "searchTokens": [
+          "r",
+          "re",
+          "reg",
+          "regi",
+          "regio",
+          "region"
+        ]
+      }
+    },
+    {
+      "record": {
+        "key": "renewal.date",
+        "label": "Renewal",
+        "type": "date",
+        "object": "nonsense",
+        "required": "yes"
+      },
+      "expected": {
+        "object": "contact",
+        "required": false,
+        "searchTokens": [
+          "r",
+          "re",
+          "ren",
+          "rene",
+          "renew",
+          "renewa",
+          "renewal",
+          "renewal.",
+          "renewal.d",
+          "renewal.da",
+          "renewal.dat",
+          "renewal.date",
+          "d",
+          "da",
+          "dat",
+          "date"
+        ]
+      }
+    }
   ]
 }

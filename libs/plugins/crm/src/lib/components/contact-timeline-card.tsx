@@ -38,6 +38,7 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -50,6 +51,12 @@ import {
   useActivityWindow,
   useCanEditActivity,
 } from './activity-queries'
+import {
+  TimelineEntry,
+  TimelineExpandAllButton,
+  useTimelineExpansion,
+  useTimelinePages,
+} from './activity-timeline'
 import { CrmSuiteLockedButton } from './crm-suite-lock'
 import { LogActivityDialog } from './log-activity-dialog'
 import { useContactCampaignEmails } from './use-contact-campaign-emails'
@@ -79,6 +86,8 @@ const SOURCE_ICONS: Record<ContactSource, { path: string }> = {
  * contacts drawer draws it: the summary is the sentence the door wrote, the
  * path is a fact the door recorded, and a long path on the sentence's line
  * pushes out the thing the row is about.
+ *
+ * Everything it holds fits the collapsed row, so it has nothing to open.
  */
 function CapturedRow(props: {
   interaction: ContactInteraction
@@ -92,54 +101,44 @@ function CapturedRow(props: {
   const icon = SOURCE_ICONS[source]
   const when = new Date(interaction.atMs)
   return (
-    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-      <Stack
-        sx={{
-          color: 'text.secondary',
-          pt: 0.25,
-          fontSize: (theme) => theme.typography.h6.fontSize,
-        }}
-      >
-        <MdiIcon path={icon?.path} />
-      </Stack>
-      <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
+    <TimelineEntry
+      icon={<MdiIcon path={icon?.path} />}
+      chips={
+        <>
+          <Chip label={label} size="small" />
+          <Chip label="Captured" size="small" variant="outlined" />
+        </>
+      }
+      title={interaction.summary ?? label}
+      meta={
         <Stack
           direction="row"
           spacing={1}
-          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+          sx={{ alignItems: 'baseline', flexWrap: 'wrap', rowGap: 0.25 }}
         >
-          <Chip label={label} size="small" />
-          <Chip label="Captured" size="small" variant="outlined" />
+          <Tooltip title={when.toLocaleString()}>
+            <Typography variant="caption" color="text.secondary">
+              {interaction.path
+                ? `${Aglyn.activityTimeLabel(interaction.atMs, nowMs)} · ${interaction.path}`
+                : Aglyn.activityTimeLabel(interaction.atMs, nowMs)}
+            </Typography>
+          </Tooltip>
+          {/*
+            The record the door left, where the console reads it (AGL-2622):
+            the submission in the Inbox reader, the order in its dialog. A door
+            that left nothing to open — a newsletter opt-in, an import — has no
+            link, and the caption is the whole entry.
+          */}
+          {href ? (
+            <Typography variant="caption">
+              <AppLink href={href}>
+                {Aglyn.INTERACTION_LINK_LABELS[source] ?? 'Open'}
+              </AppLink>
+            </Typography>
+          ) : null}
         </Stack>
-        <Typography variant="body2">
-          {interaction.summary ?? label}
-        </Typography>
-        <Tooltip title={when.toLocaleString()}>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            {interaction.path
-              ? `${Aglyn.activityTimeLabel(interaction.atMs, nowMs)} · ${interaction.path}`
-              : Aglyn.activityTimeLabel(interaction.atMs, nowMs)}
-          </Typography>
-        </Tooltip>
-        {/*
-          The record the door left, where the console reads it (AGL-2622):
-          the submission in the Inbox reader, the order in its dialog. A door
-          that left nothing to open — a newsletter opt-in, an import — has no
-          link, and the caption above is the whole entry.
-        */}
-        {href ? (
-          <Typography variant="caption" sx={{ alignSelf: 'flex-start' }}>
-            <AppLink href={href}>
-              {Aglyn.INTERACTION_LINK_LABELS[source] ?? 'Open'}
-            </AppLink>
-          </Typography>
-        ) : null}
-      </Stack>
-    </Stack>
+      }
+    />
   )
 }
 CapturedRow.displayName = 'CapturedRow'
@@ -154,6 +153,9 @@ CapturedRow.displayName = 'CapturedRow'
  * the others say "Captured" and "Logged". The name links to the email's own
  * report when the page can address it; an email the team has deleted, or
  * one a sibling site sent, keeps its name and loses the link.
+ *
+ * The delivery line stays on the collapsed row beside the name, so it has
+ * nothing to open.
  */
 function CampaignEmailRow(props: {
   email: ContactCampaignEmail
@@ -165,29 +167,21 @@ function CampaignEmailRow(props: {
   const summary = Aglyn.campaignEmailSummary(email).join(' · ')
   const when = new Date(email.sentAtMs)
   return (
-    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-      <Stack
-        sx={{
-          color: 'text.secondary',
-          pt: 0.25,
-          fontSize: (theme) => theme.typography.h6.fontSize,
-        }}
-      >
-        <MdiIcon path={mdiBullhornOutline.path} />
-      </Stack>
-      <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
-        >
+    <TimelineEntry
+      icon={<MdiIcon path={mdiBullhornOutline.path} />}
+      chips={
+        <>
           <Chip label="Campaign" size="small" />
           <Chip label="Sent" size="small" variant="outlined" />
-        </Stack>
-        <Typography variant="body2">
+        </>
+      }
+      title={
+        <>
           {href ? <AppLink href={href}>{name}</AppLink> : name}
           {` · ${summary}`}
-        </Typography>
+        </>
+      }
+      meta={
         <Tooltip title={when.toLocaleString()}>
           <Typography
             variant="caption"
@@ -199,8 +193,8 @@ function CampaignEmailRow(props: {
               : Aglyn.activityTimeLabel(email.sentAtMs, nowMs)}
           </Typography>
         </Tooltip>
-      </Stack>
-    </Stack>
+      }
+    />
   )
 }
 CampaignEmailRow.displayName = 'CampaignEmailRow'
@@ -260,12 +254,18 @@ export interface ContactTimelineCardProps {
  * — THIS group's facet, filtered to the sites the group may see, the same
  * projection the contacts list makes — and costs no read. The logged side is
  * the bounded listener every activity surface uses, filtered to this
- * contact, with a foot for the next hundred. The campaign side is one
- * request to `crm/contact-email-history`, which reads down this person's
- * own delivery log, capped, and never a campaign's recipients. The facet's
- * history is capped at fifty by the platform, so past the window the stream
- * is the logged side alone; the foot says as much by asking for "more
- * activity" rather than "more history".
+ * contact, a hundred at a time. The campaign side is one request to
+ * `crm/contact-email-history`, which reads down this person's own delivery
+ * log, capped, and never a campaign's recipients. The facet's history is
+ * capped at fifty by the platform, so past the window the stream is the
+ * logged side alone.
+ *
+ * ## How it reads
+ *
+ * Every entry is a collapsed row that opens in place, paged by the
+ * console's footer over the merged stream; a page turned past the logged
+ * window widens it by the next hundred. **Expand all** and **Log activity**
+ * sit in the card header, and edit and delete stay on the entry they act on.
  */
 export function ContactTimelineCard(props: ContactTimelineCardProps) {
   const { hostId, org, contactId, contact, campaignHref, suiteLocked = false } = props
@@ -348,29 +348,41 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
     () => <Chip label="Logged" size="small" variant="outlined" />,
     [],
   )
+  const expansion = useTimelineExpansion()
+  const pages = useTimelinePages(entries.length, {
+    hasMore: activities.hasMore,
+    showMore: activities.showMore,
+    loading: activities.status === 'loading',
+  })
+  const logButton = suiteLocked ? (
+    <CrmSuiteLockedButton variant="contained" color="primary">
+      {'Log activity'}
+    </CrmSuiteLockedButton>
+  ) : (
+    <Button
+      size="small"
+      variant="contained"
+      color="primary"
+      onClick={openNew}
+      disabled={!activities.ready}
+    >
+      {'Log activity'}
+    </Button>
+  )
 
   return (
     <>
       <CardDisplay
         header={'Timeline'}
         help={pluginDocsHelp('contactActivities', { anchor: '#four-kinds-of-history' })}
-        actions={
-          suiteLocked ? (
-            <CrmSuiteLockedButton variant="contained" color="primary">
-              {'Log activity'}
-            </CrmSuiteLockedButton>
-          ) : (
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              onClick={openNew}
-              disabled={!activities.ready}
-            >
-              {'Log activity'}
-            </Button>
-          )
-        }
+        HeaderProps={{
+          action: (
+            <Stack direction="row" spacing={1}>
+              <TimelineExpandAllButton expansion={expansion} disabled={!entries.length} />
+              {logButton}
+            </Stack>
+          ),
+        }}
         contentGutterX
         contentGutterY
       >
@@ -399,27 +411,11 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
               compact
               label={'No history yet'}
               description={'What this person does on the site, the campaigns they are sent, and what you log about them, shows here.'}
-              action={
-                suiteLocked ? (
-                  <CrmSuiteLockedButton variant="contained" color="primary">
-                    {'Log activity'}
-                  </CrmSuiteLockedButton>
-                ) : (
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="primary"
-                    onClick={openNew}
-                    disabled={!activities.ready}
-                  >
-                    {'Log activity'}
-                  </Button>
-                )
-              }
+              action={logButton}
             />
             )
           ) : (
-            entries.map((entry) =>
+            pages.slice(entries).map((entry) =>
               entry.kind === 'captured' ? (
                 <CapturedRow
                   key={entry.key}
@@ -443,19 +439,13 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
                   subject={loggedChip}
                   nowMs={nowMs}
                   editable={!suiteLocked && canEdit(entry.activity)}
+                  expanded={expansion.isExpanded(entry.key)}
+                  onToggle={() => expansion.toggle(entry.key)}
                 />
               ),
             )
           )}
-          {activities.hasMore ? (
-            <Button
-              size="small"
-              onClick={activities.showMore}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              {'Show more activity'}
-            </Button>
-          ) : null}
+          {entries.length ? <ListPagination {...pages.footer} /> : null}
         </Stack>
       </CardDisplay>
       <LogActivityDialog
