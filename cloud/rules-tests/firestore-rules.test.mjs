@@ -5700,6 +5700,8 @@ describe('pre-release hardening guards', () => {
       { nameLower: 'plugin' },
       { nameReversed: 'nigulp' },
       { takenDown: false },
+      // A locked publisher cannot put itself back in browse (AGL-3365).
+      { workspaceLockedAt: null },
     ]) {
       await assertFails(
         updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),

@@ -288,8 +288,10 @@ Payouts from a publisher in its first 30 days are held 14 days on its connected
 account, so a stolen-card sale can still be refunded with the publisher's share
 taken back. **Nothing is refunded or paused by the row.** If it is the publisher,
 lock the workspace with the `security` reason and refund the sale, which
-reverses the publisher's share. A security lock also stops every install and
-update of that publisher's listings.
+reverses the publisher's share. The lock takes the publisher's listings out of
+browse, and a security lock stops every install and update of them. With
+**pause payouts** ticked, the lock also pauses the publisher's payout account
+([Lockdown](./lockdown.md#lock-listings)).
 
 Early fraud warnings and disputes on marketplace sales count toward the
 [seller fraud pattern](#seller-fraud-pattern) under the **publisher's**

@@ -292,9 +292,16 @@ function siteMoneyLogLines(
           },
     )
   }
-  const payouts = payload['payoutsPause'] as Record<string, any> | undefined
-  if (payouts) {
-    const account = payouts['accountId'] ?? 'no account'
+  // One line per connected account the lock paused (AGL-3365): the
+  // storefront's, then any a plugin pays the workspace through.
+  const pausedAccounts = [
+    payload['payoutsPause'],
+    ...((payload['payoutsPauseOthers'] as unknown[]) ?? []),
+  ].filter(Boolean) as Array<Record<string, any>>
+  for (const payouts of pausedAccounts) {
+    const account =
+      (payouts['accountId'] ?? 'no account') +
+      (payouts['label'] ? ` (${payouts['label']})` : '')
     lines.push(
       payouts['outcome'] === 'not-controllable'
         ? {
@@ -317,9 +324,14 @@ function siteMoneyLogLines(
             },
     )
   }
-  const restore = payload['payoutsRestore'] as Record<string, any> | undefined
-  if (restore) {
-    const account = restore['accountId'] ?? 'the account'
+  const restoredAccounts = [
+    payload['payoutsRestore'],
+    ...((payload['payoutsRestoreOthers'] as unknown[]) ?? []),
+  ].filter(Boolean) as Array<Record<string, any>>
+  for (const restore of restoredAccounts) {
+    const account =
+      (restore['accountId'] ?? 'the account') +
+      (restore['label'] ? ` (${restore['label']})` : '')
     lines.push(
       restore['confirmed'] === true
         ? {
@@ -334,6 +346,14 @@ function siteMoneyLogLines(
             confirmed: false,
           },
     )
+  }
+  // What the workspace owns inside plugins (AGL-3365): the marketplace's
+  // listings, hidden on the lock and restored on the lift.
+  for (const participant of (payload['orgLockParticipants'] as Array<Record<string, any>>) ?? []) {
+    lines.push({
+      text: `${participant['pluginId'] ?? 'Plugins'}: ${participant['summary'] ?? ''}`,
+      confirmed: participant['confirmed'] === true,
+    })
   }
   return lines
 }

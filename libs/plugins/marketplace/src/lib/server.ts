@@ -26,6 +26,7 @@ import { registerPluginRouteMetadata } from '@aglyn/aglyn/plugin-manager/plugin-
 import { registerPluginArtifactInventory } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
+import { registerMarketplaceLockdown } from './server/publisher-lockdown'
 import { publishPluginHandler } from './server/publish-plugin'
 import { verificationRequestHandler } from './server/verification-request'
 import { checkoutHandler } from './server/checkout'
@@ -195,4 +196,7 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute('marketplace/publish-plugin', publishPluginHandler)
   // Marketplace purchases ride the platform Stripe webhook (AGL-418).
   registerBillingWebhookHandler(marketplaceBillingWebhookHandler)
+  // A workspace lock reaches the publisher's payout account and its
+  // listings (AGL-3365).
+  registerMarketplaceLockdown()
 }
