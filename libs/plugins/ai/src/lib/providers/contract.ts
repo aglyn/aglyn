@@ -561,11 +561,28 @@ export const AI_UPSTREAM_FAILURE_COPY = 'The AI request failed — try again.'
  */
 export class AiUpstreamError extends UpstreamServiceError {
   override readonly name = 'AiUpstreamError'
+  /**
+   * A failure about the PLATFORM's account with the provider rather than the
+   * request (AGL-3377): the key was refused, or the account is out of
+   * credit. Every AI feature on the install fails until the operator fixes
+   * it, so the runtime tells them. Each adapter classifies its own vendor's
+   * answers; absent is an ordinary failure.
+   */
+  readonly accountProblem: AiAccountProblem | null
 
-  constructor(status: number | null, retryable: boolean, requestId: string | null) {
+  constructor(
+    status: number | null,
+    retryable: boolean,
+    requestId: string | null,
+    accountProblem: AiAccountProblem | null = null,
+  ) {
     super(AI_UPSTREAM_FAILURE_COPY, { status, retryable, requestId })
+    this.accountProblem = accountProblem
   }
 }
+
+/** See {@link AiUpstreamError.accountProblem}. */
+export type AiAccountProblem = 'credentials' | 'credit'
 
 /**
  * A request the runtime refuses to send. Thrown synchronously before any

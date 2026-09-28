@@ -18,6 +18,7 @@
 import { aiCatalogEntry, aiModelIdsForProvider, estimateAiBilledUsd } from './catalog'
 import {
   AiUpstreamError,
+  type AiAccountProblem,
   aiMessageText,
   aiRawOutputOf,
   aiStoppedAtCeiling,
@@ -189,9 +190,28 @@ async function send(input: AiProviderRequest, stream: boolean): Promise<Response
       response.status,
       openAiCompatibleFailureIsRetryable(response.status),
       requestId,
+      openAiCompatibleAccountProblem(response.status, payload?.error),
     )
   }
   return response
+}
+
+/**
+ * Whether a failure is about the platform's account rather than the request
+ * (AGL-3377): a refused key, or a quota or balance that has run out. The
+ * OpenAI-shaped `insufficient_quota` code is what compatible vendors send
+ * for an empty balance, on a 429 that is otherwise a rate limit.
+ */
+export function openAiCompatibleAccountProblem(
+  status: number | null,
+  error: { type?: string; code?: string } | null | undefined,
+): AiAccountProblem | null {
+  if (status === 401 || status === 403) return 'credentials'
+  if (status === 402) return 'credit'
+  if (error?.code === 'insufficient_quota' || error?.type === 'insufficient_quota') {
+    return 'credit'
+  }
+  return null
 }
 
 /** `finish_reason` → the contract's stop reason; a filter is a refusal. */

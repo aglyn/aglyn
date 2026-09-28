@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { formatOperatorAlertAmount } from '@aglyn/aglyn/app-utils/operator-alerts'
 import { firebaseAdmin } from './firebase-admin'
 import { updateExisting } from './update-existing'
 
@@ -171,9 +172,6 @@ export async function recordConnectPayoutFailure(
   // what happens next (AGL-3377). Loaded lazily, like everything this module
   // only needs once a failure is real.
   const { raiseOperatorAlert } = await import('./operator-alerts')
-  const { formatOperatorAlertAmount } = await import(
-    '@aglyn/aglyn/app-utils/operator-alerts'
-  )
   await raiseOperatorAlert('billing.connectPayoutFailed', {
     dedupeKey: stripeId,
     context: {

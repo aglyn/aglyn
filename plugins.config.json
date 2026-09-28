@@ -196,7 +196,8 @@
         "site": "registerCommercePlugin",
         "console": "registerCommerceConsole",
         "tenantApi": "registerCommerceApi",
-        "consoleApi": "registerCommerceConsoleApi"
+        "consoleApi": "registerCommerceConsoleApi",
+        "serverDeclarations": "registerCommerceServerDeclarations"
       },
       "modules": {
         "site": "site"
@@ -728,7 +729,8 @@
         "console": "registerMarketingConsole",
         "tenantApi": "registerMarketingApi",
         "consoleApi": "registerMarketingConsoleApi",
-        "site": "registerMarketingPlugin"
+        "site": "registerMarketingPlugin",
+        "serverDeclarations": "registerMarketingServerDeclarations"
       },
       "modules": {
         "site": "site"

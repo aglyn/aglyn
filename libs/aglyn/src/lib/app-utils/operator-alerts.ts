@@ -54,7 +54,7 @@ export type OperatorAlertTier = 'must' | 'should' | 'low'
 
 export type OperatorAlertCategory =
   | 'billing'
-  | 'commerce'
+  | 'payments'
   | 'legal'
   | 'data'
   | 'ops'
@@ -130,7 +130,7 @@ export const OPERATOR_ALERT_CATEGORY_LABELS: Record<
   string
 > = {
   billing: 'Billing',
-  commerce: 'Commerce',
+  payments: 'Payments & payouts',
   legal: 'Legal',
   data: 'Data protection',
   ops: 'Operations',

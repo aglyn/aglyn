@@ -36,7 +36,7 @@ const pluginAlert = (type: string): OperatorAlertDefinition => ({
   label: 'l',
   description: 'd',
   tier: 'should',
-  category: 'commerce',
+  category: 'payments',
   title: 't',
   body: 'b',
   delivery: 'immediate',

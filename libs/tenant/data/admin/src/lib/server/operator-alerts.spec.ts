@@ -303,7 +303,7 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
       label: 'Tax not reversed',
       description: 'd',
       tier: 'must',
-      category: 'commerce',
+      category: 'payments',
       title: 'Tax not reversed on {{invoiceId}}',
       body: 'b',
       delivery: 'immediate',

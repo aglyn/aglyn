@@ -21,6 +21,7 @@ import {
   AI_IMAGE_MEDIA_TYPES,
   AI_REQUEST_MAX_IMAGES,
   AiRequestShapeError,
+  AiUpstreamError,
   aiBase64Bytes,
   aiMessageImages,
   type AiMessage,
@@ -340,5 +341,39 @@ export async function runAiRequest(
   validateAiMessages(input.messages, () => aiModelReadsImages(provider, input.model))
   const { stream, settings: _settings, provider: _provider, ...request } = input
   const providerRequest = { ...request, apiKey }
-  return stream ? provider.stream(providerRequest) : provider.complete(providerRequest)
+  try {
+    return await (stream ? provider.stream(providerRequest) : provider.complete(providerRequest))
+  } catch (error) {
+    await reportAccountProblem(provider, error)
+    throw error
+  }
+}
+
+/**
+ * Tells the operator when the failure is the platform's provider account —
+ * a refused key, no credit — rather than the request (AGL-3377). Once per
+ * provider and problem per window; loaded lazily so the runtime pulls no
+ * Admin SDK until an account is actually broken. Never throws.
+ */
+async function reportAccountProblem(provider: AiProvider, error: unknown): Promise<void> {
+  if (!(error instanceof AiUpstreamError) || !error.accountProblem) return
+  try {
+    const [{ raiseOperatorAlert }, { AI_PROVIDER_UNAVAILABLE }] = await Promise.all([
+      import('@aglyn/tenant-data-admin/server/operator-alerts'),
+      import('../operator-alerts'),
+    ])
+    await raiseOperatorAlert(AI_PROVIDER_UNAVAILABLE, {
+      dedupeKey: `${provider.id}:${error.accountProblem}`,
+      context: {
+        provider: provider.label,
+        keyEnv: provider.apiKeyEnv,
+        reason:
+          error.accountProblem === 'credentials'
+            ? `its API key was refused (HTTP ${error.status ?? 'unknown'})`
+            : 'the account is out of credit',
+      },
+    })
+  } catch (alertError) {
+    console.error('[ai] the provider account alert could not be raised', alertError)
+  }
 }

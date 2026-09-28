@@ -32,7 +32,9 @@ import {
   registerUsageAlertContributor,
 } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
 import { pluginMeteredLineOwner } from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
+import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { AI_PLUGIN_ID } from './constants'
+import { AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
 import { registerAiDeclarations } from './declarations'
 import {
   AI_OVERAGE_METER_LINE_ID,
@@ -150,6 +152,9 @@ export function registerAiServerDeclarations(): void {
       { pluginId: AI_PLUGIN_ID },
     )
   }
+  // The platform provider account alert (AGL-3377), listed on Staff →
+  // Operator alerts before the first one is ever raised.
+  registerOperatorAlerts([AI_PROVIDER_UNAVAILABLE], { pluginId: AI_PLUGIN_ID })
   if (
     !listUsageAlertContributors().some(
       (contributor) =>
