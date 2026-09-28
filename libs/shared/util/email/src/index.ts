@@ -47,3 +47,10 @@ export * from './lib/email-media-src'
 // this scope:shared lib may not import, pinned by `email-nodes-drift.spec.ts`.
 export * from './lib/stored-email-nodes'
 export * from './lib/email-merge'
+// The deliverability engine every send path asks (AGL-3328): the gateway an
+// MX names and its ledger, the bounce reader, and the address verdicts. Pure
+// — the DNS lookup and the store are injected by `@aglyn/tenant-data-admin`,
+// so nothing here reaches `node:dns` from the browser.
+export * from './lib/mail-gateway'
+export * from './lib/mail-bounce'
+export * from './lib/email-deliverability'
