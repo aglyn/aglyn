@@ -120,7 +120,7 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       // The 24 written out, and one per risk notice kind plus the risk
       // digest and review acknowledgment (AGL-3368, pinned in
       // `risk-notice-catalog.spec.ts`).
-      expect(editable.length).toBe(24 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
+      expect(editable.length).toBe(25 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {
           expect(entry.footerReason?.startsWith('You’re receiving this')).toBe(true)

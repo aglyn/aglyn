@@ -179,6 +179,19 @@ describe('MailboxCard — status and health (AGL-2978)', () => {
     expect(screen.getByLabelText('Tests today').textContent).toBe('Tests today: 3')
   })
 
+  it('says how the day is paced: sent against the cap, and what this run may send (AGL-3366)', () => {
+    // Week one of the ramp caps the day at 10; 6 left over the 8 runs to 17:00.
+    const view = renderCard({ mailbox: { health: { ...base.health, sentToday: 4, sentOnDay: '2026-09-15' } } })
+    expect(screen.getByLabelText('Pacing').textContent).toBe(
+      'Today: 4 of 10 sent · up to 1 per 15-minute run now, follow-ups first, so the rest of the day’s cap is spread across the window.',
+    )
+    view.unmount()
+    renderCard({ mailbox: { health: { ...base.health, sentToday: 10, sentOnDay: '2026-09-15' } } })
+    expect(screen.getByLabelText('Pacing').textContent).toBe(
+      'Today: 10 of 10 sent · cap reached, sending resumes in the next day’s window.',
+    )
+  })
+
   it('shows a paused mailbox with Resume, and resumes it', async () => {
     const { props } = renderCard({ mailbox: { status: 'paused' } })
     expect(within(screen.getByTestId('status')).getByText('Paused')).toBeTruthy()

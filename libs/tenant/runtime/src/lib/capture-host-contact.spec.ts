@@ -66,6 +66,7 @@ import {
   captureHostContact,
   contactCreatedPayload,
 } from './capture-host-contact'
+import { contactCaptureActor } from './capture-actor'
 
 const capture = (
   facet?: { companyId?: string; ownerUid?: string },
@@ -122,7 +123,30 @@ describe('captureHostContact', () => {
       hostId: 'site-1',
       lifecycleStage: 'lead',
       campaignIds: 'spring-2026,launch',
+    }, { actor: { kind: 'visitor', email: 'ada@example.com' } })
+  })
+
+  it('names the member a door passes as the cause, not the person captured (AGL-3376)', async () => {
+    mockCreated = {
+      contactId: 'contact-9',
+      hostId: 'site-1',
+      email: 'ada@example.com',
+      source: 'manual',
+      campaignIds: [],
+    }
+    await captureHostContact({
+      hostId: 'site-1',
+      email: 'ada@example.com',
+      source: 'manual',
+      interaction: { summary: 'Added by hand' },
+      actor: { kind: 'member', uid: 'u1', email: 'rep@example.test' },
+    } as never)
+    expect((emitHostEvent.mock.calls[0] as unknown[])[3]).toEqual({
+      actor: { kind: 'member', uid: 'u1', email: 'rep@example.test' },
     })
+    // The actor is the event's, not the contact's: it never reaches the write.
+    const options = upsertHostContact.mock.calls[0][0] as Record<string, unknown>
+    expect(options['actor']).toBeUndefined()
   })
 
   it('announces nothing when the capture was a repeat visit', async () => {
@@ -219,6 +243,7 @@ describe('captureHostContact decides who follows a new person up', () => {
       'site-1',
       'contactCreated',
       expect.objectContaining({ contactId: 'contact-9', formId: 'form-1' }),
+      expect.anything(),
     )
     emitHostEvent.mockClear()
     mockCreated = created
@@ -227,6 +252,7 @@ describe('captureHostContact decides who follows a new person up', () => {
       'site-1',
       'contactCreated',
       expect.not.objectContaining({ formId: expect.anything() }),
+      expect.anything(),
     )
   })
 
@@ -249,6 +275,26 @@ describe('captureHostContact decides who follows a new person up', () => {
     await capture()
     error.mockRestore()
     expect(emitHostEvent).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('contactCaptureActor (AGL-3376)', () => {
+  it('credits the visitor on a door where the person captured acted', () => {
+    for (const source of ['form', 'member', 'order', 'booking', 'newsletter']) {
+      expect(contactCaptureActor(source, 'ada@example.com')).toEqual({
+        kind: 'visitor',
+        email: 'ada@example.com',
+      })
+    }
+  })
+
+  it('guesses nothing on a door a member or key drives, unless told', () => {
+    for (const source of ['manual', 'import', 'api', 'account']) {
+      expect(contactCaptureActor(source, 'ada@example.com')).toBeUndefined()
+    }
+    expect(
+      contactCaptureActor('import', 'ada@example.com', { kind: 'member', uid: 'u1' }),
+    ).toEqual({ kind: 'member', uid: 'u1' })
   })
 })
 

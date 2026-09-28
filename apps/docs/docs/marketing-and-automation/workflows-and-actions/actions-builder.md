@@ -249,12 +249,13 @@ longer exists.
 ## Run history {#run-history}
 
 Every automation row has a **Runs** button. It opens **Runs — *your automation*** with a
-**Recent runs** table of that one automation's executions, in four columns:
+**Recent runs** table of that one automation's executions, in five columns:
 
 | Column | What's in it |
 | --- | --- |
 | **Time** | The clock time of the run; hover it for the full date and time. |
 | **Trigger** | The event, in words — `formSubmission` shows as **Form submitted**. A custom event keeps the name you gave it. |
+| **Who** | Who set the run off: a teammate's address, **API key** and the key's name, **Site visitor** (with the address they gave, when they gave one), or **Inbound webhook** and the hook's name. A purchase, booking or sign-up credits the customer who made it. A chained run — one an earlier automation's step caused — names whoever caused the first. Runs from before this column existed, and a run that resumes after a wait, say **Not recorded**. |
 | **Result** | **Succeeded**, **Failed**, or **Skipped**. |
 | **What happened** | For a run, what each step did, joined with `·`. For a failure, the errors. For a skip, which condition stopped it. |
 

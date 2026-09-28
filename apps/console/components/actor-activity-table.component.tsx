@@ -18,6 +18,7 @@
 
 import {
   activityActionLabel,
+  activityActorLabel,
   activityTargetLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { listPluginActivityFilters } from '@aglyn/aglyn'
@@ -56,7 +57,10 @@ export interface ActorActivityEntry {
   scopeId: string
   action?: string
   target?: Record<string, unknown> | null
+  actorId?: string | null
   actorEmail?: string | null
+  /** The address `actorId` holds now, for a row that recorded none (AGL-3369). */
+  actorEmailNow?: string | null
   apiKeyName?: string
   createdAt?: { seconds: number } | null
 }
@@ -232,6 +236,21 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         filterable: false,
         valueGetter: (_value, row: ActorActivityEntry) =>
           activityTargetLabel(row.target as never) || '—',
+      },
+      {
+        field: 'actorEmail',
+        /*
+         * Every row here is this account's, but not under one address: the
+         * address is a snapshot of the one it had when the row was written,
+         * and a key the account holds writes under the key's name (AGL-3376).
+         */
+        headerName: 'Who (then)',
+        flex: 1,
+        minWidth: 160,
+        description:
+          'The address this account had when the entry was written, or the ' +
+          'API key it acted through.',
+        valueGetter: (_value, row: ActorActivityEntry) => activityActorLabel(row),
       },
       {
         field: 'scopeId',

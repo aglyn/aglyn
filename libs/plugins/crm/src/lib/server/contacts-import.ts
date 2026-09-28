@@ -282,6 +282,7 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
         email: row.email,
         ...(row.name ? { name: row.name } : {}),
         source: 'import',
+        actor: { kind: 'member', uid: context.uid, email: context.email },
         interaction: { summary: CONTACT_IMPORT_INTERACTION_SUMMARY },
         marketingConsent: row.marketingConsent,
         tags: row.tags,

@@ -130,6 +130,7 @@ import {
   workflowHasActionSteps,
   workflowStepTypeLabel,
 } from './workflow-steps'
+import { runTriggeredByFields } from './run-trigger-actor'
 
 /** Bounded fan-out per event, mirroring the workflow runner. */
 const MAX_TRIGGERED_ACTIONS = 10
@@ -1328,6 +1329,8 @@ export async function executeAction(
     .add({
       actorId: null,
       actorEmail: null,
+      // Who set this run off (AGL-3376).
+      ...runTriggeredByFields(),
       // The prose line stays exactly as it was: `activityPrimaryText` and
       // three other renderers read it, and the run table is not the only
       // thing this collection feeds.
@@ -1631,6 +1634,8 @@ async function recordSkippedRun(
     .add({
       actorId: null,
       actorEmail: null,
+      // Who set this run off (AGL-3376).
+      ...runTriggeredByFields(),
       action: `${kind === 'orgAutomation' ? 'Org automation' : 'Action'} skipped on ${event}`,
       result: 'skipped',
       trigger: event,
@@ -1987,6 +1992,8 @@ export async function stopFlowEnrollment(
     .add({
       actorId: null,
       actorEmail: null,
+      // Who set this run off (AGL-3376).
+      ...runTriggeredByFields(),
       action: `Flow stopped mid-wait: ${reason}`.slice(0, 300),
       result: 'skipped',
       trigger: enrollment.event,

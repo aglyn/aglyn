@@ -24,7 +24,9 @@ import {
 import { assignOwnerForCapture } from './assign-contact-owner'
 import { associateCompanyByDomain } from './associate-company-by-domain'
 import { emitHostEvent } from './emit-host-event'
-import type { HostEventPayload } from './host-event-listeners'
+import { contactCaptureActor } from './capture-actor'
+import type { HostEventActor, HostEventPayload } from './host-event-listeners'
+
 
 /**
  * THE contact capture door for a server path (AGL-2605).
@@ -87,8 +89,12 @@ import type { HostEventPayload } from './host-event-listeners'
  * open lead is a lead the rep converts, as in Salesforce.
  */
 export async function captureHostContact(
-  options: Omit<UpsertHostContactOptions, 'onCreated'>,
+  captureOptions: Omit<UpsertHostContactOptions, 'onCreated'> & {
+    /** Who caused the capture, when the door knows (AGL-3376). */
+    actor?: HostEventActor
+  },
 ): Promise<UpsertHostContactVerdict> {
+  const { actor, ...options } = captureOptions
   return upsertHostContact({
     ...options,
     onCreated: async (created) => {
@@ -109,10 +115,12 @@ export async function captureHostContact(
           console.error('captureHostContact owner assignment failed', error)
         })
       }
+      const cause = contactCaptureActor(created.source, created.email, actor)
       await emitHostEvent(
         created.hostId,
         'contactCreated',
         contactCreatedPayload(created, options.interaction.formId),
+        cause ? { actor: cause } : {},
       )
     },
   })

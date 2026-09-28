@@ -613,6 +613,25 @@ export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
   ])
 
 /**
+ * Staff notifications the OPERATOR must hear about by email, whoever runs the
+ * install and whatever anyone switched on (AGL-3375): fraud and risk alerts,
+ * a card dispute nobody owns, a DMCA counter-notice whose statutory clock is
+ * running, and a billing webhook that applied only half of what it meant to.
+ *
+ * The console notification is still written for every staff member. What
+ * this adds is one email to the operator's alert inbox, because the email
+ * channel defaults OFF and a self-hosted or OSS install that nobody tuned
+ * would otherwise learn about card testing on its checkout from its bank.
+ */
+export const OPERATOR_ALERT_NOTIFICATION_TYPES: ReadonlySet<string> =
+  new Set<AglynNotificationType>([
+    'system.abuseReportUrgent',
+    'system.disputeUnattributed',
+    'system.dmcaCounterNotice',
+    'system.billingWebhookHalfApplied',
+  ])
+
+/**
  * Whether a channel is on for one notification, at its own scope.
  *
  * Resolution order, first answer wins: the notification's SITE, its

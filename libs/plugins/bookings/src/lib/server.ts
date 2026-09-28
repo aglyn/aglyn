@@ -756,11 +756,13 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       body: new Date(startsAtMs).toLocaleString(),
       link: `/${hostId}/bookings`,
     })
-    const { alerts } = await emitHostEvent(hostId, 'booking', {
-      serviceName: service.name ?? '',
-      email,
-      startsAtMs,
-    })
+    const { alerts } = await emitHostEvent(
+      hostId,
+      'booking',
+      { serviceName: service.name ?? '', email, startsAtMs },
+      // The visitor who booked (AGL-3376).
+      { actor: { kind: 'visitor', email } },
+    )
 
     // Env-gated confirmation email (same provider as AGL-98).
     if (isEmailConfigured()) {

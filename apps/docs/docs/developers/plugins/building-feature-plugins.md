@@ -448,7 +448,11 @@ fan-out (`emitHostEvent`, `dispatchHostAutomation`, and the listener registry
 entry) and the server-side screen-composition read-path (`getScreen`,
 `composeScreenNodes`, and the `get-*` loaders behind it). The runtime raises
 events and runs none of what they trigger: the automation engine is the
-Workflows plugin's listener. These live in `@aglyn/tenant-runtime`, a
+Workflows plugin's listener. An event can carry who caused it beside its
+payload — `emitHostEvent(hostId, event, payload, { actor })`, where `actor` is
+`{ kind: 'member' | 'visitor' | 'apiKey' | 'platform', uid?, email?, apiKeyName? }`
+— and a listener receives it as `onEvent`'s fourth argument. A door that knows
+who acted should always pass it: the run history's **Who** column reads it. These live in `@aglyn/tenant-runtime`, a
 server lib tagged `scope:lib`+`scope:aglyn` so both the tenant app's own API
 routes and any plugin `server.ts` can import it (and it, unlike the
 `scope:data` `tenant-data-admin`, may import `@aglyn/aglyn`). The host-event

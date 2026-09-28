@@ -64,9 +64,19 @@ Listening to host events from a plugin's server code:
 import { registerHostEventListener } from '@aglyn/tenant-runtime'
 
 registerHostEventListener('my-plugin', {
-  async onEvent(hostId, event, payload) {
-    // react to the event; optionally return site alerts
+  async onEvent(hostId, event, payload, context) {
+    // react to the event; optionally return site alerts.
+    // `context.actor` is who caused it, when the emitting door knew:
+    // { kind: 'member' | 'visitor' | 'apiKey' | 'platform', uid?, email?, apiKeyName? }
   },
+})
+```
+
+Raising one, with who caused it:
+
+```ts
+await emitHostEvent(hostId, 'contactStageChanged', payload, {
+  actor: { kind: 'member', uid, email },
 })
 ```
 

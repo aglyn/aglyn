@@ -317,6 +317,8 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
       .add({
         actorId: null,
         actorEmail: null,
+        // An outside system called the hook's URL; the hook is who it was.
+        triggeredBy: { kind: 'webhook', name: hook.workflowName },
         action: failed
           ? `Inbound webhook run failed: ${outcome.error}`.slice(0, 300)
           : `Inbound webhook ran "${hook.workflowName}"`,

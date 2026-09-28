@@ -183,6 +183,8 @@ const activity = () => within(screen.getByRole('list', { name: 'Activity' }))
 
 beforeEach(() => {
   jest.clearAllMocks()
+  // An hour before T, so every next send in the fixtures is still ahead.
+  jest.spyOn(Date, 'now').mockReturnValue(T - 60 * MIN)
   mockSequence = { status: 'ready', data: sequence() }
   mockEnrollment = { status: 'ready', data: enrollment() }
   mockHistory = { status: 'ready', data: [] }
@@ -227,6 +229,21 @@ describe('the header: who, which record, where they stand', () => {
     renderDetail()
     expect(screen.getByText('Nothing yet — step 1 sends Sep 24, 10:30 AM CDT.')).toBeTruthy()
     expect(screen.queryByLabelText('In numbers')).toBeNull()
+  })
+
+  it('says a step whose time has come is queued, with the due time on hover (AGL-3366)', () => {
+    jest.spyOn(Date, 'now').mockReturnValue(T + 3 * 86_400_000)
+    mockEnrollment = {
+      status: 'ready',
+      data: enrollment({ stepIndex: 0, stepRecords: [], lastSentAtMs: null, engagement: undefined, nextDueAtMs: T }),
+    }
+    renderDetail()
+    expect(screen.getByText('Nothing yet — step 1 is due and queued to send.')).toBeTruthy()
+    // The fixture's mailbox has no status: it is not sending, and the chip says so.
+    const chip = within(screen.getByRole('region', { name: 'Enrollment' })).getByText(
+      'Next send Held · mailbox not sending',
+    )
+    expect(chip.closest('[title]')?.getAttribute('title')).toMatch(/^Due Sep 24, 10:30 AM CDT\. Its mailbox is not sending/)
   })
 
   it('offers the row menu’s actions: curating as the button, the rest behind the menu', async () => {

@@ -51,6 +51,7 @@ import {
   type AutomationWorkflow,
   workflowHasActionSteps,
 } from './workflow-steps'
+import { runTriggeredByFields } from './run-trigger-actor'
 
 /** Bounded fan-out per event: at most this many triggered workflows run. */
 const MAX_TRIGGERED_WORKFLOWS = 10
@@ -70,6 +71,8 @@ async function recordWorkflowRun(
     .add({
       actorId: null,
       actorEmail: null,
+      // Who set this run off (AGL-3376).
+      ...runTriggeredByFields(),
       ...row,
       // The site log's search finds a run by its workflow's name (AGL-3321).
       searchTokens: activitySearchTokens({

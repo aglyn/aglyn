@@ -152,6 +152,8 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
   let orgId: string
   let org: Record<string, unknown>
   let actor: { uid: string; email: string | null } | null = null
+  // Who moved the deal, at either level, for the runs it sets off (AGL-3376).
+  let eventActor: { uid: string; email: string | null }
   if (routeScope.level === 'org') {
     const caller = await authorizeOrgCaller(req, routeScope.orgId, {
       needs: 'data.manage',
@@ -165,6 +167,7 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     orgId = caller.orgId
     org = caller.org as Record<string, unknown>
     actor = { uid: caller.uid, email: caller.email }
+    eventActor = actor
   } else {
     const authorization = String(req.headers.authorization ?? '')
     const idToken = authorization.startsWith('Bearer ')
@@ -175,7 +178,12 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     }
     let uid: string
     try {
-      uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
+      const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+      uid = decoded.uid
+      eventActor = {
+        uid,
+        email: typeof decoded.email === 'string' ? decoded.email : null,
+      }
     } catch (error) {
       // A refused credential is the caller's 401; a failure to check one is
       // ours and keeps a 5xx (AGL-2852).
@@ -318,18 +326,24 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
         },
         previousStageId,
       ),
+      { actor: { kind: 'member', ...eventActor } },
     )
   }
   if (customer?.outcome === 'advanced') {
     // The stage change is the win's effect, announced after its cause, to
     // the site whose facet moved — the same site as the win's, unless no
     // site captured the deal and the person's own site holds the stage.
-    await emitHostEvent(customer.hostId, 'contactStageChanged', {
-      contactId: customer.contactId,
-      email: customer.email,
-      lifecycleStage: customer.lifecycleStage,
-      previousStage: customer.previousStage,
-    })
+    await emitHostEvent(
+      customer.hostId,
+      'contactStageChanged',
+      {
+        contactId: customer.contactId,
+        email: customer.email,
+        lifecycleStage: customer.lifecycleStage,
+        previousStage: customer.previousStage,
+      },
+      { actor: { kind: 'member', ...eventActor } },
+    )
   }
   if (actor) {
     await logOrgActivity(

@@ -988,11 +988,19 @@ export async function POST(request: Request): Promise<Response> {
       ...(typeof path === 'string' && path ? { body: `Page: ${path}` } : {}),
       link: `/${hostId}/inbox`,
     })
-    const { alerts } = await emitHostEvent(hostId, 'formSubmission', {
-      formName: resolvedFormName,
-      path: String(path ?? '').slice(0, 500),
-      ...sanitizedFields,
-    })
+    const submittedEmail =
+      typeof sanitizedFields['email'] === 'string' ? sanitizedFields['email'] : ''
+    const { alerts } = await emitHostEvent(
+      hostId,
+      'formSubmission',
+      {
+        formName: resolvedFormName,
+        path: String(path ?? '').slice(0, 500),
+        ...sanitizedFields,
+      },
+      // The visitor who submitted, by the address they typed if any (AGL-3376).
+      { actor: { kind: 'visitor', ...(submittedEmail ? { email: submittedEmail } : {}) } },
+    )
     return json({ received: true, alerts })
   } catch (error) {
     console.error(error)

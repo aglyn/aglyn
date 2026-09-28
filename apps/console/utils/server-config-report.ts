@@ -375,8 +375,9 @@ export function buildServerConfigReport(
       key: 'STAFF_ALERT_EMAIL',
       label: 'Staff alert address',
       drives:
-        'Where erasure-hold reminders and verifier regressions go. Absent ' +
-        'means those alerts are computed and then dropped.',
+        'Where staff alarms go: fraud and risk alerts, erasure-hold ' +
+        'reminders, cost alarms. Absent, they go to the operator support ' +
+        'address, else to every staff account (AGL-3375).',
       raw: env['STAFF_ALERT_EMAIL'],
       value: describePresence(env['STAFF_ALERT_EMAIL']),
     }),

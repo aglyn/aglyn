@@ -109,6 +109,17 @@ export interface PluginContactInteraction {
 }
 
 export interface PluginContactCaptureRequest {
+  /**
+   * Who caused the capture, when it was not the person captured (AGL-3376) —
+   * a member adding someone by hand, an integration's key. A door where the
+   * visitor acts for themselves (a form, a purchase) may leave it out.
+   */
+  actor?: {
+    kind: 'member' | 'visitor' | 'apiKey' | 'platform'
+    uid?: string | null
+    email?: string | null
+    apiKeyName?: string | null
+  }
   orgId: string
   /** The site the person was met on: the brand whose form or checkout it was. */
   hostId: string

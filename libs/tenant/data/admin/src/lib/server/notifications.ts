@@ -19,6 +19,7 @@ import {
   buildRoute,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_SETTINGS_FIELD,
+  OPERATOR_ALERT_NOTIFICATION_TYPES,
   normalizeNotificationLink,
   notificationChannelEnabled,
   type AglynNotification,
@@ -32,6 +33,10 @@ import { filterSuppressedEmails } from './email-suppression'
 import { meterOrgEmail, meterPlatformEmail } from './email-metering'
 import firebaseAdmin from './firebase-admin'
 import { listOrgMembers } from './organizations'
+import {
+  resolveStaffAlertRecipients,
+  sendOperatorAlertEmail,
+} from './staff-alert-email'
 import {
   loadSystemEmail,
   renderLoadedSystemEmail,
@@ -66,6 +71,13 @@ export interface NotifyUsersOptions {
    * brand when the notification names one.
    */
   audience?: 'staff'
+  /**
+   * Write the console notification only, and mail nobody through the
+   * per-person email channel (AGL-3375): the caller has emailed the same
+   * alert to the operator's inbox, and a staff member who also switched
+   * email on would otherwise get it twice.
+   */
+  skipEmail?: boolean
 }
 
 /** The console's absolute origin for an email link, or `''` when unset. */
@@ -320,6 +332,7 @@ export async function notifyUsers(
      */
     if (
       mailTo.length &&
+      !options.skipEmail &&
       isEmailConfigured() &&
       !NOTIFICATION_SELF_SENT_EMAIL_TYPES.has(payload.type)
     ) {
@@ -366,10 +379,38 @@ async function listStaffUids(): Promise<string[]> {
  */
 export async function notifyStaff(payload: NotificationPayload): Promise<void> {
   try {
-    await notifyUsers(await listStaffUids(), payload, { audience: 'staff' })
+    // A fraud or risk alert also reaches the operator's inbox by email
+    // (AGL-3375), on every install and whatever anyone switched on. Whether
+    // there is an inbox is settled first, so the per-person channel stands
+    // down only when the alert is actually going somewhere.
+    const operatorAlert =
+      OPERATOR_ALERT_NOTIFICATION_TYPES.has(payload.type) &&
+      isEmailConfigured() &&
+      (await resolveStaffAlertRecipients()).length > 0
+    await notifyUsers(await listStaffUids(), payload, {
+      audience: 'staff',
+      ...(operatorAlert ? { skipEmail: true } : {}),
+    })
+    if (operatorAlert) {
+      await sendOperatorAlertEmail({
+        title: payload.title,
+        body: payload.body,
+        url: absoluteConsoleLink(payload.link),
+        context: `operator-alert ${payload.type}`,
+      })
+    }
   } catch (error) {
     console.error('staff notification failed', error)
   }
+}
+
+/** A notification link as an inbox can follow it, or `''`. */
+function absoluteConsoleLink(link: string | undefined): string {
+  const value = String(link ?? '').trim()
+  if (!value) return ''
+  if (/^https?:\/\//i.test(value)) return value
+  const origin = consoleOrigin()
+  return origin && value.startsWith('/') ? `${origin}${value}` : ''
 }
 
 /** Notifies the org's owner + admins (billing, membership, org events). */

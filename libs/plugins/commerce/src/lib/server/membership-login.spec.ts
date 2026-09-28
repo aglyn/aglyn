@@ -163,9 +163,13 @@ describe('membership login suspension gate (AGL-546)', () => {
     expect(String(result.headers['Set-Cookie'])).toContain(
       'aglyn_member_host-1=',
     )
-    expect(emitHostEvent).toHaveBeenCalledWith('host-1', 'memberSignIn', {
-      email: 'user@example.com',
-    })
+    expect(emitHostEvent).toHaveBeenCalledWith(
+      'host-1',
+      'memberSignIn',
+      { email: 'user@example.com' },
+      // The member signing in set off whatever runs on it (AGL-3376).
+      { actor: { kind: 'visitor', email: 'user@example.com' } },
+    )
   })
 
   it('keeps the wrong-password path generic (no suspension leak)', async () => {

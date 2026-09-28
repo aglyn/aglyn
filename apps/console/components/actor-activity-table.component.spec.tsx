@@ -127,3 +127,21 @@ describe('a filtered activity feed pages forward (AGL-3321)', () => {
     expect(last().get('cursor')).toBeNull()
   })
 })
+
+describe('every row names who acted (AGL-3376)', () => {
+  it('has a Who column reading the address then, a key, or the address now', async () => {
+    render(<ActorActivityTable endpoint="/api/x" header="Activity" />)
+    await waitFor(() => expect(mockRequests).toHaveLength(1))
+    const who = mockTableProps.columns.find((column: any) => column.field === 'actorEmail')
+    expect(who?.headerName).toBe('Who (then)')
+    const read = (row: Record<string, unknown>) => who.valueGetter(undefined, row)
+    expect(read({ actorId: 'u1', actorEmail: 'then@example.test' })).toBe('then@example.test')
+    expect(read({ actorId: 'api', actorEmail: null, apiKeyName: 'Zapier' })).toBe(
+      'API key Zapier',
+    )
+    expect(read({ actorId: 'u1', actorEmail: null, actorEmailNow: 'now@example.test' })).toBe(
+      'now@example.test',
+    )
+  })
+})
+
