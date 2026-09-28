@@ -80,7 +80,14 @@ a version stopped separately stays stopped.
 Audited plan and entitlement overrides, suspension,
 and GDPR-erasure flags, per organization. The directory is listed server-side with
 the Admin SDK (so it shows *every* org, not the subset client rules would return),
-ordered by organization id, 10 per page by default (25 or 50 from the page-size menu).
+newest first, 10 per page by default (25 or 50 from the page-size menu).
+
+Click the **Organization** header to sort A to Z, then Z to A, and the **Created**
+header to switch between newest and oldest first. The sort orders the whole
+directory, not just the page on screen. **Plan**, **Subscription** and **Site limit**
+do not sort: an organization that never had a plan or a subscription stores neither,
+and sorting on either would leave it out of the list. **AI spend (month)** sorts
+the page on screen by this month's figures.
 
 #### Filter the directory {#filter-the-directory}
 
@@ -94,8 +101,9 @@ mirrored onto the org). **Search** matches the start of any word in the name, us
 first word you type, and says so when you type more than one.
 
 Every filter you set and the search apply together, each on its own field, and the
-chips above the grid show them all. The list stays in organization-id order, except
-while **Created** is filtered, when it runs newest first. Some combinations cannot
+chips above the grid show them all. The list keeps the sort you chose, except
+while **Created** is filtered, when it runs by Created (newest first unless you chose
+oldest first), and a note above the grid says so. Some combinations cannot
 be asked of one query, and the list says so above the grid rather than applying them
 to part of it: Organization *contains* together with a search (the filter is shown as
 "is not applied: cannot be combined with the search — clear the search to use it"),
