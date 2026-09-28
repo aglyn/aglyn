@@ -170,6 +170,7 @@ const state = (
       purchases: Array<Record<string, unknown>>
       componentWrites: Array<Record<string, unknown>>
       listing: Record<string, unknown>
+      publisherOrg: Record<string, unknown> | undefined
     }
   }
 ).__state

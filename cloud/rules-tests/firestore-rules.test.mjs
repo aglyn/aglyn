@@ -5778,16 +5778,22 @@ describe('pre-release hardening guards', () => {
         updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
       )
     }
-    // Publisher-authored listing CONTENT stays owner-writable — the point of
-    // the deny-list is that it names what is server-owned, not everything.
+    // Shelf placement stays owner-writable — the point of the deny-list is
+    // that it names what is server-owned, not everything. The copy a buyer
+    // reads is written through the API since AGL-3365, which screens it.
     await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
+        categories: ['forms'],
+      }),
+    )
+    await assertFails(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
         description: 'Plugin v2', readme: '# Docs', license: 'MIT',
       }),
     )
     // Non-owners still can't touch someone else's listing.
     await assertFails(
-      updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { readme: '# Mine' }),
+      updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { categories: ['mine'] }),
     )
   })
 
