@@ -122,10 +122,14 @@ export interface PluginJobHostGate {
 }
 
 /**
- * The gate as the runner builds it. Exported because the MANUAL doors —
- * `commerce/process-abandoned`, `bookings/reminders` and the other
- * `x-cron-secret` entry points that still exist for ops — call the same scan
- * functions and must ask the same question. A forced pass is still a pass.
+ * The gate as the runner builds it.
+ *
+ * The MANUAL doors — `commerce/process-abandoned`, `commerce/process-restock`,
+ * `bookings/reminders` — do NOT use it (AGL-3356). They are served by the
+ * console, which registers no resolver, so this answered "not locked" for
+ * every site there and a forced pass mailed a suspended site's customers.
+ * They take `siteLockdownJobGate()` from the admin lib instead: the same
+ * function the tenant registers here, needing no registration at all.
  *
  * NO resolver registered answers "not locked", loudly and once. That is the
  * fail-open direction on purpose: a deployment that has not wired a carrier

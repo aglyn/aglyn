@@ -33,9 +33,13 @@ import {
 import {
   type PluginApiHandler,
   type PluginJobHostGate,
-  pluginJobHostGate,
 } from '@aglyn/aglyn/server'
 import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
+// The leaf, not the barrel: the console's `x-cron-secret` door asks the
+// site's lockdown directly (AGL-3356) — core's registry has no resolver in
+// the console process — and a spec that substitutes the barrel must still
+// reach the real verdict.
+import { siteLockdownJobGate } from '@aglyn/tenant-data-admin/server/tenant-write-lockdown'
 
 import {
   CHECKOUT_GIVE_UP_AFTER_MS as GIVE_UP_AFTER_MS,
@@ -287,7 +291,7 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
     // The manual door asks the same question the beat does (AGL-2495): a
     // forced pass is still a pass, and `x-cron-secret` is not an argument
     // for mailing a suspended site's shoppers.
-    return res.status(200).json(await scanAbandonedCheckouts(pluginJobHostGate()))
+    return res.status(200).json(await scanAbandonedCheckouts(siteLockdownJobGate()))
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Processing failed' })

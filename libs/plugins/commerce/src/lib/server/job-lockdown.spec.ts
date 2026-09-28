@@ -166,6 +166,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
+// The site-lockdown gate the console's manual doors are handed (AGL-3356):
+// the same double the scans are driven with, so a door that asked core's
+// unregistered registry instead would mail the locked host and fail below.
+jest.mock('@aglyn/tenant-data-admin/server/tenant-write-lockdown', () => ({
+  siteLockdownJobGate: () => gate,
+}))
+
 jest.mock('@aglyn/shared-util-email', () => ({
   // TRUE, so a green cannot mean "email was switched off".
   isEmailConfigured: () => true,
@@ -177,8 +184,11 @@ jest.mock('@aglyn/shared-util-email', () => ({
   },
 }))
 
-import { scanAbandonedCheckouts } from './process-abandoned'
-import { scanRestockAlerts } from './process-restock'
+import {
+  processAbandonedHandler,
+  scanAbandonedCheckouts,
+} from './process-abandoned'
+import { processRestockHandler, scanRestockAlerts } from './process-restock'
 import { scanStockDecrements } from './reconcile-stock'
 import { scanSupplierDeliveries } from './supplier-outbox'
 
@@ -457,6 +467,71 @@ describe('AGL-2495 · commerce#supplier-webhook-delivery honours a lockdown', ()
     const after = await scanSupplierDeliveries(gate, 5_000)
     expect(after.cancelled).toBe(1)
     expect(writes).toEqual(['delete supplierDeliveries/d1'])
+  })
+})
+
+/*
+ * THE CONSOLE'S MANUAL DOORS (AGL-3356). `commerce/process-abandoned` and
+ * `commerce/process-restock` drive the same scans by hand with the cron
+ * secret, served by the console — where core's job registry has no resolver,
+ * so the gate they used to mint answered "not locked" for every site.
+ */
+describe('AGL-3356 · the manual commerce doors honour a lockdown', () => {
+  const callDoor = async (handler: (req: any, res: any) => unknown) => {
+    const captured: { status: number; body: any } = { status: 0, body: null }
+    const res: any = {
+      status: (code: number) => {
+        captured.status = code
+        return res
+      },
+      json: (body: unknown) => {
+        captured.body = body
+        return res
+      },
+    }
+    await handler({ method: 'POST', headers: { 'x-cron-secret': 'cron' } }, res)
+    return captured
+  }
+  const previous = process.env['CRON_SECRET']
+  beforeEach(() => {
+    process.env['CRON_SECRET'] = 'cron'
+  })
+  afterEach(() => {
+    if (previous === undefined) delete process.env['CRON_SECRET']
+    else process.env['CRON_SECRET'] = previous
+  })
+
+  it('process-abandoned skips a locked site and leaves its checkout open', async () => {
+    rows['checkouts'] = [
+      hostDoc('locked', 'checkouts', 'c1', {
+        status: 'open',
+        email: 'shopper@example.com',
+        createdAtMs: Date.now() - 30 * 24 * 60 * 60 * 1000,
+      }),
+    ]
+    lockedHosts.add('locked')
+    const answer = await callDoor(processAbandonedHandler)
+    expect(answer.status).toBe(200)
+    expect(answer.body).toMatchObject({ skippedLocked: 1 })
+    expect(asked).toEqual(['locked'])
+    expect(writes).toEqual([])
+    expect(emails).toEqual([])
+    expect(stored['hosts/locked/checkouts/c1'].status).toBe('open')
+  })
+
+  it('process-restock skips a locked site and leaves its alert pending', async () => {
+    rows['restockAlerts'] = [
+      hostDoc('locked', 'restockAlerts', 'a1', {
+        email: 'shopper@example.com',
+        notifiedAtMs: null,
+      }),
+    ]
+    lockedHosts.add('locked')
+    const answer = await callDoor(processRestockHandler)
+    expect(answer.status).toBe(200)
+    expect(answer.body).toMatchObject({ skippedLocked: 1 })
+    expect(writes).toEqual([])
+    expect(stored['hosts/locked/restockAlerts/a1'].notifiedAtMs).toBeNull()
   })
 })
 

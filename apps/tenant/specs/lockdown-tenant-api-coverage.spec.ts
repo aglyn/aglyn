@@ -1000,9 +1000,29 @@ describe('AGL-2495 · the job lockdown resolver is actually wired', () => {
     expect(source).toContain('registerPluginJobHostLockdown(')
     // Asking the SAME function the drill's fix asks, rather than keeping a
     // second notion of what a lock is — so the enforcement-class work on
-    // `getSiteLockdown` reaches the job beat for free.
-    expect(source).toContain('getSiteLockdown')
+    // `getSiteLockdown` reaches the job beat for free. Since AGL-3356 that is
+    // `siteLockdownJobGate()`, the one wrapper over it the console's manual
+    // doors are handed too; the next case pins what the wrapper asks.
+    expect(source).toContain('siteLockdownJobGate()')
     expect(source).toContain("from '@aglyn/tenant-data-admin'")
+  })
+
+  it('the shared gate is getSiteLockdown and nothing else (AGL-3356)', () => {
+    const source = read('libs/tenant/data/admin/src/lib/server/tenant-write-lockdown.ts')
+    const body = source.slice(source.indexOf('export function siteLockdownJobGate'))
+    expect(body.slice(0, 400)).toContain('(await getSiteLockdown(hostId)) !== null')
+  })
+
+  it('the console manual doors take the shared gate, not the registry (AGL-3356)', () => {
+    for (const file of [
+      'libs/plugins/commerce/src/lib/server/process-abandoned.ts',
+      'libs/plugins/commerce/src/lib/server/process-restock.ts',
+      'libs/plugins/bookings/src/lib/server.ts',
+    ]) {
+      const source = read(file)
+      expect(`${file}: ${source.includes('(siteLockdownJobGate())')}`).toBe(`${file}: true`)
+      expect(`${file}: ${source.includes('pluginJobHostGate()')}`).toBe(`${file}: false`)
+    }
   })
 
   it('the runner route imports it for its side effect', () => {
