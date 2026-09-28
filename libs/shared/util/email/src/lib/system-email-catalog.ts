@@ -945,6 +945,46 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'libs/tenant/data/admin/src/lib/server/staff-alert-email.ts',
     },
     {
+      key: 'operator-alert',
+      name: 'Operator alert: fraud and risk',
+      description:
+        'Emailed to the operator for every fraud or risk alert staff get in ' +
+        'the console: card testing, a flagged or disputed payment, a held ' +
+        'phishing email, a seller under review, a DMCA counter-notice. Goes ' +
+        'to STAFF_ALERT_EMAIL, else the operator support address, else every ' +
+        'staff account.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{alert.title}}',
+      mergeTokens: [
+        {
+          name: 'alert.title',
+          description: 'The alert, in one line',
+          sample: 'Card testing on northwind.test',
+        },
+        {
+          name: 'alert.body',
+          description: 'What happened, as staff are told it',
+          sample:
+            '38 declined card attempts in 10 minutes on the checkout of ' +
+            'northwind.test. Checkout is rate limited while this is reviewed.',
+        },
+        {
+          name: 'alert.url',
+          description: 'The item in the staff console',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/admin/abuse-reports`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{alert.title}}', variant: 'heading' },
+        { block: 'text', text: '{{alert.body}}', variant: 'body' },
+        { block: 'button', label: 'Review it', href: '{{alert.url}}' },
+      ],
+      footerReason:
+        'You’re receiving this because this address gets ' +
+        '{{brand.productName}}’s fraud and risk alerts.',
+      source: 'libs/tenant/data/admin/src/lib/server/staff-alert-email.ts',
+    },
+    {
       key: 'support-ticket-alert',
       name: 'Support ticket to success manager',
       description:

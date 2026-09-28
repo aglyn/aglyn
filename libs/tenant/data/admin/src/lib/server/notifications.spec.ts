@@ -41,8 +41,9 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+let staffUids: string[] = []
 jest.mock('./auth-pools', () => ({
-  listStaffUidsAcrossPools: async () => [],
+  listStaffUidsAcrossPools: async () => staffUids,
   findUserByUidAcrossPools: async (uid: string) =>
     directory.has(uid)
       ? { record: { email: directory.get(uid) }, tenantId: null }
@@ -151,7 +152,7 @@ function fakeFirestore(): any {
   }
 }
 
-import { notifyHostManagers, notifyUsers } from './notifications'
+import { notifyHostManagers, notifyStaff, notifyUsers } from './notifications'
 
 /**
  * Host notifications carry their own org (AGL-1773).
@@ -474,5 +475,58 @@ describe('the notification email is a system email (AGL-3367)', () => {
     expect(String(sends[0]['html'])).not.toContain('Acme Sites')
     expect(String(sends[0]['html'])).toContain('href="https://app.example.com/admin/orgs/org-1"')
     expect(metered).toEqual(['platform'])
+  })
+})
+
+/**
+ * A fraud or risk alert reaches the operator by email (AGL-3375), whatever
+ * any staff member switched on, and nobody is mailed it twice.
+ */
+describe('operator alerts (AGL-3375)', () => {
+  const EMAIL_ON = { notificationSettings: { account: { staff: { email: true }, system: { email: true } } } }
+
+  beforeEach(() => {
+    written.length = 0
+    hostDocs.clear()
+    userDocs.clear()
+    sends.length = 0
+    metered.length = 0
+    suppressed.clear()
+    directory.clear()
+    emailConfigured = true
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.example.com'
+    process.env.STAFF_ALERT_EMAIL = 'alerts@example.com'
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    delete process.env.STAFF_ALERT_EMAIL
+    staffUids = []
+    jest.restoreAllMocks()
+  })
+
+  it('emails the operator once, beside the console notification every staff member gets', async () => {
+    staffUids = ['s1', 's2']
+    userDocs.set('s1', EMAIL_ON)
+    directory.set('s1', 's1@example.com')
+    await notifyStaff({
+      type: 'system.abuseReportUrgent',
+      title: 'Card testing on northwind.test',
+      body: '38 declined attempts in 10 minutes.',
+      link: '/admin/abuse-reports/r1',
+    })
+    // Every staff member still gets the console notification.
+    expect(written).toHaveLength(2)
+    // One email, to the operator inbox; the staff member who switched email
+    // on is not mailed a second copy.
+    expect(sends.map((send) => send['to'])).toEqual(['alerts@example.com'])
+    expect(String(sends[0]['html'])).toContain('href="https://app.example.com/admin/abuse-reports/r1"')
+  })
+
+  it('leaves an ordinary staff notification to the per-person channel', async () => {
+    staffUids = ['s1']
+    userDocs.set('s1', EMAIL_ON)
+    directory.set('s1', 's1@example.com')
+    await notifyStaff({ type: 'staff.orgCreated', title: 'New workspace', link: '/admin/orgs/o1' })
+    expect(sends.map((send) => send['to'])).not.toContain('alerts@example.com')
   })
 })

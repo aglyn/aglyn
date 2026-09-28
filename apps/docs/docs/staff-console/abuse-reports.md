@@ -22,6 +22,27 @@ reach us. For a phishing site the somewhere else is a domain-level block on
 the failure this queue exists to prevent, and it is the reason an unanswered
 report is more expensive than it looks.
 
+## Fraud and risk alerts by email {#fraud-and-risk-alerts-by-email}
+
+Every urgent alert this queue raises is also emailed to the operator, so nobody has to be
+watching the console to hear about it. That covers:
+
+- card testing on a checkout
+- a flagged, disputed or early-fraud-warned payment, including one on a workspace's own
+  subscription
+- a phishing email held on a sending domain
+- a seller or a marketplace sale under review
+- a card dispute that no workspace owns
+- a DMCA counter-notice
+- a billing webhook that only half applied
+
+The email goes to `STAFF_ALERT_EMAIL`. When that isn't set, it goes to the operator support
+address (`NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`). When neither is set, it goes to every staff
+account. So a self-hosted or open-source install that configured nothing still hears about
+fraud. Every staff member still gets the console notification, and anyone who switched on
+email for these alerts isn't sent a second copy. The email is the **Operator alert: fraud
+and risk** system email, which you can redesign under [System emails](overview.md#system-emails).
+
 ## Where reports come from {#where-reports-come-from}
 
 One URL, on every origin we serve:

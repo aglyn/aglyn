@@ -30,6 +30,7 @@ import {
 import { sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import { firebaseAdmin, meterPlatformEmail } from '@aglyn/tenant-data-admin'
+import { resolveStaffAlertRecipients } from '@aglyn/tenant-data-admin/server/staff-alert-email'
 
 /**
  * This job's console descriptor (AGL-1949) — the confirmation phrase and the
@@ -220,8 +221,12 @@ async function handler(request: Request): Promise<Response> {
       name: doc.get('name') ?? null,
       requestedAt: doc.get('erasureRequestedAt')?.toDate?.() ?? null,
     }))
-    const staffEmail = process.env.STAFF_ALERT_EMAIL
-    if (due.length && staffEmail && !dryRun) {
+    // The staff alert inbox, with its fallbacks (AGL-3375): an erasure past
+    // its hold is a legal deadline, so an install that set no inbox is told
+    // through its operator address or its staff accounts rather than not at
+    // all.
+    const staffEmails = due.length && !dryRun ? await resolveStaffAlertRecipients() : []
+    if (staffEmails.length) {
       const orgsList = due
         .map(
           (entry) =>
@@ -240,19 +245,21 @@ async function handler(request: Request): Promise<Response> {
         count: String(due.length),
         'orgs.list': orgsList,
       })
-      await sendEmail({
-        to: staffEmail,
-        subject:
-          designed?.subject ??
-          `${due.length} erasure request(s) past the 7-day hold`,
-        text: designed?.text || fallbackText,
-        ...(designed?.html ? { html: designed.html } : {}),
-        context: 'erasure-hold staff alert',
-      })
-      // Cost meter (AGL-1438). Platform-scoped: Aglyn's own staff alert, not
-      // any customer's mail, so it stays out of every org rollup while still
-      // being counted.
-      await meterPlatformEmail()
+      for (const to of staffEmails) {
+        await sendEmail({
+          to,
+          subject:
+            designed?.subject ??
+            `${due.length} erasure request(s) past the 7-day hold`,
+          text: designed?.text || fallbackText,
+          ...(designed?.html ? { html: designed.html } : {}),
+          context: 'erasure-hold staff alert',
+        })
+        // Cost meter (AGL-1438). Platform-scoped: Aglyn's own staff alert,
+        // not any customer's mail, so it stays out of every org rollup while
+        // still being counted.
+        await meterPlatformEmail()
+      }
     }
 
     return Response.json({
