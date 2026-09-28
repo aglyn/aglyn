@@ -31,6 +31,12 @@ let mockHost: { exists: boolean; memberRoles?: Record<string, string> } = {
 let mockLoggedActors = new Set<string>()
 const mockActivityAsked: string[] = []
 
+const mockFindAcrossPools = jest.fn()
+jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
+  __esModule: true,
+  findUserByUidAcrossPools: (...args: unknown[]) => mockFindAcrossPools(...args),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -96,6 +102,7 @@ const get = (params: Record<string, string>, token = 'token') => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockFindAcrossPools.mockResolvedValue(null)
   mockActivityAsked.length = 0
   mockHost = { exists: true, memberRoles: { viewer: 'viewer' } }
   mockLoggedActors = new Set(['uid-7'])
@@ -122,6 +129,17 @@ describe('the site feed resolves who acted (AGL-3369)', () => {
     expect(mockActivityAsked.sort()).toEqual(['uid-7', 'uid-9'])
     expect(mockGetUsers).toHaveBeenCalledWith([{ uid: 'uid-7' }])
     expect((await response.json()).actors).toEqual({ 'uid-7': 'uid-7@example.test' })
+  })
+
+  it('finds an SSO member in their tenant pool when the project pool has no record (AGL-1122)', async () => {
+    mockGetUsers.mockResolvedValue({ users: [], notFound: [{ uid: 'uid-7' }] })
+    mockFindAcrossPools.mockResolvedValue({
+      tenantId: 'acme-sso',
+      record: { uid: 'uid-7', email: 'sso@acme.test' },
+    })
+    const response = await get({ hostId: 'host-1', uids: 'uid-7' })
+    expect(mockFindAcrossPools).toHaveBeenCalledWith('uid-7')
+    expect((await response.json()).actors).toEqual({ 'uid-7': 'sso@acme.test' })
   })
 
   it('refuses someone who is not a member of the site', async () => {

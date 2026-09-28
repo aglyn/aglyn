@@ -97,6 +97,12 @@ function activityQuery(): any {
   }
 }
 
+const mockFindAcrossPools = jest.fn()
+jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
+  __esModule: true,
+  findUserByUidAcrossPools: (...args: unknown[]) => mockFindAcrossPools(...args),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -169,6 +175,7 @@ const get = (orgId = 'org-1', params: Record<string, string> = {}) => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockFindAcrossPools.mockResolvedValue(null)
   ordering = []
   capped = null
   wheres = []
