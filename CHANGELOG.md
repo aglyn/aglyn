@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.206 — 2026-09-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/5c53af612...v1.0.0-beta.206)
+
+### Added
+
+- **staff:** a Sites list of every site, with its org, owner, live link and preview ([AGL-3378](https://linear.app/aglyn/issue/AGL-3378), [AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+### Fixed
+
+- **auth:** verify-email confirms the click and the waiting tab carries on ([AGL-3384](https://linear.app/aglyn/issue/AGL-3384))
+
 ## v1.0.0-beta.205 — 2026-09-28
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.204...v1.0.0-beta.205)
