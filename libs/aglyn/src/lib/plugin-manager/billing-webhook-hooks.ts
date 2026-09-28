@@ -66,6 +66,13 @@ export interface BillingWebhookHandlerResult {
    * them, without the route knowing what an order or a booking is.
    */
   hostId?: string
+  /**
+   * The workspace that SOLD the claimed record, when the seller is a
+   * workspace rather than a site (AGL-3365) — a marketplace publisher. The
+   * seller's fraud-pattern row names it, so a publisher's pattern reads as
+   * the publisher's and never as the buyer's.
+   */
+  orgId?: string
 }
 
 export type BillingWebhookHandler = (
@@ -81,6 +88,8 @@ export interface BillingWebhookDispatchResult {
   claimed: boolean
   /** Every distinct `hostId` a handler reported, in handler order. */
   hostIds: string[]
+  /** Every distinct seller `orgId` a handler reported, in handler order. */
+  orgIds: string[]
 }
 
 const handlers: BillingWebhookHandler[] = []
@@ -108,6 +117,7 @@ export async function runBillingWebhookHandlers(
 ): Promise<BillingWebhookDispatchResult> {
   let claimed = false
   const hostIds: string[] = []
+  const orgIds: string[] = []
   for (const handler of handlers) {
     // Narrowed through the union rather than read off it: the handler's
     // return type includes `void` — the shape every handler that does not
@@ -119,6 +129,8 @@ export async function runBillingWebhookHandlers(
     if (result?.claimed === true) claimed = true
     const hostId = typeof result?.hostId === 'string' ? result.hostId : ''
     if (hostId && !hostIds.includes(hostId)) hostIds.push(hostId)
+    const orgId = typeof result?.orgId === 'string' ? result.orgId : ''
+    if (orgId && !orgIds.includes(orgId)) orgIds.push(orgId)
   }
-  return { claimed, hostIds }
+  return { claimed, hostIds, orgIds }
 }

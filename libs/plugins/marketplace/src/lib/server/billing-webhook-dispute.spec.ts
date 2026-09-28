@@ -305,12 +305,14 @@ describe('charge.dispute.created flags without revoking (AGL-1554)', () => {
    * to false would pass every "not mine" assertion in this file while making
    * the route alert on every marketplace chargeback there is.
    */
-  it('claims a dispute whose purchase it found', async () => {
+  it('claims a dispute whose purchase it found, naming the publisher it paid', async () => {
+    // The seller ledger counts it against the PUBLISHER's workspace, never
+    // the buyer's (AGL-3365).
     await expect(
       marketplaceBillingWebhookHandler(
         disputeEvent('charge.dispute.created') as any,
       ),
-    ).resolves.toEqual({ claimed: true })
+    ).resolves.toEqual({ claimed: true, orgId: 'seller-org' })
   })
 })
 

@@ -32,6 +32,7 @@ import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { pinnedProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
+import { isPublisherSecurityLocked } from './sale-risk'
 import {
   isListingBrowsable,
   isPrivateListing,
@@ -201,6 +202,8 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       // check below stops a hidden listing anyway, but only while the
       // revocation stands, and a takedown is not conditional on it.
       listing.hiddenAt ||
+      // A publisher under a SECURITY lock hands nothing over (AGL-3365).
+      (await isPublisherSecurityLocked(firestore, listing.profileId)) ||
       listingArtifactType(listing) !== 'plugin'
     ) {
       return res.status(404).json({ error: 'Unknown plugin listing' })

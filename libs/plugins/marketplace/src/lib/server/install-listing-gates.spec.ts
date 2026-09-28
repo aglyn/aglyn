@@ -82,6 +82,15 @@ describe('every install door checks the listing, not just the buyer (AGL-2290)',
     },
   )
 
+  it.each(doors.length ? doors.map((file) => file.name) : ['<no doors found>'])(
+    '%s refuses a publisher under a security lock (AGL-3365)',
+    (name) => {
+      const file = doors.find((entry) => entry.name === name)
+      expect(file).toBeDefined()
+      expect(file!.text).toContain('isPublisherSecurityLocked(firestore, listing.profileId)')
+    },
+  )
+
   it.each(
     // `update-artifact` is deliberately absent: it only ever updates content
     // that is ALREADY installed on the site, so a private listing reaching it

@@ -2175,11 +2175,18 @@ async function handler(request: Request): Promise<Response> {
     // its own record by now; staff hear only if this crosses the pattern.
     if (sellerFraudSignal) {
       const hostIds = dispatch?.hostIds ?? []
+      // A seller that is a WORKSPACE (a marketplace publisher, AGL-3365) is
+      // named by the plugin that sold it; a site's seller is read off the
+      // site. Either way the row names who was PAID, never who paid.
+      const orgIds = [...(dispatch?.orgIds ?? [])]
+      for (const orgId of await orgIdsForHosts(observed(), hostIds)) {
+        if (!orgIds.includes(orgId)) orgIds.push(orgId)
+      }
       await recordSellerFraudSignal(
         {
           ...sellerFraudSignal,
           hostIds,
-          orgIds: await orgIdsForHosts(observed(), hostIds),
+          orgIds,
         },
         { firestore: observed(), notify: notifyStaff },
       )

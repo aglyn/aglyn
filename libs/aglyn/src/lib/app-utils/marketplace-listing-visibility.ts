@@ -142,19 +142,17 @@ export const LISTING_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> =
     // through keys the server derives, so it is written through the API
     // (`update-listing`) alone and denied here with `deletedAt` and
     // `visibility`, the two other fields a listing's browse audience follows.
-    description:
-      'Publisher-authored storefront copy, validated by ' +
-      '`validateListingContent` on the API path and sanitized at render — ' +
-      'renderers never trust this document.',
+    // `description`, `readme`, `homepageUrl`, `repositoryUrl` and `license`
+    // were here as "publisher-authored, sanitized at render" (AGL-430). Since
+    // AGL-3365 the API runs what a buyer reads through the phishing screen
+    // before storing it, and a client write would publish it unscreened, so
+    // they are written through `update-listing` alone and denied here.
     category:
       'The single legacy category. Publisher-chosen shelf placement; it ' +
       'orders a browse page and gates nothing.',
     categories:
       'The AGL-430 multi-category list. Same reasoning as `category` — ' +
       'placement, not permission.',
-    readme:
-      'Markdown documentation for the listing page (no raw HTML). ' +
-      'Publisher-authored and sanitized at render.',
     // `logoUrl` and `screenshots` were here, justified as "sanitized at
     // render" (AGL-1701). They were not: listing-content.component.tsx hands
     // both straight to an `<img src>`, and `logoUrl` additionally becomes an
@@ -164,13 +162,6 @@ export const LISTING_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> =
     // the string names, disclosing their IP and a `Referer` naming the
     // console and their org to a recipient on no subprocessor register.
     // Denied in the rules and held to first-party media on the API path.
-    homepageUrl:
-      'Publisher-authored outbound link, sanitized at render. It points ' +
-      'away from the platform and decides nothing here.',
-    repositoryUrl: 'Publisher-authored outbound link. Same as `homepageUrl`.',
-    license:
-      'An SPDX-ish label the publisher asserts about their own code. A claim ' +
-      'shown to buyers, not a permission the platform grants.',
     pluginId:
       'The manifest id a plugin listing declares (AGL-45). Rewriting it ' +
       'breaks the publisher\'s own install resolution; the artifact that ' +

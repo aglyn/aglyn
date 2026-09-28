@@ -792,3 +792,43 @@ describe('inputs that collect credentials (AGL-3362)', () => {
     expect(PLUGIN_VERIFIER_VERSION).toBeGreaterThanOrEqual(7)
   })
 })
+
+describe('declared origins that wear a brand (AGL-3365)', () => {
+  const network = (declaredNetwork: string[]) => {
+    const result = checkPluginBundle(
+      `export function register() { return fetch('${declaredNetwork[0]}/v1') }\n`,
+      { declaredNetwork },
+    )
+    return {
+      result,
+      status: result.checks.find((check) => check.id === 'network')?.status,
+      messages: result.problems
+        .filter((problem) => problem.check === 'network')
+        .map((problem) => problem.message),
+    }
+  }
+
+  it('asks the reviewer about a lookalike origin, the platform included', () => {
+    for (const origin of ['https://paypal-verify.net', 'https://api.aglyn-billing.com']) {
+      const { result, status, messages } = network([origin])
+      // A question for the review every version gets, never a refusal.
+      expect(result.ok).toBe(true)
+      expect(status).toBe('question')
+      expect(messages).toEqual([expect.stringContaining('is not')])
+    }
+  })
+
+  it('passes a plugin that integrates with PayPal or Stripe on their own domains', () => {
+    const { status, messages } = network([
+      'https://api-m.paypal.com',
+      'https://api.stripe.com',
+      'https://app.aglyn.com',
+    ])
+    expect(status).toBe('pass')
+    expect(messages).toEqual([])
+  })
+
+  it('re-verifies every stored verdict from the checker before this one', () => {
+    expect(PLUGIN_VERIFIER_VERSION).toBeGreaterThanOrEqual(8)
+  })
+})
