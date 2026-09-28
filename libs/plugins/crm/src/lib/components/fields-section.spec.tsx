@@ -26,7 +26,9 @@
  * Since AGL-3335 each tab is the console's list table: paged, sorted by
  * Field, Key and Type, filtered by Type and Required, searched by name and
  * key — with the stored order still moved by the arrows, which wait while
- * any sort, filter or search is in force.
+ * any sort, filter or search is in force. The filters and the search are
+ * asked of Firestore (AGL-3321): the read below answers the table's real
+ * plan over the stored definitions, the way the query would.
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -35,6 +37,10 @@ import type { ReactNode } from 'react'
 import { ContactsFieldsSection } from './fields-section'
 
 const definitionsFor = jest.fn()
+/** The tab's definitions as stored, with the fields the writers stamp. */
+let mockStored: Array<Record<string, unknown>> = []
+/** The last plan the table read with, or null when it read nothing. */
+let mockPlan: { filters: unknown[] } | null = null
 
 // The org's lead source list (AGL-3298), read as the starter set.
 jest.mock('../hooks/use-lead-source-picklist', () => {
@@ -57,6 +63,11 @@ jest.mock('firebase/firestore', () => ({
       .filter(Boolean)
       .join('/'),
   }),
+  query: (collectionRef: unknown, ...constraints: Array<{ plan?: unknown }>) => ({
+    collectionRef,
+    plan: constraints.find((constraint) => constraint.plan)?.plan ?? null,
+  }),
+  limit: (count: number) => ({ limit: count }),
   setDoc: jest.fn(async () => undefined),
   serverTimestamp: () => 'server-time',
   updateDoc: jest.fn(async () => undefined),
@@ -105,8 +116,29 @@ jest.mock('../hooks/use-crm-scope', () => ({
 jest.mock('../hooks/use-contact-field-definitions', () => ({
   useContactFieldDefinitions: (orgId: string, object: string) => definitionsFor(orgId, object),
 }))
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  listQueryConstraints: (plan: unknown) => [{ plan }],
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/host-collection-queries', () => ({
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  // The Fields table's filtered read (AGL-3335), answered over the stored
+  // definitions by the list-query double's matcher.
+  useFirestoreCollection: (factory: () => { plan: { filters: unknown[] } } | null) => {
+    const { answerListQuery } = jest.requireActual(
+      '@aglyn/tenant-feature-instance/testing/list-query-double',
+    )
+    const read = factory()
+    mockPlan = read?.plan ?? null
+    return read
+      ? { data: answerListQuery(mockStored, read.plan), status: 'ready' }
+      : { data: undefined, status: 'loading' }
+  },
   // The maintenance recompute (AGL-2661) calls the route as the signed-in user.
   useUser: () => ({ data: null }),
   writeGuardedBySeed: async (_seed: unknown, write: () => Promise<void>) => {
@@ -294,8 +326,11 @@ describe('the Fields list table (AGL-3335)', () => {
       type: index % 2 ? 'number' : 'date',
     })),
   ]
-  const withFields = (definitions: unknown[]) =>
+  const withFields = (definitions: Array<Record<string, unknown>>) => {
+    const { crmFieldListFields } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+    mockStored = definitions.map((definition) => ({ ...definition, ...crmFieldListFields(definition) }))
     definitionsFor.mockReturnValue({ definitions, active: definitions, ready: true, fromCache: false })
+  }
   const arrow = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement
 
   jest.setTimeout(30_000)
@@ -316,13 +351,20 @@ describe('the Fields list table (AGL-3335)', () => {
     withFields(TWELVE)
     render(<ContactsFieldsSection hostId="host-1" org={{}} />)
     expect(arrow('Move Tier up').disabled).toBe(false)
+    // Nothing narrows the tab yet, so nothing is read beyond the shared definitions.
+    expect(mockPlan).toBeNull()
     act(() => mockGrid.onFilterModelChange({ items: [], quickFilterValues: ['plan'] }))
     expect(mockGrid.rows.map((row) => row.key)).toEqual(['plan_interest'])
+    // The search is the query's: the tab, and the word's prefix among the tokens.
+    expect(mockPlan?.filters).toEqual([
+      { path: 'object', op: '==', value: 'contact' },
+      { path: 'searchTokens', op: 'array-contains', value: 'plan' },
+    ])
     expect(arrow('Move Plan interest down').disabled).toBe(true)
     expect(screen.getByLabelText('Clear sorting and filters to reorder')).toBeTruthy()
   })
 
-  it('filters by Type and by Required', () => {
+  it('filters by Type and by Required, on the query', () => {
     withFields(TWELVE)
     render(<ContactsFieldsSection hostId="host-1" org={{}} />)
     act(() =>
@@ -333,11 +375,16 @@ describe('the Fields list table (AGL-3335)', () => {
     expect(mockGrid.rows).toHaveLength(5)
     act(() =>
       mockGrid.onFilterModelChange({
-        items: [{ id: 'panel', field: 'required', operator: 'is', value: 'required' }],
+        items: [{ id: 'panel', field: 'required', operator: 'is', value: 'true' }],
       }),
     )
     // Filtering one column and then another is both: no number is required.
     expect(mockGrid.rows).toHaveLength(0)
+    expect(mockPlan?.filters).toEqual([
+      { path: 'object', op: '==', value: 'contact' },
+      { path: 'type', op: '==', value: 'number' },
+      { path: 'required', op: '==', value: true },
+    ])
   })
 
   it('disables reorder while sorted by Type, and clearing the sort brings it back', () => {

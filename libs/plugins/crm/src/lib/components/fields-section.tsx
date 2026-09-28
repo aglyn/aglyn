@@ -19,9 +19,11 @@
 import {
   CONTACT_FIELD_TYPE_LABELS,
   CONTACT_FIELD_TYPES,
+  CONTACT_FIELDS_MAX_PER_ORG,
   type ConsolePluginPageProps,
   createResourceUid,
   CRM_COLLECTIONS,
+  crmFieldListFields,
   CRM_FIELD_OBJECT_LABELS,
   CRM_FIELD_OBJECTS,
   type CrmFieldObject,
@@ -32,6 +34,9 @@ import {
 } from '@aglyn/aglyn'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
@@ -53,15 +58,18 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import {
-  filterListRows,
-  inMemoryListField,
   type ListFilterOption,
   listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   useFirestore,
+  useFirestoreCollection,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -80,6 +88,8 @@ import {
   collection,
   deleteDoc,
   doc,
+  limit,
+  query,
   setDoc,
   updateDoc,
   writeBatch,
@@ -90,6 +100,7 @@ import {
   useContactFieldDefinitions,
 } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { CRM_FIELD_LIST_QUERY, crmFieldListBase } from '../constants/field-list-query'
 import ContactFieldDrawer, { type ContactFieldDraft } from './contact-field-drawer'
 import { LeadSourceValuesCard } from './lead-source-values-card'
 import { recomputeAllCrmNextActivity } from '../model/next-activity-api'
@@ -130,18 +141,15 @@ interface FieldRow {
   label: string
   key: string
   type: string
-  /** `required` or `optional`, the value the Required filter picks. */
-  required: 'required' | 'optional'
+  /** `true` or `false`, the value the Required filter picks. */
+  required: 'true' | 'false'
   /** Where the stored order puts it, from zero. */
   position: number
   definition: ContactFieldDefinitionDoc
 }
 
-/** What the grid's Filters panel offers: the type and whether it is required. */
-const FIELD_FILTER_FIELDS = [
-  inMemoryListField('type', 'select'),
-  inMemoryListField('required', 'select'),
-]
+/** What the grid's Filters panel offers: the type and whether it is required, on the query. */
+const FIELD_FILTER_FIELDS = CRM_FIELD_LIST_QUERY.fields
 const FIELD_FILTER_HEADERS: Readonly<Record<string, string>> = {
   type: 'Type',
   required: 'Required',
@@ -152,12 +160,10 @@ const FIELD_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>
     label: CONTACT_FIELD_TYPE_LABELS[type],
   })),
   required: [
-    { value: 'required', label: 'Required' },
-    { value: 'optional', label: 'Optional' },
+    { value: 'true', label: 'Required' },
+    { value: 'false', label: 'Optional' },
   ],
 }
-/** The quick search reads a field's name and its key. */
-const FIELD_SEARCH_PATHS = ['label', 'key'] as const
 
 /** Why the arrows are off while the list is not in its stored order. */
 export const FIELD_REORDER_LOCKED_REASON = 'Clear sorting and filters to reorder'
@@ -166,6 +172,10 @@ const typeLabel = (type: unknown) =>
   CONTACT_FIELD_TYPE_LABELS[type as keyof typeof CONTACT_FIELD_TYPE_LABELS] ?? String(type ?? '')
 
 interface FieldsTableProps {
+  /** The organization whose definitions these are; `null` reads nothing. */
+  orgId: string | null
+  /** The tab: which record the definitions describe. */
+  object: CrmFieldObject
   /** One tab's definitions, in the stored order. */
   definitions: readonly ContactFieldDefinitionDoc[]
   /** A field being written; every arrow waits for it. */
@@ -188,43 +198,89 @@ interface FieldsTableProps {
  * order, and a move would land somewhere the reader cannot see; the arrows
  * say so rather than disappear.
  *
- * The panel and the search narrow the rows here, over the tab's whole list
- * (`filterListRows`), and the grid sorts and pages what it is handed. The
- * definitions are read whole — at most `CONTACT_FIELDS_MAX_PER_ORG` — so a
- * clause matched here is matched against every field there is, and there
- * is no later page for it to miss.
+ * The panel and the search are asked of Firestore (AGL-3321): a clause or
+ * a search word reads the tab's definitions that match it
+ * (`CRM_FIELD_LIST_QUERY`), and never narrows the rows already on screen.
+ * That answer is every match, at most `CONTACT_FIELDS_MAX_PER_ORG`, so the
+ * grid sorts and pages it whole; a read that reaches the ceiling says so.
  */
 function FieldsTable(props: FieldsTableProps) {
-  const { definitions, busyId, onMove, rowActions } = props
+  const { orgId, object, definitions, busyId, onMove, rowActions } = props
+  const firestore = useFirestore()
   const gridFilter = useListGridFilter({ selectFields: ['type', 'required'] })
   const [sortModel, setSortModel] = useState<GridSortModel>([])
   const searching = gridFilter.searchWords.some((word) => word.trim() !== '')
   const reorderLocked =
     sortModel.length > 0 || gridFilter.clauses.length > 0 || searching
 
-  const allRows = useMemo<FieldRow[]>(
+  const narrowed = gridFilter.clauses.length > 0 || searching
+  const plan = useMemo(
     () =>
-      definitions.map((definition, position) => ({
-        $id: definition.$id,
-        label: definition.label,
-        key: definition.key,
-        type: definition.type,
-        required: definition.required ? 'required' : 'optional',
-        position,
-        definition,
-      })),
+      planListQuery(
+        CRM_FIELD_LIST_QUERY,
+        {
+          clauses: gridFilter.clauses,
+          search: gridFilter.searchWords,
+          base: crmFieldListBase(object),
+        },
+        nameSearchNormalizers,
+      ),
+    // The words are a new array each render; their text is their identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [object, gridFilter.clauses, gridFilter.searchWords.join(' ')],
+  )
+  const planKey = JSON.stringify({ filters: plan.filters, orderBy: plan.orderBy })
+  /*
+   * Read only while something narrows the tab. Unnarrowed, the table is the
+   * shared definitions read every CRM surface already holds, in its stored
+   * order — the same fields, with no second read.
+   */
+  const matched = useFirestoreCollection<ContactFieldDefinitionDoc>(
+    () =>
+      narrowed && orgId
+        ? query(
+            collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.contactFields),
+            ...listQueryConstraints(plan),
+            limit(CONTACT_FIELDS_MAX_PER_ORG + 1),
+          )
+        : null,
+    [firestore, orgId, narrowed, planKey],
+    { idField: '$id' },
+  )
+  const answer = useMemo(
+    () => ceilingedWindow(matched.data, CONTACT_FIELDS_MAX_PER_ORG),
+    [matched.data],
+  )
+  const positions = useMemo(
+    () => new Map(definitions.map((definition, position) => [definition.$id, position])),
     [definitions],
   )
-  const searchKey = gridFilter.searchWords.join(' ')
-  const rows = useMemo(
+  const rows = useMemo<FieldRow[]>(() => {
+    const shown = narrowed
+      ? [...answer.rows].sort(
+          (a, b) =>
+            (positions.get(a.$id) ?? Number.MAX_SAFE_INTEGER) -
+            (positions.get(b.$id) ?? Number.MAX_SAFE_INTEGER),
+        )
+      : definitions
+    return shown.map((definition) => ({
+      $id: definition.$id,
+      label: definition.label,
+      key: definition.key,
+      type: definition.type,
+      required: definition.required ? 'true' : 'false',
+      position: positions.get(definition.$id) ?? 0,
+      definition,
+    }))
+  }, [narrowed, answer.rows, definitions, positions])
+  const refused = useMemo(
     () =>
-      filterListRows(allRows, FIELD_FILTER_FIELDS, gridFilter.clauses, {
-        paths: FIELD_SEARCH_PATHS,
-        words: gridFilter.searchWords,
+      listQueryRefusals(plan.refused, {
+        fields: FIELD_FILTER_FIELDS,
+        headers: FIELD_FILTER_HEADERS,
+        options: FIELD_FILTER_OPTIONS,
       }),
-    // `searchKey` stands for the words, which are a new array each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, gridFilter.clauses, searchKey],
+    [plan.refused],
   )
 
   const columns = useMemo<GridColDef[]>(
@@ -335,7 +391,7 @@ function FieldsTable(props: FieldsTableProps) {
             sortable: false,
             renderCell: ({ row }: { row: FieldRow }) => (
               <Typography variant="body2" color="text.secondary">
-                {row.required === 'required' ? 'Yes' : '—'}
+                {row.required === 'true' ? 'Yes' : '—'}
               </Typography>
             ),
           },
@@ -363,13 +419,20 @@ function FieldsTable(props: FieldsTableProps) {
         options={FIELD_FILTER_OPTIONS}
         marksServed={false}
       />
+      <ListQueryNotices refused={refused} notices={plan.notices} />
+      {narrowed && answer.truncated ? (
+        <Typography variant="caption" color="text.secondary">
+          {`Showing the first ${CONTACT_FIELDS_MAX_PER_ORG} matching fields.`}
+        </Typography>
+      ) : null}
       <ListTable
         aria-label="Fields"
         rows={rows}
+        loading={narrowed && matched.status === 'loading'}
         columns={columns}
         sortModel={sortModel}
         onSortModelChange={setSortModel}
-        // The rows above are already narrowed; the grid only draws them.
+        // Firestore narrowed the rows above; the grid only draws them.
         filterMode="server"
         filterModel={gridFilter.filterModel}
         onFilterModelChange={gridFilter.onFilterModelChange}
@@ -528,7 +591,9 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             await updateDoc(fieldRef(editing.$id), {
               label: draft.label,
               ...(editing.type === 'select' ? { options: draft.options } : {}),
-              required: draft.required,
+              // The Fields table's query fields (AGL-3335), from the new name —
+              // and a definition written before them gains them here.
+              ...crmFieldListFields({ ...editing, label: draft.label, required: draft.required }),
               updatedAt: now,
             })
           },
@@ -559,8 +624,9 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             required: draft.required,
             order,
             retiredAt: null,
-            // Which record the field describes — the tab it was made on.
-            object,
+            // Which record the field describes — the tab it was made on —
+            // with the Fields table's query fields (AGL-3335).
+            ...crmFieldListFields({ key: draft.key, label: draft.label, required: draft.required, object }),
             hostId: createHostId,
             ...newResourceScopeFields([ORG_SCOPE_TOKEN]),
             createdAt: now,
@@ -816,6 +882,8 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
           */
           <FieldsTable
             key={object}
+            orgId={orgId}
+            object={object}
             definitions={definitions}
             busyId={busyId}
             onMove={onMove}
