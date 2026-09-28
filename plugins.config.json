@@ -766,7 +766,11 @@
         {
           "name": "campaigns",
           "routeSlug": "marketing",
-          "siteField": "hostId"
+          "siteField": "hostId",
+          "holdsTransferWhile": {
+            "field": "status",
+            "values": ["scheduled", "sending"]
+          }
         },
         {
           "name": "emailCampaigns",

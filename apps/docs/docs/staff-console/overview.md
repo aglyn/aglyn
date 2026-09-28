@@ -329,7 +329,9 @@ and its owner. Below them:
 - **Site** — the live address, the subdomain (retargeting it needs the **super**
   staff role and is audited), and whether the site is published, suspended or in
   maintenance.
-- **Ownership** — the organization and its owner, each a link to its staff page.
+- **Ownership** — the organization and its owner, each a link to its staff page,
+  with organization ownership transfer and, for super staff, [moving the site to
+  another organization](#site-transfer).
 - **Usage**, **Custom domain**, **Settings snapshot** and the site's **Activity**
   log.
 - **Content** — see below.
@@ -343,6 +345,50 @@ transfer the owner makes from Settings › Ownership: the new owner takes over
 billing and every site of the organization, and the previous owner stays on as
 an admin. A transfer that would lock the organization out of its own single
 sign-on is refused, with the reason shown.
+
+#### Move a site to another organization {#site-transfer}
+
+Super staff can move a site to a different organization from its **Ownership**
+card: pick the destination by name or paste its org ID, then **Review**. The
+review shows what the move would do before anything happens, and **Move site**
+needs a reason, which is recorded on the audit row. Both organizations' activity
+logs and the site's own record the move, attributed to staff.
+
+**What moves with the site:** everything under the site — pages, layouts,
+components, templates, forms and their submissions, collections, site members,
+orders. Its access list becomes the new organization's roster: the old
+organization's members lose access, and the new one's gain it on their usual
+terms. A dedicated sending domain moves too, with its sending reputation and
+click tracking.
+
+**What stays with the old organization:**
+
+- **Media** in the old organization's library. The site keeps showing it, because
+  pages reference it by address, but only the old organization can manage it —
+  deleting a file there removes it from this site. The review says how many
+  files this affects.
+- Records the site made for the old organization: CRM contacts and leads,
+  datasets, lists, and its **campaign send history**, which names the old
+  organization's lists and consent.
+- POS register and collaborator seats assigned to the site return to the old
+  organization's pool.
+
+**What refuses a move**, each with the reason shown:
+
+- the site is in a **consent group**, or a group change naming it is running —
+  remove it from the group first, since the other sites read its opt-outs;
+- the destination is at its **site limit** — raise the limit, or tick the
+  override, which is recorded;
+- the site has a **dedicated sending domain** and the destination's plan cannot
+  hold one — release the domain from the site first;
+- a **campaign send** made as the site is still scheduled or sending — let it
+  finish or cancel it.
+
+The review also warns when the destination does not enable a plugin the site
+uses (its blocks stop rendering), when collaborators of the old organization
+lose access, and when the destination is suspended. The live site's cached
+pages are refreshed straight after the move, so it renders under the new
+organization's plan at once.
 
 #### Site content {#site-content}
 

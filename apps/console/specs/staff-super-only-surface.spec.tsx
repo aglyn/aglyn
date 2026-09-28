@@ -186,6 +186,11 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ],
     via: /SuperStaffOnly/,
   },
+  'site-transfer/route.ts': {
+    // Moving a site to another organization (AGL-3381).
+    ui: ['app/(app)/admin/sites/[hostId]/page.tsx'],
+    via: /SuperStaffOnly/,
+  },
   'lockdown/route.ts': {
     ui: [
       'app/(app)/admin/lockdown/page.tsx',

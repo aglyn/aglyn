@@ -53,6 +53,7 @@ import PluginWidgetSlot, {
 } from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
+import StaffSiteTransfer from '../../../../../components/staff-site-transfer.component'
 import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'
 import {
   type StaffSiteRow,
@@ -419,6 +420,15 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                           onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
                         />
                       ) : null}
+                      {/* Moving the site itself to another organization
+                          (AGL-3381) is super-only at /api/admin/site-transfer. */}
+                      <SuperStaffOnly>
+                        <StaffSiteTransfer
+                          hostId={hostId}
+                          currentOrgId={orgId || null}
+                          onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
+                        />
+                      </SuperStaffOnly>
                     </Stack>
                   </CardDisplay>
                 ),

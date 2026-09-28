@@ -304,6 +304,14 @@ export interface PluginOrgCollectionDeclaration {
    * declares none.
    */
   siteField?: string
+  /**
+   * The states in which a document the site owns is work still IN FLIGHT —
+   * `{ field: 'status', values: ['scheduled', 'sending'] }` — and so holds
+   * the site where it is. Moving the site to another organization is refused
+   * while any document naming it matches (AGL-3381): the work would land
+   * for an organization the site no longer belongs to. Needs `siteField`.
+   */
+  holdsTransferWhile?: { field: string; values: string[] }
 }
 
 /** An org declaration with the plugin that made it. */
