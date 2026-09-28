@@ -95,6 +95,12 @@ function stripComments(source: string): string {
  */
 const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   {
+    file: 'libs/shared/util/email/src/lib/email-palette.ts',
+    count: 2,
+    reason:
+      "AGL-3370. The email twin of the tenant.theme.ts row below: which hosts' mail wears the OPERATOR's own palette rather than the site's. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them; a self-host operator points that variable at their own domain, and on a self-hosted instance no sending host ever equals the defaults, so every site's mail correctly takes its own palette.",
+  },
+  {
     file: 'libs/shared/ui/theme/src/lib/tenant.theme.ts',
     count: 2,
     reason:

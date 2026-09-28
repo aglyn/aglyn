@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
+import { assessSenderReadiness, googleMailboxSenderExpectation, type SenderReadinessExpectation } from '@aglyn/shared-util-email'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import type { OutreachMailboxReadinessResponse } from '../mailboxes/mailbox-api'
 import type { OutreachMailbox } from '../model/outreach.types'
 import { MAILBOX_ACTION_LABELS, MailboxCard, type MailboxCardProps } from './mailbox-card'
 import type { OutreachMailboxApi } from './use-outreach-mailbox-api'
@@ -91,6 +93,17 @@ const base: OutreachMailbox = {
   updatedAtMs: NOW - 3 * DAY,
 }
 
+/** A Workspace sender with every record published and DKIM aligned. */
+const READY = assessSenderReadiness(
+  googleMailboxSenderExpectation('avery@rep.example.com') as SenderReadinessExpectation,
+  {
+    spfTxt: ['v=spf1 include:_spf.google.com ~all'],
+    dkimTxt: ['v=DKIM1; k=rsa; p=MIGfMA0GCSq'],
+    dmarcTxt: ['v=DMARC1; p=quarantine; rua=mailto:dmarc@rep.example.com'],
+  },
+  NOW,
+)
+
 function api(): jest.Mocked<OutreachMailboxApi> {
   return {
     availability: jest.fn(),
@@ -100,6 +113,9 @@ function api(): jest.Mocked<OutreachMailboxApi> {
     setPaused: jest.fn().mockResolvedValue({ ok: true, mailbox: base }),
     sendTest: jest.fn().mockResolvedValue({ ok: true, sentTo: 'avery@rep.example.com', gmailMessageId: 'm1', sentAtMs: NOW }),
     disconnect: jest.fn().mockResolvedValue({ ok: true, revocation: 'revoked' }),
+    // Pending unless a test answers it, so the cards the other tests render
+    // are not re-rendered by a read nobody is looking at.
+    readiness: jest.fn((_mailboxId: string, _fresh?: boolean) => new Promise<OutreachMailboxReadinessResponse>(() => undefined)),
   }
 }
 
@@ -393,5 +409,36 @@ describe('MailboxCard — test and disconnect (AGL-2978)', () => {
     fireEvent.click(button(MAILBOX_ACTION_LABELS.disconnect) as HTMLElement)
     await waitFor(() => expect(mockConfirm).toHaveBeenCalled())
     expect(props.api.disconnect).not.toHaveBeenCalled()
+  })
+})
+
+describe('sender readiness (AGL-3328)', () => {
+  const ready = () => {
+    const mocked = api()
+    mocked.readiness.mockResolvedValue({ ok: true, sendAs: 'avery@rep.example.com', readiness: READY })
+    return mocked
+  }
+
+  it('shows SPF, DKIM, DMARC and alignment for the address it sends as', async () => {
+    const { props } = renderCard({ api: ready() })
+    expect(await screen.findByRole('group', { name: 'DKIM' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'SPF' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'DMARC' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Alignment' })).toBeTruthy()
+    expect(props.api.readiness).toHaveBeenCalledWith('gm_1')
+  })
+
+  it('checks again fresh on request', async () => {
+    const { props } = renderCard({ api: ready() })
+    fireEvent.click(await screen.findByRole('button', { name: MAILBOX_ACTION_LABELS.recheckReadiness }))
+    await waitFor(() => expect(props.api.readiness).toHaveBeenCalledWith('gm_1', true))
+  })
+
+  it('says a consumer Gmail address has nothing to publish', async () => {
+    const mocked = api()
+    mocked.readiness.mockResolvedValue({ ok: true, sendAs: 'avery@gmail.com', readiness: null })
+    renderCard({ api: mocked })
+    expect(await screen.findByText(/Google authenticates mail from gmail\.com itself/)).toBeTruthy()
+    expect(screen.queryByRole('group', { name: 'SPF' })).toBeNull()
   })
 })

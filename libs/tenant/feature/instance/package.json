@@ -28,6 +28,7 @@
     "@aglyn/aglyn": "1.0.0-beta.204",
     "@aglyn/shared-data-enums": "1.0.0-beta.204",
     "@aglyn/shared-ui-jsx": "1.0.0-beta.204",
+    "@aglyn/shared-util-email": "1.0.0-beta.204",
     "@aglyn/shared-util-http": "1.0.0-beta.204",
     "@aglyn/shared-util-timestamp": "1.0.0-beta.204",
     "@swc/helpers": "0.5.23",

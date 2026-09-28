@@ -38,6 +38,7 @@ import {
   describeSendingDomainRemoval,
   INCONCLUSIVE_CHECK,
 } from '../model/sending-domain-status'
+import SenderReadinessPanel from '@aglyn/tenant-feature-instance/components/sender-readiness-panel'
 import {
   useSendingApi,
   type SendingDnsRecordView,
@@ -400,6 +401,14 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
             </Alert>
           ) : null}
 
+          {/*
+            SPF, DKIM and DMARC as a receiver reads them, and whether they
+            align with the From domain (AGL-3328). The records table below is
+            what to publish; this is what the published zone adds up to.
+           */}
+          {record.readiness ? (
+            <SenderReadinessPanel readiness={record.readiness} />
+          ) : null}
           {record.records?.length &&
           record.records.some((entry) => entry.value) ? (
             <>

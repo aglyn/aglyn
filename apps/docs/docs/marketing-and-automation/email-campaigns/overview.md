@@ -385,6 +385,10 @@ hosted, then press **Check DNS**. A domain has six things it can be telling you:
 | **Verified** | Every required record is live and we can see it. | Nothing — this domain can send. |
 | **Records not found** | We looked, and one or more records are not published. | Compare them against what is shown and check again. |
 
+Once its records are issued, a domain's page also shows **Sender readiness**: SPF,
+DKIM and DMARC as a receiver reads them, and whether they align with the domain your
+mail is from. See [sender readiness](./deliverability-checks.md#sender-readiness).
+
 **"DNS unreachable" is none of the six.** It means our lookup did not complete — a
 resolver outage, a timeout — so nothing changed, including the domain's state. Your zone
 is not the problem and there is nothing to edit. Try again in a few minutes.
@@ -524,7 +528,9 @@ That means the count already reflects things you would otherwise only discover a
   caption line breaks the audience down by basis.
 - **Unsubscribed and undeliverable addresses are removed**, and reported separately as
   `· 12 unsubscribed or suppressed`, so a smaller-than-expected number has a visible
-  reason.
+  reason. Addresses whose domain takes no mail, and addresses behind a mail gateway that
+  keeps refusing this sending domain, are excluded and counted on a line of their own —
+  see [deliverability checks](./deliverability-checks.md#before-a-campaign-sends).
 - **A single send is capped at 500 recipients**, and when your audience is larger the
   readout says so: `Recipients 500 of 3,200 in this audience`. The send takes the first
   500, in a fixed order, so sending the same campaign again reaches the same people.
@@ -1398,6 +1404,7 @@ sending reputation, so the confirmation names the reason before you do it.
 
 ## Related
 
+- [Deliverability checks](./deliverability-checks.md)
 - [CRM](../../content-and-data/crm/overview.md)
 - [Forms & lead capture](../../content-and-data/forms/overview.md)
 - [Marketing overlays](../marketing-overlays/overview.md) (email capture popups)

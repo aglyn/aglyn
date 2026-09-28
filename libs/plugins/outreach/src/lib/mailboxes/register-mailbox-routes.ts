@@ -79,6 +79,8 @@ export function defaultOutreachMailboxRouteDeps(): OutreachMailboxRouteDeps {
         firestore,
         input,
       ),
+    readSenderReadiness: async (expectation, options) =>
+      (await import('@aglyn/tenant-data-admin/server/sender-readiness')).readSenderReadiness(expectation, options),
   }
 }
 
@@ -130,4 +132,5 @@ export function registerOutreachMailboxRoutes(
   registerPluginApiRoute(OUTREACH_API_ROUTES.mailboxesStatus, { web: routes.status }, orgSubject)
   registerPluginApiRoute(OUTREACH_API_ROUTES.mailboxesTest, { web: routes.test }, orgSubject)
   registerPluginApiRoute(OUTREACH_API_ROUTES.mailboxesDisconnect, { web: routes.disconnect }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.mailboxesReadiness, { web: routes.readiness }, orgSubject)
 }

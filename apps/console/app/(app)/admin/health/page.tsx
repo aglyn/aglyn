@@ -79,6 +79,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import ScopeDriftCard from '../../../../components/scope-drift-card.component'
 import PendingErasuresCard from '../../../../components/pending-erasures-card.component'
 import IdempotencyClaimsCard from '../../../../components/idempotency-claims-card.component'
+import MailGatewayLedgerCard from '../../../../components/mail-gateway-ledger-card.component'
 import ServerConfigCard from '../../../../components/server-config-card.component'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -515,6 +516,12 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                 }
               })}
             />
+
+            {/* The Email delivery tile answers "can this deployment send";
+                this answers "is anybody refusing what it sends" — the
+                platform ledger of refusals by sending domain and gateway
+                (AGL-3328). */}
+            <MailGatewayLedgerCard />
 
             <CardDisplay
               header={'Content-Security-Policy violations'}

@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { SenderReadiness } from '@aglyn/shared-util-email'
 import { useUser } from './firebase/firebase-services'
 import { useCallback, useRef } from 'react'
 import {
@@ -84,6 +85,8 @@ export interface SendingDomainView {
     consequence: string
   } | null
   dmarcSuggestion?: SendingDnsRecordView | null
+  /** How receivers will judge mail from it (AGL-3328); none before a key is issued. */
+  readiness?: SenderReadiness | null
   pendingProvider?: boolean
   providerDetail?: string | null
 }

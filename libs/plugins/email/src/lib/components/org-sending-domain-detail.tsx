@@ -28,6 +28,7 @@ import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import SenderReadinessPanel from '@aglyn/tenant-feature-instance/components/sender-readiness-panel'
 import {
   useSendingApi,
   type SendingDomainView,
@@ -439,6 +440,14 @@ function OrgSendingDomainPage(
                 >
                   {record.dmarc.consequence}
                 </Alert>
+              ) : null}
+              {/*
+                SPF, DKIM and DMARC as a receiver reads them, and whether they
+                align with the From domain (AGL-3328). The records table below is
+                what to publish; this is what the published zone adds up to.
+               */}
+              {record.readiness ? (
+                <SenderReadinessPanel readiness={record.readiness} />
               ) : null}
               {record.records?.some((entry) => entry.value) ? (
                 <>
