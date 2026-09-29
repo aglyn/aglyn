@@ -12,6 +12,7 @@
   "contributes": {
     "site": {
       "components": [
+        "aglyn.calculator.widget",
         "aglyn.calculator.scope",
         "aglyn.calculator.input",
         "aglyn.calculator.result",
@@ -19,7 +20,10 @@
         "aglyn.calculator.document",
         "aglyn.calculator.saveButton"
       ],
-      "functionBindings": { "aglyn.calculator.scope": "functionName" }
+      "functionBindings": {
+        "aglyn.calculator.widget": "functionName",
+        "aglyn.calculator.scope": "functionName"
+      }
     }
   }
 }

@@ -45,6 +45,7 @@ describe('calculator plugin (AGL-3387, AGL-3394)', () => {
   it('keeps every persisted component id, in its namespace', () => {
     // Stored in screen documents: never rename without a document migration.
     expect(CALCULATOR_BUNDLE.map((entry) => entry.schema.$id)).toEqual([
+      'aglyn.calculator.widget',
       'aglyn.calculator.scope',
       'aglyn.calculator.input',
       'aglyn.calculator.result',
@@ -63,6 +64,7 @@ describe('calculator plugin (AGL-3387, AGL-3394)', () => {
       CALCULATOR_BUNDLE.map((entry) => entry.schema.$id),
     )
     expect(manifest.contributes.site.functionBindings).toEqual({
+      'aglyn.calculator.widget': 'functionName',
       'aglyn.calculator.scope': 'functionName',
     })
   })

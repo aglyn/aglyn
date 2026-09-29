@@ -23,12 +23,14 @@ import {
 } from '@aglyn/aglyn'
 import { mdiCalculatorVariantOutline } from './constants/icons'
 import * as FunctionScope from './components/function-scope'
+import * as FunctionWidget from './components/function-widget'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
  * Calculators (AGL-3387, AGL-3394): the elements that put a site function on
  * a page, published from the Aglyn org as a signed marketplace plugin.
  *
+ * - **Function Widget** draws a whole calculator itself.
  * - **Calculator**, **Calculator Input**, **Calculator Result** and **Show
  *   When** let an author lay one out.
  * - **Calculator Document** and **Calculator Save Button** turn what it
@@ -40,6 +42,11 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * manifest's `functionBindings` names its `functionName` prop (AGL-3393).
  */
 export const CALCULATOR_BUNDLE: Aglyn.FeatureBundleEntry[] = [
+  {
+    component: FunctionWidget.default,
+    schema: FunctionWidget.schema,
+    presets: FunctionWidget.presets,
+  },
   {
     component: FunctionScope.default,
     schema: FunctionScope.schema,

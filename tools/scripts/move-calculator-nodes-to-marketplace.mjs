@@ -25,8 +25,7 @@
  *
  * Each calculator node gets the plugin's component id and names the plugin's
  * identity as its `pluginId`: `functionScope` becomes `aglyn.calculator.scope`,
- * and so on. The Function Widget is not part of the plugin; its nodes are
- * counted and left as they are.
+ * `functionWidget` becomes `aglyn.calculator.widget`, and so on.
  *
  * ## One site at a time, and only once it can draw them
  *
@@ -55,6 +54,7 @@ const IDENTITY = 'aglyn.calculator'
 
 /** mui's component id → the plugin's. */
 const MOVED = {
+  functionWidget: `${IDENTITY}.widget`,
   functionScope: `${IDENTITY}.scope`,
   functionInput: `${IDENTITY}.input`,
   functionOutput: `${IDENTITY}.result`,
@@ -62,9 +62,6 @@ const MOVED = {
   functionDocument: `${IDENTITY}.document`,
   functionSave: `${IDENTITY}.saveButton`,
 }
-
-/** Stays in mui until its future is decided; reported, never moved. */
-const LEFT_IN_MUI = new Set(['functionWidget'])
 
 /** The commit production must serve before a site's nodes move: AGL-3390. */
 const REQUIRED_COMMIT = '981db5432'
@@ -80,7 +77,6 @@ const counts = {
   formUndecodable: 0,
   nodesSeen: 0,
   nodesMoved: 0,
-  nodesLeftInMui: 0,
   docsChanged: 0,
 }
 
@@ -112,17 +108,15 @@ const writeNodes = (form, nodes) => (form === 'bytes' ? Buffer.from(encode(nodes
  */
 export function moveNodes(nodes) {
   let moved = 0
-  let leftInMui = 0
   const next = { ...nodes }
   for (const [nodeId, node] of Object.entries(nodes)) {
     if (!node || typeof node !== 'object') continue
-    if (LEFT_IN_MUI.has(node.componentId)) leftInMui += 1
     const componentId = MOVED[node.componentId]
     if (!componentId) continue
     next[nodeId] = { ...node, componentId, pluginId: IDENTITY }
     moved += 1
   }
-  return { nodes: moved ? next : null, moved, leftInMui }
+  return { nodes: moved ? next : null, moved }
 }
 
 function selfTest() {
@@ -147,9 +141,8 @@ function selfTest() {
   check('stamps the identity', result.nodes?.s1.pluginId, 'aglyn.calculator')
   check('renames Result', result.nodes?.o1.componentId, 'aglyn.calculator.result')
   check('stamps a node that named no plugin', result.nodes?.w1.pluginId, 'aglyn.calculator')
-  check('counts what moved', result.moved, 4)
-  check('leaves the Function Widget', result.nodes?.x1.componentId, 'functionWidget')
-  check('counts the Function Widget', result.leftInMui, 1)
+  check('counts what moved', result.moved, 5)
+  check('moves the Function Widget', result.nodes?.x1.componentId, 'aglyn.calculator.widget')
   check('leaves other elements alone', result.nodes?.t1, tree.t1)
   check('does not mutate the input', tree.s1.componentId, 'functionScope')
   check('a tree with nothing to move is null', moveNodes({ t1: tree.t1 }).nodes, null)
@@ -255,7 +248,6 @@ if (args.selfTest) {
         counts.docsWithNodes += 1
         counts.nodesSeen += Object.keys(read.nodes).length
         const result = moveNodes(read.nodes)
-        counts.nodesLeftInMui += result.leftInMui
         if (!result.nodes) continue
         counts.nodesMoved += result.moved
         counts.docsChanged += 1
@@ -269,8 +261,7 @@ if (args.selfTest) {
     `\n${args.apply ? 'APPLIED' : 'DRY RUN'} — ${args.host}: ${counts.docsScanned} document(s), ` +
       `${counts.docsWithNodes} with nodes (${counts.formMap} map, ${counts.formBytes} msgpack, ` +
       `${counts.formUndecodable} undecodable), ${counts.nodesSeen} node(s), ` +
-      `${counts.nodesMoved} moved across ${counts.docsChanged} document(s), ` +
-      `${counts.nodesLeftInMui} Function Widget node(s) left in mui.`,
+      `${counts.nodesMoved} moved across ${counts.docsChanged} document(s).`,
   )
   if (counts.formUndecodable) {
     console.error(`\n${counts.formUndecodable} document(s) could not be decoded; this run is not complete.`)

@@ -186,7 +186,7 @@ test('the Calculators bundle builds, carries no host code, and verifies for publ
   const code = output[0].code
 
   assert.doesNotMatch(code, /emotion|MuiButtonBase-root|createTheme/)
-  for (const role of ['scope', 'input', 'result', 'showWhen', 'document', 'saveButton']) {
+  for (const role of ['widget', 'scope', 'input', 'result', 'showWhen', 'document', 'saveButton']) {
     assert.match(code, new RegExp(`aglyn\\.calculator\\.${role}|\\.${role}\``))
   }
 
