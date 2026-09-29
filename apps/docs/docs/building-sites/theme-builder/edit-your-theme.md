@@ -24,10 +24,18 @@ immediately.
 
 The **Theme** card at the top of the page picks the theme your site runs:
 
-- **Built-in** — **Material UI (default)**, **Bootstrap**, **Minimal** (neutral, in the style
-  of shadcn/ui) and **Material 3**, plus any your plugins add. Each one restyles components
-  (buttons, inputs, cards, tabs, switches, alerts) as well as colors and type, in light and
-  dark.
+- **Built-in** — **Material UI (default)** and seven themes modeled on the design systems
+  people know best, plus any your plugins add:
+  - **Bootstrap** — Bootstrap 5's blue, system fonts, flat bordered cards and focus rings.
+  - **Minimal** — neutral and quiet, in the style of shadcn/ui.
+  - **Material 3** — Material Design 3's tonal surfaces and pill buttons.
+  - **Ant Design** — Ant Design 5's compact 14px type and 32px controls.
+  - **Fluent** — Microsoft Fluent 2: Segoe UI, underlined inputs, soft depth.
+  - **Carbon** — IBM Carbon: Plex Sans, light display type, square corners.
+  - **Cupertino** — in the style of iOS: capsule buttons, segmented tabs, green switches.
+
+  Each one restyles components (buttons, inputs, cards, tabs, switches, alerts, menus) as well
+  as colors and every text style, in light and dark.
 - **Your themes** — themes you saved from this site.
 - **From the marketplace** — themes you installed.
 
@@ -100,9 +108,9 @@ automatically when you adjust the theme — or when the visitor's scheme flips. 
 
 ## Change it with AI
 
-**Rolling out.** The **Theme assistant** above the editor proposes changes to these same
-controls from a description — "warmer", "match our brand", "bigger headings on mobile" —
-with a before and after preview. A proposal goes into the editor as unsaved changes, and
+The **Theme assistant** above the editor proposes changes to these same controls from
+a description — "warmer", "match our brand", "bigger headings on mobile" — with a
+before and after preview. A proposal goes into the editor as unsaved changes, and
 nothing is saved until you save it. See
 [Change your site's theme with AI](../../ai/theme-assist.md).
 

@@ -10,12 +10,6 @@ Aglyn AI can write the copy for your products and help you set up a store. Every
 does is a **proposal**: you review it, and nothing is saved to your catalog until you
 apply it. It never sets a price, and it never publishes a product.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
-available in every workspace yet. This page says what it does for a catalog, and grows
-with the feature.
-:::
-
 ## Write a product's copy
 
 In the product editor, under the description, tags and categories, **Write with AI**

@@ -419,16 +419,29 @@ export async function aiDraftAllowanceRefusal(
  * or the routing map already serves — so the member's publish at it later
  * takes nothing from a live page. The root is asked for only while no screen
  * holds it.
+ *
+ * Except the placeholder home page a site is created with (AGL-3408), which
+ * holds `/` only until a real home page is published there: the guided start
+ * is offered to exactly the sites that still have it, and the home page it
+ * drafts has to be able to ask for the root. Publishing it replaces the
+ * placeholder in the same write.
  */
 export function aiDraftScreenSlug(
   requested: string | null | undefined,
   name: string,
-  rows: ReadonlyArray<Pick<SiblingRow, 'slug' | 'deleted'>>,
+  rows: ReadonlyArray<Pick<SiblingRow, 'slug' | 'deleted'> & { id?: string }>,
   routingMap: RoutingMap,
+  defaultHomeScreenId?: string | null,
 ): string {
+  const placeholder = (id: string | undefined, path: unknown) =>
+    Boolean(defaultHomeScreenId) && id === defaultHomeScreenId && path === SCREEN_ROOT_PATH
   const taken = new Set<string>([
-    ...rows.filter((row) => !row.deleted && row.slug).map((row) => row.slug),
-    ...Object.values(routingMap ?? {}).filter((path): path is string => typeof path === 'string'),
+    ...rows
+      .filter((row) => !row.deleted && row.slug && !placeholder(row.id, row.slug))
+      .map((row) => row.slug),
+    ...Object.entries(routingMap ?? {})
+      .filter(([id, path]) => typeof path === 'string' && !placeholder(id, path))
+      .map(([, path]) => path as string),
   ])
   const usable = (value: string | undefined) =>
     value && !reservedScreenRouteSegment(value) && !(value === SCREEN_ROOT_PATH && taken.has(value))
@@ -637,7 +650,13 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
       })
     } else if (input.kind === 'screen') {
       versionId = createResourceUid()
-      const slug = aiDraftScreenSlug(input.slug, name, rows, routingMap)
+      const slug = aiDraftScreenSlug(
+        input.slug,
+        name,
+        rows,
+        routingMap,
+        host.get('defaultHomeScreenId'),
+      )
       tx.create(draftRef, {
         ...allowListed('screen', { displayName: name, slug, versionId }),
         ...artifactCreateListKeys('screens', { displayName: name }),

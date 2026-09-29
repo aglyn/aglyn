@@ -75,6 +75,8 @@ export const BOOTSTRAP_THEME: HostTheme = {
   typography: {
     fontFamily: SYSTEM_STACK,
     variants: {
+      // `.display-1`, Bootstrap's hero size: large and LIGHT, not heavy.
+      displayXl: { fontSize: '5rem', fontWeight: 300, lineHeight: 1.2 },
       h1: heading('2.5rem'),
       h2: heading('2rem'),
       h3: heading('1.75rem'),
@@ -85,6 +87,10 @@ export const BOOTSTRAP_THEME: HostTheme = {
       body2: { fontSize: '0.875rem', lineHeight: 1.5 },
       button: { fontSize: '1rem', fontWeight: 400, lineHeight: 1.5, textTransform: 'none' },
       overline: { fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.05em' },
+      // `.lead`, `<small>` and the smallest helper text.
+      lede: { fontSize: '1.25rem', fontWeight: 300, lineHeight: 1.5 },
+      bodyCompact: { fontSize: '0.875rem', fontWeight: 400, lineHeight: 1.5 },
+      micro: { fontSize: '0.75rem', fontWeight: 400, lineHeight: 1.5 },
     },
   },
   shape: { borderRadius: 6 },

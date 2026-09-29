@@ -444,6 +444,53 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
   ]
 }
 
+/**
+ * The home page every new site is born with (AGL-3408).
+ *
+ * A site used to be created with an empty routing map, so the address the
+ * create dialog calls live answered with the tenant's 404 until somebody
+ * built and published a page. `claimHostForOrg` now writes this screen, its
+ * first version and its `/` route in the same transaction that creates the
+ * host, which makes "a site with no home page" a state no new site starts in.
+ *
+ * It is PUBLIC from the first request, so the copy speaks to a visitor, never
+ * to the owner — no "edit this in the besigner". The site's name is written in
+ * as text, not bound: there is no page-content token for it, and a heading
+ * that followed a rename is not worth one.
+ *
+ * Deliberately not a starter: it is not offered in the gallery, and applying a
+ * starter may take the root back from it (see `defaultHomeScreenId`).
+ *
+ * PERSISTED IDENTIFIERS: every node id below is stored on every new site.
+ */
+export function buildDefaultHomeScreen(siteName: string): StarterTemplateScreen {
+  const name = siteName.trim() || 'Welcome'
+  return {
+    key: 'home',
+    displayName: 'Home',
+    slug: SCREEN_ROOT_PATH,
+    nodes: buildNodes([
+      section('dh_heroSection', 'md', 12, [
+        {
+          id: 'dh_hero',
+          componentId: 'muiStack',
+          props: { spacing: 2 },
+          sx: { alignItems: 'center' },
+          children: [
+            text('dh_heroTitle', 'h2', name, { align: 'center' }),
+            text(
+              'dh_heroSub',
+              'h6',
+              'Welcome — our new website is on its way.',
+              { align: 'center', color: 'text.secondary' },
+            ),
+          ],
+        },
+      ]),
+    ]),
+  }
+}
+
 export const STARTER_TEMPLATES: StarterTemplate[] = [
   {
     id: 'landing',

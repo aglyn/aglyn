@@ -147,3 +147,39 @@ describe('with a signer installed', () => {
     ).toThrow(/needs a sign function/)
   })
 })
+
+/**
+ * The production failure (AGL-3412): the app registers its signer from
+ * `instrumentation.ts`, which Next compiles into a different module graph
+ * from the route that signs. Each graph gets its own copy of this module,
+ * and a registry held in module scope was empty in the route's copy.
+ */
+describe('one signer per process, whichever module copy registered it', () => {
+  type TrustSigning = typeof import('./plugin-trust-signing')
+
+  const isolatedCopy = (): TrustSigning => {
+    let copy: TrustSigning | undefined
+    jest.isolateModules(() => {
+      copy = jest.requireActual<TrustSigning>('./plugin-trust-signing')
+    })
+    if (!copy) throw new Error('isolated module copy did not load')
+    return copy
+  }
+
+  it('signs from a copy other than the one boot registered into', async () => {
+    const boot = isolatedCopy()
+    const route = isolatedCopy()
+    expect(route.signPluginTrust).not.toBe(boot.signPluginTrust)
+
+    boot.registerPluginTrustSigner(
+      { sign: async () => ({ signed: true, signature: 'sig' }) },
+      { pluginId: 'console' },
+    )
+
+    expect(route.hasPluginTrustSigner()).toBe(true)
+    await expect(route.signPluginTrust('abc123')).resolves.toEqual({
+      signed: true,
+      signature: 'sig',
+    })
+  })
+})

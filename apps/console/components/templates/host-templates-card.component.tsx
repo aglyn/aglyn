@@ -91,6 +91,8 @@ import createPageFromTemplate, {
   templateScreenAddressRefusal,
   withBundleRootScreen,
 } from './create-page-from-template'
+import { releaseDefaultHomeRoot } from '../../constants/screen-publishing'
+import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import UseTemplateDialog from './use-template-dialog.component'
 import useStarterPages from './use-starter-pages'
 
@@ -594,7 +596,15 @@ export function HostTemplatesCard({
             { variant: 'warning', persist: false },
           )
         }
+        // A new site is born with a placeholder home page on `/` (AGL-3408).
+        // A bundle is somebody's whole site, so it takes the root from that
+        // placeholder — and only from it; a home page the owner made is never
+        // moved. The placeholder stays in Screens as a draft.
+        const releasedRoot =
+          pages.length > 0 &&
+          (await releaseDefaultHomeRoot(firestore, { hostId, user }))
         const used = new Set<string>(Object.values(routes))
+        if (releasedRoot) used.delete(SCREEN_ROOT_PATH)
         // Same rule the gallery applies (AGL-1575): a bundle where nothing
         // claims the site root, applied to a host that has no home page,
         // gives the root to its first page rather than leaving the site 404ing
@@ -635,7 +645,10 @@ export function HostTemplatesCard({
           enqueueSnackbar(
             `Added ${created} screen${created === 1 ? '' : 's'} from "${
               row.displayName
-            }"`,
+            }"` +
+              (releasedRoot
+                ? '. The placeholder home page is kept in Screens as a draft.'
+                : ''),
             { variant: 'success', persist: false },
           )
         }

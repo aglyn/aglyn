@@ -2868,9 +2868,10 @@ service cloud.firestore {
           // Deliberately NOT added to the blanket `hasAny` list above: that
           // list is the Admin-SDK-only set, and `screens` has a legitimate
           // client writer. Two different questions, two conditions.
+          // defaultHomeScreenId (AGL-3408) picks what a publish at / unroutes.
           (canPublishHostContent(hostId) ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['screens'])));
+              .hasAny(['screens', 'defaultHomeScreenId'])));
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && isVerified() &&
           !hostWritesFrozen(hostId));

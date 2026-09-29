@@ -8,9 +8,17 @@ Built-in themes for an Aglyn site's theme picker (**Setup → Theme**):
   shadcn/ui.
 - **Material 3** — Material Design 3's baseline roles, tonal surfaces, pill buttons and the M3
   type scale.
+- **Ant Design** — Ant Design 5's default tokens and dark algorithm, 14px type, 32px controls,
+  the hairline "default" button and its pill switch.
+- **Fluent** — Microsoft Fluent 2's brand and neutral tokens, Segoe UI with the Fluent ramp,
+  inputs underlined in the brand on focus, and depth from its shadow ramp.
+- **Carbon** — IBM Carbon's White and g100 themes, IBM Plex Sans with light display type,
+  square corners, filled fields and the green toggle.
+- **Cupertino** — in the style of iOS: the system face with Dynamic Type sizes, grouped
+  backgrounds, capsule and tinted buttons, segmented tabs and the green switch.
 
-Each is a plain-JSON `HostTheme` (palette for both schemes, fonts, typography, shape and
-component overrides, including theme-aware `sx` and `variants`), contributed through
+Each is a plain-JSON `HostTheme` (palette for both schemes including tertiary, fonts, every
+text style the platform defines, shape and component overrides, including theme-aware `sx` and `variants`), contributed through
 `ConsoleExtension.themePresets`.
 
 ## What it reads, stores and sends

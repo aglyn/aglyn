@@ -193,6 +193,19 @@ describe('validateThemeForPublish — contrast', () => {
     )
   })
 
+  it('holds a tertiary button label to the same bar (AGL-3411)', () => {
+    const theme = goodTheme()
+    theme.colorSchemes!.light!.tertiary = {
+      main: '#dddddd',
+      contrastText: '#ffffff',
+    }
+    const result = validateThemeForPublish(theme)
+    expect(result.ok).toBe(true)
+    expect(pathsOf(result.warnings)).toContain(
+      'colorSchemes.light.tertiary.contrastText',
+    )
+  })
+
   it('says nothing about a contrastText the theme never set — MUI derives it', () => {
     const result = validateThemeForPublish(goodTheme())
     expect(pathsOf(result.warnings)).not.toContain(

@@ -433,6 +433,22 @@ const baseOptions: ThemeOptions = {
               },
       },
     },
+    // The tertiary indicator (AGL-3411). MUI styles Tabs' indicator for
+    // `primary` and `secondary` only, so `indicatorColor="tertiary"` — which
+    // the palette and the Tabs element's picker both offer — drew MUI's
+    // primary. Resolved per render so it follows the scheme.
+    MuiTabs: {
+      variants: [
+        {
+          props: { indicatorColor: 'tertiary' } as any, // augmentation widens this
+          style: ({ theme }: any) => ({
+            '& .MuiTabs-indicator': {
+              backgroundColor: (theme.vars || theme).palette.tertiary.main,
+            },
+          }),
+        },
+      ],
+    },
     MuiTooltip: {
       defaultProps: {
         arrow: true,

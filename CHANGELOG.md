@@ -9,6 +9,39 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.218 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/61ee7f8e1...v1.0.0-beta.218)
+
+### Added
+
+- **themes:** four more built-in themes, the platform type styles and tertiary in every theme ([AGL-3411](https://linear.app/aglyn/issue/AGL-3411))
+
+### Fixed
+
+- **rules:** trim the AGL-3408 rules comment under the 256 KiB source limit ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **sites:** the first real home page replaces the placeholder at `/` ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **sites:** a new site is born with a published Home page, not a 404 ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+
+## v1.0.0-beta.217 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.216...v1.0.0-beta.217)
+
+### Added
+
+- **ai:** release Aglyn AI generation to every workspace ([AGL-3341](https://linear.app/aglyn/issue/AGL-3341))
+
+### Fixed
+
+- **plugins:** the declarations repair hook is one per process too ([AGL-3412](https://linear.app/aglyn/issue/AGL-3412))
+- **marketplace:** review page trust, stop and reject actions are buttons ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+- **plugins:** one service registry per process, so a route sees the boot's signer ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-53](https://linear.app/aglyn/issue/AGL-53))
+- **marketplace:** the review verdict says a version is approved and offers realm trust ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+
+### Documentation
+
+- **sequences:** not sold on aglyn.com, available to self-hosted installs ([AGL-3409](https://linear.app/aglyn/issue/AGL-3409), [AGL-2976](https://linear.app/aglyn/issue/AGL-2976))
+
 ## v1.0.0-beta.216 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.215...v1.0.0-beta.216)

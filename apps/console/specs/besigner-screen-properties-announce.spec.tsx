@@ -189,6 +189,7 @@ jest.mock('@aglyn/aglyn', () => ({
   composeScreenRoutePath: () => '/careers',
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
+  blockingRouteOwner: () => undefined,
   normalizeScreenSlug: (value: string) => value,
   // Real where they are pure functions over a string or a node map. This mock
   // is a closed world, so an export the page gains arrives as `undefined is

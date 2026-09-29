@@ -62,6 +62,7 @@
  */
 
 import { resolvePluginSiteState } from '@aglyn/aglyn'
+import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { claimHostForOrg, findSubdomainConflict } from '../utils/server/provision-host'
 
 const mockDocs = new Map<string, Record<string, unknown>>()
@@ -129,6 +130,7 @@ function mockDocRef(path: string): any {
   return {
     path,
     id: path.slice(path.lastIndexOf('/') + 1),
+    collection: (name: string) => mockCollectionRef(`${path}/${name}`),
     get: async () => snapshotFor(path),
     set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
       mockDocs.set(path, {
@@ -303,6 +305,61 @@ describe('a new site is born with User Accounts on', () => {
     expect(resolvePluginSiteState({}, olderHost, 'accounts')).toBe(
       'awaiting-opt-in',
     )
+  })
+})
+
+describe('a new site is born with a live home page (AGL-3408)', () => {
+  /*
+   * The tenant answers a request by matching its path against the host's
+   * `screens` routing map, then loading that screen's `versionId`. A site
+   * created with an empty map 404'd at its own address, so each link of that
+   * chain is read back here from stored state.
+   */
+  it('routes `/` to a screen that exists and points at a version that exists', async () => {
+    const result = await provision(SUB, 'Charcuterie Co')
+    const host = mockDocs.get(`hosts/${result.hostId}`)
+    const routing = host['screens'] as Record<string, string>
+    const [screenId] = Object.keys(routing)
+    expect(Object.values(routing)).toEqual(['/'])
+    const screen = mockDocs.get(`hosts/${result.hostId}/screens/${screenId}`)
+    expect(screen).toMatchObject({ displayName: 'Home', slug: '/' })
+    // Listed like every other screen create (AGL-3321), and Published.
+    expect(screen['deletedAt']).toBeNull()
+    expect(screen['publishedAt']).toBe('NOW')
+    const version = mockDocs.get(
+      `hosts/${result.hostId}/screens/${screenId}/versions/${screen['versionId']}`,
+    )
+    expect(version).toMatchObject({ screenId })
+    // Msgpack at rest, as `/api/hosts/versions` stores a first version.
+    expect(Buffer.isBuffer(version['nodes'])).toBe(true)
+  })
+
+  it('names the placeholder, so a starter may take the root from it and only from it', async () => {
+    const result = await provision(SUB)
+    const host = mockDocs.get(`hosts/${result.hostId}`)
+    expect(Object.keys(host['screens'] as object)).toEqual([
+      host['defaultHomeScreenId'],
+    ])
+  })
+
+  it('carries the site name, as a visitor reads it', async () => {
+    const result = await provision(SUB, 'Charcuterie Co')
+    const host = mockDocs.get(`hosts/${result.hostId}`)
+    const screenId = host['defaultHomeScreenId'] as string
+    const screen = mockDocs.get(`hosts/${result.hostId}/screens/${screenId}`)
+    const version = mockDocs.get(
+      `hosts/${result.hostId}/screens/${screenId}/versions/${screen['versionId']}`,
+    )
+    const nodes = decodeStoredNodes<Record<string, any>>(version['nodes'])
+    const texts = Object.values(nodes).map((node) => node.props?.children)
+    expect(texts).toContain('Charcuterie Co')
+  })
+
+  it('a refused create writes no home page either', async () => {
+    await provision(SUB)
+    const before = mockDocs.size
+    expect(await provision(SUB)).toEqual({ refused: 'subdomain_taken' })
+    expect(mockDocs.size).toBe(before)
   })
 })
 

@@ -55,6 +55,8 @@ const DOORS = [
   'apps/console/app/api/hosts/resources/route.ts',
   // A site import writes each bundled screen whole.
   'apps/console/app/api/hosts/import/route.ts',
+  // Site creation, which writes the placeholder home page (AGL-3408).
+  'apps/console/utils/server/provision-host.ts',
   // Duplicate, from the console, the AI tool and the page step.
   'libs/tenant/data/admin/src/lib/server/duplicate-resource.ts',
   'libs/plugins/marketplace/src/lib/server/install-email-starter.ts',
@@ -76,6 +78,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'apps/console/app/api/hosts/versions/route.ts': 'creates versions under a screen, never the screen',
   'apps/console/utils/api-v1-resources.ts': 'creates datasets, records and media; reads the routing map',
   'apps/console/constants/screen-publishing.ts': 'merge-sets the publish fields of a screen that exists',
+  'libs/tenant/runtime/src/lib/apply-publish-schedule.ts':
+    'unpublishes the placeholder home page, a screen that exists (AGL-3408)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
   'libs/plugins/marketing/src/lib/server/campaign-manage.ts': 'creates campaigns and sends; reads a design screen',
   'libs/plugins/marketing/src/lib/server/campaign-send.ts': 'writes sends; reads a design screen',

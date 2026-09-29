@@ -520,6 +520,18 @@ describe('analytics-events (AGL-1561)', () => {
       expect(isFirstPublishedRoute(null)).toBe(true)
     })
 
+    it('does not count the placeholder home page a site is created with (AGL-3408)', () => {
+      // Every new site is born with `/` routed to a platform-written page, so
+      // a literal reading would never report a first publish again.
+      expect(isFirstPublishedRoute({ home: '/' }, 'home')).toBe(true)
+      expect(isFirstPublishedRoute({ home: '/', about: 'about' }, 'home')).toBe(
+        false,
+      )
+      // Only the named placeholder is discounted.
+      expect(isFirstPublishedRoute({ home: '/' }, 'other')).toBe(false)
+      expect(isFirstPublishedRoute({ home: '/' }, null)).toBe(false)
+    })
+
     it('says false for a SECOND page going live, which is a publish and not an activation', () => {
       // The distinction the dimension exists to draw: the event counts
       // publishes, `first_publish: true` counts sites that came alive. Read

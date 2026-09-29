@@ -15,12 +15,6 @@ Aglyn AI runs from the console your team already signs in to, against the sites 
 organization already owns. One brief can start a build on many client sites at once —
 and each one stays a separate job you review.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
-available in every workspace yet. This page says how a batch behaves, and grows with
-the feature.
-:::
-
 ## One brief, many client sites {#one-brief}
 
 A batch takes the brief once and starts a [site build job](./generate-a-site.md) per

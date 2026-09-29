@@ -21,6 +21,9 @@ import {
   createResourceUid,
   suggestSubdomains,
 } from '@aglyn/aglyn/server'
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
+import { buildDefaultHomeScreen } from '@aglyn/aglyn/app-utils/starter-templates'
+import { encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import {
   firebaseAdmin,
   registerOrgHost,
@@ -125,6 +128,59 @@ export interface ClaimHostResult {
 }
 
 /**
+ * The home page a new site is created with (AGL-3408): the screen and its
+ * first version, plus the path its routing entry claims.
+ *
+ * Written inside the create transaction rather than after it, so no site ever
+ * exists without one — a follow-up write that failed would hand the customer
+ * the same 404 this exists to remove, under a success toast.
+ *
+ * The same shape every other create door writes: the screen's list keys
+ * (`deletedAt: null` among them, AGL-3321) from `artifactCreateListKeys`, and
+ * the version's nodes msgpack at rest as `/api/hosts/versions` stores them.
+ * `slug` and `publishedAt` are what `publishScreenRoute` stamps, so the
+ * console lists the page as Published rather than as a draft that happens to
+ * be served.
+ */
+export function defaultHomeWrites(siteName: string): {
+  screenId: string
+  versionId: string
+  path: string
+  screen: Record<string, unknown>
+  version: Record<string, unknown>
+} {
+  const now = () => firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  const definition = buildDefaultHomeScreen(siteName)
+  const screenId = createResourceUid()
+  const versionId = createResourceUid()
+  const packed = encodeStoredNodes(definition.nodes)
+  const fields = {
+    displayName: definition.displayName,
+    slug: definition.slug,
+    versionId,
+  }
+  return {
+    screenId,
+    versionId,
+    path: definition.slug,
+    screen: {
+      ...fields,
+      ...artifactCreateListKeys('screens', fields),
+      publishedAt: now(),
+      createdAt: now(),
+      updatedAt: now(),
+    },
+    version: {
+      screenId,
+      displayName: 'Initial version',
+      nodes: packed ? Buffer.from(packed) : definition.nodes,
+      createdAt: now(),
+      updatedAt: now(),
+    },
+  }
+}
+
+/**
  * Counts, claims and creates, in one transaction (AGL-2063).
  *
  * The count is the LARGER of the `orgs/{id}.hosts` directory map and a
@@ -151,6 +207,7 @@ export async function claimHostForOrg(
   ).data().count
   const orgRef = firestore.collection('orgs').doc(orgId)
   const hostRef = firestore.collection('hosts').doc(hostId)
+  const home = defaultHomeWrites(displayName)
   // Annotated rather than inferred. The body has three exits and an inferred
   // union of object literals does not narrow reliably with `strictNullChecks`
   // off — the same reason `ClaimHostResult` is one interface with optional
@@ -197,7 +254,14 @@ export async function claimHostForOrg(
       displayName,
       subdomain,
       orgId,
-      screens: {},
+      // Born routed (AGL-3408): the home page written below answers `/` from
+      // the site's first request, where an empty map answered with the 404.
+      screens: { [home.screenId]: home.path },
+      // Which screen is the platform's placeholder rather than the owner's
+      // page. A starter applied later may take `/` from it, and the
+      // `first_publish` dimension does not count it — never any other screen.
+      // Cleared the moment a starter takes the root.
+      defaultHomeScreenId: home.screenId,
       /*
        * A new site starts with User Accounts ON. The catalog still marks
        * `accounts` default-off per site, so a host doc with no opt-in list —
@@ -214,6 +278,9 @@ export async function claimHostForOrg(
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
+    const homeRef = hostRef.collection('screens').doc(home.screenId)
+    tx.set(homeRef, home.screen)
+    tx.set(homeRef.collection('versions').doc(home.versionId), home.version)
     // The claim itself. `set(…, { merge: true })` deep-merges the map, so this
     // adds one key without disturbing the org's other fields — and it is what
     // makes a concurrent create see this site on its retry. `registerOrgHost`

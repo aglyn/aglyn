@@ -19,12 +19,6 @@ form's page. No screen places it, so nothing on the live site changes. It counts
 forms allowance like a form you create yourself, and when your plan has no room for another
 form the job says so before it starts, not after it has spent anything.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
-available in every workspace yet. This page says what a form job does, and grows with
-the feature.
-:::
-
 ## Describe the form
 
 Open **Forms** for the site and choose **Describe it**, beside **Create Form**. Write what the

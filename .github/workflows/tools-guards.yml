@@ -40,6 +40,7 @@ name: Tools guards
 #  - test:release-version     the semver/bump/changelog rules a release
 #                             depends on (AGL-2089) — a wrong bump does not
 #                             throw, it just mints a wrong number forever
+#  - test:promotion-cadence   the three-a-day promotion cap (AGL-3413)
 #  - test:changelog-entry     the wording of the entry a promotion publishes
 #                             on aglyn.com (AGL-3211) — checked against the
 #                             sixteen entries a human wrote in the console
@@ -569,6 +570,10 @@ jobs:
       # crash. Registered in rules-drift.test.mjs's wiring allowlist like the
       # rest, so deleting this step turns both drift workflows red.
       - run: npm run test:release-version
+
+      # AGL-3413. The daily promotion cap: Central-day boundaries (UTC midnight
+      # is 7 PM there), DST changeover days, and the hotfix override.
+      - run: npm run test:promotion-cadence
 
       # AGL-3211. The customer-facing changelog entry a promotion publishes.
       # Pure string logic over parsed commits, no git and no Firestore, and

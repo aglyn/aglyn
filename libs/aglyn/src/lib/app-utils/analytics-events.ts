@@ -866,11 +866,23 @@ export function buildAddToCartParams(input: {
  * Callers pass what they already hold — the live-subscribed map in the
  * console, a read snapshot on the server — and never a map read back AFTER
  * the write, which is never empty.
+ *
+ * ## The placeholder home page is not a publish (AGL-3408)
+ *
+ * Every new site is created with a home page already routed at `/`, so read
+ * literally the map is never empty and no site would ever report a first
+ * publish. The host's `defaultHomeScreenId` names that placeholder, and its
+ * entry is not counted: the site "came alive" when its owner put something on
+ * it, not when the platform did. Republishing the placeholder itself after
+ * editing it counts, which is the same act.
  */
 export function isFirstPublishedRoute(
   routing: Record<string, unknown> | null | undefined,
+  defaultHomeScreenId?: string | null,
 ): boolean {
-  return Object.keys(routing ?? {}).length === 0
+  return !Object.keys(routing ?? {}).some(
+    (screenId) => screenId !== defaultHomeScreenId,
+  )
 }
 
 /**
