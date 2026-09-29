@@ -126,7 +126,7 @@ const CAVEATS: Record<OutreachReportCaveat['id'], string> = {
   'opens-unrecorded':
     'Opens are counted for this sequence, and no email with the tracking image has gone out yet. Emails sent from now on carry it.',
   'opens-counted':
-    'Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Fetches made by mail privacy proxies (Apple Mail), image proxies (Gmail, Yahoo) and security scanners are counted separately and left out of the rate, so a Gmail reader’s open lands there too: the rate reads low rather than high.',
+    'Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Gmail readers’ opens count. Fetches Apple Mail makes as the email arrives, whether or not anyone reads it, and those by Yahoo’s image proxy and security scanners, are counted separately and left out of the rate.',
   'opens-stopped':
     'Opens were counted while this sequence’s emails carried a tracking image. It’s turned off now, so the figures cover only the emails sent while it was on.',
   'clicks-not-tracked':

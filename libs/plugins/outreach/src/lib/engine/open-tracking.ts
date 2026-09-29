@@ -105,12 +105,15 @@ export function outreachOpenTrackedHtml(text: string, pixelUrl: string): string 
  * - **Apple Mail Privacy Protection** fetches every remote image of every
  *   message through Apple's proxy when the message arrives, whether or not
  *   anyone reads it. Its fetch names itself only as `Mozilla/5.0`.
- * - **Mail providers' image proxies** — Gmail's `GoogleImageProxy`, Yahoo's —
- *   fetch the image on the reader's behalf, and cache it. A Gmail reader's
- *   open therefore arrives as the proxy's, indistinguishable from the proxy
- *   prefetching it, and is counted here as a machine's. The rate that
- *   leaves is low rather than inflated, and the card shows the proxy count
- *   beside it so the reader can see how much was set aside.
+ * - **Yahoo's image proxy** fetches on the provider's behalf, and is set
+ *   apart as a proxy.
+ *
+ * Gmail's `GoogleImageProxy` is NOT a machine here. Gmail fetches through it
+ * only when the reader opens the message — it does not prefetch on delivery
+ * — so outside the delivery window its fetch is the reader's open, and
+ * setting it apart would leave the rate blind to every Gmail and Workspace
+ * reader. The proxy caches the image, so a reader's later opens may not
+ * arrive at all; the rate is taken over first opens per person either way.
  * - **Gateways and scanners** that open the message to inspect it, which
  *   name themselves as the click scanners do, or arrive within seconds of
  *   delivery.
@@ -128,7 +131,14 @@ export function outreachOpenTrackedHtml(text: string, pixelUrl: string): string 
 export const OUTREACH_OPEN_HUMAN_DELAY_MS = 30_000
 
 /** Image proxies that fetch on a mail provider's behalf, matched as substrings of the agent. */
-const IMAGE_PROXY_AGENTS = ['googleimageproxy', 'ggpht.com', 'yahoomailproxy']
+const IMAGE_PROXY_AGENTS = ['yahoomailproxy']
+
+/**
+ * Gmail's image proxy, which fetches when the reader opens the message and
+ * so counts as their open — see the note above. It names itself in an agent
+ * the scanner list would otherwise match (`googleimageproxy`).
+ */
+const GMAIL_PROXY_AGENTS = ['googleimageproxy', 'ggpht.com']
 
 /**
  * The agent Apple's Mail Privacy Protection proxy sends: the bare product
@@ -174,7 +184,8 @@ export function judgeOutreachOpen(input: {
   if (!agent) return machine('agent')
   if (IMAGE_PROXY_AGENTS.some((needle) => agent.includes(needle))) return machine('image_proxy')
   if (agent === APPLE_PRIVACY_AGENT) return machine('privacy_proxy')
-  if (OUTREACH_MACHINE_AGENTS.some((needle) => agent.includes(needle))) return machine('agent')
+  const gmail = GMAIL_PROXY_AGENTS.some((needle) => agent.includes(needle))
+  if (!gmail && OUTREACH_MACHINE_AGENTS.some((needle) => agent.includes(needle))) return machine('agent')
   // A fetch before its send is two clocks disagreeing, and read as a person's.
   if (input.sinceSentMs !== null && input.sinceSentMs >= 0 && input.sinceSentMs < OUTREACH_OPEN_HUMAN_DELAY_MS) {
     return machine('too_soon')

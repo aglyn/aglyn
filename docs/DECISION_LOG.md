@@ -102,9 +102,11 @@ introduce a price or an entitlement the account owner has not chosen.
 sequence stays plain text unless a member turns **Count opens** on for it, and
 the report still says opens are not measured for every sequence with it off.
 On, each send is `multipart/alternative` — the plain-text part unchanged, and
-the same text as HTML with a 1×1 image on the short-link host — and fetches by
-mail privacy proxies, image proxies and scanners are counted apart and kept out
-of the rate, as scanner clicks are.
+the same text as HTML with a 1×1 image on the short-link host. Gmail's image
+proxy counts as the reader's open, since Gmail fetches only when the message is
+opened; Apple Mail Privacy Protection (which prefetches on delivery), Yahoo's
+proxy, scanners and fetches within 30 s of delivery are counted apart and kept
+out of the rate, as scanner clicks are.
 
 ---
 

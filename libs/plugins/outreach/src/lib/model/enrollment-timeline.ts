@@ -142,7 +142,7 @@ export const OUTREACH_OPEN_MACHINE_REASON_LABELS: Record<OutreachOpenMachineReas
   agent: 'the request named itself as a scanner or a preview',
   too_soon: 'it came within 30 seconds of the email arriving, faster than anyone reads',
   method: 'it checked the image without loading it',
-  image_proxy: 'a mail provider’s image proxy fetched it, which it does whether or not the person reads it',
+  image_proxy: 'Yahoo’s image proxy fetched it, which it does whether or not the person reads it',
   privacy_proxy: 'Apple Mail’s privacy protection fetched it as the email arrived',
 }
 

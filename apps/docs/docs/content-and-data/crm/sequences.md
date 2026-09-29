@@ -375,12 +375,13 @@ It has a cost, which is why it is off by default:
   the sender. Use it to measure a slice of your sends — a new segment for a
   week, say — rather than leaving it on everywhere.
 
-Not every image load is a person reading. Apple Mail's privacy protection
-loads every image the moment the email arrives, Gmail and Yahoo load images
-through their own proxies, and security gateways open messages to inspect
-them. Those loads are counted as **Machine opens**, shown beside the open
-figures and left out of the open rate — and since a Gmail reader's open also
-arrives through Gmail's proxy, the rate reads low rather than high. The
+Not every image load is a person reading. Gmail opens count: Gmail loads the
+image through its own proxy only when the reader opens the email. Apple Mail
+Privacy Protection opens don't: Apple loads every image the moment the email
+arrives, whether or not anyone reads it. Yahoo's image proxy, security gateways
+that open messages to inspect them, and any load within 30 seconds of delivery
+don't count either. Those loads are counted as **Machine opens**, shown beside
+the open figures and left out of the open rate. The
 **Open rate** is taken over the people who were sent at least one email
 carrying the image, not everyone the sequence emailed, so turning the switch
 on part-way through doesn't dilute it.

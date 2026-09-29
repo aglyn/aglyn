@@ -738,11 +738,17 @@ describe('the tracking image on the short-link route (AGL-3395)', () => {
     expect(stats()).toMatchObject({ opens: 2, uniqueOpens: 1 })
   })
 
-  it('counts proxies and fetches on delivery as machine opens, out of the rate', async () => {
-    await callShort(shortVisit(OPEN_ID, { userAgent: 'Mozilla/5.0' }))
+  it('counts a Gmail reader’s open through Google’s image proxy as theirs', async () => {
     await callShort(
       shortVisit(OPEN_ID, { userAgent: 'Mozilla/5.0 (Windows NT 5.1) Firefox/11.0 (via ggpht.com GoogleImageProxy)' }),
     )
+    expect(engagement()).toMatchObject({ opens: 1, machineOpens: 0 })
+    expect(stats()).toMatchObject({ opens: 1, uniqueOpens: 1 })
+  })
+
+  it('counts proxies and fetches on delivery as machine opens, out of the rate', async () => {
+    await callShort(shortVisit(OPEN_ID, { userAgent: 'Mozilla/5.0' }))
+    await callShort(shortVisit(OPEN_ID, { userAgent: 'YahooMailProxy; https://help.yahoo.com/kb/yahoo-mail-proxy-SLN28749.html' }))
     clock = SENT_AT + 5_000
     await callShort(shortVisit(OPEN_ID, { userAgent: MAIL_CLIENT }))
     expect(engagement()).toMatchObject({ opens: 0, firstOpenAtMs: null, machineOpens: 3, loggedOpens: 3 })

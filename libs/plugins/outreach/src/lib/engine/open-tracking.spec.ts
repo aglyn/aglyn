@@ -61,12 +61,16 @@ describe('who opened: a person, or a machine (AGL-3395)', () => {
     expect(judge(CHROME)).toEqual({ human: true, machineReason: null })
   })
 
-  it('sets apart Apple Mail Privacy Protection and the providers’ image proxies', () => {
+  it('counts Gmail’s image proxy as the reader’s open, outside the delivery window', () => {
+    // Gmail fetches through its proxy only when the message is opened.
+    const gmail = 'Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)'
+    expect(judge(gmail)).toEqual({ human: true, machineReason: null })
+    expect(judge(gmail, OUTREACH_OPEN_HUMAN_DELAY_MS - 1)).toEqual({ human: false, machineReason: 'too_soon' })
+    expect(judge(gmail, 3_600_000, 'HEAD')).toEqual({ human: false, machineReason: 'method' })
+  })
+
+  it('sets apart Apple Mail Privacy Protection and Yahoo’s image proxy', () => {
     expect(judge('Mozilla/5.0')).toEqual({ human: false, machineReason: 'privacy_proxy' })
-    expect(judge('Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)')).toEqual({
-      human: false,
-      machineReason: 'image_proxy',
-    })
     expect(judge('YahooMailProxy; https://help.yahoo.com/kb/yahoo-mail-proxy-SLN28749.html')).toEqual({
       human: false,
       machineReason: 'image_proxy',

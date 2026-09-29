@@ -616,8 +616,9 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
                   version is unchanged. It makes the email look less like one
                   written by hand, and some spam filters score HTML with a
                   remote image against you, so turn it on to measure a slice
-                  of your sends rather than for every sequence. Opens by mail
-                  privacy features and image proxies are counted separately.
+                  of your sends rather than for every sequence. Gmail opens
+                  count; Apple Mail loads every image on arrival, so its loads
+                  are counted separately.
                 </Typography>
               </Stack>
               {/*
