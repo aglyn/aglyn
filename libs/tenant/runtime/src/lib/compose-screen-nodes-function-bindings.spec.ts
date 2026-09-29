@@ -76,8 +76,7 @@ jest.mock('./get-screen-version', () => ({
   __esModule: true,
   default: jest.fn(),
 }))
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin'),
+jest.mock('./realm-installs-seam', () => ({
   getRealmPluginInstalls: (...a: unknown[]) => mockGetRealmPluginInstalls(...a),
 }))
 
