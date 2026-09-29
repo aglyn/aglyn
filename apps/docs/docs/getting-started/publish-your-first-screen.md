@@ -73,7 +73,15 @@ saves so you can jump straight to the real page.
   social image, SEO and structured data, business details, languages, consent banner,
   announcement bar, popup and store settings have no publish step — saving one
   refreshes every page of the live site immediately, the same way a publish does.
-  Installing, updating or resetting a marketplace theme does too.
+  Installing, updating or resetting a marketplace theme does too, and so does saving a
+  product, a review's moderation, a site variable or function, an overlay or an A/B
+  test. If you close the tab straight after saving, the refresh still happens within
+  a few minutes.
+- **Collections refresh their own pages.** Changing a collection's template screens,
+  its address or its categories refreshes its listing and every published entry page
+  — including the old addresses after a rename.
+- **A deleted site stops serving at once.** Its cached pages are dropped when you
+  delete it, rather than lingering for up to an hour.
 - **Saving is not publishing.** A save writes your working version; the live site
   serves the published one. The one subtle case: if you edit the version that is
   *currently live* and press Save, the live site catches up on its own within about a

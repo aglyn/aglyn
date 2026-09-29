@@ -40,7 +40,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
+import { collection, doc, getDoc } from 'firebase/firestore'
 import { productCollectionFields } from './smart-collections'
 import { useCallback, useMemo, useState } from 'react'
 import {
@@ -50,7 +50,9 @@ import {
   useFirestoreCollection,
   useHostResourceApi,
   writeGuardedBySeed,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
@@ -169,6 +171,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   const subsLocked = subs.ready && !subs.entitled
   const giftsLocked = gifts.ready && !gifts.entitled
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   /**
@@ -553,20 +556,29 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               .then((snapshot) => snapshot.get('stockHolds'))
               .catch(() => undefined)
             // Edit stays client-direct (no quota consumed); full replace.
-            await setDoc(
-              productRef,
-              {
-                ...withoutHolds,
-                ...membership,
-                ...(liveHolds ? { stockHolds: liveHolds } : {}),
-                // The editor edits a LIVE product, and the products table
-                // lists only `deletedAt == null` (AGL-3321): a replace whose
-                // seed lacked the field would take the product off the list.
-                deletedAt: null,
-                updatedAt: Timestamp.now(),
-              },
-              { merge: false },
-            )
+            // The product page renders it with no publish step, so the save
+            // carries the site's cache drop with it (AGL-3386).
+            await writeSiteWideChange({
+              firestore,
+              user,
+              hostId,
+              write: (batch) =>
+                batch.set(
+                  productRef,
+                  {
+                    ...withoutHolds,
+                    ...membership,
+                    ...(liveHolds ? { stockHolds: liveHolds } : {}),
+                    // The editor edits a LIVE product, and the products table
+                    // lists only `deletedAt == null` (AGL-3321): a replace
+                    // whose seed lacked the field would take the product off
+                    // the list.
+                    deletedAt: null,
+                    updatedAt: Timestamp.now(),
+                  },
+                  { merge: false },
+                ),
+            })
           } else {
             // New product rides the quota-enforcing resources API (AGL-473) —
             // it re-checks the `commerce` entitlement and productsPerHost.
@@ -596,6 +608,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       })
     }
   }, [
+    user,
     current,
     error,
     product,

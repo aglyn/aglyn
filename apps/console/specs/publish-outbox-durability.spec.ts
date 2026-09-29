@@ -110,6 +110,7 @@ import { join } from 'node:path'
 import {
   PUBLISH_OUTBOX_COLLECTION,
   PUBLISH_OUTBOX_FIELDS,
+  PUBLISH_OUTBOX_OPTIONAL_FIELDS,
   PUBLISH_OUTBOX_MAX_PATHS,
   sanitizePublishOutboxPaths,
 } from '../constants/publish-outbox'
@@ -328,7 +329,21 @@ describe('the writer and the rule are held to ONE field list', () => {
     const allowed = [...(clause as string).matchAll(/'([\w]+)'/g)].map(
       (match) => match[1],
     )
-    expect(allowed.sort()).toEqual([...PUBLISH_OUTBOX_FIELDS].sort())
+    expect(allowed.sort()).toEqual(
+      [...PUBLISH_OUTBOX_FIELDS, ...PUBLISH_OUTBOX_OPTIONAL_FIELDS].sort(),
+    )
+  })
+
+  it('the rule REQUIRES exactly the keys every entry carries', () => {
+    // The optional `entireHost` (AGL-3386) is in `hasOnly` and must not be in
+    // `hasAll`, or every publish entry — which never carries it — is refused.
+    const clause =
+      /match \/publishOutbox\/[\s\S]*?hasAll\(\s*\[([^\]]*)\]/.exec(rules)?.[1]
+    expect(clause).toBeDefined()
+    const required = [...(clause as string).matchAll(/'([\w]+)'/g)].map(
+      (match) => match[1],
+    )
+    expect(required.sort()).toEqual([...PUBLISH_OUTBOX_FIELDS].sort())
   })
 
   it('the writer writes exactly the keys the rule allows', async () => {

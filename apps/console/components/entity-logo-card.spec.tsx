@@ -175,9 +175,11 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
     render(<EntityLogoCard hostId="h1" />)
     fireEvent.click(screen.getByRole('button', { name: /remove/i }))
 
+    // `alongside` stages the site-wide outbox entry the console's `useHost`
+    // commits with a rendered write (AGL-3386).
     expect(mockSetDoc).toHaveBeenCalledWith(
       { seo: { entity: { logo: '' } } },
-      { merge: true },
+      { merge: true, alongside: expect.any(Function) },
     )
   })
 

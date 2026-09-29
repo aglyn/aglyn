@@ -32,6 +32,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
+import { dropDeletedSiteCache } from '../../../../utils/server/tenant-revalidate'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
@@ -215,6 +216,20 @@ async function handler(request: Request): Promise<Response> {
      * claim and `/api/admin/reap-sending-domains` collects it.
      *=========================================*/
     await eraseHost(hostId, { tearDownSendingDomain: teardownSendingDomain })
+
+    /*==========================================
+     * THE LIVE SITE STOPS SERVING NOW, NOT IN AN HOUR (AGL-3386).
+     *
+     * Its pages are ISR-cached for an hour and its names are cached to its
+     * id for as long, so without this a deleted site went on answering from
+     * cache for the rest of the window. Dropped from the snapshot read above
+     * — the routing map, the subdomain, the custom domain — because the
+     * document it came from is gone, and AFTER the erase, because a visitor
+     * arriving between a drop and the erase would re-cache the page from
+     * documents that still existed. Best effort: the site is deleted either
+     * way, and the hour is the backstop.
+     *=========================================*/
+    await dropDeletedSiteCache(hostSnapshot)
 
     /*==========================================
      * TO THE ORG'S FEED, NOT THE SITE'S.

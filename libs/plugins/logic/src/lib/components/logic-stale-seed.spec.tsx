@@ -97,6 +97,14 @@ const mockCreateResource = jest.fn().mockResolvedValue({ id: 'new-1' })
  */
 const FIRESTORE = {}
 
+// The card saves through `writeSiteWideChange` (AGL-3386); the double sends
+// each staged write to this spec's own `firebase/firestore` mock.
+jest.mock('@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/site-wide-change-double')
+    .siteWideChangeThroughSdk(() => jest.requireMock('firebase/firestore')),
+)
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useFirestoreCollection: (build: () => unknown) => ({

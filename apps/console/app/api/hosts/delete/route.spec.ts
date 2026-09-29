@@ -105,6 +105,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   logOrgActivity: (...args: unknown[]) => mockLogOrgActivity(...args),
 }))
 
+const mockDropDeletedSiteCache = jest.fn(async (..._args: unknown[]) => true)
+jest.mock('../../../../utils/server/tenant-revalidate', () => ({
+  __esModule: true,
+  dropDeletedSiteCache: (...args: unknown[]) => mockDropDeletedSiteCache(...args),
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   pluginRequestFromWeb: async (request: Request) => ({
@@ -345,5 +351,30 @@ describe('a site in a consent group (AGL-3320)', () => {
     expect(mockEraseHost).toHaveBeenCalledWith('host-1', {
       tearDownSendingDomain: expect.any(Function),
     })
+  })
+})
+
+describe("a deleted site stops serving from cache (AGL-3386)", () => {
+  it('drops the whole site from the snapshot read before the erase, after it', async () => {
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(mockDropDeletedSiteCache).toHaveBeenCalledTimes(1)
+    // The snapshot the route read — the document is gone by now, so this is
+    // the only place the subdomain, custom domain and routing map survive.
+    const [snapshot] = mockDropDeletedSiteCache.mock.calls[0] as [
+      { get: (field: string) => unknown },
+    ]
+    expect(snapshot.get('displayName')).toBe('Acme Storefront')
+    // After, never before: a drop first would race a visitor re-caching the
+    // page from documents that still existed.
+    expect(mockDropDeletedSiteCache.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockEraseHost.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('drops nothing when the erase throws — the site is still there', async () => {
+    mockEraseHost.mockRejectedValueOnce(new Error('boom'))
+    await post()
+    expect(mockDropDeletedSiteCache).not.toHaveBeenCalled()
   })
 })

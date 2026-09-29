@@ -9,6 +9,35 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.211 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/67df8d871...v1.0.0-beta.211)
+
+### Added
+
+- **cache:** a site-wide save writes its cache drop down, and plugin data announces ([AGL-3386](https://linear.app/aglyn/issue/AGL-3386), [AGL-2575](https://linear.app/aglyn/issue/AGL-2575))
+
+### Fixed
+
+- **cache:** the outbox rule fits the ruleset limit; site-wide entries take a minted id ([AGL-3386](https://linear.app/aglyn/issue/AGL-3386), [AGL-3389](https://linear.app/aglyn/issue/AGL-3389))
+- **cache:** collection changes and site deletion drop what they change ([AGL-3386](https://linear.app/aglyn/issue/AGL-3386))
+
+### Reverted
+
+- **calculator:** calculators go back to mui, bound for the marketplace ([AGL-3387](https://linear.app/aglyn/issue/AGL-3387))
+
+## v1.0.0-beta.210 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.209...v1.0.0-beta.210)
+
+### Added
+
+- **calculator:** calculators leave mui for a plugin of their own ([AGL-3387](https://linear.app/aglyn/issue/AGL-3387), [AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+
+### Fixed
+
+- **staff:** the abuse queue opens on open-or-reviewing reports ([AGL-3389](https://linear.app/aglyn/issue/AGL-3389))
+
 ## v1.0.0-beta.209 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/25cc1505f...v1.0.0-beta.209)

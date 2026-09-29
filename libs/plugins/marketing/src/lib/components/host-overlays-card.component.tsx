@@ -55,22 +55,16 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  orderBy,
-  query,
-  setDoc,
-} from 'firebase/firestore'
+import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
 import { useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
   useHostActivityLogger,
   writeGuardedBySeed,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
   overlayDisplayName,
   overlayEngagementLabel,
@@ -146,6 +140,7 @@ function parsePatterns(value: string): string[] {
 export function HostOverlaysCard(props: HostOverlaysCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { org } = props
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -308,10 +303,16 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           fromCache: Boolean(editor.$id) && overlaysFromCache,
         },
         async () => {
-          await setDoc(doc(firestore, 'hosts', hostId, 'overlays', id), {
-            ...cleaned,
-            updatedAt: Timestamp.now(),
-            ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
+          await writeSiteWideChange({
+            firestore,
+            user,
+            hostId,
+            write: (batch) =>
+              batch.set(doc(firestore, 'hosts', hostId, 'overlays', id), {
+                ...cleaned,
+                updatedAt: Timestamp.now(),
+                ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
+              }),
           })
           logActivity(editor.$id ? 'Updated overlay' : 'Created overlay', {
             type: 'content',
@@ -348,7 +349,13 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    await deleteDoc(doc(firestore, 'hosts', hostId, 'overlays', overlay.$id))
+    await writeSiteWideChange({
+      firestore,
+      user,
+      hostId,
+      write: (batch) =>
+        batch.delete(doc(firestore, 'hosts', hostId, 'overlays', overlay.$id)),
+    })
     enqueueSnackbar('Overlay deleted', { variant: 'success', persist: false })
     logActivity('Deleted overlay', {
       type: 'content',
@@ -365,27 +372,40 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     if (!neighbor?.$id || !current?.$id) return
     const currentOrder = current.order ?? index
     const neighborOrder = neighbor.order ?? index + direction
-    await Promise.all([
-      setDoc(
-        doc(firestore, 'hosts', hostId, 'overlays', current.$id),
-        { order: neighborOrder === currentOrder ? neighborOrder + direction : neighborOrder },
-        { merge: true },
-      ),
-      setDoc(
-        doc(firestore, 'hosts', hostId, 'overlays', neighbor.$id),
-        { order: currentOrder },
-        { merge: true },
-      ),
-    ]).catch(console.error)
+    // One batch, so the swap lands whole — and the order decides which
+    // overlay a visitor sees, so it carries the site's cache drop.
+    await writeSiteWideChange({
+      firestore,
+      user,
+      hostId,
+      write: (batch) => {
+        batch.set(
+          doc(firestore, 'hosts', hostId, 'overlays', current.$id as string),
+          { order: neighborOrder === currentOrder ? neighborOrder + direction : neighborOrder },
+          { merge: true },
+        )
+        batch.set(
+          doc(firestore, 'hosts', hostId, 'overlays', neighbor.$id as string),
+          { order: currentOrder },
+          { merge: true },
+        )
+      },
+    }).catch(console.error)
   }
 
   const handleToggle = async (overlay: OverlayDraft) => {
     if (!overlay.$id) return
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'overlays', overlay.$id),
-      { enabled: overlay.enabled === false },
-      { merge: true },
-    )
+    await writeSiteWideChange({
+      firestore,
+      user,
+      hostId,
+      write: (batch) =>
+        batch.set(
+          doc(firestore, 'hosts', hostId, 'overlays', overlay.$id),
+          { enabled: overlay.enabled === false },
+          { merge: true },
+        ),
+    })
   }
 
   const statusChip = (overlay: OverlayDraft) => {

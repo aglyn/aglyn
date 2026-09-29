@@ -3820,36 +3820,27 @@ service cloud.firestore {
      * ## The forgery this has to refuse
      *
      * An entry is an instruction the platform later carries out with its own
-     * credentials: drop these addresses on this site. Nothing in the DOCUMENT
-     * PATH says which site, because the drain reads this collection top-level
-     * (a subcollection would make it a collection-group query, and automatic
-     * single-field indexes are COLLECTION scope only — AGL-2486). So `hostId`
-     * is a field, and the field is what is checked: the writer must be able
-     * to PUBLISH to the host they name, by the same `canPublishHostContent`
-     * the routing-map write itself asks. An `author` — the role sold as "edit
-     * content but not publish" — is refused here exactly as it is there, and
-     * a member of one site cannot name another site's id.
+     * credentials: drop these addresses on this site. The drain reads this
+     * collection top-level (a collection group gets no automatic index —
+     * AGL-2486), so `hostId` is a field, and the writer must be able to write
+     * the host it names: a PATH entry (a publish) asks `canPublishHostContent`,
+     * as the routing-map write does, so an `author` is refused it. A
+     * SITE-WIDE entry (`entireHost: true`, AGL-3386) rides a settings save,
+     * which an author may make, so it asks `canWriteHostContent` — a narrower
+     * rule would fail the author's whole batch. It moves no pointer: the drain
+     * can only make the site's own pages regenerate, which
+     * `/api/screens/revalidate` already lets that role ask for. `entireHost`
+     * may only be `true`, and `paths` still names `/`, so the path rules hold.
+     * A suspended site is frozen here too: a takedown its editors could keep
+     * queuing platform work through would not be one.
      *
-     * A suspended site is frozen here too, and for a sharper reason than
-     * consistency: an outbox entry is a request for the platform to call out
-     * on the site's behalf, and a takedown its own editors could keep queuing
-     * work through would not be a takedown.
+     * ## The shape is pinned as tightly as the authorization
      *
-     * ## Why the shape is pinned as tightly as the authorization
-     *
-     * `createdAt == request.time` is what makes the drain's ordering and its
-     * age reporting mean anything: a client-settable timestamp could put an
-     * entry at the head of the queue for ever, or make a stranded publish
-     * report as newly created and never age into the stalled count.
+     * `createdAt == request.time` keeps the drain's order and ageing honest,
      * `attempts == 0` keeps the retry ceiling out of the writer's hands, and
-     * `hasOnly` keeps a client from parking arbitrary state in a collection
-     * the platform reads back.
-     *
-     * UPDATE is denied outright. The drain uses the Admin SDK and bypasses
-     * these rules; nothing else has any business editing an entry in place.
-     * DELETE is open to the same role that may create one, because the
-     * publishing tab releases its own entry the moment its announce lands —
-     * that is what keeps this collection near-empty instead of a log.
+     * `hasOnly` keeps a client from parking state here. UPDATE is denied (the
+     * drain uses the Admin SDK); DELETE is open to whoever may create the
+     * entry, so the tab releases its own once its announce lands.
      */
     match /publishOutbox/{entryId} {
       // The client never reads its own entries: it holds the reference it
@@ -3857,9 +3848,11 @@ service cloud.firestore {
       allow read: if isStaff();
       allow create: if isStaff() ||
         (request.resource.data.keys().hasOnly(
-           ['hostId', 'paths', 'createdAt', 'attempts']) &&
+           ['hostId', 'paths', 'createdAt', 'attempts', 'entireHost']) &&
          request.resource.data.keys().hasAll(
            ['hostId', 'paths', 'createdAt', 'attempts']) &&
+         (!('entireHost' in request.resource.data) ||
+           request.resource.data.entireHost == true) &&
          request.resource.data.hostId is string &&
          request.resource.data.paths is list &&
          request.resource.data.paths.size() > 0 &&
@@ -3869,12 +3862,16 @@ service cloud.firestore {
          request.resource.data.paths.size() <= 250 &&
          request.resource.data.attempts == 0 &&
          request.resource.data.createdAt == request.time &&
-         canPublishHostContent(request.resource.data.hostId) &&
+         (canPublishHostContent(request.resource.data.hostId) ||
+           ('entireHost' in request.resource.data &&
+            canWriteHostContent(request.resource.data.hostId))) &&
          !hostWritesFrozen(request.resource.data.hostId));
       allow update: if false;
       allow delete: if isStaff() ||
         (resource.data.hostId is string &&
-         canPublishHostContent(resource.data.hostId));
+         (canPublishHostContent(resource.data.hostId) ||
+           (resource.data.get('entireHost', false) == true &&
+            canWriteHostContent(resource.data.hostId))));
     }
 
     // User profile docs (AGL-158): the console account page reads/writes

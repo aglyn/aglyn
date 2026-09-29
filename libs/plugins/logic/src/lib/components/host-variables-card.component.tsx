@@ -55,13 +55,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  doc,
-  getCountFromServer,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore'
+import { collection, doc, getCountFromServer } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -70,6 +64,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import WhereUsedDialog from './where-used-dialog.component'
 import {
   fetchWhereUsed,
@@ -412,11 +407,17 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             fromCache: variablesFromCache,
           },
           async () => {
-            await setDoc(
-              doc(firestore, 'hosts', hostId, 'variables', draft.id),
-              { ...fields, updatedAt: Timestamp.now() },
-              { merge: true },
-            )
+            await writeSiteWideChange({
+              firestore,
+              user,
+              hostId,
+              write: (batch) =>
+                batch.set(
+                  doc(firestore, 'hosts', hostId, 'variables', draft.id),
+                  { ...fields, updatedAt: Timestamp.now() },
+                  { merge: true },
+                ),
+            })
           },
         )
         // Before `setDraft(null)`, so a refusal keeps the dialog open with
@@ -449,6 +450,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
       })
     }
   }, [
+    user,
     draft,
     validName,
     nameTaken,
@@ -498,10 +500,16 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await updateDoc(
-        doc(firestore, 'hosts', hostId, 'variables', variable.$id),
-        { deletedAt: Timestamp.now() },
-      )
+      await writeSiteWideChange({
+        firestore,
+        user,
+        hostId,
+        write: (batch) =>
+          batch.update(
+            doc(firestore, 'hosts', hostId, 'variables', variable.$id),
+            { deletedAt: Timestamp.now() },
+          ),
+      })
       enqueueSnackbar('Variable deleted', {
         variant: 'success',
         persist: false,

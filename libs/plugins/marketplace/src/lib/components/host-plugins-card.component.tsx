@@ -31,7 +31,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import {
   collection,
-  deleteDoc,
   doc,
   documentId,
   limit,
@@ -52,6 +51,7 @@ import {
   useHostOrgId,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface HostPluginsCardProps {
@@ -309,9 +309,15 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
           scope: 'org',
         })
         if (!payload) return
-        await deleteDoc(
-          doc(firestore, 'hosts', hostId, 'installs', install.$id),
-        )
+        await writeSiteWideChange({
+          firestore,
+          user,
+          hostId,
+          write: (batch) =>
+            batch.delete(
+              doc(firestore, 'hosts', hostId, 'installs', install.$id),
+            ),
+        })
         enqueueSnackbar('Plugin now installed for the whole organization', {
           variant: 'success',
           persist: false,
@@ -320,7 +326,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
         setBusy(null)
       }
     },
-    [requestPluginApi, firestore, hostId, enqueueSnackbar],
+    [requestPluginApi, firestore, hostId, user, enqueueSnackbar],
   )
 
   const handleOrgUpgrade = useCallback(

@@ -477,6 +477,68 @@ export async function revalidateHostAliases(options: {
   }
 }
 
+/**
+ * Every address a site answers that a drop can name: its root and each
+ * routed page, capped at the tenant's own `MAX_PATHS`. Read off a host
+ * snapshot the caller already holds, so a caller that is about to remove the
+ * host document can compute it first (AGL-3386).
+ */
+export function wholeHostPaths(snapshot: {
+  get: (field: string) => unknown
+}): string[] {
+  const screens = (snapshot.get('screens') ?? {}) as Record<string, string>
+  return [
+    ...new Set([
+      '/',
+      ...Object.values(screens)
+        .filter((path): path is string => typeof path === 'string' && !!path)
+        .map((path) => screenRoutePathToUrl(path)),
+    ]),
+  ].slice(0, MAX_WHOLE_HOST_PATHS)
+}
+
+/**
+ * Drop every cached page of a site that is being DELETED, and expire every
+ * name it answered to (AGL-3386).
+ *
+ * Takes the snapshot rather than an id, because by the time the cache is
+ * dropped the host document is gone and nothing could be resolved from it:
+ * the caller reads the host first, erases it, then calls this with what it
+ * read. Dropping BEFORE the erase instead would race it — a visitor arriving
+ * between the two would regenerate the page from the still-present documents
+ * and cache it for another hour.
+ *
+ * Best effort and never throws, like everything here: the site is deleted
+ * either way, and the hour-long window is the backstop.
+ */
+export async function dropDeletedSiteCache(snapshot: {
+  id: string
+  get: (field: string) => unknown
+}): Promise<boolean> {
+  const hostId = snapshot.id
+  const subdomain = String(snapshot.get('subdomain') ?? '')
+  if (!hostId || !subdomain) return false
+  const cname = String(snapshot.get('cname') ?? '') || undefined
+  try {
+    const [pages] = await Promise.all([
+      postTenantRevalidate({
+        subdomain,
+        hostId,
+        paths: wholeHostPaths(snapshot),
+        ...(cname ? { cname } : {}),
+      }),
+      // The alias cache still resolves both names to the deleted host for up
+      // to an hour otherwise, and every request through it answers from the
+      // cached pages above.
+      revalidateHostAliases({ subdomain, hostId, ...(cname ? { cname } : {}) }),
+    ])
+    return pages.reason === 'ok'
+  } catch (error) {
+    console.error('[tenant-revalidate] deleted-site drop failed', hostId, error)
+    return false
+  }
+}
+
 export async function revalidateEntireHost(
   firestore: Firestore,
   hostId: string,
@@ -493,13 +555,7 @@ export async function revalidateEntireHost(
     if (!snapshot.exists) return miss('error')
     const subdomain = String(snapshot.get('subdomain') ?? '')
     if (!subdomain) return miss('error')
-    const screens = (snapshot.get('screens') ?? {}) as Record<string, string>
-    const paths = [
-      ...new Set([
-        '/',
-        ...Object.values(screens).map((path) => screenRoutePathToUrl(path)),
-      ]),
-    ].slice(0, MAX_WHOLE_HOST_PATHS)
+    const paths = wholeHostPaths(snapshot)
     const result = await postTenantRevalidate({
       subdomain,
       hostId,

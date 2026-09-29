@@ -37,6 +37,10 @@ import {
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  announceCollectionChange,
+  collectionLivePaths,
+} from '../../../../utils/server/announce-collection-change'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
 // `author` (AGL-2334) manages the collection's SHAPE — creating one, naming
@@ -287,6 +291,15 @@ async function writeTemplatePointers(options: {
     })
   }
   await batch.commit()
+  // The entry template renders every entry page and the list screen every
+  // listing, and a demoted screen stops answering at its own address — all
+  // of them cached for an hour otherwise (AGL-3386). Best effort.
+  await announceCollectionChange({
+    firestore,
+    hostId: hostRef.id,
+    collectionId,
+    screenIds: [...demote],
+  })
   /*==========================================
    * AFTER THE COMMIT (AGL-118), and this action logs at all because the
    * pointer edit is not the cosmetic one it looks like.
@@ -465,6 +478,14 @@ async function handler(request: Request): Promise<Response> {
     fields.kind = kind
 
     const collectionsRef = hostRef.collection('collections')
+    // What the collection answers BEFORE the write: on a rename these are the
+    // addresses it moves away from, which nothing can name afterwards.
+    const before =
+      action === 'update'
+        ? await collectionLivePaths({ firestore, hostId, collectionId: id }).catch(
+            () => [],
+          )
+        : []
     const result = await firestore.runTransaction(async (transaction) => {
       // The claim: same host, same slug, same kind, different document. Read
       // and write share the transaction, so a concurrent create that would
@@ -562,6 +583,11 @@ async function handler(request: Request): Promise<Response> {
      * inside it writes one entry per attempt and a busy site quietly gets
      * duplicates. Past every verdict, the write has committed exactly once.
      *=========================================*/
+    // The slug is the first segment of every page the collection serves, and
+    // its categories name the listings: drop the old addresses and the new
+    // (AGL-3386). A create drops too — its address may be holding a cached
+    // 404 from before the collection existed. Best effort.
+    await announceCollectionChange({ firestore, hostId, collectionId: id, before })
     await logHostActivity(
       hostId,
       { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
