@@ -151,7 +151,7 @@ let fuseLoad: Promise<typeof Fuse> | undefined
  * cached, so the next keystroke tries again instead of the box going dead.
  */
 export const loadCollectionFuse = (): Promise<typeof Fuse> =>
-  (fuseLoad ??= import('@aglyn/shared-util-vendor/fuse').then(
+  (fuseLoad ??= import('./collection-search-fuse').then(
     (module) => (loadedFuse = module.Fuse),
     (error: unknown) => {
       fuseLoad = undefined
