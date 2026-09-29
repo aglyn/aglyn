@@ -715,7 +715,9 @@ export function readAiThemeProposal(value: unknown): AiThemeProposal | null {
         (THEME_EDITOR_CONTROLS.find((control) => control.id === 'components')?.options ?? []).includes(
           String(leaf['component']),
         ) &&
-        (leaf['target'] === 'styleOverrides' || leaf['target'] === 'defaultProps') &&
+        (leaf['target'] === 'styleOverrides' ||
+          leaf['target'] === 'sx' ||
+          leaf['target'] === 'defaultProps') &&
         typeof leaf['property'] === 'string' &&
         ['string', 'number', 'boolean'].includes(typeof leaf['value']) &&
         (leaf['media'] === null || String(leaf['media']) in THEME_EDITOR_MEDIA_QUERIES),

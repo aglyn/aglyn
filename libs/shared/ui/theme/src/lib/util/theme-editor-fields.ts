@@ -658,8 +658,12 @@ export function resetComponentOverrides(theme: HostTheme): HostTheme {
 /** One leaf of a component override, as a writer names it. */
 export interface ThemeComponentOverrideLeaf {
   component: HostThemeComponentKey
-  /** `styleOverrides` styles a slot; `defaultProps` sets a prop's default. */
-  target: 'styleOverrides' | 'defaultProps'
+  /**
+   * `styleOverrides` styles a slot in literal CSS; `sx` styles it in theme
+   * terms, so a value may name a palette path (`primary.main`) or a spacing
+   * unit (AGL-3403); `defaultProps` sets a prop's default.
+   */
+  target: 'styleOverrides' | 'sx' | 'defaultProps'
   /** The style slot (`root`, `contained`, `h1`); `null` for a default prop. */
   slot: string | null
   /** A camelCase CSS property, or the prop's name. */
@@ -685,7 +689,9 @@ export function writeComponentOverride(
     entry.defaultProps = { ...entry.defaultProps, [leaf.property]: leaf.value }
   } else {
     const slot = leaf.slot ?? 'root'
-    const styles = { ...entry.styleOverrides }
+    const styles: Record<string, unknown> = {
+      ...(leaf.target === 'sx' ? entry.sx : entry.styleOverrides),
+    }
     const slotStyles = { ...(styles[slot] as Record<string, unknown> | undefined) }
     if (leaf.media) {
       const query = THEME_EDITOR_MEDIA_QUERIES[leaf.media]
@@ -697,7 +703,11 @@ export function writeComponentOverride(
       slotStyles[leaf.property] = leaf.value
     }
     styles[slot] = slotStyles
-    entry.styleOverrides = styles
+    if (leaf.target === 'sx') {
+      entry.sx = styles as HostThemeComponentOverride['sx']
+    } else {
+      entry.styleOverrides = styles
+    }
   }
   components[leaf.component] = entry
   return { ...theme, components }

@@ -238,7 +238,7 @@ describe('parseAiThemeToolInput holds an answer to the editor', () => {
         leaf({ property: 'width', value: 'expression(alert(1))' }),
         leaf({ property: 'p', value: 2 }),
         leaf({ target: 'defaultProps', slot: null, property: 'href', value: 'https' }),
-        leaf({ component: 'MuiDrawer' }),
+        leaf({ component: 'MuiContainer' }),
       ],
     })
     expect(parsed.components).toEqual([

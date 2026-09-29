@@ -18,6 +18,7 @@
 import type {
   HostTheme,
   HostThemeComponentOverride,
+  HostThemeComponentVariant,
   HostThemeFont,
   HostThemePaletteColor,
   HostThemeScheme,
@@ -31,32 +32,75 @@ import type { PaletteOptions, ThemeOptions } from '../../vendor/mui'
  * anything outside this list is dropped by {@link sanitizeHostTheme} so a
  * tampered document can't restyle console-internal or portal-critical
  * components.
+ *
+ * The list is what a site actually renders — its elements, the forms, booking
+ * and commerce surfaces, and the dialogs and menus they open — so a theme can
+ * restyle a whole site rather than its buttons alone (AGL-3403). Layout
+ * primitives (`MuiContainer`, `MuiGrid`, `MuiStack`, `MuiBox`) are absent on
+ * purpose: they carry the page structure, and a theme that reflowed them
+ * would break layouts the Besigner drew.
  */
 export const HOST_THEME_COMPONENT_WHITELIST = [
+  'MuiAccordion',
+  'MuiAccordionDetails',
+  'MuiAccordionSummary',
+  'MuiAlert',
+  'MuiAlertTitle',
   'MuiAppBar',
   'MuiAvatar',
   'MuiBadge',
+  'MuiBreadcrumbs',
   'MuiButton',
   'MuiButtonBase',
+  'MuiButtonGroup',
   'MuiCard',
+  'MuiCardActions',
   'MuiCardContent',
+  'MuiCardHeader',
   'MuiCheckbox',
   'MuiChip',
   'MuiCircularProgress',
+  'MuiDialog',
+  'MuiDialogActions',
+  'MuiDialogContent',
+  'MuiDialogTitle',
   'MuiDivider',
+  'MuiDrawer',
+  'MuiFab',
+  'MuiFilledInput',
+  'MuiFormControlLabel',
+  'MuiFormHelperText',
+  'MuiFormLabel',
   'MuiIconButton',
+  'MuiInput',
+  'MuiInputBase',
+  'MuiInputLabel',
   'MuiLinearProgress',
   'MuiLink',
   'MuiList',
   'MuiListItem',
+  'MuiListItemButton',
   'MuiMenu',
+  'MuiMenuItem',
+  'MuiOutlinedInput',
+  'MuiPagination',
+  'MuiPaginationItem',
   'MuiPaper',
   'MuiRadio',
+  'MuiRating',
+  'MuiSelect',
   'MuiSlider',
+  'MuiSnackbarContent',
   'MuiSwitch',
   'MuiTab',
+  'MuiTable',
+  'MuiTableCell',
+  'MuiTableHead',
+  'MuiTableRow',
   'MuiTabs',
   'MuiTextField',
+  'MuiToggleButton',
+  'MuiToggleButtonGroup',
   'MuiToolbar',
   'MuiTooltip',
   'MuiTypography',
@@ -143,9 +187,119 @@ function sanitizeComponents(
     const entry: HostThemeComponentOverride = {}
     if (override.defaultProps) entry.defaultProps = override.defaultProps
     if (override.styleOverrides) entry.styleOverrides = override.styleOverrides
+    const sx = sanitizeSlotStyles(override.sx)
+    if (sx) entry.sx = sx
+    const variants = sanitizeVariants(override.variants)
+    if (variants) entry.variants = variants
     if (Object.keys(entry).length) sanitized[key] = entry
   }
   return Object.keys(sanitized).length ? sanitized : undefined
+}
+
+/** `sx` slots: each a style object, anything else dropped. */
+function sanitizeSlotStyles(
+  slots: unknown,
+): Record<string, Record<string, unknown>> | undefined {
+  if (!isPlainObject(slots)) return undefined
+  const kept: Record<string, Record<string, unknown>> = {}
+  for (const [slot, style] of Object.entries(slots)) {
+    if (isPlainObject(style)) kept[slot] = style
+  }
+  return Object.keys(kept).length ? kept : undefined
+}
+
+/**
+ * Variants that can match and style something: a props object of scalars
+ * and a style or an `sx`. A malformed entry is dropped rather than handed to
+ * MUI, whose variant loop reads `props` and would throw on a missing one.
+ */
+function sanitizeVariants(
+  variants: unknown,
+): HostThemeComponentVariant[] | undefined {
+  if (!Array.isArray(variants)) return undefined
+  const kept: HostThemeComponentVariant[] = []
+  for (const variant of variants) {
+    if (!isPlainObject(variant) || !isPlainObject(variant['props'])) continue
+    const props = variant['props'] as Record<string, unknown>
+    if (
+      Object.values(props).some(
+        (value) =>
+          value !== null &&
+          !['string', 'number', 'boolean'].includes(typeof value),
+      )
+    ) {
+      continue
+    }
+    const entry: HostThemeComponentVariant = {
+      props: props as HostThemeComponentVariant['props'],
+    }
+    if (isPlainObject(variant['style'])) entry.style = variant['style']
+    if (isPlainObject(variant['sx'])) entry.sx = variant['sx']
+    if (entry.style || entry.sx) kept.push(entry)
+  }
+  return kept.length ? kept : undefined
+}
+
+/** The theme a style function is handed, as far as `sx` needs it. */
+type SxTheme = { unstable_sx?: (style: unknown) => unknown }
+
+/**
+ * An `sx` object as a style function of the theme it renders under.
+ *
+ * `components` are read against the BUILT theme of each scheme, so a palette
+ * path resolves to that scheme's color: `borderColor: 'divider'` is the light
+ * divider on light and the dark one on dark, which is the thing a literal
+ * override cannot say.
+ */
+function sxStyle(sx: Record<string, unknown>) {
+  return ({ theme }: { theme: SxTheme }) =>
+    theme?.unstable_sx ? theme.unstable_sx(sx) : sx
+}
+
+/**
+ * The stored (JSON) components as MUI reads them: each `sx` slot joins its
+ * literal `styleOverrides` slot, literal first, and each variant's `sx`
+ * becomes a style function.
+ */
+function componentsToThemeOptions(
+  components: Record<string, HostThemeComponentOverride>,
+): NonNullable<ThemeOptions['components']> {
+  const converted: Record<string, Record<string, unknown>> = {}
+  for (const [key, override] of Object.entries(components)) {
+    const entry: Record<string, unknown> = {}
+    if (override.defaultProps) entry['defaultProps'] = override.defaultProps
+    const slots = new Set([
+      ...Object.keys(override.styleOverrides ?? {}),
+      ...Object.keys(override.sx ?? {}),
+    ])
+    if (slots.size) {
+      const styleOverrides: Record<string, unknown> = {}
+      for (const slot of slots) {
+        const literal = override.styleOverrides?.[slot]
+        const sx = override.sx?.[slot]
+        styleOverrides[slot] =
+          sx && literal !== undefined
+            ? [literal, sxStyle(sx)]
+            : sx
+              ? sxStyle(sx)
+              : literal
+      }
+      entry['styleOverrides'] = styleOverrides
+    }
+    if (override.variants?.length) {
+      entry['variants'] = override.variants.map(({ props, style, sx }) => ({
+        props,
+        style: sx
+          ? (context: { theme: SxTheme }) => [
+              style ?? {},
+              sxStyle(sx)(context),
+            ]
+          : style,
+      }))
+    }
+    converted[key] = entry
+  }
+  return converted as NonNullable<ThemeOptions['components']>
 }
 
 /**
@@ -278,7 +432,11 @@ export function hostThemeToThemeOptions(
     options.spacing = sanitized.spacing
   }
   if (sanitized.components) {
-    options.components = sanitized.components as ThemeOptions['components']
+    // Ordered BEFORE conversion: an `sx` object ends up inside a closure,
+    // where the pass over the finished options below cannot reach it.
+    options.components = componentsToThemeOptions(
+      orderMediaWidths(sanitized.components),
+    )
   }
   // Toolbar height is only reachable here (AGL-1242). MUI derives the
   // Toolbar's `regular` variant style from `mixins.toolbar` and applies it
@@ -352,8 +510,62 @@ export function mergeThemeOptions(
     base.components ?? {},
     overrides.components ?? {},
   ) as ThemeOptions['components']
+  composeComponentStyles(merged.components, base.components, overrides.components)
 
   return merged
+}
+
+type ComponentOptions = {
+  styleOverrides?: Record<string, unknown>
+  variants?: unknown[]
+}
+
+/** A slot's styles as a list MUI resolves in order (its `processStyle` flattens arrays). */
+function styleList(style: unknown): unknown[] {
+  return Array.isArray(style) ? style : [style]
+}
+
+/**
+ * Where a deep merge would REPLACE styling rather than add to it, composes
+ * the two instead (AGL-3403).
+ *
+ * A deep merge merges two style OBJECTS key by key, which is right. But the
+ * base styles several slots with a FUNCTION of the theme — `MuiButton.root`
+ * carries the accent-text contrast fix — and merging an object onto a
+ * function keeps only the object. So a theme that set one property on the
+ * button root silently removed the fix, and nothing JSON can say could put it
+ * back. MUI accepts a list per slot and applies it in order, so a function on
+ * either side makes the slot `[base, override]`: the override still wins
+ * every property it names, and everything else the base did still happens.
+ *
+ * `variants` concatenate for the same reason: the base's outlined
+ * `IconButton` must not disappear because a theme styled its `small` size.
+ */
+function composeComponentStyles(
+  merged: ThemeOptions['components'],
+  base: ThemeOptions['components'],
+  overrides: ThemeOptions['components'],
+): void {
+  if (!merged || !base || !overrides) return
+  const target = merged as Record<string, ComponentOptions>
+  for (const [name, override] of Object.entries(
+    overrides as Record<string, ComponentOptions>,
+  )) {
+    const from = (base as Record<string, ComponentOptions>)[name]
+    if (!from || !override) continue
+    for (const [slot, style] of Object.entries(override.styleOverrides ?? {})) {
+      const baseStyle = from.styleOverrides?.[slot]
+      if (baseStyle === undefined) continue
+      if (isPlainObject(baseStyle) && isPlainObject(style)) continue
+      target[name].styleOverrides = {
+        ...target[name].styleOverrides,
+        [slot]: [...styleList(baseStyle), ...styleList(style)],
+      }
+    }
+    if (Array.isArray(from.variants) && Array.isArray(override.variants)) {
+      target[name].variants = [...from.variants, ...override.variants]
+    }
+  }
 }
 
 /** Plain data object — not an array, function, or class instance. */
