@@ -73,8 +73,38 @@ export interface PluginServiceRegistration<T> {
   priority: number
 }
 
-const contracts = new Map<string, PluginServiceContract<unknown>>()
-const registrations = new Map<string, PluginServiceRegistration<unknown>[]>()
+/**
+ * ONE REGISTRY PER PROCESS, NOT PER MODULE COPY (AGL-3412).
+ *
+ * The app's boot step registers the shell's own services — the trust signer,
+ * the site cache — from `instrumentation.ts`, and Next compiles that file
+ * and every route into separate module graphs. A module-scoped `Map` is
+ * therefore one registry per graph: boot filled its copy, and the route that
+ * asked read an empty one. Realm trust answered 501 on production with the
+ * signer registered, and the site cache failed the same way without a sound.
+ *
+ * Keyed on `globalThis` under `Symbol.for`, every copy in the process reads
+ * the same two maps — the AGL-53 singleton pattern in `aglyn.ts`.
+ */
+const PLUGIN_SERVICES_KEY = Symbol.for('@aglyn/aglyn:plugin-services')
+
+interface PluginServicesStore {
+  contracts: Map<string, PluginServiceContract<unknown>>
+  registrations: Map<string, PluginServiceRegistration<unknown>[]>
+}
+
+const globalScope = globalThis as typeof globalThis & {
+  [PLUGIN_SERVICES_KEY]?: PluginServicesStore
+}
+
+const store: PluginServicesStore =
+  globalScope[PLUGIN_SERVICES_KEY] ??
+  (globalScope[PLUGIN_SERVICES_KEY] = {
+    contracts: new Map(),
+    registrations: new Map(),
+  })
+
+const { contracts, registrations } = store
 
 /**
  * Declares a contract. Idempotent by id for the same `multiple` setting, so
