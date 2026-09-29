@@ -15,12 +15,6 @@ what happens next: nothing is saved, sent or imported until you do it yourself.
 - **In an import**, a suggested match between the columns of your file and the fields they
   fill.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
-available in every workspace yet. This page says what it does in the CRM, and grows
-with the feature.
-:::
-
 ## Summarize a record {#summarize-a-record}
 
 On a contact's, company's, deal's or lead's page, **Summarize this contact** (or company, deal

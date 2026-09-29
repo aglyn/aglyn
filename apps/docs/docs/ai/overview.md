@@ -11,12 +11,6 @@ component, a layout, a page template, a form, an email, a campaign, product copy
 theme, your search titles and descriptions — and it plans the work, builds it from
 what your site already has, and hands you a draft to review.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — the doors
-described here do not all appear in every workspace yet. This section says what each
-one does, and grows as each reaches you.
-:::
-
 It is the same assistant as [Aglyn Assist](../getting-started/aglyn-assist.md), which
 answers questions about the product from this documentation. Aglyn AI is what that
 assistant does when it stops explaining and starts building.
