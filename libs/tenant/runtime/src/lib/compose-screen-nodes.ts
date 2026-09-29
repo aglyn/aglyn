@@ -22,7 +22,6 @@ import {
   applyMediaAssetFacts,
   mediaAssetRefs,
 } from '@aglyn/aglyn/app-utils/media-asset-facts'
-import { getRealmPluginInstalls } from '@aglyn/tenant-data-admin'
 import {
   recordServedPageVersion,
   reviewHostedPage,
@@ -369,6 +368,7 @@ async function functionBindingsFor(
   )
   if (!placesMarketplaceElement) return firstParty
   try {
+    const { getRealmPluginInstalls } = await import('./realm-installs-seam')
     const installs = await getRealmPluginInstalls({ hostId })
     return Aglyn.mergeFunctionBindings(firstParty, ...installs)
   } catch (error) {
