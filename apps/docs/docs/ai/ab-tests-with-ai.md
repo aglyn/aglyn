@@ -6,12 +6,6 @@ description: "Have Aglyn AI write two to four variants for a screen, section or 
 
 # A/B tests by AI
 
-:::caution Rolling out
-A/B tests by AI is a **release-flagged feature, currently being rolled out** — it is
-not available in your workspace yet. This page says what it does, and grows with the
-feature.
-:::
-
 The test itself is yours. The experiment, its variants, the traffic split, the
 conversion goal and the counters all belong to the **Experiments** card on your site's
 **Marketing** page. Two AI cards sit inside that card: one writes variants while you are

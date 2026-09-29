@@ -10,12 +10,6 @@ Where [rewriting copy](copy-assist.md) changes words, **Generate a section with 
 builds **structure** — a whole section of real components — directly on the page you
 have open.
 
-:::caution Rolling out
-Generating a section is part of **Aglyn AI**, a release-flagged feature currently being
-rolled out — it is not available in every workspace yet. This page says what it does,
-and grows with the feature.
-:::
-
 ## Use it
 
 1. Open a page, layout or reusable component in the Besigner and select where the

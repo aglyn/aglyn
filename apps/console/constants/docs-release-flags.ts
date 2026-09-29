@@ -376,6 +376,16 @@ export const PUBLISHED_ON_IN_PRODUCTION: Partial<
     precondition:
       'AGL-1909: Anthropic has to be a published subprocessor before Assist sends it customer content. The published subprocessors page (/legal/subprocessors) lists Anthropic for the Assist helper.',
   },
+  release_ai_generative: {
+    templateVersion: 13,
+    publishedAt: '2026-09-29',
+    publishedValue:
+      '{"enabled":true,"rolloutPercent":0,"note":"Released to every workspace on every tier, 2026-09-29 (owner decision; AGL-3341 follow-through)."}',
+    defaultStaysOff:
+      'The generative doors send customer briefs and site content to the model provider, so a code change must never be what opens them: the default and the template seed stay OFF and the release is a Remote Config publish, the same terms as release_assist.',
+    precondition:
+      'AGL-1909 covers the provider as a published subprocessor, as it does for Assist. The rollout ran at 90% from template v12 (AGL-3341) before the owner released it to every workspace; AGL-3024 had cleared three of its five eval floors.',
+  },
 }
 
 /** Every flag whose in-repo default (and seeded Remote Config value) is OFF. */
