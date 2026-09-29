@@ -191,24 +191,6 @@ The function does the arithmetic and decides what shows: give it a local variabl
 figure on the page, and a true/false for every row a filter can turn off. The layout
 between those elements is whatever you build.
 
-### Receipts, invoices and quotes
-
-A calculator's answer can leave the page as a document the customer keeps:
-
-1. Inside the Calculator, place a **Calculator Document** and design the receipt in it: your
-   logo, the customer's details, one row per charge, the total. Each figure is a
-   **Calculator Result**, and each row that only sometimes applies sits in a **Show When**.
-2. Give it a **File name** such as `Receipt {invoice_number} {customer}`; the names in braces
-   fill in from the function.
-3. Place a **Calculator Save Button** anywhere in the same Calculator. **Save as PDF** opens the
-   print window with only the document in it, so the saved PDF carries none of the page around
-   it. **Share** and **Copy as text** send it as text, for a text message or an email.
-
-Set the document's **On the page** to **Only in the saved copy** when the page should show a
-working calculator and the PDF a formal document laid out differently. Nothing is stored: the
-document is made from what is on the screen at that moment, so save or send it before
-starting the next one.
-
 ## Where-used & safety
 
 Before you rename or delete a variable or function, run the **where-used scan** to see

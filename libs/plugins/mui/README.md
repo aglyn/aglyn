@@ -22,7 +22,7 @@ The plugin has one registrar, `registerMuiPlugin` (the `site` registrar in `plug
 - Surfaces: `muiCard` and its header, content and actions, `muiAccordion` and its summary and details, `muiTabs`, `muiTabPanel`, `muiList`, `muiListItem`, `muiListItemText`.
 - Media: `image`, `video`, `videoEmbed`, `muiImageList`, `muiImageListItem`, `socialLinks`.
 - Data and content: `dataTable`, `collectionEntries`, `collectionEntryBody`, `collectionEntryMeta`, `collectionEntryAuthor`, `collectionRelated`, `collectionShare`, `collectionCategories`, `collectionSearch`, `contentAuthorProfile`, `product`.
-- Functions: `functionWidget`, `functionScope`, `functionInput`, `functionOutput`, `functionShow`, `functionDocument`, `functionSave`.
+- Functions: `functionWidget`, `functionScope`, `functionInput`, `functionOutput`, `functionShow`.
 - Other: `reusableInstance`, `custom-html`, `marketplacePlugin`, and `div`, the root of a document.
 
 **Component ids are persisted.** Every node in a saved screen document stores its `componentId` beside `pluginId: 'mui'`, so the ids above, including the legacy `mui`-prefixed ones, do not change without a document migration.
