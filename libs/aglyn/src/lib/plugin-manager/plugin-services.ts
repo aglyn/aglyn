@@ -73,8 +73,37 @@ export interface PluginServiceRegistration<T> {
   priority: number
 }
 
-const contracts = new Map<string, PluginServiceContract<unknown>>()
-const registrations = new Map<string, PluginServiceRegistration<unknown>[]>()
+/**
+ * ONE REGISTRY PER PROCESS, not per module copy — the `aglyn.ts` pattern
+ * (AGL-53), and for the same reason.
+ *
+ * Next.js compiles `instrumentation.ts` apart from the routes, so the boot
+ * file and a route handler each hold their own copy of this module. With the
+ * maps at module scope, what the boot registered (the console's trust signer,
+ * its site cache, the declarations repair) went into the boot's copy, and
+ * every route resolved an empty one: production answered "Trust signing is
+ * not available on this deployment" with the key deployed and the signer
+ * registered. Keyed on `globalThis` under `Symbol.for`, every copy in a
+ * realm reads the same maps.
+ */
+const PLUGIN_SERVICES_KEY = Symbol.for('@aglyn/aglyn:plugin-services')
+
+interface PluginServiceTables {
+  contracts: Map<string, PluginServiceContract<unknown>>
+  registrations: Map<string, PluginServiceRegistration<unknown>[]>
+}
+
+const globalScope = globalThis as typeof globalThis & {
+  [PLUGIN_SERVICES_KEY]?: PluginServiceTables
+}
+
+const tables: PluginServiceTables =
+  globalScope[PLUGIN_SERVICES_KEY] ??
+  (globalScope[PLUGIN_SERVICES_KEY] = {
+    contracts: new Map(),
+    registrations: new Map(),
+  })
+const { contracts, registrations } = tables
 
 /**
  * Declares a contract. Idempotent by id for the same `multiple` setting, so

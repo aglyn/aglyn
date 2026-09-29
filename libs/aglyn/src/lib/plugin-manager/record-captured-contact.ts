@@ -79,8 +79,19 @@ import {
   type PluginContactCaptured,
 } from './plugin-contact-capture'
 
-/** The app's boot-time declarations step, when it has offered one. */
-let repair: (() => Promise<void>) | null = null
+/**
+ * The app's boot-time declarations step, when it has offered one.
+ *
+ * Held on `globalThis` rather than in a module `let` (AGL-3412): the app
+ * offers it from `instrumentation.ts`, which Next compiles into a different
+ * module graph from the routes that capture, so a module-scoped slot is set
+ * in one copy and read as empty in the other.
+ */
+const REPAIR_KEY = Symbol.for('@aglyn/aglyn:plugin-declarations-repair')
+
+const globalScope = globalThis as typeof globalThis & {
+  [REPAIR_KEY]?: (() => Promise<void>) | null
+}
 
 /**
  * The app offers its boot step, so a capture that finds nobody can run it.
@@ -94,12 +105,12 @@ let repair: (() => Promise<void>) | null = null
  * Idempotent and last-one-wins; an app registers exactly once per process.
  */
 export function registerPluginDeclarationsRepair(run: () => Promise<void>): void {
-  repair = run
+  globalScope[REPAIR_KEY] = run
 }
 
 /** Only for specs: forgets the registered boot step. */
 export function resetPluginDeclarationsRepairForTests(): void {
-  repair = null
+  globalScope[REPAIR_KEY] = null
 }
 
 export async function recordCapturedContact(
@@ -113,6 +124,7 @@ export async function recordCapturedContact(
   // that registers the writer failed and every capture in this process has
   // been going nowhere. Run it and ask again — the registration memoizes its
   // own promise, so this is one attempt per process and not one per capture.
+  const repair = globalScope[REPAIR_KEY]
   if (repair) {
     try {
       await repair()

@@ -92,6 +92,23 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-29 — Sequences is not sold: it stays internal to Aglyn's own organization and available to self-hosted installs
+
+- **Decided by:** the account owner on 2026-09-29 (AGL-3409), closing the packaging question AGL-2976 left open: Sequences is not offered on aglyn.com-hosted workspaces at any price. It stays in use by Aglyn's own organization through its per-org grant, and is available to self-hosted installs, which bring their own Google Workspace OAuth client with an Internal consent screen.
+- **Scope:** packaging
+- **Evidence:** `features.outreach: false` on all eight rows of `PLAN_ENTITLEMENTS` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`, unchanged; no `PLAN_PRICING` field, add-on kind or Stripe price for it; `release_outreach` off by default in `libs/aglyn/src/lib/app-utils/release-flags.ts` and absent from `PUBLISHED_ON_IN_PRODUCTION` in `apps/console/constants/docs-release-flags.ts`; the Sequences doc's rolling-out disclosure and its Self-hosted installs section; the `GOOGLE_OUTREACH_*` rows of the self-hosting environment reference; AGL-3409, AGL-2976, AGL-2974.
+
+**No price moves and no plan gains anything.** The entry below stands as the
+state of the code: every tier carries `outreach: false`, and a workspace
+reaches Sequences only through the per-org entitlement override. What changes
+is that the override is no longer a stand-in for a packaging decision still to
+come — not selling it IS the decision. So there is no Google app verification
+and no security assessment to pursue: Aglyn's own mailboxes connect through an
+Internal OAuth client, and a self-hosted install uses its own Internal client
+in its own Workspace, which needs neither.
+
+---
+
 ## 2026-09-28 — A sequence may count opens, per sequence and off by default: an HTML copy with a tracking image, for measuring a slice
 
 - **Decided by:** the account owner, 2026-09-28, as written in AGL-3395 — opens on for a slice of sends, accepting that those sends lose the plain-text one-to-one look.
@@ -421,6 +438,10 @@ drift spec move together, under a new entry here.
 The feature was renamed **Sequences** on 2026-09-19 (AGL-3199), before any
 customer saw it. The entitlement key, the release flag and the plan rows
 above are unchanged; only what a reader sees moved.
+
+Packaging was decided on 2026-09-29: Sequences is not sold, and stays
+internal to Aglyn's own organization and available to self-hosted installs —
+see that entry above (AGL-3409).
 
 ---
 

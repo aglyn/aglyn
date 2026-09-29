@@ -12,12 +12,6 @@ site already has, with your theme and brand, as a draft you review. The rules
 below are not a suggestion in a prompt. Every plan and every generated document
 is checked against them before you see it.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
-available in every workspace yet. The rules on this page apply to every build as it
-reaches you.
-:::
-
 ## Where to describe a build
 
 Open the site you are building for, go to the page that lists what you want built, and
