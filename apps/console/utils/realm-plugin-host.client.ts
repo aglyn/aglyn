@@ -47,6 +47,11 @@ import {
  *
  * The tenant twin is `apps/tenant/utils/realm-plugin-host.client.ts`.
  */
+// The loader and the registry it holds bundles to travel with the host, so a
+// screen that runs no realm plugin carries neither (AGL-3390).
+export { components as realmRegistry } from '@aglyn/aglyn/aglyn'
+export { loadRealmPlugins } from '@aglyn/aglyn/plugin-manager/realm-plugins'
+
 export function composeRealmPluginHost(host: {
   React: unknown
   jsxRuntime: unknown

@@ -89,12 +89,40 @@ revoke; a hard-kill still needs a revocation doc. Signing requires
 - **Besigner**: for a site that runs the plugin, when it declares site
   components or site features, so its elements are in the Elements panel and
   draw on the canvas. The canvas waits for the bundle.
-- **Published sites**: post-hydration (additive — first paint never waits
-  on a marketplace CDN), and only on a page that uses the plugin: one that
+- **Published sites**: only on a page that uses the plugin: one that
   places a component its manifest declares under `contributes.site`, or on
   every page when it declares a site feature. A plugin that only adds console
   widgets never loads on a published page, and neither does the host that
   runs it. See [`contributes`](../reference/manifest-and-envs.md#contributes--where-the-plugin-loads).
+  - **Server-rendered elements.** A version published with an identity that
+    declares site components renders its elements on the server.
+    - The server fetches the pinned bundle, checks its sha256 and signature,
+      and registers it before the page renders. It waits five seconds at most;
+      after that, the page renders without the plugin and the browser adds it.
+    - In the browser, each element keeps its server HTML inside a boundary of
+      its own until the bundle has loaded, then hydrates. The rest of the page
+      does not wait for it.
+    - The page preloads the bundle with the document.
+  - **Other versions** load after hydration, as additive runtimes: first paint
+    never waits on a marketplace CDN.
+
+### Identity and namespace
+
+A plugin's **identity** is `<publisher handle>.<manifest id>`, for example
+`aglyn.calculator`. It is given at the listing's first publish and never
+changes, even if the handle is renamed. No other listing can ever take it.
+
+- **Component ids.** Every component in `contributes.site.components` is
+  `<identity>.<role>`, such as `aglyn.calculator.scope`. A publish that
+  declares one outside that namespace is refused.
+- **Plugin id.** Every component and preset `register()` adds names the
+  identity as its `pluginId`.
+- **Load-time check.** The loaders compare the component registry before
+  and after `register()`. A bundle that replaces or removes an existing
+  component or preset, registers in another namespace, or registers under
+  another plugin id is undone whole, and its elements render as unregistered.
+- **Other sites.** A server renders many sites from one registry, so an
+  element whose plugin a site does not run renders there as unregistered.
 - **Server** (rare): only on deployments with `PLUGIN_REMOTE_SERVER=enabled`
   plus a per-deploy `listingId@version` allowlist; every load is audited.
 

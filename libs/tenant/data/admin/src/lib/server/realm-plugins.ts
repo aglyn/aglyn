@@ -149,6 +149,7 @@ export async function resolveMarketplacePluginVersion(
   trust?: string
   hostAbi?: number
   pluginId?: string
+  identity?: string
   contributes?: PluginContributions
 } | null> {
   const firestore = firebaseAdmin.app().firestore()
@@ -205,12 +206,20 @@ export async function resolveMarketplacePluginVersion(
     typeof data.manifest?.id === 'string' && data.manifest.id
       ? String(data.manifest.id)
       : undefined
+  // The namespace these bytes were published under (AGL-3390), which the
+  // loaders hold every registration to. Absent on a version published before
+  // identities existed, and such a version never server-renders.
+  const identity =
+    typeof data.identity === 'string' && data.identity
+      ? String(data.identity)
+      : undefined
   return {
     sha256: String(data.sha256),
     ...(data.signature ? { signature: String(data.signature) } : {}),
     ...(data.trust ? { trust: String(data.trust) } : {}),
     ...(Number.isInteger(hostAbi) && hostAbi > 0 ? { hostAbi } : {}),
     ...(pluginId ? { pluginId } : {}),
+    ...(identity ? { identity } : {}),
     ...(contributes ? { contributes } : {}),
   }
 }
@@ -313,6 +322,7 @@ async function resolveRealmPluginInstalls(options: {
         signature: pinned.signature,
         ...(pinned.hostAbi !== undefined ? { hostAbi: pinned.hostAbi } : {}),
         ...(pinned.pluginId ? { pluginId: pinned.pluginId } : {}),
+        ...(pinned.identity ? { identity: pinned.identity } : {}),
         ...(pinned.contributes ? { contributes: pinned.contributes } : {}),
       }
     }),

@@ -58,6 +58,7 @@ jest.mock('./publisher-profile', () => ({
   canActAsPublisher: async () => true,
   resolvePublisherProfile: async () => ({
     orgId: 'org-1',
+    handle: 'acme',
     stripeChargesEnabled: true,
     // The org-level publisher agreement (AGL-1077) is a separate gate with
     // its own spec; hold it satisfied here so these assertions stay about
@@ -104,7 +105,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
                 __listingExists: boolean
               }
               return store.__listingExists
-                ? { empty: false, docs: [{ ref: listingRef }] }
+                ? { empty: false, docs: [{ ref: listingRef, get: () => undefined }] }
                 : { empty: true, docs: [] }
             },
           }),
@@ -115,6 +116,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       work({
         get: async () => ({ data: () => ({}) }),
         set: () => undefined,
+        // The identity claim (AGL-3390) creates its doc in the same kind of
+        // transaction.
+        create: () => undefined,
       }),
   }
   return {
@@ -364,3 +368,51 @@ describe('publish-plugin attestation gate (AGL-969)', () => {
     expect(written.publisherAttestation['made-up-item']).toBeUndefined()
   })
 })
+
+describe('publish-plugin identity (AGL-3390)', () => {
+  const ORIGINAL_BUCKET = process.env.PLUGIN_ARTIFACTS_BUCKET
+  const ALL = requiredAttestationIds(false)
+
+  beforeAll(() => {
+    process.env.PLUGIN_ARTIFACTS_BUCKET = 'test-bucket'
+  })
+  afterAll(() => {
+    process.env.PLUGIN_ARTIFACTS_BUCKET = ORIGINAL_BUCKET
+  })
+  beforeEach(() => {
+    adminMock.__versionWrites.length = 0
+    adminMock.__listingExists = false
+  })
+
+  it('stamps the version with its identity, handle then manifest id', async () => {
+    const result = await publish(ALL, {
+      repositoryUrl: REPO_URL,
+      manifest: {
+        id: 'calculator',
+        version: '1.0.0',
+        contributes: { site: { components: ['acme.calculator.scope'] } },
+      },
+    })
+
+    expect(result.status).toBe(200)
+    expect(adminMock.__versionWrites[0]?.['identity']).toBe('acme.calculator')
+  })
+
+  it("refuses site components outside the plugin's namespace", async () => {
+    const result = await publish(ALL, {
+      repositoryUrl: REPO_URL,
+      manifest: {
+        id: 'calculator',
+        version: '1.0.0',
+        contributes: { site: { components: ['button', 'other.calculator.scope'] } },
+      },
+    })
+
+    expect(result.status).toBe(422)
+    expect(String((result.body as { error: string }).error)).toContain(
+      'button, other.calculator.scope',
+    )
+    expect(adminMock.__versionWrites).toHaveLength(0)
+  })
+})
+

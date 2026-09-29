@@ -62,10 +62,19 @@ import {
 } from '@aglyn/shared-ui-theme'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, type HTMLAttributes, useContext } from 'react'
+import { isNamespacedComponentId } from '@aglyn/aglyn/plugin-manager/plugin-contributions'
+import { RealmElementsContext } from '@aglyn/aglyn/app-utils/realm-elements-context'
+import {
+  forwardRef,
+  type HTMLAttributes,
+  Suspense,
+  use,
+  useContext,
+} from 'react'
 import { isValidElementType } from 'react-is'
 import RendererComponents from '../contexts/renderer-components'
 import { LeafSxTransformContext } from '../contexts/leaf-sx-transform'
+import { RealmBoundaryContext } from '../contexts/realm-boundary'
 import { resolvePaletteVarsSx, resolveSchemeSx } from '../utils/scheme-sx'
 
 const DefaultComponent = styled('div')({})
@@ -146,6 +155,18 @@ export const Leaf = observer(
       enabledPlugins,
     )
     const Factory = offForSite ? undefined : components.getFactory(node?.componentId)
+    // A signed marketplace plugin's element (AGL-3390) renders on the server,
+    // and the browser registers its component a moment later. Inside the
+    // element's own boundary (below) it waits for that load rather than
+    // hydrating the server's HTML as an unregistered element, which would
+    // not match it.
+    const realmElement = isNamespacedComponentId(node?.componentId)
+    const realmBoundary = useContext(RealmBoundaryContext)
+    const realmLoadFor = useContext(RealmElementsContext)
+    if (realmElement && realmBoundary === node?.$id && !Factory && !offForSite) {
+      const loading = realmLoadFor?.(node.componentId)
+      if (loading) use(loading)
+    }
     const Component = isValidElementType(Factory) ? Factory : DefaultComponent
 
     // Self-closing components (AGL-579): a component whose schema flags it
@@ -202,6 +223,18 @@ export const Leaf = observer(
       pinnedScheme && pinnedScheme !== activeScheme && schemeThemes
         ? schemeThemes(pinnedScheme)
         : undefined
+    // Each realm element hydrates in a boundary of its own (AGL-3390), so one
+    // waiting for its bundle holds only itself. Rendered on the server too:
+    // the browser's tree has to have the same boundary to hydrate into.
+    if (realmElement && realmBoundary !== node?.$id) {
+      return (
+        <Suspense fallback={null}>
+          <RealmBoundaryContext.Provider value={node?.$id}>
+            <Leaf {...props} ref={ref} />
+          </RealmBoundaryContext.Provider>
+        </Suspense>
+      )
+    }
     if (forcedTheme && forcedTheme.palette?.mode === pinnedScheme) {
       return (
         <ThemeProvider theme={forcedTheme}>

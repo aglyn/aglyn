@@ -73,6 +73,12 @@ way its elements appear in the Elements panel and draw on the canvas. The
 site's list is the workspace's installs plus the site's own, the same list its
 published pages load from.
 
+A marketplace plugin's site component ids are `<identity>.<role>`, where the
+identity is `<publisher handle>.<manifest id>`: `acme.quote.calculator` for
+the `quote` plugin of the publisher `acme`. A publish that declares a
+component outside its namespace is refused. See the
+[realm bundles guide](../guides/realm-bundles.md#identity-and-namespace).
+
 One more `site` key declares no load point. `site.functionBindings` names the
 elements that run one of the site's
 [functions](../../../building-sites/bindings/overview.md) in the
