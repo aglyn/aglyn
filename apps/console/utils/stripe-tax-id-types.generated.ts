@@ -81,6 +81,7 @@ export const STRIPE_TAX_ID_TYPES = [
   'kz_bin',
   'li_uid',
   'li_vat',
+  'lk_vat',
   'ma_vat',
   'md_vat',
   'me_pib',

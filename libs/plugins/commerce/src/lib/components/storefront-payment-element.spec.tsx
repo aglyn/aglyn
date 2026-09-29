@@ -46,11 +46,14 @@ jest.mock('@stripe/stripe-js', () => ({
   loadStripe: (...args: unknown[]) => loadStripeMock(...(args as [])),
 }))
 
-jest.mock('@stripe/react-stripe-js', () => ({
+/** What `useCheckoutElements()` reports; each test may move it off success. */
+let checkoutState: any
+
+jest.mock('@stripe/react-stripe-js/checkout', () => ({
   // A pass-through provider: the real one boots Stripe.js against the network.
-  CheckoutProvider: ({ children }: any) => children,
+  CheckoutElementsProvider: ({ children }: any) => children,
   PaymentElement: () => <div data-testid="stripe-payment-element" />,
-  useCheckout: () => ({ confirm: confirmMock }),
+  useCheckoutElements: () => checkoutState,
 }))
 
 import {
@@ -75,6 +78,7 @@ function mount(props: Partial<Record<string, any>> = {}) {
 }
 
 beforeEach(() => {
+  checkoutState = { type: 'success', checkout: { confirm: confirmMock } }
   confirmMock.mockReset()
   loadStripeMock.mockClear()
   __resetStripePromises()
@@ -217,5 +221,35 @@ describe('it refuses to render half a payment form', () => {
     const { container } = mount({ publishableKey: '' })
     expect(container.firstChild).toBeNull()
     expect(loadStripeMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('a checkout session Stripe cannot load', () => {
+  it('says so and offers the way back instead of a form that cannot pay', () => {
+    // An expired session, or one already completed in another tab. The
+    // react-stripe-js v6 hook reports it rather than handing back a checkout
+    // whose confirm() would fail on click (AGL-3410).
+    checkoutState = { type: 'error', error: { message: 'expired' } }
+    const onCancel = jest.fn()
+    mount({ onCancel })
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'This checkout could not be loaded.',
+    )
+    expect(screen.queryByTestId('stripe-payment-element')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the store' }))
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(confirmMock).not.toHaveBeenCalled()
+  })
+
+  it('holds the pay button until the session has loaded', () => {
+    checkoutState = { type: 'loading' }
+    mount()
+    const pay = screen.getByRole('button', {
+      name: 'Pay $53.35',
+    }) as HTMLButtonElement
+    expect(pay.disabled).toBe(true)
+    fireEvent.click(pay)
+    expect(confirmMock).not.toHaveBeenCalled()
   })
 })

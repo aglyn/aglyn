@@ -26,6 +26,7 @@ import {
   makeAutoObservable,
   makeObservable,
   observable,
+  observableRef,
   type ObservableMap,
   runInAction,
   toJS,
@@ -388,13 +389,13 @@ export class CanvasManager {
       CanvasManager,
       '_initial' | '_initialConfirmed' | '_drafted' | '_epoch'
     >(this, {
-      _initial: observable.ref,
+      _initial: observableRef,
       _initialConfirmed: observable,
       // Observable for the same reason `_epoch` is: {@link isDraftedSame} is
       // read while rendering the toolbar, and the label it decides has to
       // change on the author's next keystroke rather than on the next
       // unrelated render (AGL-3271).
-      _drafted: observable.ref,
+      _drafted: observableRef,
       // Observable so {@link hasRemoteEdits} is a computed a React observer
       // re-renders on: the draft prompt has to stop offering Restore the
       // moment a peer's first change lands, not on the next unrelated

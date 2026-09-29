@@ -91,3 +91,44 @@ if (typeof global.fetch === 'undefined') {
   global.Request = globalThis.Request
   global.Response = globalThis.Response
 }
+
+// jsdom has no PointerEvent in the version jest runs (AGL-3410, closing the
+// AGL-2470 hold). jest-environment-jsdom pins its OWN nested jsdom 26.1.0,
+// whatever the repo's jsdom is, and @base-ui/react >= 1.7 synthesises a
+// keyboard-activated click as `new (ownerWindow(el).PointerEvent)(...)`, so
+// every such button threw "PointerEvent is not a constructor" under test
+// while working in every browser. This is the MouseEvent subclass the spec
+// defines, with the pointer fields at their spec defaults; it installs only
+// where the constructor is missing, so a jsdom that ships one keeps its own.
+if (
+  typeof window !== 'undefined' &&
+  typeof window.MouseEvent === 'function' &&
+  typeof window.PointerEvent === 'undefined'
+) {
+  class PointerEvent extends window.MouseEvent {
+    constructor(type, init = {}) {
+      super(type, init)
+      this.pointerId = init.pointerId ?? 0
+      this.width = init.width ?? 1
+      this.height = init.height ?? 1
+      this.pressure = init.pressure ?? 0
+      this.tangentialPressure = init.tangentialPressure ?? 0
+      this.tiltX = init.tiltX ?? 0
+      this.tiltY = init.tiltY ?? 0
+      this.twist = init.twist ?? 0
+      this.altitudeAngle = init.altitudeAngle ?? Math.PI / 2
+      this.azimuthAngle = init.azimuthAngle ?? 0
+      this.pointerType = init.pointerType ?? ''
+      this.isPrimary = init.isPrimary ?? false
+    }
+
+    getCoalescedEvents() {
+      return []
+    }
+
+    getPredictedEvents() {
+      return []
+    }
+  }
+  window.PointerEvent = PointerEvent
+}

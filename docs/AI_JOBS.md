@@ -2242,7 +2242,7 @@ the element budget its request asks for.
   artboard. Each render is loaded into a headless Chrome whose viewport is that
   width (found as the e2e tools find it, `E2E_CHROME_PATH` first), which measures
   what runs past the screen, the columns on the first line of every row a layout
-  element of the palette draws, and axe-core 4.12.1 with every rule on,
+  element of the palette draws, and axe-core 4.13.0 with every rule on,
   `color-contrast` included, since a browser paints the colors the theme gives. It
   writes what it measured to `fixtures/ai-page-axe.generated.json`, with a
   fingerprint of the goldens it rendered. `ai-job-page-widths.spec.ts` holds every

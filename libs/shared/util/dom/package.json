@@ -27,7 +27,7 @@
   "dependencies": {
     "@aglyn/shared-util-tools": "1.0.0-beta.218",
     "@swc/helpers": "0.5.23",
-    "mobx": "^6.16.1",
+    "mobx": "^7.0.5",
     "rxjs": "^7.8.2"
   },
   "sideEffects": false
