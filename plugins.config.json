@@ -82,7 +82,11 @@
             "muiPagination",
             "muiBreadcrumbs",
             "themeModeSwitcher"
-          ]
+          ],
+          "functionBindings": {
+            "functionScope": "functionName",
+            "functionWidget": "functionName"
+          }
         }
       }
     },

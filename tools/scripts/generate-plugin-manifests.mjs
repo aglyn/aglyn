@@ -374,6 +374,14 @@ async function checkContributions() {
     }
     const verdict = sanitizePluginContributions(plugin.contributes)
     if (!verdict.ok) problems.push(`${plugin.id}: ${verdict.error}`)
+    // A `.` marks a marketplace plugin's namespace (AGL-3387). A first-party
+    // id carrying one would read as a marketplace element to every check
+    // that tells the two apart without loading code.
+    for (const id of plugin.contributes?.site?.components ?? []) {
+      if (id.includes('.')) {
+        problems.push(`${plugin.id}: component id "${id}" has a ".", which only marketplace ids carry`)
+      }
+    }
   }
   if (problems.length) {
     throw new Error(
@@ -528,6 +536,25 @@ const MANIFESTS = [
  */
 const CATALOG_FILE = 'libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts'
 const SITE_IMPACTS = ['elements', 'routes', 'console-only']
+
+/**
+ * The first-party elements that run a site function, each declared by its own
+ * plugin's `contributes.site.functionBindings` (AGL-3393). Compose reads this
+ * without loading any plugin, the way it reads a marketplace manifest.
+ */
+function functionBindingRows() {
+  const rows = {}
+  for (const plugin of config.plugins) {
+    const declared = plugin.contributes?.site?.functionBindings ?? {}
+    for (const [componentId, prop] of Object.entries(declared)) {
+      if (componentId in rows) {
+        throw new Error(`plugins.config.json: "${componentId}" has a function binding in two plugins`)
+      }
+      rows[componentId] = prop
+    }
+  }
+  return Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b)))
+}
 
 function catalogRows() {
   const rows = []
@@ -815,7 +842,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -857,6 +884,14 @@ ${orgCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`)
 export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
 ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
+
+/**
+ * Every first-party element that runs a site function, and the prop naming
+ * it, declared by that element's plugin (AGL-3393). Core names no element.
+ */
+export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {
+${Object.entries(functionBindingRows()).map(([id, prop]) => `  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('\n')}
+}
 `
   )
 }

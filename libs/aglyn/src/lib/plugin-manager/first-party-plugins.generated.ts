@@ -10,6 +10,7 @@
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { FunctionBindings } from './plugin-contributions'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -460,3 +461,12 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
     }
   },
 ]
+
+/**
+ * Every first-party element that runs a site function, and the prop naming
+ * it, declared by that element's plugin (AGL-3393). Core names no element.
+ */
+export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {
+  "functionScope": "functionName",
+  "functionWidget": "functionName",
+}
