@@ -1334,6 +1334,7 @@ export function PluginReviewDetail({
                       </Button>
                       <Button
                         size="small"
+                        variant="outlined"
                         color="error"
                         disabled={busy}
                         onClick={() =>
@@ -1378,6 +1379,7 @@ export function PluginReviewDetail({
                           >
                             <Button
                               size="small"
+                              variant="outlined"
                               color="inherit"
                               disabled={busy}
                               onClick={() =>
@@ -1817,8 +1819,12 @@ export function PluginReviewDetail({
                         blocked={superGate.blocked}
                         reason={superGate.reason ?? SUPER_STAFF_ONLY_REASON}
                       >
+                        {/* Buttons, not text links: each of these changes
+                            where a version's code runs, and one sat unseen
+                            in a row of metadata until it was pointed out. */}
                         <Button
                           size="small"
+                          variant={entry.trust === 'realm' ? 'outlined' : 'contained'}
                           color={entry.trust === 'realm' ? 'error' : 'success'}
                           disabled={busy}
                           onClick={() =>
@@ -1839,6 +1845,7 @@ export function PluginReviewDetail({
                           running. */}
                       <Button
                         size="small"
+                        variant="outlined"
                         color={entry.revoked ? 'success' : 'error'}
                         disabled={busy}
                         onClick={() =>
