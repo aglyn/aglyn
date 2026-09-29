@@ -9,6 +9,26 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.209 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/25cc1505f...v1.0.0-beta.209)
+
+### Fixed
+
+- **cache:** settings, theme and API writes drop the live site's cache ([AGL-3386](https://linear.app/aglyn/issue/AGL-3386), [AGL-2690](https://linear.app/aglyn/issue/AGL-2690), [AGL-1150](https://linear.app/aglyn/issue/AGL-1150), [AGL-2575](https://linear.app/aglyn/issue/AGL-2575))
+- **links:** an sms: href survives to the published page ([AGL-3388](https://linear.app/aglyn/issue/AGL-3388))
+
+### Reverted
+
+- **mui:** take the calculator document out of mui, bound for its own plugin ([AGL-3387](https://linear.app/aglyn/issue/AGL-3387), [AGL-3386](https://linear.app/aglyn/issue/AGL-3386))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** raise the Linear ceiling to AGL-3387, read off the workspace ([AGL-3387](https://linear.app/aglyn/issue/AGL-3387), [AGL-3386](https://linear.app/aglyn/issue/AGL-3386), [AGL-3385](https://linear.app/aglyn/issue/AGL-3385))
+
+</details>
+
 ## v1.0.0-beta.208 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.207...v1.0.0-beta.208)
