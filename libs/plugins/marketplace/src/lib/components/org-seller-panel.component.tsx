@@ -27,7 +27,6 @@ import {
   Chip,
   Divider,
   IconButton,
-  Link,
   Menu,
   MenuItem,
   Stack,
@@ -35,9 +34,7 @@ import {
   Typography,
 } from '@mui/material'
 import {
-  PUBLISHER_AGREEMENT_POINTS,
   PUBLISHER_AGREEMENT_TITLE,
-  PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementPresentation,
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
@@ -63,6 +60,8 @@ import { pluginDocsHelp, useMediaPicker } from '@aglyn/aglyn'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import EditListingDialog from './edit-listing-dialog.component'
+import { acceptPublisherAgreement } from './publisher-agreement-client'
+import PublisherAgreementSummary from './publisher-agreement-summary.component'
 import { listingPath, publishPluginPath } from '../model/marketplace-paths'
 import { payoutReadiness } from '../model/payout-readiness'
 import {
@@ -405,29 +404,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     try {
       // Server-owned, like the handle: an acceptance the accepting party can
       // write itself is not evidence of anything, and the rules block the
-      // field outright.
-      const response = await authorizedFetch(
-        user,
-        '/api/marketplace/publisher-profile',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'accept-agreement',
-            orgId,
-            // Echoed back so the server can refuse an acceptance of anything
-            // other than the version in force — including one made against a
-            // page left open across a change.
-            version: PUBLISHER_AGREEMENT_VERSION,
-          }),
-        },
-      )
-      const payload = await response.json().catch(() => null)
-      if (!response.ok) {
-        return void enqueueSnackbar(
-          payload?.error ?? 'Could not record the acceptance',
-          { variant: 'warning', persist: false },
-        )
+      // field outright. The same request the agreement dialog a refused
+      // publish opens makes (AGL-3407), so both record one acceptance.
+      const refused = await acceptPublisherAgreement(user, orgId)
+      if (refused) {
+        return void enqueueSnackbar(refused, {
+          variant: 'warning',
+          persist: false,
+        })
       }
       enqueueSnackbar('Agreement accepted — you can publish now', {
         variant: 'success',
@@ -725,43 +709,11 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                   'set up a profile without them, but you cannot publish.'}
             </Alert>
           )}
-          <Typography variant="body2" color="text.secondary">
-            {'In summary — this is not the agreement, it is what tends to ' +
-              'surprise people later:'}
-          </Typography>
-          <Stack spacing={1}>
-            {PUBLISHER_AGREEMENT_POINTS.map((point) => (
-              <Stack key={point.id} spacing={0.25}>
-                <Typography variant="body2">{point.label}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {point.detail}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-          {/* The href comes from the presentation helper, never from the
-              constant: while the document is unpublished the helper hands back
-              null and there is nothing here to click. That is the point — a
-              link to a 404 above an Accept button is how a publisher ends up
-              having "read" a document that was never served. */}
-          {agreementPresentation.documentUrl ? (
-            <Typography variant="body2">
-              <Link
-                href={agreementPresentation.documentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                underline="always"
-              >
-                {`Read the full ${PUBLISHER_AGREEMENT_TITLE}`}
-              </Link>
-              {` (version ${PUBLISHER_AGREEMENT_VERSION})`}
-            </Typography>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              {`Version ${PUBLISHER_AGREEMENT_VERSION} has no published page ` +
-                'yet, so there is no full text to link to.'}
-            </Typography>
-          )}
+          {/* The summary and the link, shared with the dialog a refused
+              publish opens (AGL-3407), so both show the same terms. */}
+          <PublisherAgreementSummary
+            documentUrl={agreementPresentation.documentUrl}
+          />
           {agreementPresentation.canAccept ? (
             <Button
               variant="contained"

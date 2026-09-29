@@ -1569,6 +1569,13 @@ export interface ConsoleExtension {
   /** Slot-addressed components the shell renders in place (AGL-419). */
   widgets?: ConsoleWidget[]
   /**
+   * Built-in themes this plugin adds to every site's theme picker
+   * (AGL-3404) — see {@link ConsoleThemePreset}. Loaded with the plugin at
+   * the {@link THEME_PRESETS_LOAD_POINT}, which the plugin declares among its
+   * `console.slots`.
+   */
+  themePresets?: readonly ConsoleThemePreset[]
+  /**
    * Pages in the STAFF area (AGL-2939) — see {@link ConsoleStaffPage}.
    * Neither `featureFlag` nor `permission` applies to them.
    */
@@ -1903,6 +1910,57 @@ export function listConsoleWidgets(
   for (const extension of listConsoleExtensions(enabledPluginIds)) {
     for (const widget of extension.widgets ?? []) {
       if (widget.slot === slot) out.push({ extension, widget })
+    }
+  }
+  return out
+}
+
+/**
+ * A built-in theme a plugin contributes (AGL-3404): a complete, JSON
+ * {@link HostTheme} a site can pick on Setup → Theme.
+ *
+ * Picking one COPIES it onto the site, and the site's edits are an override
+ * on top, so a preset is never modified by a site and a later version of the
+ * plugin never repaints a site that did not pick it again. That is also why a
+ * preset needs no server surface: the console sends the picked theme with the
+ * request.
+ */
+export interface ConsoleThemePreset {
+  /**
+   * Unique across every plugin, and persisted in the site's selection — so
+   * namespace it with the plugin (`themes.bootstrap`) and never rename it.
+   */
+  id: string
+  /** The name in the picker. */
+  name: string
+  /** One line under the name: what the theme looks like. */
+  description?: string
+  theme: HostTheme
+}
+
+/**
+ * The load point a plugin contributing theme presets declares in its
+ * `console.slots`, and the theme page loads before it lists them — so the
+ * presets' code is fetched there and nowhere else.
+ */
+export const THEME_PRESETS_LOAD_POINT = 'hostThemePresets'
+
+/**
+ * Every built-in theme the enabled plugins contribute, in registration order,
+ * with the plugin each came from. A second preset with an id already listed
+ * is dropped rather than shown twice, so two plugins cannot make one entry of
+ * the picker ambiguous.
+ */
+export function listConsoleThemePresets(
+  enabledPluginIds?: readonly PluginId[],
+): Array<ConsoleThemePreset & { pluginId: PluginId }> {
+  const seen = new Set<string>()
+  const out: Array<ConsoleThemePreset & { pluginId: PluginId }> = []
+  for (const extension of listConsoleExtensions(enabledPluginIds)) {
+    for (const preset of extension.themePresets ?? []) {
+      if (!preset?.id || seen.has(preset.id)) continue
+      seen.add(preset.id)
+      out.push({ ...preset, pluginId: extension.pluginId })
     }
   }
   return out

@@ -275,7 +275,7 @@ jest.mock('../components/error-screens-card.component', () => nullCard)
 jest.mock('../components/languages-card.component', () => nullCard)
 jest.mock('../components/site-backup-card.component', () => nullCard)
 jest.mock('../components/site-template-card.component', () => nullCard)
-jest.mock('../components/theme-editor/theme-source-card.component', () => nullCard)
+jest.mock('../components/theme-editor/theme-library-card.component', () => nullCard)
 jest.mock('../components/host-display-name.component', () => nullCard)
 // New since this file was written (AGL-2099). It is an unrelated sibling card
 // — it reads the org's `removeBranding` entitlement and renders a sentence —
@@ -424,10 +424,15 @@ describe('Host Setup theme save (AGL-1358)', () => {
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const [payload, options] = withoutSiteWideEntry(mockSetDoc.mock.calls[0])
-    // The WHOLE theme map, replaced atomically — which is exactly why the
-    // guard has to stand in front of it.
-    expect(payload.theme).toEqual({ palette: { primary: '#ff0000' } })
-    expect(options).toEqual({ mergeFields: ['theme'] })
+    // The WHOLE override, replaced atomically — which is exactly why the
+    // guard has to stand in front of it. Every edit is an override on the
+    // picked theme (AGL-3404), so the theme itself is not written at all.
+    expect(payload.theme).toBeUndefined()
+    // `themeOverridePatch` is mocked above to a fixed diff.
+    expect(payload.themeOverride).toEqual({
+      patch: { palette: { primary: '#222222' } },
+    })
+    expect(options).toEqual({ mergeFields: ['themeOverride'] })
   })
 
   /**

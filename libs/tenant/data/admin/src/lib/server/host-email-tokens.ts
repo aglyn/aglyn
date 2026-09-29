@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  resolveSiteTheme,
+  type ThemeHostDocument,
+} from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import {
   hostTokenMerge,
@@ -132,6 +136,7 @@ type SiteEmailHost = HostTokenSource & {
     colorSchemes?: { light?: Record<string, unknown> | null }
     shape?: { borderRadius?: unknown }
   } | null
+  themeOverride?: unknown
 }
 
 /**
@@ -141,11 +146,15 @@ type SiteEmailHost = HostTokenSource & {
  * same base the site itself does.
  */
 function siteThemeFor(host: SiteEmailHost | null): EmailTheme {
-  const radius = host?.theme?.shape?.borderRadius
+  // Resolved, not read off `theme`: a site's edits are an override on the
+  // theme it picked (AGL-3404), so the stored theme alone is the design
+  // before anything the site changed.
+  const theme = resolveSiteTheme(host as ThemeHostDocument | null)
+  const radius = theme?.shape?.borderRadius
   return {
     palette: buildEmailPalette({
       base: emailPaletteBaseForHost(host),
-      colors: host?.theme?.colorSchemes?.light ?? null,
+      colors: (theme?.colorSchemes?.light ?? null) as Record<string, unknown> | null,
     }),
     ...(typeof radius === 'number' ? { buttonRadius: radius } : {}),
   }

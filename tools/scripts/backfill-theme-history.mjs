@@ -33,8 +33,10 @@
  *    not a growth problem that also needs a retention rule.
  *
  * The console still has to know whether a revert is POSSIBLE — that is what
- * enables "Go back to the previous theme" in `theme-source-card.component`,
- * which today receives the whole `themeReplaced` object to answer a boolean.
+ * enabled "Go back to the previous theme" in the console's theme source card,
+ * which received the whole `themeReplaced` object to answer a boolean. (The
+ * theme library replaced that card and clears `themeReplaced` on every
+ * switch, AGL-3404.)
  * `themeReplacedAt` is that boolean, at eight bytes, and it is why this
  * migration leaves a marker rather than simply deleting the field: the
  * affordance must not depend on reading the payload it exists to restore.

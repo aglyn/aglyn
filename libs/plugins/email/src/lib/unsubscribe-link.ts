@@ -31,6 +31,10 @@
  * standing up a database double.
  */
 
+import {
+  resolveSiteTheme,
+  type ThemeHostDocument,
+} from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import {
   resolveHostToken,
@@ -249,7 +253,8 @@ export function resolveEmailPageBrand(
   const name =
     resolveHostToken('businessName', host)?.slice(0, BRAND_NAME_MAX).trim() ||
     BRAND.ORG_NAME
-  const scheme = host.theme?.colorSchemes?.light
+  // Resolved: a site's edits are an override on its picked theme (AGL-3404).
+  const scheme = resolveSiteTheme(host as ThemeHostDocument)?.colorSchemes?.light
   // `''` distinguishes "set to something unusable" from "not set", which the
   // accent rule below needs: a host that themed a primary and no secondary
   // wants the rule in ITS color, while a host that themed nothing at all

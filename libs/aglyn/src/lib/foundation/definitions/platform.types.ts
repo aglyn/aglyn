@@ -691,10 +691,17 @@ export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'The persisted MUI theme for the published site. Authoring — the theme ' +
     'editor writes it directly, and it renders only on this host.',
   themeOverride:
-    'The editor\'s local diff on top of an installed marketplace theme, ' +
-    'written wholesale by the setup page. Authoring. Its PROVENANCE ' +
+    'The editor\'s diff on top of the picked theme (AGL-3404: every edit is ' +
+    'one), written wholesale by the setup page. Authoring. Its PROVENANCE ' +
     '(`themeInstalledFrom`) is denied instead, which is the half that has to ' +
     'be true for `isOverrideForCurrentTheme` to mean anything.',
+  themeSelection:
+    'Which library theme the site picked (AGL-3404), written by ' +
+    '/api/hosts/theme. A label and a pointer, never an input to a decision: ' +
+    'the page renders `theme` ⊕ `themeOverride`, both already authoring ' +
+    'fields, and the route re-reads the library itself rather than trusting ' +
+    'it. A forged one can only misname the theme in the picker or file the ' +
+    'next switch\'s stash under another entry of the same site.',
   announcementBar:
     'Site-wide announcement bar (AGL-195). `marketingOverlays`-gated, but ' +
     'the gate is enforced where it counts — `site-page-enricher` re-checks ' +

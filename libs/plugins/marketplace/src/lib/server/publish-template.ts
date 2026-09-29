@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   CANVAS_ROOT_ELEMENT_ID,
@@ -233,7 +234,10 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
     await listingRef.collection('versions').doc(String(version)).set({
       template: {
         screens,
-        theme: hostSnapshot.get('theme') ?? null,
+        // The theme the site shows, edits included (AGL-3404: every edit is
+        // an override on the picked theme). A template carries it rather than
+        // applies it, so there is no publisher's copy here to keep apart.
+        theme: resolveSiteTheme(hostSnapshot.data() ?? {}) ?? null,
       },
       publishedAt: now,
     })

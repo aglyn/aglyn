@@ -162,7 +162,7 @@
         "bookings"
       ],
       "catalog": {
-        "order": 4,
+        "order": 5,
         "label": "Bookings",
         "description": "Services, open slots, and paid bookings.",
         "releaseFlag": "release_bookings",
@@ -217,7 +217,7 @@
         {
           "id": "accounts",
           "catalog": {
-            "order": 3,
+            "order": 4,
             "$comment": "The Members blocks and the membership/* handlers are registered by this bundle, so there is no separate package to load; what this id contributes is the SWITCH the tenant route gate, the console card and the sitemap all ask (AGL-2486). Commerce off = member pages with no server, hence requires.",
             "label": "User Accounts",
             "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
@@ -231,7 +231,7 @@
         }
       ],
       "catalog": {
-        "order": 5,
+        "order": 6,
         "label": "Commerce",
         "description": "Products, carts, checkout, orders, POS.",
         "releaseFlag": "release_commerce_v2",
@@ -403,7 +403,7 @@
         "marketplace"
       ],
       "catalog": {
-        "order": 6,
+        "order": 7,
         "label": "Marketplace",
         "description": "Marketplace listings, templates, and installs.",
         "releaseFlag": "release_marketplace",
@@ -442,7 +442,7 @@
         "libs/plugins/crm/src/lib/server/lead-create.ts"
       ],
       "catalog": {
-        "order": 7,
+        "order": 8,
         "$comment": "The id was contacts until AGL-2595 widened one list into the hub; the release flag kept its key because it is persisted in Remote Config.",
         "label": "CRM",
         "description": "Leads, contacts, companies, deals, tasks and reports.",
@@ -489,7 +489,7 @@
         "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts"
       ],
       "catalog": {
-        "order": 8,
+        "order": 9,
         "$comment": "Works the CRM's records but is released and entitled on its own (AGL-2974). Reads Sequences since AGL-3199; the id is stored on every org, so it stays.",
         "label": "Sequences",
         "description": "One-to-one email sequences sent from connected mailboxes.",
@@ -512,7 +512,7 @@
         "console": "registerDataConsole"
       },
       "catalog": {
-        "order": 9,
+        "order": 10,
         "label": "Data",
         "description": "Datasets, records, and CSV import/export.",
         "releaseFlag": "release_data_store",
@@ -562,7 +562,7 @@
         "email"
       ],
       "catalog": {
-        "order": 10,
+        "order": 11,
         "label": "Email",
         "description": "Designed emails and campaign sending.",
         "releaseFlag": "release_email",
@@ -622,7 +622,7 @@
         "events"
       ],
       "catalog": {
-        "order": 11,
+        "order": 12,
         "label": "Events Calendar",
         "description": "Event lists and calendars.",
         "releaseFlag": "release_events",
@@ -659,7 +659,7 @@
         "inbox"
       ],
       "catalog": {
-        "order": 12,
+        "order": 13,
         "label": "Inbox",
         "description": "Form submissions and lead inbox.",
         "releaseFlag": "release_inbox",
@@ -700,7 +700,7 @@
         "console": "registerLogicConsole"
       },
       "catalog": {
-        "order": 13,
+        "order": 14,
         "label": "Logic",
         "description": "Variables, functions, and reference health.",
         "releaseFlag": "release_logic",
@@ -748,7 +748,7 @@
         "experiments"
       ],
       "catalog": {
-        "order": 14,
+        "order": 15,
         "label": "Marketing",
         "description": "Overlays, campaigns, and experiments.",
         "releaseFlag": "release_marketing",
@@ -819,7 +819,7 @@
         "tenantApi": "registerRedirectsApi"
       },
       "catalog": {
-        "order": 15,
+        "order": 16,
         "label": "Redirects",
         "description": "URL redirect rules.",
         "releaseFlag": "release_redirects",
@@ -855,7 +855,7 @@
         "automations"
       ],
       "catalog": {
-        "order": 16,
+        "order": 17,
         "$comment": "The id is stored on every org's enabled-plugin list; only the label moved.",
         "label": "Automation",
         "description": "Workflows, actions, webhooks, and run logs.",
@@ -966,6 +966,32 @@
             "staffOrgUsageColumn",
             "staffOrgsListColumn",
             "staffUser"
+          ]
+        }
+      }
+    },
+    {
+      "id": "theme-presets",
+      "package": "@aglyn/plugins-themes",
+      "register": {
+        "console": "registerThemesConsole"
+      },
+      "catalog": {
+        "order": 3,
+        "$comment": "On for every workspace, off for a site only when that site says so (AGL-3405): the built-in themes cost nothing until the theme page lists them, and a site that picked one keeps it whatever this switch says, because picking a theme copies it onto the site.",
+        "label": "Themes",
+        "alwaysOnForWorkspace": true,
+        "description": "Built-in themes to pick from on Setup → Theme: Bootstrap, Minimal and Material 3.",
+        "siteOff": {
+          "stops": "Switching Themes off for this site removes its built-in themes from the theme picker.",
+          "keeps": "A site already using one keeps it, with every edit made to it: picking a theme copies it onto the site, so nothing on the published site changes."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostThemePresets"
           ]
         }
       }

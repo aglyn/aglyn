@@ -151,7 +151,7 @@ function Layouts(props) {
     setQuickDrawerOpen(false)
   }, [])
   const firestore = useFirestore()
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { org, orgId, ready: orgReady } = useCurrentOrg()
   // The where-used scan is an authenticated POST (host admin only).
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
@@ -585,6 +585,10 @@ function Layouts(props) {
                       setPublishTarget({
                         kind: 'layout',
                         hostId,
+                        // The org rides too, so the zone can offer the
+                        // publisher agreement before the form is filled when
+                        // the org's acceptance is missing (AGL-3407).
+                        orgId: orgId ?? null,
                         artifactId: layoutId,
                         displayName: row.displayName,
                         description: row.description,

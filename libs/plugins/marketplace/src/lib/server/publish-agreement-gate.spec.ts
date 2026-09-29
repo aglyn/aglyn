@@ -100,10 +100,13 @@ describe('publishPreconditionRefusal (AGL-2282)', () => {
       { priceUsd: 9, sells: 'components' },
     )
     expect(refusal?.status).toBe(412)
+    // The org rides in the refusal (AGL-3407): a host-scoped publish names
+    // only its site, and the console accepts on the org's behalf from here.
     expect(refusal?.body.agreement).toEqual({
       required: PUBLISHER_AGREEMENT_VERSION,
       accepted: null,
       state: 'none',
+      orgId: PROFILE.orgId,
     })
   })
 

@@ -295,6 +295,13 @@ jest.mock('../components/templates/save-as-template-dialog.component', () => ({
   __esModule: true,
   default: () => null,
 }))
+// The publish dialog is the marketplace's, drawn through a zone (AGL-3407);
+// one widget stands in so the card still offers the publish entry.
+jest.mock('../components/plugin-widget-slot.component', () => ({
+  __esModule: true,
+  default: () => null,
+  useSlotWidgets: () => ({ widgets: [{}], ready: true }),
+}))
 
 jest.mock('../components/artifacts/artifact-delete-confirm.component', () => ({
   __esModule: true,

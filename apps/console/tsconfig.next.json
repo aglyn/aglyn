@@ -158,6 +158,12 @@
       "@aglyn/plugins-redirects/*": [
         "../../libs/plugins/redirects/src/lib/*"
       ],
+      "@aglyn/plugins-themes": [
+        "../../libs/plugins/themes/src/index.ts"
+      ],
+      "@aglyn/plugins-themes/*": [
+        "../../libs/plugins/themes/src/lib/*"
+      ],
       "@aglyn/plugins-video-delivery": [
         "../../libs/plugins/video-delivery/src/index.ts"
       ],

@@ -19,6 +19,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { runThemeLibraryAction } from '@aglyn/tenant-data-admin/server/theme-library-write'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   isPrivateListing,
@@ -112,20 +113,17 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
       })
 
     // ---- reset: back to the platform default ----
+    // Picking the default from the site's theme library (AGL-3404): the theme
+    // being left is filed in the library, edits and all, so resetting stays
+    // reversible without a second copy of it on the host.
     if (action === 'reset') {
-      await hostRef.set(
-        {
-          // Kept, not dropped: resetting is reversible for the same reason
-          // installing is, and someone who resets by mistake has otherwise
-          // lost a theme that existed in no other document.
-          themeReplaced: { theme: currentTheme, replacedAt: now },
-          theme: firebaseAdmin.firestore.FieldValue.delete(),
-          themeInstalledFrom: firebaseAdmin.firestore.FieldValue.delete(),
-          themeOverride: firebaseAdmin.firestore.FieldValue.delete(),
-          updatedAt: now,
-        },
-        { merge: true },
+      const plan = await firestore.runTransaction((tx) =>
+        runThemeLibraryAction(tx, hostRef, {
+          action: 'select',
+          target: { kind: 'default' },
+        }),
       )
+      if (plan.ok === false) return res.status(plan.status).json({ error: plan.error })
       await repaintLiveSite('reset')
       return res.status(200).json({ reset: true })
     }
@@ -134,14 +132,14 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
     // The third way back, and the narrowest: "reset to the publisher's
     // version" is deleting the patch — the whole point of owning the patch
     // rather than the copy (AGL-1019). The theme itself is untouched.
+    //
+    // The library's `restore`, which keeps the site's own dark-scheme setting
+    // (AGL-3404): that is a decision about the site, not an edit to the theme.
     if (action === 'clear-overrides') {
-      await hostRef.set(
-        {
-          themeOverride: firebaseAdmin.firestore.FieldValue.delete(),
-          updatedAt: now,
-        },
-        { merge: true },
+      const plan = await firestore.runTransaction((tx) =>
+        runThemeLibraryAction(tx, hostRef, { action: 'restore' }),
       )
+      if (plan.ok === false) return res.status(plan.status).json({ error: plan.error })
       await repaintLiveSite('overrides cleared')
       return res.status(200).json({ cleared: true })
     }
@@ -167,6 +165,10 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
             ? { themeOverride: replaced.override }
             : { themeOverride: firebaseAdmin.firestore.FieldValue.delete() }),
           themeReplaced: firebaseAdmin.firestore.FieldValue.delete(),
+          // A `themeReplaced` predates the library (every library switch
+          // clears it), so the theme it restores is read the way a
+          // pre-library site's is — from the fields above, not a selection.
+          themeSelection: firebaseAdmin.firestore.FieldValue.delete(),
           updatedAt: now,
         },
         { merge: true },
@@ -285,36 +287,28 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
     const previousVersion =
       hostSnapshot.get('themeInstalledFrom.version') ?? null
 
-    await hostRef.set(
-      {
+    // The theme joins the site's library and is picked (AGL-3404). The theme
+    // it replaces is filed in the library with its edits, so installing is
+    // reversible by picking it again — the job `themeReplaced` used to do
+    // for one theme, for every theme.
+    //
+    // Edits belong to the theme they were made on. They used to SURVIVE a
+    // swap (AGL-1021), because the theme being replaced was about to exist
+    // nowhere and carrying its patch forward was the lesser loss. With the
+    // library keeping it, a patch tuned for one design no longer lands on
+    // another: each theme gets its own back when it is picked again. An
+    // UPDATE of the theme already picked keeps its patch exactly as stored,
+    // hash included, so the editor can still say it predates this version.
+    const plan = await firestore.runTransaction((tx) =>
+      runThemeLibraryAction(tx, hostRef, {
+        action: 'install',
+        listingId,
+        name: String(listing.displayName ?? '') || 'Marketplace theme',
         theme,
-        themeInstalledFrom: provenance.installedFrom,
-        // Everything needed to put this site back exactly as it was, captured
-        // BEFORE the write that changes it.
-        themeReplaced: {
-          theme: currentTheme,
-          ...(hostSnapshot.get('themeInstalledFrom')
-            ? { installedFrom: hostSnapshot.get('themeInstalledFrom') }
-            : {}),
-          ...(hostSnapshot.get('themeOverride')
-            ? { override: hostSnapshot.get('themeOverride') }
-            : {}),
-          replacedAt: now,
-        },
-        // Overrides SURVIVE a theme swap (AGL-1021). A site that set its brand
-        // colour still means it under a new theme, and silently discarding
-        // that on install would be the more surprising of the two options.
-        //
-        // What must not happen is surviving *silently*: the override keeps the
-        // `baseSha256` it was authored against, which no longer matches the
-        // theme now installed, so `isOverrideForCurrentTheme` is false and the
-        // editor says so with an offer to clear them. Rewriting that hash here
-        // would launder a patch written for another theme into one that claims
-        // to belong to this one.
-        updatedAt: now,
-      },
-      { merge: true },
+        installedFrom: { ...provenance.installedFrom },
+      }),
     )
+    if (plan.ok === false) return res.status(plan.status).json({ error: plan.error })
 
     await repaintLiveSite('installed')
 
