@@ -47,7 +47,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
     "id": "accounts",
     "label": "User Accounts",
-    "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. Off for a site until you turn it on.",
+    "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
     "releaseFlag": "release_member_accounts",
     "defaultOffPerSite": true,
     "requires": [

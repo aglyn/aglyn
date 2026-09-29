@@ -61,6 +61,7 @@
  * limiter token).
  */
 
+import { resolvePluginSiteState } from '@aglyn/aglyn'
 import { claimHostForOrg, findSubdomainConflict } from '../utils/server/provision-host'
 
 const mockDocs = new Map<string, Record<string, unknown>>()
@@ -281,6 +282,27 @@ describe('one caller, the ordinary path (AGL-2465)', () => {
     const second = await provision(SUB)
     expect(second.refused).toBe('subdomain_taken')
     expect(hostsOn(SUB)).toHaveLength(1)
+  })
+})
+
+describe('a new site is born with User Accounts on', () => {
+  /*
+   * Read through `resolvePluginSiteState`, the resolver the switchboard and
+   * the tenant route gate share, rather than by asserting the stored array:
+   * a site that stored the opt-in under a key nothing reads would still be
+   * off, and only the resolver would say so.
+   */
+  it('the stored host resolves User Accounts as running', async () => {
+    const result = await provision(SUB)
+    const host = mockDocs.get(`hosts/${result.hostId}`)
+    expect(resolvePluginSiteState({}, host, 'accounts')).toBe('runs-here')
+  })
+
+  it('NEGATIVE CONTROL: a host doc with no opt-in — every older site — stays off', () => {
+    const olderHost: Record<string, unknown> = { subdomain: SUB }
+    expect(resolvePluginSiteState({}, olderHost, 'accounts')).toBe(
+      'awaiting-opt-in',
+    )
   })
 })
 
