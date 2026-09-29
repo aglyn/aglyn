@@ -7,9 +7,10 @@ description: One-to-one email sequences a rep sends to a person from their own c
 # Sequences
 
 :::caution Rolling out
-Sequences is a **release-flagged feature, currently being rolled out** — it is
-not available in your workspace yet. This page says what it is for, and grows
-with the feature.
+Sequences is a **release-flagged feature**, and it is **not offered on
+aglyn.com-hosted workspaces**. It is available on **self-hosted installs**,
+where the install's own staff switch it on — see
+[Self-hosted installs](#self-hosted).
 :::
 
 ## What it is for
@@ -41,6 +42,27 @@ by default. A [custom role](../../workspace-and-billing/teams-and-roles/custom-r
 can grant it to other members of the organization. A collaborator added to
 particular sites cannot open it, because Sequences covers the whole
 organization.
+
+## Self-hosted installs {#self-hosted}
+
+A self-hosted install runs Sequences with a Google OAuth client of its own:
+
+1. Create the OAuth client in Google Cloud and set `GOOGLE_OUTREACH_CLIENT_ID`,
+   `GOOGLE_OUTREACH_CLIENT_SECRET` and `OUTREACH_TOKEN_KEY` on the console.
+   [Environment variables](../../developers/self-hosting-environment.md#sequences)
+   gives each value, the redirect URI to register and the scopes the grant asks
+   for.
+2. Make the consent screen **Internal**, on a Google Cloud project owned by
+   your own Google Workspace organization. An Internal screen lets that
+   organization's users connect their mailboxes without Google's app
+   verification or its security assessment. Only accounts in that Workspace
+   organization can connect; a mailbox outside it would need an External
+   screen, which Google has to verify first.
+3. As a staff account on your install, turn Sequences on for the organization
+   that will use it: grant the Sequences entitlement and the `release_outreach`
+   flag in the [entitlement editor](../../staff-console/overview.md#entitlement-editor),
+   or turn `release_outreach` on for every organization under
+   [Feature flags](../../staff-console/feature-flags.md).
 
 ## Connect a mailbox {#connect-a-mailbox}
 
