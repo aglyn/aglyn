@@ -516,7 +516,7 @@ FunctionSave.displayName = 'AglynFunctionSave'
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 
-const ICON_COLOR = '#7b1fa2'
+export const ICON_COLOR = '#7b1fa2'
 
 const CONTROL_LABELS: Record<FunctionControlKind, string> = {
   auto: 'Automatic',

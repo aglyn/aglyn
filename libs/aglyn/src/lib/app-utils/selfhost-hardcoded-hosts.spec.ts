@@ -137,6 +137,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'AGL-1452. The daily upload-CORS drift checker. The literal is the default project fallback for a build tool that is never shipped; a self-host operator runs it against their own project id.',
   },
   {
+    file: 'tools/scripts/move-calculator-nodes-to-marketplace.mjs',
+    count: 1,
+    reason:
+      "An operator's one-off migration of Aglyn's own sites (AGL-3394): it asks aglyn.com's health route which commit production serves before it writes.",
+  },
+  {
     file: 'tools/scripts/release-changelog-entry.mjs',
     count: 1,
     reason:
@@ -363,7 +369,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "`tenantWebApex()` — the mail layer's reader of NEXT_PUBLIC_TENANT_DOMAIN, and the literal is only its `||` default. The same structural copy as email-media-src.ts above and for the same reason: `shared-util-email` is tagged scope:shared and cannot import TENANT_APEX from @aglyn/aglyn. The mail apex built on it is separately configurable through AGLYN_TENANT_MAIL_APEX and defaults to `mail.{web apex}`, so an operator who sets the tenant domain gets a sending namespace inside their own zone rather than inside ours; platform-sending-domain.spec.ts holds this function to the configured value, so the default cannot become the answer for a deployment that set one.",
   },
   {
-    file: 'libs/aglyn/src/lib/app-utils/host-naming.ts',
+    file: 'libs/aglyn/src/lib/app-utils/tenant-apex.ts',
     count: 1,
     reason:
       'TENANT_APEX — the one reader of NEXT_PUBLIC_TENANT_DOMAIN; the literal is its default.',
