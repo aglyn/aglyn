@@ -67,10 +67,19 @@ const __aglynHostModule = host["mui"];
 var Typography = __aglynHostModule["Typography"];
 var _aglynHost_aglyn = host["aglyn"];
 const { alpha, useTheme } = host.muiStyles;
-function El() { return [_aglynHost_mui.Button, _aglynHost_mui.Stack, __aglynHostModule.typographyClasses, alpha, useTheme] }
+function El() { return [_aglynHost_mui.Button, _aglynHost_mui.Stack, Typography, alpha, useTheme] }
 export function register(h) { h.aglyn.defineUiFeatureBundle(El); _aglynHost_aglyn.components.registerComponent(El, {}); return h.version }
 `)
     expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
+  })
+
+  it('reads no name from a module a bundle only tests for', () => {
+    const result = checkPluginBundle(`export function register(h) {
+  if (!h || !h.aglyn || typeof h.mui === 'undefined') return
+  if (h.muiStyles) h.aglyn.registerConsoleExtension({})
+}
+`)
     expect(result.problems).toEqual([])
   })
 
