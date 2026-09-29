@@ -43,9 +43,9 @@ export * from './lib/change-case'
 // The four real consumers, and where each puts the matcher:
 //   - `use-mdi-icons-fuzzy` → the icon picker, console-only,
 //   - `media-search.ts` → the console DAM,
-//   - `plugins-mui/collection.tsx` → a published page, but only once a
-//     reader types into a collection search box: the element `import()`s the
-//     matcher on the first keystroke (AGL-3401). It used to arrive with every
+//   - `plugins-mui/collection-search-box.tsx` → a published page, but only
+//     once a reader types into a collection search box: the element
+//     `import()`s the matcher on the first keystroke (AGL-3401). It used to arrive with every
 //     page that placed any collection element (25.9 KB raw, AGL-3082), and
 //     before the registry split, with every page at all,
 //   - `apps/tenant/utils/search-content.ts` → tenant, but SERVER-only: it

@@ -29,8 +29,8 @@ import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
  * One thunk per component module, named here because several ids share one:
- * `collection.tsx` alone exports eight elements, and a module is imported
- * once however many of its components a surface asks for.
+ * `card.tsx` and `accordion.tsx` each export several elements, and a module is
+ * imported once however many of its components a surface asks for.
  *
  * Every thunk goes through the element tier (AGL-3401). The common elements
  * are part of it; the rest are `import()`s written inside it, so they can
@@ -88,7 +88,15 @@ const listItem = viaTier('listItem')
 const listItemText = viaTier('listItemText')
 const blocks = viaTier('blocks')
 const dataTable = viaTier('dataTable')
-const collection = viaTier('collection')
+const collectionEntries = viaTier('collectionEntries')
+const collectionEntryBody = viaTier('collectionEntryBody')
+const collectionRelated = viaTier('collectionRelated')
+const collectionShare = viaTier('collectionShare')
+const collectionEntryMeta = viaTier('collectionEntryMeta')
+const collectionEntryAuthor = viaTier('collectionEntryAuthor')
+const collectionAuthorProfile = viaTier('collectionAuthorProfile')
+const collectionCategories = viaTier('collectionCategories')
+const collectionSearch = viaTier('collectionSearch')
 const video = viaTier('video')
 const languageSwitcher = viaTier('languageSwitcher')
 const reusableInstance = viaTier('reusableInstance')
@@ -236,55 +244,55 @@ export const MUI_COMPONENT_SOURCES: Readonly<
   // Content collections (AGL-551/582): entries repeater, markdown entry
   // body, related posts, share bar, entry meta.
   collectionEntries: {
-    module: collection,
+    module: collectionEntries,
     component: 'CollectionEntries',
     schema: 'collectionEntriesSchema',
     presets: 'collectionPresets',
   },
   collectionEntryBody: {
-    module: collection,
+    module: collectionEntryBody,
     component: 'CollectionEntryBody',
     schema: 'collectionEntryBodySchema',
   },
   collectionRelated: {
-    module: collection,
+    module: collectionRelated,
     component: 'CollectionRelated',
     schema: 'collectionRelatedSchema',
   },
   collectionShare: {
-    module: collection,
+    module: collectionShare,
     component: 'CollectionShare',
     schema: 'collectionShareSchema',
   },
   collectionEntryMeta: {
-    module: collection,
+    module: collectionEntryMeta,
     component: 'CollectionEntryMeta',
     schema: 'collectionEntryMetaSchema',
   },
   // The author card that closes an article (AGL-2486): the byline block
   // prints a name, and the record behind it also has a portrait and a bio.
   collectionEntryAuthor: {
-    module: collection,
+    module: collectionEntryAuthor,
     component: 'CollectionEntryAuthor',
     schema: 'collectionEntryAuthorSchema',
   },
   // The subject of an author's own page (AGL-2518): the same person the
   // card above draws as a footnote, with the role fields it has no room for.
   contentAuthorProfile: {
-    module: collection,
+    module: collectionAuthorProfile,
     component: 'ContentAuthorProfile',
     schema: 'contentAuthorProfileSchema',
   },
   // Category pills (AGL-1321): real anchors to /{collection}/category/{slug}.
   collectionCategories: {
-    module: collection,
+    module: collectionCategories,
     component: 'CollectionCategories',
     schema: 'collectionCategoriesSchema',
   },
   // The toolbar search box (AGL-1516): the entries block's own field cannot
   // leave it, so the frame's pills-left / search-right row needs a block.
   collectionSearch: {
-    module: collection,
+    module: collectionSearch,
     component: 'CollectionSearch',
     schema: 'collectionSearchSchema',
   },
@@ -560,8 +568,8 @@ export async function loadMuiBundle(
   const ids = (componentIds ?? Object.keys(MUI_COMPONENT_SOURCES)).filter(
     (id) => id in MUI_COMPONENT_SOURCES,
   )
-  // Keyed on the THUNK, so `collection.tsx` is imported once for the eight
-  // ids that name it rather than eight times.
+  // Keyed on the THUNK, so a module that exports several elements is
+  // imported once for all the ids that name it rather than once per id.
   const pending = new Map<
     MuiComponentSource['module'],
     Promise<Record<string, unknown>>

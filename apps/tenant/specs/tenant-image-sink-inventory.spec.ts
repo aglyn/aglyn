@@ -447,10 +447,35 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'The listing card image on the same console surface, and the besigner standalone preview of it.',
   },
-  'libs/plugins/mui/src/lib/components/collection.tsx': {
-    markers: 5,
+  // The collection elements, one module each since AGL-3401. Five images,
+  // all through resolveMediaSrc. The two portraits differ from the rest only
+  // in where the string comes from — an author RECORD the customer wrote, not
+  // a node prop (AGL-2486/2518) — and they are the SAME record field rendered
+  // at two sizes, so neither is a new class of input.
+  'libs/plugins/mui/src/lib/components/collection-entry-body.tsx': {
+    markers: 1,
     guard: 'media-ref',
-    why: 'Markdown body image, entry cover, byline avatar, the Entry Author card portrait and the Author Profile portrait, all five through resolveMediaSrc. The body image is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the other four are not. The two portraits differ from the rest only in where the string comes from — an author RECORD the customer wrote, not a node prop (AGL-2486/2518) — and they are the SAME record field rendered at two sizes, so neither is a new class of input.',
+    why: 'The markdown body image, through resolveMediaSrc (inside mediaBodyImageAttributes). It is additionally scheme-checked at parse time by markdown-lite (AGL-1713); the other four collection images are not.',
+  },
+  'libs/plugins/mui/src/lib/components/collection-related.tsx': {
+    markers: 1,
+    guard: 'media-ref',
+    why: 'Each related entry\'s stored cover image, stamped onto the block by expandCollectionRelated and resolved here through resolveMediaSrc.',
+  },
+  'libs/plugins/mui/src/lib/components/collection-entry-meta.tsx': {
+    markers: 1,
+    guard: 'media-ref',
+    why: 'The byline avatar, through resolveMediaSrc; an unresolved `{{token}}` renders no image at all.',
+  },
+  'libs/plugins/mui/src/lib/components/collection-entry-author.tsx': {
+    markers: 1,
+    guard: 'media-ref',
+    why: 'The Entry Author card portrait: the routed author record\'s `image`, resolved through resolveMediaSrc; an unresolved `{{token}}` renders no image at all.',
+  },
+  'libs/plugins/mui/src/lib/components/collection-author-profile.tsx': {
+    markers: 1,
+    guard: 'media-ref',
+    why: 'The Author Profile portrait — the same record field as the Entry Author card, at a larger size — through resolveMediaSrc.',
   },
   'libs/plugins/mui/src/lib/components/custom-html.tsx': {
     markers: 1,
@@ -515,7 +540,7 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
   'libs/tenant/runtime/src/lib/author-page-nodes.ts': {
     markers: 1,
     guard: 'projection',
-    why: "Sets the routed author's stored `image` as a PROP on the built-in page's Author Profile node. The string is passed on untouched; ContentAuthorProfile in libs/plugins/mui/src/lib/components/collection.tsx resolves it with resolveMediaSrc at render, which is the same resolver and the same record field the Entry Author card already uses (AGL-2518). Nothing is fetched here.",
+    why: "Sets the routed author's stored `image` as a PROP on the built-in page's Author Profile node. The string is passed on untouched; ContentAuthorProfile in libs/plugins/mui/src/lib/components/collection-author-profile.tsx resolves it with resolveMediaSrc at render, which is the same resolver and the same record field the Entry Author card already uses (AGL-2518). Nothing is fetched here.",
   },
   'libs/aglyn/src/lib/app-utils/content-author-profile.ts': {
     markers: 2,
