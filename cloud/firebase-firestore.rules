@@ -2868,13 +2868,7 @@ service cloud.firestore {
           // Deliberately NOT added to the blanket `hasAny` list above: that
           // list is the Admin-SDK-only set, and `screens` has a legitimate
           // client writer. Two different questions, two conditions.
-          //
-          // `defaultHomeScreenId` (AGL-3408) names the placeholder home page
-          // a site is created with — the one screen a starter may take `/`
-          // from. It rides the same tier because it decides what leaves the
-          // routing map: an `author` who could point it at the owner's real
-          // home page would have the next starter applied unpublish it. The
-          // starter apply clears it in the same write as the `screens` entry.
+          // defaultHomeScreenId (AGL-3408) picks what a publish at / unroutes.
           (canPublishHostContent(hostId) ||
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['screens', 'defaultHomeScreenId'])));
