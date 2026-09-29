@@ -38,7 +38,7 @@
 
 import type { AddressInfo } from 'net'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
-import { Agent } from 'undici'
+import { Dispatcher1Wrapper } from 'undici'
 import { createPinnedDispatcher, servePluginFetch } from './serve-plugin-fetch'
 
 /** Addresses `lookup` will report for the requested hostname. */
@@ -575,7 +575,7 @@ describe('servePluginFetch — what reaches the network', () => {
     )
     expect(captured.status).toBe(200)
     // The guard is worth nothing if the dispatcher is built and then dropped.
-    expect(seen?.init.dispatcher).toBeInstanceOf(Agent)
+    expect(seen?.init.dispatcher).toBeInstanceOf(Dispatcher1Wrapper)
     expect(seen?.url).toBe(`${ALLOWED_ORIGIN}/data`)
     expect(captured.body).toEqual({
       ok: true,
