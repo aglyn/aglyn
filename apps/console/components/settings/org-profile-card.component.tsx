@@ -17,14 +17,12 @@
 
 'use client'
 
-import { supportedTimeZones } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
   AlertTitle,
   Avatar,
   Button,
-  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -47,6 +45,11 @@ import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
  * not a panel sharing the page's closure.
  *
  * ## What this card deliberately does not edit
+ *
+ * The workspace time zone. It is a setting of the workspace, not of its
+ * identity, and it is saved by its own action from Settings → General: this
+ * card posts its whole form, so a zone riding along was re-saved by every
+ * logo edit.
  *
  * The platform billing address is READ-ONLY here. It is a tax input — Stripe
  * computes `automatic_tax` from it — and it had two editors, this card and
@@ -76,7 +79,6 @@ export function OrgProfileCard() {
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
-    timeZone: '',
   })
   useEffect(() => {
     setProfile({
@@ -84,7 +86,6 @@ export function OrgProfileCard() {
       contactEmail: String((org as any)?.contact?.email ?? ''),
       contactPhone: String((org as any)?.contact?.phone ?? ''),
       contactWebsite: String((org as any)?.contact?.website ?? ''),
-      timeZone: String((org as any)?.timeZone ?? ''),
     })
   }, [org])
   // The stored billing address, shown but not edited. Structured since
@@ -206,31 +207,6 @@ export function OrgProfileCard() {
         }))
       }
     />
-    <TextField
-      select
-      label="Time zone"
-      value={profile.timeZone}
-      helperText={
-        'The day a published post is dated on every site this workspace ' +
-        'owns. Leave it on UTC and a post published at 7pm Central is dated ' +
-        'the next day.'
-      }
-      onChange={(event) =>
-        setProfile((prev) => ({ ...prev, timeZone: event.target.value }))
-      }
-    >
-      {/*
-        Empty is the default rather than a missing choice: an org that has
-        never set one renders its dates in UTC, and this row is how it says
-        so out loud.
-      */}
-      <MenuItem value="">UTC (default)</MenuItem>
-      {supportedTimeZones().map((zone) => (
-        <MenuItem key={zone} value={zone}>
-          {zone.replace(/_/g, ' ')}
-        </MenuItem>
-      ))}
-    </TextField>
     <Stack direction="row">
       <Button
         variant="contained"

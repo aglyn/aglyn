@@ -18,37 +18,60 @@
 'use client'
 
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
+import {
+  Alert,
+  Button,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useEffect, useState } from 'react'
-import { canManageOrg, isValidOrgSlug } from '@aglyn/aglyn'
+import { canManageOrg, isValidOrgSlug, supportedTimeZones } from '@aglyn/aglyn'
 import { WORKSPACE_DOMAIN } from '../../constants/workspace-domain'
 import { docsHelp } from '../../constants/docs-links'
+import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgScope } from '../../hooks/use-org-scope'
 import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
 
 /**
- * The organization's identity — its name and its workspace URL.
+ * The organization's name, its workspace URL and its time zone.
  *
  * Extracted from the settings page when its sections became routes (AGL-2501).
- * Both fields prefill from the org-scope projection, and both write through
- * the settings route rather than Firestore so the reverse index that feeds the
- * switcher and the breadcrumbs fans out with the change.
+ * The name and URL prefill from the org-scope projection, and both write
+ * through the settings route rather than Firestore so the reverse index that
+ * feeds the switcher and the breadcrumbs fans out with the change.
+ *
+ * The time zone is the one every site in the workspace inherits unless the
+ * site sets its own (AGL-3252). It is not on the membership projection, so it
+ * prefills from the org DOCUMENT, and nothing saves it until that document has
+ * loaded: before then the field reads empty, and empty is a real value — UTC —
+ * so a save inside the loading window would reset the zone rather than keep it.
  */
 export function OrgGeneralCard() {
   const { currentOrg } = useOrgScope()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const settingsRequest = useOrgSettingsRequest()
+  const { org, ready: orgReady } = useCurrentOrg()
   const canManage = canManageOrg(currentOrg?.role)
   const isOwner = currentOrg?.role === 'owner'
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
+  const storedTimeZone = String((org as any)?.timeZone ?? '')
+  const [timeZone, setTimeZone] = useState('')
   useEffect(() => {
     setName(currentOrg?.orgName ?? '')
     setSlug(currentOrg?.slug ?? '')
   }, [currentOrg?.orgName, currentOrg?.slug])
+  useEffect(() => {
+    setTimeZone(storedTimeZone)
+  }, [storedTimeZone])
+  const nameChanged =
+    Boolean(name.trim()) && name.trim() !== (currentOrg?.orgName ?? '')
+  const timeZoneChanged = orgReady && timeZone !== storedTimeZone
   const handleSlugChange = async () => {
     const next = slug.trim().toLowerCase()
     if (!currentOrg || !next || next === currentOrg.slug || busy) return
@@ -79,17 +102,22 @@ export function OrgGeneralCard() {
     }
   }
 
-  const handleRename = async () => {
-    if (!currentOrg || !name.trim() || busy) return
+  const handleSave = async () => {
+    if (!currentOrg || busy || (!nameChanged && !timeZoneChanged)) return
     setBusy(true)
     try {
-      // API-routed so the reverse-index orgName (switcher, breadcrumbs)
-      // fans out with the rename.
-      await settingsRequest({ action: 'rename', name: name.trim() })
-      enqueueSnackbar('Organization renamed', { variant: 'success' })
-    } catch (error) {
+      if (nameChanged) {
+        // API-routed so the reverse-index orgName (switcher, breadcrumbs)
+        // fans out with the rename.
+        await settingsRequest({ action: 'rename', name: name.trim() })
+      }
+      if (timeZoneChanged) {
+        await settingsRequest({ action: 'set-time-zone', timeZone })
+      }
+      enqueueSnackbar('Organization settings saved', { variant: 'success' })
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('Renaming failed', { variant: 'error' })
+      enqueueSnackbar(error?.message ?? 'Saving failed', { variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -101,8 +129,9 @@ export function OrgGeneralCard() {
   help={docsHelp('glossary', {
     anchor: '#workspace',
     excerpt:
-      'Rename the organization and change its workspace URL — ' +
-      '"workspace" is the console word for your organization\'s home.',
+      'Rename the organization, change its workspace URL and set the ' +
+      'time zone its sites inherit — "workspace" is the console word for ' +
+      'your organization\'s home.',
   })}
   contentGutterX
   contentGutterY
@@ -146,6 +175,36 @@ export function OrgGeneralCard() {
         </Button>
       ) : null}
     </Stack>
+    <TextField
+      select
+      label="Time zone"
+      value={timeZone}
+      disabled={!canManage || !orgReady || busy}
+      helperText={
+        'Every site in this workspace dates its posts and pages in this ' +
+        'zone, unless the site sets its own under Admin → General. Left on ' +
+        'UTC, a post published at 7pm Central is dated the next day.'
+      }
+      onChange={(event) => setTimeZone(event.target.value)}
+      // Empty is UTC, a real choice with a label of its own — without
+      // `displayEmpty` the select renders it as a blank field.
+      slotProps={{
+        select: { displayEmpty: true },
+        inputLabel: { shrink: true },
+      }}
+    >
+      {/*
+        Empty is the default rather than a missing choice: an org that has
+        never set one renders its dates in UTC, and this row is how it says
+        so out loud.
+      */}
+      <MenuItem value="">UTC (default)</MenuItem>
+      {supportedTimeZones().map((zone) => (
+        <MenuItem key={zone} value={zone}>
+          {zone.replace(/_/g, ' ')}
+        </MenuItem>
+      ))}
+    </TextField>
     <Typography variant="body2" color="text.secondary">
       {`Your role: ${currentOrg?.role ?? '—'}. Plan, billing and ` +
         'suspension are managed under Manage → Billing.'}
@@ -154,19 +213,15 @@ export function OrgGeneralCard() {
       <Stack direction="row">
         <Button
           variant="contained"
-          disabled={
-            busy ||
-            !name.trim() ||
-            name.trim() === (currentOrg?.orgName ?? '')
-          }
-          onClick={() => void handleRename()}
+          disabled={busy || (!nameChanged && !timeZoneChanged)}
+          onClick={() => void handleSave()}
         >
           {busy ? 'Saving…' : 'Save'}
         </Button>
       </Stack>
     ) : (
       <Alert severity="info">
-        {'Renaming the organization requires the admin role.'}
+        {'Changing these settings requires the admin role.'}
       </Alert>
     )}
   </Stack>
