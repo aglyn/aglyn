@@ -66,6 +66,18 @@ const SCAN_ROOTS = ['libs/plugins']
  */
 const SHARED_TEXT_EXCEPTIONS: ReadonlyMap<string, string> = new Map()
 
+/**
+ * Files whose fields are left out of the unique-text rule because the same
+ * elements live on in a successor, with the reason. The entry goes with the
+ * file.
+ */
+const RETIRING_COPIES: ReadonlyMap<string, string> = new Map([
+  [
+    'libs/plugins/mui/src/lib/components/function-scope.tsx',
+    "AGL-3394: the calculator family moved to the Calculators marketplace plugin (libs/plugins/calculator). mui keeps its copy only until aglyn.com's calculators are moved onto the plugin, and then this file is deleted.",
+  ],
+])
+
 interface Attribute {
   file: string
   line: number
@@ -190,6 +202,7 @@ describe('every element attribute carries its own help (AGL-2486)', () => {
     for (const attribute of attributes) {
       const text = attribute.description?.trim()
       if (!text || SHARED_TEXT_EXCEPTIONS.has(text)) continue
+      if (RETIRING_COPIES.has(attribute.file)) continue
       byText.set(text, [...(byText.get(text) ?? []), attribute])
     }
     const shared = [...byText.entries()].filter(([, list]) => list.length > 1)
