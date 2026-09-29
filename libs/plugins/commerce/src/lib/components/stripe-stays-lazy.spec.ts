@@ -177,7 +177,9 @@ function namedImportsFrom(source: string, specifier: string): string[] {
  * with the missing name in the failure message.
  */
 describe('the Stripe imports we rely on exist in the installed package', () => {
-  const REACT_STRIPE = '@stripe/react-stripe-js'
+  // The `/checkout` entry since v6 — where the Checkout Sessions provider,
+  // hook and PaymentElement the component imports now live (AGL-3410).
+  const REACT_STRIPE = '@stripe/react-stripe-js/checkout'
 
   it('exports every symbol the payment element imports from it', () => {
     const imported = namedImportsFrom(
@@ -203,7 +205,7 @@ describe('the Stripe imports we rely on exist in the installed package', () => {
     // exact failure this pair of tests exists to make loud.
     const mocked = [
       ...read('storefront-payment-element.spec.tsx').matchAll(
-        /jest\.mock\('@stripe\/react-stripe-js',[\s\S]*?\n\}\)\)/g,
+        /jest\.mock\('@stripe\/react-stripe-js\/checkout',[\s\S]*?\n\}\)\)/g,
       ),
     ]
       .flatMap((block) => [...block[0].matchAll(/^\s{2}([A-Za-z_$][\w$]*):/gm)])

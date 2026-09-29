@@ -254,7 +254,7 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
     ok: true,
     json: async () =>
       params.get('ui_mode')
-        ? { id, client_secret: `${id}_secret_xyz`, ui_mode: 'custom' }
+        ? { id, client_secret: `${id}_secret_xyz`, ui_mode: 'elements' }
         : { id, url: `https://checkout.stripe.com/pay/${id}` },
   }
 })

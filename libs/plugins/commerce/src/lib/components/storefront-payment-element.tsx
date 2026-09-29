@@ -17,7 +17,15 @@
 
 'use client'
 
-import { CheckoutProvider, PaymentElement, useCheckout } from '@stripe/react-stripe-js'
+// The `/checkout` entry, not the main one: react-stripe-js v6 moved the
+// Checkout Sessions provider, its hook and its own `PaymentElement` there, and
+// the main entry's `PaymentElement` is the Elements one, which does not mount
+// under a Checkout provider.
+import {
+  CheckoutElementsProvider,
+  PaymentElement,
+  useCheckoutElements,
+} from '@stripe/react-stripe-js/checkout'
 // `/pure` deliberately, not the bare entry (AGL-2486). The bare entry ends
 // with a module-scope `Promise.resolve().then(() => getStripePromise())`,
 // so merely EVALUATING it injects the js.stripe.com/v3 script tag —
@@ -110,7 +118,11 @@ function PaymentForm({
   payLabel,
   onCancel,
 }: Pick<StorefrontPaymentElementProps, 'payLabel' | 'onCancel'>) {
-  const checkout = useCheckout()
+  // A `{ type: 'loading' | 'success' | 'error' }` union since react-stripe-js
+  // v6: the session is not usable until Stripe.js has booted against it.
+  const checkoutState = useCheckoutElements()
+  const checkout =
+    checkoutState.type === 'success' ? checkoutState.checkout : null
   const [status, setStatus] = useState<'idle' | 'confirming' | 'error'>('idle')
   const [message, setMessage] = useState('')
 
@@ -118,7 +130,7 @@ function PaymentForm({
     // Guarded rather than merely disabled: a disabled button is a rendering
     // fact, and a keyboard or a slow re-render can still land a second call
     // during a 3DS challenge.
-    if (status === 'confirming') return
+    if (status === 'confirming' || !checkout) return
     setStatus('confirming')
     setMessage('')
     try {
@@ -143,6 +155,24 @@ function PaymentForm({
     }
   }, [checkout, status])
 
+  if (checkoutState.type === 'error') {
+    // The session could not be loaded — expired, or already completed in
+    // another tab. Nothing typed here could be charged, so say so and offer
+    // the way back rather than a form that cannot submit.
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Alert severity="error" role="alert">
+          {'This checkout could not be loaded. Return to the store and try again.'}
+        </Alert>
+        {onCancel ? (
+          <Button variant="text" onClick={onCancel}>
+            {'Back to the store'}
+          </Button>
+        ) : null}
+      </Box>
+    )
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <PaymentElement />
@@ -158,7 +188,7 @@ function PaymentForm({
         <Button
           variant="contained"
           onClick={handlePay}
-          disabled={status === 'confirming'}
+          disabled={status === 'confirming' || !checkout}
           fullWidth
         >
           {status === 'confirming' ? 'Paying…' : payLabel || 'Pay now'}
@@ -189,11 +219,11 @@ export function StorefrontPaymentElement({
   // white box that looks like a broken payment form.
   if (!clientSecret || !stripe) return null
   return (
-    <CheckoutProvider stripe={stripe} options={{ clientSecret }}>
+    <CheckoutElementsProvider stripe={stripe} options={{ clientSecret }}>
       <Box sx={{ py: 2 }} data-testid="storefront-payment-element">
         <PaymentForm payLabel={payLabel} onCancel={onCancel} />
       </Box>
-    </CheckoutProvider>
+    </CheckoutElementsProvider>
   )
 }
 

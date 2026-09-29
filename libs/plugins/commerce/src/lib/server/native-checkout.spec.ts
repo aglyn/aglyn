@@ -422,7 +422,7 @@ describe('tax, shipping, fee and metadata are identical on both paths', () => {
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_key'
     await post()
     const params = sessionCall().params
-    expect(params.get('ui_mode')).toBe('custom')
+    expect(params.get('ui_mode')).toBe('elements')
     expect(params.get('success_url')).toBeNull()
     expect(params.get('cancel_url')).toBeNull()
     // The session id still rides the return, so the storefront can NAME the
@@ -441,9 +441,10 @@ describe('tax, shipping, fee and metadata are identical on both paths', () => {
     expect(sessionCall().headers['Stripe-Version']).toBe(
       NATIVE_CHECKOUT_STRIPE_VERSION,
     )
-    // Measured: `ui_mode: custom` is refused below this version, and webhook
-    // deliveries are versioned per endpoint so the pin cannot reach them.
-    expect(NATIVE_CHECKOUT_STRIPE_VERSION).toBe('2025-03-31.basil')
+    // Dahlia is the version that accepts `ui_mode: elements` (it renamed
+    // `custom`), and webhook deliveries are versioned per endpoint so the pin
+    // cannot reach them.
+    expect(NATIVE_CHECKOUT_STRIPE_VERSION).toBe('2026-03-25.dahlia')
   })
 
   it('still carries the idempotency key that stops a double session', async () => {
@@ -525,5 +526,21 @@ describe('applyNativeCheckoutParams', () => {
         ([key]) => !key.endsWith('_url') && key !== 'ui_mode',
       ),
     ).toEqual(before)
+  })
+
+  it('keeps a subscription on CLASSIC billing, which the pin no longer defaults to', () => {
+    // Clover made flexible billing the default for new subscriptions, and the
+    // Dahlia pin sits past it. The hosted path, on the account default, still
+    // creates classic ones; the two paths must bill the same subscription the
+    // same way.
+    const subscription = new URLSearchParams({ mode: 'subscription' })
+    applyNativeCheckoutParams(subscription, 'https://shop.example.com/p')
+    expect(subscription.get('subscription_data[billing_mode][type]')).toBe(
+      'classic',
+    )
+
+    const payment = new URLSearchParams({ mode: 'payment' })
+    applyNativeCheckoutParams(payment, 'https://shop.example.com/p')
+    expect(payment.has('subscription_data[billing_mode][type]')).toBe(false)
   })
 })
