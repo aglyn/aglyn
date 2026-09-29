@@ -22,6 +22,7 @@ import {
   getRealmPluginInstalls,
   isImpersonationSession,
   lockdownRefusal,
+  resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -32,11 +33,18 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * staff-only version docs — the client can read its install pins but not
  * whether the platform signed them. Any org member may read: the response
  * is exactly what the member's own console is about to load.
+ *
+ * `hostId` answers for one of the org's sites instead: the workspace's pins
+ * plus the site's own, which is the list that site's published pages load and
+ * so the one the Besigner offers elements from (AGL-3391). A site the org does
+ * not own answers 404, the same as one that does not exist, so the route
+ * never confirms another workspace's site.
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const orgId = url.searchParams.get('orgId') ?? ''
   if (!orgId) return Response.json({ error: 'Missing orgId' }, { status: 400 })
+  const hostId = url.searchParams.get('hostId') || undefined
 
   const authorization = request.headers.get('authorization') ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -64,7 +72,12 @@ export async function GET(request: Request): Promise<Response> {
       org: (await getOrgDoc(orgId)) ?? undefined,
     })
     if (locked) return locked
-    const installs = await getRealmPluginInstalls({ orgId })
+    if (hostId && (await resolveOrgIdForHost(hostId)) !== orgId) {
+      return Response.json({ error: 'Site not found' }, { status: 404 })
+    }
+    const installs = await getRealmPluginInstalls(
+      hostId ? { orgId, hostId } : { orgId },
+    )
     return Response.json({ installs }, { status: 200 })
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993). Null

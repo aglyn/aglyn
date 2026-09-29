@@ -84,7 +84,11 @@ revoke; a hard-kill still needs a revocation doc. Signing requires
 
 ## Where realm bundles load
 
-- **Console**: before the shell renders, from the org's trusted installs.
+- **Console**: from the org's trusted installs, on the screens that draw
+  what the manifest declares under `contributes.console`.
+- **Besigner**: for a site that runs the plugin, when it declares site
+  components or site features, so its elements are in the Elements panel and
+  draw on the canvas. The canvas waits for the bundle.
 - **Published sites**: post-hydration (additive — first paint never waits
   on a marketplace CDN), and only on a page that uses the plugin: one that
   places a component its manifest declares under `contributes.site`, or on

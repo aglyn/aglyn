@@ -61,11 +61,17 @@ console screens fetch your bundle, and it never runs your code to find out.
 
 | Key | What it declares | Where the plugin then loads |
 | --- | --- | --- |
-| `site.components` | The canvas component ids `register()` registers | A published page whose node tree places one of them |
-| `site.features` | The `runtimeId` of each site runtime it mounts | Every page of a site that has the plugin switched on |
+| `site.components` | The canvas component ids `register()` registers | A published page whose node tree places one of them, and the Besigner for every site that runs the plugin |
+| `site.features` | The `runtimeId` of each site runtime it mounts | Every page of a site that has the plugin switched on, and the Besigner for that site |
 | `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`assistPanel`, `besignerInspector`) | A console screen that renders one of those slots |
 | `console.routes` / `console.orgRoutes` | The console routes its pages serve (`/my-plugin`) | The screens under those routes |
 | `console.shell` | It adds a nav tab, a provider or a staff page, which the shell draws on every screen | Every screen of the workspace |
+
+The Besigner loads a plugin that declares either `site` key for every site
+that runs it, whether or not the page open places one of its elements. That
+way its elements appear in the Elements panel and draw on the canvas. The
+site's list is the workspace's installs plus the site's own, the same list its
+published pages load from.
 
 One more `site` key declares no load point. `site.functionBindings` names the
 elements that run one of the site's

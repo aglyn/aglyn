@@ -19,7 +19,9 @@ import {
   isNamespacedComponentId,
   mergeFunctionBindings,
   consoleLoadPoints,
+  declaresSiteElements,
   isPluginUsedInConsole,
+  presenceIds,
   isPluginUsedOnPage,
   pagePresence,
   PLUGIN_MAX_CONTRIBUTIONS,
@@ -321,3 +323,36 @@ describe('isPluginUsedInConsole (AGL-3142)', () => {
     ).toBe(false)
   })
 })
+
+describe('the editor load point (AGL-3391)', () => {
+  const elements = { site: { components: ['aglyn.calculator.scope'] } }
+  const features = { site: { features: ['overlays'] } }
+  const zonesOnly = { console: { slots: ['hostDashboard'] } }
+
+  it('loads a plugin that declares site elements or site features', () => {
+    expect(declaresSiteElements(elements)).toBe(true)
+    expect(declaresSiteElements(features)).toBe(true)
+    expect(isPluginUsedInConsole(elements, { at: 'editor' })).toBe(true)
+    expect(isPluginUsedInConsole(features, { at: 'editor' })).toBe(true)
+  })
+
+  it('does not load one that draws nothing on a site', () => {
+    expect(isPluginUsedInConsole(zonesOnly, { at: 'editor' })).toBe(false)
+    expect(isPluginUsedInConsole({ site: { components: [] } }, { at: 'editor' })).toBe(false)
+    // An undeclared plugin loads with the shell, the only place that can
+    // discover what it registers.
+    expect(isPluginUsedInConsole(undefined, { at: 'editor' })).toBe(false)
+  })
+})
+
+describe('presenceIds (AGL-3391)', () => {
+  it('names a plugin by its own id and its listing id, once each', () => {
+    expect(presenceIds({ pluginId: 'calculator', listingId: 'listing-calc' })).toEqual([
+      'calculator',
+      'listing-calc',
+    ])
+    expect(presenceIds({ pluginId: 'same', listingId: 'same' })).toEqual(['same'])
+    expect(presenceIds({ listingId: 'listing-only' })).toEqual(['listing-only'])
+  })
+})
+
