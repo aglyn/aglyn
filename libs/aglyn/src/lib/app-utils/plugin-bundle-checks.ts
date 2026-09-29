@@ -176,7 +176,7 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * 8 — declared network origins that are a brand's lookalike (AGL-3365).
  * 9 — lookups on the host ABI name only keys a host provides (AGL-3392).
  */
-export const PLUGIN_VERIFIER_VERSION = 9
+export const PLUGIN_VERIFIER_VERSION = 10
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -1021,6 +1021,17 @@ function hostAbiReads(
   /** Records how one reference to a lazy key's module is used. */
   const useOf = (key: string, ref: AnyNode): void => {
     const parent = parents.get(ref)
+    // A presence check reads no name from the module: `if (!h.aglyn) return`
+    // is how a bundle stays inert on a host without the key, and every
+    // example plugin does it.
+    if (
+      (parent?.type === 'UnaryExpression' &&
+        (parent['operator'] === '!' || parent['operator'] === 'typeof')) ||
+      ((parent?.type === 'IfStatement' || parent?.type === 'ConditionalExpression') &&
+        parent['test'] === ref)
+    ) {
+      return
+    }
     if (parent?.type === 'MemberExpression' && parent['object'] === ref) {
       return note(key, propertyName(parent, constants))
     }
@@ -1744,8 +1755,8 @@ function analyseBundle(
     )
   }
 
-  const host = hostAbiReads(program, constants, isGlobalRef)
-  for (const key of host.unknown) {
+  const abi = hostAbiReads(program, constants, isGlobalRef)
+  for (const key of abi.unknown) {
     add(
       'error',
       'host-abi',
@@ -1753,7 +1764,7 @@ function analyseBundle(
         `${PLUGIN_HOST_ABI_KEYS.join(', ')} — it would be undefined on every site`,
     )
   }
-  for (const key of host.unknownOnParam) {
+  for (const key of abi.unknownOnParam) {
     add(
       'warning',
       'host-abi',
@@ -1761,26 +1772,26 @@ function analyseBundle(
         `${PLUGIN_HOST_ABI_KEYS.join(', ')} — it will be undefined`,
     )
   }
-  if (host.computedOnParam) {
+  if (abi.computedOnParam) {
     add(
       'warning',
       'host-abi',
       `register() reads its host argument by a key chosen at runtime ` +
-        `(${host.computedOnParam}×)`,
+        `(${abi.computedOnParam}×)`,
     )
   }
-  if (host.computed) {
+  if (abi.computed) {
     add(
       'error',
       'host-abi',
-      `bundle reads the host by a key chosen at runtime (${host.computed}×) — ` +
+      `bundle reads the host by a key chosen at runtime (${abi.computed}×) — ` +
         'a lookup that cannot be named cannot be reviewed',
     )
   }
   // Each name the bundle reads from a host module must be one the host holds
   // (AGL-3392): core's realm plugin surface, or the whole of the others.
   for (const key of PLUGIN_HOST_MODULE_KEYS) {
-    const read = host.imports[key]
+    const read = abi.imports[key]
     if (!read) continue
     const holds = REALM_HOST_SURFACE_NAMES[key]
     if (read === '*') {
@@ -1810,7 +1821,7 @@ function analyseBundle(
   }
   details.set(
     'host-abi',
-    host.read.size ? `reads ${[...host.read].sort().join(', ')}` : 'reads nothing by name',
+    abi.read.size ? `reads ${[...abi.read].sort().join(', ')}` : 'reads nothing by name',
   )
 
   const detected = detectRegistrations(program, constants)
