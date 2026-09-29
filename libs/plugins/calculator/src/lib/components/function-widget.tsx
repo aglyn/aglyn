@@ -33,6 +33,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useContext, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { ICON_COLOR } from './function-scope'
 import {
   FunctionParameterControl,
   displayFunctionValue as displayValue,
@@ -268,7 +269,7 @@ export const schema: Aglyn.ComponentSchema<FunctionWidgetProps> = {
   description:
     'Runs one of your no-code functions and shows the result — calculators, quotes.',
   category: ComponentCategory.INPUT,
-  icon: { path: mdiFunctionVariant.path, sx: { color: '#7b1fa2' } },
+  icon: { path: mdiFunctionVariant.path, sx: { color: ICON_COLOR } },
   flags: { selfClosing: FEATURE_FLAG.ENABLED },
   attributes: [
     {
@@ -325,7 +326,7 @@ export const presets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Run a no-code function — calculators, quotes, checks',
     category: ComponentCategory.INPUT,
-    icon: { path: mdiFunctionVariant.path, sx: { color: '#7b1fa2' } },
+    icon: { path: mdiFunctionVariant.path, sx: { color: ICON_COLOR } },
     data: {
       $id: null,
       componentId: ID,

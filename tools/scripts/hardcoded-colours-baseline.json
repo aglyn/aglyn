@@ -18,7 +18,6 @@
   "libs/besigner/feature/designer/src/lib/components/node-outline.tsx": 1,
   "libs/besigner/feature/designer/src/lib/components/viewport-canvas.component.tsx": 1,
   "libs/plugins/bookings/src/lib/components/booking.tsx": 2,
-  "libs/plugins/calculator/src/lib/components/function-widget.tsx": 2,
   "libs/plugins/commerce/src/lib/components/account.tsx": 2,
   "libs/plugins/commerce/src/lib/components/cart.tsx": 3,
   "libs/plugins/commerce/src/lib/components/gate.tsx": 2,
