@@ -63,7 +63,7 @@ export interface SanitizeRichTextOptions {
   phrasingOnly?: boolean
 }
 
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/)/i
+const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|sms:|\/)/i
 
 /**
  * Allowlist HTML sanitizer for inline rich text: keeps basic formatting
