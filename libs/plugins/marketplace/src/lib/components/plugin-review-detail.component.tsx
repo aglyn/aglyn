@@ -361,6 +361,13 @@ export function PluginReviewDetail({
     (entry) => entry.version === detail?.reviewVersion,
   )
   const liveOnReviewVersion = reviewEntry?.activeInstalls ?? 0
+  const reviewApproved = reviewEntry?.reviewState === 'approved'
+  /** Approved, judged to need the app realm, and not yet trusted. */
+  const realmTrustDue =
+    reviewApproved &&
+    reviewEntry?.trust !== 'realm' &&
+    !reviewEntry?.revoked &&
+    Boolean(detail?.checklist?.['realm-need'])
 
   /**
    * Where a reviewer actually goes to check each item (AGL-973).
@@ -1303,11 +1310,16 @@ export function PluginReviewDetail({
                           </MenuItem>
                         ))}
                       </TextField>
+                      {/* An approved version has nothing left to approve,
+                          so the button says where it stands instead of
+                          offering the same verdict twice. Rejecting stays
+                          available: an approved version can still be
+                          withdrawn. */}
                       <Button
                         size="small"
                         variant="contained"
                         color="success"
-                        disabled={busy || blocked}
+                        disabled={busy || blocked || reviewApproved}
                         onClick={() =>
                           void post(
                             {
@@ -1318,7 +1330,7 @@ export function PluginReviewDetail({
                           )
                         }
                       >
-                        {'Approve version'}
+                        {reviewApproved ? 'Approved' : 'Approve version'}
                       </Button>
                       <Button
                         size="small"
@@ -1348,6 +1360,38 @@ export function PluginReviewDetail({
                     {blocked ? (
                       <Alert severity="info" sx={{ mt: 0.5 }}>
                         {`Blocked: ${detail.checklistOutstanding.length} required checklist item(s) outstanding for these bytes.`}
+                      </Alert>
+                    ) : null}
+                    {/* The reviewer said these bytes need the app realm
+                        (the `realm-need` item), and they are approved but
+                        still sandboxed. Trust is the step that makes them
+                        run, so it is offered here, beside the verdict, as
+                        well as on the version's row below. */}
+                    {reviewEntry && realmTrustDue ? (
+                      <Alert
+                        severity="info"
+                        sx={{ mt: 0.5 }}
+                        action={
+                          <BlockedControl
+                            blocked={superGate.blocked}
+                            reason={superGate.reason ?? SUPER_STAFF_ONLY_REASON}
+                          >
+                            <Button
+                              size="small"
+                              color="inherit"
+                              disabled={busy}
+                              onClick={() =>
+                                void signRealm(reviewEntry.version, 'grant')
+                              }
+                            >
+                              {'Grant realm trust'}
+                            </Button>
+                          </BlockedControl>
+                        }
+                      >
+                        {`v${reviewEntry.version} is approved and still sandboxed. ` +
+                          'Realm trust signs these bytes to run in the page itself; ' +
+                          'until then its elements do not load.'}
                       </Alert>
                     ) : null}
                     {/* AGL-1085: a rejection is a verdict, not a kill. These
