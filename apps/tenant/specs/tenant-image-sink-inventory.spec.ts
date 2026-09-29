@@ -347,6 +347,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'raw',
     why: "An author profile's avatar, read out of the raw document with only a length bound applied, and emitted into Article.author JSON-LD. Out of band, so no browser policy sees it.",
   },
+  'libs/aglyn/src/lib/app-utils/site-entity-json-ld.ts': {
+    markers: 1,
+    guard: 'media-ref',
+    why: "A LocalBusiness site entity's `image` (AGL-3398): the same URL as its `logo`, which hostSeoEntityImageJsonLd in content-authors resolves through absoluteMediaSrc from host.seo.entity.logo. Emitted into the site-entity JSON-LD. Out of band, so no browser policy sees it.",
+  },
   'libs/aglyn/src/lib/plugin-manager/plugin-styles-ui.tsx': {
     markers: 1,
     guard: 'scheme-guard',

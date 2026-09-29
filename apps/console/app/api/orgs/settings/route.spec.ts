@@ -165,7 +165,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
       firestore: () => mockMakeFirestore(),
     }),
-    firestore: { FieldValue: { serverTimestamp: () => '__now__' } },
+    firestore: {
+      FieldValue: {
+        serverTimestamp: () => '__now__',
+        delete: () => '__delete__',
+      },
+    },
   },
   // The real contract: null for a missing org, because it checks `.exists`.
   // The whole defect is that the route threw this answer away.
@@ -615,5 +620,87 @@ describe('set-consent-group-confirmation', () => {
 
     expect(response.status).toBe(404)
     expect(mockDocs.has(`orgs/${TYPO}`)).toBe(false)
+  })
+})
+
+describe('set-time-zone', () => {
+  const set = (timeZone: unknown) =>
+    POST(post({ orgId: ORG, action: 'set-time-zone', timeZone }))
+
+  it('stores the zone and leaves every other org field alone', async () => {
+    seedOrg()
+
+    const response = await set('America/Chicago')
+
+    expect(response.status).toBe(200)
+    const org = mockDocs.get(`orgs/${ORG}`) as Record<string, unknown>
+    expect(org['timeZone']).toBe('America/Chicago')
+    expect(org['name']).toBe('Seven')
+    expect(org['plan']).toBe('pro')
+    expect(mockActivity[0]?.[2]).toBe(
+      'Set the workspace time zone to America/Chicago',
+    )
+    // The cached pages of every site in the workspace are dropped (AGL-3386).
+    expect(mockDeferred).toHaveLength(1)
+  })
+
+  it('empty clears the field back to the UTC default', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      timeZone: 'America/Chicago',
+    })
+
+    const response = await set('')
+
+    expect(response.status).toBe(200)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['timeZone']).toBe('__delete__')
+  })
+
+  it('an unchanged zone re-renders nothing and logs nothing', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      timeZone: 'America/Chicago',
+    })
+
+    await set('America/Chicago')
+
+    expect(mockDeferred).toHaveLength(0)
+    expect(mockActivity).toHaveLength(0)
+  })
+
+  it('refuses a zone this runtime cannot format in, and writes nothing', async () => {
+    seedOrg()
+
+    const response = await set('Mars/Olympus_Mons')
+
+    expect(response.status).toBe(400)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['timeZone']).toBe(undefined)
+  })
+
+  /*
+   * The defect the separate action exists for: `update-profile` posts the
+   * whole profile form, and the staff org editor posts it WITHOUT a zone —
+   * which, while the zone rode that action, deleted it on every staff save.
+   */
+  it('update-profile no longer touches the zone', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      timeZone: 'America/Chicago',
+    })
+
+    const response = await POST(
+      post({
+        orgId: ORG,
+        action: 'update-profile',
+        contactEmail: 'billing@example.com',
+        logoUrl: 'https://example.com/logo.png',
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['timeZone']).toBe('America/Chicago')
   })
 })

@@ -16,7 +16,7 @@
  */
 
 /**
- * Two settings left Settings → Profile, and this suite pins both moves by the
+ * Three settings left Settings → Profile, and this suite pins both moves by the
  * REQUEST each surface can make rather than by the words on it.
  *
  * 1. The billing address. `update-profile` posts the whole profile object, so
@@ -26,6 +26,9 @@
  * 2. `defaultResourceScope`, which decides what the next dataset or upload is
  *    shared with. It is not organization identity, and it now lives on the
  *    organization Media page beside the library those uploads land in.
+ *
+ * 3. The workspace time zone, which moved to Settings → General and saves by
+ *    its own action (see `org-time-zone-is-on-general.spec.tsx`).
  *
  * The third assertion here is a bug the move exposed rather than the move
  * itself: the control read `useOrgScope().currentOrg.defaultResourceScope`,
@@ -154,29 +157,18 @@ describe('the org profile card', () => {
       'contactPhone',
       'contactWebsite',
       'logoUrl',
-      // The workspace time zone (AGL-3237). Enumerated like the rest, so the
-      // guard still fails on a field added back under any other name.
-      'timeZone',
     ])
   })
 
-  it('offers no sharing select, so the default cannot be set here', () => {
+  it('offers no select at all, so neither the sharing default nor the zone is set here', () => {
     render(<OrgProfileCard />)
     /*
-     * Structural rather than textual, and still counted rather than searched
-     * by label: a returning `defaultResourceScope` dropdown puts a SECOND
-     * combobox on the card whatever it calls itself, and this fails on it.
-     *
-     * It read `toHaveLength(0)` while every control here was a text field.
-     * AGL-3237 added the workspace time zone, which is legitimately a select,
-     * so the assertion names the one that belongs instead of asserting none
-     * exist — the weaker form, "no combobox labelled sharing", would pass for
-     * a scope dropdown under any other label, which is the exact hole the
-     * original was written broad to close.
+     * Structural rather than textual: a returning `defaultResourceScope`
+     * dropdown puts a combobox on the card whatever it calls itself, and this
+     * fails on it. The workspace time zone was one select here for a while;
+     * it moved to Settings → General, so none belongs.
      */
-    const selects = screen.queryAllByRole('combobox')
-    expect(selects).toHaveLength(1)
-    expect(screen.getByLabelText(/time zone/i)).toBe(selects[0])
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
   })
 })
 

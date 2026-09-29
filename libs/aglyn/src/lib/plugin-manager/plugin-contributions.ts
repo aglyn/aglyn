@@ -67,6 +67,19 @@ export interface PluginSiteContributions {
    * such a site, which is what a feature is.
    */
   features?: string[]
+  /**
+   * The elements that run a site function in the visitor's browser (AGL-3393),
+   * each keyed by its component id and naming the prop that holds the
+   * function's name. Compose hands such a node the function's definition and
+   * the site variables it reads; no other node is given either.
+   *
+   * Declared DATA rather than read off a registered schema: compose runs where
+   * no plugin code loads — the tenant's server components — so the only thing
+   * it can consult is a declaration. A first-party plugin declares it in
+   * `plugins.config.json`, a marketplace plugin in its manifest, and both reach
+   * compose as the same map. Every key must also be one of `components`.
+   */
+  functionBindings?: Record<string, string>
 }
 
 /** What a plugin adds to the console. */
@@ -110,6 +123,9 @@ const CONTRIBUTION_ID = /^[A-Za-z_][A-Za-z0-9_.:-]{0,79}$/
  */
 const CONTRIBUTION_ROUTE = /^(\/[A-Za-z0-9_-]+){1,8}$/
 
+/** A prop name a function binding may name: a plain identifier. */
+const BINDING_PROP = /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/
+
 type Sanitized =
   | { ok: true; contributions: PluginContributions }
   | { ok: false; error: string }
@@ -144,12 +160,23 @@ export function sanitizePluginContributions(input: unknown): Sanitized {
     }
     const next: PluginSiteContributions = {}
     for (const key of Object.keys(site)) {
+      if (key === 'functionBindings') continue
       if (key !== 'components' && key !== 'features') {
         return { ok: false, error: `contributes.site.${key} is not a known contribution` }
       }
       const list = idList(site[key], `contributes.site.${key}`, CONTRIBUTION_ID)
       if (list.ok === false) return { ok: false, error: list.error }
       if (list.values.length) next[key] = list.values
+    }
+    if (site['functionBindings'] !== undefined) {
+      const bindings = functionBindingMap(
+        site['functionBindings'],
+        next.components ?? [],
+      )
+      if (bindings.ok === false) return { ok: false, error: bindings.error }
+      if (Object.keys(bindings.value).length) {
+        next.functionBindings = bindings.value
+      }
     }
     if (Object.keys(next).length) out.site = next
   }
@@ -209,6 +236,43 @@ function idList(
     if (!values.includes(entry)) values.push(entry)
   }
   return { ok: true, values }
+}
+
+/**
+ * `contributes.site.functionBindings`, validated against the components the
+ * same block declares: a binding on an element the plugin does not register
+ * would hand a function's definition, and the variable values it reads, to
+ * whichever element happens to own that id.
+ */
+function functionBindingMap(
+  value: unknown,
+  components: readonly string[],
+): { ok: true; value: Record<string, string> } | { ok: false; error: string } {
+  const where = 'contributes.site.functionBindings'
+  if (!isPlainObject(value)) {
+    return { ok: false, error: `${where} must be an object` }
+  }
+  const entries = Object.entries(value)
+  if (entries.length > PLUGIN_MAX_CONTRIBUTIONS) {
+    return { ok: false, error: `${where} lists more than ${PLUGIN_MAX_CONTRIBUTIONS}` }
+  }
+  const out: Record<string, string> = {}
+  for (const [componentId, prop] of entries) {
+    if (!components.includes(componentId)) {
+      return {
+        ok: false,
+        error: `${where} names "${componentId}", which contributes.site.components does not declare`,
+      }
+    }
+    if (typeof prop !== 'string' || !BINDING_PROP.test(prop)) {
+      return {
+        ok: false,
+        error: `${where}.${componentId} must name a prop, not "${String(prop)}"`,
+      }
+    }
+    out[componentId] = prop
+  }
+  return { ok: true, value: out }
 }
 
 /**
@@ -318,6 +382,55 @@ export function isPluginUsedOnPage(
   if (!site) return false
   if (site.features?.length) return true
   return (site.components ?? []).some((id) => page.componentIds.has(id))
+}
+
+/**
+ * Function bindings (AGL-3393): component id → the prop naming the site
+ * function that element runs.
+ */
+export type FunctionBindings = Readonly<Record<string, string>>
+
+/**
+ * The function bindings a set of plugins declares, merged into one map.
+ *
+ * Where two plugins bind the same component id the FIRST one listed wins, so a
+ * caller that passes first-party declarations ahead of marketplace ones keeps
+ * a marketplace manifest from rebinding a first-party element. Marketplace ids
+ * are namespaced by their publisher (see {@link isNamespacedComponentId}), so
+ * a collision is a mistake, never a feature.
+ */
+export function mergeFunctionBindings(
+  ...sources: ReadonlyArray<
+    FunctionBindings | { contributes?: PluginContributions } | null | undefined
+  >
+): FunctionBindings {
+  const merged: Record<string, string> = {}
+  for (const source of sources) {
+    if (!source) continue
+    const declared: FunctionBindings | undefined =
+      'contributes' in source
+        ? (source.contributes as PluginContributions | undefined)?.site
+            ?.functionBindings
+        : (source as FunctionBindings)
+    for (const [componentId, prop] of Object.entries(declared ?? {})) {
+      if (typeof prop !== 'string') continue
+      if (!Object.prototype.hasOwnProperty.call(merged, componentId)) {
+        merged[componentId] = prop
+      }
+    }
+  }
+  return merged
+}
+
+/**
+ * Whether a component id belongs to a marketplace plugin's namespace
+ * (AGL-3387): `<publisher handle>.<plugin id>.<role>`. A `.` is reserved for
+ * those ids — no first-party component carries one, which the manifest
+ * generator enforces — so compose can tell, without loading anything, that a
+ * tree places an element only an installed plugin can declare.
+ */
+export function isNamespacedComponentId(componentId: unknown): boolean {
+  return typeof componentId === 'string' && componentId.includes('.')
 }
 
 /**

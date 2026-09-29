@@ -523,15 +523,24 @@ describe('isConnectWebhookEndpoint (AGL-1948)', () => {
 })
 
 describe('unsubscribedRequiredEvents against the Connect list (AGL-1948)', () => {
-  it('reports account.updated missing from a bare destination', () => {
+  it('reports every Connect event missing from a bare destination', () => {
     expect(
       unsubscribedRequiredEvents([], REQUIRED_CONNECT_WEBHOOK_EVENTS),
-    ).toEqual(['account.updated'])
+    ).toEqual(['account.updated', 'payout.failed', 'payout.paid'])
   })
 
-  it('is satisfied by the event itself, and by the wildcard', () => {
+  it('reports the payout events missing from an account.updated-only destination', () => {
     expect(
       unsubscribedRequiredEvents(['account.updated'], REQUIRED_CONNECT_WEBHOOK_EVENTS),
+    ).toEqual(['payout.failed', 'payout.paid'])
+  })
+
+  it('is satisfied by the events themselves, and by the wildcard', () => {
+    expect(
+      unsubscribedRequiredEvents(
+        ['account.updated', 'payout.failed', 'payout.paid'],
+        REQUIRED_CONNECT_WEBHOOK_EVENTS,
+      ),
     ).toEqual([])
     expect(
       unsubscribedRequiredEvents(['*'], REQUIRED_CONNECT_WEBHOOK_EVENTS),
@@ -546,6 +555,6 @@ describe('unsubscribedRequiredEvents against the Connect list (AGL-1948)', () =>
         [...REQUIRED_WEBHOOK_EVENTS],
         REQUIRED_CONNECT_WEBHOOK_EVENTS,
       ),
-    ).toEqual(['account.updated'])
+    ).toEqual([...REQUIRED_CONNECT_WEBHOOK_EVENTS])
   })
 })

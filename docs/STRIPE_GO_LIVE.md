@@ -172,6 +172,11 @@ putting it there subscribes the *platform's own* account,
 bound to the platform account id, nothing happens, and every check goes green
 over an unchanged fail-open. It lives in `CONNECT_WEBHOOK_EVENTS` instead.
 
+`payout.failed` and `payout.paid` live there too, for the same reason: a
+payout is the *connected* account's balance leaving for its bank, so the event
+fires on that account and only a Connect destination receives it. They feed the
+merchant's payout warning and the `billing.connectPayoutFailed` operator alert.
+
 **What is broken until this exists.** `stripeChargesEnabled` is the cached flag
 every commerce money route gates on — checkout, cart checkout, draft orders,
 reservations, POS. AGL-1997 made `account.updated` refresh it, precisely so a

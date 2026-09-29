@@ -125,7 +125,7 @@ const HEALTHY_ENDPOINTS = [
     id: 'we_connect',
     url: WEBHOOK_URL,
     status: 'enabled',
-    enabled_events: ['account.updated'],
+    enabled_events: ['account.updated', 'payout.failed', 'payout.paid'],
     metadata: { aglyn_scope: 'connect' },
   },
 ]

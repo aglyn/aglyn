@@ -16,6 +16,7 @@
  */
 
 import {
+  ACCOUNTS_PLUGIN_ID,
   checkQuota,
   createResourceUid,
   suggestSubdomains,
@@ -197,6 +198,19 @@ export async function claimHostForOrg(
       subdomain,
       orgId,
       screens: {},
+      /*
+       * A new site starts with User Accounts ON. The catalog still marks
+       * `accounts` default-off per site, so a host doc with no opt-in list —
+       * every site created before this line — keeps serving no member pages;
+       * what changes is only what a site is BORN with, written as the same
+       * opt-in its Admin → Plugins switch writes, so switching it off there
+       * is the ordinary edit.
+       *
+       * Named, not `DEFAULT_OFF_PER_SITE_PLUGIN_IDS`: a capability later
+       * marked default-off is marked so because it must not be on until
+       * somebody asks, and spreading the set here would ask on their behalf.
+       */
+      enabledPlugins: [ACCOUNTS_PLUGIN_ID],
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
