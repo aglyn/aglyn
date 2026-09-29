@@ -35,7 +35,7 @@ afterEach(() => {
   delete scope[HOST_GLOBAL]
 })
 
-it('composes a host carrying the caller React and the core namespace', async () => {
+it('composes a host of the caller React and the reviewed surfaces', async () => {
   const React = { marker: 'the app bundle React' }
   const jsxRuntime = { marker: 'the app bundle jsx-runtime' }
 
@@ -51,10 +51,33 @@ it('composes a host carrying the caller React and the core namespace', async () 
   // Substituting core's own React here is what renders a remote plugin blank.
   expect(host['React']).toBe(React)
   expect(host['jsxRuntime']).toBe(jsxRuntime)
-  // The slot remote bundles read the platform API out of.
+  // Core as its realm plugin surface (AGL-3392), not the whole namespace.
   const aglyn = host['aglyn'] as Record<string, unknown>
-  expect(typeof aglyn['setRealmPluginHost']).toBe('function')
-  expect(typeof aglyn['loadRealmPlugins']).toBe('function')
+  expect(typeof aglyn['components']).toBe('object')
+  expect(typeof aglyn['defineUiFeatureBundle']).toBe('function')
+  expect(aglyn['loadRealmPlugins']).toBeUndefined()
+  // The site's MUI instance, which a bundle uses instead of compiling one in.
+  const mui = host['mui'] as Record<string, unknown>
+  const { default: Button } = await import('@mui/material/Button')
+  expect(mui['Button']).toBe(Button)
+  expect(mui['Slider']).toBeUndefined()
+  const muiStyles = await import('@mui/material/styles')
+  const styles = host['muiStyles'] as Record<string, unknown>
+  expect(styles['useTheme']).toBe(muiStyles.useTheme)
+  // A name list, not the module: the rest must shake out of the page's copy.
+  expect(styles['experimental_extendTheme']).toBeUndefined()
+})
+
+it('loads nothing further: no import() inside the host module', () => {
+  const source = readFileSync(
+    join(__dirname, '..', 'utils', 'realm-plugin-host.client.ts'),
+    'utf8',
+  )
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+  // Every import() that reached a library module re-cut the chunks every
+  // published page loads (AGL-3392); the host module's imports are static.
+  expect(code).not.toMatch(/\bimport\(/)
+  expect(source).not.toMatch(/^import \* as \w+ from '@aglyn\/aglyn'/m)
 })
 
 it('reaches the namespace module only through a relative import()', () => {
