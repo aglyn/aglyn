@@ -527,7 +527,27 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Email, never a tenant render: the open-tracking image (AGL-3395) in the HTML part `outreachOpenTrackedHtml` writes for a sequence email whose sequence counts opens. `pixelUrl` is our own short link — `deps.clickLinkUrl` in runtime/send-job.ts (or the step test in routes/step-test-routes.ts) builds it from a fresh `newOutreachLinkId` on the outreach link host or the console's `/api/outreach/l/<id>` path, and returns nothing without an HTTPS origin. No author or member string reaches the src; it is escaped into the attribute regardless. The fetch it causes lands on our own route, which is the whole point of it.",
   },
+  'libs/plugins/themes/src/lib/presets/ant-design.ts': {
+    markers: 1,
+    guard: 'platform',
+    why: "Not a sink: the marker is `backgroundImage: 'none'` in a built-in theme's `MuiPaper` style (AGL-3405), which REMOVES MUI's dark-mode overlay. The theme is a module constant of the Themes plugin, copied onto a site when it is picked; no author string reaches it and no URL is produced.",
+  },
   'libs/plugins/themes/src/lib/presets/bootstrap.ts': {
+    markers: 1,
+    guard: 'platform',
+    why: "Not a sink: the marker is `backgroundImage: 'none'` in a built-in theme's `MuiPaper` style (AGL-3405), which REMOVES MUI's dark-mode overlay. The theme is a module constant of the Themes plugin, copied onto a site when it is picked; no author string reaches it and no URL is produced.",
+  },
+  'libs/plugins/themes/src/lib/presets/carbon.ts': {
+    markers: 1,
+    guard: 'platform',
+    why: "Not a sink: the marker is `backgroundImage: 'none'` in a built-in theme's `MuiPaper` style (AGL-3405), which REMOVES MUI's dark-mode overlay. The theme is a module constant of the Themes plugin, copied onto a site when it is picked; no author string reaches it and no URL is produced.",
+  },
+  'libs/plugins/themes/src/lib/presets/cupertino.ts': {
+    markers: 1,
+    guard: 'platform',
+    why: "Not a sink: the marker is `backgroundImage: 'none'` in a built-in theme's `MuiPaper` style (AGL-3405), which REMOVES MUI's dark-mode overlay. The theme is a module constant of the Themes plugin, copied onto a site when it is picked; no author string reaches it and no URL is produced.",
+  },
+  'libs/plugins/themes/src/lib/presets/fluent.ts': {
     markers: 1,
     guard: 'platform',
     why: "Not a sink: the marker is `backgroundImage: 'none'` in a built-in theme's `MuiPaper` style (AGL-3405), which REMOVES MUI's dark-mode overlay. The theme is a module constant of the Themes plugin, copied onto a site when it is picked; no author string reaches it and no URL is produced.",
