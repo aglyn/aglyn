@@ -302,10 +302,10 @@ export const PUBLISHER_AGREEMENT_CHANGES: readonly {
   {
     version: '2026-08-18.1',
     changes: [
-      '§1 calls it "the Aglyn marketplace" and names the End User License Agreement.',
-      '§3(h), new: listing conduct — what an Artifact and its listing may not claim about Aglyn.',
+      '§1 names the marketplace and the End User License Agreement by their current names.',
+      '§3(h), new: listing conduct — what an Artifact and its listing may not claim about the platform, its plans or its prices.',
       '§8.6, new: a paid Artifact, tier or license key must be sold through the Marketplace.',
-      '§13.6, new: how you may use Aglyn’s names and marks.',
+      '§13.6, new: how you may use the platform’s names and marks.',
     ],
   },
   {
