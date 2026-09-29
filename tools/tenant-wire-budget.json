@@ -22,8 +22,8 @@
           "why": "Real-user vitals, measured on every page."
         }
       ],
-      "baselineBytes": 303811,
-      "budgetBytes": 319488
+      "baselineBytes": 301290,
+      "budgetBytes": 316416
     },
     {
       "name": "a site with the marketing plugin",
