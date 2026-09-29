@@ -131,23 +131,6 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "description": "Workflows, actions, webhooks, and run logs.",
     "releaseFlag": "release_workflows"
   },
-  {
-    "id": "calculator",
-    "label": "Calculators",
-    "description": "Calculators that run your site functions, and the receipts, invoices and quotes they save.",
-    "requires": [
-      "logic"
-    ],
-    "siteOff": {
-      "stops": "Switching Calculators off for this site stops calculators, function widgets and their receipts rendering on its published pages.",
-      "keeps": "The site's functions and variables are kept, and calculators keep working on the workspace's other sites.",
-      "confirm": true,
-      "pages": {
-        "heading": "These published pages carry a calculator. It stops rendering:",
-        "none": "No published page on this site carries a calculator."
-      }
-    }
-  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -168,7 +151,6 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "marketing": "elements",
   "redirects": "routes",
   "workflows": "routes",
-  "calculator": "elements",
 }
 
 /**

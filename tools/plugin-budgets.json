@@ -54,9 +54,5 @@
   "workflows": {
     "baseline": 35643,
     "budget": 45056
-  },
-  "calculator": {
-    "baseline": 25222,
-    "budget": 31744
   }
 }

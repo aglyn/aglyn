@@ -74,12 +74,6 @@
       "@aglyn/plugins-bookings/*": [
         "../../libs/plugins/bookings/src/lib/*"
       ],
-      "@aglyn/plugins-calculator": [
-        "../../libs/plugins/calculator/src/index.ts"
-      ],
-      "@aglyn/plugins-calculator/*": [
-        "../../libs/plugins/calculator/src/lib/*"
-      ],
       "@aglyn/plugins-events-calendar": [
         "../../libs/plugins/events-calendar/src/index.ts"
       ],

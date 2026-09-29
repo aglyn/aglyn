@@ -119,6 +119,7 @@ const HINTS: Array<{
   { name: 'Image', id: 'image', hint: /choose a source/ },
   { name: 'Icon', id: 'icon', hint: /^Icon$/ },
   { name: 'Table of Contents', id: 'tableOfContents', hint: /add ## headings/ },
+  { name: 'Function Widget', id: 'functionWidget', hint: /set the Function name attribute/ },
   { name: 'Plugin', id: 'marketplacePlugin', hint: /pick an installed plugin/ },
   { name: 'Layout Slot', id: 'layoutSlot', hint: /Screen content renders here/ },
   // The instance's label is CSS generated content, which jsdom does not lay

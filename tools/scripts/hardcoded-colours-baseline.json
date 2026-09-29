@@ -50,7 +50,7 @@
   "libs/plugins/mui/src/lib/components/custom-html.tsx": 2,
   "libs/plugins/mui/src/lib/components/data-table.tsx": 2,
   "libs/plugins/mui/src/lib/components/drawer.tsx": 3,
-  "libs/plugins/calculator/src/lib/components/function-widget.tsx": 2,
+  "libs/plugins/mui/src/lib/components/function-widget.tsx": 2,
   "libs/plugins/mui/src/lib/components/grid.tsx": 2,
   "libs/plugins/mui/src/lib/components/icon.tsx": 2,
   "libs/plugins/mui/src/lib/components/image-list.tsx": 2,

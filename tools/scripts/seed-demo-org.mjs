@@ -295,7 +295,6 @@ async function createEmulatorOrg() {
         'events-calendar',
         'inbox',
         'logic',
-        'calculator',
         'marketing',
         'redirects',
         'workflows',

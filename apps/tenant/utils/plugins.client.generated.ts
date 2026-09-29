@@ -53,9 +53,4 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"site":"registerMarketingPlugin"},
     load: () => import('@aglyn/plugins-marketing/site'),
   },
-  {
-    id: 'calculator',
-    register: {"site":"registerCalculatorPlugin"},
-    load: () => import('@aglyn/plugins-calculator/site'),
-  },
 ]

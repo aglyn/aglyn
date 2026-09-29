@@ -105,7 +105,6 @@ const BUNDLE_FILES: ReadonlyArray<[pluginId: string, file: string]> = [
   ['commerce', 'libs/plugins/commerce/src/lib/plugin.ts'],
   ['bookings', 'libs/plugins/bookings/src/lib/plugin.ts'],
   ['events-calendar', 'libs/plugins/events-calendar/src/lib/plugin.ts'],
-  ['calculator', 'libs/plugins/calculator/src/lib/plugin.ts'],
 ]
 
 /**
@@ -168,10 +167,6 @@ const NEVER_IDS = new Set([
   'functionInput',
   'functionOutput',
   'functionShow',
-  // A calculator's document and its save button (AGL-3387), for the same
-  // reason: nothing to hold or save without the function behind them.
-  'functionDocument',
-  'functionSave',
   'div',
   'reusableInstance',
   'marketplacePlugin',
