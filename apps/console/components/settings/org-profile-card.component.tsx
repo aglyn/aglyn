@@ -76,6 +76,7 @@ export function OrgProfileCard() {
   const [busy, setBusy] = useState(false)
   const [profile, setProfile] = useState({
     logoUrl: '',
+    logoDarkUrl: '',
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
@@ -83,6 +84,7 @@ export function OrgProfileCard() {
   useEffect(() => {
     setProfile({
       logoUrl: String((org as any)?.logoUrl ?? ''),
+      logoDarkUrl: String((org as any)?.logoDarkUrl ?? ''),
       contactEmail: String((org as any)?.contact?.email ?? ''),
       contactPhone: String((org as any)?.contact?.phone ?? ''),
       contactWebsite: String((org as any)?.contact?.website ?? ''),
@@ -174,6 +176,34 @@ export function OrgProfileCard() {
         value={profile.logoUrl}
         onChange={(logoUrl) =>
           setProfile((prev) => ({ ...prev, logoUrl }))
+        }
+      />
+    </Stack>
+    {/* The dark-mode logo, previewed on the ground it is seen on: a dark
+        console shows it in the workspace switcher, and blank falls back to
+        the logo above. */}
+    <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+      <Avatar
+        src={profile.logoDarkUrl || profile.logoUrl || undefined}
+        variant="rounded"
+        sx={{
+          width: 56,
+          height: 56,
+          bgcolor: 'grey.900',
+          color: 'common.white',
+          border: 1,
+          borderColor: 'divider',
+        }}
+      >
+        {(currentOrg.orgName ?? '?').slice(0, 1).toUpperCase()}
+      </Avatar>
+      <MediaUrlField
+        label="Dark mode logo URL"
+        helperText="Shown in place of the logo above when the console is in dark mode. Leave it blank to use the same logo in both."
+        orgId={currentOrg.$id}
+        value={profile.logoDarkUrl}
+        onChange={(logoDarkUrl) =>
+          setProfile((prev) => ({ ...prev, logoDarkUrl }))
         }
       />
     </Stack>

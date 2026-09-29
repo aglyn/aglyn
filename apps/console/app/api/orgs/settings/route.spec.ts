@@ -142,6 +142,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: () => true,
   isValidOrgSlug: () => true,
   normalizePhone: (value: string) => value,
+  // The real predicate the branding URL validator asks, so a refused logo URL
+  // is refused by the rule that ships rather than by a missing export.
+  isMediaCdnPath: jest.requireActual('@aglyn/aglyn/app-utils/media-ref')
+    .isMediaCdnPath,
   /*
    * The REAL dependency graph (AGL-2486), not a stub. A double here would
    * make the refusal below pass against a fixture rather than against the
@@ -702,5 +706,70 @@ describe('set-time-zone', () => {
 
     expect(response.status).toBe(200)
     expect(mockDocs.get(`orgs/${ORG}`)?.['timeZone']).toBe('America/Chicago')
+  })
+})
+
+describe('update-profile: the dark-mode org logo', () => {
+  const profile = (extra: Record<string, unknown>) =>
+    POST(
+      post({
+        orgId: ORG,
+        action: 'update-profile',
+        logoUrl: 'https://example.com/logo.png',
+        ...extra,
+      }),
+    )
+
+  it('stores it when the form sends it', async () => {
+    seedOrg()
+
+    const response = await profile({
+      logoDarkUrl: 'https://example.com/logo-white.png',
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['logoDarkUrl']).toBe(
+      'https://example.com/logo-white.png',
+    )
+  })
+
+  /*
+   * Both editors post the whole form, and a form that never learned the key
+   * (a stale tab, an older client) must not erase what the other one set.
+   */
+  it('leaves a stored one alone when the form does not name it', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      logoDarkUrl: 'https://example.com/logo-white.png',
+    })
+
+    const response = await profile({})
+
+    expect(response.status).toBe(200)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['logoDarkUrl']).toBe(
+      'https://example.com/logo-white.png',
+    )
+  })
+
+  it('an explicit blank clears it', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      logoDarkUrl: 'https://example.com/logo-white.png',
+    })
+
+    await profile({ logoDarkUrl: '' })
+
+    expect(mockDocs.get(`orgs/${ORG}`)?.['logoDarkUrl']).toBe('__delete__')
+  })
+
+  it('refuses a URL that is neither https nor a media-library path', async () => {
+    seedOrg()
+
+    const response = await profile({ logoDarkUrl: 'javascript:alert(1)' })
+
+    expect(response.status).toBe(400)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['logoDarkUrl']).toBe(undefined)
   })
 })

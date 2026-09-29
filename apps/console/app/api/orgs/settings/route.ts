@@ -408,6 +408,29 @@ async function handler(request: Request): Promise<Response> {
           { status: 400 },
         )
       }
+      /**
+       * The dark-mode org logo (AGL-3406), written ONLY when the request names it.
+       *
+       * Every other field here is posted whole by both of its editors, so a
+       * blank means "cleared". This one is newer than the staff org editor's
+       * form, and a form that never learned the key must not erase it — so an
+       * absent key leaves the stored value alone, and only an explicit `''`
+       * clears it.
+       */
+      const hasLogoDark = Object.prototype.hasOwnProperty.call(
+        body ?? {},
+        'logoDarkUrl',
+      )
+      const logoDarkUrl = clean(body?.logoDarkUrl, 500)
+      if (hasLogoDark && logoDarkUrl && !isBrandingImageUrl(logoDarkUrl)) {
+        return Response.json(
+          {
+            error:
+              'Dark mode logo URL must be an https:// URL or an image from your media library',
+          },
+          { status: 400 },
+        )
+      }
       // THE PLATFORM BILLING ADDRESS IS NOT WRITTEN HERE (AGL-1133).
       //
       // `contact.address` is the address Aglyn issues the org's invoices to
@@ -438,6 +461,12 @@ async function handler(request: Request): Promise<Response> {
       await orgDocRef.set(
         {
           logoUrl: logoUrl || firebaseAdmin.firestore.FieldValue.delete(),
+          ...(hasLogoDark
+            ? {
+                logoDarkUrl:
+                  logoDarkUrl || firebaseAdmin.firestore.FieldValue.delete(),
+              }
+            : {}),
           contact,
           updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
@@ -532,7 +561,9 @@ async function handler(request: Request): Promise<Response> {
       const fromName = clean(input.fromName, 80)
       const supportUrl = clean(input.supportUrl, 500)
       const logoUrl = clean(input.logoUrl, 500)
+      const logoDarkUrl = clean(input.logoDarkUrl, 500)
       const faviconUrl = clean(input.faviconUrl, 500)
+      const faviconDarkUrl = clean(input.faviconDarkUrl, 500)
       const emailLogoUrl = clean(input.emailLogoUrl, 500)
       const primaryColor = clean(input.primaryColor, 32)
       let customConsoleDomain = clean(input.customConsoleDomain, 253).toLowerCase()
@@ -541,7 +572,7 @@ async function handler(request: Request): Promise<Response> {
        * customer clicks out to from an inbox or a branded page, where a
        * site-relative path means nothing.
        *
-       * The other three are RENDERED, and each one's "Browse" button writes a
+       * The image fields are RENDERED, and each one's "Browse" button writes a
        * site-relative CDN path — so one shared https-only rule made Browse a
        * dead button on the tier that costs the most (AGL-2247). Both
        * predicates stay allowlists; see `branding-url.ts` for which shapes and
@@ -555,7 +586,9 @@ async function handler(request: Request): Promise<Response> {
       }
       const imageFields: Array<[string, string]> = [
         ['Logo URL', logoUrl],
+        ['Dark mode logo URL', logoDarkUrl],
         ['Favicon URL', faviconUrl],
+        ['Dark mode favicon URL', faviconDarkUrl],
         ['Email logo URL', emailLogoUrl],
       ]
       for (const [label, url] of imageFields) {
@@ -630,7 +663,9 @@ async function handler(request: Request): Promise<Response> {
           fromName,
           supportUrl,
           logoUrl,
+          logoDarkUrl,
           faviconUrl,
+          faviconDarkUrl,
           emailLogoUrl,
           primaryColor,
           customConsoleDomain,

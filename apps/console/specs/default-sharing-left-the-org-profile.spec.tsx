@@ -156,6 +156,7 @@ describe('the org profile card', () => {
       'contactEmail',
       'contactPhone',
       'contactWebsite',
+      'logoDarkUrl',
       'logoUrl',
     ])
   })

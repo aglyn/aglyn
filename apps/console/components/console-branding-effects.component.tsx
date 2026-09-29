@@ -42,6 +42,8 @@ export function ConsoleBrandingEffects(): null {
   const { branding, whiteLabel } = useBranding()
   const primaryColor = whiteLabel ? branding.primaryColor : null
   const faviconUrl = whiteLabel ? branding.faviconUrl : null
+  const faviconDarkUrl =
+    whiteLabel && branding.faviconUrl ? branding.faviconDarkUrl : null
   const productName = whiteLabel ? branding.productName : null
   // WHICH entity the route is about (AGL-2486), published by the page. Read
   // HERE, rather than written by the page, because this component owns
@@ -79,7 +81,10 @@ export function ConsoleBrandingEffects(): null {
   useEffect(() => {
     if (!faviconUrl) return
     const links = Array.from(
-      document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]'),
+      // Never the dark-scheme link below, which the next effect owns.
+      document.querySelectorAll<HTMLLinkElement>(
+        'link[rel~="icon"]:not([data-branding-dark])',
+      ),
     )
     const previous = links.map((link) => link.getAttribute('href'))
     if (links.length) {
@@ -102,6 +107,25 @@ export function ConsoleBrandingEffects(): null {
       })
     }
   }, [faviconUrl])
+
+  // Dark favicon: one more `<link rel="icon">`, answered by the browser under
+  // `(prefers-color-scheme: dark)`. The media query is the OS/browser scheme
+  // on purpose rather than the console's own light/dark choice: the icon sits
+  // in the browser's tab strip, which follows the browser, not this page.
+  // Appended AFTER the light links so it wins wherever its query matches.
+  useEffect(() => {
+    if (!faviconDarkUrl) return
+    const link = document.createElement('link')
+    link.rel = 'icon'
+    link.href = faviconDarkUrl
+    link.media = '(prefers-color-scheme: dark)'
+    link.dataset.brandingInjected = 'true'
+    link.dataset.brandingDark = 'true'
+    document.head.appendChild(link)
+    return () => {
+      link.remove()
+    }
+  }, [faviconDarkUrl])
 
   // Tab title. The console title is server-rendered from `TITLE_TEMPLATE`
   // ("%s · Aglyn") and the root layout's `title.default`, both built from

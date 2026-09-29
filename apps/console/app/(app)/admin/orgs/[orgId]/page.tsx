@@ -656,6 +656,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [orgEdit, setOrgEdit] = useState({
     name: '',
     logoUrl: '',
+    logoDarkUrl: '',
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
@@ -666,6 +667,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     setOrgEdit({
       name: String(org.name ?? ''),
       logoUrl: String(org.logoUrl ?? ''),
+      logoDarkUrl: String(org.logoDarkUrl ?? ''),
       contactEmail: String(org.contact?.email ?? ''),
       contactPhone: String(org.contact?.phone ?? ''),
       contactWebsite: String(org.contact?.website ?? ''),
@@ -724,6 +726,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
           orgId,
           action: 'update-profile',
           logoUrl: orgEdit.logoUrl,
+          logoDarkUrl: orgEdit.logoDarkUrl,
           contactEmail: orgEdit.contactEmail,
           contactPhone: orgEdit.contactPhone,
           contactWebsite: orgEdit.contactWebsite,
@@ -1179,6 +1182,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           value={orgEdit.logoUrl}
                           onChange={(logoUrl) =>
                             setOrgEdit((prev) => ({ ...prev, logoUrl }))
+                          }
+                        />
+                        <MediaUrlField
+                          label="Dark mode logo URL"
+                          helperText="Blank uses the logo above in both modes."
+                          orgId={orgId}
+                          value={orgEdit.logoDarkUrl}
+                          onChange={(logoDarkUrl) =>
+                            setOrgEdit((prev) => ({ ...prev, logoDarkUrl }))
                           }
                         />
                         <TextField

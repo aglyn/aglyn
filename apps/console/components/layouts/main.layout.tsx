@@ -45,6 +45,7 @@ import AppBarMenubarComponent from './app-bar-menubar.component'
 import GlobalSearchTriggerComponent from '../global-search/global-search-trigger.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import useBranding from '../../hooks/use-branding'
+import { onlyInScheme } from '../../utils/scheme-visibility'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useUrlNamesOrg } from '../../hooks/use-secondary-nav'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
@@ -285,12 +286,33 @@ const TopAppBar = (props: TopAppBarProps) => {
                       orgs — and every surface until the org doc is confirmed —
                       keep the wordmark the shell passed. */}
                   {whiteLabel && branding.logoUrl ? (
-                    <Box
-                      component="img"
-                      src={branding.logoUrl}
-                      alt={branding.productName}
-                      sx={{ height: 24, width: 'auto', display: 'block' }}
-                    />
+                    <>
+                      <Box
+                        component="img"
+                        src={branding.logoUrl}
+                        alt={branding.productName}
+                        sx={[
+                          { height: 24, width: 'auto' },
+                          branding.logoDarkUrl
+                            ? onlyInScheme('light')
+                            : { display: 'block' },
+                        ]}
+                      />
+                      {/* The dark-ground variant, when the brand set one:
+                          both are in the markup and the scheme class picks,
+                          so a dark console never flashes the light mark. */}
+                      {branding.logoDarkUrl ? (
+                        <Box
+                          component="img"
+                          src={branding.logoDarkUrl}
+                          alt={branding.productName}
+                          sx={[
+                            { height: 24, width: 'auto' },
+                            onlyInScheme('dark'),
+                          ]}
+                        />
+                      ) : null}
+                    </>
                   ) : whiteLabel ? (
                     <Typography
                       component="span"

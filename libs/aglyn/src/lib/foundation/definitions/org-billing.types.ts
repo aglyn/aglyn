@@ -335,8 +335,20 @@ export interface OrgBrandingProfile {
   productName?: string
   /** Primary/full-color logo URL (light backgrounds, console chrome). */
   logoUrl?: string
+  /**
+   * The logo for DARK grounds (AGL-3406): the console chrome in dark mode and the
+   * published site's attribution badge, which always sits on a dark pill.
+   * Unset falls back to {@link logoUrl}.
+   */
+  logoDarkUrl?: string
   /** Favicon URL for branded surfaces. */
   faviconUrl?: string
+  /**
+   * The favicon for a browser whose tab strip is dark, emitted as a second
+   * `<link rel="icon">` under `(prefers-color-scheme: dark)`. Unset falls back
+   * to {@link faviconUrl}.
+   */
+  faviconDarkUrl?: string
   /** Brand primary color as a CSS color (hex), e.g. `#1a73e8`. */
   primaryColor?: string
   /** Support/help destination linked from branded surfaces and emails. */

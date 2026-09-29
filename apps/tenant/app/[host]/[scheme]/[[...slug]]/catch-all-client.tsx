@@ -727,9 +727,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           // card writes a typed URL today, which passes straight through; this
           // is what stops a picked `media:` reference reaching the badge as a
           // literal string once `logoUrl` is converted.
-          const brandLogo = resolveMediaSrc(brand.logoUrl, {
-            hostId: host?.$id,
-          })
+          //
+          // The DARK-ground logo first when the brand set one: the badge is a
+          // white-text pill on the brand color or near-black, in either site
+          // scheme, so a light-ground wordmark is the wrong one here.
+          const brandLogo = resolveMediaSrc(
+            brand.logoDarkUrl ?? brand.logoUrl,
+            { hostId: host?.$id },
+          )
           // `homeUrl`, NOT `supportUrl`.
           //
           // This badge is the platform's only organic acquisition surface —

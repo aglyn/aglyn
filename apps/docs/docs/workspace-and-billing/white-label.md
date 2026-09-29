@@ -64,19 +64,21 @@ never told we exist.
 | **Support URL** | Linked from branded surfaces and email footers. Leave it blank and no support link appears at all — your customers are never sent to Aglyn. | Where a "need help?" link points, or nothing |
 | **Primary color** | CSS hex color used for the console primary and site badge. | The console's primary color, live |
 | **Logo URL** | Console chrome + site badge. Browse the org media library or paste an https URL. | The Aglyn wordmark in the console header |
+| **Dark mode logo URL** | Console chrome in dark mode, and the site badge, which always sits on a dark background. Leave it blank to use the logo above. | The logo above, wherever the ground is dark |
 | **Favicon URL** | Browser tab icon for branded console surfaces. | The browser-tab icon |
+| **Dark mode favicon URL** | Used when the visitor's browser is in dark mode. Leave it blank to use the favicon above. | The favicon above, in a dark browser |
 | **Email logo URL** | Logo shown in transactional email headers (a hosted PNG works best). | Your product name, which heads your system email as text until a logo is set. See [below](#email) |
 | **Custom console domain** | Saved now; domain routing to it ships in a later phase. | Nothing yet. See [below](#custom-console-domain) |
 
-**Logo URL**, **Favicon URL** and **Email logo URL** each carry a **Browse**
+Every logo and favicon field carries a **Browse**
 button that opens your organization's media library, so you do not have to
 host the file yourself or paste a URL by hand.
 
 Press **Save brand**. A confirmation reads **"Brand settings saved"**.
 
 :::note What the save will refuse
-**Support URL**, **Logo URL**, **Favicon URL** and **Email logo URL** must
-begin with `https://`. A plain `http://` or a bare hostname is rejected by
+**Support URL** must begin with `https://`, and every logo and favicon field
+must be an `https://` URL or an image picked from your media library. A plain `http://` or a bare hostname is rejected by
 name — "Logo URL must be an https:// URL" — rather than saved and quietly
 ignored later.
 
@@ -87,13 +89,20 @@ Anything else is refused with "Primary color must be a hex color like
 
 ## Where you will see the change {#where-you-see-it}
 
-- **Console header.** Your **Logo URL** replaces the Aglyn wordmark. Set a
-  **Product name** but no logo and the name is rendered as text in the same
+- **Console header.** Your **Logo URL** replaces the Aglyn wordmark, and your
+  **Dark mode logo URL** takes its place when the console is in dark mode. Set
+  a **Product name** but no logo and the name is rendered as text in the same
   place instead.
 - **Console theme and tab.** **Primary color** and **Favicon URL** are applied
   to the page you are already on, so the change is visible without a reload.
 - **Published sites.** The site badge and the site favicon follow the same
-  brand.
+  brand. The badge is white text on a dark pill in both light and dark mode,
+  so it shows your **Dark mode logo URL** when you set one. A site that sets
+  its own favicon keeps it; otherwise the site uses your favicon, and your
+  **Dark mode favicon URL** in a dark browser.
+- **Email stays on the light logo.** Mail clients paint a light background
+  and do not reliably honor dark mode, so **Email logo URL** has no dark
+  partner.
 - **Site fingerprint.** The `<meta name="generator">` tag and the
   `x-powered-by` header that otherwise credit Aglyn are suppressed on a
   white-label organization's published sites. This one is worth knowing about
