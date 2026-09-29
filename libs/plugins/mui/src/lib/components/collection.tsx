@@ -41,8 +41,9 @@ import {
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // The icon picker's fuzzy matcher (use-mdi-icons-fuzzy), not a re-implementation
 // (AGL-1516): search here has to feel like search does everywhere else in the
-// product, and two matchers is how they drift.
-import { Fuse } from '@aglyn/shared-util-vendor/fuse'
+// product, and two matchers is how they drift. A TYPE here: the matcher itself
+// is fetched on a reader's first keystroke — see `loadCollectionFuse`.
+import type { Fuse } from '@aglyn/shared-util-vendor/fuse'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
@@ -281,6 +282,68 @@ const suggestionFooterSx = {
 /** What a built index can be searched by — Fuse over the stamped rows. */
 type EntryFuse = InstanceType<typeof Fuse<Aglyn.CollectionEntrySearchItem>>
 
+/** The matcher's constructor, once something has asked for it. */
+let loadedFuse: typeof Fuse | undefined
+let fuseLoad: Promise<typeof Fuse> | undefined
+
+/**
+ * The fuzzy matcher, fetched the first time a reader types into a collection
+ * search box (AGL-3401) — one fetch per visit, however many boxes ask.
+ *
+ * It was a static import, and `fuse.js` is 26 KB of the 68 KB this module
+ * weighed: every page that placed ANY collection element downloaded and
+ * parsed it, including the many whose entries block has no search at all and
+ * the rest, where most visitors never type. The box itself still renders on
+ * the server; only the matcher waits for a query.
+ *
+ * A failed fetch (offline, a deploy mid-visit) is forgotten rather than
+ * cached, so the next keystroke tries again instead of the box going dead.
+ */
+export const loadCollectionFuse = (): Promise<typeof Fuse> =>
+  (fuseLoad ??= import('@aglyn/shared-util-vendor/fuse').then(
+    (module) => (loadedFuse = module.Fuse),
+    (error: unknown) => {
+      fuseLoad = undefined
+      throw error
+    },
+  ))
+
+/**
+ * The Fuse index over `items`, and the call that asks for the matcher.
+ *
+ * `fuzzy` is null until the first `requestFuzzy()` has resolved — a box
+ * nobody typed into never builds an index. A box mounted after another one
+ * loaded the matcher starts with it, so a second search on the page answers
+ * its first keystroke synchronously.
+ */
+const useEntryFuse = (
+  items: readonly Aglyn.CollectionEntrySearchItem[] | undefined,
+): { fuzzy: EntryFuse | null; requestFuzzy: () => void } => {
+  const [FuseConstructor, setFuseConstructor] = useState<
+    typeof Fuse | undefined
+  >(() => loadedFuse)
+  const fuzzy = useMemo(
+    () =>
+      FuseConstructor && items?.length
+        ? // The ONE matcher config (AGL-1525), shared with the site-wide
+          // results page the suggestion panel links to — a query the panel
+          // forgave must not come back empty from "View all results".
+          new FuseConstructor(items, { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS })
+        : null,
+    [FuseConstructor, items],
+  )
+  const requestFuzzy = () => {
+    if (FuseConstructor) return
+    loadCollectionFuse().then(
+      (loaded) => setFuseConstructor(() => loaded),
+      // The box keeps working as a form that submits to `/search`; the next
+      // keystroke asks again.
+      () => undefined,
+    )
+  }
+  return { fuzzy, requestFuzzy }
+}
+
 /**
  * The frame's search input (Figma 494:1220) — the magnify glyph and a bare
  * `InputBase` on the quiet surface token.
@@ -441,12 +504,16 @@ const SuggestionPanel = ({
  */
 const SuggestSearchBox = ({
   fuzzy,
+  requestFuzzy,
   items,
   placeholder,
   inert,
   emptyText,
 }: {
+  /** Null until the matcher has loaded; see {@link useEntryFuse}. */
   fuzzy: EntryFuse | null
+  /** Asks for the matcher; called on every query, a no-op once it is here. */
+  requestFuzzy: () => void
   items?: readonly Aglyn.CollectionEntrySearchItem[]
   placeholder?: string
   inert?: boolean
@@ -472,6 +539,7 @@ const SuggestSearchBox = ({
       // No form wraps the inert field, so the landmark belongs on it.
       {...(inert ? { inert: true, landmark: true } : {})}
       onQuery={(next) => {
+        requestFuzzy()
         setQuery(next)
         // A new query reopens a panel the reader dismissed — Escape closes
         // THIS answer, it does not turn the feature off for the visit.
@@ -490,7 +558,11 @@ const SuggestSearchBox = ({
       sx={suggestionAnchorSx}
     >
       {field}
-      {trimmed && !closed ? (
+      {/*
+        Not until the matcher is here: a panel drawn in the moment it takes
+        to arrive would say "No matches" about a query nothing has searched.
+      */}
+      {trimmed && !closed && fuzzy ? (
         <SuggestionPanel
           suggestions={suggestions}
           trimmed={trimmed}
@@ -594,16 +666,7 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
     /** `filter` mode only — `suggest` owns its own query (AGL-1516). */
     const [query, setQuery] = useState('')
     const items = search ? searchIndex : undefined
-    const fuzzy = useMemo(
-      () =>
-        items?.length
-          ? // The ONE matcher config (AGL-1525), shared with the site-wide
-            // results page this block's panel links to — a query the panel
-            // forgave must not come back empty from "View all results".
-            new Fuse(items, { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS })
-          : null,
-      [items],
-    )
+    const { fuzzy, requestFuzzy } = useEntryFuse(items)
     if (!search) {
       return (
         <MuiStack ref={ref} spacing={4} {...props}>
@@ -627,9 +690,11 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
     // the templates that made the fail-open necessary.
     const mode: CollectionSearchMode =
       searchMode === 'suggest' ? 'suggest' : 'filter'
+    // Whether there is an index to search, NOT whether the matcher has loaded:
+    // the field has to be there for the keystroke that loads it.
     const live =
       !suppressNavigation &&
-      Boolean(fuzzy) &&
+      Boolean(items?.length) &&
       (mode === 'suggest' || groupSize > 0)
     const trimmed = query.trim()
     let visible: ReactNode[] | ReactNode = children
@@ -710,6 +775,7 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       // question, and the best answer belongs first.
       <SuggestSearchBox
         fuzzy={fuzzy}
+        requestFuzzy={requestFuzzy}
         {...(items ? { items } : {})}
         {...(searchPlaceholder === undefined
           ? {}
@@ -725,7 +791,10 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
         landmark
         {...(searchPlaceholder === undefined ? {} : { placeholder: searchPlaceholder })}
         {...(suppressNavigation ? { inert: true } : {})}
-        onQuery={setQuery}
+        onQuery={(next) => {
+          requestFuzzy()
+          setQuery(next)
+        }}
       />
     )
     return (
@@ -3322,14 +3391,8 @@ const CollectionSearch = forwardRef<HTMLDivElement, CollectionSearchProps>(
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
-    const fuzzy = useMemo(
-      () =>
-        searchIndex?.length
-          ? new Fuse(searchIndex, { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS })
-          : null,
-      [searchIndex],
-    )
-    if (!suppressNavigation && !fuzzy) {
+    const { fuzzy, requestFuzzy } = useEntryFuse(searchIndex)
+    if (!suppressNavigation && !searchIndex?.length) {
       // Nothing stamped on a live surface: an unknown collection, an empty
       // one, or a page composed before this block existed. Renders NOTHING
       // rather than a field that can only ever answer "no matches" — that
@@ -3341,6 +3404,7 @@ const CollectionSearch = forwardRef<HTMLDivElement, CollectionSearchProps>(
       <MuiStack ref={ref} {...rest} sx={[{ alignItems: 'flex-end' }, ...nodeSx]}>
         <SuggestSearchBox
           fuzzy={fuzzy}
+          requestFuzzy={requestFuzzy}
           {...(searchIndex ? { items: searchIndex } : {})}
           {...(searchPlaceholder === undefined
             ? {}

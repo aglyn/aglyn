@@ -43,12 +43,11 @@ export * from './lib/change-case'
 // The four real consumers, and where each puts the matcher:
 //   - `use-mdi-icons-fuzzy` → the icon picker, console-only,
 //   - `media-search.ts` → the console DAM,
-//   - `plugins-mui/collection.tsx` → EVERY published page. It sits behind
-//     `import('@aglyn/plugins-mui')`, but that is the always-on site plugin,
-//     loaded on every page before it settles, and it registers the collection
-//     components statically — so `fuse.js` arrives one dynamic import later
-//     whether or not the page has a collection (25.9 KB raw, AGL-3082). Only
-//     a split of that plugin's component registry takes it off those pages,
+//   - `plugins-mui/collection.tsx` → a published page, but only once a
+//     reader types into a collection search box: the element `import()`s the
+//     matcher on the first keystroke (AGL-3401). It used to arrive with every
+//     page that placed any collection element (25.9 KB raw, AGL-3082), and
+//     before the registry split, with every page at all,
 //   - `apps/tenant/utils/search-content.ts` → tenant, but SERVER-only: it
 //     imports `@aglyn/aglyn/server` and `tenant-data-admin`, and
 //     `search-facets.ts` exists precisely so the `'use client'` results page
