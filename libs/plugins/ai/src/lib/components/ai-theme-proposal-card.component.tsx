@@ -88,7 +88,10 @@ const BRIEF_MAX_CHARS = 4_000
 const SOURCE_COPY: Record<HostThemeSource, string> = {
   installed:
     'Saved as your changes on top of the installed theme. The publisher’s version stays as it is and can still take an update.',
-  custom: 'Changes this site’s own theme.',
+  preset:
+    'Saved as your changes on top of the built-in theme, which stays as it is and can be restored.',
+  custom:
+    'Saved as your changes on top of this theme of yours. Update it to keep them in the theme itself.',
   default:
     'Only these values are stored. Everything else keeps following the default theme.',
 }

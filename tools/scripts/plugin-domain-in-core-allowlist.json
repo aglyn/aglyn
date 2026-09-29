@@ -540,13 +540,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/components/theme-editor/theme-source-card.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/web-vitals-reporter.component.tsx",
       "rules": [
         "vendor:ga4"

@@ -1389,11 +1389,12 @@ export function HostSettingsScopeProvider({
   const logActivity = useHostActivityLogger(hostId)
 
   /**
-   * A site running an INSTALLED theme owns the patch, not the copy (AGL-1021):
-   * the editor renders `theme ⊕ override`, so what comes back is the resolved
-   * view, and what is stored is its difference from the publisher's version.
-   * Editing `theme` directly instead would fork the theme on the first colour
-   * change and there would be nothing left to take an update against.
+   * A site owns the patch, not the copy (AGL-1021, AGL-3404): the editor
+   * renders `theme ⊕ override`, so what comes back is the resolved view, and
+   * what is stored is its difference from the picked theme. Editing `theme`
+   * directly instead would fork the theme on the first colour change — an
+   * installed one would have nothing left to take an update against, and a
+   * built-in or saved one nothing left to restore.
    */
   const themeIsInstalled = Boolean(data?.themeInstalledFrom?.listingId)
   const resolvedTheme = useMemo(() => resolveSiteTheme(data), [data])
@@ -1468,17 +1469,22 @@ export function HostSettingsScopeProvider({
             fromCache: hostFromCache,
           },
           async () => {
-            await (themeIsInstalled
-              ? setDoc(
-                  {
-                    themeOverride: overrideWriteValue(
-                      themeOverridePatch(data, theme),
-                      data?.themeInstalledFrom?.sha256 ?? null,
-                    ),
-                  },
-                  { mergeFields: ['themeOverride'] },
-                )
-              : setDoc({ theme }, { mergeFields: ['theme'] }))
+            // Every theme is edited through its override (AGL-3404): the
+            // picked theme — built-in, saved, installed or the default — is
+            // never rewritten, which is what lets Restore and Save as custom
+            // theme leave it intact. Only an installed theme's patch carries
+            // a publisher hash to compare an update against.
+            await setDoc(
+              {
+                themeOverride: overrideWriteValue(
+                  themeOverridePatch(data, theme),
+                  themeIsInstalled
+                    ? (data?.themeInstalledFrom?.sha256 ?? null)
+                    : null,
+                ),
+              },
+              { mergeFields: ['themeOverride'] },
+            )
           },
         )
         // A refusal leaves the editor exactly as the author left it, so the

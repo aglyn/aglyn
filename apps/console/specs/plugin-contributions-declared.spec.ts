@@ -36,6 +36,7 @@ import {
   components,
   listConsoleExtensions,
   listCustomFieldTypes,
+  THEME_PRESETS_LOAD_POINT,
   type ConsoleExtension,
   type PluginContributions,
 } from '@aglyn/aglyn'
@@ -84,6 +85,8 @@ function consoleContributions(extensions: readonly ConsoleExtension[]) {
   let shell = false
   for (const extension of extensions) {
     for (const widget of extension.widgets ?? []) slots.add(widget.slot)
+    // Theme presets load where the theme page lists them (AGL-3404).
+    if (extension.themePresets?.length) slots.add(THEME_PRESETS_LOAD_POINT)
     for (const item of extension.navItems ?? []) routes.add(item.href)
     for (const item of extension.orgNavItems ?? []) orgRoutes.add(item.href)
     if (SHELL_FIELDS.some((field) => (extension[field] as unknown[] | undefined)?.length)) {

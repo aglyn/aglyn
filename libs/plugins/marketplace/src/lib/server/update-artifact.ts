@@ -20,6 +20,10 @@
 // mocks have no reason to stage.
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
+  installedEntryId,
+  THEME_LIBRARY_COLLECTION,
+} from '@aglyn/aglyn/app-utils/theme-library'
+import {
   createResourceUid,
   decodeStoredNodes,
   encodeStoredNodes,
@@ -598,6 +602,29 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       // than within the hour (AGL-3386). Awaited before the response, and it
       // never throws: a failed drop leaves the update applied.
       if (artifactType === 'theme') {
+        // The library's copy of this theme moves with it (AGL-3404), or
+        // picking it again after switching away would bring back the version
+        // this update just replaced.
+        const entryRef = hostRef
+          .collection(THEME_LIBRARY_COLLECTION)
+          .doc(installedEntryId(listingId))
+        const entry = await entryRef.get()
+        if (entry.exists) {
+          await entryRef.update({
+            theme: merged.content ?? {},
+            installedFrom: provenance.installedFrom,
+            updatedAt: now,
+          })
+        } else {
+          await entryRef.set({
+            kind: 'installed',
+            name: String(listing.displayName ?? '') || 'Marketplace theme',
+            theme: merged.content ?? {},
+            installedFrom: provenance.installedFrom,
+            createdAt: now,
+            updatedAt: now,
+          })
+        }
         await dropPluginSiteCache({
           hostIds: [hostId],
           reason: 'marketplace theme updated',

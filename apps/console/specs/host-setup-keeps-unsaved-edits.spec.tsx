@@ -342,7 +342,7 @@ jest.mock('../components/error-screens-card.component', () => nullCard)
 jest.mock('../components/languages-card.component', () => nullCard)
 jest.mock('../components/site-backup-card.component', () => nullCard)
 jest.mock('../components/site-template-card.component', () => nullCard)
-jest.mock('../components/theme-editor/theme-source-card.component', () => nullCard)
+jest.mock('../components/theme-editor/theme-library-card.component', () => nullCard)
 jest.mock('../components/host-display-name.component', () => nullCard)
 // New since this file was written (AGL-2099). It is an unrelated sibling card
 // — it reads the org's `removeBranding` entitlement and renders a sentence —
