@@ -61,7 +61,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getCountFromServer, getDocs, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  getDocs,
+  limit,
+  query,
+} from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -70,6 +77,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
   formatParameterOptions,
   parseParameterOptions,
@@ -415,11 +423,17 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
             fromCache: functionsFromCache,
           },
           async () => {
-            await setDoc(
-              doc(firestore, 'hosts', hostId, 'functions', draftId),
-              { ...fields, updatedAt: Timestamp.now() },
-              { merge: true },
-            )
+            await writeSiteWideChange({
+              firestore,
+              user,
+              hostId,
+              write: (batch) =>
+                batch.set(
+                  doc(firestore, 'hosts', hostId, 'functions', draftId),
+                  { ...fields, updatedAt: Timestamp.now() },
+                  { merge: true },
+                ),
+            })
           },
         )
         // Before `setDraft(null)`, so a refusal keeps the dialog open with
@@ -448,6 +462,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
       })
     }
   }, [
+    user,
     draft,
     nameTaken,
     firestore,
@@ -495,10 +510,16 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await updateDoc(
-        doc(firestore, 'hosts', hostId, 'functions', definition.$id),
-        { deletedAt: Timestamp.now() },
-      )
+      await writeSiteWideChange({
+        firestore,
+        user,
+        hostId,
+        write: (batch) =>
+          batch.update(
+            doc(firestore, 'hosts', hostId, 'functions', definition.$id),
+            { deletedAt: Timestamp.now() },
+          ),
+      })
       enqueueSnackbar('Function deleted', {
         variant: 'success',
         persist: false,

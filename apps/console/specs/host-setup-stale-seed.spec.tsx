@@ -46,6 +46,20 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
+/**
+ * The setter's options with the site-wide outbox stager taken out. The
+ * console's `useHost` commits a rendered write with its cache drop beside it
+ * (AGL-3386) by handing the library setter `alongside`; this spec is about the
+ * write, and `host-document-writes.spec.ts` pins the stager.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a jest.fn's calls are `any`
+function withoutSiteWideEntry(call: any[]): any[] {
+  const [payload, options] = call as [unknown, Record<string, unknown> | undefined]
+  if (!options || !('alongside' in options)) return call
+  const { alongside: _entry, ...rest } = options
+  return [payload, Object.keys(rest).length ? rest : undefined]
+}
+
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 const mockEnqueueSnackbar = jest.fn()
 
@@ -409,7 +423,7 @@ describe('Host Setup theme save (AGL-1358)', () => {
     click('Save theme')
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
-    const [payload, options] = mockSetDoc.mock.calls[0]
+    const [payload, options] = withoutSiteWideEntry(mockSetDoc.mock.calls[0])
     // The WHOLE theme map, replaced atomically — which is exactly why the
     // guard has to stand in front of it.
     expect(payload.theme).toEqual({ palette: { primary: '#ff0000' } })
@@ -479,7 +493,7 @@ describe('Host Setup override reset (AGL-1358)', () => {
     click('Reset one override')
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
-    expect(mockSetDoc.mock.calls[0][1]).toEqual({
+    expect(withoutSiteWideEntry(mockSetDoc.mock.calls[0])[1]).toEqual({
       mergeFields: ['themeOverride'],
     })
     expect(overrideVerdicts[0].ok).toBe(true)
@@ -524,7 +538,7 @@ describe('Host Admin details save (AGL-1358)', () => {
     click('Submit details')
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
-    const [payload, options] = mockSetDoc.mock.calls[0]
+    const [payload, options] = withoutSiteWideEntry(mockSetDoc.mock.calls[0])
     expect(payload.displayName).toEqual('Renamed')
     // Every seeded field rides along, which is why `merge: true` is not
     // protection here.

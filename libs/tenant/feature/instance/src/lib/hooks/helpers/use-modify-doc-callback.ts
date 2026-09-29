@@ -17,12 +17,16 @@
 
 import { HOST_UNPERSISTED_FIELDS, ORG_UNPERSISTED_FIELDS } from '@aglyn/aglyn'
 import {
+  type DocumentData,
   type DocumentReference,
+  type Firestore,
   serverTimestamp,
   setDoc,
   type SetOptions,
   type UpdateData,
   updateDoc,
+  type WriteBatch,
+  writeBatch,
 } from 'firebase/firestore'
 import { useCallback } from 'react'
 
@@ -92,7 +96,17 @@ export type SetDocCallback<T> = (
   data: Partial<T>,
   options?: SetOptions,
 ) => Promise<void>
-export type ModifyDocOptions = SetOptions & { shouldSet?: boolean }
+export type ModifyDocOptions = SetOptions & {
+  shouldSet?: boolean
+  /**
+   * Other writes that must land in the SAME commit as this one, or not at
+   * all. Given, the write goes through a batch — the same stamp, strip and
+   * converter as without it — with whatever this stages beside it. The
+   * console uses it to write a site-wide cache drop down durably next to a
+   * settings save (AGL-3386).
+   */
+  alongside?: (batch: WriteBatch, firestore: Firestore) => void
+}
 export type ModifyDocCallback<T> = (
   data: UpdateData<T> | Partial<T>,
   options?: ModifyDocOptions,
@@ -154,10 +168,25 @@ export function useModifyDocCallback<T>(
         options?.shouldSet ||
         (options && 'merge' in options) ||
         (options && 'mergeFields' in options)
+      if (options?.alongside) {
+        // `shouldSet` is this hook's own flag, never a Firestore option.
+        const { alongside, shouldSet: _flag, ...setOptions } = options
+        void _flag
+        const batch = writeBatch(ref.firestore)
+        const payload = stampUpdatedAt(dropUnpersistedFields(data as object))
+        // `batch.set` applies the ref's converter exactly as `setDoc` does,
+        // and `batch.update` skips it exactly as `updateDoc` does — so the
+        // batched write stores what the unbatched one would have.
+        if (shouldSet) batch.set(ref, payload as Partial<T>, setOptions)
+        // Pinned to the untyped overload for the reason `typedUpdateDoc` is.
+        else batch.update(ref as DocumentReference, payload as UpdateData<DocumentData>)
+        alongside(batch, ref.firestore)
+        return batch.commit()
+      }
       if (shouldSet) return setDocCb(data as Partial<T>, options)
       return updateDocCb(data as UpdateData<T>)
     },
-    [updateDocCb, setDocCb],
+    [ref, updateDocCb, setDocCb],
   )
 }
 

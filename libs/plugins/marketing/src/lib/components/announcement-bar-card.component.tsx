@@ -33,7 +33,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import {
   useFirestore,
@@ -42,7 +42,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import { announceSiteWideChange } from '@aglyn/aglyn/app-utils/announce-site-wide-change'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import OverlayStatsRow from './overlay-stats-row.component'
 import {
   OVERLAY_COPY_HELPER_TEXT,
@@ -144,20 +144,23 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
           fromCache: hostFromCache,
         },
         async () => {
-          await updateDoc(doc(firestore, 'hosts', hostId), {
-            announcementBar: {
-              enabled: Boolean(draft.enabled),
-              text: copy.storedWithin(draft.text, 300),
-              href: (draft.href ?? '').trim(),
-              backgroundColor: (draft.backgroundColor ?? '').trim(),
-              textColor: (draft.textColor ?? '').trim(),
-              dismissible: draft.dismissible !== false,
-            },
+          await writeSiteWideChange({
+            firestore,
+            user,
+            hostId,
+            write: (batch) =>
+              batch.update(doc(firestore, 'hosts', hostId), {
+                announcementBar: {
+                  enabled: Boolean(draft.enabled),
+                  text: copy.storedWithin(draft.text, 300),
+                  href: (draft.href ?? '').trim(),
+                  backgroundColor: (draft.backgroundColor ?? '').trim(),
+                  textColor: (draft.textColor ?? '').trim(),
+                  dismissible: draft.dismissible !== false,
+                },
+              }),
           })
           logActivity('Updated announcement bar', { type: 'host', id: hostId })
-          // Rendered on every page with no publish step: drop the live
-          // site's cached pages so it shows now rather than within the hour.
-          void announceSiteWideChange({ user, hostId })
         },
       )
       // A refusal leaves every typed value on screen. A save that silently

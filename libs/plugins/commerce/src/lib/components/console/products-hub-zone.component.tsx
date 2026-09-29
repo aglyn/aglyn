@@ -26,7 +26,15 @@ import type {
   ConsoleProposedProduct,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostResourceApi,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
+import {
+  commitWithSiteWideEntry,
+  settleSiteWideChange,
+} from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
   collection,
   doc,
@@ -106,6 +114,7 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
   const { hostId, products, roomFor, lastImport, onCreated } = props
   const Slot = useConsoleWidgetSlot()
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
 
   const summaries = useMemo<ConsoleProductSummary[]>(
@@ -124,34 +133,40 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
     async (productId: string, values: ConsoleProductCopyValues) => {
       const ref = doc(firestore, 'hosts', hostId, 'products', productId)
       const smartCollections = await readSmartCollections(firestore, hostId)
-      await runTransaction(firestore, async (transaction) => {
-        const snapshot = await transaction.get(ref)
-        const stored = snapshot.exists() ? (snapshot.data() as CommerceModel.HostProduct) : null
-        if (!stored || stored.deletedAt) throw new Error(PRODUCT_GONE_COPY)
-        const lifted = CommerceModel.liftLegacyProduct(stored)
-        const patch = CommerceModel.productCopyPatch(lifted, values)
-        if (!Object.keys(patch).length) return
-        // Tags and categories may move, and with them its smart collections
-        // (AGL-3321).
-        // Written only when it moved, so a copy that changes no rule input
-        // writes only the copy.
-        const collectionIds = CommerceModel.productCollectionIds(
-          { ...lifted, ...patch },
-          smartCollections,
-        )
-        const held = stored.collectionIds ?? []
-        const moved =
-          held.length !== collectionIds.length ||
-          collectionIds.some((id, at) => held[at] !== id)
-        transaction.update(ref, {
-          ...patch,
-          ...(moved ? { collectionIds } : {}),
-          updatedAtMs: Date.now(),
-          updatedAt: Timestamp.now(),
-        })
-      })
+      // The product page renders the copy with no publish step, so the
+      // transaction carries the site's cache drop with it (AGL-3386).
+      const entry = await commitWithSiteWideEntry(hostId, (stage) =>
+        runTransaction(firestore, async (transaction) => {
+          const snapshot = await transaction.get(ref)
+          const stored = snapshot.exists() ? (snapshot.data() as CommerceModel.HostProduct) : null
+          if (!stored || stored.deletedAt) throw new Error(PRODUCT_GONE_COPY)
+          const lifted = CommerceModel.liftLegacyProduct(stored)
+          const patch = CommerceModel.productCopyPatch(lifted, values)
+          if (!Object.keys(patch).length) return
+          // Tags and categories may move, and with them its smart collections
+          // (AGL-3321).
+          // Written only when it moved, so a copy that changes no rule input
+          // writes only the copy.
+          const collectionIds = CommerceModel.productCollectionIds(
+            { ...lifted, ...patch },
+            smartCollections,
+          )
+          const held = stored.collectionIds ?? []
+          const moved =
+            held.length !== collectionIds.length ||
+            collectionIds.some((id, at) => held[at] !== id)
+          transaction.update(ref, {
+            ...patch,
+            ...(moved ? { collectionIds } : {}),
+            updatedAtMs: Date.now(),
+            updatedAt: Timestamp.now(),
+          })
+          stage?.(transaction, firestore)
+        }),
+      )
+      settleSiteWideChange({ user, hostId, entry })
     },
-    [firestore, hostId],
+    [firestore, hostId, user],
   )
 
   const createProductDrafts = useCallback(

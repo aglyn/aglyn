@@ -60,6 +60,7 @@ let mockHostDoc: Record<string, unknown> = {}
 
 const mockUpdateDoc = jest.fn().mockResolvedValue(undefined)
 const mockRevalidateLivePages = jest.fn().mockResolvedValue({ reason: 'ok' })
+const mockStagedEntries: { ref: unknown; data: unknown }[] = []
 const mockEnqueueSnackbar = jest.fn()
 
 jest.mock('firebase/firestore', () => ({
@@ -71,6 +72,20 @@ jest.mock('firebase/firestore', () => ({
   limit: jest.fn(() => ({})),
   query: jest.fn(() => ({})),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  deleteDoc: jest.fn(async () => undefined),
+  serverTimestamp: () => '__now__',
+  // The maintenance flag commits in ONE batch with its site-wide outbox entry
+  // (AGL-3386): the host update reaches `mockUpdateDoc` as before, and the
+  // entry is recorded beside it.
+  writeBatch: () => ({
+    update: (...args: unknown[]) => {
+      void mockUpdateDoc(...args)
+    },
+    set: (ref: { path?: string }, data: unknown) => {
+      mockStagedEntries.push({ ref, data })
+    },
+    commit: async () => undefined,
+  }),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
@@ -247,6 +262,11 @@ describe('the maintenance write still announces to the live caches', () => {
       path: `hosts/${HOST_ID}`,
     })
     expect(mockUpdateDoc.mock.calls[0][1]).toEqual({ maintenance: true })
+    // Durable: the whole-site drop is written down in the same commit.
+    expect(mockStagedEntries.at(-1)?.data).toMatchObject({
+      hostId: HOST_ID,
+      entireHost: true,
+    })
 
     // `entireHost`, not a screen fan-out: maintenance replaces every address,
     // including the ones no screen document holds.

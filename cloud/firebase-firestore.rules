@@ -3850,6 +3850,25 @@ service cloud.firestore {
      * DELETE is open to the same role that may create one, because the
      * publishing tab releases its own entry the moment its announce lands —
      * that is what keeps this collection near-empty instead of a log.
+     *
+     * ## A SITE-WIDE entry is the one an `author` may write (AGL-3386)
+     *
+     * A settings save — the theme, the favicon, a site variable, a product —
+     * changes every page and has no publish step, so it commits a drop of the
+     * WHOLE site beside it: `entireHost: true`, with `paths` still naming `/`
+     * so the path rules below hold unchanged. The role that may make that
+     * write is `canWriteHostContent`, which admits the `author`, and a rule
+     * narrower than the write would fail the author's whole batch. So a
+     * site-wide entry asks exactly what the write it rides with asks.
+     *
+     * That widens nothing an author could not already do. The entry moves no
+     * pointer and registers no route; all the drain can do with it is make
+     * the site's own cached pages regenerate from documents the author was
+     * allowed to write — which `/api/screens/revalidate` already lets every
+     * content-writing role do from the tab. A PATH entry, the publish seam's,
+     * stays `canPublishHostContent`: an author still may not stage one, and
+     * `entireHost` may only ever be `true`, so an author cannot dress a path
+     * entry up as something else.
      */
     match /publishOutbox/{entryId} {
       // The client never reads its own entries: it holds the reference it
@@ -3857,9 +3876,11 @@ service cloud.firestore {
       allow read: if isStaff();
       allow create: if isStaff() ||
         (request.resource.data.keys().hasOnly(
-           ['hostId', 'paths', 'createdAt', 'attempts']) &&
+           ['hostId', 'paths', 'createdAt', 'attempts', 'entireHost']) &&
          request.resource.data.keys().hasAll(
            ['hostId', 'paths', 'createdAt', 'attempts']) &&
+         (!('entireHost' in request.resource.data) ||
+           request.resource.data.entireHost == true) &&
          request.resource.data.hostId is string &&
          request.resource.data.paths is list &&
          request.resource.data.paths.size() > 0 &&
@@ -3869,12 +3890,16 @@ service cloud.firestore {
          request.resource.data.paths.size() <= 250 &&
          request.resource.data.attempts == 0 &&
          request.resource.data.createdAt == request.time &&
-         canPublishHostContent(request.resource.data.hostId) &&
+         (canPublishHostContent(request.resource.data.hostId) ||
+           (request.resource.data.get('entireHost', false) == true &&
+            canWriteHostContent(request.resource.data.hostId))) &&
          !hostWritesFrozen(request.resource.data.hostId));
       allow update: if false;
       allow delete: if isStaff() ||
         (resource.data.hostId is string &&
-         canPublishHostContent(resource.data.hostId));
+         (canPublishHostContent(resource.data.hostId) ||
+           (resource.data.get('entireHost', false) == true &&
+            canWriteHostContent(resource.data.hostId))));
     }
 
     // User profile docs (AGL-158): the console account page reads/writes

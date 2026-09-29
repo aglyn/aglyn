@@ -51,6 +51,20 @@ import BusinessDetailsCard from '../components/business-details-card.component'
 import HostComponentsCard from '../components/host-components-card.component'
 import LanguagesCard from '../components/languages-card.component'
 
+/**
+ * The setter's options with the site-wide outbox stager taken out. The
+ * console's `useHost` commits a rendered write with its cache drop beside it
+ * (AGL-3386) by handing the library setter `alongside`; this spec is about the
+ * write, and `host-document-writes.spec.ts` pins the stager.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a jest.fn's calls are `any`
+function withoutSiteWideEntry(call: any[]): any[] {
+  const [payload, options] = call as [unknown, Record<string, unknown> | undefined]
+  if (!options || !('alongside' in options)) return call
+  const { alongside: _entry, ...rest } = options
+  return [payload, Object.keys(rest).length ? rest : undefined]
+}
+
 /** Mutable so each spec picks the listener's verdict before rendering. */
 const mockListener = {
   fromCache: false,
@@ -194,6 +208,20 @@ jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
+  deleteDoc: jest.fn().mockResolvedValue(undefined),
+  serverTimestamp: () => '__now__',
+  // A rendered host write commits in one batch with its site-wide outbox
+  // entry (AGL-3386); the host update still reaches the `updateDoc` double.
+  writeBatch: () => {
+    const { updateDoc } = jest.requireMock('firebase/firestore')
+    return {
+      update: (...args: unknown[]) => {
+        void updateDoc(...args)
+      },
+      set: () => undefined,
+      commit: async () => undefined,
+    }
+  },
   // The components card's head-count (AGL-1716) is two server aggregates on
   // mount. Left real they receive this file's stand-in collection — a bare
   // string — and throw before the card renders at all.
@@ -289,7 +317,7 @@ describe('BusinessDetailsCard (AGL-1358)', () => {
     editAndSave()
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
-    const [payload, options] = mockSetDoc.mock.calls[0]
+    const [payload, options] = withoutSiteWideEntry(mockSetDoc.mock.calls[0])
     expect(payload.business.supportEmail).toBe('support@acme.test')
     // The rest of the map rides along, replaced atomically — which is why the
     // guard is the only thing standing in front of it.

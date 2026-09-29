@@ -39,12 +39,16 @@ interface OutboxRow {
   paths?: unknown
   attempts?: number
   ageMs?: number
+  entireHost?: unknown
 }
 
 let mockRows: OutboxRow[] = []
 const mockDeleted: string[] = []
 const mockMerged: { id: string; data: Record<string, unknown> }[] = []
-const mockHostDocs = new Map<string, { subdomain?: string; cname?: string }>()
+const mockHostDocs = new Map<
+  string,
+  { subdomain?: string; cname?: string; screens?: Record<string, string> }
+>()
 
 const mockBeat = jest.fn(async (_id: string) => undefined)
 const mockPost = jest.fn(async (_options: unknown) => ({
@@ -75,6 +79,13 @@ jest.mock('../utils/cron-beat', () => ({
 jest.mock('../utils/server/tenant-revalidate', () => ({
   __esModule: true,
   postTenantRevalidate: (options: unknown) => mockPost(options),
+  // The routing map as addresses, the shape the real helper reads.
+  wholeHostPaths: (snapshot: { get: (field: string) => unknown }) => [
+    '/',
+    ...Object.values(
+      (snapshot.get('screens') ?? {}) as Record<string, string>,
+    ).map((path) => `/${path}`),
+  ],
 }))
 
 /** The query the route runs, and the two document handles it uses. */
@@ -350,5 +361,60 @@ describe('the telemetry line', () => {
       drained: 1,
       stalled: 1,
     })
+  })
+})
+
+describe('a site-wide entry — a settings save, which names no page (AGL-3386)', () => {
+  beforeEach(() => {
+    mockHostDocs.set('host-a', {
+      subdomain: 'acme',
+      cname: 'acme.com',
+      screens: { s1: 'pricing', s2: 'about' },
+    })
+  })
+
+  it('drops every routed page of the site, and releases the entry on ok', async () => {
+    mockRows = [{ id: 'theme', hostId: 'host-a', paths: ['/'], entireHost: true }]
+    await post()
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    expect(mockPost.mock.calls[0][0]).toMatchObject({
+      subdomain: 'acme',
+      hostId: 'host-a',
+      cname: 'acme.com',
+      paths: ['/', '/pricing', '/about'],
+    })
+    expect(mockDeleted).toEqual(['theme'])
+  })
+
+  it('merges with a publish entry for the same site into one announce', async () => {
+    mockRows = [
+      { id: 'publish', hostId: 'host-a', paths: ['/new-page'] },
+      { id: 'theme', hostId: 'host-a', paths: ['/'], entireHost: true },
+    ]
+    await post()
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    // The publish's own address leads; the tenant keeps the first it is handed.
+    expect(mockPost.mock.calls[0][0]).toMatchObject({
+      paths: ['/new-page', '/', '/pricing', '/about'],
+    })
+    expect(mockDeleted.sort()).toEqual(['publish', 'theme'])
+  })
+
+  it('reads anything but a literal true as a path entry', async () => {
+    mockRows = [{ id: 'odd', hostId: 'host-a', paths: ['/'], entireHost: 'yes' }]
+    await post()
+    expect(mockPost.mock.calls[0][0]).toMatchObject({ paths: ['/'] })
+  })
+
+  it('keeps a site-wide entry the tenant refused, like any other', async () => {
+    mockPost.mockResolvedValueOnce({
+      revalidated: [],
+      reason: 'tenant-429',
+      pathsDropped: 0,
+    })
+    mockRows = [{ id: 'theme', hostId: 'host-a', paths: ['/'], entireHost: true }]
+    await post()
+    expect(mockDeleted).toEqual([])
+    expect(mockMerged[0]).toMatchObject({ id: 'theme' })
   })
 })

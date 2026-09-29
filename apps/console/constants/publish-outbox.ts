@@ -124,6 +124,15 @@ export interface PublishOutboxEntry {
   createdAt: unknown
   /** Drain attempts spent so far. Written 0 by the client; only the drain raises it. */
   attempts: number
+  /**
+   * Drop EVERY page of the site, not just `paths` (AGL-3386).
+   *
+   * A settings save — the theme, the favicon, a site variable — changes what
+   * every page renders and has no address of its own, so its entry says so
+   * instead of naming one. Written only as `true`; the rules refuse any other
+   * value, and `paths` still carries `/` so the path rules hold unchanged.
+   */
+  entireHost?: true
 }
 
 /**
@@ -139,6 +148,20 @@ export const PUBLISH_OUTBOX_FIELDS = [
   'createdAt',
   'attempts',
 ] as const
+
+/**
+ * The keys an entry MAY carry beyond `PUBLISH_OUTBOX_FIELDS` (AGL-3386). The
+ * rules' `hasOnly` is the two lists together; its `hasAll` is the first.
+ */
+export const PUBLISH_OUTBOX_OPTIONAL_FIELDS = ['entireHost'] as const
+
+/**
+ * Does this entry ask for the whole site? Only a literal `true` does: an
+ * entry is client-written, and anything else is read as a path entry.
+ */
+export function isSiteWidePublishOutboxEntry(entireHost: unknown): boolean {
+  return entireHost === true
+}
 
 /**
  * The paths an entry may carry, or an empty list when there are none worth

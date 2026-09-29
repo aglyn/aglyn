@@ -11651,6 +11651,165 @@ describe('a publish outbox entry may only be written for a host you can publish 
   })
 })
 
+describe('a SITE-WIDE outbox entry rides a settings save by whoever may make it (AGL-3386)', () => {
+  const OUTBOX = 'publishOutbox'
+  /** An entry shaped exactly as `stageSiteWideOutboxEntry` writes one. */
+  const siteWide = (hostId = HOST) => ({
+    hostId,
+    paths: ['/'],
+    createdAt: serverTimestamp(),
+    attempts: 0,
+    entireHost: true,
+  })
+  const FOREIGN_HOST = 'host-foreign-site-wide'
+  const seedForeignHost = async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', FOREIGN_HOST), {
+        displayName: 'Someone else', orgId: OTHER_ORG,
+        memberRoles: { [OUTSIDER]: 'admin' },
+        screens: {},
+      })
+    })
+  }
+  const seedEntry = async (id, fields = {}) => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), OUTBOX, id), {
+        hostId: HOST, paths: ['/'], createdAt: new Date(), attempts: 0, ...fields,
+      })
+    })
+  }
+
+  it('HALF ONE — the author saving a setting and its drop lands, as one batch', async () => {
+    // Asserted FIRST, as the batch the console commits. A rule narrower than
+    // the settings write fails the author's whole save — which is what the
+    // publish-only rule would have done, and why this block exists.
+    const db = authed(AUTHOR)
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'hosts', HOST), { theme: { palette: { mode: 'dark' } } })
+    batch.set(doc(db, OUTBOX, 'author-theme'), siteWide())
+    await mustAllow('the author saving the theme with its site-wide drop', batch.commit())
+    await mustAllow(
+      'the editor staging one too',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'editor-site-wide'), siteWide()),
+    )
+    await mustAllow(
+      'the owner staging one too',
+      setDoc(doc(authed(OWNER), OUTBOX, 'owner-site-wide'), siteWide()),
+    )
+  })
+
+  it('still refuses the author a PATH entry — that is a publish announce', async () => {
+    await mustDeny(
+      'the author staging an entry without entireHost',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'author-path'), {
+        hostId: HOST, paths: ['/home'], createdAt: serverTimestamp(), attempts: 0,
+      }),
+    )
+    await mustDeny(
+      'the author dressing a path entry up with entireHost: false',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'author-false'), {
+        ...siteWide(), paths: ['/home'], entireHost: false,
+      }),
+    )
+  })
+
+  it('refuses any entireHost that is not literally true', async () => {
+    await mustDeny(
+      'an editor writing entireHost: "yes"',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'string-flag'), { ...siteWide(), entireHost: 'yes' }),
+    )
+    await mustDeny(
+      'an editor writing entireHost: false',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'false-flag'), { ...siteWide(), entireHost: false }),
+    )
+  })
+
+  it('refuses whoever may not write the site at all', async () => {
+    await seedForeignHost()
+    await mustDeny(
+      'the author of one site naming another',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'foreign'), siteWide(FOREIGN_HOST)),
+    )
+    await mustDeny(
+      'a viewer, who may not save the setting either',
+      setDoc(doc(authed(VIEWER), OUTBOX, 'viewer'), siteWide()),
+    )
+    await mustDeny(
+      'an outsider',
+      setDoc(doc(authed(OUTSIDER), OUTBOX, 'outsider'), siteWide()),
+    )
+    await mustDeny(
+      'an anonymous caller',
+      setDoc(doc(anon(), OUTBOX, 'anon'), siteWide()),
+    )
+    await mustDeny(
+      'an unverified author',
+      setDoc(
+        doc(authed(AUTHOR, { email_verified: false }), OUTBOX, 'unverified'),
+        siteWide(),
+      ),
+    )
+    await mustDeny(
+      'an editor of a suspended site',
+      setDoc(doc(authed(EDITOR), OUTBOX, 'suspended'), siteWide(SUSPENDED_HOST)),
+    )
+  })
+
+  it('keeps the shape pinned — the path ceiling and the fixed fields', async () => {
+    await mustDeny(
+      'a site-wide entry with no paths',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'no-paths'), { ...siteWide(), paths: [] }),
+    )
+    await mustDeny(
+      'a site-wide entry over the path ceiling',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'too-many'), {
+        ...siteWide(),
+        paths: Array.from({ length: 251 }, (_, index) => `/p${index}`),
+      }),
+    )
+    await mustDeny(
+      'a site-wide entry with its attempts pre-spent',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'spent'), { ...siteWide(), attempts: 3 }),
+    )
+    await mustDeny(
+      'a site-wide entry with a client clock',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'backdated'), {
+        ...siteWide(), createdAt: new Date(Date.now() - AN_HOUR),
+      }),
+    )
+    await mustDeny(
+      'a site-wide entry carrying an extra key',
+      setDoc(doc(authed(AUTHOR), OUTBOX, 'extra'), { ...siteWide(), lastReason: 'ok' }),
+    )
+  })
+
+  it('lets the author release their own site-wide entry, and no publish entry', async () => {
+    await seedEntry('author-release', { entireHost: true })
+    await mustAllow(
+      'the author releasing a site-wide entry once its drop landed',
+      deleteDoc(doc(authed(AUTHOR), OUTBOX, 'author-release')),
+    )
+    await seedEntry('publish-entry')
+    await mustDeny(
+      'the author releasing a publish entry',
+      deleteDoc(doc(authed(AUTHOR), OUTBOX, 'publish-entry')),
+    )
+    await seedEntry('viewer-release', { entireHost: true })
+    await mustDeny(
+      'a viewer releasing a site-wide entry',
+      deleteDoc(doc(authed(VIEWER), OUTBOX, 'viewer-release')),
+    )
+  })
+
+  it('cannot be edited in place by the author either', async () => {
+    await seedEntry('author-edit', { entireHost: true })
+    await mustDeny(
+      'the author raising the attempt count',
+      updateDoc(doc(authed(AUTHOR), OUTBOX, 'author-edit'), { attempts: 99 }),
+    )
+  })
+})
+
 describe('an unverified address cannot write org or site data (AGL-2589)', () => {
   /*
    * THE CONTAINMENT PROPERTY, STATED.

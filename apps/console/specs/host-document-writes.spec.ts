@@ -37,7 +37,15 @@ import { HOST_CLIENT_WRITABLE_FIELDS } from '@aglyn/aglyn/foundation/definitions
 const mockRevalidateLivePages = jest.fn()
 const mockUpdateDoc = jest.fn()
 const mockLibrarySetDoc = jest.fn()
+const mockDeleteDoc = jest.fn()
+const mockCommit = jest.fn()
 const mockUser = { uid: 'u1', getIdToken: async () => 'token' }
+
+interface MockBatch {
+  ops: { op: 'set' | 'update'; path: string; data: Record<string, unknown> }[]
+}
+/** Every batch the door opened, in order, with what it staged. */
+const mockBatches: MockBatch[] = []
 
 jest.mock('../utils/revalidate-live-pages', () => ({
   __esModule: true,
@@ -46,8 +54,28 @@ jest.mock('../utils/revalidate-live-pages', () => ({
 }))
 
 jest.mock('firebase/firestore', () => ({
-  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  collection: (_db: unknown, name: string) => ({ collectionPath: name }),
+  doc: (first: { collectionPath?: string }, ...segments: string[]) =>
+    first?.collectionPath
+      ? { path: `${first.collectionPath}/entry-1` }
+      : { path: segments.join('/') },
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
+  serverTimestamp: () => '__now__',
+  writeBatch: () => {
+    const batch: MockBatch & Record<string, unknown> = {
+      ops: [],
+      set: (ref: { path: string }, data: Record<string, unknown>) => {
+        batch.ops.push({ op: 'set', path: ref.path, data })
+      },
+      update: (ref: { path: string }, data: Record<string, unknown>) => {
+        batch.ops.push({ op: 'update', path: ref.path, data })
+      },
+      commit: () => mockCommit(batch),
+    }
+    mockBatches.push(batch)
+    return batch
+  },
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -66,6 +94,13 @@ import {
   updateHostDocument,
 } from '../utils/host-document-writes'
 import { useHost } from '../hooks/use-host'
+import { SITE_WIDE_OUTBOX_COLLECTION } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
+import {
+  isSiteWidePublishOutboxEntry,
+  PUBLISH_OUTBOX_COLLECTION,
+  PUBLISH_OUTBOX_FIELDS,
+  PUBLISH_OUTBOX_OPTIONAL_FIELDS,
+} from '../constants/publish-outbox'
 
 const OK = { revalidated: 12, pathsDropped: 0, scanTruncated: false, reason: 'ok' }
 const firestore = {} as never
@@ -73,10 +108,27 @@ const firestore = {} as never
 /** Lets a fired-and-forgotten promise chain settle. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+/** The site-wide outbox entry exactly as the rules pin it (AGL-3386). */
+const SITE_WIDE_ENTRY = {
+  hostId: 'host-1',
+  paths: ['/'],
+  createdAt: '__now__',
+  attempts: 0,
+  entireHost: true,
+}
+
+const denied = () =>
+  Object.assign(new Error('Missing or insufficient permissions.'), {
+    code: 'permission-denied',
+  })
+
 beforeEach(() => {
   mockRevalidateLivePages.mockReset().mockResolvedValue(OK)
   mockUpdateDoc.mockReset().mockResolvedValue(undefined)
   mockLibrarySetDoc.mockReset().mockResolvedValue(undefined)
+  mockDeleteDoc.mockReset().mockResolvedValue(undefined)
+  mockCommit.mockReset().mockResolvedValue(undefined)
+  mockBatches.length = 0
 })
 
 describe('which writes change what the site renders', () => {
@@ -165,28 +217,88 @@ describe('announceHostDocumentWrite', () => {
 })
 
 describe('updateHostDocument', () => {
-  it('writes the host document, then drops the site', async () => {
+  it('commits the write and its site-wide outbox entry as ONE batch, then drops', async () => {
     await updateHostDocument(
       firestore,
       { user: mockUser, hostId: 'host-1' },
       { 'consent.mode': 'strict' },
     )
     await flush()
-    expect(mockUpdateDoc).toHaveBeenCalledWith(
-      { path: 'hosts/host-1' },
-      { 'consent.mode': 'strict' },
-    )
+    // Both documents or neither: a pending entry always describes a save that
+    // really landed, and a landed save always has an entry behind it.
+    expect(mockBatches).toHaveLength(1)
+    expect(mockBatches[0].ops).toEqual([
+      { op: 'update', path: 'hosts/host-1', data: { 'consent.mode': 'strict' } },
+      { op: 'set', path: 'publishOutbox/entry-1', data: SITE_WIDE_ENTRY },
+    ])
+    expect(mockCommit).toHaveBeenCalledTimes(1)
+    expect(mockUpdateDoc).not.toHaveBeenCalled()
     expect(mockRevalidateLivePages).toHaveBeenCalledWith(
       expect.objectContaining({ hostId: 'host-1', entireHost: true }),
     )
   })
 
-  it('announces nothing when the write fails, and rejects as updateDoc does', async () => {
-    mockUpdateDoc.mockRejectedValue(new Error('permission-denied'))
+  it('releases the entry once the drop answers ok', async () => {
+    await updateHostDocument(firestore, { user: mockUser, hostId: 'host-1' }, { theme: {} })
+    await flush()
+    expect(mockDeleteDoc).toHaveBeenCalledWith({ path: 'publishOutbox/entry-1' })
+  })
+
+  it('keeps the entry for the drain when the tenant refused', async () => {
+    mockRevalidateLivePages.mockResolvedValue({ ...OK, reason: 'tenant-429' })
+    await updateHostDocument(firestore, { user: mockUser, hostId: 'host-1' }, { theme: {} })
+    await flush()
+    expect(mockDeleteDoc).not.toHaveBeenCalled()
+  })
+
+  it('keeps the entry when the drop answered nothing at all', async () => {
+    mockRevalidateLivePages.mockResolvedValue(null)
+    await updateHostDocument(firestore, { user: mockUser, hostId: 'host-1' }, { theme: {} })
+    await flush()
+    expect(mockDeleteDoc).not.toHaveBeenCalled()
+  })
+
+  it('saves WITHOUT the entry when the rules refuse it, rather than failing the save', async () => {
+    // The window between a code release and the rules deploy that admits the
+    // author's entry, or a role the outbox rule does not cover.
+    mockCommit.mockRejectedValueOnce(denied()).mockResolvedValueOnce(undefined)
+    await expect(
+      updateHostDocument(firestore, { user: mockUser, hostId: 'host-1' }, { logoUrl: '/l.png' }),
+    ).resolves.toBeNull()
+    await flush()
+    expect(mockBatches).toHaveLength(2)
+    expect(mockBatches[1].ops).toEqual([
+      { op: 'update', path: 'hosts/host-1', data: { logoUrl: '/l.png' } },
+    ])
+    // The tab's drop still runs; there is no entry to release.
+    expect(mockRevalidateLivePages).toHaveBeenCalledTimes(1)
+    expect(mockDeleteDoc).not.toHaveBeenCalled()
+  })
+
+  it('rejects, and drops nothing, when the write itself is refused', async () => {
+    mockCommit.mockRejectedValue(denied())
     await expect(
       updateHostDocument(firestore, { user: mockUser, hostId: 'host-1' }, { theme: {} }),
-    ).rejects.toThrow('permission-denied')
+    ).rejects.toThrow('insufficient permissions')
     await flush()
+    expect(mockRevalidateLivePages).not.toHaveBeenCalled()
+  })
+
+  it('rejects on any other failure without retrying', async () => {
+    mockCommit.mockRejectedValue(new Error('unavailable'))
+    await expect(
+      updateHostDocument(firestore, { user: mockUser, hostId: 'host-1' }, { theme: {} }),
+    ).rejects.toThrow('unavailable')
+    expect(mockCommit).toHaveBeenCalledTimes(1)
+    await flush()
+    expect(mockRevalidateLivePages).not.toHaveBeenCalled()
+  })
+
+  it('writes a bookkeeping-only payload plainly — no entry, no drop', async () => {
+    await updateHostDocument(firestore, { user: mockUser, hostId: 'host-1' }, { updatedAt: 1 })
+    await flush()
+    expect(mockUpdateDoc).toHaveBeenCalledWith({ path: 'hosts/host-1' }, { updatedAt: 1 })
+    expect(mockBatches).toHaveLength(0)
     expect(mockRevalidateLivePages).not.toHaveBeenCalled()
   })
 
@@ -230,21 +342,59 @@ describe('updateHostDocument', () => {
 })
 
 describe("the console's useHost", () => {
-  it('drops the site after a rendered write lands', async () => {
+  it('stages the site-wide entry beside a rendered write, then drops and releases', async () => {
+    // The library setter commits `alongside` in the SAME batch as the write;
+    // this double runs it against a batch of its own to see what it stages.
+    const staged: { path: string; data: Record<string, unknown> }[] = []
+    mockLibrarySetDoc.mockImplementation(async (_payload, options) => {
+      options?.alongside?.(
+        {
+          set: (ref: { path: string }, data: Record<string, unknown>) =>
+            staged.push({ path: ref.path, data }),
+        },
+        {},
+      )
+    })
     const { result } = renderHook(() => useHost({ hostId: 'host-1' }))
     await act(async () => {
       await result.current.setDoc({ seo: { favicon: '/f.png' } }, { merge: true })
     })
     await flush()
-    expect(mockLibrarySetDoc).toHaveBeenCalledWith(
-      { seo: { favicon: '/f.png' } },
-      { merge: true },
-    )
+    expect(mockLibrarySetDoc).toHaveBeenCalledTimes(1)
+    expect(mockLibrarySetDoc.mock.calls[0][0]).toEqual({ seo: { favicon: '/f.png' } })
+    expect(mockLibrarySetDoc.mock.calls[0][1]).toMatchObject({ merge: true })
+    expect(staged).toEqual([{ path: 'publishOutbox/entry-1', data: SITE_WIDE_ENTRY }])
     expect(mockRevalidateLivePages).toHaveBeenCalledWith({
       user: mockUser,
       hostId: 'host-1',
       entireHost: true,
     })
+    expect(mockDeleteDoc).toHaveBeenCalledWith({ path: 'publishOutbox/entry-1' })
+  })
+
+  it('saves without the entry when the rules refuse it', async () => {
+    mockLibrarySetDoc.mockImplementationOnce(async (_payload, options) => {
+      options?.alongside?.({ set: () => undefined }, {})
+      throw denied()
+    })
+    const { result } = renderHook(() => useHost({ hostId: 'host-1' }))
+    await act(async () => {
+      await expect(result.current.setDoc({ theme: {} } as never)).resolves.toBeUndefined()
+    })
+    await flush()
+    expect(mockLibrarySetDoc).toHaveBeenCalledTimes(2)
+    // The retry is the plain write, exactly as before the entry existed.
+    expect(mockLibrarySetDoc.mock.calls[1][1]).toBeUndefined()
+    expect(mockRevalidateLivePages).toHaveBeenCalledTimes(1)
+    expect(mockDeleteDoc).not.toHaveBeenCalled()
+  })
+
+  it('passes a bookkeeping-only write straight through, with no entry', async () => {
+    const { result } = renderHook(() => useHost({ hostId: 'host-1' }))
+    await act(async () => {
+      await result.current.setDoc({ updatedAt: 2 } as never, { merge: true })
+    })
+    expect(mockLibrarySetDoc).toHaveBeenCalledWith({ updatedAt: 2 }, { merge: true })
   })
 
   it('drops nothing for a write the site does not render', async () => {
@@ -324,5 +474,23 @@ describe('every host field a client can write is classified', () => {
       (field) => field in HOST_FIELDS_WITHOUT_SITE_DROP,
     )
     expect(both).toEqual([])
+  })
+})
+
+describe('the site-wide entry and the publish outbox are one collection and one shape', () => {
+  it('names the same collection', () => {
+    expect(SITE_WIDE_OUTBOX_COLLECTION).toBe(PUBLISH_OUTBOX_COLLECTION)
+  })
+
+  it('writes every required key, and nothing the rule does not allow', () => {
+    const keys = Object.keys(SITE_WIDE_ENTRY)
+    expect(keys).toEqual(expect.arrayContaining([...PUBLISH_OUTBOX_FIELDS]))
+    const allowed = new Set<string>([
+      ...PUBLISH_OUTBOX_FIELDS,
+      ...PUBLISH_OUTBOX_OPTIONAL_FIELDS,
+    ])
+    expect(keys.filter((key) => !allowed.has(key))).toEqual([])
+    // The drain reads the flag with the console's own predicate.
+    expect(isSiteWidePublishOutboxEntry(SITE_WIDE_ENTRY.entireHost)).toBe(true)
   })
 })

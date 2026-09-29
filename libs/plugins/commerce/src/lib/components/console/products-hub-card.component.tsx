@@ -74,7 +74,8 @@ import {
 } from 'firebase/firestore'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
   useFirestoreCollection,
   writeGuardedBySeed,
@@ -140,6 +141,7 @@ const PRODUCT_VISIBLE_COLUMNS = ['name', 'status', 'type', 'priceUsd', 'stock', 
 export function ProductsHubCard(props: ProductsHubCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   // Product cap (AGL-471): per-plan `productsPerHost`, same pattern as
   // locations. Console-side gate; server enforcement rides AGL-473.
@@ -471,13 +473,19 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           { variant: 'info', persist: false },
         )
       }
-      await updateDoc(doc(firestore, 'hosts', hostId, 'products', product.$id), {
-        status,
-        updatedAtMs: Date.now(),
-        updatedAt: Timestamp.now(),
+      await writeSiteWideChange({
+        firestore,
+        user,
+        hostId,
+        write: (batch) =>
+          batch.update(doc(firestore, 'hosts', hostId, 'products', product.$id), {
+            status,
+            updatedAtMs: Date.now(),
+            updatedAt: Timestamp.now(),
+          }),
       })
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   const handleDelete = useCallback(
@@ -493,12 +501,18 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await updateDoc(doc(firestore, 'hosts', hostId, 'products', product.$id), {
-        deletedAt: Timestamp.now(),
+      await writeSiteWideChange({
+        firestore,
+        user,
+        hostId,
+        write: (batch) =>
+          batch.update(doc(firestore, 'hosts', hostId, 'products', product.$id), {
+            deletedAt: Timestamp.now(),
+          }),
       })
       enqueueSnackbar('Product deleted', { variant: 'success', persist: false })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [confirm, firestore, hostId, user, enqueueSnackbar],
   )
 
   /*
@@ -682,15 +696,21 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         fromCache: productsFromCache,
       },
       async () => {
-        await updateDoc(
-          doc(firestore, 'hosts', hostId, 'products', adjusting.product.$id),
-          {
-            variants,
-            // The total and the In stock verdict move with the count (AGL-3321).
-            ...CommerceModel.productStockFields({ ...adjusting.product, variants }),
-            updatedAtMs: Date.now(),
-          },
-        )
+        await writeSiteWideChange({
+          firestore,
+          user,
+          hostId,
+          write: (batch) =>
+            batch.update(
+              doc(firestore, 'hosts', hostId, 'products', adjusting.product.$id),
+              {
+                variants,
+                // The total and the In stock verdict move with the count (AGL-3321).
+                ...CommerceModel.productStockFields({ ...adjusting.product, variants }),
+                updatedAtMs: Date.now(),
+              },
+            ),
+        })
         // Adjustment history (AGL-281): the same log the sale webhook writes.
         await addDoc(
           collection(firestore, 'hosts', hostId, 'inventoryAdjustments'),
@@ -715,6 +735,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     setAdjusting(null)
     enqueueSnackbar('Stock adjusted', { variant: 'success', persist: false })
   }, [
+    user,
     adjusting,
     firestore,
     hostId,

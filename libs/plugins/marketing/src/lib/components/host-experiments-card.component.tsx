@@ -74,12 +74,10 @@ import {
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
-  deleteDoc,
   doc,
   getDocs,
   limit,
   query,
-  setDoc,
   where,
 } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
@@ -88,7 +86,9 @@ import {
   useFirestoreCollection,
   useHostActivityLogger,
   writeGuardedBySeed,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   ExperimentResultZone,
@@ -148,6 +148,7 @@ const EXPERIMENT_FILTER_OPTIONS = {
 export function HostExperimentsCard(props: HostExperimentsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { org } = props
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -370,26 +371,32 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           fromCache: Boolean(editor.$id) && experimentsFromCache,
         },
         async () => {
-          await setDoc(
-            doc(firestore, 'hosts', hostId, 'experiments', id),
-            {
-              ...JSON.parse(JSON.stringify(payload)),
-              /*
-               * The name's search keys, from the name being written — the
-               * list's Experiment filter and its search box read them
-               * (AGL-3321). After the payload, so keys copied from the stored
-               * row cannot outlive a rename.
-               */
-              ...nameSearchFields(editor.name ?? ''),
-              // Clearing the end date / auto-winner must overwrite — a
-              // merge-set keeps absent keys otherwise (AGL-273).
-              endAtMs: editor.endAtMs ?? null,
-              autoWinner: editor.autoWinner ?? null,
-              updatedAt: Timestamp.now(),
-              ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
-            },
-            { merge: true },
-          )
+          await writeSiteWideChange({
+            firestore,
+            user,
+            hostId,
+            write: (batch) =>
+              batch.set(
+                doc(firestore, 'hosts', hostId, 'experiments', id),
+                {
+                  ...JSON.parse(JSON.stringify(payload)),
+                  /*
+                   * The name's search keys, from the name being written — the
+                   * list's Experiment filter and its search box read them
+                   * (AGL-3321). After the payload, so keys copied from the stored
+                   * row cannot outlive a rename.
+                   */
+                  ...nameSearchFields(editor.name ?? ''),
+                  // Clearing the end date / auto-winner must overwrite — a
+                  // merge-set keeps absent keys otherwise (AGL-273).
+                  endAtMs: editor.endAtMs ?? null,
+                  autoWinner: editor.autoWinner ?? null,
+                  updatedAt: Timestamp.now(),
+                  ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
+                },
+                { merge: true },
+              ),
+          })
           logActivity(
             editor.$id ? 'Updated experiment' : 'Created experiment',
             { type: 'content', id, name: editor.name },
@@ -449,15 +456,21 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
         )
       }
     }
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'experiments', experiment.$id),
-      {
-        status,
-        ...(winnerVariantId ? { winnerVariantId } : {}),
-        updatedAt: Timestamp.now(),
-      },
-      { merge: true },
-    )
+    await writeSiteWideChange({
+      firestore,
+      user,
+      hostId,
+      write: (batch) =>
+        batch.set(
+          doc(firestore, 'hosts', hostId, 'experiments', experiment.$id),
+          {
+            status,
+            ...(winnerVariantId ? { winnerVariantId } : {}),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        ),
+    })
     logActivity(`Experiment ${status}`, {
       type: 'content',
       id: experiment.$id,
@@ -478,9 +491,15 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
       .then(() => true)
       .catch(() => false)
     if (!accepted) return
-    await deleteDoc(
-      doc(firestore, 'hosts', hostId, 'experiments', experiment.$id),
-    )
+    await writeSiteWideChange({
+      firestore,
+      user,
+      hostId,
+      write: (batch) =>
+        batch.delete(
+          doc(firestore, 'hosts', hostId, 'experiments', experiment.$id),
+        ),
+    })
   }
 
   const openResults = async (experiment: ExperimentDraft) => {

@@ -36,7 +36,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import {
   useFirestore,
@@ -45,7 +45,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import { announceSiteWideChange } from '@aglyn/aglyn/app-utils/announce-site-wide-change'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import OverlayStatsRow from './overlay-stats-row.component'
 import {
   OVERLAY_COPY_HELPER_TEXT,
@@ -168,32 +168,35 @@ export function PopupCard(props: PopupCardProps) {
           fromCache: hostFromCache,
         },
         async () => {
-          await updateDoc(doc(firestore, 'hosts', hostId), {
-            popup: {
-              enabled: Boolean(draft.enabled),
-              headline: copy.storedWithin(draft.headline, 120),
-              body: copy.storedWithin(draft.body, 1000),
-              imageUrl: (draft.imageUrl ?? '').trim(),
-              // AGL-1896. Capped at the same length the media library saves
-              // alt through, so a value defaulted from an asset and a value
-              // typed here cannot diverge.
-              imageAlt: (draft.imageAlt ?? '')
-                .trim()
-                .slice(0, MEDIA_ALT_MAX_LENGTH),
-              ctaLabel: (draft.ctaLabel ?? '').slice(0, 60),
-              ctaHref: (draft.ctaHref ?? '').trim(),
-              collectEmail: Boolean(draft.collectEmail),
-              trigger: draft.trigger ?? 'delay',
-              triggerValue: Math.max(0, Number(draft.triggerValue ?? 3)),
-              frequencyDays: Math.max(1, Number(draft.frequencyDays ?? 7)),
-              startAtMs: draft.startAtMs ?? null,
-              endAtMs: draft.endAtMs ?? null,
-            },
+          await writeSiteWideChange({
+            firestore,
+            user,
+            hostId,
+            write: (batch) =>
+              batch.update(doc(firestore, 'hosts', hostId), {
+                popup: {
+                  enabled: Boolean(draft.enabled),
+                  headline: copy.storedWithin(draft.headline, 120),
+                  body: copy.storedWithin(draft.body, 1000),
+                  imageUrl: (draft.imageUrl ?? '').trim(),
+                  // AGL-1896. Capped at the same length the media library saves
+                  // alt through, so a value defaulted from an asset and a value
+                  // typed here cannot diverge.
+                  imageAlt: (draft.imageAlt ?? '')
+                    .trim()
+                    .slice(0, MEDIA_ALT_MAX_LENGTH),
+                  ctaLabel: (draft.ctaLabel ?? '').slice(0, 60),
+                  ctaHref: (draft.ctaHref ?? '').trim(),
+                  collectEmail: Boolean(draft.collectEmail),
+                  trigger: draft.trigger ?? 'delay',
+                  triggerValue: Math.max(0, Number(draft.triggerValue ?? 3)),
+                  frequencyDays: Math.max(1, Number(draft.frequencyDays ?? 7)),
+                  startAtMs: draft.startAtMs ?? null,
+                  endAtMs: draft.endAtMs ?? null,
+                },
+              }),
           })
           logActivity('Updated popup', { type: 'host', id: hostId })
-          // Rendered on every page with no publish step: drop the live
-          // site's cached pages so it shows now rather than within the hour.
-          void announceSiteWideChange({ user, hostId })
         },
       )
       // A refusal leaves every typed value on screen. A save that silently

@@ -30,7 +30,16 @@ import { setDoc } from 'firebase/firestore'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import type { ConsoleProductEditorZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 
+// The card saves through `writeSiteWideChange` (AGL-3386); the double sends
+// each staged write to this spec's own `firebase/firestore` mock.
+jest.mock('@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/site-wide-change-double')
+    .siteWideChangeThroughSdk(() => jest.requireMock('firebase/firestore')),
+)
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useUser: () => ({ data: null }),
   useFirestore: () => mockFirestore,
   useFirestoreCollection: (build: () => unknown) => ({
     data: build() === 'productCategories' ? mockCategories : [],

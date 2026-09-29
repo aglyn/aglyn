@@ -23,7 +23,7 @@
  * settings save, a theme install and an API write did not, so each of them
  * waited out the hour while the surface that made it reported success. The
  * fix is a door per side — `useHost` / `updateHostDocument` in the console,
- * `announceSiteWideChange` for a plugin's card, `dropPluginSiteCache` for a
+ * `writeSiteWideChange` for a plugin's card, `dropPluginSiteCache` for a
  * plugin's server route, an announce inside each `/v1` write handler — and
  * this file is what keeps the next writer from walking around it. It reads
  * source, because the omission it guards against is a line that is not
@@ -82,11 +82,6 @@ function writesHostDocument(source: string): boolean {
   }
   return false
 }
-
-/** A site-wide settings document beside the host (`hosts/{id}/settings/*`). */
-const SITE_SETTINGS_WRITE = new RegExp(
-  String.raw`\b(?:updateDoc|setDoc)\(\s*doc\(\s*[\w.]+\s*,\s*['"]hosts['"]\s*,\s*[^,()]+,\s*['"]settings['"]`,
-)
 
 describe('the sweep can see a host-document write', () => {
   // Premise guards: a regex that matches nothing would pass every case below
@@ -177,17 +172,72 @@ describe('console: every host-document write goes through the door', () => {
   })
 })
 
-describe("plugins: a console card's site-wide write announces", () => {
-  const files = sourcesUnder(PLUGINS)
-    .filter((path) => !/[/\\]server[/\\]|[/\\]server\.ts$/.test(path))
-    .map((path) => ({ path: posix(path), source: readFileSync(path, 'utf8') }))
-
-  it('reads the plugins it means to sweep', () => {
-    expect(files.length).toBeGreaterThan(200)
-  })
-
+describe("plugins: a console card's write of something a page renders carries the drop", () => {
   /**
-   * Plugin writers of a site's settings that owe no drop, each with why.
+   * Every document a plugin's console code writes under a host, by what a
+   * published page makes of it. Keyed by the first path segment under
+   * `hosts/{id}` — `(host)` is the host document itself.
+   *
+   * RENDERED means the tenant reads it while building a page it caches: the
+   * write must go through `writeSiteWideChange` (or stage its entry with
+   * `commitWithSiteWideEntry` inside a transaction), so the site's cache drop
+   * commits with it. The reasons on the other side are what a page does
+   * INSTEAD — read it per request, fetch it from the browser, or never.
+   *
+   * A write to a segment in neither list fails the build until somebody
+   * decides, which is the point: the sweep cannot know whether a new
+   * collection renders, and guessing "no" is how the hour-long cache came to
+   * be the mechanism for every setting in the first place.
+   */
+  const RENDERED: Record<string, string> = {
+    '(host)': 'Site settings the tenant layout reads (see SITE_RENDERED_HOST_FIELDS).',
+    products: 'The PDP at /products/{slug} is composed server-side from the product.',
+    reviews: 'The PDP renders the approved reviews’ star aggregate server-side.',
+    variables: 'Read at render through the tenant-data cache (get-variables).',
+    functions: 'Read at render through the tenant-data cache (get-variables).',
+    overlays: 'Read at render through the tenant-data cache (get-overlays).',
+    experiments: 'Read at render by the marketing page enricher.',
+    installs: 'Which plugin version a page loads is read at render (get-plugin-installs).',
+    settings:
+      '`settings/store` names the PDP and collection templates the resolver renders.',
+  }
+  const UNRENDERED: Record<string, string> = {
+    actions: 'Automation, run server-side on events; never on a page.',
+    workflows: 'Automation, run server-side on events; never on a page.',
+    webhooks: 'Outbound delivery configuration; never on a page.',
+    bookings: 'Appointments; the booking widget asks its API per visit.',
+    services: 'Read only by the booking widget’s API, fetched from the browser.',
+    events: 'Read only by the events API, fetched from the browser (60s CDN cache).',
+    coupons: 'Read only at checkout.',
+    discounts: 'Read only at checkout.',
+    orders: 'The order book; never on a page.',
+    licenseKeys: 'Issued at fulfilment; never on a page.',
+    inventoryAdjustments:
+      'The stock log; the product write beside each entry carries the drop.',
+    suppliers: 'Purchasing; never on a page.',
+    registers: 'Point of sale; never on a page.',
+    reservations: 'Availability is computed per request by the reservation API.',
+    resources: 'Availability is computed per request by the reservation API.',
+    locations: 'No tenant reader; used by POS and fulfilment.',
+    memberPosts: 'The member feed API answers per member, private and no-store.',
+    productCategories:
+      'Read only by the catalog API, fetched from the browser (60s CDN cache).',
+    forms:
+      'The placed design renders from the nodes /api/hosts/forms/promote writes ' +
+      'and announces; these writes are fields, names, routing, archive state ' +
+      'and the draft pointer, which the tenant reads per submission.',
+    formSubmissions: 'The inbox; never on a page.',
+    screens: 'The email plugin’s documents are emails, never routed.',
+    suppressions: 'Email suppression list; never on a page.',
+  }
+  /** Segments whose writes announce their own addresses instead. */
+  const OWN_ANNOUNCE: Record<string, string> = {
+    redirects:
+      'A rule names its own source, and the redirects manager posts it to ' +
+      '/api/screens/revalidate as `redirectPath`.',
+  }
+  /**
+   * Plugin writers of a rendered segment that owe no drop, each with why.
    * Checked against the payload below, so an exempt card that starts writing
    * something a page renders loses its exemption.
    */
@@ -208,6 +258,99 @@ describe("plugins: a console card's site-wide write announces", () => {
       },
   }
 
+  const files = sourcesUnder(PLUGINS)
+    .filter((path) => !/[/\\]server[/\\]|[/\\]server\.ts$/.test(path))
+    .map((path) => ({ path: posix(path), source: readFileSync(path, 'utf8') }))
+
+  /** The first segment under `hosts/{id}` of every document this file writes. */
+  function writtenSegments(source: string): Set<string> {
+    const flat = source.replace(/\s+/g, ' ')
+    const segments = new Set<string>()
+    const WRITE = String.raw`(?:\b(?:setDoc|updateDoc|deleteDoc|addDoc)\(|\.(?:set|update|delete)\()\s*`
+    const TARGET = String.raw`(?:doc|collection)\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+(?:\([^()]*\))?\s*(?:,\s*'(\w+)')?`
+    for (const match of flat.matchAll(new RegExp(WRITE + TARGET, 'g'))) {
+      segments.add(match[1] ?? '(host)')
+    }
+    const held = new RegExp(
+      String.raw`const (\w+) = doc\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+\s*(?:,\s*'(\w+)')?`,
+      'g',
+    )
+    for (const match of flat.matchAll(held)) {
+      const writes = new RegExp(WRITE + String.raw`${match[1]}\s*,`)
+      if (writes.test(flat)) segments.add(match[2] ?? '(host)')
+    }
+    return segments
+  }
+
+  const writers = files
+    .map((file) => ({ ...file, segments: writtenSegments(file.source) }))
+    .filter(({ segments }) => segments.size > 0)
+
+  it('reads the plugins it means to sweep', () => {
+    expect(files.length).toBeGreaterThan(200)
+    // Premise guard: writers this was written against, found by the parse.
+    const found = new Map(writers.map(({ path, segments }) => [path, segments]))
+    expect(
+      found.get('libs/plugins/marketing/src/lib/components/popup-card.component.tsx'),
+    ).toEqual(new Set(['(host)']))
+    expect(
+      found.get(
+        'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx',
+      ),
+    ).toEqual(new Set(['products']))
+    expect(
+      found.get('libs/plugins/logic/src/lib/components/host-variables-card.component.tsx'),
+    ).toEqual(new Set(['variables']))
+  })
+
+  it('classifies every host-scoped segment a plugin card writes', () => {
+    const unclassified = writers.flatMap(({ path, segments }) =>
+      [...segments]
+        .filter(
+          (segment) =>
+            !(segment in RENDERED) &&
+            !(segment in UNRENDERED) &&
+            !(segment in OWN_ANNOUNCE),
+        )
+        .map((segment) => `${path} → ${segment}`),
+    )
+    expect(unclassified).toEqual([])
+  })
+
+  it('carries the drop from every writer of a rendered segment', () => {
+    const silent = writers
+      .filter(({ path }) => !(path in EXEMPT))
+      .filter(({ segments }) => [...segments].some((segment) => segment in RENDERED))
+      .filter(
+        ({ source }) =>
+          !/\bwriteSiteWideChange\(/.test(source) &&
+          !/\bcommitWithSiteWideEntry\(/.test(source),
+      )
+      .map(({ path }) => path)
+    expect(silent).toEqual([])
+  })
+
+  it('writes a rendered segment ONLY inside the helper — no bare write beside it', () => {
+    // A file that calls the helper once and writes a rendered document
+    // directly elsewhere passes the case above while that second write stays
+    // silent. So the bare SDK calls are read for their target, and none may
+    // name a rendered segment.
+    const bare = writers
+      .filter(({ path }) => !(path in EXEMPT))
+      .flatMap(({ path, source }) => {
+        const flat = source.replace(/\s+/g, ' ')
+        const direct = new RegExp(
+          String.raw`\b(?:setDoc|updateDoc|deleteDoc|addDoc)\(\s*(?:doc|collection)\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+(?:\([^()]*\))?\s*(?:,\s*'(\w+)')?`,
+          'g',
+        )
+        return [...flat.matchAll(direct)]
+          .map((match) => match[1] ?? '(host)')
+          .filter((segment) => segment in RENDERED)
+          .map((segment) => `${path} → ${segment}`)
+      })
+    expect(bare).toEqual([])
+  })
+
   it('keeps every exemption to the payload it was granted for', () => {
     for (const [path, { writes }] of Object.entries(EXEMPT)) {
       const file = files.find((candidate) => candidate.path === path)
@@ -221,22 +364,10 @@ describe("plugins: a console card's site-wide write announces", () => {
     }
   })
 
-  it('calls announceSiteWideChange after writing the host or its settings', () => {
-    const writers = files.filter(
-      ({ source }) =>
-        writesHostDocument(source) || SITE_SETTINGS_WRITE.test(source),
-    )
-    // Premise guard: the three writers this was written against.
-    expect(writers.map(({ path }) => path)).toEqual(
-      expect.arrayContaining([
-        'libs/plugins/marketing/src/lib/components/announcement-bar-card.component.tsx',
-        'libs/plugins/marketing/src/lib/components/popup-card.component.tsx',
-        'libs/plugins/commerce/src/lib/components/console/store-settings-card.component.tsx',
-      ]),
-    )
+  it('lets a segment announce its own addresses only where it really does', () => {
     const silent = writers
-      .filter(({ path }) => !(path in EXEMPT))
-      .filter(({ source }) => !/\bannounceSiteWideChange\(/.test(source))
+      .filter(({ segments }) => [...segments].some((segment) => segment in OWN_ANNOUNCE))
+      .filter(({ source }) => !source.includes("'/api/screens/revalidate'"))
       .map(({ path }) => path)
     expect(silent).toEqual([])
   })

@@ -28,17 +28,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  doc,
-  limit,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-} from 'firebase/firestore'
+import { collection, doc, limit, orderBy, query, where } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { usePagedCollection } from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -67,6 +60,7 @@ const reviewsHelp = pluginDocsHelp('catalog', {
 export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [filter, setFilter] = useState('pending')
   /*
@@ -106,9 +100,17 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const [replyFor, setReplyFor] = useState<string | null>(null)
   const [reply, setReply] = useState('')
 
+  // An approved review is on the product page — its star aggregate and its
+  // reply — so moderating one carries the site's cache drop (AGL-3386).
   const setStatus = (review: any, status: string) =>
-    updateDoc(doc(firestore, 'hosts', hostId, 'reviews', review.$id), {
-      status,
+    writeSiteWideChange({
+      firestore,
+      user,
+      hostId,
+      write: (batch) =>
+        batch.update(doc(firestore, 'hosts', hostId, 'reviews', review.$id), {
+          status,
+        }),
     })
 
   return (
@@ -202,10 +204,16 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
                     variant="contained"
                     color="primary"
                     onClick={async () => {
-                      await updateDoc(
-                        doc(firestore, 'hosts', hostId, 'reviews', review.$id),
-                        { reply: reply.trim().slice(0, 500) || null },
-                      )
+                      await writeSiteWideChange({
+                        firestore,
+                        user,
+                        hostId,
+                        write: (batch) =>
+                          batch.update(
+                            doc(firestore, 'hosts', hostId, 'reviews', review.$id),
+                            { reply: reply.trim().slice(0, 500) || null },
+                          ),
+                      })
                       setReplyFor(null)
                       enqueueSnackbar('Reply saved', {
                         variant: 'success',

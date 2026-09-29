@@ -27,7 +27,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, setDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -35,7 +35,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { hostPublicOrigin, pluginDocsHelp } from '@aglyn/aglyn'
-import { announceSiteWideChange } from '@aglyn/aglyn/app-utils/announce-site-wide-change'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 
 export interface StoreSettingsCardProps {
   hostId: string
@@ -149,18 +149,27 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
         fromCache: storeFromCache,
       },
       async () => {
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'settings', 'store'),
-          {
-            pdpScreenId: current.pdpScreenId || null,
-            collectionScreenId: current.collectionScreenId || null,
-            currency: current.currency ?? 'USD',
-            guestCheckout: current.guestCheckout !== false,
-            termsUrl: current.termsUrl || null,
-            receiptFooter: current.receiptFooter || null,
-          },
-          { merge: true },
-        )
+        // The product and collection templates, the currency and the
+        // checkout rules render on the live store with no publish step, so
+        // the save carries the site's cache drop with it.
+        await writeSiteWideChange({
+          firestore,
+          user,
+          hostId,
+          write: (batch) =>
+            batch.set(
+              doc(firestore, 'hosts', hostId, 'settings', 'store'),
+              {
+                pdpScreenId: current.pdpScreenId || null,
+                collectionScreenId: current.collectionScreenId || null,
+                currency: current.currency ?? 'USD',
+                guestCheckout: current.guestCheckout !== false,
+                termsUrl: current.termsUrl || null,
+                receiptFooter: current.receiptFooter || null,
+              },
+              { merge: true },
+            ),
+        })
       },
     )
     // Before `setDraft(null)`, so a refusal keeps every typed value on
@@ -173,10 +182,6 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
       })
     }
     setDraft(null)
-    // The product and collection templates, the currency and the checkout
-    // rules render on the live store with no publish step: drop its cached
-    // pages so they show now rather than within the hour.
-    void announceSiteWideChange({ user, hostId })
     enqueueSnackbar('Store settings saved', {
       variant: 'success',
       persist: false,

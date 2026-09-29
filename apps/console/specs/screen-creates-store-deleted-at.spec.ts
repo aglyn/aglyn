@@ -79,6 +79,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
   'libs/plugins/marketing/src/lib/server/campaign-manage.ts': 'creates campaigns and sends; reads a design screen',
   'libs/plugins/marketing/src/lib/server/campaign-send.ts': 'writes sends; reads a design screen',
+  'libs/plugins/marketing/src/lib/components/host-experiments-card.component.tsx':
+    'writes experiments through a batch; names the screen under test',
   'tools/e2e/besigner-editors.e2e.mjs': 'seeds components and templates; reads the seeded home screen',
   'tools/e2e/presence-two-session.e2e.mjs': 'seeds members and roles; reads the seeded home screen',
   'tools/e2e/save-as-template.e2e.mjs': 'seeds layouts, components and templates; reads screens',

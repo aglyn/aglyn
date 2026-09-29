@@ -45,11 +45,11 @@ import {
   limit,
   orderBy,
   query,
-  setDoc,
   type Firestore,
 } from 'firebase/firestore'
 import { Fragment, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { useMarketingOrgMount } from './marketing-org-mount'
 import {
@@ -169,6 +169,7 @@ export function OrgOverlaysCard(props: OrgOverlaysCardProps) {
   const { org } = props
   const mount = useMarketingOrgMount()
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const entitled = checkEntitlement(org, 'marketingOverlays')
 
@@ -191,11 +192,17 @@ export function OrgOverlaysCard(props: OrgOverlaysCardProps) {
   const handleToggle = async (hostId: string, overlay: OverlayRow) => {
     const enabled = overlay.enabled === false
     try {
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'overlays', overlay.$id),
-        { enabled },
-        { merge: true },
-      )
+      await writeSiteWideChange({
+        firestore,
+        user,
+        hostId,
+        write: (batch) =>
+          batch.set(
+            doc(firestore, 'hosts', hostId, 'overlays', overlay.$id),
+            { enabled },
+            { merge: true },
+          ),
+      })
       patch(hostId, (site) => ({
         ...site,
         rows: site.rows.map((row) =>

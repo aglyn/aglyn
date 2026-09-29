@@ -19,8 +19,12 @@ import {
   useHost as useHostDocument,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { commitWithSiteWideEntry } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { useCallback } from 'react'
-import { announceHostDocumentWrite } from '../utils/host-document-writes'
+import {
+  announceHostDocumentWrite,
+  renderedHostFieldsIn,
+} from '../utils/host-document-writes'
 
 type HostDocumentHook = typeof useHostDocument
 type HostDocumentResult = ReturnType<HostDocumentHook>
@@ -41,7 +45,9 @@ type HostSetDoc = HostDocumentResult['setDoc']
  *
  * The setter resolves when the WRITE does, exactly as before. The drop runs
  * behind it and cannot reject, so no caller's success path or error path
- * moves.
+ * moves. A rendered write lands in one batch with a site-wide publish outbox
+ * entry (the library setter's `alongside`), so a tab closed before its drop
+ * still leaves the drain something to fire.
  */
 export function useHost(
   ...args: Parameters<HostDocumentHook>
@@ -54,8 +60,11 @@ export function useHost(
 
   const announcingSetDoc = useCallback<HostSetDoc>(
     async (payload, options) => {
-      await setDoc(payload, options)
-      void announceHostDocumentWrite({ user, hostId, payload })
+      if (!renderedHostFieldsIn(payload).length) return setDoc(payload, options)
+      const entry = await commitWithSiteWideEntry(hostId, (stage) =>
+        setDoc(payload, stage ? { ...options, alongside: stage } : options),
+      )
+      void announceHostDocumentWrite({ user, hostId, payload, entry })
     },
     [setDoc, user, hostId],
   )

@@ -15,7 +15,18 @@
  * limitations under the License.
  */
 
-import { doc, updateDoc, type Firestore, type UpdateData } from 'firebase/firestore'
+import {
+  commitWithSiteWideEntry,
+  releaseSiteWideOutboxEntry,
+} from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
+import {
+  doc,
+  updateDoc,
+  writeBatch,
+  type DocumentReference,
+  type Firestore,
+  type UpdateData,
+} from 'firebase/firestore'
 import revalidateLivePages, {
   type RevalidateLivePagesOptions,
   type RevalidateLivePagesResult,
@@ -44,6 +55,11 @@ import revalidateLivePages, {
  * The drop is `entireHost`, because a site setting has no address: the theme
  * is on every page, and so is the favicon. The hour-long window is still
  * underneath as the backstop; this only stops it being the mechanism.
+ *
+ * DURABLE, like a publish. A rendered write commits with a site-wide publish
+ * outbox entry in the same batch (`commitWithSiteWideEntry`), the tab's own
+ * drop releases it on a plain `ok`, and the console's drain fires any entry a
+ * closed tab left behind.
  */
 
 /**
@@ -203,20 +219,27 @@ export interface HostDocumentWriter {
 
 /**
  * After a SUCCESSFUL write to `hosts/{hostId}`: drop every cached page of the
- * site when the payload touched anything it renders.
+ * site when the payload touched anything it renders, and release the write's
+ * outbox entry once that drop is known to have landed.
  *
  * Resolves `null` when nothing rendered changed, and never rejects. The write
  * has already landed by the time this runs, so a drop that fails must never
  * make the save look failed — `revalidateLivePages` answers a refusal as a
- * result rather than a throw, and anything else is swallowed here.
+ * result rather than a throw, and anything else is swallowed here. A drop
+ * that did not answer `ok` leaves the entry for the drain.
  */
 export async function announceHostDocumentWrite(
-  options: HostDocumentWriter & { payload: unknown },
+  options: HostDocumentWriter & {
+    payload: unknown
+    entry?: DocumentReference | null
+  },
 ): Promise<RevalidateLivePagesResult | null> {
-  const { user, hostId, payload } = options
+  const { user, hostId, payload, entry = null } = options
   if (!hostId || !renderedHostFieldsIn(payload).length) return null
   try {
-    return await revalidateLivePages({ user, hostId, entireHost: true })
+    const result = await revalidateLivePages({ user, hostId, entireHost: true })
+    await releaseSiteWideOutboxEntry(entry, result?.reason)
+    return result
   } catch {
     return null
   }
@@ -227,7 +250,8 @@ export async function announceHostDocumentWrite(
  *
  * Use this — never a bare `updateDoc(doc(firestore, 'hosts', hostId), …)` —
  * for every console write to the host document outside `useHost`. A failed
- * write rejects exactly as `updateDoc` would, and nothing is announced.
+ * write rejects exactly as `updateDoc` would, and nothing is announced. A
+ * rendered write commits with its site-wide outbox entry in one batch.
  *
  * The drop is fired without waiting by default, like the publish call sites:
  * the save is done, and a settings card has nothing to say about the cache.
@@ -241,8 +265,19 @@ export async function updateHostDocument(
   data: UpdateData<Record<string, unknown>>,
   options?: { awaitAnnounce?: boolean },
 ): Promise<RevalidateLivePagesResult | null> {
-  await updateDoc(doc(firestore, 'hosts', writer.hostId), data)
-  const announced = announceHostDocumentWrite({ ...writer, payload: data })
+  const hostRef = doc(firestore, 'hosts', writer.hostId)
+  let entry: DocumentReference | null = null
+  if (renderedHostFieldsIn(data).length) {
+    entry = await commitWithSiteWideEntry(writer.hostId, async (stage) => {
+      const batch = writeBatch(firestore)
+      batch.update(hostRef, data)
+      stage?.(batch, firestore)
+      await batch.commit()
+    })
+  } else {
+    await updateDoc(hostRef, data)
+  }
+  const announced = announceHostDocumentWrite({ ...writer, payload: data, entry })
   if (options?.awaitAnnounce) return announced
   void announced
   return null

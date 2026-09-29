@@ -20,6 +20,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   isPublishOutboxDue,
   isPublishOutboxStalled,
+  isSiteWidePublishOutboxEntry,
   PUBLISH_OUTBOX_COLLECTION,
   PUBLISH_OUTBOX_DRAIN_LIMIT,
   PUBLISH_OUTBOX_DRAIN_TAG,
@@ -29,7 +30,10 @@ import {
 } from '../../../../constants/publish-outbox'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
-import { postTenantRevalidate } from '../../../../utils/server/tenant-revalidate'
+import {
+  postTenantRevalidate,
+  wholeHostPaths,
+} from '../../../../utils/server/tenant-revalidate'
 import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
 /**
@@ -123,6 +127,12 @@ async function handler(request: Request): Promise<Response> {
     interface HostWork {
       paths: Set<string>
       refs: FirebaseFirestore.DocumentReference[]
+      /**
+       * Some entry for this host asked for the WHOLE site (AGL-3386) — a
+       * settings save, which changes every page and names none. Resolved
+       * against the routing map below, once the host document is in hand.
+       */
+      entireHost: boolean
     }
     const work = new Map<string, HostWork>()
     let stalled = 0
@@ -167,12 +177,18 @@ async function handler(request: Request): Promise<Response> {
         malformed += 1
         continue
       }
+      const entireHost = isSiteWidePublishOutboxEntry(entry.get('entireHost'))
       const existing = work.get(hostId)
       if (existing) {
         for (const path of paths) existing.paths.add(path)
         existing.refs.push(entry.ref)
+        existing.entireHost ||= entireHost
       } else {
-        work.set(hostId, { paths: new Set(paths), refs: [entry.ref] })
+        work.set(hostId, {
+          paths: new Set(paths),
+          refs: [entry.ref],
+          entireHost,
+        })
       }
     }
 
@@ -196,10 +212,15 @@ async function handler(request: Request): Promise<Response> {
         drained += hostWork.refs.length
         continue
       }
+      // A site-wide entry drops every routed page. Its named paths lead, as
+      // on every other drop: the tenant keeps the first paths it is handed.
+      const paths = hostWork.entireHost
+        ? [...new Set([...hostWork.paths, ...wholeHostPaths(hostSnapshot)])]
+        : [...hostWork.paths]
       const result = await postTenantRevalidate({
         subdomain,
         hostId,
-        paths: [...hostWork.paths].slice(0, PUBLISH_OUTBOX_MAX_PATHS),
+        paths: paths.slice(0, PUBLISH_OUTBOX_MAX_PATHS),
         // The custom domain is a SECOND cache key for the same page
         // (AGL-1152) and it is the one visitors actually use.
         cname: String(hostSnapshot.get('cname') ?? '') || undefined,
