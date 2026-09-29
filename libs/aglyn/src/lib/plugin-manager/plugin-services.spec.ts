@@ -151,3 +151,30 @@ describe('reset and unregister', () => {
     expect(resolvePluginService(PROVIDERS)).toBeUndefined()
   })
 })
+
+describe('one registry per process', () => {
+  it('a second copy of the module resolves what the first registered', () => {
+    // The shape of Next's boot file and a route handler: two evaluations of
+    // this module in one process. What boot registers, a route must see.
+    type Services = typeof import('./plugin-services')
+    type Signing = typeof import('./plugin-trust-signing')
+    let boot!: Signing
+    let route!: Signing
+    let routeServices!: Services
+    jest.isolateModules(() => {
+      boot = jest.requireActual('./plugin-trust-signing')
+    })
+    jest.isolateModules(() => {
+      route = jest.requireActual('./plugin-trust-signing')
+      routeServices = jest.requireActual('./plugin-services')
+    })
+    expect(route).not.toBe(boot)
+    boot.registerPluginTrustSigner(
+      { sign: async () => ({ signed: true, signature: 'sig' }) },
+      { pluginId: 'console' },
+    )
+    expect(route.hasPluginTrustSigner()).toBe(true)
+    routeServices.resetPluginServicesForTests()
+    expect(boot.hasPluginTrustSigner()).toBe(false)
+  })
+})
