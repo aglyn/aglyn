@@ -26,10 +26,10 @@ import {
   doc,
   limit,
   query,
-  updateDoc,
 } from 'firebase/firestore'
 import { useCallback } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { updateHostDocument } from '../utils/host-document-writes'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
@@ -70,6 +70,7 @@ const AUTH_SLOTS: Array<{
 export function AuthScreensCard(props: AuthScreensCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { data: host } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
@@ -89,7 +90,7 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
 
   const handleChange = useCallback(
     (key: string) => async (value: string) => {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
+      await updateHostDocument(firestore, { user, hostId }, {
         [`authScreens.${key}`]: value || deleteField(),
       })
       enqueueSnackbar(value ? 'Auth screen set' : 'Auth screen cleared', {
@@ -97,7 +98,7 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
         persist: false,
       })
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   const authScreens = host?.authScreens ?? {}

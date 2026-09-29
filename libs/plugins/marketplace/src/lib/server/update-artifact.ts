@@ -36,6 +36,7 @@ import {
   type ArtifactUpdatePlan,
 } from '../model/artifact-merge'
 import { ARTIFACT_BASE_COLLECTION } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
@@ -592,6 +593,16 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
+      // A merged THEME repaints every page of the site the moment it lands,
+      // and nothing publishes it — so the site's cached pages go now rather
+      // than within the hour (AGL-3386). Awaited before the response, and it
+      // never throws: a failed drop leaves the update applied.
+      if (artifactType === 'theme') {
+        await dropPluginSiteCache({
+          hostIds: [hostId],
+          reason: 'marketplace theme updated',
+        })
+      }
       // Per-version tally (AGL-1036): this install just moved versions, which
       // is the whole reason the per-version count exists.
       await recordVersionMove({

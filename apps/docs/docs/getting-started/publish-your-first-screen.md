@@ -69,6 +69,11 @@ saves so you can jump straight to the real page.
 - **Publishing a layout or a reusable component** refreshes every page that uses it
   the same way. When that fan-out is very large, the publish confirms that the
   remaining pages *"update on their own within an hour"* — and they do.
+- **Site settings go live when you save them.** Your theme, logo, favicon, app icon,
+  social image, SEO and structured data, business details, languages, consent banner,
+  announcement bar, popup and store settings have no publish step — saving one
+  refreshes every page of the live site immediately, the same way a publish does.
+  Installing, updating or resetting a marketplace theme does too.
 - **Saving is not publishing.** A save writes your working version; the live site
   serves the published one. The one subtle case: if you edit the version that is
   *currently live* and press Save, the live site catches up on its own within about a

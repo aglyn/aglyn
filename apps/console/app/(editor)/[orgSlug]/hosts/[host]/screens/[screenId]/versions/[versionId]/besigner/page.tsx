@@ -98,7 +98,6 @@ import {
 } from '@aglyn/shared-ui-theme'
 import {
   saveNodesGuarded,
-  useHost,
   useHostActivityLogger,
   useLayout,
   useLayoutVersion,
@@ -108,6 +107,7 @@ import {
   writeGuardedBySeed,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../../../../../../../../../../hooks/use-host'
 import {
   Alert,
   Button,

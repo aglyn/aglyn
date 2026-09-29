@@ -42,11 +42,8 @@ import {
   simpleComponentMapper,
 } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useHost,
-  useUser,
-  writeGuardedBySeed,
-} from '@aglyn/tenant-feature-instance'
+import { useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../../../../../hooks/use-host'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { InputAdornment } from '@mui/material'
 import { deleteField } from 'firebase/firestore'

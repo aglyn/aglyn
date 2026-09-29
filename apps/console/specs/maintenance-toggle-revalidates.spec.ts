@@ -39,6 +39,7 @@ const CARD = join(
   'components',
   'error-screens-card.component.tsx',
 )
+const CHOKEPOINT = join(__dirname, '..', 'utils', 'host-document-writes.ts')
 const ROUTE = join(
   __dirname,
   '..',
@@ -55,26 +56,33 @@ describe('the toggle asks for the drop', () => {
     source.indexOf('const handleMaintenance'),
     source.indexOf('const errorScreens'),
   )
+  const chokepoint = readFileSync(CHOKEPOINT, 'utf8')
 
   it('reads the handler it means to assert on', () => {
     // A premise guard: a rename would otherwise leave every case below
     // matching an empty string and passing against nothing.
     expect(handler.length).toBeGreaterThan(200)
-    expect(handler).toContain('updateDoc')
+    expect(handler).toContain('updateHostDocument(')
   })
 
-  it('drops the WHOLE host, not a screen fan-out', () => {
+  it('writes through the host-document door, which drops the WHOLE host', () => {
     // Maintenance replaces every path, including addresses no screen document
-    // holds — the sitemap, a feed, a collection entry's URL.
-    expect(handler).toMatch(/revalidateLivePages\(\{[\s\S]{0,80}entireHost: true/)
+    // holds — the sitemap, a feed, a collection entry's URL. The door is what
+    // asks for that (AGL-3386), and `maintenance` is one of the fields it
+    // treats as rendered.
+    expect(handler).not.toMatch(/\bupdateDoc\(/)
+    expect(chokepoint).toMatch(
+      /revalidateLivePages\(\{[\s\S]{0,80}entireHost: true/,
+    )
+    expect(chokepoint).toMatch(/\n {2}maintenance:/)
   })
 
   it('AWAITS it, because the snackbar is a claim about what visitors see', () => {
     // The publish call sites fire this and move on; they can, because a
     // publish already succeeded. Here the write and the drop together are the
     // feature.
-    expect(handler).toMatch(/await revalidateLivePages\(/)
-    expect(handler).not.toMatch(/void revalidateLivePages\(/)
+    expect(handler).toMatch(/const dropped = await updateHostDocument\(/)
+    expect(handler).toMatch(/awaitAnnounce: true/)
   })
 
   it('says something weaker when the drop did not land', () => {

@@ -69,6 +69,9 @@ const resetSite = () => {
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  // The cards announce a saved overlay to the live site as this user
+  // (AGL-3386); signed out here, so the announce is refused and swallowed.
+  useUser: () => ({ data: null }),
   useFirestoreDoc: () => ({ data: site, status: 'success', fromCache: false }),
   useFirestoreCollection: (build: () => string | null) => {
     const path = build()

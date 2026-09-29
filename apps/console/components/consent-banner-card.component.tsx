@@ -36,9 +36,10 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
-import { deleteField, doc, updateDoc } from 'firebase/firestore'
+import { deleteField, doc } from 'firebase/firestore'
 import { useCallback } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { updateHostDocument } from '../utils/host-document-writes'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
@@ -76,6 +77,7 @@ export interface ConsentBannerCardProps {
 export function ConsentBannerCard(props: ConsentBannerCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { data: host } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
@@ -91,7 +93,7 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
 
   const handleToggle = useCallback(
     async (active: boolean) => {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
+      await updateHostDocument(firestore, { user, hostId }, {
         'consent.disabled': active ? deleteField() : true,
       })
       enqueueSnackbar(
@@ -101,7 +103,7 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
         { variant: active ? 'success' : 'warning', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   /**
@@ -128,7 +130,7 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
    */
   const handleAdvertising = useCallback(
     async (active: boolean) => {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
+      await updateHostDocument(firestore, { user, hostId }, {
         'consent.advertising': active ? true : deleteField(),
       })
       enqueueSnackbar(
@@ -138,13 +140,13 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
         { variant: 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   const handleMode = useCallback(
     async (nextMode: string) => {
       const value = nextMode === 'strict' ? 'strict' : 'geo'
-      await updateDoc(doc(firestore, 'hosts', hostId), {
+      await updateHostDocument(firestore, { user, hostId }, {
         'consent.mode': value,
       })
       enqueueSnackbar(
@@ -154,7 +156,7 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
         { variant: 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   return (

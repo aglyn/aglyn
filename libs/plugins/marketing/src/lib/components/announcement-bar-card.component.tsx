@@ -39,8 +39,10 @@ import {
   useFirestore,
   useFirestoreDoc,
   useHostActivityLogger,
+  useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { announceSiteWideChange } from '@aglyn/aglyn/app-utils/announce-site-wide-change'
 import OverlayStatsRow from './overlay-stats-row.component'
 import {
   OVERLAY_COPY_HELPER_TEXT,
@@ -66,6 +68,7 @@ export interface AnnouncementBarCardProps {
 export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { org } = props
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
@@ -152,6 +155,9 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
             },
           })
           logActivity('Updated announcement bar', { type: 'host', id: hostId })
+          // Rendered on every page with no publish step: drop the live
+          // site's cached pages so it shows now rather than within the hour.
+          void announceSiteWideChange({ user, hostId })
         },
       )
       // A refusal leaves every typed value on screen. A save that silently

@@ -20,7 +20,8 @@ import { docsHelp } from '../constants/docs-links'
 import { describeHostTokens } from '@aglyn/aglyn/app-utils/host-tokens'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import { writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../hooks/use-host'
 import {
   Box,
   Button,

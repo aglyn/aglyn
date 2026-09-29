@@ -62,10 +62,10 @@ import {
   useFirestoreDoc,
   useFormVersion,
   useFormVersionRef,
-  useHost,
   useHostActivityLogger,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../../../../../../../../../../hooks/use-host'
 import { Stack, Typography } from '@mui/material'
 import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'

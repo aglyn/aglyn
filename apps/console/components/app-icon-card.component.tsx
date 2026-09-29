@@ -18,7 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHost } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../hooks/use-host'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'

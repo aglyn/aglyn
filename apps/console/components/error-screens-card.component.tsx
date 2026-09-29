@@ -35,14 +35,13 @@ import {
   doc,
   limit,
   query,
-  updateDoc,
 } from 'firebase/firestore'
 import { useCallback } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { unpublishScreenRoute } from '../constants/screen-publishing'
-import revalidateLivePages from '../utils/revalidate-live-pages'
+import { updateHostDocument } from '../utils/host-document-writes'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
@@ -211,10 +210,12 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
    * That second direction is the one that matters: a site kept down after its
    * owner brought it back is an outage they cannot end.
    *
-   * `entireHost` rather than a screen fan-out because maintenance replaces
-   * EVERY path, including the addresses no screen document holds.
+   * `updateHostDocument` makes that drop `entireHost` rather than a screen
+   * fan-out, which is what maintenance needs: it replaces EVERY path,
+   * including the addresses no screen document holds.
    *
-   * AWAITED, unlike the publish call sites that fire this helper and move on.
+   * AWAITED (`awaitAnnounce`), unlike the settings cards and publish call
+   * sites that fire the drop and move on.
    * They can: a publish has already succeeded and the page is live-but-stale
    * for a bounded window. Here the write and the drop together ARE the
    * feature, and the snackbar is a claim about what visitors see — so it
@@ -222,14 +223,12 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
    */
   const handleMaintenance = useCallback(
     async (enabled: boolean) => {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
-        maintenance: enabled || deleteField(),
-      })
-      const dropped = await revalidateLivePages({
-        user,
-        hostId,
-        entireHost: true,
-      })
+      const dropped = await updateHostDocument(
+        firestore,
+        { user, hostId },
+        { maintenance: enabled || deleteField() },
+        { awaitAnnounce: true },
+      )
       const landed = dropped?.reason === 'ok'
       enqueueSnackbar(
         enabled

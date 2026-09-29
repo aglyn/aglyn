@@ -17,6 +17,7 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
@@ -51,6 +52,10 @@ import { isPublisherSecurityLocked } from './sale-risk'
  *
  * `preview` changes nothing and returns what the swap would do, so the
  * confirmation can name it rather than showing a JSON blob.
+ *
+ * Every action that writes the theme then drops the site's cached pages
+ * (AGL-3386). The theme styles every page and nothing publishes it, so
+ * without the drop "the site repaints" meant "within the hour".
  */
 export const installThemeHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -97,6 +102,14 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
     }
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
     const currentTheme = hostSnapshot.get('theme') ?? null
+    // Awaited before the response, because a serverless function may be
+    // frozen once it has answered. Never throws: a drop that fails leaves the
+    // theme saved and the hour-long cache as the backstop.
+    const repaintLiveSite = (action: string) =>
+      dropPluginSiteCache({
+        hostIds: [hostId],
+        reason: `marketplace theme ${action}`,
+      })
 
     // ---- reset: back to the platform default ----
     if (action === 'reset') {
@@ -113,6 +126,7 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
+      await repaintLiveSite('reset')
       return res.status(200).json({ reset: true })
     }
 
@@ -128,6 +142,7 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
+      await repaintLiveSite('overrides cleared')
       return res.status(200).json({ cleared: true })
     }
 
@@ -156,6 +171,7 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
+      await repaintLiveSite('reverted')
       return res.status(200).json({ reverted: true })
     }
 
@@ -299,6 +315,8 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+
+    await repaintLiveSite('installed')
 
     await recordVersionMove({
       firestore,

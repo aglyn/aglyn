@@ -56,11 +56,11 @@ import {
 } from '@aglyn/shared-ui-theme'
 import {
   saveNodesGuarded,
-  useHost,
   useHostTemplate,
   useHostTemplateRef,
   useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../../../../../../../../hooks/use-host'
 import { Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'

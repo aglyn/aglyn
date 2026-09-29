@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { useHost } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../hooks/use-host'
 
 export interface HostDisplayNameComponentProps {
   hostId: string

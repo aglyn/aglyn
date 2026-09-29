@@ -77,6 +77,7 @@ import {
   useHostResourceApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { updateHostDocument } from '../../utils/host-document-writes'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useDeclareDocumentSubject } from '../document-subject'
 import PageHoldBanner from '../page-holds/page-hold-banner.component'
@@ -819,7 +820,7 @@ export function CollectionEntriesPage() {
   const handleAuthorScreenChange = useCallback(
     async (value: string) => {
       try {
-        await updateDoc(doc(firestore, 'hosts', hostId), {
+        await updateHostDocument(firestore, { user, hostId }, {
           authorScreenId: value || deleteField(),
           updatedAt: Timestamp.now(),
         })
@@ -837,7 +838,7 @@ export function CollectionEntriesPage() {
         { variant: 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   /**

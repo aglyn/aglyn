@@ -20,9 +20,10 @@ import { isSearchDiscouraged } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, FormControlLabel, Stack, Switch, Typography } from '@mui/material'
-import { deleteField, doc, updateDoc } from 'firebase/firestore'
+import { deleteField, doc } from 'firebase/firestore'
 import { useCallback } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { updateHostDocument } from '../utils/host-document-writes'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
@@ -50,6 +51,7 @@ export interface SearchIndexingCardProps {
 export function SearchIndexingCard(props: SearchIndexingCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { data: host } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
@@ -61,7 +63,7 @@ export function SearchIndexingCard(props: SearchIndexingCardProps) {
 
   const handleChange = useCallback(
     async (enabled: boolean) => {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
+      await updateHostDocument(firestore, { user, hostId }, {
         'seo.discourageSearchEngines': enabled || deleteField(),
       })
       enqueueSnackbar(
@@ -71,7 +73,7 @@ export function SearchIndexingCard(props: SearchIndexingCardProps) {
         { variant: enabled ? 'warning' : 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   return (
