@@ -114,6 +114,7 @@ changes, because every rule is by tag.
 | -- | -- | -- | -- | -- | -- |
 | `plugins-ai` | `@aglyn/plugins-ai` | `libs/plugins/ai` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-bookings` | `@aglyn/plugins-bookings` | `libs/plugins/bookings` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-calculator` | `@aglyn/plugins-calculator` | `libs/plugins/calculator` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-commerce` | `@aglyn/plugins-commerce` | `libs/plugins/commerce` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-crm` | `@aglyn/plugins-crm` | `libs/plugins/crm` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-data` | `@aglyn/plugins-data` | `libs/plugins/data` | `scope:plugin` `type:feature` | yes | `.`, `./*` |

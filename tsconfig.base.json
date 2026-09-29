@@ -59,6 +59,8 @@
       "@aglyn/plugins-ai/*": ["./libs/plugins/ai/src/lib/*"],
       "@aglyn/plugins-bookings": ["./libs/plugins/bookings/src/index.ts"],
       "@aglyn/plugins-bookings/*": ["./libs/plugins/bookings/src/lib/*"],
+      "@aglyn/plugins-calculator": ["./libs/plugins/calculator/src/index.ts"],
+      "@aglyn/plugins-calculator/*": ["./libs/plugins/calculator/src/lib/*"],
       "@aglyn/plugins-events-calendar": ["./libs/plugins/events-calendar/src/index.ts"],
       "@aglyn/plugins-events-calendar/*": ["./libs/plugins/events-calendar/src/lib/*"],
       "@aglyn/plugins-forms": ["./libs/plugins/forms/src/index.ts"],

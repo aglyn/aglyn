@@ -89,6 +89,7 @@ const ENABLED_PLUGINS = [
   'events-calendar',
   'inbox',
   'logic',
+  'calculator',
   'marketing',
   'redirects',
   'workflows',

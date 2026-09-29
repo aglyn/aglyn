@@ -77,6 +77,11 @@ const OWNING_BUNDLE = {
   formField: 'forms',
   booking: 'bookings',
   eventList: 'events-calendar',
+  functionWidget: 'calculator',
+  functionScope: 'calculator',
+  functionInput: 'calculator',
+  functionOutput: 'calculator',
+  functionShow: 'calculator',
 }
 
 /**

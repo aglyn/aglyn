@@ -138,4 +138,10 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     contributes: {"console":{"shell":true,"slots":["assistPanel","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","hostAutomations","hostComponents","hostFirstRun","hostForms","hostLayouts","hostMembers","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","orgBillingUsage","orgMember","orgMembersListColumn","orgSites","productEditor","productImport","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
     load: () => import('@aglyn/plugins-ai'),
   },
+  {
+    id: 'calculator',
+    register: {"site":"registerCalculatorPlugin"},
+    contributes: {},
+    load: () => import('@aglyn/plugins-calculator/site'),
+  },
 ]

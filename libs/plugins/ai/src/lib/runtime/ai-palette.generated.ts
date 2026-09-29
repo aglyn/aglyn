@@ -1319,8 +1319,59 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     presets: ['Form Field', 'Marketing consent'],
   },
+  functionDocument: {
+    pluginId: 'calculator',
+    kind: 'element',
+    category: 'Input',
+    displayName: 'Calculator Document',
+    summary: 'A receipt, invoice or quote inside a Calculator.',
+    acceptsChildren: true,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          maxLength: 200,
+        },
+        paper: {
+          type: 'string',
+          enum: ['letter', 'a4', 'auto'],
+        },
+        margin: {
+          type: 'string',
+          enum: ['none', 'narrow', 'normal', 'wide'],
+        },
+        onScreen: {
+          type: 'string',
+          enum: ['show', 'hide'],
+        },
+        name: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      title: 'text',
+      name: 'text',
+    },
+    propFields: {
+      title: 'text-field',
+      paper: 'select',
+      margin: 'select',
+      onScreen: 'select',
+      name: 'text-field',
+    },
+    textLimits: {
+      title: 200,
+      name: 200,
+    },
+    presets: ['Calculator Document'],
+  },
   functionInput: {
-    pluginId: 'mui',
+    pluginId: 'calculator',
     kind: 'element',
     category: 'Input',
     displayName: 'Calculator Input',
@@ -1373,7 +1424,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     presets: ['Calculator Input'],
   },
   functionOutput: {
-    pluginId: 'mui',
+    pluginId: 'calculator',
     kind: 'element',
     category: 'Input',
     displayName: 'Calculator Result',
@@ -1418,8 +1469,59 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     presets: ['Calculator Result'],
   },
+  functionSave: {
+    pluginId: 'calculator',
+    kind: 'element',
+    category: 'Input',
+    displayName: 'Calculator Save Button',
+    summary:
+      'Saves the Calculator Document in the same Calculator: as a PDF, to the device’s share sheet, or copied as tex…',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['pdf', 'share', 'copy'],
+        },
+        label: {
+          type: 'string',
+          maxLength: 200,
+        },
+        variant: {
+          type: 'string',
+          enum: ['contained', 'outlined', 'text'],
+        },
+        fullWidth: {
+          type: 'boolean',
+        },
+        document: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      label: 'text',
+      document: 'text',
+    },
+    propFields: {
+      action: 'select',
+      label: 'text-field',
+      variant: 'select',
+      fullWidth: 'switch',
+      document: 'text-field',
+    },
+    textLimits: {
+      label: 200,
+      document: 200,
+    },
+    presets: ['Calculator Save Button'],
+  },
   functionScope: {
-    pluginId: 'mui',
+    pluginId: 'calculator',
     kind: 'element',
     category: 'Input',
     displayName: 'Calculator',
@@ -1448,7 +1550,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     presets: ['Calculator'],
   },
   functionShow: {
-    pluginId: 'mui',
+    pluginId: 'calculator',
     kind: 'element',
     category: 'Input',
     displayName: 'Show When',
@@ -1482,7 +1584,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     presets: ['Show When'],
   },
   functionWidget: {
-    pluginId: 'mui',
+    pluginId: 'calculator',
     kind: 'element',
     category: 'Input',
     displayName: 'Function Widget',

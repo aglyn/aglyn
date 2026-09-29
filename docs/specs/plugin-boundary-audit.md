@@ -228,6 +228,15 @@ the reason that entry offers two options rather than one.
 
 ### 3.1 — `functionWidget` → `libs/plugins/logic` · **confidence: high**
 
+> **Resolved differently, AGL-3387 (2026-09-29).** The calculator elements —
+> `functionWidget`, `functionScope`, `functionInput`, `functionOutput`,
+> `functionShow`, and the new `functionDocument` and `functionSave` — moved out
+> of `mui` into a plugin of their own, `libs/plugins/calculator`, whose catalog
+> row `requires: ["logic"]`. Logic stays console-only. The model and the
+> compose hook stay in core, as argued below; saved nodes are restamped by
+> `tools/scripts/backfill-node-plugin-ids.mjs`. The analysis below is kept as
+> it was written.
+
 **A plugin that documents itself as having no canvas element has one.**
 
 | piece | where it lives today |

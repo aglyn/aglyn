@@ -282,6 +282,7 @@ await put(firestore.collection('orgs').doc(orgId), {
     'events-calendar',
     'inbox',
     'logic',
+    'calculator',
     'marketing',
     'redirects',
     'workflows',

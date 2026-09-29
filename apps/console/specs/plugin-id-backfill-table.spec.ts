@@ -66,6 +66,7 @@ async function bundleOf(id: string, exportName: string): Promise<BundleEntry[]> 
 const FORMS_ID = 'forms'
 const BOOKINGS_ID = 'bookings'
 const EVENTS_ID = 'events-calendar'
+const CALCULATOR_ID = 'calculator'
 const MUI_ID = 'mui'
 
 const SCRIPT = 'tools/scripts/backfill-node-plugin-ids.mjs'
@@ -104,6 +105,7 @@ describe('the pluginId backfill names the bundles that exist', () => {
       [FORMS_ID, await bundleOf(FORMS_ID, 'FORMS_BUNDLE')],
       [BOOKINGS_ID, await bundleOf(BOOKINGS_ID, 'BOOKINGS_BUNDLE')],
       [EVENTS_ID, await bundleOf(EVENTS_ID, 'EVENTS_CALENDAR_BUNDLE')],
+      [CALCULATOR_ID, await bundleOf(CALCULATOR_ID, 'CALCULATOR_BUNDLE')],
       [MUI_ID, MUI_BUNDLE],
     ] as const) {
       for (const entry of bundle) REGISTERED[String(entry.schema.$id)] = bundleId
@@ -134,6 +136,11 @@ describe('the pluginId backfill names the bundles that exist', () => {
       'eventList',
       'form',
       'formField',
+      'functionInput',
+      'functionOutput',
+      'functionScope',
+      'functionShow',
+      'functionWidget',
     ])
   })
 
