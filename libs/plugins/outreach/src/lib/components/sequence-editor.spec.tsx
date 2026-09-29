@@ -153,7 +153,7 @@ const stored = (
   status: 'draft',
   createdAtMs: 1,
   updatedAtMs: 1,
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, countOpens: false, listUnsubscribe: false },
   steps: [
     {
       id: 'step-a',
@@ -346,6 +346,10 @@ describe('the sequence editor: a new sequence (AGL-2980)', () => {
     // page's buttons are reachable again.
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    // Opens are counted only when asked for (AGL-3395): off on a new one.
+    const countOpens = screen.getByLabelText('Count opens') as HTMLInputElement
+    expect(countOpens.checked).toBe(false)
+    fireEvent.click(countOpens)
     fireEvent.click(screen.getByRole('button', { name: 'Create sequence' }))
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
     const [sequenceId, draft] = mockApi.saveSequence.mock.calls[0]
@@ -358,6 +362,7 @@ describe('the sequence editor: a new sequence (AGL-2980)', () => {
         window: null,
         allowedCountries: ['US'],
         allowCustomers: false,
+        countOpens: true,
       },
       campaignIds: ['founder-icp2'],
     })

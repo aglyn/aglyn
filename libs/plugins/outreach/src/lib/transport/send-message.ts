@@ -116,6 +116,7 @@ export function sendComposedOutreachEmail(
       to: email.to,
       subject: email.subject,
       text: email.text,
+      html: email.html ?? null,
       headers: {
         'In-Reply-To': email.inReplyTo,
         References: email.references,

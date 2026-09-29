@@ -37,11 +37,14 @@
  *
  * And one is this channel's own:
  *
- * 4. **Opens are not measured at all.** Not zero, not withheld pending a
- *    webhook — impossible, because a sequence email is plain text by
- *    decision and a pixel needs an HTML part. The report SAYS that, in the
- *    place a reader looks for an open rate, so nobody concludes from a
- *    missing number that nobody read the mail.
+ * 4. **Opens are not measured unless the sequence asked for them.** A
+ *    sequence email is plain text by decision and a pixel needs an HTML
+ *    part, so for a sequence with "Count opens" off the report SAYS opens
+ *    are not measured, in the place a reader looks for an open rate — nobody
+ *    concludes from a missing number that nobody read the mail. A sequence
+ *    that counts them (AGL-3395) gets an open rate over the people who were
+ *    sent the image, never over everyone it emailed, with the machine
+ *    fetches set apart and shown.
  *=========================================*/
 
 import {
@@ -58,6 +61,9 @@ export interface OutreachReportCaveat {
   /** Stable id, so a spec asserts on the caveat and not on its prose. */
   id:
     | 'opens-not-measured'
+    | 'opens-unrecorded'
+    | 'opens-counted'
+    | 'opens-stopped'
     | 'clicks-not-tracked'
     | 'clicks-unrecorded'
     | 'machine-clicks-excluded'
@@ -80,6 +86,20 @@ export interface OutreachSequenceReport {
   lastClickAtMs: number | null
   /** Whether any email of this sequence went out with its links rewritten. */
   clickTracked: boolean
+  /** Whether any email of this sequence carried a tracking image (AGL-3395). */
+  openTracked: boolean
+  /** Distinct people sent at least one email with the image, or `null` when unrecorded. */
+  openPeople: number | null
+  /** Opens judged a person's. */
+  opens: number
+  /** Distinct people who opened — the open rate's numerator. */
+  uniqueOpens: number
+  /** Fetches of the image a machine made, never in the rate. */
+  machineOpens: number
+  /** Of `machineOpens`, the ones a mail provider's image proxy made. */
+  proxyOpens: number
+  /** When a person last opened one of the emails. */
+  lastOpenAtMs: number | null
   rates: {
     /**
      * Distinct people who clicked, over the people emailed.
@@ -88,6 +108,13 @@ export interface OutreachSequenceReport {
      * been emailed yet, and when the counters predate the feature.
      */
     click: CampaignRate | null
+    /**
+     * Distinct people who opened, over the people sent the image.
+     *
+     * `null` when no email carried the image, and when nobody has been sent
+     * one yet.
+     */
+    open: CampaignRate | null
   }
   caveats: OutreachReportCaveat[]
 }
@@ -96,6 +123,12 @@ export interface OutreachSequenceReport {
 const CAVEATS: Record<OutreachReportCaveat['id'], string> = {
   'opens-not-measured':
     'Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead.',
+  'opens-unrecorded':
+    'Opens are counted for this sequence, and no email with the tracking image has gone out yet. Emails sent from now on carry it.',
+  'opens-counted':
+    'Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Fetches made by mail privacy proxies (Apple Mail), image proxies (Gmail, Yahoo) and security scanners are counted separately and left out of the rate, so a Gmail reader’s open lands there too: the rate reads low rather than high.',
+  'opens-stopped':
+    'Opens were counted while this sequence’s emails carried a tracking image. It’s turned off now, so the figures cover only the emails sent while it was on.',
   'clicks-not-tracked':
     'Clicks aren’t being counted for this sequence. Turn on link tracking in its settings, and the emails sent after that have their links counted.',
   'clicks-unrecorded':
@@ -116,10 +149,13 @@ const caveat = (id: OutreachReportCaveat['id']): OutreachReportCaveat => ({
  * @param trackClicks Whether the sequence is SET to track clicks now — which
  *   is a different question from whether it ever has, and the two together
  *   are what separate "nothing to report yet" from "this will never report".
+ * @param countOpens Whether the sequence is SET to count opens now
+ *   (AGL-3395), read beside `stats.openTracked` the same way.
  */
 export function outreachSequenceReport(
   stats: OutreachSequenceStats | undefined,
   trackClicks: boolean,
+  countOpens = false,
 ): OutreachSequenceReport {
   const source = stats ?? {}
   const count = (value: unknown): number => {
@@ -138,8 +174,21 @@ export function outreachSequenceReport(
   const uniqueClicks = count(source.uniqueClicks)
   const machineClicks = count(source.machineClicks)
   const clickTracked = source.clickTracked === true
+  const openTracked = source.openTracked === true
+  const openPeople = source.openPeople === undefined ? null : count(source.openPeople)
+  const uniqueOpens = count(source.uniqueOpens)
+  const machineOpens = count(source.machineOpens)
 
-  const caveats: OutreachReportCaveat[] = [caveat('opens-not-measured')]
+  /*
+   * Opens (AGL-3395). A sequence that never carried the image says opens
+   * are not measured — the sentence every sequence showed before the
+   * setting existed, and still true of every one with it off. One that has
+   * carried it explains what the rate counts, and one that stopped says
+   * the figures stop where the setting did.
+   */
+  const caveats: OutreachReportCaveat[] = []
+  if (!openTracked) caveats.push(caveat(countOpens ? 'opens-unrecorded' : 'opens-not-measured'))
+  else caveats.push(caveat(countOpens ? 'opens-counted' : 'opens-stopped'))
   if (!clickTracked) {
     /*
      * Two ways to have no click figures, and they are not the same
@@ -166,9 +215,22 @@ export function outreachSequenceReport(
         ? source.lastClickAtMs
         : null,
     clickTracked,
+    openTracked,
+    openPeople,
+    opens: count(source.opens),
+    uniqueOpens,
+    machineOpens,
+    proxyOpens: Math.min(count(source.proxyOpens), machineOpens),
+    lastOpenAtMs:
+      typeof source.lastOpenAtMs === 'number' && Number.isFinite(source.lastOpenAtMs)
+        ? source.lastOpenAtMs
+        : null,
     rates: {
       click: clickTracked
         ? campaignRate(uniqueClicks, people ?? undefined, 'people emailed')
+        : null,
+      open: openTracked
+        ? campaignRate(uniqueOpens, openPeople ?? undefined, 'people sent a tracked email')
         : null,
     },
     caveats,

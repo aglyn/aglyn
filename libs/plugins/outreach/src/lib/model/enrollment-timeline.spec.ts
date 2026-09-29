@@ -20,6 +20,7 @@ import {
   outreachActionHistoryRow,
   outreachClickHistoryRow,
   outreachHistoryEntryId,
+  outreachOpenHistoryRow,
   readOutreachHistoryEntry,
 } from './enrollment-history'
 import {
@@ -144,6 +145,24 @@ describe('the timeline: what happened, newest first', () => {
     expect(entries.some((entry) => entry.kind === 'earlier-clicks')).toBe(false)
   })
 
+  it('lists each open, a machine’s with why, and marks the send that carried the image (AGL-3395)', () => {
+    const entries = build({
+      enrollment: enrollment({
+        stepRecords: [{ stepIndex: 0, stepId: 'a', kind: 'email', atMs: T, gmailThreadId: 'thread-1', openTracked: true }],
+        engagement: { clicks: 0, firstClickAtMs: null, lastClickAtMs: null, lastClickUrl: null, machineClicks: 0, opens: 1, machineOpens: 1, loggedOpens: 2 },
+      }),
+      history: [
+        { id: 'o2', kind: 'open', atMs: T + 60 * MIN, stepIndex: 0, human: true, machineReason: null },
+        { id: 'o1', kind: 'open', atMs: T + 5_000, stepIndex: 0, human: false, machineReason: 'privacy_proxy' },
+      ],
+    })
+    expect(entries.slice(0, 3)).toMatchObject([
+      { kind: 'open', title: 'Opened an email', facts: ['Email 1 · step 1'], tone: 'info' },
+      { kind: 'machine-open', facts: ['Email 1 · step 1', expect.stringMatching(/^Read as a machine: Apple Mail/)] },
+      { kind: 'sent', facts: ['Tracking image'] },
+    ])
+  })
+
   it('says clicks from before the history as ONE honest line, never a row apiece', () => {
     // Keith's case: two clicks counted before each was recorded on its own.
     const entries = build({
@@ -263,9 +282,19 @@ describe('the five figures', () => {
       // Two clicks from before the history: one link at least, not a claim of one.
       linksFollowed: { count: 1, atLeast: true },
       scannerClicks: 3,
+      opens: 0,
+      machineOpens: 0,
       replies: 1,
       anything: true,
     })
+  })
+
+  it('counts opens and machine opens apart (AGL-3395)', () => {
+    expect(
+      outreachEnrollmentFigures(
+        enrollment({ engagement: { clicks: 0, firstClickAtMs: null, lastClickAtMs: null, lastClickUrl: null, machineClicks: 0, opens: 2, machineOpens: 5 } }),
+      ),
+    ).toMatchObject({ opens: 2, machineOpens: 5, anything: true })
   })
 })
 
@@ -301,6 +330,15 @@ describe('the history rows, as written and read back', () => {
     })
     const actionRow = outreachActionHistoryRow({ atMs: T, action: 'pause', byUid: 'uid-zach', detail: '  Out  of office ' })
     expect(readOutreachHistoryEntry('h2', actionRow)).toMatchObject({ kind: 'action', action: 'pause', detail: 'Out of office' })
+    const openRow = outreachOpenHistoryRow({ atMs: T, stepIndex: 1, human: false, machineReason: 'image_proxy' })
+    expect(readOutreachHistoryEntry('h6', openRow)).toEqual({
+      id: 'h6',
+      kind: 'open',
+      atMs: T,
+      stepIndex: 1,
+      human: false,
+      machineReason: 'image_proxy',
+    })
     expect(readOutreachHistoryEntry('h3', { kind: 'click' })).toBeNull()
     expect(readOutreachHistoryEntry('h4', { kind: 'action', atMs: T, action: 'delete' })).toBeNull()
     expect(readOutreachHistoryEntry('h5', undefined)).toBeNull()

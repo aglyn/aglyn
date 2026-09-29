@@ -32,8 +32,10 @@ import {
   outreachClickUrl,
   outreachShortLinkUrl,
   outreachStoredLink,
+  outreachStoredOpen,
   readOutreachClickToken,
   readOutreachStoredLink,
+  readOutreachStoredOpen,
 } from './click-link'
 import { createOutreachClickRoute, createOutreachShortLinkRoute } from './click-route'
 import { OUTREACH_ENROLLMENT_HISTORY, OUTREACH_ENROLLMENT_HISTORY_MAX } from '../model/outreach.types'
@@ -685,5 +687,92 @@ describe('the short link route', () => {
     const answer = await call(visit(token()))
     expect(answer.status).toBe(302)
     expect(answer.headers.get('Location')).toBe(TARGET)
+  })
+})
+
+describe('the tracking image on the short-link route (AGL-3395)', () => {
+  const OPEN_ID = 'Op3nP1x3lZ'
+  const OPEN_PATH = `outreachLinks/${OPEN_ID}`
+  const MAIL_CLIENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
+  const engagement = () => ((docs.get(ENROLLMENT_PATH) as Data)['engagement'] ?? {}) as Data
+  const stats = () => ((docs.get(SEQUENCE_PATH) as Data)['stats'] ?? {}) as Data
+  const historyRows = () =>
+    [...docs.entries()].filter(([path]) => path.startsWith(`${ENROLLMENT_PATH}/${OUTREACH_ENROLLMENT_HISTORY}/`))
+
+  beforeEach(() => {
+    docs.set(OPEN_PATH, outreachStoredOpen({ orgId: ORG, enrollmentId: ENROLLMENT, stepIndex: 0 }, SENT_AT) as unknown as Data)
+  })
+
+  it('stores an image as a link of kind open that names no destination, and is never followed', async () => {
+    const doc = outreachStoredOpen({ orgId: ORG, enrollmentId: ENROLLMENT, stepIndex: 0 }, 5)
+    expect(doc).toEqual({ v: 1, kind: 'open', orgId: ORG, enrollmentId: ENROLLMENT, stepIndex: 0, createdAtMs: 5 })
+    expect(readOutreachStoredOpen(doc)).toEqual({ orgId: ORG, enrollmentId: ENROLLMENT, stepIndex: 0 })
+    // Even carrying a URL, an image's document is not a link.
+    expect(readOutreachStoredLink({ ...doc, url: TARGET, linkIndex: 0 })).toBeNull()
+    expect(readOutreachStoredOpen({ ...doc, orgId: '../x' })).toBeNull()
+  })
+
+  it('answers the image, uncached, and records a person’s open on the right enrollment and its sequence', async () => {
+    const answer = await callShort(shortVisit(OPEN_ID, { userAgent: MAIL_CLIENT }))
+    expect(answer.status).toBe(200)
+    expect(answer.headers.get('Content-Type')).toBe('image/gif')
+    expect(answer.headers.get('Cache-Control')).toContain('no-store')
+    expect(answer.headers.get('Location')).toBeNull()
+    const bytes = new Uint8Array(await answer.arrayBuffer())
+    expect(Buffer.from(bytes).subarray(0, 6).toString('ascii')).toBe('GIF89a')
+
+    expect(engagement()).toMatchObject({ opens: 1, firstOpenAtMs: clock, lastOpenAtMs: clock, machineOpens: 0, loggedOpens: 1 })
+    expect(stats()).toMatchObject({ opens: 1, uniqueOpens: 1, lastOpenAtMs: clock })
+    expect(historyRows().map(([, row]) => row)).toEqual([
+      { kind: 'open', atMs: clock, stepIndex: 0, human: true, machineReason: null },
+    ])
+    // An open is not a click, and files nothing on the person's record.
+    expect(stats()).not.toHaveProperty('clicks')
+    expect(filed).toEqual([])
+
+    const firstAt = clock
+    clock += 60_000
+    await callShort(shortVisit(OPEN_ID, { userAgent: MAIL_CLIENT }))
+    expect(engagement()).toMatchObject({ opens: 2, firstOpenAtMs: firstAt, lastOpenAtMs: clock })
+    // One person opening twice is one of the rate's numerator.
+    expect(stats()).toMatchObject({ opens: 2, uniqueOpens: 1 })
+  })
+
+  it('counts proxies and fetches on delivery as machine opens, out of the rate', async () => {
+    await callShort(shortVisit(OPEN_ID, { userAgent: 'Mozilla/5.0' }))
+    await callShort(
+      shortVisit(OPEN_ID, { userAgent: 'Mozilla/5.0 (Windows NT 5.1) Firefox/11.0 (via ggpht.com GoogleImageProxy)' }),
+    )
+    clock = SENT_AT + 5_000
+    await callShort(shortVisit(OPEN_ID, { userAgent: MAIL_CLIENT }))
+    expect(engagement()).toMatchObject({ opens: 0, firstOpenAtMs: null, machineOpens: 3, loggedOpens: 3 })
+    expect(stats()).toMatchObject({ machineOpens: 3, proxyOpens: 2 })
+    expect(stats()).not.toHaveProperty('uniqueOpens')
+    expect(historyRows().map(([, row]) => (row as Data)['machineReason']).sort()).toEqual([
+      'image_proxy',
+      'privacy_proxy',
+      'too_soon',
+    ])
+  })
+
+  it('answers a test’s image and records nothing', async () => {
+    docs.set(
+      OPEN_PATH,
+      outreachStoredOpen(
+        { orgId: ORG, enrollmentId: OUTREACH_TEST_LINK_ENROLLMENT, stepIndex: 0, test: true },
+        SENT_AT,
+      ) as unknown as Data,
+    )
+    const before = JSON.stringify([...docs.entries()])
+    const answer = await callShort(shortVisit(OPEN_ID, { userAgent: MAIL_CLIENT }))
+    expect(answer.headers.get('Content-Type')).toBe('image/gif')
+    expect(JSON.stringify([...docs.entries()])).toBe(before)
+  })
+
+  it('still answers the image when the enrollment is gone, and records nothing anywhere', async () => {
+    docs.delete(ENROLLMENT_PATH)
+    const answer = await callShort(shortVisit(OPEN_ID, { userAgent: MAIL_CLIENT }))
+    expect(answer.status).toBe(200)
+    expect(stats()).not.toHaveProperty('opens')
   })
 })

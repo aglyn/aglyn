@@ -37,6 +37,7 @@
  */
 
 import type { OutreachClickMachineReason } from '../engine/click-tracking'
+import type { OutreachOpenMachineReason } from '../engine/open-tracking'
 import type { OutreachGatewayDayCounts, OutreachMailGateway } from '../engine/mail-gateway'
 
 /**
@@ -456,11 +457,23 @@ export interface OutreachSequenceSettings {
    *
    * It buys the one engagement number a plain-text sequence can honestly
    * report. It costs a visible link: the destination in the body becomes a
-   * signed link on the console that forwards to it. There is no equivalent
-   * setting for opens, because a pixel needs an HTML part — see
-   * `../engine/click-tracking.ts`.
+   * short link of ours that forwards to it. Opens are the separate
+   * {@link countOpens}, because a pixel needs an HTML part.
    */
   trackClicks: boolean
+  /**
+   * Whether this sequence's emails carry an HTML part with a tracking image,
+   * so opens are counted (AGL-3395). Default `false`, and `false` on every
+   * sequence written before the setting existed.
+   *
+   * On, each email goes out as `multipart/alternative`: the plain-text part
+   * exactly as it would have been, and beside it the same words as HTML with
+   * a 1×1 image on the short-link host. It costs the plain-text one-to-one
+   * look, and some gateways score an HTML part with a remote image — see
+   * `../engine/open-tracking.ts`. Off, nothing about the email changes and
+   * the report says opens are not measured.
+   */
+  countOpens: boolean
   /**
    * Whether this sequence's emails carry `List-Unsubscribe` and
    * `List-Unsubscribe-Post` (RFC 8058) (AGL-3296). Default `false`, and
@@ -534,6 +547,33 @@ export interface OutreachSequenceStats {
   machineClicks?: number
   /** When a person last followed a link. */
   lastClickAtMs?: number | null
+  /**
+   * At least one email of this sequence went out with a tracking image
+   * (AGL-3395). Absent is "never recorded", and the report says opens are
+   * not measured rather than showing 0%.
+   */
+  openTracked?: boolean
+  /**
+   * Distinct enrollments that have had at least one email carrying the
+   * image — the open rate's denominator. Not `people`: a sequence that turned
+   * the setting on halfway through emailed some people no image at all, and
+   * they could never have been counted as opening.
+   */
+  openPeople?: number
+  /** Opens judged a person's. One reader opening twice counts two. */
+  opens?: number
+  /** Enrollments whose FIRST human open was seen: the open rate's numerator. */
+  uniqueOpens?: number
+  /**
+   * Fetches of the image a machine made — a mail privacy proxy prefetching
+   * it, a gateway scanning the message — counted apart and never in the
+   * rate (`../engine/open-tracking.ts`).
+   */
+  machineOpens?: number
+  /** Of {@link machineOpens}, the ones a mail provider's image proxy made. */
+  proxyOpens?: number
+  /** When a person last opened one of this sequence's emails. */
+  lastOpenAtMs?: number | null
 }
 
 /** What one enrollment did with the links it was sent (AGL-3239). */
@@ -562,6 +602,15 @@ export interface OutreachEnrollmentEngagement {
    */
   loggedClicks?: number
   loggedMachineClicks?: number
+  /** Opens judged this person's, machines excluded (AGL-3395). */
+  opens?: number
+  /** The first, which is what makes them one of the sequence's `uniqueOpens`. */
+  firstOpenAtMs?: number | null
+  lastOpenAtMs?: number | null
+  /** Fetches of this person's tracking image that were a machine's. */
+  machineOpens?: number
+  /** How many of `opens` and `machineOpens` have a row in the history. */
+  loggedOpens?: number
 }
 
 /**
@@ -577,8 +626,9 @@ export const OUTREACH_ENGAGEMENT_LINKS_MAX = 20
  *
  * `orgs/{orgId}/outreachEnrollments/{id}/history/{entryId}`: a row for each
  * visit to a tracking link in this person's emails — which link, from which
- * step, when, and whether a person or a scanner made it — and for each
- * pause, resume, stop and do-not-contact a member applied. The enrollment
+ * step, when, and whether a person or a scanner made it — for each fetch
+ * of the tracking image in a sequence that counts opens (AGL-3395), and for
+ * each pause, resume, stop and do-not-contact a member applied. The enrollment
  * keeps totals; this keeps the events, and is read only when somebody opens
  * the person, so the table's listener never carries it.
  *
@@ -625,7 +675,23 @@ export interface OutreachActionHistoryEntry {
   detail: string | null
 }
 
-export type OutreachEnrollmentHistoryEntry = OutreachClickHistoryEntry | OutreachActionHistoryEntry
+/** One fetch of the tracking image in this person's email (AGL-3395). */
+export interface OutreachOpenHistoryEntry {
+  id: string
+  kind: 'open'
+  atMs: number
+  /** The step whose email carried the image. */
+  stepIndex: number
+  /** Whether it counts: a person's open, not a proxy's or a scanner's. */
+  human: boolean
+  /** Why it was read as a machine's; `null` for a person's. */
+  machineReason: OutreachOpenMachineReason | null
+}
+
+export type OutreachEnrollmentHistoryEntry =
+  | OutreachClickHistoryEntry
+  | OutreachOpenHistoryEntry
+  | OutreachActionHistoryEntry
 
 /** An ordered set of steps sent from one mailbox (`orgs/{orgId}/outreachSequences/{id}`). */
 export interface OutreachSequence extends OutreachTimestamps {
@@ -1019,6 +1085,12 @@ export interface OutreachStepRecord {
    * read afterwards for what it actually offered them.
    */
   links?: string[]
+  /**
+   * The email carried a tracking image (AGL-3395). Absent on every email
+   * sent without one — which is every email of a sequence that does not
+   * count opens.
+   */
+  openTracked?: boolean
   /**
    * The email went out as this person's curated copy (AGL-3324), and who
    * wrote it. Absent on a step sent as the sequence wrote it.

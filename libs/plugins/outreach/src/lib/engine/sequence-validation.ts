@@ -253,6 +253,9 @@ export function readOutreachSequenceSettings(
     // Absent is off (AGL-3239). Every sequence written before the setting
     // existed reads as untracked, which is what it was.
     trackClicks: data['trackClicks'] === true,
+    // Absent is off (AGL-3395): a sequence stays plain text unless it asks
+    // for the HTML part, and every one written before the setting did not.
+    countOpens: data['countOpens'] === true,
     // Absent is off (AGL-3296): a sequence is one-to-one mail, and every
     // sequence written before the setting existed reads as headerless.
     // Read by the shared reader campaigns use too (AGL-3307), with the

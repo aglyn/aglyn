@@ -59,7 +59,13 @@ import { GmailTransportError, isReconnectRequired } from '../transport/gmail-err
 import { Rfc5322MessageError } from '../transport/rfc5322'
 import { sendComposedOutreachEmail } from '../transport/send-message'
 import { creditOutreachFirstSend } from './campaign-credit'
-import { newOutreachLinkId, outreachStoredLink, type OutreachStoredLink } from './click-link'
+import {
+  newOutreachLinkId,
+  outreachStoredLink,
+  outreachStoredOpen,
+  type OutreachStoredLink,
+  type OutreachStoredOpen,
+} from './click-link'
 import { applyOutreachEvent } from './enrollment-events'
 import { outreachSiteHeld } from './host-suspension'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
@@ -543,6 +549,9 @@ async function completeStep(
    * `stats.sent` is not, since one person takes several steps.
    */
   let firstEmail = false
+  // The first email of this person's to carry a tracking image (AGL-3395):
+  // what `stats.openPeople`, the open rate's denominator, counts.
+  let firstOpenTracked = false
   const completed = await firestore.runTransaction(async (transaction) => {
     const [current, box] = await Promise.all([
       transaction.get(enrollmentRef),
@@ -557,6 +566,10 @@ async function completeStep(
     firstEmail =
       input.sent !== null &&
       !(stored.stepRecords ?? []).some((record) => record.kind === 'email')
+    firstOpenTracked =
+      input.sent !== null &&
+      input.record.openTracked === true &&
+      !(stored.stepRecords ?? []).some((record) => record.openTracked === true)
     const plan = planOutreachStepCompletion({
       enrollment: { ...stored, status: 'active' },
       sequence: input.sequence,
@@ -603,6 +616,8 @@ async function completeStep(
       sequenceId: input.sequence.id,
       firstEmail,
       trackedLinks: input.record.links?.length ?? 0,
+      openTracked: input.record.openTracked === true,
+      firstOpenTracked,
     })
   }
   return completed
@@ -624,7 +639,14 @@ async function completeStep(
  */
 async function bumpOutreachSequenceStats(
   firestore: Firestore,
-  input: { orgId: string; sequenceId: string; firstEmail: boolean; trackedLinks: number },
+  input: {
+    orgId: string
+    sequenceId: string
+    firstEmail: boolean
+    trackedLinks: number
+    openTracked?: boolean
+    firstOpenTracked?: boolean
+  },
 ): Promise<void> {
   if (!input.sequenceId) return
   await outreachOrgCollection(firestore, input.orgId, 'sequences')
@@ -633,6 +655,10 @@ async function bumpOutreachSequenceStats(
       'stats.sent': FieldValue.increment(1),
       ...(input.firstEmail ? { 'stats.people': FieldValue.increment(1) } : {}),
       ...(input.trackedLinks > 0 ? { 'stats.clickTracked': true } : {}),
+      // Stamped by a send that carried the image, never by the setting, for
+      // `clickTracked`'s reason (AGL-3395).
+      ...(input.openTracked ? { 'stats.openTracked': true } : {}),
+      ...(input.firstOpenTracked ? { 'stats.openPeople': FieldValue.increment(1) } : {}),
     })
     .catch((error: unknown) => {
       console.warn('[outreach] a send could not be counted on its sequence', error)
@@ -819,7 +845,7 @@ async function runEmailStep(
    * short link (AGL-3297) whose document is written below, before the email
    * leaves; a link that cannot be made is left exactly as the step wrote it.
    */
-  if (sequence.settings.trackClicks && run.linkOrigin === undefined) {
+  if ((sequence.settings.trackClicks || sequence.settings.countOpens) && run.linkOrigin === undefined) {
     run.linkOrigin = await trackingLinkOrigin(deps, run.orgId, sender.address)
   }
   const shortLinks: Array<{ id: string; doc: OutreachStoredLink }> = []
@@ -842,11 +868,27 @@ async function runEmailStep(
         return url
       }
     : null
+  /*
+   * The tracking image (AGL-3395), for a sequence that counts opens: a short
+   * link of kind `open` on the same host, stored with the links below. None
+   * minted — no HTTPS origin — and the email goes out as plain text alone.
+   */
+  let pixel: { id: string; doc: OutreachStoredOpen; url: string } | null = null
+  if (sequence.settings.countOpens) {
+    const doc = outreachStoredOpen(
+      { orgId: run.orgId, enrollmentId: enrollment.id, stepIndex: enrollment.stepIndex },
+      nowMs,
+    )
+    const id = newOutreachLinkId()
+    const url = doc ? deps.clickLinkUrl(id, run.linkOrigin ?? null) : null
+    if (doc && url) pixel = { id, doc, url }
+  }
   const composed = composeOutreachEmail({
     sequence,
     enrollment,
     orgSettings: run.settings,
     rewriteLink,
+    openPixelUrl: pixel?.url ?? null,
     merge: {
       // For a lead, the contact-shaped view of it (`leadAsContact`), so a
       // step written with `{{contact.*}}` reads the lead; `{{lead.*}}` reads
@@ -914,11 +956,14 @@ async function runEmailStep(
    * that fails holds the send for the next run, which mints new ones — an
    * orphaned document is inert, an email whose links go nowhere is not.
    */
-  if (shortLinks.length) {
+  if (shortLinks.length || (pixel && composed.email.html)) {
     try {
       const batch = firestore.batch()
       for (const link of shortLinks) {
         batch.create(firestore.collection(OUTREACH_COLLECTIONS.links).doc(link.id), link.doc)
+      }
+      if (pixel && composed.email.html) {
+        batch.create(firestore.collection(OUTREACH_COLLECTIONS.links).doc(pixel.id), pixel.doc)
       }
       await batch.commit()
     } catch (error) {
@@ -990,6 +1035,7 @@ async function runEmailStep(
     messageId: sent.messageId,
     subject: sent.subject,
     ...(composed.email.trackedLinks.length ? { links: composed.email.trackedLinks } : {}),
+    ...(composed.email.html ? { openTracked: true } : {}),
     // Sent as this person's own copy of the step (AGL-3324), and whose words.
     ...(composed.override ? { curated: composed.override.source } : {}),
   }

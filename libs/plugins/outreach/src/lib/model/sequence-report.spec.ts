@@ -31,10 +31,10 @@ describe('outreachSequenceReport', () => {
     )
   })
 
-  it('never reports an open figure of any kind', () => {
+  it('reports no open rate for a sequence whose emails never carried the image', () => {
     const report = outreachSequenceReport({ sent: 40, people: 10 }, true)
-    expect(Object.keys(report)).not.toContain('opens')
-    expect(Object.keys(report.rates)).toEqual(['click'])
+    expect(report.openTracked).toBe(false)
+    expect(report.rates.open).toBeNull()
   })
 
   it('takes the click rate over PEOPLE emailed, not over emails sent', () => {
@@ -124,6 +124,11 @@ describe('readOutreachEngagement', () => {
       links: [],
       loggedClicks: 0,
       loggedMachineClicks: 0,
+      opens: 0,
+      firstOpenAtMs: null,
+      lastOpenAtMs: null,
+      machineOpens: 0,
+      loggedOpens: 0,
     })
   })
 
@@ -149,6 +154,56 @@ describe('readOutreachEngagement', () => {
       links: ['https://aglyn.com/pricing'],
       loggedClicks: 3,
       loggedMachineClicks: 0,
+      opens: 0,
+      firstOpenAtMs: null,
+      lastOpenAtMs: null,
+      machineOpens: 0,
+      loggedOpens: 0,
     })
+  })
+
+  it('reads opens a field at a time, and never more rows than events (AGL-3395)', () => {
+    expect(
+      readOutreachEngagement({ opens: 2, firstOpenAtMs: 5, lastOpenAtMs: 'x', machineOpens: 3, loggedOpens: 99 }),
+    ).toMatchObject({ opens: 2, firstOpenAtMs: 5, lastOpenAtMs: null, machineOpens: 3, loggedOpens: 5 })
+  })
+})
+
+describe('opens in the report (AGL-3395)', () => {
+  it('keeps saying opens are not measured for a sequence with the switch off', () => {
+    expect(ids({ sent: 40, people: 10 }, true)).toContain('opens-not-measured')
+    expect(outreachSequenceReport({ sent: 40, people: 10 }, true, false).rates.open).toBeNull()
+  })
+
+  it('says nothing has been measured yet when the switch is on and no image has gone out', () => {
+    const caveats = outreachSequenceReport({ sent: 4, people: 4 }, false, true).caveats.map((entry) => entry.id)
+    expect(caveats).toContain('opens-unrecorded')
+    expect(caveats).not.toContain('opens-not-measured')
+  })
+
+  it('takes the open rate over the people SENT THE IMAGE, not everyone emailed', () => {
+    // Twenty people were emailed before the switch went on; only eight got the image.
+    const report = outreachSequenceReport(
+      { sent: 40, people: 20, openTracked: true, openPeople: 8, opens: 5, uniqueOpens: 2, machineOpens: 9, proxyOpens: 6 },
+      false,
+      true,
+    )
+    expect(report.rates.open).toEqual({
+      value: 0.25,
+      numerator: 2,
+      denominator: 8,
+      denominatorLabel: 'people sent a tracked email',
+    })
+    // Machine opens are counted apart, never in the rate.
+    expect(report.machineOpens).toBe(9)
+    expect(report.proxyOpens).toBe(6)
+    expect(report.caveats.map((entry) => entry.id)).toContain('opens-counted')
+  })
+
+  it('says the figures stop where the switch did', () => {
+    const caveats = outreachSequenceReport({ sent: 4, people: 4, openTracked: true, openPeople: 4 }, false, false)
+      .caveats.map((entry) => entry.id)
+    expect(caveats).toEqual(expect.arrayContaining(['opens-stopped']))
+    expect(caveats).not.toContain('opens-not-measured')
   })
 })

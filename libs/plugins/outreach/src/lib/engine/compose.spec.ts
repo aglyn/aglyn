@@ -370,6 +370,38 @@ describe('click tracking (AGL-3239)', () => {
   })
 })
 
+describe('open counting (AGL-3395)', () => {
+  const PIXEL = 'https://links.acme.io/Ab3dE9xK2q'
+  const withLink = (body: string): Partial<ComposeOutreachEmailInput> => ({
+    sequence: { steps: [{ ...first, body }] },
+  })
+
+  it('stays plain text with no image address, which is what a preview and a sequence with it off pass', () => {
+    const result = composeOutreachEmail(input(withLink('Read https://aglyn.com/pricing first.')))
+    expect(result.email?.html).toBeUndefined()
+  })
+
+  it('adds an HTML part of the same text, footer and rewritten links included, and one image', () => {
+    const plain = composeOutreachEmail(
+      input({ ...withLink('Read https://aglyn.com/pricing first.'), rewriteLink: () => 'https://links.acme.io/Zz9yY8xX7w' }),
+    )
+    const result = composeOutreachEmail(
+      input({
+        ...withLink('Read https://aglyn.com/pricing first.'),
+        rewriteLink: () => 'https://links.acme.io/Zz9yY8xX7w',
+        openPixelUrl: PIXEL,
+      }),
+    )
+    // The plain-text part is exactly what it would have been.
+    expect(result.email?.text).toBe(plain.email?.text)
+    const html = result.email?.html ?? ''
+    expect(html).toContain('<a href="https://links.acme.io/Zz9yY8xX7w">')
+    expect(html).not.toContain('https://aglyn.com/pricing')
+    expect(html).toContain('Not interested? Reply &quot;no&quot; and I won&#39;t email again.')
+    expect(html).toContain(`<img src="${PIXEL}"`)
+  })
+})
+
 describe('a curated step (AGL-3324)', () => {
   const curated = (stepOverrides: ComposeOutreachEmailInput['enrollment']['stepOverrides']) =>
     ({ ...input().enrollment, stepOverrides }) as ComposeOutreachEmailInput['enrollment']

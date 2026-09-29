@@ -299,6 +299,8 @@ export function readOutreachStoredLink(data: unknown): OutreachClickTarget | nul
   if (!data || typeof data !== 'object') return null
   const body = data as Record<string, unknown>
   if (body['v'] !== 1) return null
+  // A tracking image's document names no destination, and is never followed.
+  if (body['kind'] === OUTREACH_OPEN_KIND) return null
   const orgId = String(body['orgId'] ?? '')
   const enrollmentId = String(body['enrollmentId'] ?? '')
   const url = outreachClickTargetUrl(body['url'])
@@ -311,6 +313,79 @@ export function readOutreachStoredLink(data: unknown): OutreachClickTarget | nul
     stepIndex: body['stepIndex'] as number,
     linkIndex: body['linkIndex'] as number,
     url,
+    ...(body['test'] === true ? { test: true } : {}),
+  }
+}
+
+/*==========================================
+ * THE TRACKING IMAGE (AGL-3395).
+ *
+ * A sequence that counts opens gives each email one image, and the image is
+ * a short link too: an `outreachLinks` document of kind `open`, minted and
+ * stored exactly as a link's is, on the same host. The short-link route
+ * reads the document and, finding an image's, answers the image rather than
+ * a redirect — so the image needs no route, host or rule a link does not
+ * already have, and the email names no address a click does not.
+ *
+ * It names the enrollment and the step, and no destination: there is
+ * nothing to follow.
+ *=========================================*/
+
+/** The `kind` an image's document carries; a link's carries none. */
+export const OUTREACH_OPEN_KIND = 'open'
+
+/** What a tracking image names. */
+export interface OutreachOpenTarget {
+  orgId: string
+  enrollmentId: string
+  /** The step whose email carried the image. */
+  stepIndex: number
+  /** An image in a TEST of a step (AGL-3325): answered, and recorded nowhere. */
+  test?: boolean
+}
+
+/** What an `outreachLinks/{id}` document holds for a tracking image. */
+export interface OutreachStoredOpen extends OutreachOpenTarget {
+  v: 1
+  kind: typeof OUTREACH_OPEN_KIND
+  createdAtMs: number
+  /** Which sequence a TEST image's step belongs to; a real send names its enrollment instead. */
+  sequenceId?: string
+}
+
+/** The document for one email's image, or `null` when the target is not one we would record. */
+export function outreachStoredOpen(target: OutreachOpenTarget, nowMs: number): OutreachStoredOpen | null {
+  if (!DOCUMENT_ID.test(target.orgId) || !DOCUMENT_ID.test(target.enrollmentId)) return null
+  if (!index(target.stepIndex)) return null
+  return {
+    v: 1,
+    kind: OUTREACH_OPEN_KIND,
+    orgId: target.orgId,
+    enrollmentId: target.enrollmentId,
+    stepIndex: target.stepIndex,
+    createdAtMs: nowMs,
+    ...(target.test ? { test: true } : {}),
+  }
+}
+
+/** Whether a stored document is a tracking image's, whatever else it holds. */
+export function isOutreachStoredOpen(data: unknown): boolean {
+  return Boolean(data) && typeof data === 'object' && (data as Record<string, unknown>)['kind'] === OUTREACH_OPEN_KIND
+}
+
+/** What a stored image names, or `null` for a document that is not one we will record. */
+export function readOutreachStoredOpen(data: unknown): OutreachOpenTarget | null {
+  if (!isOutreachStoredOpen(data)) return null
+  const body = data as Record<string, unknown>
+  if (body['v'] !== 1) return null
+  const orgId = String(body['orgId'] ?? '')
+  const enrollmentId = String(body['enrollmentId'] ?? '')
+  if (!DOCUMENT_ID.test(orgId) || !DOCUMENT_ID.test(enrollmentId)) return null
+  if (!index(body['stepIndex'])) return null
+  return {
+    orgId,
+    enrollmentId,
+    stepIndex: body['stepIndex'] as number,
     ...(body['test'] === true ? { test: true } : {}),
   }
 }

@@ -20,11 +20,15 @@ import { OUTREACH_COLLECTIONS } from '../model/outreach.types'
 import { recordOutreachSequenceTouch } from './campaign-credit'
 import {
   isOutreachLinkId,
+  isOutreachStoredOpen,
   readOutreachClickToken,
   readOutreachStoredLink,
+  readOutreachStoredOpen,
   type OutreachClickTarget,
+  type OutreachOpenTarget,
 } from './click-link'
 import { recordOutreachClick } from './click-events'
+import { recordOutreachOpen } from './open-events'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 // The plain page both recipient-facing routes answer with: no theme, no
 // session, the reader's own colors. It lives beside the first route that
@@ -135,6 +139,51 @@ async function followOutreachClick(
   return redirect
 }
 
+/**
+ * A transparent 1×1 GIF: the tracking image (AGL-3395). The smallest image
+ * every mail client renders, and the one that draws nothing if it is shown.
+ */
+const PIXEL_GIF = Uint8Array.from(
+  Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'),
+)
+
+/**
+ * The image, then the recording (AGL-3395).
+ *
+ * Every fetch gets the same image — a person, a mail privacy proxy and a
+ * gateway alike, and an image whose document is unreadable too — because a
+ * broken image in a one-to-one email is a visible fault and a missing open
+ * is only a number. `no-store` asks every cache not to keep it, so a later
+ * open fetches again; a proxy that caches anyway (Gmail's does) is why the
+ * first open is the one the rate is taken over.
+ */
+async function answerOutreachOpen(
+  deps: ClickRouteDeps,
+  request: Request,
+  target: OutreachOpenTarget | null,
+): Promise<Response> {
+  const image = new Response(request.method === 'HEAD' ? null : PIXEL_GIF, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/gif',
+      'Content-Length': String(PIXEL_GIF.byteLength),
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'X-Robots-Tag': 'noindex, nofollow',
+    },
+  })
+  if (!target || target.test) return image
+  try {
+    await recordOutreachOpen(deps, {
+      target,
+      method: request.method,
+      userAgent: request.headers.get('user-agent'),
+    })
+  } catch (error) {
+    console.error('[outreach] an open could not be recorded', error)
+  }
+  return image
+}
+
 /** The signed link, `?t=…` — every tracked email sent before AGL-3297. */
 export function createOutreachClickRoute(deps: ClickRouteDeps): PluginWebApiHandler {
   return async (request) => {
@@ -149,6 +198,10 @@ export function createOutreachClickRoute(deps: ClickRouteDeps): PluginWebApiHand
 
 /**
  * THE SHORT LINK (AGL-3297): `GET /api/outreach/l/<id>`.
+ *
+ * The same route answers a tracking image (AGL-3395) — an `outreachLinks`
+ * document of kind `open` — with the image instead of a redirect, so the
+ * image lives on the same host and path as every link.
  *
  * One read of `outreachLinks/<id>` stands where the signature check stood,
  * and everything after it is the signed route's: the same redirect, the same
@@ -165,10 +218,10 @@ export function createOutreachShortLinkRoute(deps: ClickRouteDeps): PluginWebApi
     // The id is the last path segment: `/api/outreach/l/<id>`.
     const linkId = new URL(request.url).pathname.split('/').pop()
     if (!isOutreachLinkId(linkId)) return brokenLink()
-    let target: OutreachClickTarget | null
+    let data: unknown
     try {
       const snapshot = await deps.firestore().collection(OUTREACH_COLLECTIONS.links).doc(linkId).get()
-      target = snapshot.exists ? readOutreachStoredLink(snapshot.data()) : null
+      data = snapshot.exists ? snapshot.data() : undefined
     } catch (error) {
       console.error('[outreach] a short link could not be read', error)
       return outreachUnsubscribePage(
@@ -179,6 +232,9 @@ export function createOutreachShortLinkRoute(deps: ClickRouteDeps): PluginWebApi
         503,
       )
     }
+    // The id names a tracking image (AGL-3395): the image, not a redirect.
+    if (isOutreachStoredOpen(data)) return answerOutreachOpen(deps, request, readOutreachStoredOpen(data))
+    const target = readOutreachStoredLink(data)
     if (!target) return brokenLink()
     return followOutreachClick(deps, request, target)
   }

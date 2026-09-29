@@ -40,6 +40,8 @@ export function readOutreachEngagement(raw: unknown): Required<OutreachEnrollmen
     typeof value === 'number' && Number.isFinite(value) ? value : null
   const clicks = count(data['clicks'])
   const machineClicks = count(data['machineClicks'])
+  const opens = count(data['opens'])
+  const machineOpens = count(data['machineOpens'])
   const links = Array.isArray(data['links'])
     ? [...new Set(data['links'].filter((entry): entry is string => typeof entry === 'string' && entry !== ''))]
     : []
@@ -54,7 +56,23 @@ export function readOutreachEngagement(raw: unknown): Required<OutreachEnrollmen
     // in the same transaction as the count it itemizes.
     loggedClicks: Math.min(count(data['loggedClicks']), clicks),
     loggedMachineClicks: Math.min(count(data['loggedMachineClicks']), machineClicks),
+    // Opens (AGL-3395): absent on every enrollment of a sequence that does
+    // not count them, and read as none.
+    opens,
+    firstOpenAtMs: ms(data['firstOpenAtMs']),
+    lastOpenAtMs: ms(data['lastOpenAtMs']),
+    machineOpens,
+    loggedOpens: Math.min(count(data['loggedOpens']), opens + machineOpens),
   }
+}
+
+/**
+ * How many rows one enrollment's history holds for its clicks and opens:
+ * what the writers compare with `OUTREACH_ENROLLMENT_HISTORY_MAX` before
+ * adding another.
+ */
+export function outreachLoggedEngagementRows(engagement: Required<OutreachEnrollmentEngagement>): number {
+  return engagement.loggedClicks + engagement.loggedMachineClicks + engagement.loggedOpens
 }
 
 /**

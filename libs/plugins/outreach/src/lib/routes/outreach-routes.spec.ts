@@ -1589,6 +1589,38 @@ describe('outreach/steps/test (AGL-3325)', () => {
     expect((await post(test(), REP, { sequenceId })).body.testsToday).toBe(2)
   })
 
+  it('saves Count opens, and sends the test with both parts and the tracking image, recorded nowhere (AGL-3395)', async () => {
+    const saved = await post(sequences().save, REP, {
+      sequence: draft({
+        steps: [{ ...firstEmail, body: `${firstEmail.body}\n\nBook a time: https://example.com/book` }, call, followUp],
+        settings: { ...draft().settings, countOpens: true },
+      }),
+    })
+    expect(saved.body.sequence.settings).toMatchObject({ countOpens: true, trackClicks: false })
+    const sequenceId = saved.body.sequence.id as string
+    expect((await post(test(), REP, { sequenceId })).status).toBe(200)
+    expect(header('Content-Type')).toMatch(/^multipart\/alternative; boundary="aglyn-alt-/)
+    const body = sentBody()
+    expect(body).toContain('Content-Type: text/plain; charset=UTF-8')
+    expect(body).toContain('Content-Type: text/html; charset=UTF-8')
+    // The plain text keeps the link as written: clicks aren't tracked here.
+    expect(body).toContain('Book a time: https://example.com/book')
+    expect(body).toContain('<a href=3D"https://example.com/book">')
+    expect(body).toMatch(/<img src=3D"https:\/\/links\.example\.com\/[A-Za-z0-9]{10}"/)
+    const images = storedLinks().filter(([, doc]) => (doc as Data)['kind'] === 'open')
+    expect(images).toHaveLength(1)
+    expect(images[0][1]).toMatchObject({ v: 1, kind: 'open', test: true, enrollmentId: 'test', sequenceId, stepIndex: 0 })
+    expect(Number(fieldOf(docs.get(org(`outreachSequences/${sequenceId}`)), 'stats.sent') ?? 0)).toBe(0)
+  })
+
+  it('sends plain text alone for a sequence that does not count opens (AGL-3395)', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    expect(saved.body.sequence.settings.countOpens).toBe(false)
+    await post(test(), REP, { sequenceId: saved.body.sequence.id })
+    expect(header('Content-Type')).toBe('text/plain; charset=UTF-8')
+    expect(sentBody()).not.toMatch(/<img|text\/html/)
+  })
+
   it('sends a later email as the reply it would be, with no thread to answer, to an address the member types', async () => {
     const saved = await post(sequences().save, REP, { sequence: draft() })
     warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')

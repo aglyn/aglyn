@@ -93,6 +93,12 @@ export interface OutreachStepPreviewInput {
    * as written.
    */
   rewriteLink?: ComposeOutreachEmailInput['rewriteLink']
+  /**
+   * The tracking image's address for a TEST send of a sequence that counts
+   * opens (AGL-3395), minted as a test image. A preview passes nothing and
+   * shows the plain text alone.
+   */
+  openPixelUrl?: string | null
   /** The person's own copies of steps (AGL-3324), as the enrollment would carry them. */
   stepOverrides?: OutreachStepOverrides | null
 }
@@ -127,5 +133,6 @@ export function previewOutreachStep(input: OutreachStepPreviewInput): OutreachCo
     merge: input.merge,
     templateBody: input.templateBody ?? null,
     rewriteLink: input.rewriteLink ?? null,
+    openPixelUrl: input.openPixelUrl ?? null,
   })
 }
