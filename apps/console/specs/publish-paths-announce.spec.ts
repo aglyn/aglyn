@@ -223,6 +223,53 @@ describe('a starter taking the root from the placeholder home page (AGL-3408)', 
     expect(mockCommit).not.toHaveBeenCalled()
   })
 
+  it('a page published at `/` replaces the placeholder in the SAME host update', async () => {
+    mockGetDoc.mockResolvedValue(newSite({ ph: '/' }, 'ph') as never)
+    await publishScreenRoute(
+      firestore,
+      { hostId: 'host', screenId: 'real', user },
+      '/',
+    )
+    // One update of the host document, so `/` is never held by two screens.
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      { path: 'hosts/host' },
+      {
+        'screens.real': '/',
+        'screens.ph': '__deleted__',
+        defaultHomeScreenId: '__deleted__',
+      },
+    )
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      { path: 'hosts/host/screens/ph' },
+      { publishedAt: '__deleted__' },
+      { merge: true },
+    )
+    expect(announced()?.paths).toEqual(['/'])
+  })
+
+  it('a route sync that gives `/` to a real page replaces the placeholder too', async () => {
+    mockGetDoc.mockResolvedValue(newSite({ ph: '/' }, 'ph') as never)
+    await syncScreenRouteEntries(firestore, 'host', { real: '/' }, { user })
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      { path: 'hosts/host' },
+      {
+        'screens.real': '/',
+        'screens.ph': '__deleted__',
+        defaultHomeScreenId: '__deleted__',
+      },
+    )
+  })
+
+  it('publishing anywhere else, or republishing the placeholder itself, leaves it alone', async () => {
+    mockGetDoc.mockResolvedValue(newSite({ ph: '/' }, 'ph') as never)
+    await publishScreenRoute(firestore, { hostId: 'host', screenId: 'real', user }, 'about')
+    await publishScreenRoute(firestore, { hostId: 'host', screenId: 'ph', user }, '/')
+    for (const [, updates] of mockBatchUpdate.mock.calls) {
+      expect(Object.keys(updates)).not.toContain('defaultHomeScreenId')
+    }
+  })
+
   it('releases nothing when the host cannot be read', async () => {
     mockGetDoc.mockRejectedValue(new Error('offline') as never)
     await expect(

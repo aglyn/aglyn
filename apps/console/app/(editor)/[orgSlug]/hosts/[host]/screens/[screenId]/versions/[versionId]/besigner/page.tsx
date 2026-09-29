@@ -36,7 +36,7 @@ import {
   composeScreenRoutePath,
   decodeStoredNodes,
   extractLayoutStyleOverrides,
-  findScreenIdByRoutePath,
+  blockingRouteOwner,
   HostViewType,
   injectLayoutStyleOverrides,
   layoutPropValuesFor,
@@ -1041,7 +1041,7 @@ function BesignerPage(props) {
     ? composeScreenRoutePath(screenId, candidateById)
     : undefined
   const slugOwner = composedPath
-    ? findScreenIdByRoutePath(routingMap, composedPath)
+    ? blockingRouteOwner(routingMap, composedPath, defaultHomeScreenId)
     : undefined
   const slugConflict = Boolean(slugOwner && slugOwner !== screenId)
   const unpublishedAncestor = Boolean(normalizedSlug && !composedPath)
@@ -1677,7 +1677,7 @@ function BesignerPage(props) {
       }
       const nextSelfPath = composeScreenRoutePath(screenId, nextById)
       const owner = nextSelfPath
-        ? findScreenIdByRoutePath(routingMap, nextSelfPath)
+        ? blockingRouteOwner(routingMap, nextSelfPath, defaultHomeScreenId)
         : undefined
       if (owner && owner !== screenId) {
         return enqueueSnackbar(

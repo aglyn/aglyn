@@ -17,10 +17,11 @@
 
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
+  blockingRouteOwner,
   checkEntitlement,
   composeScreenRoutePath,
-  findScreenIdByRoutePath,
   SCREEN_KIND_EMAIL,
+  SCREEN_ROOT_PATH,
 } from '@aglyn/aglyn/server'
 // Deep import, like the Measurement Protocol sender's: `analytics-events.ts`
 // is deliberately DOM-free so both sides of the publish path can share the
@@ -72,8 +73,10 @@ async function resolveScheduledRoutePath(options: {
   hostRef: FirebaseFirestore.DocumentReference
   screenId: string
   routing: Record<string, string>
+  /** The placeholder home page, which does not block `/` (AGL-3408). */
+  defaultHomeScreenId?: string
 }): Promise<{ path: string } | { refused: RouteRefusal }> {
-  const { hostRef, screenId, routing } = options
+  const { hostRef, screenId, routing, defaultHomeScreenId } = options
   const screens = hostRef.collection('screens')
   const screensById: Record<string, Aglyn.ScreenRouteNode | undefined> = {}
 
@@ -99,7 +102,7 @@ async function resolveScheduledRoutePath(options: {
 
   const path = composeScreenRoutePath(screenId, screensById)
   if (!path) return { refused: 'no-path' }
-  const owner = findScreenIdByRoutePath(routing, path)
+  const owner = blockingRouteOwner(routing, path, defaultHomeScreenId)
   if (owner && owner !== screenId) return { refused: 'path-taken' }
   return { path }
 }
@@ -228,6 +231,9 @@ export async function applyDuePublishSchedule(options: {
   // this entry (AGL-1588). Left undefined outside the screens branch, where
   // no route is going live and no `site_published` is sent at all.
   let firstPublish: boolean | undefined
+  // The placeholder home page this publish takes `/` from, if it does
+  // (AGL-3408) — its entry leaves the map in the same commit.
+  let releasedPlaceholder: string | undefined
   if (collectionName === 'screens') {
     try {
       const host = await hostRef.get()
@@ -242,10 +248,12 @@ export async function applyDuePublishSchedule(options: {
           routing,
           host.get('defaultHomeScreenId'),
         )
+        const defaultHomeScreenId = host.get('defaultHomeScreenId')
         const resolved = await resolveScheduledRoutePath({
           hostRef,
           screenId: docId,
           routing,
+          defaultHomeScreenId,
         })
         if ('refused' in resolved) {
           // Record the refusal rather than publishing a pointer at a page
@@ -264,6 +272,14 @@ export async function applyDuePublishSchedule(options: {
           return parent.versionId
         }
         routePath = resolved.path
+        if (
+          routePath === SCREEN_ROOT_PATH &&
+          defaultHomeScreenId &&
+          defaultHomeScreenId !== docId &&
+          routing[defaultHomeScreenId] === SCREEN_ROOT_PATH
+        ) {
+          releasedPlaceholder = defaultHomeScreenId
+        }
       }
     } catch (error) {
       // Fail-open like every other write here: leave the schedule pending and
@@ -286,7 +302,24 @@ export async function applyDuePublishSchedule(options: {
       // together or not at all. A failed commit leaves the schedule pending
       // and the next beat runs it again.
       const batch = firestore.batch()
-      batch.update(hostRef, { [`screens.${docId}`]: routePath })
+      batch.update(hostRef, {
+        [`screens.${docId}`]: routePath,
+        // The first real home page replaces the placeholder (AGL-3408), in
+        // the same commit, so `/` is never answered by two screens.
+        ...(releasedPlaceholder
+          ? {
+              [`screens.${releasedPlaceholder}`]: FieldValue.delete(),
+              defaultHomeScreenId: FieldValue.delete(),
+            }
+          : {}),
+      })
+      if (releasedPlaceholder) {
+        batch.set(
+          hostRef.collection('screens').doc(releasedPlaceholder),
+          { publishedAt: FieldValue.delete() },
+          { merge: true },
+        )
+      }
       batch.update(docRef, { ...applied, publishedAt: Timestamp.now() })
       await batch.commit()
 

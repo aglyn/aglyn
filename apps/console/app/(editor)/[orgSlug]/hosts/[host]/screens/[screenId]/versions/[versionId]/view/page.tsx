@@ -21,7 +21,7 @@ import {
   campaignMembershipUnchanged,
   campaignMembershipValue,
   composeScreenRoutePath,
-  findScreenIdByRoutePath,
+  blockingRouteOwner,
   HostScreenVisibility,
   normalizeScreenSlug,
   readCampaignIds,
@@ -656,7 +656,7 @@ function ScreenDetails() {
       })
     }
     const owner = composed
-      ? findScreenIdByRoutePath(routingMap, composed)
+      ? blockingRouteOwner(routingMap, composed, hostData?.defaultHomeScreenId)
       : undefined
     if (owner && owner !== screenId) {
       return enqueueSnackbar(
