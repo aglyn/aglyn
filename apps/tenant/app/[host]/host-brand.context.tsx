@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { useTheme } from '@mui/material/styles'
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 // TYPE-ONLY, and it has to stay that way: `site-nav.ts` reaches
 // `@aglyn/aglyn/server`, and a value import here would drag the server entry
@@ -50,8 +51,19 @@ import type { SiteNavLink } from '../../utils/site-nav'
 export interface HostBrand {
   /** The site's display name, e.g. "Northwind Coffee". */
   brandName?: string
-  /** Resolved, site-relative logo URL; absent when the host set none. */
+  /**
+   * Resolved, site-relative logo URL; absent when the host set none.
+   *
+   * Read from the context, this is the logo for the ACTIVE scheme: the
+   * provider swaps in {@link brandLogoDarkUrl} under a dark theme (AGL-3400),
+   * so a reader renders one field and never has to ask which scheme is live.
+   */
   brandLogoUrl?: string
+  /**
+   * The dark-scheme variant the site set, resolved like `brandLogoUrl`.
+   * Absent means the one logo serves both schemes.
+   */
+  brandLogoDarkUrl?: string
   /**
    * The site's public top-level pages (AGL-2187) — the closest thing to a
    * navigation a boundary can render, and it travels the same way and for the
@@ -103,23 +115,38 @@ const HostBrandContext = createContext<HostBrand>({})
 
 export function HostBrandProvider({
   brandName,
-  brandLogoUrl,
+  brandLogoUrl: lightLogoUrl,
+  brandLogoDarkUrl,
   siteLinks,
   hostKey,
   siteTitle,
   titleSeparator,
   children,
 }: HostBrand & { children: ReactNode }) {
+  // The theme, not the route's scheme segment: the two agree on the server
+  // render, and only the theme follows a visitor who flips the scheme in the
+  // page afterwards.
+  const dark = useTheme().palette.mode === 'dark'
+  const brandLogoUrl = (dark && brandLogoDarkUrl) || lightLogoUrl
   const value = useMemo(
     () => ({
       brandName,
       brandLogoUrl,
+      brandLogoDarkUrl,
       siteLinks,
       hostKey,
       siteTitle,
       titleSeparator,
     }),
-    [brandName, brandLogoUrl, siteLinks, hostKey, siteTitle, titleSeparator],
+    [
+      brandName,
+      brandLogoUrl,
+      brandLogoDarkUrl,
+      siteLinks,
+      hostKey,
+      siteTitle,
+      titleSeparator,
+    ],
   )
   return (
     <HostBrandContext.Provider value={value}>

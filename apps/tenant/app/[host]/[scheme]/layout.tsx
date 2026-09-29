@@ -70,6 +70,13 @@ export default async function HostLayout({
   const brandLogoUrl = resolveMediaSrc(hostRes.host?.logoUrl, {
     hostId: hostRes.host?.$id,
   })
+  // Its dark-scheme variant (AGL-3400), resolved the same way. BOTH travel
+  // down rather than the one this route's scheme names: the visitor can flip
+  // the scheme in the page without a navigation, and the brand context picks
+  // between them from the theme it is rendered under.
+  const brandLogoDarkUrl = resolveMediaSrc(hostRes.host?.logoDarkUrl, {
+    hostId: hostRes.host?.$id,
+  })
   /**
    * The site's own favicon (AGL-1421).
    *
@@ -238,6 +245,7 @@ export default async function HostLayout({
       hostTheme={hostTheme}
       initialDeviceMode={initialDeviceMode}
       brandLogoUrl={brandLogoUrl}
+      brandLogoDarkUrl={brandLogoDarkUrl}
       brandName={hostRes.host?.displayName}
       siteLinks={siteLinks}
       hostKey={host}

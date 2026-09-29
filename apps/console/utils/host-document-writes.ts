@@ -86,6 +86,9 @@ export const SITE_RENDERED_HOST_FIELDS: Readonly<Record<string, string>> = {
   displayName:
     'The site name — the title and JSON-LD fallback when no SEO title is set.',
   logoUrl: 'The brand mark the tenant navigation and error pages render.',
+  logoDarkUrl:
+    'The brand mark the tenant navigation and error pages render in the ' +
+    'dark scheme (AGL-3400).',
   business:
     'Support email, address and social links behind the host tokens that ' +
     'published pages and footers render.',

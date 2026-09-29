@@ -31,7 +31,7 @@ import {
 import type { ReactNode } from 'react'
 // Type-only — see the note on the same import in `host-brand.context.tsx`.
 import type { SiteNavLink } from '../../utils/site-nav'
-import { HostBrandProvider } from './host-brand.context'
+import { HostBrandProvider, useHostBrand } from './host-brand.context'
 
 /**
  * Client theme boundary for tenant sites (App Router). Replaces the Pages
@@ -57,6 +57,7 @@ export function HostThemeProviders({
   initialThemeMode,
   initialDeviceMode,
   brandLogoUrl,
+  brandLogoDarkUrl,
   brandName,
   siteLinks,
   hostKey,
@@ -90,6 +91,8 @@ export function HostThemeProviders({
    */
   initialDeviceMode?: ThemeMode
   brandLogoUrl?: string
+  /** The dark-scheme logo (AGL-3400); see `HostBrand.brandLogoDarkUrl`. */
+  brandLogoDarkUrl?: string
   brandName?: string
   siteLinks?: SiteNavLink[]
   hostKey?: string
@@ -128,19 +131,40 @@ export function HostThemeProviders({
     >
       <HostBrandProvider
         brandLogoUrl={brandLogoUrl}
+        brandLogoDarkUrl={brandLogoDarkUrl}
         brandName={brandName}
         siteLinks={siteLinks}
         hostKey={hostKey}
         siteTitle={siteTitle}
         titleSeparator={titleSeparator}
       >
-        <LoadingLayoutAppComponent
-          brandLogoUrl={brandLogoUrl}
-          brandName={brandName}
-        >
-          {children}
-        </LoadingLayoutAppComponent>
+        <HostLoadingLayout brandName={brandName}>{children}</HostLoadingLayout>
       </HostBrandProvider>
     </HostThemeProvider>
   )
 }
+
+/**
+ * The navigation loader, wearing the logo the brand context picked for the
+ * active scheme (AGL-3400). A child of the provider rather than a prop from
+ * above it: only something rendered under `HostThemeProvider` can see which
+ * scheme is live.
+ */
+function HostLoadingLayout({
+  brandName,
+  children,
+}: {
+  brandName?: string
+  children: ReactNode
+}) {
+  const { brandLogoUrl } = useHostBrand()
+  return (
+    <LoadingLayoutAppComponent
+      brandLogoUrl={brandLogoUrl}
+      brandName={brandName}
+    >
+      {children}
+    </LoadingLayoutAppComponent>
+  )
+}
+HostLoadingLayout.displayName = 'HostLoadingLayout'

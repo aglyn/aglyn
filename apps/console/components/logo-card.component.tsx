@@ -30,30 +30,23 @@ export interface LogoCardProps {
   hostId: string
 }
 
+/** The two host fields a logo slot writes. */
+type LogoField = 'logoUrl' | 'logoDarkUrl'
+
 /**
  * Site logo picker (AGL-594): pick (or upload) the site's brand mark in
  * the media browser and the asset URL lands on the host's `logoUrl`.
  * The tenant's navigation loader shows it (site name when unset);
  * distinct from `seo.entity.logo`, which is JSON-LD publisher data.
+ *
+ * A second slot holds the dark-scheme mark, `logoDarkUrl` (AGL-3400): the
+ * live site shows it on the loader and error screens when the visitor's
+ * scheme is dark, and falls back to the first when it is unset. Each preview
+ * sits on the ground it will be seen on, which is how an owner notices that a
+ * dark wordmark needs its partner before a visitor does.
  */
 export function LogoCard(props: LogoCardProps) {
   const { hostId } = props
-  const { enqueueSnackbar } = useSnackbar()
-  const {
-    doc: { data },
-    setDoc,
-  } = useHost({ hostId })
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const logoUrl = data?.logoUrl
-  /**
-   * The stored value has three generations — a raw storage URL, an AGL-175
-   * CDN path, and a `media:` reference (AGL-1407) — and only the resolver
-   * knows all three. Handing the raw string to `<img src>` worked for exactly
-   * as long as no site's `logoUrl` held a reference; the tenant's three
-   * readers all resolve, so this preview was the last one that would have
-   * shown a broken image the moment the data was converted.
-   */
-  const preview = Aglyn.resolveMediaSrc(logoUrl, { hostId })
 
   return (
     <CardDisplay
@@ -68,60 +61,122 @@ export function LogoCard(props: LogoCardProps) {
     >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {'Shown while pages load on your live site. Without a logo, the ' +
-          'site name is shown instead.'}
+          'site name is shown instead. Add a dark mode version if your logo ' +
+          'is hard to see on a dark background.'}
       </Typography>
       {/* What to bring, said before the upload (AGL-2486). */}
       <Typography
         variant="caption"
         color="text.secondary"
         component="div"
-        sx={{ mt: 0.5 }}
+        sx={{ mt: 0.5, mb: 1 }}
       >
         {SITE_LOGO_HINT}
       </Typography>
-      <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+      <Stack spacing={1.5}>
+        <LogoSlot
+          hostId={hostId}
+          field="logoUrl"
+          label="Light mode"
+          ground="light"
+        />
+        <LogoSlot
+          hostId={hostId}
+          field="logoDarkUrl"
+          label="Dark mode"
+          ground="dark"
+          emptyText="Uses the light mode logo"
+        />
+      </Stack>
+    </CardDisplay>
+  )
+}
+LogoCard.displayName = 'LogoCard'
+
+function LogoSlot(props: {
+  hostId: string
+  field: LogoField
+  label: string
+  /** The background the mark is previewed on — the one it will be seen on. */
+  ground: 'light' | 'dark'
+  emptyText?: string
+}) {
+  const { hostId, field, label, ground, emptyText = 'No logo set' } = props
+  const { enqueueSnackbar } = useSnackbar()
+  const {
+    doc: { data },
+    setDoc,
+  } = useHost({ hostId })
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const value = data?.[field]
+  /**
+   * The stored value has three generations — a raw storage URL, an AGL-175
+   * CDN path, and a `media:` reference (AGL-1407) — and only the resolver
+   * knows all three. Handing the raw string to `<img src>` worked for exactly
+   * as long as no site's `logoUrl` held a reference; the tenant's three
+   * readers all resolve, so this preview was the last one that would have
+   * shown a broken image the moment the data was converted.
+   */
+  const preview = Aglyn.resolveMediaSrc(value, { hostId })
+  const write = (next: string, done: string) =>
+    setDoc({ [field]: next }, { merge: true })
+      .then(() => enqueueSnackbar(done, { variant: 'success', persist: false }))
+      .catch(() =>
+        enqueueSnackbar('An error has occurred', { variant: 'error' }),
+      )
+
+  return (
+    <Stack
+      direction="row"
+      spacing={2}
+      sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+    >
+      <Typography variant="body2" sx={{ width: 88, flexShrink: 0 }}>
+        {label}
+      </Typography>
+      <Box
+        sx={{
+          width: 176,
+          height: 56,
+          px: 1,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 1,
+          border: 1,
+          borderColor: 'divider',
+          bgcolor: ground === 'dark' ? 'grey.900' : 'common.white',
+        }}
+      >
         {preview ? (
           <Box
             component="img"
             src={preview}
-            alt="Site logo"
-            sx={{ maxHeight: 48, maxWidth: 160, objectFit: 'contain' }}
+            alt={`Site logo, ${label.toLowerCase()}`}
+            sx={{ maxHeight: 44, maxWidth: 160, objectFit: 'contain' }}
           />
         ) : (
-          <Typography variant="body2" color="text.secondary">
-            {'No logo set'}
+          <Typography
+            variant="caption"
+            sx={{ color: ground === 'dark' ? 'grey.400' : 'grey.600' }}
+          >
+            {emptyText}
           </Typography>
         )}
+      </Box>
+      <Button size="small" color="primary" onClick={() => setPickerOpen(true)}>
+        {value ? 'Replace from media' : 'Choose from media'}
+      </Button>
+      {value ? (
         <Button
           size="small"
-          color="primary"
-          onClick={() => setPickerOpen(true)}
+          color="error"
+          onClick={() => void write('', 'Logo removed')}
         >
-          {logoUrl ? 'Replace from media' : 'Choose from media'}
+          {'Remove'}
         </Button>
-        {logoUrl ? (
-          <Button
-            size="small"
-            color="error"
-            onClick={() =>
-              setDoc({ logoUrl: '' }, { merge: true })
-                .then(() =>
-                  enqueueSnackbar('Logo removed', {
-                    variant: 'success',
-                    persist: false,
-                  }),
-                )
-                .catch(() =>
-                  enqueueSnackbar('An error has occurred', {
-                    variant: 'error',
-                  }),
-                )
-            }
-          >
-            {'Remove'}
-          </Button>
-        ) : null}
-      </Stack>
+      ) : null}
       <MediaPickerDialog
         hostId={hostId}
         open={pickerOpen}
@@ -135,21 +190,12 @@ export function LogoCard(props: LogoCardProps) {
           // the next time someone opens this card.
           const src = Aglyn.mediaNodeSrc(media)
           if (!src) return
-          void setDoc({ logoUrl: src }, { merge: true })
-            .then(() =>
-              enqueueSnackbar('Logo saved', {
-                variant: 'success',
-                persist: false,
-              }),
-            )
-            .catch(() =>
-              enqueueSnackbar('An error has occurred', { variant: 'error' }),
-            )
+          void write(src, 'Logo saved')
         }}
       />
-    </CardDisplay>
+    </Stack>
   )
 }
-LogoCard.displayName = 'LogoCard'
+LogoSlot.displayName = 'LogoSlot'
 
 export default LogoCard

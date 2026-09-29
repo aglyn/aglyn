@@ -192,6 +192,15 @@ export interface AglynHost extends AglynDocument {
    * `seo.entity.logo`, which is publisher-semantic JSON-LD.
    */
   logoUrl?: string
+  /**
+   * The site logo for the DARK scheme (AGL-3400). A wordmark drawn for a
+   * light ground — dark ink on a transparent PNG — disappears on the dark
+   * loader scrim and error screens, so a site may name a second mark for
+   * them. Unset means {@link logoUrl} serves both schemes. Read only where a
+   * scheme is known; emails, `{{host.logo}}` and the install icon stay on
+   * `logoUrl`, because a mail client paints a light ground.
+   */
+  logoDarkUrl?: string
   seo?: {
     title?: string
     description?: string
@@ -629,6 +638,9 @@ export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
   logoUrl:
     'The site brand mark rendered by the tenant nav (AGL-594). Authored ' +
     'content pointing at already-public media; no gate reads it.',
+  logoDarkUrl:
+    'The dark-scheme variant of `logoUrl` (AGL-3400). Same reasoning: ' +
+    'authored content pointing at already-public media; no gate reads it.',
   seo:
     'Title, description, favicon, app icon, social card, search engine ' +
     'verification tokens and the AGL-1263 `discourageSearchEngines` switch. ' +
