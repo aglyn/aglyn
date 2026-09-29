@@ -66,7 +66,9 @@
  *
  * **The filters reach the whole queue.** Status and Category are clauses the
  * route puts on its Firestore query (AGL-3321), and both lists page by a
- * cursor; nothing here narrows the rows the route hands back. A combination
+ * cursor; nothing here narrows the rows the route hands back. Status starts
+ * on open-or-reviewing, so a closed report leaves the queue a reader lands
+ * on and stays under All statuses. A combination
  * the query cannot hold is named above the list (`ListQueryNotices`) rather
  * than applied to some rows and not others.
  *
@@ -585,6 +587,23 @@ const COUNTER_NOTICE_PARAMS: Readonly<Record<string, string>> = {
   queue: 'counterNotices',
 }
 
+/**
+ * The status menu's default: every report nobody has closed. A closed row
+ * keeps its record under All statuses, but the queue a reader lands on is
+ * the work still owed.
+ */
+const UNRESOLVED_STATUS = 'unresolved'
+const UNRESOLVED_CLAUSE: ListFilterClause = {
+  field: 'status',
+  op: 'isAnyOf',
+  value: 'open,reviewing',
+  label: 'open or reviewing',
+}
+const isUnresolvedClause = (clause: ListFilterClause): boolean =>
+  clause.field === UNRESOLVED_CLAUSE.field &&
+  clause.op === UNRESOLVED_CLAUSE.op &&
+  clause.value === UNRESOLVED_CLAUSE.value
+
 const isClosingStatus = (status: string): boolean =>
   status === 'actioned' || status === 'dismissed'
 
@@ -741,19 +760,34 @@ function AdminAbuseReports() {
    * selects write them and the chips remove them; the rows that come back
    * are the answer, and nothing here narrows them further.
    */
+  const [reportClauses, setReportClauses] = useState<ListFilterClause[]>([
+    UNRESOLVED_CLAUSE,
+  ])
   const reportFilter = useListGridFilter({
     selectFields: Object.keys(ABUSE_REPORT_FILTER_OPTIONS),
+    clauses: reportClauses,
+    onChange: setReportClauses,
   })
   const { clauses, setClauses } = reportFilter
-  const pickedOf = (field: string): string =>
-    clauses.find((clause) => clause.field === field && clause.op === 'equals')
-      ?.value ?? 'all'
+  const pickedOf = (field: string): string => {
+    if (field === 'status' && clauses.some(isUnresolvedClause)) {
+      return UNRESOLVED_STATUS
+    }
+    return (
+      clauses.find((clause) => clause.field === field && clause.op === 'equals')
+        ?.value ?? 'all'
+    )
+  }
   const pick = (field: string, value: string) => {
     const label = ABUSE_REPORT_FILTER_OPTIONS[field]?.find(
       (option) => option.value === value,
     )?.label
     const next: ListFilterClause | null =
-      value === 'all' ? null : { field, op: 'equals', value, label }
+      value === 'all'
+        ? null
+        : field === 'status' && value === UNRESOLVED_STATUS
+          ? UNRESOLVED_CLAUSE
+          : { field, op: 'equals', value, label }
     setClauses(upsertListFilterClause(clauses, field, next))
   }
 
@@ -1203,6 +1237,11 @@ function AdminAbuseReports() {
                       onChange={(event) => pick(field, event.target.value)}
                       sx={{ minWidth: 200 }}
                     >
+                      {field === 'status' ? (
+                        <MenuItem value={UNRESOLVED_STATUS}>
+                          {'Open or reviewing'}
+                        </MenuItem>
+                      ) : null}
                       <MenuItem value="all">
                         {field === 'status' ? 'All statuses' : 'All categories'}
                       </MenuItem>
@@ -1303,7 +1342,9 @@ function AdminAbuseReports() {
 
                 {!reportList.loading && !reportList.failed && !reports.length ? (
                   <Typography variant="body2" color="text.secondary">
-                    {clauses.length === 0
+                    {clauses.length === 1 && isUnresolvedClause(clauses[0])
+                      ? 'Nothing is waiting: every report has been actioned or dismissed. Closed reports are under All statuses.'
+                      : clauses.length === 0
                       ? 'No reports have been filed. That is the good state — but if the public form ever broke it would look exactly like this, so check the form itself before treating a long silence as quiet.'
                       : 'No reports match these filters anywhere in the queue. Remove a filter to see the rest of it.'}
                   </Typography>

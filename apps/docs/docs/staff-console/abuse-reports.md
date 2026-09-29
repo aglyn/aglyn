@@ -545,7 +545,9 @@ considered it.
 
 **Filtering and paging the queue.** The queue has two filters, **Status** and
 **Category**, set from the two menus above it; each one in force shows as a chip
-you can remove. Both are applied to
+you can remove. Status starts on **Open or reviewing**, so a report leaves the
+queue once it is actioned or dismissed; pick **All statuses** to see closed
+ones. Both are applied to
 the **whole queue** by the query that reads it, not to the page on screen, so
 "no reports match" means none anywhere. They combine freely — `open` reports in
 `phishing`, say. There is no search box: a report is triaged by status and category, and its text
