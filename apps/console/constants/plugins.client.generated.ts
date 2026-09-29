@@ -16,7 +16,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     alwaysOn: true,
     register: {"site":"registerMuiPlugin"},
     contributes: {},
-    load: () => import('@aglyn/plugins-mui'),
+    load: () => import('@aglyn/plugins-mui/plugin'),
   },
   {
     id: 'forms',

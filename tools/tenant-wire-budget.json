@@ -8,8 +8,8 @@
       "loads": [
         {
           "from": "apps/tenant/utils/plugins.client.generated.ts",
-          "import": "@aglyn/plugins-mui",
-          "why": "The always-on site plugin: it registers the components every page's nodes render with."
+          "import": "@aglyn/plugins-mui/plugin",
+          "why": "The always-on site plugin: it registers the components every page's nodes render with. Its site module, not the package root: a dynamic import keeps every export of what it names, so importing the root put the Plugin element, its sandboxed frame and the custom-HTML sanitizer on every page for re-exports nothing there reads (AGL-3401)."
         },
         {
           "from": "apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx",
@@ -22,8 +22,8 @@
           "why": "Real-user vitals, measured on every page."
         }
       ],
-      "baselineBytes": 314796,
-      "budgetBytes": 330752
+      "baselineBytes": 303811,
+      "budgetBytes": 319488
     },
     {
       "name": "a site with the marketing plugin",

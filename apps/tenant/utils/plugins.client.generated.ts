@@ -15,7 +15,7 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'mui',
     alwaysOn: true,
     register: {"site":"registerMuiPlugin"},
-    load: () => import('@aglyn/plugins-mui'),
+    load: () => import('@aglyn/plugins-mui/plugin'),
   },
   {
     id: 'forms',

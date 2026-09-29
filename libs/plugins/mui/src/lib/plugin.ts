@@ -22,7 +22,7 @@ import {
 import {
   muiPluginInstallToPreset,
   muiPluginInstallToPresets,
-} from './components/plugin'
+} from './components/plugin-install-presets'
 import * as Aglyn from '@aglyn/aglyn'
 import { runInAction } from 'mobx'
 import { BUNDLE_ID } from './constants/bundle-common'
