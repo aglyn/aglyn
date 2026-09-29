@@ -47,6 +47,20 @@ type LogoField = 'logoUrl' | 'logoDarkUrl'
  */
 export function LogoCard(props: LogoCardProps) {
   const { hostId } = props
+  const { enqueueSnackbar } = useSnackbar()
+  // ONE subscription for both slots. Each slot calling `useHost` itself was a
+  // second listener on the host document, and the Setup page's read budget
+  // (`host-setup-read-cost.spec.tsx`) counts every one.
+  const {
+    doc: { data },
+    setDoc,
+  } = useHost({ hostId })
+  const write = (field: LogoField) => (next: string, done: string) =>
+    setDoc({ [field]: next }, { merge: true })
+      .then(() => enqueueSnackbar(done, { variant: 'success', persist: false }))
+      .catch(() =>
+        enqueueSnackbar('An error has occurred', { variant: 'error' }),
+      )
 
   return (
     <CardDisplay
@@ -76,13 +90,15 @@ export function LogoCard(props: LogoCardProps) {
       <Stack spacing={1.5}>
         <LogoSlot
           hostId={hostId}
-          field="logoUrl"
+          value={data?.logoUrl}
+          write={write('logoUrl')}
           label="Light mode"
           ground="light"
         />
         <LogoSlot
           hostId={hostId}
-          field="logoDarkUrl"
+          value={data?.logoDarkUrl}
+          write={write('logoDarkUrl')}
           label="Dark mode"
           ground="dark"
           emptyText="Uses the light mode logo"
@@ -95,20 +111,23 @@ LogoCard.displayName = 'LogoCard'
 
 function LogoSlot(props: {
   hostId: string
-  field: LogoField
+  /** The stored value, as the host document holds it. */
+  value: string | undefined
+  write: (next: string, done: string) => Promise<unknown>
   label: string
   /** The background the mark is previewed on — the one it will be seen on. */
   ground: 'light' | 'dark'
   emptyText?: string
 }) {
-  const { hostId, field, label, ground, emptyText = 'No logo set' } = props
-  const { enqueueSnackbar } = useSnackbar()
   const {
-    doc: { data },
-    setDoc,
-  } = useHost({ hostId })
+    hostId,
+    value,
+    write,
+    label,
+    ground,
+    emptyText = 'No logo set',
+  } = props
   const [pickerOpen, setPickerOpen] = useState(false)
-  const value = data?.[field]
   /**
    * The stored value has three generations — a raw storage URL, an AGL-175
    * CDN path, and a `media:` reference (AGL-1407) — and only the resolver
@@ -118,12 +137,6 @@ function LogoSlot(props: {
    * shown a broken image the moment the data was converted.
    */
   const preview = Aglyn.resolveMediaSrc(value, { hostId })
-  const write = (next: string, done: string) =>
-    setDoc({ [field]: next }, { merge: true })
-      .then(() => enqueueSnackbar(done, { variant: 'success', persist: false }))
-      .catch(() =>
-        enqueueSnackbar('An error has occurred', { variant: 'error' }),
-      )
 
   return (
     <Stack
