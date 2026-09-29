@@ -196,6 +196,7 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 | `PLUGIN_REMOTE_SERVER_BUNDLES` | server | Per-deploy `listingId@version` allowlist |
 | `PLUGIN_JOBS_SECRET` | tenant server | Shared secret the scheduler sends to `/api/plugins/run-jobs` |
 | `NEXT_PUBLIC_PLUGIN_DEV_BUNDLES` | client, dev only | Unverified localhost bundle loading for the authoring loop; dead code in production builds |
+| `PLUGIN_DEV_MANIFESTS` | server, dev only | Comma-separated manifest file paths for the dev loop's bundles. Compose reads their `functionBindings` from disk, because a dev bundle has no install to carry them; never read in production builds |
 
 ## `plugins.config.json` (first-party contributors)
 

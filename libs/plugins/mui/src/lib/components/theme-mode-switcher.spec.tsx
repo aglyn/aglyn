@@ -79,6 +79,13 @@ describe('ThemeModeSwitcher where dark is available', () => {
     ).not.toBeNull()
   })
 
+  it("names the visitor's choice in the browser's own tooltip (AGL-3401)", () => {
+    renderUnder(modeState(true), <ThemeModeSwitcher />)
+    expect(
+      screen.getByRole('button', { name: 'Toggle color theme' }).getAttribute('title'),
+    ).toMatch(/^Theme: /)
+  })
+
   it('renders with no provider at all', () => {
     render(<ThemeModeSwitcher />)
     expect(

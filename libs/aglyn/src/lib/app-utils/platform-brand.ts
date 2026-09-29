@@ -278,7 +278,11 @@ export const PLATFORM_POSTAL_ADDRESS: string | null =
 export interface ResolvedBrandingProfile {
   productName: string
   logoUrl: string | null
+  /** The logo for dark grounds; null means {@link logoUrl} serves both. */
+  logoDarkUrl: string | null
   faviconUrl: string | null
+  /** The favicon for a dark tab strip; null means {@link faviconUrl} serves both. */
+  faviconDarkUrl: string | null
   primaryColor: string | null
   supportUrl: string | null
   /**
@@ -327,7 +331,9 @@ export const PLATFORM_BRANDING_PROFILE: ResolvedBrandingProfile = {
   // else's site. The free-tier attribution badge is the one that exists
   // today, and it carried no mark at all while this was null.
   logoUrl: PLATFORM_MARK_URL,
+  logoDarkUrl: null,
   faviconUrl: null,
+  faviconDarkUrl: null,
   primaryColor: null,
   supportUrl: PLATFORM_SUPPORT_URL,
   homeUrl: PLATFORM_HOME_URL,

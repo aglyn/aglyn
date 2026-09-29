@@ -243,9 +243,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: "The bar mounts only for an authenticated editor of this site, and its favicon is resolved by the edit-context route with the same resolver the layout's <link rel=icon> uses. Its <style> is BAR_CSS, ours.",
   },
   'apps/tenant/app/[host]/[scheme]/layout.tsx': {
-    markers: 1,
+    markers: 2,
     guard: 'media-ref',
-    why: 'The site favicon, the org brand favicon, the apple-touch-icon (AGL-3382) and the navigation loader logo, all through resolveMediaSrc since AGL-1407. Site-relative is correct here: a page is present to resolve against.',
+    why: "The site favicon, the org brand favicon and its dark-tab partner (the brand profile's faviconDarkUrl, emitted as a second <link rel=icon> under prefers-color-scheme: dark), the apple-touch-icon (AGL-3382) and the navigation loader logos, all through resolveMediaSrc since AGL-1407. Site-relative is correct here: a page is present to resolve against.",
   },
   'apps/tenant/app/api/_legal-intake/chrome.ts': {
     markers: 1,

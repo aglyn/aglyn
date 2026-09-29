@@ -164,7 +164,105 @@ describe('hostThemeToThemeOptions', () => {
   })
 })
 
+describe('theme-aware component overrides (AGL-3403)', () => {
+  const unstable_sx = (style: Record<string, unknown>) => ({ resolved: style })
+  const theme = { unstable_sx }
+
+  it('turns an sx slot into a style function of the theme', () => {
+    const options = hostThemeToThemeOptions(
+      { components: { MuiCard: { sx: { root: { borderColor: 'divider' } } } } },
+      'light',
+    )
+    const root = (options.components as any).MuiCard.styleOverrides.root
+    expect(typeof root).toBe('function')
+    expect(root({ theme })).toEqual({ resolved: { borderColor: 'divider' } })
+  })
+
+  it('applies the literal slot first and the sx after it', () => {
+    const options = hostThemeToThemeOptions(
+      {
+        components: {
+          MuiCard: {
+            styleOverrides: { root: { padding: 8 } },
+            sx: { root: { p: 2 } },
+          },
+        },
+      },
+      'light',
+    )
+    const root = (options.components as any).MuiCard.styleOverrides.root
+    expect(root[0]).toEqual({ padding: 8 })
+    expect(root[1]({ theme })).toEqual({ resolved: { p: 2 } })
+  })
+
+  it('keeps literal styleOverrides literal', () => {
+    const options = hostThemeToThemeOptions(
+      { components: { MuiCard: { styleOverrides: { root: { padding: 8 } } } } },
+      'light',
+    )
+    expect((options.components as any).MuiCard.styleOverrides.root).toEqual({
+      padding: 8,
+    })
+  })
+
+  it('carries variants, resolving a variant sx against the theme', () => {
+    const options = hostThemeToThemeOptions(
+      {
+        components: {
+          MuiButton: {
+            variants: [
+              { props: { variant: 'outlined' }, style: { borderWidth: 2 } },
+              { props: { size: 'small' }, sx: { px: 1 } },
+            ],
+          },
+        },
+      },
+      'light',
+    )
+    const [outlined, small] = (options.components as any).MuiButton.variants
+    expect(outlined).toEqual({ props: { variant: 'outlined' }, style: { borderWidth: 2 } })
+    expect(small.props).toEqual({ size: 'small' })
+    expect(small.style({ theme })).toEqual([{}, { resolved: { px: 1 } }])
+  })
+
+  it('renders an sx override through a real theme, per scheme', () => {
+    const { createTheme } = jest.requireActual('@mui/material/styles')
+    for (const scheme of ['light', 'dark'] as const) {
+      const built = createTheme(
+        hostThemeToThemeOptions(
+          { components: { MuiCard: { sx: { root: { borderColor: 'divider', p: 2 } } } } },
+          scheme,
+        ),
+      )
+      const style = built.components.MuiCard.styleOverrides.root({ theme: built })
+      expect(style).toEqual({ borderColor: built.palette.divider, padding: '16px' })
+    }
+  })
+})
+
 describe('sanitizeHostTheme', () => {
+  it('keeps sx slots and well-formed variants, dropping malformed ones', () => {
+    const sanitized = sanitizeHostTheme({
+      components: {
+        MuiButton: {
+          sx: { root: { p: 1 }, label: 'nope' as any },
+          variants: [
+            { props: { variant: 'text' }, sx: { px: 0 } },
+            { props: { variant: { nested: true } as any }, style: { a: 1 } },
+            { props: { size: 'small' } },
+            { style: { a: 1 } } as any,
+          ],
+        },
+      },
+    })
+    expect(sanitized.components).toEqual({
+      MuiButton: {
+        sx: { root: { p: 1 } },
+        variants: [{ props: { variant: 'text' }, sx: { px: 0 } }],
+      },
+    })
+  })
+
   it('strips non-whitelisted components without mutating the input', () => {
     const theme: HostTheme = {
       components: {
@@ -343,10 +441,69 @@ describe('mergeThemeOptions (AGL-1180)', () => {
 
   it('replaces arrays rather than merging them', () => {
     const merged = mergeThemeOptions(
-      { components: { MuiX: { variants: ['a', 'b', 'c'] } } } as any,
+      { components: { MuiX: { defaultProps: { list: ['a', 'b', 'c'] } } } } as any,
+      { components: { MuiX: { defaultProps: { list: ['z'] } } } } as any,
+    )
+    expect((merged.components as any).MuiX.defaultProps.list).toEqual(['z'])
+  })
+
+  // AGL-3403: a deep merge of an object onto a style FUNCTION keeps only the
+  // object, which silently dropped the base's contrast fix.
+  it('composes a slot the base styles with a function instead of replacing it', () => {
+    const rootStyle = () => ({ padding: 8 })
+    const merged = mergeThemeOptions(
+      { components: { MuiButton: { styleOverrides: { root: rootStyle } } } } as any,
+      { components: { MuiButton: { styleOverrides: { root: { borderRadius: 0 } } } } } as any,
+    )
+    expect((merged.components as any).MuiButton.styleOverrides.root).toEqual([
+      rootStyle,
+      { borderRadius: 0 },
+    ])
+  })
+
+  it('composes a function override onto an object base, base first', () => {
+    const hostStyle = () => ({ padding: 8 })
+    const merged = mergeThemeOptions(
+      { components: { MuiButton: { styleOverrides: { root: { margin: 1 } } } } } as any,
+      { components: { MuiButton: { styleOverrides: { root: hostStyle } } } } as any,
+    )
+    expect((merged.components as any).MuiButton.styleOverrides.root).toEqual([
+      { margin: 1 },
+      hostStyle,
+    ])
+  })
+
+  it('still deep-merges two object slots key by key', () => {
+    const merged = mergeThemeOptions(
+      { components: { MuiButton: { styleOverrides: { root: { margin: 1, padding: 2 } } } } } as any,
+      { components: { MuiButton: { styleOverrides: { root: { padding: 4 } } } } } as any,
+    )
+    expect((merged.components as any).MuiButton.styleOverrides.root).toEqual({
+      margin: 1,
+      padding: 4,
+    })
+  })
+
+  it('concatenates variants so the base keeps its own (AGL-3403)', () => {
+    const merged = mergeThemeOptions(
+      { components: { MuiX: { variants: ['a', 'b'] } } } as any,
       { components: { MuiX: { variants: ['z'] } } } as any,
     )
-    expect((merged.components as any).MuiX.variants).toEqual(['z'])
+    expect((merged.components as any).MuiX.variants).toEqual(['a', 'b', 'z'])
+  })
+
+  it('keeps the brand button fix under a theme that styles the button root', () => {
+    const merged = mergeThemeOptions(
+      consoleOptions,
+      hostThemeToThemeOptions(
+        { components: { MuiButton: { styleOverrides: { root: { borderRadius: 0 } } } } },
+        'light',
+      ),
+    )
+    const root = (merged.components as any).MuiButton.styleOverrides.root
+    expect(Array.isArray(root)).toBe(true)
+    expect(typeof root[0]).toBe('function')
+    expect(root[1]).toEqual({ borderRadius: 0 })
   })
 
   it('keeps every theme component when the host overrides none', () => {

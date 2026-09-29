@@ -653,7 +653,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       email: { prefixTokens: 2_919, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_730, minimum: 1_024, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_618, minimum: 1_024, caches: true, toolsStable: true },
-      theme: { prefixTokens: 3_326, minimum: 1_024, caches: true, toolsStable: true },
+      // 3,326 before AGL-3403 widened the components a theme may style and
+      // gave a component leaf its theme-aware `sx` target.
+      theme: { prefixTokens: 3_514, minimum: 1_024, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096).

@@ -26,7 +26,6 @@ import { useThemeMode } from '@aglyn/shared-ui-theme'
 import IconButton from '@mui/material/IconButton'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import Tooltip from '@mui/material/Tooltip'
 import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -86,31 +85,33 @@ const ThemeModeSwitcher = forwardRef<HTMLElement, ThemeModeSwitcherProps>(
     }
 
     return (
-      <Tooltip title={`Theme: ${cookieMode ?? 'device default'}`}>
-        <IconButton
-          ref={ref as any}
-          onClick={(event) => toggleThemeMode(event)}
-          aria-label="Toggle color theme"
-          color="inherit"
-          {...rest}
-        >
-          <MdiIcon
-            // Key off the visitor's SELECTION, not the resolved mode: with
-            // 'device default' chosen, `mode` still resolves to light or dark,
-            // so the button showed a sun/moon and the system state was
-            // invisible — you couldn't tell it apart from an explicit choice.
-            // Same mapping the toggle variant uses.
-            path={
-              cookieMode === 'dark'
-                ? mdiWeatherNight.path
-                : cookieMode === 'light'
+      // The browser's own tooltip (`title`), not MUI's: Tooltip brings Popper
+      // and popper.js, 30 KB raw on every page that places this switch
+      // (AGL-3401).
+      <IconButton
+        ref={ref as any}
+        onClick={(event) => toggleThemeMode(event)}
+        aria-label="Toggle color theme"
+        title={`Theme: ${cookieMode ?? 'device default'}`}
+        color="inherit"
+        {...rest}
+      >
+        <MdiIcon
+          // Key off the visitor's SELECTION, not the resolved mode: with
+          // 'device default' chosen, `mode` still resolves to light or dark,
+          // so the button showed a sun/moon and the system state was
+          // invisible — you couldn't tell it apart from an explicit choice.
+          // Same mapping the toggle variant uses.
+          path={
+            cookieMode === 'dark'
+              ? mdiWeatherNight.path
+              : cookieMode === 'light'
                 ? mdiWhiteBalanceSunny.path
                 : mdiThemeLightDark.path
-            }
-            fontSize="small"
-          />
-        </IconButton>
-      </Tooltip>
+          }
+          fontSize="small"
+        />
+      </IconButton>
     )
   },
 )

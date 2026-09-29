@@ -28,7 +28,11 @@ import { hostSeoTitleParts } from '../../../utils/not-found-title'
 import AdminBarSlot from '../admin-bar/admin-bar-slot'
 import getOrgBilling from '../../../utils/get-org-billing'
 import { getHostCached } from '../host-data'
-import { orgBrandFavicon, resolveSiteFaviconHref } from '../site-favicon'
+import {
+  orgBrandFavicon,
+  orgBrandFaviconDark,
+  resolveSiteFaviconHref,
+} from '../site-favicon'
 import {
   siteAppleTouchIconSrc,
   siteFaviconSrc,
@@ -232,13 +236,22 @@ export default async function HostLayout({
    * `load-page-data` already calls it for this same request.
    */
   const orgRes = await getOrgBilling({ hostId: hostRes.host?.$id })
+  const brandFavicon = resolveMediaSrc(orgBrandFavicon(orgRes.org), {
+    hostId: hostRes.host?.$id,
+  })
   const faviconHref = resolveSiteFaviconHref({
     siteFavicon,
-    brandFavicon: resolveMediaSrc(orgBrandFavicon(orgRes.org), {
-      hostId: hostRes.host?.$id,
-    }),
+    brandFavicon,
     org: orgRes.org,
   })
+  // The brand's dark-tab favicon, only while the brand favicon is the one in
+  // use: a site that set its own icon keeps it in both browser schemes.
+  const faviconDarkHref =
+    faviconHref && faviconHref === brandFavicon
+      ? resolveMediaSrc(orgBrandFaviconDark(orgRes.org), {
+          hostId: hostRes.host?.$id,
+        })
+      : undefined
   const titleParts = hostSeoTitleParts(hostRes.host)
   return (
     <HostThemeProviders
@@ -261,6 +274,13 @@ export default async function HostLayout({
           the layout needing to know which it is on. */}
       <link rel="manifest" href="/manifest.webmanifest" />
       {faviconHref ? <link rel="icon" href={faviconHref} /> : null}
+      {faviconDarkHref ? (
+        <link
+          rel="icon"
+          href={faviconDarkHref}
+          media="(prefers-color-scheme: dark)"
+        />
+      ) : null}
       {appleTouchIcon ? (
         <link rel="apple-touch-icon" href={appleTouchIcon} />
       ) : null}

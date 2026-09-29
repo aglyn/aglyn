@@ -9,6 +9,36 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.215 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/66daf34a5...v1.0.0-beta.215)
+
+### Added
+
+- **theme:** component overrides compose with the base and take theme-aware sx, variants ([AGL-3403](https://linear.app/aglyn/issue/AGL-3403))
+- **branding:** dark-mode variants of the org logo and the white-label logo and favicon ([AGL-3406](https://linear.app/aglyn/issue/AGL-3406), [AGL-3400](https://linear.app/aglyn/issue/AGL-3400))
+- **team:** a pending invitation is answerable from every console page ([AGL-3402](https://linear.app/aglyn/issue/AGL-3402))
+
+### Fixed
+
+- **plugins:** the dev loop renders and binds a namespaced plugin without an install ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394), [AGL-3390](https://linear.app/aglyn/issue/AGL-3390), [AGL-3393](https://linear.app/aglyn/issue/AGL-3393))
+- **release:** beta.214's self-host and colour ratchets are green again ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+
+### Performance
+
+- **mui:** the theme mode switch uses the browser's own tooltip ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+
+### Documentation
+
+- **calculator:** the README says what the plugin reads, stores and sends ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **linear:** raise the issue ceiling to AGL-3402 ([AGL-3402](https://linear.app/aglyn/issue/AGL-3402), [AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+
+</details>
+
 ## v1.0.0-beta.214 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/60dcba1ef...v1.0.0-beta.214)

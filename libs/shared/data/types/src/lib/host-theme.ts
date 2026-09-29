@@ -114,13 +114,41 @@ export interface HostThemeTypography {
 }
 
 /**
- * Plain-JSON component override: serialized `defaultProps` and
- * `styleOverrides` (slot name -> CSS object). Functions are not
- * representable by design.
+ * A style a component takes only when its props match (MUI's theme
+ * `variants`), e.g. `{ props: { variant: 'outlined' }, sx: { borderWidth: 2 } }`.
+ *
+ * `style` is literal CSS and `sx` is resolved against the theme, the same
+ * split {@link HostThemeComponentOverride} makes between `styleOverrides` and
+ * `sx`. Either or both.
+ */
+export interface HostThemeComponentVariant {
+  /** Every prop named must equal the value given for the style to apply. */
+  props: Record<string, string | number | boolean | null>
+  style?: Record<string, unknown>
+  sx?: Record<string, unknown>
+}
+
+/**
+ * Plain-JSON component override. Functions are not representable by design,
+ * so the theme-dependent half of MUI's component API is expressed as data:
+ *
+ * - `defaultProps` — MUI's own.
+ * - `styleOverrides` — slot name → literal CSS object, MUI's own. `padding:
+ *   8` is 8px.
+ * - `sx` — slot name → an `sx` object, resolved against the site's theme per
+ *   scheme: palette paths (`borderColor: 'divider'`, `bgcolor:
+ *   'primary.main'`), spacing units (`px: 2`), radius multiples
+ *   (`borderRadius: 2`), shadow indices (`boxShadow: 3`) and whole type
+ *   variants (`typography: 'button'`). A separate field, not a flag on
+ *   `styleOverrides`, because the same number means a different length in
+ *   each (`padding: 8` is 8px there and `spacing(8)` here).
+ * - `variants` — props-matched styles, MUI's own.
  */
 export interface HostThemeComponentOverride {
   defaultProps?: Record<string, unknown>
   styleOverrides?: Record<string, unknown>
+  sx?: Record<string, Record<string, unknown>>
+  variants?: Array<HostThemeComponentVariant>
 }
 
 /**

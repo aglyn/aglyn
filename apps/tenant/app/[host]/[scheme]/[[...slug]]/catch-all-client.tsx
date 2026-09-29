@@ -66,6 +66,7 @@ import {
 } from 'react'
 import AttributionGuard from '../../../../components/attribution-guard.component'
 import {
+  devRealmPluginIds,
   loadSiteRealmPlugins,
   rendersOnServer,
 } from '../../../../utils/realm-plugins.client'
@@ -208,12 +209,15 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
    *
    * The signed marketplace plugins this page runs are in it too, under every
    * id their elements carry (AGL-3390): the server renders those, and the
-   * set is what keeps one site's plugin off another site's page.
+   * set is what keeps one site's plugin off another site's page. So are the
+   * DEV loop's unverified bundles (AGL-427), which have no install to carry
+   * them; the list is empty outside a dev build that opted in.
    */
   const renderedPlugins = useMemo(
     () => [
       ...enabledKey.split(','),
       ...(props.realmPlugins ?? []).flatMap((install) => presenceIds(install)),
+      ...devRealmPluginIds(),
     ],
     // realmKey captures the install list's identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -723,9 +727,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           // card writes a typed URL today, which passes straight through; this
           // is what stops a picked `media:` reference reaching the badge as a
           // literal string once `logoUrl` is converted.
-          const brandLogo = resolveMediaSrc(brand.logoUrl, {
-            hostId: host?.$id,
-          })
+          //
+          // The DARK-ground logo first when the brand set one: the badge is a
+          // white-text pill on the brand color or near-black, in either site
+          // scheme, so a light-ground wordmark is the wrong one here.
+          const brandLogo = resolveMediaSrc(
+            brand.logoDarkUrl ?? brand.logoUrl,
+            { hostId: host?.$id },
+          )
           // `homeUrl`, NOT `supportUrl`.
           //
           // This badge is the platform's only organic acquisition surface —

@@ -153,17 +153,37 @@ export function resetSiteRealmLoadsForTests(): void {
 }
 
 /**
+ * The raw `id=url` list of the DEV-ONLY realm loop, or nothing. Empty in a
+ * production build (NODE_ENV guard) and without the explicit opt-in (AGL-516):
+ * NODE_ENV alone is a fragile guard for an UNVERIFIED import() path, so a
+ * NODE_ENV!=production preview build can't silently enable it.
+ */
+function configuredDevRealmBundles(): string {
+  if (process.env.NODE_ENV === 'production') return ''
+  if (process.env.NEXT_PUBLIC_PLUGIN_DEV !== 'enabled') return ''
+  return process.env.NEXT_PUBLIC_PLUGIN_DEV_BUNDLES ?? ''
+}
+
+/**
+ * The plugin ids the DEV-ONLY realm loop registers. The renderer draws a
+ * namespaced component as unregistered unless its plugin is in the rendered
+ * site's plugin set (AGL-3390), and a dev bundle has no install to put it
+ * there, so the page adds these itself.
+ */
+export function devRealmPluginIds(): string[] {
+  return configuredDevRealmBundles()
+    .split(',')
+    .map((entry) => entry.split('=')[0]?.trim() ?? '')
+    .filter(Boolean)
+}
+
+/**
  * DEV-ONLY realm loop (AGL-427): unverified bundles from localhost via
  * `NEXT_PUBLIC_PLUGIN_DEV_BUNDLES="id=http://localhost:5173/plugin.bundle.mjs"`.
  * Dead code in production builds (NODE_ENV guard); localhost-only URLs.
  */
 async function loadDevRealmBundles(): Promise<void> {
-  if (process.env.NODE_ENV === 'production') return
-  // Explicit opt-in (AGL-516): NODE_ENV alone is a fragile guard for an
-  // UNVERIFIED import() path, so also require a deliberate dev flag — a
-  // NODE_ENV!=production preview build can't silently enable it.
-  if (process.env.NEXT_PUBLIC_PLUGIN_DEV !== 'enabled') return
-  const configured = process.env.NEXT_PUBLIC_PLUGIN_DEV_BUNDLES ?? ''
+  const configured = configuredDevRealmBundles()
   if (!configured) return
   const { composeRealmPluginHost } = await import('./realm-plugin-host.client')
   composeRealmPluginHost({ React, jsxRuntime })

@@ -58,6 +58,7 @@ import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostIndexEntries from '../hooks/use-host-index-entries'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
 import useOrgHosts from '../hooks/use-org-hosts'
+import { useInviteReview, usePendingInvites } from '../hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import {
   playNotificationChime,
@@ -81,6 +82,8 @@ export function NotificationsMenu() {
   const router = useRouter()
   const uid = (user as any)?.uid as string | undefined
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const { review: reviewInvite } = useInviteReview()
+  const { refresh: refreshInvites } = usePendingInvites()
   // Inbox = unread, Archive = already read (AGL-874) — a click marks-read,
   // moving a notification from Inbox to Archive.
   const [tab, setTab] = useState<'inbox' | 'archive'>('inbox')
@@ -180,6 +183,24 @@ export function NotificationsMenu() {
     [orgSlug, slugByOrgId, subdomainByHostId, indexedHosts],
   )
 
+  // Where a notification goes when opened. An invitee's own invitation
+  // (AGL-3402) opens the accept/decline dialog instead of a page: its link is
+  // only the fallback for a client that predates the dialog.
+  const followNotification = useCallback(
+    (notification: AglynNotification) => {
+      if (notification.inviteId && notification.orgId) {
+        reviewInvite({
+          orgId: notification.orgId,
+          inviteId: notification.inviteId,
+        })
+        return
+      }
+      const target = resolveLink(notification)
+      if (target) void router.push(target)
+    },
+    [reviewInvite, resolveLink, router],
+  )
+
   // Detect arrivals by DIFFING DOCUMENT IDS, not by watching the count.
   // Two traps make the count useless as a trigger: emitters never write
   // `readAt`, so the unread figure is only an approximation of a 10-doc
@@ -203,6 +224,8 @@ export function NotificationsMenu() {
     )
     seenIdsRef.current = ids
     if (arrived.length === 0) return
+    // A new invitation belongs in the banner now, not on the next reload.
+    if (arrived.some((item) => item.inviteId)) void refreshInvites()
 
     if (alertPrefs.sound) playNotificationChime()
     if (alertPrefs.desktop) {
@@ -217,13 +240,16 @@ export function NotificationsMenu() {
             ? `${newest.body ?? ''}${newest.body ? ' ' : ''}(+${extra} more)`
             : newest.body,
         tag: newest.$id,
-        onActivate: () => {
-          const target = resolveLink(newest)
-          if (target) router.push(target)
-        },
+        onActivate: () => followNotification(newest),
       })
     }
-  }, [recent, alertPrefs.sound, alertPrefs.desktop, resolveLink, router])
+  }, [
+    recent,
+    alertPrefs.sound,
+    alertPrefs.desktop,
+    followNotification,
+    refreshInvites,
+  ])
 
   // Unread badge in the tab title.
   //
@@ -278,8 +304,7 @@ export function NotificationsMenu() {
   ) => {
     if (!notification.readAt) markRead(notification)
     setAnchor(null)
-    const target = resolveLink(notification)
-    if (target) void router.push(target)
+    followNotification(notification)
   }
 
   const handleMarkAll = () => {

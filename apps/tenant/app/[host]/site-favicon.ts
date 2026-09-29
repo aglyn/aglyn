@@ -82,3 +82,17 @@ export function orgBrandFavicon(
 ): string | undefined {
   return resolveBrandingProfile(org).faviconUrl ?? undefined
 }
+
+/**
+ * The org's white-label favicon for a DARK tab strip, before media
+ * resolution, or undefined. Only meaningful beside {@link orgBrandFavicon}:
+ * the layout emits it as a second, `(prefers-color-scheme: dark)` link, and
+ * only when the brand favicon is the one the site is wearing — a site's own
+ * `seo.favicon` has no dark partner and is never overridden by the org's.
+ */
+export function orgBrandFaviconDark(
+  org: Partial<Aglyn.AglynOrgBilling> | null | undefined,
+): string | undefined {
+  const brand = resolveBrandingProfile(org)
+  return brand.faviconUrl ? (brand.faviconDarkUrl ?? undefined) : undefined
+}

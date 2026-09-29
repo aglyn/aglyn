@@ -367,7 +367,7 @@ describe('applying later, to the theme as it is then', () => {
     const tampered = readAiThemeProposal({
       ...stored,
       changes: [...stored.changes, { control: 'color.accent', scheme: 'light', value: '#000' }],
-      components: [...stored.components, { component: 'MuiDrawer', target: 'styleOverrides', property: 'x', value: 1, media: null }],
+      components: [...stored.components, { component: 'MuiContainer', target: 'styleOverrides', property: 'x', value: 1, media: null }],
     })
     expect(tampered?.changes).toEqual(proposal.changes)
     expect(tampered?.components).toEqual(proposal.components)

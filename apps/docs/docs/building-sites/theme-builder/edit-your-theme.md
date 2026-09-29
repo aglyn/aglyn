@@ -31,6 +31,34 @@ immediately.
 - **Dark scheme** — set it to **Off** when your content only reads well in light: every
   visitor stays on light and the theme mode switcher is hidden on published pages.
 
+## Style components
+
+**Component overrides** restyle MUI components site-wide beyond the palette and type. The
+editor takes MUI's component theme API as JSON, keyed by component (`MuiButton`,
+`MuiOutlinedInput`, `MuiCard`, `MuiAlert`…):
+
+- `defaultProps` — a prop's default, e.g. `{ "variant": "outlined" }`.
+- `styleOverrides` — literal CSS per slot. `"padding": 8` is 8px.
+- `sx` — the same per-slot styles in **theme terms**, resolved separately for light and
+  dark: palette paths (`"borderColor": "divider"`, `"bgcolor": "primary.main"`), spacing
+  units (`"px": 2` is 16px), radius multiples (`"borderRadius": 2`), shadow levels
+  (`"boxShadow": 3`) and whole text styles (`"typography": "button"`). Use it for anything
+  that should follow the scheme.
+- `variants` — styles that apply only when props match, e.g.
+  `{ "props": { "variant": "outlined" }, "sx": { "borderWidth": 2 } }`.
+
+```json
+{
+  "MuiCard": {
+    "defaultProps": { "variant": "outlined" },
+    "sx": { "root": { "borderColor": "divider", "borderRadius": 2 } }
+  }
+}
+```
+
+Your overrides are added to the platform's own component styles rather than replacing them,
+so the contrast fixes the platform applies to buttons and links stay in place.
+
 ## It follows you into the Besigner
 
 The theme you set here is supplied to the [Besigner](../besigner/overview.md) canvas, so what

@@ -190,19 +190,29 @@ function overrideLeaves(theme: HostTheme | undefined): string[] {
     for (const [prop, value] of Object.entries(override?.defaultProps ?? {})) {
       leaves.push(`${component} default ${prop} = ${text(value)}`)
     }
-    for (const [slot, styles] of Object.entries(override?.styleOverrides ?? {})) {
-      if (!styles || typeof styles !== 'object') continue
-      for (const [property, value] of Object.entries(styles as Record<string, unknown>)) {
-        if (value && typeof value === 'object') {
-          for (const [nested, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-            leaves.push(
-              `${component} ${slot} ${nested} = ${text(nestedValue)} (${media[property] ?? property})`,
-            )
+    // `sx` leaves are marked so the model writes them back to `sx`: the same
+    // number is a different length in each (AGL-3403).
+    for (const [target, slots] of [
+      ['', override?.styleOverrides],
+      [' sx', override?.sx],
+    ] as const) {
+      for (const [slot, styles] of Object.entries(slots ?? {})) {
+        if (!styles || typeof styles !== 'object') continue
+        for (const [property, value] of Object.entries(styles as Record<string, unknown>)) {
+          if (value && typeof value === 'object') {
+            for (const [nested, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+              leaves.push(
+                `${component}${target} ${slot} ${nested} = ${text(nestedValue)} (${media[property] ?? property})`,
+              )
+            }
+          } else {
+            leaves.push(`${component}${target} ${slot} ${property} = ${text(value)}`)
           }
-        } else {
-          leaves.push(`${component} ${slot} ${property} = ${text(value)}`)
         }
       }
+    }
+    if (override?.variants?.length) {
+      leaves.push(`${component} ${override.variants.length} props-matched variant style(s)`)
     }
   }
   return leaves

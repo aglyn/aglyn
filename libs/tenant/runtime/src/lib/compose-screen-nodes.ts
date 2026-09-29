@@ -367,13 +367,19 @@ async function functionBindingsFor(
     Aglyn.isNamespacedComponentId(node?.componentId),
   )
   if (!placesMarketplaceElement) return firstParty
+  // The dev loop's plugins have no install, so their manifests are read from
+  // disk (AGL-3394). A production build never reaches the module.
+  const dev =
+    process.env.NODE_ENV === 'production'
+      ? []
+      : await (await import('./dev-plugin-manifests')).devPluginManifests()
   try {
     const { getRealmPluginInstalls } = await import('./realm-installs-seam')
     const installs = await getRealmPluginInstalls({ hostId })
-    return Aglyn.mergeFunctionBindings(firstParty, ...installs)
+    return Aglyn.mergeFunctionBindings(firstParty, ...installs, ...dev)
   } catch (error) {
     console.error('function bindings: realm install lookup failed:', error)
-    return firstParty
+    return Aglyn.mergeFunctionBindings(firstParty, ...dev)
   }
 }
 

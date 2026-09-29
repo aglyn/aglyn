@@ -4425,8 +4425,14 @@ export function resolveBrandingProfile(
     // which is precisely the disclosure white-label is sold to prevent. A
     // white-label org that set no logo shows none.
     logoUrl: cleanBrandString(profile.logoUrl) ?? null,
+    // The same no-fallback rule, and no fallback to the light logo either:
+    // a reader wanting "the logo for a dark ground" asks for
+    // `logoDarkUrl ?? logoUrl` itself, so null here keeps "the org set a
+    // dark variant" answerable.
+    logoDarkUrl: cleanBrandString(profile.logoDarkUrl) ?? null,
     faviconUrl:
       cleanBrandString(profile.faviconUrl) ?? PLATFORM_BRANDING_PROFILE.faviconUrl,
+    faviconDarkUrl: cleanBrandString(profile.faviconDarkUrl) ?? null,
     primaryColor:
       cleanBrandString(profile.primaryColor) ??
       PLATFORM_BRANDING_PROFILE.primaryColor,

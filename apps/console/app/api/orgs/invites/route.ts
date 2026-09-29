@@ -48,11 +48,13 @@ import {
   memberHasOrgPermission,
   meterOrgEmail,
   notifyOrgAdmins,
+  notifyUsers,
   orgOwnerSeatRefusalResponse,
   resolveOrgMembership,
   upsertOrgMember,
   verifiedAccountEmails,
 } from '@aglyn/tenant-data-admin'
+import { attributableAccountForAddress } from '@aglyn/tenant-data-admin/server/account-addresses'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -155,6 +157,7 @@ async function handler(request: Request): Promise<Response> {
             $id: inviteDoc.id,
             orgId: orgRef?.id ?? null,
             orgName: orgSnapshot?.get('name') ?? null,
+            orgSlug: orgSnapshot?.get('slug') ?? null,
             role: inviteDoc.get('role') ?? null,
           }
         }),
@@ -289,6 +292,131 @@ async function handler(request: Request): Promise<Response> {
       const snapshot = await firestore.collection('orgs').doc(orgId).get()
       const slug = snapshot.get('slug')
       return typeof slug === 'string' && slug ? slug : undefined
+    }
+
+    /**
+     * The invitee's own invite notifications, marked read once the invite is
+     * answered (AGL-3402). The notification's job is to put the accept/decline
+     * choice in front of them; once it is made, an unread "you've been
+     * invited" in the bell is a question that has already been answered.
+     * Best-effort: a miss leaves a stale unread item, never a failed answer.
+     */
+    const markInviteNotificationsRead = async (
+      uid: string,
+      inviteId: string,
+    ): Promise<void> => {
+      try {
+        const snapshot = await firestore
+          .collection('users')
+          .doc(uid)
+          .collection('notifications')
+          .where('inviteId', '==', inviteId)
+          .limit(20)
+          .get()
+        if (snapshot.empty) return
+        const batch = firestore.batch()
+        for (const notification of snapshot.docs) {
+          batch.update(notification.ref, {
+            read: true,
+            readAt: FieldValue.serverTimestamp(),
+          })
+        }
+        await batch.commit()
+      } catch (error) {
+        console.error('marking invite notifications read failed', error)
+      }
+    }
+
+    /**
+     * The in-app notification to an invitee who already has an account
+     * (AGL-3402). It carries `inviteId`, which is what makes the console open
+     * the accept/decline dialog when it is clicked rather than following the
+     * link. Never throws: the invite is written and mailed by the time this
+     * runs, and a missed notification must not turn that into a failure.
+     *
+     * `attributableAccountForAddress` answers null for an address held by
+     * more than one account as well as for none: naming a workspace to the
+     * wrong person is worse than naming it to nobody, and the invite still
+     * reaches whoever holds the address through the banner and the email.
+     * No email here — the invite email is that message already.
+     */
+    const notifyInvitee = async (
+      email: string,
+      role: string,
+      inviteId: string,
+    ): Promise<void> => {
+      try {
+        const inviteeUid = await attributableAccountForAddress(email)
+        if (!inviteeUid || inviteeUid === decoded.uid) return
+        const orgName = String(
+          (await getOrgDoc(orgId))?.['name'] ?? 'a workspace',
+        )
+        await notifyUsers(
+          [inviteeUid],
+          {
+            type: 'team.invite',
+            title: `You've been invited to ${orgName}`,
+            body: `Join as ${role}, or decline the invitation.`,
+            orgId,
+            inviteId,
+            // The workspace chooser, for a client that predates the
+            // accept/decline dialog this notification opens.
+            link: '/',
+          },
+          { skipEmail: true },
+        )
+      } catch (error) {
+        console.error('invitee notification failed', error)
+      }
+    }
+
+    /**
+     * Whether the caller is the person this invite is addressed to — the one
+     * check both `accept` and `decline` answer, so the two can never disagree
+     * about who may answer an invitation. Returns the addresses the caller may
+     * answer as, or the 403.
+     *
+     * An invitation may arrive at ANY confirmed address on the account
+     * (AGL-2486), not only the primary — GitHub's behaviour, and the
+     * decision recorded for this issue.
+     *
+     * It is safe for a reason worth stating, because the neighbouring SSO
+     * path deliberately does NOT do this. An invitation is an explicit
+     * grant the ORG made to a person it chose: somebody with permission
+     * typed this address and picked this role. Matching it against the
+     * recipient's other confirmed mailboxes decides only WHICH inbox the
+     * org's own grant may land in. It cannot manufacture a grant, and
+     * adding an address to your account still gives you access to nothing.
+     *
+     * Contrast `/api/auth/sso-jit`, which matches the address the IdP
+     * asserted and nothing else. There the org is not choosing anybody —
+     * the IdP's assertion IS the org's statement about who this is — so
+     * widening the match to addresses the account holder added would let
+     * them pull in an invitation inside the one flow whose entire premise
+     * is that the IdP is the authority.
+     *
+     * `verifiedAccountEmails` returns CONFIRMED addresses only; the
+     * uniqueness index guarantees no other account holds any of them, and
+     * `email_verified` on the token is still required, so an account that
+     * has not confirmed its own primary answers nothing.
+     */
+    const inviteeAddresses = async (
+      invite: Record<string, unknown>,
+    ): Promise<{ email: string; addresses: string[] } | Response> => {
+      const email = String(decoded.email ?? '').toLowerCase()
+      const addresses = email
+        ? [email, ...(await verifiedAccountEmails(decoded.uid))]
+        : []
+      if (
+        !email ||
+        !addresses.includes(String(invite['email'] ?? '')) ||
+        !decoded.email_verified
+      ) {
+        return Response.json({
+          error: 'This invite is for a different (or unverified) email',
+        }, { status: 403 })
+      }
+      return { email, addresses }
     }
 
     // Shared invite-email send (AGL-853): both `create` and the new `resend`
@@ -486,9 +614,8 @@ async function handler(request: Request): Promise<Response> {
       // Tell the org's admins (AGL-1116). Until now a pending invite left no
       // trace outside the activity log, which nobody watches: the `team.invite`
       // notification type has existed since AGL-259 with no emitter at all.
-      // The invitee cannot be notified in-app — they have no account yet — so
-      // the admins are the only audience there is, and whether the email
-      // actually went out is the part they cannot otherwise find out.
+      // Whether the email actually went out is the part they cannot
+      // otherwise find out.
       const inviteSlug = await orgSlugForLink()
       void notifyOrgAdmins(orgId, {
         type: 'team.invite',
@@ -502,6 +629,10 @@ async function handler(request: Request): Promise<Response> {
           ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: inviteSlug }) }
           : {}),
       })
+      // And the invitee, when the address already belongs to an account
+      // (AGL-3402): someone signed in to one workspace and invited to another
+      // otherwise has no in-app trace of the invitation.
+      await notifyInvitee(email, role, inviteId)
       return Response.json(
         { ok: true, inviteId, emailed, updated: reusing },
         { status: 200 },
@@ -571,44 +702,9 @@ async function handler(request: Request): Promise<Response> {
       if (invite['acceptedAt']) {
         return Response.json({ error: 'Invite already accepted' }, { status: 409 })
       }
-      const email = String(decoded.email ?? '').toLowerCase()
-      /*
-       * An invitation may arrive at ANY confirmed address on the account
-       * (AGL-2486), not only the primary — GitHub's behaviour, and the
-       * decision recorded for this issue.
-       *
-       * It is safe for a reason worth stating, because the neighbouring SSO
-       * path deliberately does NOT do this. An invitation is an explicit
-       * grant the ORG made to a person it chose: somebody with permission
-       * typed this address and picked this role. Matching it against the
-       * recipient's other confirmed mailboxes decides only WHICH inbox the
-       * org's own grant may land in. It cannot manufacture a grant, and
-       * adding an address to your account still gives you access to nothing.
-       *
-       * Contrast `/api/auth/sso-jit`, which matches the address the IdP
-       * asserted and nothing else. There the org is not choosing anybody —
-       * the IdP's assertion IS the org's statement about who this is — so
-       * widening the match to addresses the account holder added would let
-       * them pull in an invitation inside the one flow whose entire premise
-       * is that the IdP is the authority.
-       *
-       * `verifiedAccountEmails` returns CONFIRMED addresses only; the
-       * uniqueness index guarantees no other account holds any of them, and
-       * `email_verified` on the token is still required, so an account that
-       * has not confirmed its own primary accepts nothing.
-       */
-      const acceptableEmails = email
-        ? [email, ...(await verifiedAccountEmails(decoded.uid))]
-        : []
-      if (
-        !email ||
-        !acceptableEmails.includes(String(invite['email'] ?? '')) ||
-        !decoded.email_verified
-      ) {
-        return Response.json({
-          error: 'This invite is for a different (or unverified) email',
-        }, { status: 403 })
-      }
+      const invitee = await inviteeAddresses(invite)
+      if (invitee instanceof Response) return invitee
+      const { email, addresses: acceptableEmails } = invitee
       // The manager seat is charged INSIDE `upsertOrgMember`'s transaction
       // (AGL-2068 on the manager key). The gate that stood here read the
       // roster and then wrote through a separate call, so N people accepting
@@ -666,6 +762,46 @@ async function handler(request: Request): Promise<Response> {
           ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: acceptSlug }) }
           : {}),
       })
+      await markInviteNotificationsRead(decoded.uid, inviteId)
+      return Response.json({ ok: true }, { status: 200 })
+    }
+
+    // The invitee turns the invitation down (AGL-3402). Until this existed an
+    // unwanted invite could only be withdrawn by the org that sent it, so it
+    // sat in the invitee's banner for good. The row is deleted, as `revoke`
+    // deletes it: a pending invite holds a seat in the quota, and a declined
+    // one must stop holding it. The activity log is the record that it
+    // happened, and the admins are told so they are not left waiting.
+    if (action === 'decline') {
+      const inviteId = String(body?.inviteId ?? '')
+      if (!inviteId) return Response.json({ error: 'Missing inviteId' }, { status: 400 })
+      const snapshot = await invitesRef.doc(inviteId).get()
+      const invite = snapshot.data()
+      if (!snapshot.exists || !invite) {
+        return Response.json({ error: 'Invite not found' }, { status: 404 })
+      }
+      if (invite['acceptedAt']) {
+        return Response.json({ error: 'Invite already accepted' }, { status: 409 })
+      }
+      const invitee = await inviteeAddresses(invite)
+      if (invitee instanceof Response) return invitee
+      await invitesRef.doc(inviteId).delete()
+      void logOrgActivity(
+        orgId,
+        { uid: decoded.uid, email: decoded.email },
+        `Declined the invitation to join as ${invite['role']}`,
+        { type: 'invite', id: inviteId, name: String(invite['email']) },
+      )
+      const declineSlug = await orgSlugForLink()
+      void notifyOrgAdmins(orgId, {
+        type: 'team.invite',
+        title: `${invitee.email} declined their invitation`,
+        body: `They were invited as ${invite['role']}.`,
+        ...(declineSlug
+          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: declineSlug }) }
+          : {}),
+      })
+      await markInviteNotificationsRead(decoded.uid, inviteId)
       return Response.json({ ok: true }, { status: 200 })
     }
 

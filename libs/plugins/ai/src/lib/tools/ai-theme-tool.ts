@@ -270,12 +270,14 @@ export function aiThemeTool(): AiTool {
       description:
         'Component styles beyond the palette and typography, one leaf each. A style names a ' +
         'slot and a camelCase CSS property; a default names a prop. A style never carries a ' +
-        'literal color: color belongs to the palette.',
+        'literal color: color belongs to the palette. Target sx to write the style in theme ' +
+        'terms, where a color property takes a palette path (primary.main, divider, ' +
+        'text.secondary) and a length a spacing unit.',
       items: {
         type: 'object',
         properties: {
           component: { type: 'string', enum: [...COMPONENT_OVERRIDES_FIELD.components] },
-          target: { type: 'string', enum: ['styleOverrides', 'defaultProps'] },
+          target: { type: 'string', enum: ['styleOverrides', 'sx', 'defaultProps'] },
           slot: nullable({
             type: 'string',
             description: 'The style slot (root, contained, h1); null for a default prop.',
@@ -387,9 +389,13 @@ function parseComponentLeaf(
     return null
   }
   const target =
-    raw['target'] === 'defaultProps' || raw['target'] === 'styleOverrides' ? raw['target'] : null
+    raw['target'] === 'defaultProps' ||
+    raw['target'] === 'styleOverrides' ||
+    raw['target'] === 'sx'
+      ? raw['target']
+      : null
   if (!target) {
-    dropped.push(`${where}: target must be styleOverrides or defaultProps`)
+    dropped.push(`${where}: target must be styleOverrides, sx or defaultProps`)
     return null
   }
   const property = String(raw['property'] ?? '')

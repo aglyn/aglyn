@@ -45,7 +45,9 @@ interface BrandingDraft {
   supportUrl: string
   primaryColor: string
   logoUrl: string
+  logoDarkUrl: string
   faviconUrl: string
+  faviconDarkUrl: string
   emailLogoUrl: string
   customConsoleDomain: string
 }
@@ -56,7 +58,9 @@ const EMPTY_DRAFT: BrandingDraft = {
   supportUrl: '',
   primaryColor: '',
   logoUrl: '',
+  logoDarkUrl: '',
   faviconUrl: '',
+  faviconDarkUrl: '',
   emailLogoUrl: '',
   customConsoleDomain: '',
 }
@@ -64,7 +68,8 @@ const EMPTY_DRAFT: BrandingDraft = {
 /**
  * White-label brand settings (White-Label Phase 2). An Agency-tier org admin
  * edits the org's `brandingProfile` — product name, from-name, support URL,
- * primary color, and logo/favicon/email-logo URLs — persisted to the org doc
+ * primary color, and logo/favicon/email-logo URLs (the logo and favicon each
+ * with an optional dark-mode partner) — persisted to the org doc
  * through the Admin-SDK `/api/orgs/settings` route (`update-branding`). Every
  * branded surface (console chrome, published site, transactional email) reads
  * these back through the one shared `resolveBrandingProfile`, so what an admin
@@ -98,7 +103,9 @@ export function OrgBrandingCard() {
       supportUrl: String(profile?.supportUrl ?? ''),
       primaryColor: String(profile?.primaryColor ?? ''),
       logoUrl: String(profile?.logoUrl ?? ''),
+      logoDarkUrl: String(profile?.logoDarkUrl ?? ''),
       faviconUrl: String(profile?.faviconUrl ?? ''),
+      faviconDarkUrl: String(profile?.faviconDarkUrl ?? ''),
       emailLogoUrl: String(profile?.emailLogoUrl ?? ''),
       customConsoleDomain: String(profile?.customConsoleDomain ?? ''),
     })
@@ -238,11 +245,25 @@ export function OrgBrandingCard() {
                 onChange={set('logoUrl')}
               />
               <MediaUrlField
+                label="Dark mode logo URL"
+                helperText="Console chrome in dark mode, and the site badge, which always sits on a dark background. Leave it blank to use the logo above."
+                orgId={orgId}
+                value={draft.logoDarkUrl}
+                onChange={set('logoDarkUrl')}
+              />
+              <MediaUrlField
                 label="Favicon URL"
                 helperText={`Browser tab icon for branded console surfaces. ${FAVICON_HINT}`}
                 orgId={orgId}
                 value={draft.faviconUrl}
                 onChange={set('faviconUrl')}
+              />
+              <MediaUrlField
+                label="Dark mode favicon URL"
+                helperText="Used when the visitor's browser is in dark mode. Leave it blank to use the favicon above."
+                orgId={orgId}
+                value={draft.faviconDarkUrl}
+                onChange={set('faviconDarkUrl')}
               />
               <MediaUrlField
                 label="Email logo URL"

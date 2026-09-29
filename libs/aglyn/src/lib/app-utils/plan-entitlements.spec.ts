@@ -2114,6 +2114,35 @@ describe('plan entitlements', () => {
       expect(brand.supportUrl).toBeNull()
     })
 
+    it('carries the dark-mode logo and favicon, and falls back to neither', () => {
+      const set = resolveBrandingProfile({
+        plan: 'agency',
+        brandingProfile: {
+          logoUrl: 'https://cdn.acme.com/logo.png',
+          logoDarkUrl: 'https://cdn.acme.com/logo-white.png',
+          faviconUrl: 'https://cdn.acme.com/icon.png',
+          faviconDarkUrl: 'https://cdn.acme.com/icon-white.png',
+        },
+      } as any)
+      expect(set.logoDarkUrl).toBe('https://cdn.acme.com/logo-white.png')
+      expect(set.faviconDarkUrl).toBe('https://cdn.acme.com/icon-white.png')
+      // Unset means null, not the light value: a reader asks for
+      // `logoDarkUrl ?? logoUrl` itself, so "did they set one" stays answerable.
+      const unset = resolveBrandingProfile({
+        plan: 'agency',
+        brandingProfile: { logoUrl: 'https://cdn.acme.com/logo.png' },
+      } as any)
+      expect(unset.logoDarkUrl).toBeNull()
+      expect(unset.faviconDarkUrl).toBeNull()
+      // And without the entitlement a stored dark logo is ignored like the rest.
+      expect(
+        resolveBrandingProfile({
+          plan: 'business',
+          brandingProfile: { logoDarkUrl: 'https://cdn.acme.com/logo-white.png' },
+        } as any).logoDarkUrl,
+      ).toBeNull()
+    })
+
     /**
      * A white-label org that blanks its Support URL must NOT be given
      * Aglyn's (AGL-2428).

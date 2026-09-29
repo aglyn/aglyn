@@ -53,6 +53,7 @@ import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
 import { useConsolePath, useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
+import { onlyInScheme } from '../utils/scheme-visibility'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 
@@ -92,6 +93,9 @@ export function OrgSwitcherNav() {
   const urlNamedOrg = useUrlNamedOrg()
   const { org, ready: orgReady } = useCurrentOrg()
   const logoUrl = (org as any)?.logoUrl as string | undefined
+  // The dark-mode org logo, when the org set one; both avatars are rendered
+  // and the scheme class picks (see `onlyInScheme`).
+  const logoDarkUrl = (org as any)?.logoDarkUrl as string | undefined
   // The plan the workspace GETS, comp and dead subscription included
   // (AGL-3034) — the badge is a claim about the tier, not about a field.
   const plan = org ? resolveEffectivePlan(org as never) : undefined
@@ -248,8 +252,21 @@ export function OrgSwitcherNav() {
     : currentOrg.orgName ?? currentOrg.slug ?? currentOrg.$id
   const controlLabel = unclaimed ? orgLabel : `Workspace: ${orgLabel}`
 
-  const orgAvatar = (url?: string) =>
-    url ? (
+  const orgAvatar = (url?: string, darkUrl?: string) =>
+    url && darkUrl ? (
+      <>
+        <Avatar
+          src={url}
+          variant="rounded"
+          sx={[{ width: 22, height: 22 }, onlyInScheme('light', 'flex')]}
+        />
+        <Avatar
+          src={darkUrl}
+          variant="rounded"
+          sx={[{ width: 22, height: 22 }, onlyInScheme('dark', 'flex')]}
+        />
+      </>
+    ) : url ? (
       <Avatar src={url} variant="rounded" sx={{ width: 22, height: 22 }} />
     ) : (
       <Avatar
@@ -278,7 +295,10 @@ export function OrgSwitcherNav() {
           variant="text"
           color="inherit"
           onClick={(event) => setAnchor(event.currentTarget)}
-          startIcon={orgAvatar(unclaimed ? undefined : logoUrl)}
+          startIcon={orgAvatar(
+            unclaimed ? undefined : logoUrl,
+            unclaimed ? undefined : logoDarkUrl,
+          )}
           endIcon={
             <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />
           }
@@ -385,7 +405,10 @@ export function OrgSwitcherNav() {
                   sx={{ gap: 1 }}
                 >
                   <ListItemIcon sx={{ minWidth: 0 }}>
-                    {orgAvatar(isCurrent ? logoUrl : undefined)}
+                    {orgAvatar(
+                      isCurrent ? logoUrl : undefined,
+                      isCurrent ? logoDarkUrl : undefined,
+                    )}
                   </ListItemIcon>
                   <ListItemText
                     primary={item.orgName ?? item.slug ?? item.$id}

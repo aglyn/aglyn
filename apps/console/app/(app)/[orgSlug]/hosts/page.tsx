@@ -65,7 +65,6 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import MarketingConsentPrompt from '../../../../components/marketing-consent-prompt.component'
 import OrgDashboardWidgets from '../../../../components/org-dashboard-widgets.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
-import OrgInvitesBanner from '../../../../components/org-invites-banner.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -513,8 +512,6 @@ function HostsContent() {
       }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        {/* Pending org invites (AGL-234). */}
-        <OrgInvitesBanner />
         {/* The one-time product-updates ask (AGL-3185): a single-workspace
             member is sent straight here from the workspace chooser, so this
             is where most accounts land. Renders nothing once answered. */}
