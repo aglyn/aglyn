@@ -99,6 +99,10 @@ export default function HostSetupSeoSection() {
       <HostSettingsForm schemaId="hostSeoAddress" />
       <HostSettingsForm schemaId="hostSeoLocalBusiness" />
       <HostSettingsForm schemaId="hostSeoAgent" />
+      {/* Beside the indexing switch: both are about what a search engine
+          does with the site, and a reader verifying in Search Console is the
+          one most likely to need to know the switch is off (AGL-3399). */}
+      <HostSettingsForm schemaId="hostSeoVerification" />
       <SearchIndexingCard hostId={hostId} />
     </Stack>
   )

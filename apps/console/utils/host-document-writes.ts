@@ -80,7 +80,8 @@ export const SITE_RENDERED_HOST_FIELDS: Readonly<Record<string, string>> = {
   seo:
     'Title, description, separator and title pattern, favicon, app icon, ' +
     'social image, the organization/Local business JSON-LD entity, the AI ' +
-    'agent guidance and `discourageSearchEngines` — all written into the ' +
+    'agent guidance, the search engine verification tokens and ' +
+    '`discourageSearchEngines` — all written into the ' +
     'head of every page, or into robots and llms.txt.',
   displayName:
     'The site name — the title and JSON-LD fallback when no SEO title is set.',

@@ -19,6 +19,7 @@
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { searchEngineVerificationMeta } from '@aglyn/aglyn/app-utils/search-engine-verification'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import { parseSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import type { ReactNode } from 'react'
@@ -106,6 +107,21 @@ export default async function HostLayout({
    */
   const appleTouchIcon = siteAppleTouchIconSrc(hostRes.host)
   const themeColors = siteThemeColorMeta(hostTheme)
+  /**
+   * Search engine ownership tags (AGL-3399) — `google-site-verification` and
+   * `msvalidate.01`, the HTML-tag method Search Console and Bing Webmaster
+   * Tools check a site's head for. On a platform subdomain it is the only
+   * method a site has: no DNS of its own, no file at the origin root.
+   *
+   * Here rather than in a page's `generateMetadata` so every route under the
+   * layout carries them — collection lists, author pages, search — whichever
+   * URL the owner registered as the property. Each stored token is re-checked
+   * against the pattern the console validates with, so a value that reached
+   * the document some other way is dropped rather than echoed into the head.
+   */
+  const verificationMetas = searchEngineVerificationMeta(
+    hostRes.host?.seo?.verification,
+  )
   /**
    * The site's public top-level pages (AGL-2187), for the error boundaries.
    *
@@ -247,6 +263,9 @@ export default async function HostLayout({
           content={content}
           media={media}
         />
+      ))}
+      {verificationMetas.map(({ name, content }) => (
+        <meta key={name} name={name} content={content} />
       ))}
       {fontsHref ? (
         <>

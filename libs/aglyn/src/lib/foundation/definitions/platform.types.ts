@@ -365,6 +365,21 @@ export interface AglynHost extends AglynDocument {
       /** How an agent should call the site — endpoints, etiquette, limits. */
       howToUse?: string
     }
+    /**
+     * Search engine ownership tokens (AGL-3399), emitted by the tenant as
+     * `<meta name="google-site-verification">` and `<meta name="msvalidate.01">`
+     * in the head of every published page.
+     *
+     * The HTML-tag method is the only one a site on a platform subdomain can
+     * use: it has no DNS of its own and cannot upload a file to the origin.
+     * Only the tag's `content` value is stored, and the tenant re-checks it
+     * against `SEARCH_ENGINE_VERIFICATION_TOKEN_PATTERN` before emitting, so a
+     * stored value is never echoed into the head as written.
+     */
+    verification?: {
+      google?: string
+      bing?: string
+    }
   }
   /**
    * Customer-configured third-party analytics (AGL-138/661). Long written by
@@ -615,9 +630,10 @@ export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'The site brand mark rendered by the tenant nav (AGL-594). Authored ' +
     'content pointing at already-public media; no gate reads it.',
   seo:
-    'Title, description, favicon, app icon, social card and the AGL-1263 ' +
-    '`discourageSearchEngines` switch. All of it is authoring: the values ' +
-    'end up in the page the editor is already free to write.',
+    'Title, description, favicon, app icon, social card, search engine ' +
+    'verification tokens and the AGL-1263 `discourageSearchEngines` switch. ' +
+    'All of it is authoring: the values end up in the page the editor is ' +
+    'already free to write.',
   // `screens` LEFT this map in AGL-2334 and is now classified as denied,
   // following the `disabledPlugins` precedent: it is TIERED, not freely
   // client-writable. The reason it used to carry — "an editor who may add a
