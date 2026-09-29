@@ -28,6 +28,131 @@ function Widget() { return React.createElement('div', null, 'hi'); }
 export function register(h) { h.aglyn.registerConsoleExtension({ pluginId: 'x' }); }
 `
 
+describe('host ABI lookups (AGL-3392)', () => {
+  const abi = (check: ReturnType<typeof checkPluginBundle>) =>
+    check.checks.find((row) => row.id === 'host-abi')
+
+  it("accepts the site's MUI, as the realm Rollup config compiles it", () => {
+    // Verbatim shape of what tools/plugin-loader/realm/rollup.config.mjs
+    // emits for `@mui/material`, a deep `@mui/material/Typography` import and
+    // `@mui/material/styles`.
+    const result = checkPluginBundle(`const host$2 = globalThis.__AGLYN_PLUGIN_HOST__;
+if (!host$2) throw new Error('__AGLYN_PLUGIN_HOST__ is not set');
+if (!("React" in host$2)) throw new Error('this Aglyn host does not provide React');
+var _aglynHost_React = host$2["React"];
+const host$1 = globalThis.__AGLYN_PLUGIN_HOST__;
+if (!host$1) throw new Error('__AGLYN_PLUGIN_HOST__ is not set');
+if (!("mui" in host$1)) throw new Error('this Aglyn host does not provide mui');
+const __aglynHostModule = host$1["mui"];
+var Typography = __aglynHostModule["Typography"];
+const host = globalThis.__AGLYN_PLUGIN_HOST__;
+if (!host) throw new Error('__AGLYN_PLUGIN_HOST__ is not set');
+if (!("muiStyles" in host)) throw new Error('this Aglyn host does not provide muiStyles');
+var _aglynHost_muiStyles = host["muiStyles"];
+function El() { return _aglynHost_React.createElement(Typography, { color: _aglynHost_muiStyles.alpha('#000', 0.5) }) }
+export function register(h) { return [El, h.version]; }
+`)
+    expect(result.ok).toBe(true)
+    expect(abi(result)).toMatchObject({
+      status: 'pass',
+      detail: 'reads React, mui, muiStyles, version',
+    })
+  })
+
+  it('accepts names the host holds, however the bundle reaches them', () => {
+    const result = checkPluginBundle(`const host$1 = globalThis.__AGLYN_PLUGIN_HOST__;
+var _aglynHost_mui = host$1["mui"];
+const host = globalThis.__AGLYN_PLUGIN_HOST__;
+const __aglynHostModule = host["mui"];
+var Typography = __aglynHostModule["Typography"];
+var _aglynHost_aglyn = host["aglyn"];
+const { alpha, useTheme } = host.muiStyles;
+function El() { return [_aglynHost_mui.Button, _aglynHost_mui.Stack, __aglynHostModule.typographyClasses, alpha, useTheme] }
+export function register(h) { h.aglyn.defineUiFeatureBundle(El); _aglynHost_aglyn.components.registerComponent(El, {}); return h.version }
+`)
+    expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
+  })
+
+  it('refuses a name its host module does not hold (AGL-3392)', () => {
+    const result = checkPluginBundle(`const host = globalThis.__AGLYN_PLUGIN_HOST__;
+var core = host["aglyn"];
+var mui = host["mui"];
+var styles = host["muiStyles"];
+export function register() { return [core.components, core.loadRealmPlugins, mui.Slider, styles.nope] }
+`)
+    expect(result.ok).toBe(false)
+    const errors = result.problems
+      .filter((problem) => problem.check === 'host-abi' && problem.level === 'error')
+      .map((problem) => problem.message)
+    expect(errors).toEqual([
+      expect.stringContaining("reads loadRealmPlugins from the host's aglyn"),
+      expect.stringContaining("reads Slider from the host's mui"),
+      expect.stringContaining("reads nope from the host's muiStyles"),
+    ])
+  })
+
+  it('warns when core is handed around as a namespace value', () => {
+    const result = checkPluginBundle(`const host = globalThis.__AGLYN_PLUGIN_HOST__;
+var M = host["aglyn"];
+var S = host["muiStyles"];
+export function register() { return [Object.keys(M), S[Math.random() > 0.5 ? 'a' : 'b']] }
+`)
+    expect(result.ok).toBe(true)
+    expect(
+      result.problems.filter((problem) => problem.check === 'host-abi'),
+    ).toEqual([
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining('@aglyn/aglyn as a namespace value'),
+      }),
+    ])
+  })
+
+  it("reads register's parameter as the host only inside register", () => {
+    const result = checkPluginBundle(`function helper(h) { return h.firebase }
+export function register(h) { return [helper({}), h.mui.Button, h.mui.Nope] }
+`)
+    expect(result.ok).toBe(false)
+    expect(result.problems.map((problem) => problem.message).join('\n')).toContain(
+      "reads Nope from the host's mui",
+    )
+    expect(result.problems.map((problem) => problem.message).join('\n')).not.toContain(
+      'firebase',
+    )
+  })
+
+  it('refuses a key no host provides, however the host is reached', () => {
+    const direct = checkPluginBundle(
+      'var x = globalThis.__AGLYN_PLUGIN_HOST__["firebase"];\nexport function register() { return x }\n',
+    )
+    expect(direct.ok).toBe(false)
+    expect(abi(direct)?.status).toBe('fail')
+    expect(direct.problems.map((p) => p.message).join('\n')).toContain('"firebase"')
+
+    const aliased = checkPluginBundle(
+      'const g = window; const h = g.__AGLYN_PLUGIN_HOST__ || {};\nvar x = h.firebase;\nexport function register() { return x }\n',
+    )
+    expect(aliased.ok).toBe(false)
+    expect(abi(aliased)?.status).toBe('fail')
+  })
+
+  it('refuses a key chosen at runtime', () => {
+    const result = checkPluginBundle(
+      'const host = globalThis.__AGLYN_PLUGIN_HOST__;\nexport function register(k) { return host[k] }\n',
+    )
+    expect(result.ok).toBe(false)
+    expect(abi(result)?.status).toBe('fail')
+  })
+
+  it('does not follow the host into the objects it hands out', () => {
+    const result = checkPluginBundle(
+      'const host = globalThis.__AGLYN_PLUGIN_HOST__;\nvar mui = host["mui"];\nexport function register() { return mui.Button.displayName.anything }\n',
+    )
+    expect(result.ok).toBe(true)
+  })
+})
+
 describe('checkPluginBundle (AGL-426)', () => {
   it('accepts a self-contained bundle exporting register', () => {
     const result = checkPluginBundle(GOOD_BUNDLE)
@@ -116,7 +241,11 @@ describe('checkPluginBundle (AGL-426)', () => {
         `}\n`,
     )
     expect(result.ok).toBe(true)
-    expect(result.problems).toEqual([])
+    // `host.get` and `host.state` are keys the real host lacks, which the
+    // host-ABI check warns about (AGL-3392); this case is about storage names.
+    expect(
+      result.problems.filter((problem) => problem.check !== 'host-abi'),
+    ).toEqual([])
   })
 
   it('rejects a bundle it cannot parse', () => {
@@ -274,10 +403,11 @@ describe('calls through an alias (AGL-1090)', () => {
   }
 
   it('leaves a method on an unknown object alone', () => {
-    // `host.fetch(…)` is the host ABI, not the global — resolving property
-    // names on arbitrary objects would flag half the bundles in the market.
+    // `api.fetch(…)` is some object's method, not the global — resolving
+    // property names on arbitrary objects would flag half the bundles in the
+    // market.
     const result = checkPluginBundle(
-      `const api = globalThis.__AGLYN_PLUGIN_HOST__.aglyn\n` +
+      `const api = makeClient()\n` +
         `const f = api.fetch\n` +
         `export function register() { f('/relative') }\n`,
       { declaredNetwork: [] },
@@ -463,7 +593,7 @@ describe('per-check summary (AGL-1087)', () => {
 
   it('reports every area, not only the ones that found something', () => {
     const result = checkPluginBundle(GOOD_BUNDLE, { declaredNetwork: [] })
-    expect(result.checks).toHaveLength(12)
+    expect(result.checks).toHaveLength(13)
     expect(result.checks.every((check) => check.status === 'pass')).toBe(true)
   })
 

@@ -37,8 +37,9 @@
  *   check-hardcoded-colours, check-dependency-egress   -- `if (write)` only
  *   check-plugin-budgets                               -- `mkdtempSync`, own dir
  *
- * `generate:docs-help:check`, `generate:plugin-manifests:check` and
- * `sync:next-tsconfigs:check` are the `--check` halves of generators: they
+ * `generate:docs-help:check`, `generate:plugin-manifests:check`,
+ * `generate:realm-host-exports:check` and `sync:next-tsconfigs:check` are the
+ * `--check` halves of generators: they
  * compare and report, they do not emit. `test:gate-script` shells
  * `gate.sh --self-test`, which builds its fixtures under its own `mktemp -d`.
  *
@@ -134,6 +135,7 @@ const REPO_WIDE = new Set([
   'check:pricing-tables',
   'generate:docs-help:check',
   'generate:plugin-manifests:check',
+  'generate:realm-host-exports:check',
   'sync:next-tsconfigs:check',
   'check:ai-palette',
   // Sweeps every tree that is not a plugin for a plugin's domain: a
