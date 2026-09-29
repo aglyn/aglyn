@@ -36,7 +36,17 @@ receives `hostId: null` and an `orgMount` naming the organization and its
 sites, and the shell admits only a member whose access spans the whole
 organization; an `href` that names one of the console's own organization
 routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
-`settingsSections?`, `widgets?`, `providers?`, `staffPages?`.
+`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`.
+
+`ConsoleExtension.themePresets?` adds built-in themes to every site's theme
+picker (**Setup → Theme**): each `{ id, name, description?, theme }` is a
+plain-JSON `HostTheme` — both schemes, fonts, typography, shape and component
+overrides (`defaultProps`, `styleOverrides`, theme-aware `sx`, `variants`).
+Namespace the `id` with your plugin and never rename it: a site that picks the
+theme stores it. Picking copies the theme onto the site and the site's edits
+are an override on that copy, so a later version of your plugin never
+repaints a site. Declare `hostThemePresets` in your `console.slots` so the
+theme page loads your plugin, and nothing else does.
 
 `ConsoleExtension.staffPages?` adds pages to the staff area: each
 `{ id, label, header?: { title, icon?, docsTopic? }, Component }` becomes a

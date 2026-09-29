@@ -182,7 +182,10 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
   ).map((plugin) => plugin.id)
 
   it('is exactly the plugins whose workspace half carries no site', () => {
-    expect(WORKSPACE_LOCKED).toEqual(['forms', 'ai'])
+    // Themes (AGL-3405): its built-in themes are listed on a site's theme
+    // page, and a workspace that stored its plugin set before it existed must
+    // still get them — so it is unioned in, and a site can still turn it off.
+    expect(WORKSPACE_LOCKED).toEqual(['forms', 'ai', 'theme-presets'])
   })
 
   it('never also claims `alwaysOn`, which would make the site switch inert', () => {

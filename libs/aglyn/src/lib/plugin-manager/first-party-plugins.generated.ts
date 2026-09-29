@@ -45,6 +45,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "theme-presets",
+    "label": "Themes",
+    "alwaysOnForWorkspace": true,
+    "description": "Built-in themes to pick from on Setup → Theme: Bootstrap, Minimal and Material 3.",
+    "siteOff": {
+      "stops": "Switching Themes off for this site removes its built-in themes from the theme picker.",
+      "keeps": "A site already using one keeps it, with every edit made to it: picking a theme copies it onto the site, so nothing on the published site changes."
+    }
+  },
+  {
     "id": "accounts",
     "label": "User Accounts",
     "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
@@ -138,6 +148,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "mui": "elements",
   "forms": "elements",
   "ai": "console-only",
+  "theme-presets": "console-only",
   "accounts": "routes",
   "bookings": "elements",
   "commerce": "elements",

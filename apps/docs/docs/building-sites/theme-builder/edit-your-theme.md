@@ -24,8 +24,10 @@ immediately.
 
 The **Theme** card at the top of the page picks the theme your site runs:
 
-- **Built-in** — **Material UI (default)**, plus any built-in themes your plugins add. Each
-  one restyles components (buttons, inputs, cards, tabs, alerts) as well as colors and type.
+- **Built-in** — **Material UI (default)**, **Bootstrap**, **Minimal** (neutral, in the style
+  of shadcn/ui) and **Material 3**, plus any your plugins add. Each one restyles components
+  (buttons, inputs, cards, tabs, switches, alerts) as well as colors and type, in light and
+  dark.
 - **Your themes** — themes you saved from this site.
 - **From the marketplace** — themes you installed.
 

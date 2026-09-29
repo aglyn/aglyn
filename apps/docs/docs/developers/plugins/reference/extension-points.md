@@ -16,6 +16,7 @@ The surface matrix: what a plugin can extend, from which entry
 | Widgets (`ConsoleExtension.widgets`) | barrel (`console`) | Named console zones (dashboard, org, billing, team, staff, besigner, the assistant dock) — a widget with a `column` is a column of a shell-owned table | With their host page |
 | Providers (`ConsoleExtension.providers`) | barrel (`console`) | Around every console page | Once the registry is populated |
 | Zones a plugin HOSTS (`definePluginZone` / `registerPluginZone`) | barrel (`console`) | A position on a page the plugin owns, with the props it hands each widget carried on the token — so another plugin writes a widget for it without importing the owner | With the page that draws `useConsoleWidgetSlot()`; the token itself is type-only and ships nothing |
+| Built-in themes (`ConsoleExtension.themePresets`) | barrel (`console`) | The theme picker on every site's **Setup → Theme** | When the theme page loads the plugins declaring `hostThemePresets` |
 | Staff pages (`ConsoleExtension.staffPages`) | barrel (`staff`) | The staff area — a tab in the staff strip and a page at `/admin/{id}` | Once the staff area has loaded its plugins, behind the staff guard |
 | Site runtimes (`registerSiteRuntime`) | barrel (`site`) | Every published page | Client render, reading enricher props |
 | Redirect resolvers / page resolvers / enrichers | `/server` | Tenant page pipeline | Per request, in that order; enricher errors isolated |

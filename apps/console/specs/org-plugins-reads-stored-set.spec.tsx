@@ -170,10 +170,15 @@ describe('org Plugins page reads the stored set (AGL-2486)', () => {
     const on = Object.entries(allSwitches())
       .filter(([, checked]) => checked)
       .map(([label]) => label)
-    // Three, not one: `forms` and `ai` are locked on for the workspace like
-    // the component library, so they are unioned into every org's resolved
-    // set and their workspace switches are on and inert.
-    expect(on).toEqual(['Toggle Components', 'Toggle Forms', 'Toggle AI'])
+    // Four, not one: `forms`, `ai` and `theme-presets` are locked on for the
+    // workspace like the component library, so they are unioned into every
+    // org's resolved set and their workspace switches are on and inert.
+    expect(on).toEqual([
+      'Toggle Components',
+      'Toggle Forms',
+      'Toggle AI',
+      'Toggle Themes',
+    ])
   })
 
   it('an absent field still means the full default set', async () => {
