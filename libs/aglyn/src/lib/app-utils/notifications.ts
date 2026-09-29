@@ -259,6 +259,13 @@ export interface AglynNotification {
   link?: string
   orgId?: string
   hostId?: string
+  /**
+   * The pending invitation this notification offers the recipient
+   * (AGL-3402), under `orgs/{orgId}/invites`. Present only on the invitee's
+   * own `team.invite`; the console opens the accept/decline dialog for it
+   * instead of following `link`, and answering marks it read.
+   */
+  inviteId?: string
   createdAt?: ITimestamp
   /** When the owner read it; absent or null while unread. */
   readAt?: ITimestamp | null

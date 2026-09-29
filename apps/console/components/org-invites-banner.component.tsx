@@ -16,77 +16,92 @@
  */
 'use client'
 
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Stack } from '@mui/material'
-import { useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useOrgScope } from '../hooks/use-org-scope'
-import { usePendingInvites, type PendingInvite } from '../hooks/use-pending-invites'
+import { useEffect } from 'react'
+import { useInviteResponse } from '../hooks/use-invite-response'
+import {
+  useInviteReview,
+  usePendingInvites,
+  type PendingInvite,
+} from '../hooks/use-pending-invites'
+
+export interface OrgInvitesBannerProps {
+  /**
+   * `shell` is the copy the console layout mounts above every page
+   * (AGL-3402); it steps aside while an `inline` copy is mounted, so a page
+   * that makes the invitation its content does not show it twice.
+   */
+  placement?: 'shell' | 'inline'
+}
+
+/** "You've been invited to Acme as admin." */
+export function inviteSentence(invite: PendingInvite): string {
+  return (
+    `You've been invited to ${invite.orgName ?? 'an organization'}` +
+    (invite.role ? ` as ${invite.role}` : '') +
+    '.'
+  )
+}
 
 /**
- * Pending organization invites (AGL-234): surfaces invites addressed to
- * the signed-in user's verified email; accepting materializes the
- * membership server-side and the new org appears in the switcher via the
- * reverse-index subscription.
+ * Pending organization invites (AGL-234): invites addressed to any confirmed
+ * address on the signed-in account, each with Accept and Decline.
+ *
+ * The console shell mounts it on every page (AGL-3402). It used to render
+ * only on the workspace chooser and the sites list, and nothing inside a
+ * workspace links back to the chooser — so a person already working in one
+ * workspace could not reach an invitation to another without typing the URL.
+ *
+ * Decline opens the dialog on its confirmation step rather than answering at
+ * once: a declined invitation is gone, and only the org can send another.
  */
-export function OrgInvitesBanner() {
-  const { data: user } = useUser()
-  const { selectOrg } = useOrgScope()
-  const { enqueueSnackbar } = useSnackbar()
-  const { invites, refresh } = usePendingInvites()
-  const [busyId, setBusyId] = useState<string | null>(null)
+export function OrgInvitesBanner({ placement = 'inline' }: OrgInvitesBannerProps) {
+  const { invites } = usePendingInvites()
+  const { review, claimInline, inlineClaims } = useInviteReview()
+  const { respond, busyId } = useInviteResponse()
 
-  const accept = async (invite: PendingInvite) => {
-    setBusyId(invite.$id)
-    try {
-      const response = await authorizedFetch(user, '/api/orgs/invites', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orgId: invite.orgId,
-          action: 'accept',
-          inviteId: invite.$id,
-        }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        enqueueSnackbar(payload?.error ?? 'Accepting the invite failed', {
-          variant: 'warning',
-        })
-        return
-      }
-      enqueueSnackbar(`Joined ${invite.orgName ?? 'the organization'}`, {
-        variant: 'success',
-      })
-      if (invite.orgId) selectOrg(invite.orgId)
-      await refresh()
-    } finally {
-      setBusyId(null)
-    }
-  }
+  useEffect(
+    () => (placement === 'inline' ? claimInline() : undefined),
+    [placement, claimInline],
+  )
 
   if (invites.length === 0) return null
+  if (placement === 'shell' && inlineClaims > 0) return null
 
   return (
-    <Stack spacing={1} sx={{ mb: 2 }}>
+    <Stack spacing={placement === 'shell' ? 0 : 1} sx={placement === 'shell' ? undefined : { mb: 2 }}>
       {invites.map((invite) => (
         <Alert
           key={invite.$id}
           severity="info"
           action={
-            <Button
-              size="small"
-              disabled={busyId === invite.$id}
-              onClick={() => void accept(invite)}
-            >
-              {busyId === invite.$id ? 'Joining…' : 'Accept'}
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                color="inherit"
+                disabled={busyId === invite.$id}
+                onClick={() =>
+                  invite.orgId &&
+                  review({
+                    orgId: invite.orgId,
+                    inviteId: invite.$id,
+                    decline: true,
+                  })
+                }
+              >
+                {'Decline'}
+              </Button>
+              <Button
+                size="small"
+                disabled={busyId === invite.$id}
+                onClick={() => void respond(invite, 'accept')}
+              >
+                {busyId === invite.$id ? 'Joining…' : 'Accept'}
+              </Button>
+            </Stack>
           }
         >
-          {`You've been invited to ${invite.orgName ?? 'an organization'}` +
-            (invite.role ? ` as ${invite.role}` : '') +
-            '.'}
+          {inviteSentence(invite)}
         </Alert>
       ))}
     </Stack>

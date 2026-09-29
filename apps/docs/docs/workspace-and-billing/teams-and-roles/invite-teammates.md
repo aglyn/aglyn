@@ -35,21 +35,36 @@ stops working immediately.
   whether one actually went out — "email sent" versus "they'll see it when they sign
   in" — so a workspace with email delivery unavailable never leaves you assuming a
   message was delivered.
+- If the address already belongs to an Aglyn account, that person also gets an
+  **in-app notification**. Clicking it opens the invitation, where they can accept or
+  decline it.
 - Your workspace's **owner and admins** get an in-app notification when an invite is
-  created and again when it is **accepted**, so whoever sent it finds out it was taken
-  up without re-checking the Team page. Both appear under **Team & access** in the
-  notification bell, and can be muted there like any other category.
+  created, and again when it is **accepted** or **declined**, so whoever sent it finds
+  out what happened without re-checking the Team page. These appear under
+  **Team & access** in the notification bell, and can be muted there like any other
+  category.
 
 ## Accepting an invite
 
 If you're the one being invited, sign up or sign in with **the address the invite was
-sent to** — usually via Google, if that's the address. You land on the **Workspaces**
-page, which leads with **"You've been invited"** and an accept banner. Accept there and
-the workspace opens.
+sent to**, or with any address you've confirmed on your account. That's usually Google,
+if it's the address. A banner at the top of every console page reads **"You've been
+invited to …"** and has **Accept** and **Decline** buttons. When you accept, the
+workspace opens.
 
-If that invite is your only workspace, the page also offers **Create my own site
-instead** — accepting isn't your only option. If you already belong to other
-workspaces, the invite banner appears above your usual workspace picker.
+If you're already signed in and working in another workspace, you don't have to go
+looking: the same banner appears on whatever page you have open, and the invitation
+also shows up in the notification bell. Clicking it there opens a dialog to accept or
+decline.
+
+If the invite is your only workspace, the **Workspaces** page leads with it and also
+offers **Create my own site instead**, so accepting isn't your only option.
+
+### Declining an invite
+
+**Decline** asks you to confirm, then removes the invitation, and the workspace's
+admins are told you declined. You can't undo a decline. To join later, an admin has
+to invite you again.
 
 ### An invitation never changes who owns the workspace
 

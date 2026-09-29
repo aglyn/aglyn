@@ -46,6 +46,7 @@ import { docsHelp } from '../../../../../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../../../../constants/shared'
 import useHostIndexEntries from '../../../../../hooks/use-host-index-entries'
 import useOrgHosts from '../../../../../hooks/use-org-hosts'
+import { useInviteReview } from '../../../../../hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import {
   normalizeNotificationLink,
@@ -71,6 +72,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const router = useRouter()
+  const { review: reviewInvite } = useInviteReview()
   const uid = (user as any)?.uid as string | undefined
   // Links are normalized when followed (AGL-644) — stored ones predate the
   // org-slug/subdomain routes and can't be migrated in place.
@@ -241,6 +243,15 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         doc(firestore, 'users', uid, 'notifications', notification.$id),
         { read: true, readAt: serverTimestamp() },
       ).catch(console.error)
+    }
+    // The invitee's own invitation opens the accept/decline dialog
+    // (AGL-3402), as it does from the bell.
+    if (notification.inviteId && notification.orgId) {
+      reviewInvite({
+        orgId: notification.orgId,
+        inviteId: notification.inviteId,
+      })
+      return
     }
     const target = normalizeNotificationLink(notification.link, {
       // The notification's own org, not the one currently open (AGL-644).
