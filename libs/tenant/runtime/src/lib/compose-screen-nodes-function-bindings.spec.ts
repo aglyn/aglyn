@@ -80,6 +80,16 @@ jest.mock('./realm-installs-seam', () => ({
   getRealmPluginInstalls: (...a: unknown[]) => mockGetRealmPluginInstalls(...a),
 }))
 
+/**
+ * No first-party element binds a site function today: the calculators are a
+ * marketplace plugin (AGL-3394). The compiled declaration is still how one
+ * would, and still wins over every manifest, so a stand-in carries it here.
+ */
+jest.mock('@aglyn/aglyn/server', () => ({
+  ...jest.requireActual('@aglyn/aglyn/server'),
+  FIRST_PARTY_FUNCTION_BINDINGS: { firstPartyWidget: 'functionName' },
+}))
+
 import { composeNodesWithChrome } from './compose-screen-nodes'
 
 const ROOT = '_@_'
@@ -140,11 +150,11 @@ describe('function bindings are declared, not named by core (AGL-3393)', () => {
     mockGetRealmPluginInstalls.mockResolvedValue([CALCULATOR_INSTALL])
   })
 
-  it("binds mui's calculator from the compiled declaration, with no install read", async () => {
+  it('binds a first-party element from the compiled declaration, with no install read', async () => {
     const nodes = await compose(
       page({
         $id: 'widget',
-        componentId: 'functionWidget',
+        componentId: 'firstPartyWidget',
         props: { functionName: 'quote' },
       }),
     )
@@ -206,10 +216,10 @@ describe('function bindings are declared, not named by core (AGL-3393)', () => {
         ...CALCULATOR_INSTALL,
         contributes: {
           site: {
-            components: ['aglyn.calculator.scope', 'functionWidget'],
+            components: ['aglyn.calculator.scope', 'firstPartyWidget'],
             functionBindings: {
               'aglyn.calculator.scope': 'functionName',
-              functionWidget: 'hijack',
+              firstPartyWidget: 'hijack',
             },
           },
         },
@@ -224,7 +234,7 @@ describe('function bindings are declared, not named by core (AGL-3393)', () => {
         },
         {
           $id: 'widget',
-          componentId: 'functionWidget',
+          componentId: 'firstPartyWidget',
           props: { functionName: 'quote', hijack: 'nothing' },
         },
       ),
@@ -244,7 +254,7 @@ describe('function bindings are declared, not named by core (AGL-3393)', () => {
         },
         {
           $id: 'widget',
-          componentId: 'functionWidget',
+          componentId: 'firstPartyWidget',
           props: { functionName: 'quote' },
         },
       ),
@@ -270,10 +280,10 @@ describe("the dev loop's plugins bind through their manifests on disk (AGL-3394)
       id: 'calculator',
       contributes: {
         site: {
-          components: ['aglyn.calculator.scope', 'functionWidget'],
+          components: ['aglyn.calculator.scope', 'firstPartyWidget'],
           functionBindings: {
             'aglyn.calculator.scope': 'functionName',
-            functionWidget: 'hijack',
+            firstPartyWidget: 'hijack',
           },
         },
       },
@@ -290,7 +300,7 @@ describe("the dev loop's plugins bind through their manifests on disk (AGL-3394)
       },
       {
         $id: 'widget',
-        componentId: 'functionWidget',
+        componentId: 'firstPartyWidget',
         props: { functionName: 'quote', hijack: 'nothing' },
       },
     )

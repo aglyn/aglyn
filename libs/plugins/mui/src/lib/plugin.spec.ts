@@ -14,7 +14,6 @@ import {
   megaMenuSchema as megaMenu,
   navMenuSchema as navMenu,
 } from './components/nav-menu'
-import { schema as functionWidget } from './components/function-widget'
 import { schema as image } from './components/image'
 import { schema as layoutSlot } from './components/layout-slot'
 import { schema as list } from './components/list'
@@ -45,7 +44,6 @@ let MUI_BUNDLE: MuiBundleEntry[] = []
 // These ids are persisted in screen documents and must never change
 // without a document migration.
 const PERSISTED_COMPONENT_IDS = [
-  'functionWidget',
   'image',
   'layoutSlot',
   'muiAppBar',
@@ -99,11 +97,6 @@ const MUI_DECLARED_CONTAINERS: readonly string[] = [
   // The canvas ROOT — the `Document` layer (AGL-2486). Every node on a page
   // is one of its descendants, so it renders children by definition.
   'div',
-  // The calculator's two containers (AGL-3202): both put the nodes they are
-  // given into their output — `functionShow` CONDITIONALLY, while the value
-  // it watches is true, which is the same shape `muiTabPanel` has.
-  'functionScope',
-  'functionShow',
   'muiAccordion',
   'muiAccordionDetails',
   'muiAppBar',
@@ -301,7 +294,6 @@ describe('plugins-mui', () => {
       drawerToggle,
       megaMenu,
       navMenu,
-      functionWidget,
       image,
       container,
       layoutSlot,
