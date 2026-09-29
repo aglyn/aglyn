@@ -75,6 +75,7 @@ import type {
   OutreachStepOverride,
 } from '../model/outreach.types'
 import { rewriteOutreachBodyLinks } from './click-tracking'
+import { outreachOpenTrackedHtml } from './open-tracking'
 import { normalizeOutreachPersonalLine } from './gates'
 import {
   isInThreadEmailStep,
@@ -105,6 +106,12 @@ export interface ComposedOutreachEmail {
   subject: string
   /** The plain-text body, footer included. */
   text: string
+  /**
+   * The same body as HTML with a tracking image (AGL-3395), sent beside
+   * `text` as `multipart/alternative`. Absent on every email of a sequence
+   * that does not count opens, which goes out as plain text alone.
+   */
+  html?: string
   /** The provider thread a reply step is sent into. */
   threadId?: string
   /** The `Message-ID` this email answers, angle brackets included. */
@@ -176,6 +183,13 @@ export interface ComposeOutreachEmailInput {
    * organization's identification and the way out are never rewritten.
    */
   rewriteLink?: ((link: { url: string; index: number }) => string | null) | null
+  /**
+   * The tracking image's address, minted by the runtime for a sequence that
+   * counts opens (AGL-3395). Given, the email gains an HTML part — the same
+   * text, footer included, and the image; absent or `null`, it stays plain
+   * text, which is what a preview and every other caller pass.
+   */
+  openPixelUrl?: string | null
 }
 
 export interface OutreachComposeResult {
@@ -379,6 +393,9 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     : { text: body, links: [] }
   email.trackedLinks = tracked.links
   email.text = `${tracked.text}\n\n${footer}`
+  // Built from the finished text, so the HTML part says exactly what the
+  // plain-text part says — the footer and any rewritten link included.
+  if (input.openPixelUrl) email.html = outreachOpenTrackedHtml(email.text, input.openPixelUrl)
 
   const url = unsubscribeUrl(input.listUnsubscribeUrl)
   if (url === null) {

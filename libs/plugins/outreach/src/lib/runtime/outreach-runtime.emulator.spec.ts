@@ -231,7 +231,7 @@ const SEQUENCE: OutreachSequence = {
       templateId: null,
     },
   ],
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, countOpens: false, listUnsubscribe: false },
   status: 'active',
   createdAtMs: 1,
   updatedAtMs: 1,

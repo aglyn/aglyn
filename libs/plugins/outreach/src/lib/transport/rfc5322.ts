@@ -33,14 +33,17 @@ import { randomUUID } from 'node:crypto'
  * - `Date` in RFC 5322 form, UTC.
  * - `Message-ID` `<uuid@domain>`, the domain being the From address's unless
  *   the caller names one, so the id belongs to the domain the mail is from.
- * - `MIME-Version: 1.0` and `Content-Type: text/plain; charset=UTF-8`.
+ * - `MIME-Version: 1.0` and `Content-Type: text/plain; charset=UTF-8` —
+ *   or, for a sequence that counts opens (AGL-3395), `multipart/alternative`
+ *   holding that same plain-text part and the caller's HTML part after it.
  * - The caller's `In-Reply-To`, `References`, `Reply-To`, `List-Unsubscribe`
  *   and `List-Unsubscribe-Post`, plus any `X-` header.
  * - CRLF line endings throughout. The body goes as `7bit` when it is ASCII
  *   with no line over 998 octets, and `quoted-printable` otherwise.
  *
- * No HTML part, no tracking pixel, no rewritten links, no open or click
- * beacon of any kind: the body the caller composed is the body that is sent.
+ * Nothing is added to what the caller composed: no HTML part it did not
+ * pass, no image, no rewritten link. The body the caller composed is the
+ * body that is sent.
  *
  * ## Refusals
  *
@@ -75,6 +78,12 @@ export interface OutreachComposedMessage {
   subject: string
   text: string
   /**
+   * An HTML alternative to `text` (AGL-3395). Absent — every send of a
+   * sequence that does not count opens — sends `text` alone as
+   * `text/plain`, exactly as before.
+   */
+  html?: string | null
+  /**
    * `In-Reply-To`, `References`, `Reply-To`, `List-Unsubscribe`,
    * `List-Unsubscribe-Post`, or an `X-` header. A null, undefined or empty
    * value is omitted.
@@ -89,6 +98,8 @@ export interface BuildRfc5322Options {
   messageIdLocalPart?: string
   /** The Message-ID's domain. The From address's domain when omitted. */
   messageIdDomain?: string
+  /** The `multipart/alternative` boundary. A random one when omitted. */
+  boundary?: string
 }
 
 export interface BuiltRfc5322Message {
@@ -428,10 +439,7 @@ export function buildRfc5322Message(
   }
   const messageId = `<${local}@${domain}>`
 
-  const body = canonicalBody(message.text)
-  const sevenBit = isSevenBitSafe(body)
-
-  const lines = [
+  const headers = [
     foldHeader('From', formatAddress(from)),
     foldHeader('To', formatAddress(to)),
     ...(subject.length ? [foldHeader('Subject', subject)] : ['Subject:']),
@@ -439,14 +447,51 @@ export function buildRfc5322Message(
     `Message-ID: ${messageId}`,
     ...extras.map(([name, value]) => foldHeader(name, spaceTokens(value))),
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    `Content-Transfer-Encoding: ${sevenBit ? '7bit' : 'quoted-printable'}`,
   ]
-  const encodedBody = sevenBit ? body : encodeQuotedPrintable(body)
+  const text = mimePart('text/plain', message.text)
+  const html = typeof message.html === 'string' && message.html.trim() ? mimePart('text/html', message.html) : null
+  if (!html) {
+    return {
+      raw: `${[...headers, ...text.headers].join(CRLF)}${CRLF}${CRLF}${text.body}`,
+      messageId,
+      subject: message.subject.trim(),
+    }
+  }
+  /*
+   * RFC 2046 §5.1.4: alternatives in increasing order of preference, so the
+   * plain text comes first and a client that can show HTML shows the HTML.
+   * The boundary is a UUID's characters behind a prefix, which no
+   * quoted-printable or 7bit body line can contain in full.
+   */
+  const boundary = options.boundary ?? `aglyn-alt-${randomUUID()}`
+  if (!/^[A-Za-z0-9'()+_,./:=?-]{1,70}$/.test(boundary)) {
+    throw new Rfc5322MessageError('invalid-header', 'The multipart boundary would not be valid.')
+  }
+  const part = (built: { headers: string[]; body: string }) =>
+    `--${boundary}${CRLF}${built.headers.join(CRLF)}${CRLF}${CRLF}${built.body}`
   return {
-    raw: `${lines.join(CRLF)}${CRLF}${CRLF}${encodedBody}`,
+    raw:
+      `${[...headers, `Content-Type: multipart/alternative; boundary="${boundary}"`].join(CRLF)}${CRLF}${CRLF}` +
+      `${part(text)}${part(html)}--${boundary}--${CRLF}`,
     messageId,
     subject: message.subject.trim(),
+  }
+}
+
+/**
+ * One body with its content headers: `7bit` when it is ASCII with no line
+ * over 998 octets, `quoted-printable` otherwise. The body ends with a CRLF,
+ * which is what puts a following boundary on a line of its own.
+ */
+function mimePart(type: 'text/plain' | 'text/html', content: string): { headers: string[]; body: string } {
+  const body = canonicalBody(content)
+  const sevenBit = isSevenBitSafe(body)
+  return {
+    headers: [
+      `Content-Type: ${type}; charset=UTF-8`,
+      `Content-Transfer-Encoding: ${sevenBit ? '7bit' : 'quoted-printable'}`,
+    ],
+    body: sevenBit ? body : encodeQuotedPrintable(body),
   }
 }
 

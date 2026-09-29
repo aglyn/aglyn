@@ -28,11 +28,12 @@ import type { OutreachSequenceLinksLoad } from './use-outreach-data'
  * a number the model withheld, or leaving off the sentence that says why.
  */
 
-const settings = (trackClicks: boolean): OutreachSequence['settings'] => ({
+const settings = (trackClicks: boolean, countOpens = false): OutreachSequence['settings'] => ({
   window: null,
   allowedCountries: ['US'],
   allowCustomers: false,
   trackClicks,
+  countOpens,
   listUnsubscribe: false,
 })
 
@@ -56,6 +57,36 @@ describe('the sequence report card', () => {
     card({ sent: 40, people: 10, clicks: 4, uniqueClicks: 3, clickTracked: true })
     expect(screen.getByText(/Opens aren.t measured/i)).toBeTruthy()
     expect(screen.queryByText(/open rate/i)).toBeNull()
+  })
+
+  it('keeps opens unmeasured for a sequence with the switch off, and shows them once the image went out (AGL-3395)', () => {
+    const { unmount } = render(
+      <OutreachSequenceReportCard
+        sequence={{ stats: { sent: 4, people: 4 }, settings: settings(true, true) }}
+        links={noLinks}
+        timeZone="America/Chicago"
+      />,
+    )
+    // On, and nothing carried the image yet: said, and no figure.
+    expect(screen.getByText(/no email with the tracking image has gone out yet/i)).toBeTruthy()
+    expect(screen.queryByText('Open rate')).toBeNull()
+    unmount()
+    render(
+      <OutreachSequenceReportCard
+        sequence={{
+          stats: { sent: 40, people: 20, openTracked: true, openPeople: 8, opens: 3, uniqueOpens: 2, machineOpens: 5, proxyOpens: 4 },
+          settings: settings(true, true),
+        }}
+        links={noLinks}
+        timeZone="America/Chicago"
+      />,
+    )
+    expect(screen.getByText('Opened')).toBeTruthy()
+    expect(screen.getByText('25.0%')).toBeTruthy()
+    expect(screen.getByText('2 of 8 people sent a tracked email')).toBeTruthy()
+    expect(screen.getByText('Machine opens')).toBeTruthy()
+    expect(screen.getByText('Not in the rate · 4 by mail proxies')).toBeTruthy()
+    expect(screen.queryByText(/Opens aren.t measured/i)).toBeNull()
   })
 
   it('prints the rate with the denominator it was taken over', () => {

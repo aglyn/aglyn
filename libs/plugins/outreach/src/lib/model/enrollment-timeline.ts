@@ -42,8 +42,13 @@
  *=========================================*/
 
 import type { OutreachClickMachineReason } from '../engine/click-tracking'
+import type { OutreachOpenMachineReason } from '../engine/open-tracking'
 import { OUTREACH_MAIL_GATEWAY_LABELS, type OutreachMailGateway } from '../engine/mail-gateway'
-import { outreachClickSummary } from './enrollment-engagement'
+import {
+  outreachClickSummary,
+  outreachLoggedEngagementRows,
+  readOutreachEngagement,
+} from './enrollment-engagement'
 import {
   OUTREACH_ENROLLMENT_HISTORY_MAX,
   OUTREACH_TASK_KIND_LABELS,
@@ -63,6 +68,8 @@ export type OutreachTimelineKind =
   | 'click'
   | 'scanner'
   | 'earlier-clicks'
+  | 'open'
+  | 'machine-open'
   | 'paused'
   | 'resumed'
   | 'stopped'
@@ -130,6 +137,15 @@ export const OUTREACH_MACHINE_REASON_LABELS: Record<OutreachClickMachineReason, 
   method: 'it checked the link without opening the page',
 }
 
+/** Why a fetch of the tracking image was not counted as an open (AGL-3395). */
+export const OUTREACH_OPEN_MACHINE_REASON_LABELS: Record<OutreachOpenMachineReason, string> = {
+  agent: 'the request named itself as a scanner or a preview',
+  too_soon: 'it came within 30 seconds of the email arriving, faster than anyone reads',
+  method: 'it checked the image without loading it',
+  image_proxy: 'Yahoo’s image proxy fetched it, which it does whether or not the person reads it',
+  privacy_proxy: 'Apple Mail’s privacy protection fetched it as the email arrived',
+}
+
 const ACTION_TITLES: Record<OutreachHistoryAction, string> = {
   pause: 'Paused',
   resume: 'Resumed',
@@ -159,6 +175,8 @@ const TIE_ORDER: Record<OutreachTimelineKind, number> = {
   click: 4,
   scanner: 4,
   'earlier-clicks': 4,
+  open: 4,
+  'machine-open': 4,
   task: 5,
   sent: 5,
   curated: 6,
@@ -255,6 +273,7 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
             ? 'Curated copy — written by a member'
             : null,
         record.links?.length ? plural(record.links.length, 'tracked link', 'tracked links') : null,
+        record.openTracked ? 'Tracking image' : null,
       ].filter((fact): fact is string => Boolean(fact)),
       gmailThreadId: startsThread ? thread : null,
       tone: 'default',
@@ -290,6 +309,33 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
     )
   }
 
+  // ── Opens (AGL-3395) ────────────────────────────────────────────────────
+  for (const row of history) {
+    if (row.kind !== 'open') continue
+    entries.push(
+      row.human
+        ? {
+            key: `history-${row.id}`,
+            kind: 'open',
+            atMs: row.atMs,
+            title: 'Opened an email',
+            facts: [`${outreachStepName(steps, row.stepIndex)}`],
+            tone: 'info',
+          }
+        : {
+            key: `history-${row.id}`,
+            kind: 'machine-open',
+            atMs: row.atMs,
+            title: 'The tracking image was fetched by a machine — not counted',
+            facts: [
+              outreachStepName(steps, row.stepIndex),
+              row.machineReason ? `Read as a machine: ${OUTREACH_OPEN_MACHINE_REASON_LABELS[row.machineReason]}` : null,
+            ].filter((fact): fact is string => Boolean(fact)),
+            tone: 'default',
+          },
+    )
+  }
+
   /*
    * Clicks with no row of their own: counted before the per-click history
    * began, or past its limit. ONE entry, placed at the first of them when
@@ -299,7 +345,7 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
   const engagement = enrollment.engagement
   if (clicks.unloggedClicks > 0 || clicks.unloggedMachineClicks > 0) {
     const everyHumanUnlogged = clicks.unloggedClicks === clicks.clicks
-    const loggedRows = clicks.clicks - clicks.unloggedClicks + (clicks.machineClicks - clicks.unloggedMachineClicks)
+    const loggedRows = outreachLoggedEngagementRows(readOutreachEngagement(enrollment.engagement))
     const facts: string[] = []
     const first = engagement?.firstClickAtMs ?? null
     const last = engagement?.lastClickAtMs ?? null
@@ -475,6 +521,9 @@ export interface OutreachEnrollmentFigures {
   /** Distinct destinations followed; `atLeast` when only a floor is known. */
   linksFollowed: { count: number; atLeast: boolean }
   scannerClicks: number
+  /** Opens judged theirs, and the image fetches that were a machine's (AGL-3395). */
+  opens: number
+  machineOpens: number
   replies: number
   /** Whether anything has happened to them beyond being enrolled. */
   anything: boolean
@@ -482,6 +531,7 @@ export interface OutreachEnrollmentFigures {
 
 export function outreachEnrollmentFigures(enrollment: OutreachEnrollment): OutreachEnrollmentFigures {
   const clicks = outreachClickSummary(enrollment.engagement)
+  const engagement = readOutreachEngagement(enrollment.engagement)
   const emailsSent = emailRecords(enrollment).length
   const replies =
     enrollment.status === 'replied' || enrollment.stopReason === 'reply' || enrollment.stopReason === 'opt_out_reply'
@@ -495,12 +545,16 @@ export function outreachEnrollmentFigures(enrollment: OutreachEnrollment): Outre
         ? { count: clicks.followed.length, atLeast: true }
         : { count: clicks.linkCount, atLeast: clicks.linksCapped },
     scannerClicks: clicks.machineClicks,
+    opens: engagement.opens,
+    machineOpens: engagement.machineOpens,
     replies,
     anything:
       emailsSent > 0 ||
       (enrollment.stepRecords ?? []).length > 0 ||
       clicks.clicks > 0 ||
       clicks.machineClicks > 0 ||
+      engagement.opens > 0 ||
+      engagement.machineOpens > 0 ||
       enrollment.stoppedAtMs !== null,
   }
 }

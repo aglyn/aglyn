@@ -207,7 +207,7 @@ export const OUTREACH_CLICK_HUMAN_DELAY_MS = 30_000
  * impersonate a browser, which is what {@link OUTREACH_CLICK_HUMAN_DELAY_MS}
  * is for.
  */
-const MACHINE_AGENTS = [
+export const OUTREACH_MACHINE_AGENTS: readonly string[] = [
   'bot',
   'crawler',
   'spider',
@@ -278,7 +278,7 @@ export function judgeOutreachClick(input: {
   if (String(input.method ?? '').toUpperCase() === 'HEAD') return machine('method')
   const agent = String(input.userAgent ?? '').trim().toLowerCase()
   if (!agent) return machine('agent')
-  if (MACHINE_AGENTS.some((needle) => agent.includes(needle))) return machine('agent')
+  if (OUTREACH_MACHINE_AGENTS.some((needle) => agent.includes(needle))) return machine('agent')
   /*
    * A click that arrives BEFORE the send it belongs to is a clock disagreeing
    * with itself, not a time traveller, and it is read as a person's: the one

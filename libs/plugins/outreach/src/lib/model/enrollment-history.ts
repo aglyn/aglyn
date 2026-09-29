@@ -16,6 +16,7 @@
  */
 
 import type { OutreachClickMachineReason } from '../engine/click-tracking'
+import type { OutreachOpenMachineReason } from '../engine/open-tracking'
 import type {
   OutreachEnrollmentHistoryEntry,
   OutreachHistoryAction,
@@ -32,6 +33,13 @@ import type {
  */
 
 const MACHINE_REASONS: readonly OutreachClickMachineReason[] = ['agent', 'too_soon', 'method']
+const OPEN_MACHINE_REASONS: readonly OutreachOpenMachineReason[] = [
+  'agent',
+  'too_soon',
+  'method',
+  'image_proxy',
+  'privacy_proxy',
+]
 const ACTIONS: readonly OutreachHistoryAction[] = ['pause', 'resume', 'stop', 'do_not_contact']
 
 /** A click row as the click route writes it. */
@@ -46,6 +54,22 @@ export function outreachClickHistoryRow(input: {
     kind: 'click',
     atMs: input.atMs,
     url: input.url,
+    stepIndex: input.stepIndex,
+    human: input.human,
+    machineReason: input.human ? null : input.machineReason,
+  }
+}
+
+/** An open row as the short-link route writes it for a tracking image (AGL-3395). */
+export function outreachOpenHistoryRow(input: {
+  atMs: number
+  stepIndex: number
+  human: boolean
+  machineReason: OutreachOpenMachineReason | null
+}): Record<string, unknown> {
+  return {
+    kind: 'open',
+    atMs: input.atMs,
     stepIndex: input.stepIndex,
     human: input.human,
     machineReason: input.human ? null : input.machineReason,
@@ -103,6 +127,23 @@ export function readOutreachHistoryEntry(
         ? null
         : (MACHINE_REASONS as readonly unknown[]).includes(reason)
           ? (reason as OutreachClickMachineReason)
+          : null,
+    }
+  }
+  if (data['kind'] === 'open') {
+    const stepIndex = Number(data['stepIndex'])
+    const human = data['human'] === true
+    const reason = data['machineReason']
+    return {
+      id,
+      kind: 'open',
+      atMs,
+      stepIndex: Number.isInteger(stepIndex) && stepIndex >= 0 ? stepIndex : 0,
+      human,
+      machineReason: human
+        ? null
+        : (OPEN_MACHINE_REASONS as readonly unknown[]).includes(reason)
+          ? (reason as OutreachOpenMachineReason)
           : null,
     }
   }

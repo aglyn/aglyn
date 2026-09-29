@@ -35,6 +35,7 @@ import {
   mdiCursorDefaultClickOutline,
   mdiEmailAlertOutline,
   mdiEmailOffOutline,
+  mdiEmailOpenOutline,
   mdiEmailOutline,
   mdiHandBackLeftOutline,
   mdiPauseCircleOutline,
@@ -170,6 +171,8 @@ const KIND_ICONS: Record<OutreachTimelineKind, { path: string }> = {
   click: mdiCursorDefaultClickOutline,
   scanner: mdiShieldSearch,
   'earlier-clicks': mdiCursorDefaultClickOutline,
+  open: mdiEmailOpenOutline,
+  'machine-open': mdiShieldSearch,
   paused: mdiPauseCircleOutline,
   resumed: mdiPlayCircleOutline,
   stopped: mdiStopCircleOutline,
@@ -632,6 +635,13 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
   )
   const figures = outreachEnrollmentFigures(enrollment)
   const trackClicks = sequence.settings.trackClicks || sequence.stats?.clickTracked === true
+  // Opens are shown for a sequence that counts them or once did (AGL-3395),
+  // and for a person with any recorded, whatever the sequence says now.
+  const countOpens =
+    sequence.settings.countOpens ||
+    sequence.stats?.openTracked === true ||
+    figures.opens > 0 ||
+    figures.machineOpens > 0
   const open = enrollment.status === 'active' || enrollment.status === 'paused'
   const held = enrollment.status === 'paused' && enrollment.stopReason === 'gateway_blocked_here'
 
@@ -747,6 +757,13 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
           {figures.anything ? (
             <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }} role="group" aria-label="In numbers">
               <OutreachFigure label="Emails sent" value={dash(figures.emailsSent)} />
+              {countOpens ? (
+                <OutreachFigure
+                  label="Opens"
+                  value={dash(figures.opens)}
+                  hint={figures.machineOpens ? `${figures.machineOpens.toLocaleString()} by machines, not counted` : undefined}
+                />
+              ) : null}
               <OutreachFigure label="Clicks" value={dash(figures.clicks)} hint={notTracked} />
               <OutreachFigure
                 label="Links followed"
@@ -797,7 +814,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
         }
       >
         <Stack spacing={1}>
-          {history.status === 'loading' ? <OutreachLoading label="Loading their clicks…" /> : null}
+          {history.status === 'loading' ? <OutreachLoading label="Loading their history…" /> : null}
           {history.status === 'error' || history.status === 'refused' ? (
             <OutreachLoadProblem
               status={history.status}
