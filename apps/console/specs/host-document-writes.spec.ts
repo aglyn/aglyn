@@ -53,6 +53,10 @@ jest.mock('../utils/revalidate-live-pages', () => ({
   revalidateLivePages: (...args: unknown[]) => mockRevalidateLivePages(...args),
 }))
 
+jest.mock('@aglyn/aglyn/app-utils/create-resource-uid', () => ({
+  createResourceUid: () => 'entry-1',
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, name: string) => ({ collectionPath: name }),
   doc: (first: { collectionPath?: string }, ...segments: string[]) =>

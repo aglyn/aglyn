@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
-  collection,
   deleteDoc,
   doc,
   serverTimestamp,
@@ -78,7 +78,8 @@ export function stageSiteWideOutboxEntry(
   firestore: Firestore,
   hostId: string,
 ): DocumentReference {
-  const ref = doc(collection(firestore, SITE_WIDE_OUTBOX_COLLECTION))
+  // Named by the id every console resource carries, never an SDK auto-id.
+  const ref = doc(firestore, SITE_WIDE_OUTBOX_COLLECTION, createResourceUid())
   batch.set(ref, {
     hostId,
     paths: [...SITE_WIDE_OUTBOX_PATHS],

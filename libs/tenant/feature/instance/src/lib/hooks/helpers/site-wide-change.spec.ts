@@ -32,6 +32,10 @@ const mockCommit = jest.fn()
 const mockDeleteDoc = jest.fn()
 const mockFetch = jest.fn()
 
+jest.mock('@aglyn/aglyn/app-utils/create-resource-uid', () => ({
+  createResourceUid: () => 'entry-1',
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, name: string) => ({ collectionPath: name }),
   doc: (first: { collectionPath?: string }, ...segments: string[]) =>
