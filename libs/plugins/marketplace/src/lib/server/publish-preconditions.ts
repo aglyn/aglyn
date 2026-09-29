@@ -155,6 +155,14 @@ export function publishPreconditionRefusal(
   //
   // An acceptance of an older version does not count: whoever publishes next
   // reads the changed agreement and accepts it, or does not publish.
+  //
+  // `agreement` is the machine-readable half of the refusal (AGL-3407): the
+  // console reads it, not the prose, to present the agreement where the
+  // publish was attempted and send the same request again once it is
+  // accepted. `orgId` is in it because the acceptance is the ORG's, and a
+  // host-scoped publish (a layout, a theme, a component) names only its site
+  // — the client would otherwise have to guess which org it is asking to
+  // bind.
   const agreementState = publisherAgreementState(publisher.agreement)
   if (agreementState !== 'current') {
     return {
@@ -165,6 +173,7 @@ export function publishPreconditionRefusal(
           required: PUBLISHER_AGREEMENT_VERSION,
           accepted: publisher.agreement?.version ?? null,
           state: agreementState,
+          orgId: publisher.orgId,
         },
       },
     }

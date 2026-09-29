@@ -17,86 +17,33 @@
 'use client'
 
 import {
-  isBelowMarketplacePriceFloor,
-  marketplacePriceCostNote,
-  marketplacePriceFloorHint,
+  CONSOLE_WIDGET_SLOTS,
+  type ConsolePublishableArtifact,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
-import { useCallback, useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { Button, Stack, Typography } from '@mui/material'
+import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import useCurrentOrg from '../hooks/use-current-org'
+import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
 
 /**
  * Save-as-template (AGL-137): publishes this host's published screens +
- * theme to the marketplace library as a site template (free or paid). The
- * API applies the same sanitizer and gates as component publishing;
- * preview images attach afterwards from Manage → Marketplace.
+ * theme to the marketplace library as a site template (free or paid).
+ *
+ * The card says what it has — this site — and the publish itself is drawn
+ * through the `hostArtifactPublish` zone (AGL-3080), the same widget the
+ * layouts and components pages open: the route, the listing form, the price
+ * floor and the publisher agreement it may need to ask for (AGL-3407) are
+ * the marketplace's, not the console's. With nothing drawing that zone there
+ * is nowhere to publish to, so the card is not shown at all.
  */
 export function SiteTemplateCard(props: { hostId: string }) {
   const { hostId } = props
-  const { data: user } = useUser()
-  const { enqueueSnackbar } = useSnackbar()
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [category, setCategory] = useState('')
-  const [price, setPrice] = useState('0')
-  const [busy, setBusy] = useState(false)
-
-  const handlePublish = useCallback(async () => {
-    if (!name.trim() || busy) return
-    setBusy(true)
-    try {
-      const response = await authorizedFetch(
-        user,
-        '/api/marketplace/publish-template',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            hostId,
-            displayName: name.trim(),
-            description: description.trim(),
-            category: category.trim(),
-            priceUsd: Number(price) || 0,
-          }),
-        },
-      )
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Publish failed', {
-          variant: 'warning',
-          allowDuplicate: true,
-        })
-      }
-      setOpen(false)
-      enqueueSnackbar(
-        `Template published (v${payload.version}) — add a preview image ` +
-          'from Manage → Marketplace',
-        { variant: 'success', persist: false },
-      )
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    } finally {
-      setBusy(false)
-    }
-  }, [name, description, category, price, busy, user, hostId, enqueueSnackbar])
+  const { orgId } = useCurrentOrg()
+  const [target, setTarget] = useState<ConsolePublishableArtifact | null>(null)
+  const { widgets } = useSlotWidgets([CONSOLE_WIDGET_SLOTS.hostArtifactPublish])
+  if (!widgets.length) return null
 
   return (
     <CardDisplay
@@ -118,79 +65,18 @@ export function SiteTemplateCard(props: { hostId: string }) {
           variant="contained"
           color="primary"
           sx={{ alignSelf: 'flex-start' }}
-          onClick={() => setOpen(true)}
+          onClick={() =>
+            setTarget({ kind: 'site', hostId, orgId: orgId ?? null })
+          }
         >
           {'Publish as template'}
         </Button>
       </Stack>
-      <Dialog
-        open={open}
-        onClose={() => (busy ? null : setOpen(false))}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{'Publish as template'}</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
-        >
-          <TextField
-            label="Template name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            size="small"
-            autoFocus
-            sx={{ mt: 1 }}
-          />
-          <TextField
-            label="Description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            size="small"
-            multiline
-            minRows={2}
-          />
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="Category"
-              placeholder="Portfolio, Restaurant…"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              size="small"
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label="Price (USD, 0 = free)"
-              // The minimum paid price (AGL-2343): marketplace checkout is a
-              // destination charge, so Stripe's fee is debited from the
-              // PLATFORM and at $1 it exceeds the whole platform cut. The
-              // publish route refuses anything under the floor.
-              error={isBelowMarketplacePriceFloor(price)}
-              helperText={
-                marketplacePriceCostNote(price) ?? marketplacePriceFloorHint()
-              }
-              value={price}
-              onChange={(event) =>
-                setPrice(event.target.value.replace(/[^0-9]/g, ''))
-              }
-              size="small"
-              sx={{ width: 150 }}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={busy} onClick={() => setOpen(false)}>
-            {'Cancel'}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!name.trim() || busy || isBelowMarketplacePriceFloor(price)}
-            onClick={handlePublish}
-          >
-            {busy ? 'Publishing…' : 'Publish'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <PluginWidgetSlot
+        slot={CONSOLE_WIDGET_SLOTS.hostArtifactPublish}
+        artifact={target}
+        onClose={() => setTarget(null)}
+      />
     </CardDisplay>
   )
 }

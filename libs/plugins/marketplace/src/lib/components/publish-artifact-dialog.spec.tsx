@@ -41,21 +41,39 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import PublishArtifactDialog from './publish-artifact-dialog.component'
 
 const posted: Array<{ url: string; body: Record<string, unknown> }> = []
+/** Requests that are not publishes: the roster and the agreement acceptance. */
+const asked: string[] = []
 let responseStatus = 200
 let responseBody: Record<string, unknown> = { listingId: 'listing-1', version: 1 }
+/** Answers for the next publishes, before falling back to the two above. */
+let queued: Array<{ status: number; body: Record<string, unknown> }> = []
+/** The org's publisher profile, as the agreement gate reads it. */
+let profileDoc: Record<string, unknown> | undefined
 
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (
     _user: unknown,
     url: string,
-    init: { body: string },
+    init?: { body: string },
   ) => {
-    posted.push({ url, body: JSON.parse(init.body) })
-    return {
-      ok: responseStatus < 400,
-      status: responseStatus,
-      json: async () => responseBody,
+    const reply = (status: number, body: unknown) => ({
+      ok: status < 400,
+      status,
+      json: async () => body,
+    })
+    if (url.startsWith('/api/orgs/members')) {
+      asked.push(url)
+      return reply(200, { members: [{ $id: 'me', role: 'owner' }] })
     }
+    if (url === '/api/marketplace/publisher-profile') {
+      asked.push(url)
+      return reply(200, { ok: true })
+    }
+    posted.push({ url, body: JSON.parse(String(init?.body)) })
+    const next = queued.shift()
+    return next
+      ? reply(next.status, next.body)
+      : reply(responseStatus, responseBody)
   },
 }))
 
@@ -65,11 +83,16 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useUser: () => ({ data: { getIdToken: async () => 'token' } }),
+  useUser: () => ({ data: { uid: 'me', getIdToken: async () => 'token' } }),
+  useFirestore: () => ({}),
+  useFirestoreDoc: () => ({ data: profileDoc, status: 'success' }),
 }))
 
 beforeEach(() => {
   posted.length = 0
+  asked.length = 0
+  queued = []
+  profileDoc = undefined
   responseStatus = 200
   responseBody = { listingId: 'listing-1', version: 1 }
   enqueueSnackbar.mockClear()
@@ -197,5 +220,73 @@ describe('what the server says is what the publisher reads', () => {
         expect.objectContaining({ variant: 'warning' }),
       ),
     )
+  })
+})
+
+/**
+ * THE PUBLISHER AGREEMENT, ASKED FOR IN THIS DIALOG (AGL-3407).
+ *
+ * Every kind above is published through this one form, so wiring it once
+ * wires the seven: a refusal for the agreement opens the agreement over the
+ * form, and accepting sends the publish again with what was typed.
+ */
+describe('the publisher agreement', () => {
+  const REFUSAL = {
+    error: 'Your organization has not accepted the Marketplace Publisher Agreement.',
+    agreement: { required: 'x', accepted: null, state: 'none', orgId: 'org-1' },
+  }
+
+  it.each(['layout', 'component', 'site', 'theme', 'emailTemplate'])(
+    'a refused %s publish opens it, and accepting publishes the same listing',
+    async (kind) => {
+      queued = [{ status: 412, body: REFUSAL }]
+      const onClose = jest.fn()
+      render(
+        <PublishArtifactDialog
+          artifact={{ kind, hostId: 'host-1', artifactId: 'a-1', displayName: 'Named' } as never}
+          onClose={onClose}
+        />,
+      )
+      fireEvent.change(screen.getByLabelText('Listing name'), {
+        target: { value: 'Typed by hand' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Accept and publish' }))
+      await waitFor(() => expect(onClose).toHaveBeenCalled())
+      expect(posted).toHaveLength(2)
+      expect(posted[1]).toEqual(posted[0])
+      expect(posted[1].body['displayName']).toBe('Typed by hand')
+      expect(asked).toContain('/api/marketplace/publisher-profile')
+      // The route's prose never reached a toast: the dialog said it.
+      expect(enqueueSnackbar).not.toHaveBeenCalledWith(
+        REFUSAL.error,
+        expect.anything(),
+      )
+    },
+  )
+
+  it('is offered as the form opens when the org is known to need it', async () => {
+    profileDoc = { handle: 'acme', publisherAgreement: { version: '2026-08-18.1' } }
+    render(
+      <PublishArtifactDialog
+        artifact={{ kind: 'layout', hostId: 'h', orgId: 'org-1', artifactId: 'l', displayName: 'Docs' } as never}
+        onClose={jest.fn()}
+      />,
+    )
+    expect(
+      await screen.findByText('What changed since version 2026-08-18.1'),
+    ).toBeTruthy()
+    expect(posted).toHaveLength(0)
+  })
+
+  it('is not offered to an org with no publisher profile, whose refusal is the profile', () => {
+    profileDoc = undefined
+    render(
+      <PublishArtifactDialog
+        artifact={{ kind: 'layout', hostId: 'h', orgId: 'org-1', artifactId: 'l' } as never}
+        onClose={jest.fn()}
+      />,
+    )
+    expect(screen.queryByText('Marketplace Publisher Agreement')).toBeNull()
   })
 })

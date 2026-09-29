@@ -85,14 +85,52 @@ describe('legal links the console presents (AGL-1660)', () => {
   })
 })
 
+/*
+ * The link itself is drawn by the summary both acceptance surfaces share —
+ * the seller panel and the dialog a refused publish opens (AGL-3407) — so the
+ * property now spans three files: the summary links only the href it is
+ * handed, and each surface hands it the presentation helper's.
+ */
+const marketplaceComponent = (file: string) =>
+  readFileSync(
+    join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'libs',
+      'plugins',
+      'marketplace',
+      'src',
+      'lib',
+      'components',
+      file,
+    ),
+    'utf-8',
+  )
+const agreementSummary = marketplaceComponent(
+  'publisher-agreement-summary.component.tsx',
+)
+const agreementDialog = marketplaceComponent(
+  'publisher-agreement-dialog.component.tsx',
+)
+
 describe('the seller panel cannot link an unreadable agreement', () => {
   it('never reads the URL constant directly', () => {
     expect(sellerPanel).not.toContain('PUBLISHER_AGREEMENT_URL')
+    expect(agreementSummary).not.toContain('PUBLISHER_AGREEMENT_URL')
+    expect(agreementDialog).not.toContain('PUBLISHER_AGREEMENT_URL')
   })
 
   it('takes the href and the accept control from the presentation helper', () => {
     expect(sellerPanel).toContain('publisherAgreementPresentation')
-    expect(sellerPanel).toContain('href={agreementPresentation.documentUrl}')
+    expect(sellerPanel).toContain(
+      'documentUrl={agreementPresentation.documentUrl}',
+    )
     expect(sellerPanel).toContain('agreementPresentation.canAccept ? (')
+    expect(agreementSummary).toContain('href={documentUrl}')
+    expect(agreementDialog).toContain('publisherAgreementPresentation')
+    expect(agreementDialog).toContain('documentUrl={presentation.documentUrl}')
+    expect(agreementDialog).toContain('presentation.canAccept &&')
   })
 })

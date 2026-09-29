@@ -162,7 +162,8 @@ export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
  *
  * TO PUBLISH A CHANGE: publish the besigner edit first, confirm the live page
  * serves it, capture a new snapshot under the new version's directory, then
- * bump `PUBLISHER_AGREEMENT_VERSION` and these two values together. Never
+ * bump `PUBLISHER_AGREEMENT_VERSION` and these two values together, and add
+ * the version's entry to `PUBLISHER_AGREEMENT_CHANGES` below. Never
  * hand-write a snapshot: it is evidence of what a publisher was shown, and a
  * snapshot of unpublished text is a false record.
  */
@@ -276,6 +277,64 @@ export const PUBLISHER_AGREEMENT_POINTS: readonly {
       'Including infringement claims and disputes with the organizations that install it.',
   },
 ]
+
+/**
+ * What each version changed from the one before it, in the words a publisher
+ * re-accepting needs (AGL-3407).
+ *
+ * An org that accepted an older version is asked again, and "the terms
+ * changed" with nothing more is a request to re-read thirteen sections to
+ * find two edited clauses. Each entry names the sections that moved, read off
+ * the archived snapshots beside this module (`legal/publisher-agreement/`) —
+ * never written from memory of the edit, for the same reason a snapshot is
+ * never hand-written.
+ *
+ * Oldest first. The last entry is always {@link PUBLISHER_AGREEMENT_VERSION}:
+ * a bump adds its entry in the same change, and
+ * `publisher-agreement-version.spec.ts` fails a bump that did not. The first
+ * published version has no entry, because nothing preceded it that anyone
+ * accepted.
+ */
+export const PUBLISHER_AGREEMENT_CHANGES: readonly {
+  version: string
+  changes: readonly string[]
+}[] = [
+  {
+    version: '2026-08-18.1',
+    changes: [
+      '§1 calls it "the Aglyn marketplace" and names the End User License Agreement.',
+      '§3(h), new: listing conduct — what an Artifact and its listing may not claim about Aglyn.',
+      '§8.6, new: a paid Artifact, tier or license key must be sold through the Marketplace.',
+      '§13.6, new: how you may use Aglyn’s names and marks.',
+    ],
+  },
+  {
+    version: '2026-08-24.1',
+    changes: [
+      '§13.3: venue moves to Travis County, Texas, and governing law now cites Terms of Service Section 18.6.',
+    ],
+  },
+]
+
+/**
+ * The changes an org has not yet accepted, oldest first.
+ *
+ * Versions are dated strings (`YYYY-MM-DD.n`), so they order as text. An
+ * acceptance of a version this list does not name — one older than the first
+ * entry — gets every entry, which is the honest answer: all of it is new to
+ * them. No acceptance at all gets none, because a first acceptance is of the
+ * whole document, not a set of edits.
+ */
+export function publisherAgreementChangesSince(
+  acceptedVersion: string | null | undefined,
+  currentVersion: string = PUBLISHER_AGREEMENT_VERSION,
+): readonly { version: string; changes: readonly string[] }[] {
+  const accepted = typeof acceptedVersion === 'string' ? acceptedVersion.trim() : ''
+  if (!accepted) return []
+  return PUBLISHER_AGREEMENT_CHANGES.filter(
+    (entry) => entry.version > accepted && entry.version <= currentVersion,
+  )
+}
 
 /**
  * A recorded acceptance: which version, of which exact bytes, by whom, when.

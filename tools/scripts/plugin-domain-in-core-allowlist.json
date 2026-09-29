@@ -406,13 +406,6 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/components/host-components-card.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/interaction-builder-dialog.component.tsx",
       "rules": [
         "plugin-id",
@@ -489,13 +482,6 @@
         "vendor:wistia"
       ],
       "lane": "video-embed-provider"
-    },
-    {
-      "path": "apps/console/components/site-template-card.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "apps/console/components/staff-org-actions.component.tsx",

@@ -39,6 +39,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import usePublisherAgreementGate from './use-publisher-agreement-gate'
 
 /** One kind's publish route, and the words a person reads about it. */
 interface PublishRequest {
@@ -91,12 +92,14 @@ function publishRequestFor(
         endpoint: 'marketplace/publish',
         payload: { hostId, componentId: artifactId },
         noun: 'component',
+        categoryPlaceholder: 'e.g. Hero, Footer, Pricing',
       }
     case 'site':
       return {
         endpoint: 'marketplace/publish-template',
         payload: { hostId },
         noun: 'site template',
+        categoryPlaceholder: 'e.g. Portfolio, Restaurant',
       }
     case 'theme':
       return {
@@ -160,6 +163,14 @@ export function PublishArtifactDialog({
   const [category, setCategory] = useState('')
   const [price, setPrice] = useState('')
   const [busy, setBusy] = useState(false)
+  // The publisher agreement (AGL-3407): offered as the dialog opens when the
+  // org's acceptance is missing or stale, and presented again over the form
+  // if the publish is refused for it — accepting sends the same publish.
+  const { send: sendGated, dialog: agreementDialog } =
+    usePublisherAgreementGate({
+      orgId: artifact?.orgId ?? null,
+      offer: Boolean(target),
+    })
 
   useEffect(() => {
     if (!artifact) return
@@ -173,18 +184,25 @@ export function PublishArtifactDialog({
     if (!target || !name.trim() || busy) return
     setBusy(true)
     try {
-      const response = await authorizedFetch(user, `/api/${target.endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...target.payload,
-          displayName: name.trim(),
-          description: description.trim(),
-          category: category.trim(),
-          priceUsd: Number(price) || 0,
-        }),
+      // Serialized once, so a retry after accepting the agreement sends the
+      // very bytes the first attempt did.
+      const body = JSON.stringify({
+        ...target.payload,
+        displayName: name.trim(),
+        description: description.trim(),
+        category: category.trim(),
+        priceUsd: Number(price) || 0,
       })
-      const payload = await response.json().catch(() => ({}))
+      const { response, payload, declined } = await sendGated(() =>
+        authorizedFetch(user, `/api/${target.endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        }),
+      )
+      // The agreement was shown and closed; it said why, and the form stays
+      // as it was for when they are ready.
+      if (declined) return
       if (!response.ok) {
         // 412 means a setup step is missing (publisher profile, payouts) —
         // actionable, so it reads as a warning rather than an error.
@@ -217,6 +235,7 @@ export function PublishArtifactDialog({
     user,
     enqueueSnackbar,
     onClose,
+    sendGated,
   ])
 
   if (artifact && !target) {
@@ -239,89 +258,96 @@ export function PublishArtifactDialog({
   }
 
   return (
-    <Dialog
-      open={!!target}
-      onClose={busy ? undefined : onClose}
-      maxWidth="xs"
-      fullWidth
-    >
-      <DialogTitle>{`Publish ${target?.noun ?? 'artifact'}`}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            {`Publishes the current published version of this ` +
-              `${target?.noun ?? 'artifact'} so other organizations can ` +
-              'install it. Your site is unaffected.'}
-          </Typography>
-          <TextField
-            autoFocus
+    <>
+      <Dialog
+        open={!!target}
+        onClose={busy ? undefined : onClose}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{`Publish ${target?.noun ?? 'artifact'}`}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              {`Publishes the current published version of this ` +
+                `${target?.noun ?? 'artifact'} so other organizations can ` +
+                'install it. Your site is unaffected.'}
+            </Typography>
+            <TextField
+              autoFocus
+              size="small"
+              label="Listing name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={busy}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              disabled={busy}
+              multiline
+              minRows={2}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Category"
+              placeholder={
+                target?.categoryPlaceholder ?? 'e.g. Marketing, Docs'
+              }
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              disabled={busy}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Price (USD)"
+              placeholder="0 = free"
+              // The minimum price (AGL-2343). Marketplace checkout is a
+              // destination charge, so Stripe's fee comes out of the PLATFORM's
+              // balance while the seller is transferred a fixed share — at $1 the
+              // fee is larger than the whole platform cut. The publish route
+              // refuses anything under the floor, so the field says so before the
+              // publisher gets there and the button holds.
+              error={isBelowMarketplacePriceFloor(price)}
+              helperText={
+                marketplacePriceCostNote(price) ??
+                marketplacePriceFloorHint(
+                  'Paid listings need payouts set up on your marketplace profile.',
+                )
+              }
+              value={price}
+              onChange={(event) =>
+                setPrice(event.target.value.replace(/[^0-9]/g, ''))
+              }
+              disabled={busy}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" onClick={onClose} disabled={busy}>
+            {'Cancel'}
+          </Button>
+          <Button
             size="small"
-            label="Listing name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            disabled={busy}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            disabled={busy}
-            multiline
-            minRows={2}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Category"
-            placeholder={target?.categoryPlaceholder ?? 'e.g. Marketing, Docs'}
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            disabled={busy}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Price (USD)"
-            placeholder="0 = free"
-            // The minimum price (AGL-2343). Marketplace checkout is a
-            // destination charge, so Stripe's fee comes out of the PLATFORM's
-            // balance while the seller is transferred a fixed share — at $1 the
-            // fee is larger than the whole platform cut. The publish route
-            // refuses anything under the floor, so the field says so before the
-            // publisher gets there and the button holds.
-            error={isBelowMarketplacePriceFloor(price)}
-            helperText={
-              marketplacePriceCostNote(price) ??
-              marketplacePriceFloorHint(
-                'Paid listings need payouts set up on your marketplace profile.',
-              )
+            variant="contained"
+            color="primary"
+            disabled={
+              busy || !name.trim() || isBelowMarketplacePriceFloor(price)
             }
-            value={price}
-            onChange={(event) =>
-              setPrice(event.target.value.replace(/[^0-9]/g, ''))
-            }
-            disabled={busy}
-            fullWidth
-          />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button size="small" onClick={onClose} disabled={busy}>
-          {'Cancel'}
-        </Button>
-        <Button
-          size="small"
-          variant="contained"
-          color="primary"
-          disabled={busy || !name.trim() || isBelowMarketplacePriceFloor(price)}
-          onClick={() => void handlePublish()}
-        >
-          {busy ? 'Publishing…' : 'Publish'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+            onClick={() => void handlePublish()}
+          >
+            {busy ? 'Publishing…' : 'Publish'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {agreementDialog}
+    </>
   )
 }
 

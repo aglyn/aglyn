@@ -34,13 +34,15 @@
  */
 
 import { createHash } from 'crypto'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import {
   PUBLISHER_AGREEMENT_BYTES,
+  PUBLISHER_AGREEMENT_CHANGES,
   PUBLISHER_AGREEMENT_SHA256,
   PUBLISHER_AGREEMENT_TITLE,
   PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementChangesSince,
 } from './publisher-agreement'
 
 const snapshotPath = join(
@@ -87,5 +89,69 @@ describe('publisher agreement version (AGL-1678)', () => {
     // the merchant of record.
     expect(text).not.toContain('ATTORNEY REVIEW REQUIRED')
     expect(text).toContain('merchant of record')
+  })
+})
+
+/**
+ * AGL-3407 — a re-acceptance says what changed.
+ *
+ * The dialog that asks an org to accept again lists the edits since the
+ * version it accepted. That list is only worth showing if a bump cannot land
+ * without its entry, and if every entry names a version that was actually
+ * archived — an entry for a version nobody was shown describes nothing.
+ */
+describe('publisher agreement change record (AGL-3407)', () => {
+  it('ends at the version in force, so a bump brings its entry', () => {
+    expect(PUBLISHER_AGREEMENT_CHANGES.at(-1)?.version).toBe(
+      PUBLISHER_AGREEMENT_VERSION,
+    )
+  })
+
+  it('names only archived versions, oldest first, each with a change', () => {
+    const versions = PUBLISHER_AGREEMENT_CHANGES.map((entry) => entry.version)
+    expect([...versions].sort()).toEqual(versions)
+    for (const entry of PUBLISHER_AGREEMENT_CHANGES) {
+      expect(entry.changes.length).toBeGreaterThan(0)
+      expect(
+        existsSync(
+          join(
+            __dirname,
+            'legal',
+            'publisher-agreement',
+            entry.version,
+            'marketplace-publisher-agreement.txt',
+          ),
+        ),
+      ).toBe(true)
+    }
+  })
+
+  it('answers with what is new to the org, and nothing for a first acceptance', () => {
+    expect(publisherAgreementChangesSince(null)).toEqual([])
+    expect(publisherAgreementChangesSince(PUBLISHER_AGREEMENT_VERSION)).toEqual([])
+    expect(
+      publisherAgreementChangesSince('2026-08-18.1').map((entry) => entry.version),
+    ).toEqual(['2026-08-24.1'])
+    // Older than anything recorded: all of it is new to them.
+    expect(publisherAgreementChangesSince('2026-08-14.1')).toEqual(
+      PUBLISHER_AGREEMENT_CHANGES,
+    )
+  })
+
+  it('describes the 2026-08-24.1 edit the snapshots actually show', () => {
+    const read = (version: string) =>
+      readFileSync(
+        join(
+          __dirname,
+          'legal',
+          'publisher-agreement',
+          version,
+          'marketplace-publisher-agreement.txt',
+        ),
+        'utf-8',
+      )
+    expect(read('2026-08-18.1')).toContain('Williamson County, Texas')
+    expect(read('2026-08-24.1')).toContain('Travis County, Texas')
+    expect(read('2026-08-24.1')).toContain('Section 18.6 (governing law')
   })
 })
