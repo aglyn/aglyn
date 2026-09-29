@@ -22,7 +22,7 @@ import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-s
 import ThemeEditor from '../../../../../../../../components/theme-editor/theme-editor.component'
 import ThemeOverridesCard from '../../../../../../../../components/theme-editor/theme-overrides-card.component'
 import ThemePreview from '../../../../../../../../components/theme-editor/theme-preview.component'
-import ThemeSourceCard from '../../../../../../../../components/theme-editor/theme-source-card.component'
+import ThemeLibraryCard from '../../../../../../../../components/theme-editor/theme-library-card.component'
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import { useHostSettingsScope } from '../../../host-settings-scope'
@@ -55,21 +55,15 @@ export default function HostSetupThemeSection() {
   if (!hostHasEmitted) return null
   return (
     <>
-      {/* Where the theme came from, and the ways back (AGL-1020). Above the
-          editor because "am I editing my own theme or a publisher's" changes
-          what every control below it means. */}
+      {/* Which theme this site runs, and the ways to change it (AGL-3404).
+          Above the editor because the picked theme is what every control
+          below edits ON TOP OF — never in place. */}
       <div style={{ marginBottom: 24 }}>
-        <ThemeSourceCard
-          hostId={hostId}
-          theme={data?.theme}
-          installedFrom={data?.themeInstalledFrom}
-          replaced={data?.themeReplaced}
-        />
+        <ThemeLibraryCard hostId={hostId} host={data} />
       </div>
       {/* "What have I changed?" is a read of the stored patch (AGL-1021), so
-          it cannot disagree with what is applied. Only meaningful for an
-          installed theme — a site's own theme has no publisher's version to
-          differ from. */}
+          it cannot disagree with what is applied — for whichever theme is
+          picked, since every edit is a patch on it (AGL-3404). */}
       <div style={{ marginBottom: 24 }}>
         <ThemeOverridesCard
           hostId={hostId}

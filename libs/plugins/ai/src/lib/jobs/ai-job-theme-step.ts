@@ -171,7 +171,8 @@ export function aiJobThemeMode(inputs: AiJob['inputs'] | undefined): AiThemeProp
 const SOURCE_WORDS: Record<HostThemeSource, string> = {
   installed:
     "an installed marketplace theme; a change is stored as the site's own edits on top of it",
-  custom: "the site's own theme",
+  preset: "a built-in theme; a change is stored as the site's own edits on top of it",
+  custom: "one of the site's own saved themes; a change is stored as edits on top of it",
   default: "the platform's default theme; a change stores only the values it sets",
 }
 

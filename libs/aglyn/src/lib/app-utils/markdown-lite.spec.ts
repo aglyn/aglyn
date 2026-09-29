@@ -1171,7 +1171,7 @@ describe('heading-anchor coverage across the markdown renderers (AGL-1162)', () 
     // like that one fails here instead of quietly emptying the sweep.
     const files = renderers.map((entry) => entry.file)
     expect(files).toContain(
-      'libs/plugins/mui/src/lib/components/collection.tsx',
+      'libs/plugins/mui/src/lib/components/collection-entry-body.tsx',
     )
     expect(files).toContain(
       'apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx',
@@ -1268,7 +1268,7 @@ describe('link-reference coverage across the markdown renderers (AGL-3118)', () 
     expect(files).toEqual(
       expect.arrayContaining([
         'libs/plugins/mui/src/lib/components/markdown.tsx',
-        'libs/plugins/mui/src/lib/components/collection.tsx',
+        'libs/plugins/mui/src/lib/components/collection-entry-body.tsx',
         'apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx',
       ]),
     )

@@ -29,6 +29,10 @@ import {
   readThemeOverride,
   type ThemeOverrideEntry,
 } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import {
+  hasThemeEdits,
+  readThemeSelection,
+} from '@aglyn/aglyn/app-utils/theme-library'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
@@ -97,9 +101,10 @@ function ValueCell(props: { value: unknown }) {
  * the property the override layer exists to give: the list cannot disagree with
  * what is actually applied, because it IS what is applied.
  *
- * Only shown for an installed theme. A site that built its own theme has no
- * publisher's version to differ from — every value is theirs, so "what have I
- * changed" would be the whole theme and the question is not meaningful.
+ * Shown for whichever theme the site picked once it carries an edit, and
+ * always for an installed theme (AGL-3404): every edit is a patch on the picked
+ * theme, never a change to it, so "what have I changed" has an answer for a
+ * built-in theme or a saved one exactly as it has for a publisher's.
  */
 export function ThemeOverridesCard(props: {
   hostId: string
@@ -107,6 +112,7 @@ export function ThemeOverridesCard(props: {
     theme?: HostTheme | null
     themeOverride?: unknown
     themeInstalledFrom?: { sha256?: string | null; listingId?: string } | null
+    themeSelection?: unknown
   } | null
   /**
    * Writes `themeOverride` wholesale — never `merge: true` (see below).
@@ -126,6 +132,7 @@ export function ThemeOverridesCard(props: {
   const entries = useMemo(() => describeThemeOverride(host), [host])
   const stale = !isOverrideForCurrentTheme(host)
   const installed = Boolean(host?.themeInstalledFrom?.listingId)
+  const themeName = readThemeSelection(host).name
 
   /**
    * Per-field reset: drop ONE path from the patch and store the rest.
@@ -186,18 +193,17 @@ export function ThemeOverridesCard(props: {
     try {
       const response = await authorizedFetch(
         user,
-        '/api/marketplace/install-theme',
+        '/api/hosts/theme',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostId, action: 'clear-overrides' }),
+          body: JSON.stringify({ hostId, action: 'restore' }),
         },
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        // Clearing overrides rides `install-theme`, so an installs lock
-        // refuses it (AGL-1532). "That did not work" is a shrug; the lock
-        // has an actual reason and it belongs on screen.
+        // A lockdown refuses it (AGL-1532). "That did not work" is a shrug;
+        // the lock has an actual reason and it belongs on screen.
         const locked = parseLockdownRefusal(response.status, payload)
         if (locked) {
           return void enqueueSnackbar(lockdownRefusalText(locked), {
@@ -210,7 +216,7 @@ export function ThemeOverridesCard(props: {
           allowDuplicate: true,
         })
       }
-      enqueueSnackbar('Your changes are cleared — this is the theme as published.', {
+      enqueueSnackbar(`Your changes are cleared — this is ${themeName} as picked.`, {
         variant: 'success',
         persist: false,
       })
@@ -223,17 +229,17 @@ export function ThemeOverridesCard(props: {
     } finally {
       setBusy(false)
     }
-  }, [hostId, user, enqueueSnackbar])
+  }, [hostId, user, enqueueSnackbar, themeName])
 
-  if (!installed) return null
+  if (!installed && !hasThemeEdits(host)) return null
 
   return (
     <CardDisplay
       header={'What you have changed'}
       help={docsHelp('themeBuilder', {
         excerpt:
-          'Your changes on top of an installed theme, stored separately so ' +
-          'taking an update keeps them.',
+          'Your changes on top of the picked theme, stored separately so the ' +
+          'theme itself is never changed.',
       })}
       contentGutterX
       contentGutterY
@@ -250,7 +256,7 @@ export function ThemeOverridesCard(props: {
 
         {!entries.length ? (
           <Typography variant="body2" color="text.secondary">
-            {'Nothing — this site is running the theme exactly as its ' +
+            {`Nothing — this site is running ${themeName} exactly as its ` +
               'publisher shipped it. Anything you change below is stored as ' +
               'your change on top, so taking an update keeps it.'}
           </Typography>
@@ -258,9 +264,11 @@ export function ThemeOverridesCard(props: {
           <>
             <Typography variant="body2" color="text.secondary">
               {`${entries.length} value${entries.length === 1 ? '' : 's'} ` +
-                `${entries.length === 1 ? 'differs' : 'differ'} from the ` +
-                'published theme. Taking an update keeps these and applies ' +
-                'the rest.'}
+                `${entries.length === 1 ? 'differs' : 'differ'} from ` +
+                `${themeName}.` +
+                (installed
+                  ? ' Taking an update keeps these and applies the rest.'
+                  : '')}
             </Typography>
             <ScrollTable size="small">
               <TableHead>
@@ -317,7 +325,7 @@ export function ThemeOverridesCard(props: {
                 disabled={busy}
                 onClick={clearAll}
               >
-                {'Reset everything to the published theme'}
+                {`Reset everything to ${themeName}`}
               </Button>
             </Box>
           </>

@@ -54,6 +54,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { listingPath } from '../model/marketplace-paths'
+import usePublisherAgreementGate from './use-publisher-agreement-gate'
 
 // Mirrors the server taxonomy; the server re-validates (the console cannot
 // import the marketplace plugin's model — scope:app may not reach aglyn:addons).
@@ -364,6 +365,11 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
   const [problems, setProblems] = useState<PublishProblem[]>([])
   const [missingAttestations, setMissingAttestations] = useState<string[]>([])
   const [agreementProblem, setAgreementProblem] = useState('')
+  // The publisher agreement (AGL-3407), asked for HERE rather than on the
+  // Publisher Profile tab: offered as the form opens when the org's
+  // acceptance is missing or stale, and presented again if the publish is
+  // refused for it — accepting sends the same bundle and fields again.
+  const agreement = usePublisherAgreementGate({ orgId, offer: true })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const set = <K extends keyof PublishDraft>(key: K) =>
@@ -500,40 +506,40 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
     setBusy(true)
     try {
       const bundle = await fileToBase64(bundleFile)
-      const response = await authorizedFetch(
-        user,
-        '/api/marketplace/publish-plugin',
-        {
+      // Serialized once: a retry after the agreement is accepted sends the
+      // bytes this attempt did, not whatever the form holds by then.
+      const body = JSON.stringify({
+        orgId,
+        bundle,
+        manifest,
+        displayName:
+          draft.displayName.trim() ||
+          String((manifest as { name?: unknown }).name ?? '').trim(),
+        description: draft.description.trim(),
+        category: draft.category || undefined,
+        changelog: draft.changelog.trim(),
+        // A private plugin has no buyers — its only audience already owns
+        // it — so it publishes free regardless of what the field held
+        // before the publisher switched visibility.
+        priceUsd:
+          draft.visibility === 'private'
+            ? 0
+            : Math.max(0, Math.round(Number(draft.priceUsd) || 0)),
+        visibility: draft.visibility,
+        attestation: draft.attested,
+        ...(draft.readme.trim() ? { readme: draft.readme.trim() } : {}),
+        ...(draft.license.trim() ? { license: draft.license.trim() } : {}),
+        ...(draft.repositoryUrl.trim()
+          ? { repositoryUrl: draft.repositoryUrl.trim() }
+          : {}),
+      })
+      const { response, payload, declined } = await agreement.send(() =>
+        authorizedFetch(user, '/api/marketplace/publish-plugin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orgId,
-            bundle,
-            manifest,
-            displayName:
-              draft.displayName.trim() ||
-              String((manifest as { name?: unknown }).name ?? '').trim(),
-            description: draft.description.trim(),
-            category: draft.category || undefined,
-            changelog: draft.changelog.trim(),
-            // A private plugin has no buyers — its only audience already owns
-            // it — so it publishes free regardless of what the field held
-            // before the publisher switched visibility.
-            priceUsd:
-              draft.visibility === 'private'
-                ? 0
-                : Math.max(0, Math.round(Number(draft.priceUsd) || 0)),
-            visibility: draft.visibility,
-            attestation: draft.attested,
-            ...(draft.readme.trim() ? { readme: draft.readme.trim() } : {}),
-            ...(draft.license.trim() ? { license: draft.license.trim() } : {}),
-            ...(draft.repositoryUrl.trim()
-              ? { repositoryUrl: draft.repositoryUrl.trim() }
-              : {}),
-          }),
-        },
+          body,
+        }),
       )
-      const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (Array.isArray(payload?.problems)) {
           setProblems(
@@ -555,10 +561,11 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
         if (Array.isArray(payload?.missingAttestations)) {
           setMissingAttestations(payload.missingAttestations)
         }
-        // A 412 with an `agreement` is a precondition on the ORG (AGL-1077),
-        // fixed on another page — held as an alert, not a toast.
-        if (payload?.agreement) {
-          setAgreementProblem(String(payload.error ?? ''))
+        // The agreement was presented and closed without accepting
+        // (AGL-3407). Held as an alert with the way back to it, not a toast:
+        // the dialog already said why, and the form keeps everything.
+        if (declined) {
+          return void setAgreementProblem(String(payload.error ?? ''))
         }
         // A rejected subject names its field (AGL-1076), so put the message
         // where the value is rather than in a banner about a form.
@@ -661,8 +668,18 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       ) : null}
 
       {agreementProblem ? (
-        <Alert severity="warning">{agreementProblem}</Alert>
+        <Alert
+          severity="warning"
+          action={
+            <Button color="inherit" size="small" onClick={agreement.review}>
+              {'Review the agreement'}
+            </Button>
+          }
+        >
+          {agreementProblem}
+        </Alert>
       ) : null}
+      {agreement.dialog}
 
       <CardDisplay
         header={isUpdate ? 'The new bundle and manifest' : 'Bundle and manifest'}

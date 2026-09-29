@@ -99,7 +99,23 @@ export const listItem = () => import('./components/list-item')
 export const listItemText = () => import('./components/list-item-text')
 export const blocks = () => import('./components/blocks')
 export const dataTable = () => import('./components/data-table')
-export const collection = () => import('./components/collection')
+// The collection family is one module per element (AGL-3401): a page placing
+// an entries list does not download the entry body's markdown renderer, the
+// author cards' platform marks or the search box.
+export const collectionEntries = () => import('./components/collection-entries')
+export const collectionEntryBody = () =>
+  import('./components/collection-entry-body')
+export const collectionRelated = () => import('./components/collection-related')
+export const collectionShare = () => import('./components/collection-share')
+export const collectionEntryMeta = () =>
+  import('./components/collection-entry-meta')
+export const collectionEntryAuthor = () =>
+  import('./components/collection-entry-author')
+export const collectionAuthorProfile = () =>
+  import('./components/collection-author-profile')
+export const collectionCategories = () =>
+  import('./components/collection-categories')
+export const collectionSearch = () => import('./components/collection-search')
 export const video = () => import('./components/video')
 export const languageSwitcher = () => import('./components/language-switcher')
 export const reusableInstance = () => import('./components/reusable-instance')

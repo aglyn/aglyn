@@ -20,6 +20,34 @@ and previewed live as you edit.
 Go to **Setup → Theme editor**. Changes render in a **live preview** so you see them
 immediately.
 
+## Choose a theme
+
+The **Theme** card at the top of the page picks the theme your site runs:
+
+- **Built-in** — **Material UI (default)**, **Bootstrap**, **Minimal** (neutral, in the style
+  of shadcn/ui) and **Material 3**, plus any your plugins add. Each one restyles components
+  (buttons, inputs, cards, tabs, switches, alerts) as well as colors and type, in light and
+  dark.
+- **Your themes** — themes you saved from this site.
+- **From the marketplace** — themes you installed.
+
+Choosing a theme shows a **preview** first, in light and dark; **Use this theme** applies it
+to the live site.
+
+**Your edits never change the theme itself.** Everything you set in the editor below is
+stored as your edits *on top of* the theme you picked, so:
+
+- **Restore** drops your edits and brings the theme back exactly as it was.
+- **Save as custom theme** saves the result — the theme plus your edits — as a new theme of
+  your own under **Your themes** and switches to it. The theme you started from stays in the
+  list, unchanged.
+- **Update** (on one of your own themes) folds your edits into that theme.
+- **Switching themes keeps your edits.** Each theme remembers the edits you made to it, and
+  they come back when you pick it again. Themes marked **Edited** in the list have some.
+
+Your **Dark scheme** setting belongs to the site, not the theme, so it stays as you set it
+whichever theme you pick.
+
 ## Set colors and fonts
 
 - Choose your **palette** and **typography**.

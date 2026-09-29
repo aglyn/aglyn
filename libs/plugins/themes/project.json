@@ -1,0 +1,30 @@
+{
+  "name": "plugins-themes",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/themes/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/themes",
+        "main": "libs/plugins/themes/src/index.ts",
+        "tsConfig": "libs/plugins/themes/tsconfig.lib.json",
+        "assets": ["libs/plugins/themes/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/themes"],
+      "options": {
+        "jestConfig": "libs/plugins/themes/jest.config.ts"
+      }
+    }
+  }
+}

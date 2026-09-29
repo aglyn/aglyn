@@ -77,6 +77,8 @@ const LOCKABLE_FETCH = [
   '/api/marketplace/install',
   '/api/marketplace/update-artifact',
   '/api/marketplace/checkout',
+  // The theme library (AGL-3404): picking, saving and restoring a theme.
+  '/api/hosts/theme',
   '/api/ai/assist',
   '/api/${endpoint}',
 ]

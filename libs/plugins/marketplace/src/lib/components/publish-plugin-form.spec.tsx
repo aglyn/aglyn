@@ -37,8 +37,13 @@ import {
  * are the two failures this guards against.
  */
 
+// The org's publisher profile as the agreement gate reads it (AGL-3407);
+// undefined until a test says otherwise, so nothing is offered on open.
+let mockProfile: Record<string, unknown> | undefined
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useUser: () => ({ data: { getIdToken: async () => 'token' } }),
+  useUser: () => ({ data: { uid: 'me', getIdToken: async () => 'token' } }),
+  useFirestore: () => ({}),
+  useFirestoreDoc: () => ({ data: mockProfile, status: 'success' }),
 }))
 
 // The README uses the shared MarkdownField, which offers a DAM picker
@@ -137,6 +142,7 @@ describe('PublishPluginForm (AGL-969 / AGL-1076 / AGL-1078)', () => {
     ;(global as { fetch?: unknown }).fetch = jest.fn()
     mockPush.mockClear()
     window.localStorage.clear()
+    mockProfile = undefined
   })
 
   it('renders every attestation item', () => {
@@ -250,6 +256,70 @@ describe('PublishPluginForm (AGL-969 / AGL-1076 / AGL-1078)', () => {
         screen.getByText(/already has a published version/),
       ).toBeTruthy(),
     )
+  })
+
+  /**
+   * The publisher agreement, asked for on this page (AGL-3407) rather than by
+   * a sentence naming the Publisher Profile tab. Accepting sends the same
+   * bundle and fields again — the bundle is the one thing a draft cannot
+   * restore, so losing the submission would mean choosing it again.
+   */
+  it('presents a refused agreement here and publishes the same bundle once it is accepted', async () => {
+    const publishes: string[] = []
+    const refusal = {
+      error: 'Your organization has not accepted the Marketplace Publisher Agreement.',
+      agreement: { required: 'x', accepted: null, state: 'none', orgId: 'org-1' },
+    }
+    const reply = (status: number, body: unknown) => ({
+      ok: status < 400,
+      status,
+      json: async () => body,
+    })
+    const fetchMock = jest.fn(async (url: string, init?: { body?: string }) => {
+      if (url.startsWith('/api/orgs/members')) {
+        return reply(200, { members: [{ $id: 'me', role: 'admin' }] })
+      }
+      if (url === '/api/marketplace/publisher-profile') return reply(200, { ok: true })
+      publishes.push(String(init?.body))
+      return publishes.length === 1
+        ? reply(412, refusal)
+        : reply(200, { version: '1.0.0', listingId: 'listing-9' })
+    })
+    ;(global as { fetch?: unknown }).fetch = fetchMock
+    open()
+    chooseBundle()
+    fillRepository()
+    fireEvent.change(screen.getByPlaceholderText(/"id": "acme-widget"/), {
+      target: {
+        value: JSON.stringify({
+          id: 'acme-widget',
+          name: 'Widget',
+          version: '1.0.0',
+          entry: 'index.js',
+        }),
+      },
+    })
+    for (const id of ALWAYS_REQUIRED) tick(id)
+    fireEvent.click(publishButton())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Accept and publish' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalled())
+    expect(publishes).toHaveLength(2)
+    expect(publishes[1]).toBe(publishes[0])
+    expect(JSON.parse(publishes[1]).bundle).toBeTruthy()
+  })
+
+  it('offers the agreement as the form opens when the acceptance is stale', async () => {
+    mockProfile = { handle: 'acme', publisherAgreement: { version: '2026-08-18.1' } }
+    ;(global as { fetch?: unknown }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ members: [] }),
+    })
+    open()
+    expect(
+      await screen.findByText('What changed since version 2026-08-18.1'),
+    ).toBeTruthy()
   })
 
   /**

@@ -57,18 +57,12 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Typography,
 } from '@mui/material'
 import DocumentPresenceChips from './document-presence-chips.component'
 import PageHoldChips from './page-holds/page-hold-chips.component'
 import usePageHolds from './page-holds/use-page-holds'
 import usePresenceSummary from '../hooks/use-presence-summary'
 import * as Aglyn from '@aglyn/aglyn'
-import {
-  isBelowMarketplacePriceFloor,
-  marketplacePriceCostNote,
-  marketplacePriceFloorHint,
-} from '@aglyn/aglyn'
 import { collection, doc, setDoc, updateDoc } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
@@ -96,12 +90,12 @@ import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   COMPONENT_LIST_HEADERS,
   COMPONENT_LIST_QUERY,
 } from '../utils/artifact-list-queries'
+import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from './templates/save-as-template-dialog.component'
@@ -204,7 +198,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       }),
   })
   const { confirm } = useConfirmationContext()
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { org, orgId, ready: orgReady } = useCurrentOrg()
   /**
    * The list PAGES, over an ordered walk (AGL-2501).
    *
@@ -329,62 +323,28 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     icon?: Aglyn.ReusableComponentIcon
   } | null>(null)
 
-  // Marketplace publish (AGL-44): posts to the server-side publish API —
-  // sanitization/allowlisting happen there; clients cannot create listings.
   const { data: user } = useUser()
   const router = useRouter()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const [publisher, setPublisher] = useState<{
-    id: string
-    name: string
-    description: string
-    category: string
-    price: string
-    busy?: boolean
-  } | null>(null)
+  /*
+   * Publishing a component (AGL-44) is the marketplace's, drawn through the
+   * `hostArtifactPublish` zone (AGL-3080) like the layouts page's: this card
+   * says it has a component, which site holds it and what it is called, and
+   * the widget owns the route, the form and the publisher agreement it may
+   * need to ask for (AGL-3407). The menu entry is left out when nothing draws
+   * the zone, so a workspace without a marketplace is not offered a publish
+   * that opens nothing.
+   */
+  const [publishTarget, setPublishTarget] =
+    useState<Aglyn.ConsolePublishableArtifact | null>(null)
+  const { widgets: publishWidgets } = useSlotWidgets([
+    Aglyn.CONSOLE_WIDGET_SLOTS.hostArtifactPublish,
+  ])
+  const canPublish = publishWidgets.length > 0
   // Save as template (AGL-668) — same dialog as screens and layouts.
   const [saveTemplateFor, setSaveTemplateFor] =
     useState<SaveAsTemplateSource | null>(null)
-
-  const handlePublishConfirm = useCallback(async () => {
-    if (!publisher || !publisher.name.trim() || publisher.busy) return
-    setPublisher((prev) => (prev ? { ...prev, busy: true } : prev))
-    try {
-      const response = await authorizedFetch(user, '/api/marketplace/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hostId,
-          componentId: publisher.id,
-          displayName: publisher.name.trim(),
-          description: publisher.description.trim(),
-          category: publisher.category.trim(),
-          priceUsd: Number(publisher.price) || 0,
-        }),
-      })
-      const payload = await response.json()
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Publish failed', {
-          variant: response.status === 412 ? 'warning' : 'error',
-          allowDuplicate: true,
-        })
-      }
-      setPublisher(null)
-      enqueueSnackbar(`Published v${payload.version} to the marketplace`, {
-        variant: 'success',
-        persist: false,
-      })
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    } finally {
-      setPublisher((prev) => (prev ? { ...prev, busy: false } : prev))
-    }
-  }, [publisher, user, hostId, enqueueSnackbar])
 
   const handleSave = useCallback(async () => {
     if (!editor || !editor.name.trim()) return
@@ -761,19 +721,26 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                   },
                 }),
             },
-            {
-              key: 'publish',
-              label: 'Publish to marketplace',
-              icon: <MdiIcon path={mdiStorefrontOutline.path} size={0.8} />,
-              onClick: () =>
-                setPublisher({
-                  id: definition.$id,
-                  name: definition.displayName ?? '',
-                  description: definition.description ?? '',
-                  category: '',
-                  price: '',
-                }),
-            },
+            ...(canPublish
+              ? [
+                  {
+                    key: 'publish',
+                    label: 'Publish to marketplace',
+                    icon: (
+                      <MdiIcon path={mdiStorefrontOutline.path} size={0.8} />
+                    ),
+                    onClick: () =>
+                      setPublishTarget({
+                        kind: 'component',
+                        hostId,
+                        orgId: orgId ?? null,
+                        artifactId: definition.$id,
+                        displayName: definition.displayName ?? '',
+                        description: definition.description ?? '',
+                      }),
+                  },
+                ]
+              : []),
             {
               key: 'delete',
               label: 'Delete',
@@ -927,104 +894,11 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog
-        open={Boolean(publisher)}
-        onClose={() => (publisher?.busy ? null : setPublisher(null))}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{'Publish to marketplace'}</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            {'Publishes a snapshot as a public listing under your ' +
-              'marketplace profile. Re-publishing releases a new version; ' +
-              'sites that installed it choose when to update.'}
-          </Typography>
-          <TextField
-            label="Listing name"
-            value={publisher?.name ?? ''}
-            onChange={(event) =>
-              setPublisher((prev) =>
-                prev ? { ...prev, name: event.target.value } : prev,
-              )
-            }
-            size="small"
-            autoFocus
-          />
-          <TextField
-            label="Description"
-            value={publisher?.description ?? ''}
-            onChange={(event) =>
-              setPublisher((prev) =>
-                prev ? { ...prev, description: event.target.value } : prev,
-              )
-            }
-            size="small"
-            multiline
-            minRows={2}
-          />
-          <TextField
-            label="Category"
-            placeholder="e.g. Hero, Footer, Pricing"
-            value={publisher?.category ?? ''}
-            onChange={(event) =>
-              setPublisher((prev) =>
-                prev ? { ...prev, category: event.target.value } : prev,
-              )
-            }
-            size="small"
-          />
-          <TextField
-            label="Price (USD)"
-            placeholder="0 = free"
-            // The minimum paid price (AGL-2343): marketplace checkout is a
-            // destination charge, so Stripe's fee is debited from the PLATFORM
-            // and at $1 it exceeds the whole platform cut. The publish route
-            // refuses anything under the floor — this field says so first.
-            error={isBelowMarketplacePriceFloor(publisher?.price)}
-            helperText={
-              marketplacePriceCostNote(publisher?.price) ??
-              marketplacePriceFloorHint(
-                'Paid listings need payouts set up on your marketplace profile.',
-              )
-            }
-            value={publisher?.price ?? ''}
-            onChange={(event) =>
-              setPublisher((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      price: event.target.value.replace(/[^0-9]/g, ''),
-                    }
-                  : prev,
-              )
-            }
-            size="small"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button
-            disabled={publisher?.busy}
-            onClick={() => setPublisher(null)}
-          >
-            {'Cancel'}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={
-              !publisher?.name.trim() ||
-              publisher?.busy ||
-              isBelowMarketplacePriceFloor(publisher?.price)
-            }
-            onClick={handlePublishConfirm}
-          >
-            {publisher?.busy ? 'Publishing…' : 'Publish'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <PluginWidgetSlot
+        slot={Aglyn.CONSOLE_WIDGET_SLOTS.hostArtifactPublish}
+        artifact={publishTarget}
+        onClose={() => setPublishTarget(null)}
+      />
       <SaveAsTemplateDialog
         hostId={hostId}
         source={saveTemplateFor}

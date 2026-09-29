@@ -403,7 +403,10 @@ describe("plugins: a server route that writes a site's theme drops its pages", (
   it('install-theme drops after every action that writes', () => {
     const source =
       writers.find(({ path }) => path.endsWith('/install-theme.ts'))?.source ?? ''
-    const writes = source.match(/await hostRef\.set\(/g) ?? []
+    // A write is a direct `hostRef.set` or a theme-library action, which
+    // writes the host in its own transaction (AGL-3404).
+    const writes =
+      source.match(/await hostRef\.set\(|runThemeLibraryAction\(tx, hostRef/g) ?? []
     const drops = source.match(/await repaintLiveSite\(/g) ?? []
     expect(writes.length).toBeGreaterThanOrEqual(4)
     expect(drops.length).toBe(writes.length)

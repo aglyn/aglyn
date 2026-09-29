@@ -17,8 +17,9 @@ the marketplace side.
 1. **Publisher profile** (Marketplace → Profile) — your handle and
    display name appear on every listing. Publishing is **organization-owned**:
    the listing belongs to your organization, not your personal account.
-2. **Publisher agreement** (Marketplace → Profile) — accept it once, on
-   behalf of the organization. See
+2. **Publisher agreement** — accept it once, on behalf of the
+   organization. It is offered wherever you start a publish, and it is
+   always on Marketplace → Profile. See
    [The publisher agreement](#the-publisher-agreement).
 3. **Plan**: publishing requires a Pro plan.
 4. **Payouts** (paid listings only): complete Stripe Connect onboarding
@@ -28,10 +29,19 @@ the marketplace side.
 ## The publisher agreement
 
 Your **organization** — not you personally — is the publishing party, so
-the organization accepts the **Marketplace Publisher Agreement** once,
-from **Marketplace → Profile**. Only an owner or admin can accept it,
-because only they can bind the organization, and we record who accepted
-it and when.
+the organization accepts the **Marketplace Publisher Agreement** once.
+Only an owner or admin can accept it, because only they can bind the
+organization, and we record who accepted it and when.
+
+You do not have to go looking for it. When your organization has not
+accepted the current version, the agreement opens in a dialog wherever
+you are publishing — the plugin publish page, or the publish dialog for a
+component, layout, site template, theme, email template or dataset
+schema — as soon as you open it, and again if you submit without
+accepting. Accepting there records the same acceptance as
+**Marketplace → Profile** does, and the publish you started then goes
+ahead with everything you filled in. If you are not an owner or admin,
+the dialog names the people in your organization who can accept it.
 
 You can read the agreement in full at
 [aglyn.com/legal/marketplace-publisher-agreement](https://aglyn.com/legal/marketplace-publisher-agreement),
@@ -60,7 +70,9 @@ collect and remit sales tax — while refunds, chargebacks and support on
 your artifacts stay with you. Read the full agreement before accepting.
 
 **If we change the agreement, publishing stops** until someone who can
-bind your organization reads and accepts the new version. An older
+bind your organization reads and accepts the new version. The dialog lists
+what changed since the version your organization accepted, so you can read
+the edited sections rather than the whole document again. An older
 acceptance is never carried forward — that is the whole reason the
 agreement is versioned. Nothing already published is affected, and
 reviewers can see which version each publisher is under.

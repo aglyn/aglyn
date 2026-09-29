@@ -54,9 +54,9 @@
   ],
   "duplication": {
     "name": "a page that places every mui element",
-    "why": "Module code downloaded more than once, raw bytes, by a page that places every element of the mui plugin: the every-page chunks, then every dynamic import written under the directory below, followed transitively. Sibling imports each carry the modules their shared parent has not loaded, so sixty element imports written side by side in plugin.ts had pages fetching MUI's Button eight times and 30% of their module code as copies (AGL-3401). The elements now load through element-tier.ts, and this number is what says whether the copies are coming back.",
+    "why": "Module code downloaded more than once, raw bytes, by a page that places every element of the mui plugin: the every-page chunks, then every dynamic import written under the directory below, followed transitively. Sibling imports each carry the modules their shared parent has not loaded, so sixty element imports written side by side in plugin.ts had pages fetching MUI's Button eight times and 30% of their module code as copies (AGL-3401). The elements now load through element-tier.ts, and this number is what says whether the copies are coming back. It rose from 178.7 KB to 212.0 KB when the collection family became one module per element (AGL-3401), by design: this page places all nine, a real page places the two to five an article or a listing uses, and the copies are what siblings share — Chip in Entry Meta, Related Posts and the search box, the search box in Entries and Search, the author links in both author cards. A press page placing Entries alone went from 464.3 KB to 439.2 KB, an article from 464.3 KB to 451.4 KB.",
     "follows": "libs/plugins/mui/src/lib/",
-    "baselineBytes": 188257,
-    "budgetBytes": 198656
+    "baselineBytes": 217093,
+    "budgetBytes": 228352
   }
 }

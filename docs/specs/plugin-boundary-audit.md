@@ -449,7 +449,7 @@ saying the boundary bothers him.
 | piece | where it lives today |
 | --- | --- |
 | canvas element | `libs/plugins/mui/src/lib/components/search-box.tsx`, id `searchBox`, `category: FORMS`, mui bundle line 134 |
-| second element | `Collection.CollectionSearch` in `libs/plugins/mui/src/lib/components/collection.tsx` |
+| second element | `CollectionSearch` in `libs/plugins/mui/src/lib/components/collection-search.tsx` |
 | tenant page | `apps/tenant/app/[host]/[scheme]/search/page.tsx` + `search-results.component.tsx` |
 | server logic | `apps/tenant/utils/search-content.ts` (309 lines) and `search-facets.ts` |
 | console surface | **none** |

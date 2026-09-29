@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.216 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.215...v1.0.0-beta.216)
+
+### Added
+
+- **themes:** built-in Bootstrap, Minimal and Material 3 themes in their own plugin ([AGL-3405](https://linear.app/aglyn/issue/AGL-3405))
+- **marketplace:** ask for the publisher agreement in a dialog where the publish was ([AGL-3407](https://linear.app/aglyn/issue/AGL-3407))
+- **theme:** a theme library to pick, save and restore; edits never touch the theme ([AGL-3404](https://linear.app/aglyn/issue/AGL-3404))
+
+### Fixed
+
+- **mui:** the search box imports its matcher through a module of its own ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+- **theme:** the host-write sweeps know the theme library's writes and its field ([AGL-3404](https://linear.app/aglyn/issue/AGL-3404))
+- **marketplace:** the agreement change list reads the platform, not a brand literal ([AGL-3407](https://linear.app/aglyn/issue/AGL-3407))
+
+### Performance
+
+- **mui:** each collection element is its own module, loaded when placed ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+- **mui:** collection search fetches its matcher on the first keystroke ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **tenant:** the image-sink inventory declares the built-in themes' Paper overlay reset ([AGL-3405](https://linear.app/aglyn/issue/AGL-3405), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725))
+
+</details>
+
 ## v1.0.0-beta.215 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/66daf34a5...v1.0.0-beta.215)

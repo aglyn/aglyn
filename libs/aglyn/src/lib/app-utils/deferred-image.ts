@@ -57,9 +57,9 @@
  * The set only works if it is the same set everywhere: an image with `lazy`
  * but no `fetchpriority` outranks an image with both, so a partially-applied
  * hint re-creates a smaller version of the same inversion. Two of the three
- * sites in `collection.tsx` were exactly that — `loading="lazy"` and nothing
- * else — which is why this is a named thing to spread rather than a habit to
- * remember.
+ * sites in the collection elements were exactly that — `loading="lazy"` and
+ * nothing else — which is why this is a named thing to spread rather than a
+ * habit to remember.
  *
  * Spread it, never mutate it:
  *

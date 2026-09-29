@@ -24,6 +24,7 @@ import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { toCount } from '../utils/to-count'
 
 // Component ids are persisted in screen documents; never rename.
 export const IMAGE_LIST_ID: Aglyn.ComponentId = 'muiImageList'
@@ -52,13 +53,9 @@ export interface ImageListItemElementProps {
   children?: ReactNode
 }
 
-/** Number fields round-trip as strings; MUI's grid math needs numbers. */
-export function toCount(value: unknown, fallback?: number): number | undefined {
-  if (value == null || value === '') return fallback
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed < 0) return fallback
-  return Math.round(parsed)
-}
+// Still exported here, where it was first written: the package's
+// `components/image-list` subpath has always offered it.
+export { toCount }
 
 /**
  * Image list (https://mui.com/material-ui/react-image-list/): a masonry

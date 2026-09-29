@@ -19,8 +19,11 @@ import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
+  hostThemeSource,
+  resolveSiteTheme,
   themeArtifactContent,
   validateThemeForPublish,
+  type ThemeHostDocument,
 } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -116,10 +119,19 @@ export const publishThemeHandler: PluginApiHandler = async (req, res) => {
     })
     if (refusal) return res.status(refusal.status).json(refusal.body)
 
-    // The SITE'S OWN theme, before any resolution against a marketplace base or
-    // the site's overrides. Publishing the resolved view would bake this site's
-    // private customisations into an artifact other people install.
-    const theme = themeArtifactContent((hostSnapshot.get('theme') ?? {}) as any)
+    // What this site DESIGNED. On an installed theme that is the theme as
+    // stored, never the resolved view: the edits there are this site's private
+    // customisations of someone else's artifact, and publishing them would
+    // bake them into a listing other people install. Every other theme is the
+    // site's own work, and since every edit is an override on the picked theme
+    // (AGL-3404) the work IS the resolved view — the stored copy of a built-in
+    // theme holds none of it.
+    const host = (hostSnapshot.data() ?? {}) as ThemeHostDocument
+    const theme = themeArtifactContent(
+      hostThemeSource(host) === 'installed'
+        ? (host.theme ?? {})
+        : (resolveSiteTheme(host) ?? {}),
+    )
     const validation = validateThemeForPublish(theme)
     if (!validation.ok) {
       return res.status(422).json({

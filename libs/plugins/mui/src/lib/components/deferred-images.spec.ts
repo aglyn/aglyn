@@ -61,7 +61,7 @@ import * as ts from 'typescript'
  * `lazy` on its own does NOT satisfy it, and that is the point rather than
  * pedantry: a `lazy` image at default priority still outranks a `lazy` image
  * at `low`, so a partial hint re-creates a smaller version of the inversion.
- * Two sites in `collection.tsx` were exactly that.
+ * Two sites in the collection elements were exactly that.
  */
 
 /** Repo root, from this file's location. */
@@ -83,7 +83,13 @@ const ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
  */
 const TENANT_IMAGE_SOURCES = [
   'libs/plugins/mui/src/lib/components/image.tsx',
-  'libs/plugins/mui/src/lib/components/collection.tsx',
+  // The collection family, one module per element since AGL-3401: every one
+  // of them that draws an `<img>`.
+  'libs/plugins/mui/src/lib/components/collection-entry-body.tsx',
+  'libs/plugins/mui/src/lib/components/collection-related.tsx',
+  'libs/plugins/mui/src/lib/components/collection-entry-meta.tsx',
+  'libs/plugins/mui/src/lib/components/collection-entry-author.tsx',
+  'libs/plugins/mui/src/lib/components/collection-author-profile.tsx',
   'libs/plugins/mui/src/lib/components/markdown.tsx',
   'libs/plugins/mui/src/lib/components/product.tsx',
   // The Video element renders an `<img>` too, in lightbox mode (AGL-2744).

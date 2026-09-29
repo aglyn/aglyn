@@ -406,13 +406,6 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/components/host-components-card.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/interaction-builder-dialog.component.tsx",
       "rules": [
         "plugin-id",
@@ -491,13 +484,6 @@
       "lane": "video-embed-provider"
     },
     {
-      "path": "apps/console/components/site-template-card.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/staff-org-actions.component.tsx",
       "rules": [
         "domain-declares:crm",
@@ -538,13 +524,6 @@
         "domain-declares:marketplace"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/theme-editor/theme-source-card.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "apps/console/components/web-vitals-reporter.component.tsx",
