@@ -31,7 +31,9 @@
  *
  * The measurement and the verdict live in `lib/tenant-wire-weight.mjs`, with
  * the reasoning; the forced reds are in its test file. The groups, and the
- * imports that define them, are declared in `tools/tenant-wire-budget.json`.
+ * imports that define them, are declared in `tools/tenant-wire-budget.json`,
+ * and so is the `duplication` entry: the module code a page placing every mui
+ * element downloads more than once (AGL-3401).
  *
  * `--if-built` is for a CI job whose build step is affected-scoped: when the
  * tenant was not built there is nothing that could have changed its bytes,
@@ -101,6 +103,7 @@ function main() {
     measured = measureWireWeight({
       route: budget.route ?? PUBLISHED_ROUTE,
       groups: budget.groups ?? [],
+      duplication: budget.duplication,
       io,
     })
   } catch (error) {
@@ -113,7 +116,7 @@ function main() {
 
   if (args.includes('--write')) {
     const unresolved = measured.groups.filter((group) => group.missing.length)
-    if (unresolved.length) {
+    if (unresolved.length || (measured.duplication && !measured.duplication.followed)) {
       for (const reason of explainWireVerdict(evaluateWireWeight(measured, budget))) {
         console.error(`check:tenant-wire-weight — ${reason}`)
       }
@@ -128,6 +131,12 @@ function main() {
         `  ${group.name}: ${kb(group.baselineBytes)} (budget ${kb(group.budgetBytes)})`,
       )
     }
+    if (next.duplication) {
+      console.log(
+        `  ${next.duplication.name}: ${kb(next.duplication.baselineBytes)} ` +
+          `duplicated (budget ${kb(next.duplication.budgetBytes)})`,
+      )
+    }
     return 0
   }
 
@@ -137,6 +146,17 @@ function main() {
     for (const group of measured.groups) {
       console.log(`${group.name} — ${kb(group.bytes)} on the wire, ${kb(group.raw)} raw`)
       for (const chunk of group.chunks) console.log(`    ${chunk}`)
+    }
+    const copies = measured.duplication
+    if (copies) {
+      console.log(
+        `${copies.name} — ${kb(copies.bytes)} of ${kb(copies.moduleBytes)} ` +
+          `module code is a copy, across ${copies.chunks.length} chunks ` +
+          `(${copies.followed} imports followed)`,
+      )
+      for (const copy of copies.copies) {
+        console.log(`    ${copy.copies}x ${kb(copy.bytes)}  ${copy.file}`)
+      }
     }
   }
 
@@ -158,7 +178,11 @@ function main() {
               `${group.name}: ${kb(group.bytes)} (budget ` +
               `${kb(planned.get(group.name)?.budgetBytes ?? 0)})`,
           )
-          .join(' · '),
+          .join(' · ') +
+        (measured.duplication
+          ? ` · ${measured.duplication.name}: ${kb(measured.duplication.bytes)} ` +
+            `duplicated (budget ${kb(budget.duplication?.budgetBytes ?? 0)})`
+          : ''),
     )
   }
   return 0

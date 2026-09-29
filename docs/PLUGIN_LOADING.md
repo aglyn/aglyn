@@ -203,6 +203,16 @@ Every link must hold before a byte executes:
   read must ask for — an element whose component never registered renders
   nothing at all (AGL-52). Registration is bookkept per plugin+surface+use, so
   a second page that places a component the first did not still gets it.
+  `site-plugins-load-where-used.spec.tsx` pins that the catch-all hands the
+  list over: dropping it breaks no page and puts the whole library on all of
+  them, which is how it went unnoticed once (AGL-3401).
+- **Where an element's `import()` is written** (AGL-3401): every mui element
+  loads through `libs/plugins/mui/src/lib/element-tier.ts`. The elements
+  nearly every page places are part of that one chunk; the rest are
+  `import()`s written inside it, so their chunk groups are its children and
+  reuse what it loaded. Written side by side in `plugin.ts` they were siblings,
+  and each carried its own copy of Button, ButtonBase, SvgIcon, Paper and the
+  rest. `check:tenant-wire-weight`'s `duplication` entry holds the copies.
 - **Sites**: `load-page-data` ships `props.realmPlugins` (same join,
   admin SDK), narrowed to the installs THIS page uses (AGL-3116,
   `realmPluginsInUse`): a pinned version is used where the page places a

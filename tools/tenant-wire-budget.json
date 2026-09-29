@@ -22,8 +22,8 @@
           "why": "Real-user vitals, measured on every page."
         }
       ],
-      "baselineBytes": 312320,
-      "budgetBytes": 328704
+      "baselineBytes": 314796,
+      "budgetBytes": 330752
     },
     {
       "name": "a site with the marketing plugin",
@@ -51,5 +51,12 @@
       "baselineBytes": 87039,
       "budgetBytes": 92160
     }
-  ]
+  ],
+  "duplication": {
+    "name": "a page that places every mui element",
+    "why": "Module code downloaded more than once, raw bytes, by a page that places every element of the mui plugin: the every-page chunks, then every dynamic import written under the directory below, followed transitively. Sibling imports each carry the modules their shared parent has not loaded, so sixty element imports written side by side in plugin.ts had pages fetching MUI's Button eight times and 30% of their module code as copies (AGL-3401). The elements now load through element-tier.ts, and this number is what says whether the copies are coming back.",
+    "follows": "libs/plugins/mui/src/lib/",
+    "baselineBytes": 188257,
+    "budgetBytes": 198656
+  }
 }

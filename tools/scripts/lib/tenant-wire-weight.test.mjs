@@ -39,12 +39,14 @@ import {
   asyncLoaders,
   callSpecifiers,
   budgetFor,
+  chunkModules,
   decodeMappings,
   eagerChunks,
   evaluateWireWeight,
   explainWireVerdict,
   importSpecifiers,
   loaderCallSites,
+  measureDuplication,
   measureWireWeight,
   WIRE_HEADROOM,
   wireBytes,
@@ -332,6 +334,171 @@ test('budgetFor pins each group at its measurement plus the headroom, keeping wh
     assert.equal(group.why, 'kept')
     assert.deepEqual(group.loads, GROUPS[index].loads)
   }
+})
+
+// ── duplication (AGL-3401) ─────────────────────────────────────────────────
+
+/** A chunk of module entries: `[id, factory]` pairs, as Turbopack pushes them. */
+const moduleChunk = (entries, tail = '') =>
+  `(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([null,${entries
+    .map(([id, body]) => `${id},e=>{${body}}`)
+    .join(',')}${tail}]);`
+
+/** Module 11 — the one two elements share — and what its copy costs. */
+const SHARED_BODY = `e.v(${JSON.stringify('button '.repeat(200))})`
+const SHARED_BYTES = Buffer.byteLength(`e=>{${SHARED_BODY}}`)
+
+/**
+ * A page whose plugin writes two element imports, 301 and 302, on a line of
+ * `libs/plugins/mui/src/lib/plugin.ts`, and one more import, 303, from a file
+ * outside it. `a.js` and `b.js` are the two elements' chunks; `sharedIn`
+ * says which of them carry module 11, and `parentHas` puts it in the page's
+ * own chunk instead — the element tier's shape.
+ */
+function duplicationBuild({ sharedIn = ['a', 'b'], parentHas = false } = {}) {
+  const sourceText = "const a = () => import('./components/a'); const b = () => import('./components/b')"
+  const map = {
+    version: 3,
+    sources: ['turbopack:///[project]/libs/plugins/mui/src/lib/plugin.ts'],
+    sourcesContent: [sourceText],
+    names: [],
+    mappings: [vlq(0), vlq(0), vlq(0), vlq(0)].join(''),
+  }
+  const otherMap = { ...map, sources: ['turbopack:///[project]/apps/tenant/other.ts'], sourcesContent: ["import('./c')"] }
+  const element = (name, id) =>
+    moduleChunk([...(sharedIn.includes(name) ? [[11, SHARED_BODY]] : []), [id, `e.v(${JSON.stringify(name)})`]])
+  const page =
+    moduleChunk(
+      [[1, 'e.A(301);e.A(302)'], ...(parentHas ? [[11, SHARED_BODY]] : [])],
+      loaderTable(301, ['a.js']) + loaderTable(302, ['b.js']) + loaderTable(303, ['c.js']),
+    ) + '\n//# sourceMappingURL=page.js.map'
+  return {
+    'build-manifest.json': JSON.stringify({ rootMainFiles: ['static/chunks/other.js'] }),
+    [`server/app/${ROUTE}/page_client-reference-manifest.js`]:
+      'globalThis.__RSC_MANIFEST={"x":["static/chunks/page.js"]}',
+    'static/chunks/page.js': page,
+    'static/chunks/page.js.map': JSON.stringify(map),
+    'static/chunks/other.js': moduleChunk([[2, 'e.A(303)']]) + '\n//# sourceMappingURL=other.js.map',
+    'static/chunks/other.js.map': JSON.stringify(otherMap),
+    'static/chunks/a.js': element('a', 21),
+    'static/chunks/b.js': element('b', 22),
+    // Reached only through the import outside the followed directory.
+    'static/chunks/c.js': moduleChunk([[11, SHARED_BODY]]),
+  }
+}
+
+const DUPLICATION = {
+  name: 'a page that places every mui element',
+  follows: 'libs/plugins/mui/src/lib/',
+}
+
+const measureCopies = (files, duplication = DUPLICATION) =>
+  measureWireWeight({
+    route: ROUTE,
+    groups: [{ name: 'every published page', loads: [] }],
+    duplication,
+    io: ioFor(files),
+  })
+
+test('chunkModules reads each module entry and what its factory costs', () => {
+  const modules = chunkModules(moduleChunk([[11, SHARED_BODY], [21, 'e.v(1)']]))
+  assert.deepEqual(
+    modules.map((module) => [module.key, module.bytes]),
+    [
+      ['11', SHARED_BYTES],
+      ['21', Buffer.byteLength('e=>{e.v(1)}')],
+    ],
+  )
+  assert.deepEqual(chunkModules('not a chunk'), [])
+})
+
+test('counts a module two sibling element imports both carry', () => {
+  const copies = measureCopies(duplicationBuild()).duplication
+  assert.equal(copies.followed, 2)
+  assert.deepEqual(copies.chunks, [
+    'static/chunks/a.js',
+    'static/chunks/b.js',
+    'static/chunks/other.js',
+    'static/chunks/page.js',
+  ])
+  assert.equal(copies.bytes, SHARED_BYTES)
+  assert.deepEqual(
+    copies.copies.map((copy) => copy.copies),
+    [2],
+  )
+})
+
+test('a module the parent group carries is not copied into its children', () => {
+  // The element tier's shape: the shared module sits in the chunk the element
+  // imports are written in, so neither element chunk needs its own.
+  const copies = measureCopies(duplicationBuild({ sharedIn: [], parentHas: true })).duplication
+  assert.equal(copies.bytes, 0)
+})
+
+test('an import written outside the followed directory is not followed', () => {
+  // `c.js` carries a third copy, but only `apps/tenant/other.ts` imports it.
+  const copies = measureCopies(duplicationBuild()).duplication
+  assert.ok(!copies.chunks.includes('static/chunks/c.js'))
+})
+
+test('RED: the copies grew past their budget, naming the largest', () => {
+  const baseline = measureCopies(duplicationBuild({ sharedIn: ['a'] }))
+  assert.equal(baseline.duplication.bytes, 0)
+  const budget = budgetFor(baseline, { groups: [], duplication: DUPLICATION })
+  const grown = measureCopies(duplicationBuild())
+  const verdict = evaluateWireWeight(grown, budget)
+  assert.equal(verdict.ok, false)
+  assert.deepEqual(
+    verdict.reasons.map((reason) => reason.kind),
+    ['duplicated'],
+  )
+  const [text] = explainWireVerdict(verdict)
+  assert.match(text, /more copies than its budget/)
+  assert.match(text, /2x/)
+})
+
+test('RED: a followed directory that leads to no import, rather than no copies', () => {
+  const moved = { ...DUPLICATION, follows: 'libs/plugins/mui-renamed/' }
+  const measured = measureCopies(duplicationBuild(), moved)
+  assert.equal(measured.duplication.followed, 0)
+  const verdict = evaluateWireWeight(measured, { groups: [], duplication: { ...moved, budgetBytes: 1e9 } })
+  assert.deepEqual(
+    verdict.reasons.map((reason) => reason.kind),
+    ['unfollowed'],
+  )
+})
+
+test('RED: a duplication budget the measurement did not produce', () => {
+  const measured = measure(syntheticBuild())
+  const verdict = evaluateWireWeight(measured, {
+    groups: [],
+    duplication: { ...DUPLICATION, budgetBytes: 1e9 },
+  })
+  assert.deepEqual(
+    verdict.reasons.map((reason) => reason.kind),
+    ['unmeasured'],
+  )
+})
+
+test('budgetFor pins the copies at their measurement plus the headroom', () => {
+  const measured = measureCopies(duplicationBuild())
+  const budget = budgetFor(measured, { groups: [], duplication: { ...DUPLICATION, why: 'kept' } })
+  assert.equal(budget.duplication.baselineBytes, SHARED_BYTES)
+  assert.equal(
+    budget.duplication.budgetBytes,
+    Math.ceil((SHARED_BYTES * WIRE_HEADROOM) / 1024) * 1024,
+  )
+  assert.equal(budget.duplication.why, 'kept')
+  assert.equal(budget.duplication.follows, DUPLICATION.follows)
+})
+
+test('measureDuplication starts from the chunks it is handed', () => {
+  const copies = measureDuplication({
+    start: ['static/chunks/other.js'],
+    follows: DUPLICATION.follows,
+    io: ioFor(duplicationBuild()),
+  })
+  assert.equal(copies.followed, 0)
 })
 
 // ── the CLI ────────────────────────────────────────────────────────────────
