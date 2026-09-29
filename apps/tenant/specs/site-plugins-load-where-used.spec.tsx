@@ -46,7 +46,10 @@ const ensuredSets = (spy: jest.SpyInstance) =>
  * `ensure` for the blocking set, so the effect that listens for intent has
  * not attached when `render` returns.
  */
-async function renderPage(blockingPlugins?: string[]) {
+async function renderPage(
+  blockingPlugins?: string[],
+  placedComponents?: string[],
+) {
   // `act` is what flushes the suspense retry: without it the tree stays
   // suspended, nothing commits, and the effect never attaches.
   await act(async () => {
@@ -56,6 +59,7 @@ async function renderPage(blockingPlugins?: string[]) {
         nodes={{}}
         enabledPlugins={ENABLED}
         blockingPlugins={blockingPlugins}
+        placedComponents={placedComponents}
       />,
     )
   })
@@ -120,5 +124,33 @@ describe('site plugins a page does not use', () => {
     // the whole list and there is nothing left to hold back.
     await renderPage()
     expect(new Set(ensuredSets(ensure))).toEqual(new Set([ENABLED.join(',')]))
+  })
+})
+
+/**
+ * Within a plugin, the page asks for the elements it places (AGL-3141).
+ *
+ * Losing this argument breaks nothing a visitor can see: an unnarrowed ask
+ * registers every element, so every page still renders — while downloading
+ * the whole mui library, about forty element modules for a page placing
+ * sixteen. It went missing once exactly that way and was found by weighing a
+ * production page (AGL-3401), which is why it is pinned here.
+ */
+describe('the elements a page places', () => {
+  it('are handed to every site plugin it loads', async () => {
+    const placed = ['muiTypography', 'muiButton', 'section']
+    await renderPage(BLOCKING, placed)
+    expect(ensure).toHaveBeenCalled()
+    for (const [, surfaces, use] of ensure.mock.calls) {
+      expect(surfaces).toEqual(['site'])
+      expect(use).toEqual({ componentIds: placed })
+    }
+  })
+
+  it('are not narrowed when the server could not read the document', async () => {
+    // No `placedComponents` means the page cannot say what it places, and
+    // every plugin must register all of itself or an element renders blank.
+    await renderPage(BLOCKING)
+    for (const [, , use] of ensure.mock.calls) expect(use).toBeUndefined()
   })
 })
