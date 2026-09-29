@@ -91,7 +91,18 @@ export function readOutreachSequenceStats(
   if (!raw || typeof raw !== 'object') return null
   const data = raw as Record<string, unknown>
   const stats: OutreachSequenceStats = {}
-  for (const key of ['sent', 'people', 'clicks', 'uniqueClicks', 'machineClicks'] as const) {
+  for (const key of [
+    'sent',
+    'people',
+    'clicks',
+    'uniqueClicks',
+    'machineClicks',
+    'openPeople',
+    'opens',
+    'uniqueOpens',
+    'machineOpens',
+    'proxyOpens',
+  ] as const) {
     const value = data[key]
     if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
       stats[key] = Math.floor(value)
@@ -100,6 +111,9 @@ export function readOutreachSequenceStats(
   if (data['clickTracked'] === true) stats.clickTracked = true
   const last = data['lastClickAtMs']
   if (typeof last === 'number' && Number.isFinite(last)) stats.lastClickAtMs = last
+  if (data['openTracked'] === true) stats.openTracked = true
+  const lastOpen = data['lastOpenAtMs']
+  if (typeof lastOpen === 'number' && Number.isFinite(lastOpen)) stats.lastOpenAtMs = lastOpen
   return Object.keys(stats).length ? stats : null
 }
 

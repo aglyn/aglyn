@@ -343,9 +343,52 @@ Mail, Gmail and Outlook then label the email as coming from a mailing list — a
 poor fit for one-to-one email. Off, the footer's "reply no" line is the way
 out, and it is on every email either way. See [Unsubscribe](#unsubscribe).
 
+**Count opens** is off unless you turn it on; see [Count opens](#count-opens)
+before you do.
+
 The **Preview** beside the editor shows each email as it would reach a sample
 contact, with the real footer, and the editor lists anything that stops the
 sequence from being saved beside the field it is about.
+
+### Count opens {#count-opens}
+
+A sequence email is plain text, the way an email you type to one person is,
+and a plain-text email can't tell anyone it was opened. So by default a
+sequence measures replies, bounces and — with **Count link clicks** on —
+clicks, and its **Results** card says plainly that opens aren't measured.
+
+**Count opens** changes that for one sequence, for the emails it sends from
+then on. Each email goes out with two versions of the same message: the plain
+text, exactly as before, and an HTML copy of the same words — your line
+breaks, your links, the footer — with a 1×1 tracking image at the end. The
+image is served from the same short-link address as the sequence's
+[tracked links](#link-domains), and loading it records an open for that
+person.
+
+It has a cost, which is why it is off by default:
+
+- **It looks less like an email typed by hand.** One-to-one mail has no HTML
+  copy and no remote image. Most readers see no difference, but mail filters
+  do.
+- **Some spam filters score it.** An HTML part with a remote image is what
+  marketing email looks like, and some corporate gateways count that against
+  the sender. Use it to measure a slice of your sends — a new segment for a
+  week, say — rather than leaving it on everywhere.
+
+Not every image load is a person reading. Gmail opens count: Gmail loads the
+image through its own proxy only when the reader opens the email. Apple Mail
+Privacy Protection opens don't: Apple loads every image the moment the email
+arrives, whether or not anyone reads it. Yahoo's image proxy, security gateways
+that open messages to inspect them, and any load within 30 seconds of delivery
+don't count either. Those loads are counted as **Machine opens**, shown beside
+the open figures and left out of the open rate. The
+**Open rate** is taken over the people who were sent at least one email
+carrying the image, not everyone the sequence emailed, so turning the switch
+on part-way through doesn't dilute it.
+
+Turn it off and the next email goes out as plain text again; the figures
+already counted stay, and the card says they cover only the emails sent while
+it was on.
 
 ### Send yourself a test of a step {#send-a-test}
 
@@ -364,7 +407,9 @@ is stored on them.
 
 The test sends the step as it was last saved, so save your edits first. When
 the sequence counts link clicks, the links in the test are the tracking links
-a recipient gets, but your clicks on them are never counted. A test counts
+a recipient gets, but your clicks on them are never counted. When it
+[counts opens](#count-opens), the test carries the HTML copy and the tracking
+image too, and your opening it is never counted either. A test counts
 toward none of the sequence's numbers, the mailbox's daily cap or its sent
 counters, and files nothing on anyone's record; the Mailboxes card shows how
 many tests the mailbox sent today. It is a real send from your Google
@@ -559,12 +604,15 @@ point a teammate at one person. The page has three parts:
   one sends, with the same actions as the row's menu. A person held because
   their [mail gateway](#mail-gateways) refused you shows why, and **Resume and
   send** sends the email anyway. Under it, five numbers: emails sent, clicks,
-  links followed, scanner clicks (which aren't counted) and replies.
+  links followed, scanner clicks (which aren't counted) and replies — and, on a
+  sequence that [counts opens](#count-opens), their opens, with the machine
+  opens that weren't counted beside them.
 - **Activity** — everything that happened to them, newest first: when they were
   enrolled and by whom, each email with its subject as sent (and whether it was
   their [curated](#curate) copy), each link they followed with the full address
   and the email it came from, scanner visits with why they were read as a
-  scanner, replies, bounces with what the receiving server said, holds,
+  scanner, each open and each machine open with why it wasn't counted,
+  replies, bounces with what the receiving server said, holds,
   pauses, resumes and stops with who did it and why. **Open thread in Gmail**
   opens the conversation in the sending mailbox.
 - **Details** — closed until you open it: the personal line, the attestations,

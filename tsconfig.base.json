@@ -69,6 +69,8 @@
       "@aglyn/plugins-logic/*": ["./libs/plugins/logic/src/lib/*"],
       "@aglyn/plugins-marketing": ["./libs/plugins/marketing/src/index.ts"],
       "@aglyn/plugins-marketing/*": ["./libs/plugins/marketing/src/lib/*"],
+      "@aglyn/plugins-calculator": ["./libs/plugins/calculator/src/index.ts"],
+      "@aglyn/plugins-calculator/*": ["./libs/plugins/calculator/src/lib/*"],
       "@aglyn/plugins-commerce": ["./libs/plugins/commerce/src/index.ts"],
       "@aglyn/plugins-commerce/*": ["./libs/plugins/commerce/src/lib/*"],
       "@aglyn/plugins-marketplace": ["./libs/plugins/marketplace/src/index.ts"],

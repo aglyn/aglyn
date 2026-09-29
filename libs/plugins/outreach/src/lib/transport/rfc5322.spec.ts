@@ -127,6 +127,54 @@ describe('buildRfc5322Message — the wire format (AGL-2978)', () => {
     expect(parse(raw).body).toBe('See https://prospect.example.org/pricing\r\n')
   })
 
+  it('sends multipart/alternative only when handed an HTML part, the plain text first and unchanged (AGL-3395)', () => {
+    const html = '<!DOCTYPE html>\n<html><body><div>Hi Jordan</div><img src="https://l.example/x" width="1" height="1" alt=""></body></html>'
+    const { raw } = buildRfc5322Message(
+      { ...BASE, html },
+      { date: DATE, messageIdLocalPart: 'fixed-id', boundary: 'aglyn-alt-test' },
+    )
+    const { headers, body } = parse(raw)
+    expect(headers.get('content-type')).toBe('multipart/alternative; boundary="aglyn-alt-test"')
+    expect(headers.has('content-transfer-encoding')).toBe(false)
+    expect(body).toBe(
+      [
+        '--aglyn-alt-test',
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 7bit',
+        '',
+        'Hi Jordan,',
+        'Is this a good week?',
+        '',
+        'Avery',
+        '--aglyn-alt-test',
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: 7bit',
+        '',
+        '<!DOCTYPE html>',
+        '<html><body><div>Hi Jordan</div><img src="https://l.example/x" width="1" height="1" alt=""></body></html>',
+        '--aglyn-alt-test--',
+        '',
+      ].join('\r\n'),
+    )
+    // No HTML handed over, no HTML sent.
+    expect(build({ html: null }).raw).not.toMatch(/multipart|text\/html/)
+    expect(build({ html: '  ' }).raw).not.toMatch(/multipart|text\/html/)
+  })
+
+  it('encodes each alternative on its own, and refuses a boundary that is not one (AGL-3395)', () => {
+    const { raw } = buildRfc5322Message({ ...BASE, html: '<div>Grüße</div>' }, { date: DATE, boundary: 'b-1' })
+    const [, textPart, htmlPart] = raw.split('--b-1')
+    expect(textPart).toContain('Content-Transfer-Encoding: 7bit')
+    expect(htmlPart).toContain('Content-Transfer-Encoding: quoted-printable')
+    expect(decodeQuotedPrintable(htmlPart.slice(htmlPart.indexOf('\r\n\r\n') + 4))).toBe('<div>Grüße</div>\r\n')
+    expect(codeOf(() => buildRfc5322Message({ ...BASE, html: '<p>x</p>' }, { boundary: 'a b' }))).toBe('invalid-header')
+    // A random boundary otherwise, which appears as the header names it.
+    const random = buildRfc5322Message({ ...BASE, html: '<p>x</p>' }, { date: DATE }).raw
+    const named = /boundary="([^"]+)"/.exec(random)?.[1]
+    expect(named).toMatch(/^aglyn-alt-/)
+    expect(random.endsWith(`--${named}--\r\n`)).toBe(true)
+  })
+
   it('gives the Message-ID a random UUID on the From domain unless told otherwise', () => {
     const { messageId } = buildRfc5322Message(BASE, { date: DATE })
     expect(messageId).toMatch(/^<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@rep\.example\.com>$/)

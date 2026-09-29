@@ -106,7 +106,7 @@
  * next to the handler because the handler lives in a server-only lib that a
  * plugin component cannot import.
  */
-import { TENANT_APEX } from './host-naming'
+import { TENANT_APEX } from './tenant-apex'
 
 export const MEDIA_CDN_ROUTE = '/api/media/cdn'
 

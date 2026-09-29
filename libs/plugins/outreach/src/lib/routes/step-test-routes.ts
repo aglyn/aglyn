@@ -32,7 +32,9 @@ import {
   newOutreachLinkId,
   OUTREACH_TEST_LINK_ENROLLMENT,
   outreachStoredLink,
+  outreachStoredOpen,
   type OutreachStoredLink,
+  type OutreachStoredOpen,
 } from '../runtime/click-link'
 import { readStoredOutreachMailbox } from '../storage/outreach-records'
 import { GmailTransportError } from '../transport/gmail-errors'
@@ -175,7 +177,7 @@ export function createOutreachStepTestRoute(
      * own click counts for nothing.
      */
     let linkOrigin: string | null = null
-    if (sequence.settings.trackClicks && testDeps.clickLinkOrigin) {
+    if ((sequence.settings.trackClicks || sequence.settings.countOpens) && testDeps.clickLinkOrigin) {
       linkOrigin = await testDeps
         .clickLinkOrigin({ orgId: caller.orgId, senderAddress: sender.address })
         .catch(() => null)
@@ -201,20 +203,36 @@ export function createOutreachStepTestRoute(
           return url
         }
       : null
-    let composed = previewOutreachStep({ ...loaded.input, rewriteLink })
+    /*
+     * The tracking image (AGL-3395), as a real send would carry it and
+     * marked as a test's: the member sees both parts a recipient gets, and
+     * their own open is recorded nowhere.
+     */
+    let pixel: { id: string; doc: OutreachStoredOpen; url: string } | null = null
+    if (sequence.settings.countOpens) {
+      const doc = outreachStoredOpen(
+        { orgId: caller.orgId, enrollmentId: OUTREACH_TEST_LINK_ENROLLMENT, stepIndex, test: true },
+        nowMs,
+      )
+      const id = newOutreachLinkId()
+      const url = doc ? testDeps.clickLinkUrl(id, linkOrigin) : null
+      if (doc && url) pixel = { id, doc: { ...doc, sequenceId: sequence.id }, url }
+    }
+    let composed = previewOutreachStep({ ...loaded.input, rewriteLink, openPixelUrl: pixel?.url ?? null })
     if (composed.error || !composed.email) {
       return outreachRefusal(409, 'invalid-sequence', composed.error?.message ?? "This email can't be written yet.")
     }
-    if (shortLinks.length) {
+    if (shortLinks.length || pixel) {
       try {
         const batch = firestore.batch()
         for (const link of shortLinks) {
           batch.create(firestore.collection(OUTREACH_COLLECTIONS.links).doc(link.id), link.doc)
         }
+        if (pixel) batch.create(firestore.collection(OUTREACH_COLLECTIONS.links).doc(pixel.id), pixel.doc)
         await batch.commit()
       } catch (error) {
         // A link that resolves nowhere is worse than one shown as written:
-        // the test goes out with the step's own links.
+        // the test goes out with the step's own links, as plain text.
         console.error('[outreach] the test links could not be stored; the test carries the links as written', error)
         composed = previewOutreachStep({ ...loaded.input, rewriteLink: null })
         if (composed.error || !composed.email) {
@@ -247,6 +265,7 @@ export function createOutreachStepTestRoute(
       to,
       subject: `${OUTREACH_TEST_SUBJECT_PREFIX}${composed.email.subject}`,
       text: composed.email.text,
+      ...(composed.email.html ? { html: composed.email.html } : {}),
       trackedLinks: composed.email.trackedLinks,
     }
     let subject: string

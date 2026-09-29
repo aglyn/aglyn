@@ -8,6 +8,9 @@
       "register": {
         "site": "registerMuiPlugin"
       },
+      "modules": {
+        "site": "plugin"
+      },
       "catalog": {
         "order": 0,
         "label": "Components",

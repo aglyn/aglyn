@@ -22,7 +22,7 @@ import {
 import {
   muiPluginInstallToPreset,
   muiPluginInstallToPresets,
-} from './components/plugin'
+} from './components/plugin-install-presets'
 import * as Aglyn from '@aglyn/aglyn'
 import { runInAction } from 'mobx'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -31,49 +31,83 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * One thunk per component module, named here because several ids share one:
  * `collection.tsx` alone exports eight elements, and a module is imported
  * once however many of its components a surface asks for.
+ *
+ * Every thunk goes through the element tier (AGL-3401). The common elements
+ * are part of it; the rest are `import()`s written inside it, so they can
+ * rely on what it loaded instead of each carrying a copy. `element-tier.ts`
+ * has the reasoning, and which elements are which.
  */
-const appBar = () => import('./components/app-bar')
-const toolbar = () => import('./components/toolbar')
-const typography = () => import('./components/typography')
-const inlineText = () => import('./components/inline-text')
-const button = () => import('./components/button')
-const container = () => import('./components/container')
-const layoutSlot = () => import('./components/layout-slot')
-const list = () => import('./components/list')
-const listItem = () => import('./components/list-item')
-const listItemText = () => import('./components/list-item-text')
-const blocks = () => import('./components/blocks')
-const dataTable = () => import('./components/data-table')
-const collection = () => import('./components/collection')
-const image = () => import('./components/image')
-const video = () => import('./components/video')
-const icon = () => import('./components/icon')
-const languageSwitcher = () => import('./components/language-switcher')
-const reusableInstance = () => import('./components/reusable-instance')
-const screenLink = () => import('./components/screen-link')
-const linkBox = () => import('./components/link-box')
-const navMenu = () => import('./components/nav-menu')
-const drawer = () => import('./components/drawer')
-const functionWidget = () => import('./components/function-widget')
-const functionScope = () => import('./components/function-scope')
-const product = () => import('./components/product')
-const plugin = () => import('./components/plugin')
-const customHtml = () => import('./components/custom-html')
-const searchBox = () => import('./components/search-box')
-const markdown = () => import('./components/markdown')
-const section = () => import('./components/section')
-const stack = () => import('./components/stack')
-const box = () => import('./components/box')
-const documentRoot = () => import('./components/document-root')
-const grid = () => import('./components/grid')
-const paper = () => import('./components/paper')
-const card = () => import('./components/card')
-const accordion = () => import('./components/accordion')
-const tabs = () => import('./components/tabs')
-const imageList = () => import('./components/image-list')
-const pagination = () => import('./components/pagination')
-const breadcrumbs = () => import('./components/breadcrumbs')
-const themeModeSwitcher = () => import('./components/theme-mode-switcher')
+type ElementTier = typeof import('./element-tier')
+type TierElement = keyof ElementTier['CORE_ELEMENTS']
+type LazyElement = Exclude<keyof ElementTier, 'CORE_ELEMENTS'>
+
+type ElementModule = Promise<Record<string, unknown>>
+
+/**
+ * One load of the tier, however many thunks ask at once. The bundler shares
+ * a module across concurrent imports anyway; a loader that hands out a
+ * module while it is still evaluating does not — jiti, which the AI palette
+ * and page-axe generators load this bundle through, resolved the second of
+ * sixty concurrent imports to the tier's exports before `CORE_ELEMENTS` was
+ * assigned.
+ */
+let tierLoad: Promise<ElementTier> | undefined
+const elementTier = (): Promise<ElementTier> =>
+  (tierLoad ??= import('./element-tier'))
+const inTier =
+  (name: TierElement): MuiComponentSource['module'] =>
+  () =>
+    elementTier().then(
+      (tier): Record<string, unknown> => tier.CORE_ELEMENTS[name],
+    )
+const viaTier =
+  (name: LazyElement): MuiComponentSource['module'] =>
+  () =>
+    elementTier().then((tier): ElementModule => tier[name]())
+
+const appBar = inTier('appBar')
+const toolbar = inTier('toolbar')
+const layoutSlot = inTier('layoutSlot')
+const documentRoot = inTier('documentRoot')
+const section = inTier('section')
+const container = inTier('container')
+const box = inTier('box')
+const stack = inTier('stack')
+const grid = inTier('grid')
+const paper = inTier('paper')
+const typography = inTier('typography')
+const inlineText = inTier('inlineText')
+const button = inTier('button')
+const screenLink = inTier('screenLink')
+const linkBox = inTier('linkBox')
+const image = inTier('image')
+const icon = inTier('icon')
+
+const list = viaTier('list')
+const listItem = viaTier('listItem')
+const listItemText = viaTier('listItemText')
+const blocks = viaTier('blocks')
+const dataTable = viaTier('dataTable')
+const collection = viaTier('collection')
+const video = viaTier('video')
+const languageSwitcher = viaTier('languageSwitcher')
+const reusableInstance = viaTier('reusableInstance')
+const navMenu = viaTier('navMenu')
+const drawer = viaTier('drawer')
+const functionWidget = viaTier('functionWidget')
+const functionScope = viaTier('functionScope')
+const product = viaTier('product')
+const plugin = viaTier('plugin')
+const customHtml = viaTier('customHtml')
+const searchBox = viaTier('searchBox')
+const markdown = viaTier('markdown')
+const card = viaTier('card')
+const accordion = viaTier('accordion')
+const tabs = viaTier('tabs')
+const imageList = viaTier('imageList')
+const pagination = viaTier('pagination')
+const breadcrumbs = viaTier('breadcrumbs')
+const themeModeSwitcher = viaTier('themeModeSwitcher')
 
 /** One entry of the bundle: what the registry is handed for a component. */
 export interface MuiBundleEntry {

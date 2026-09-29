@@ -9,6 +9,43 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.214 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/60dcba1ef...v1.0.0-beta.214)
+
+### Added
+
+- **calculator:** the Function Widget joins the Calculators plugin ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+- **calculator:** a script moves one site's calculator nodes onto the marketplace plugin ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394), [AGL-3390](https://linear.app/aglyn/issue/AGL-3390))
+- **calculator:** the Calculators marketplace plugin, built as a signed bundle ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+- **plugins:** signed marketplace plugins server-render their site elements ([AGL-3390](https://linear.app/aglyn/issue/AGL-3390))
+- **outreach:** a sequence can count opens, per sequence and off by default ([AGL-3395](https://linear.app/aglyn/issue/AGL-3395), [AGL-3239](https://linear.app/aglyn/issue/AGL-3239), [AGL-3297](https://linear.app/aglyn/issue/AGL-3297), [AGL-3332](https://linear.app/aglyn/issue/AGL-3332), [AGL-3325](https://linear.app/aglyn/issue/AGL-3325))
+
+### Fixed
+
+- **mui:** every element thunk shares one load of the element tier ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+- **console:** the site logo card subscribes to the host once for both slots ([AGL-3400](https://linear.app/aglyn/issue/AGL-3400))
+- **plugins:** the host ABI check reads a presence test as no read ([AGL-3392](https://linear.app/aglyn/issue/AGL-3392))
+- **tenant:** a published page hands the plugins the elements it places again ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401), [AGL-3141](https://linear.app/aglyn/issue/AGL-3141), [AGL-3122](https://linear.app/aglyn/issue/AGL-3122))
+- **outreach:** a Gmail reader's open through Google's image proxy counts ([AGL-3395](https://linear.app/aglyn/issue/AGL-3395))
+
+### Performance
+
+- **core:** a published page reads the tenant apex without the subdomain policy ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+- **tenant:** a published page ships its node map without the ids it already states ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+- **mui:** a published page imports the mui site module, not the package root ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+- **mui:** elements load through one tier, so a page stops downloading copies ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+
+<details>
+<summary>Also in this release: 1 test, 3 chore</summary>
+
+- **calculator:** the Function Widget's two colour literals travel with it ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+- **calculator:** mui's retiring calculator copy is left out of the unique-help rule ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+- **colours:** the plugin install presets carry their two colours to their own module ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401))
+- **linear:** raise the issue ceiling to AGL-3401 ([AGL-3401](https://linear.app/aglyn/issue/AGL-3401), [AGL-3399](https://linear.app/aglyn/issue/AGL-3399))
+
+</details>
+
 ## v1.0.0-beta.213 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/6ef313157...v1.0.0-beta.213)

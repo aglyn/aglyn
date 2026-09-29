@@ -25,7 +25,7 @@ import {
   judgeOutreachClick,
   type OutreachClickJudgement,
 } from '../engine/click-tracking'
-import { readOutreachEngagement } from '../model/enrollment-engagement'
+import { outreachLoggedEngagementRows, readOutreachEngagement } from '../model/enrollment-engagement'
 import { outreachClickHistoryRow, outreachHistoryEntryId } from '../model/enrollment-history'
 import {
   OUTREACH_ENGAGEMENT_LINKS_MAX,
@@ -78,8 +78,8 @@ export interface OutreachClickOutcome extends OutreachClickJudgement {
   enrollment: OutreachEnrollment | null
 }
 
-/** When the step that carried the link was sent, or `null` when it cannot be found. */
-function sentAtMs(enrollment: OutreachEnrollment, stepIndex: number): number | null {
+/** When the step that carried a link or an image was sent, or `null` when it cannot be found. */
+export function outreachStepSentAtMs(enrollment: OutreachEnrollment, stepIndex: number): number | null {
   const records = enrollment.stepRecords ?? []
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const record = records[index]
@@ -131,7 +131,7 @@ export async function recordOutreachClick(
     if (!enrollment) {
       return { human: false, machineReason: null, first: false, enrollment: null } as OutreachClickOutcome
     }
-    const sent = sentAtMs(enrollment, stepIndex)
+    const sent = outreachStepSentAtMs(enrollment, stepIndex)
     const judgement = judgeOutreachClick({
       method: input.method,
       userAgent: input.userAgent,
@@ -141,7 +141,7 @@ export async function recordOutreachClick(
     const first = judgement.human && held.firstClickAtMs === null
     const key = campaignLinkKey(url)
     // A row for this visit, while the person's history has room for one.
-    const logged = held.loggedClicks + held.loggedMachineClicks < OUTREACH_ENROLLMENT_HISTORY_MAX
+    const logged = outreachLoggedEngagementRows(held) < OUTREACH_ENROLLMENT_HISTORY_MAX
     /*
      * The destinations known to have been followed. A click from before the
      * per-click history (AGL-3332) is known only by `lastClickUrl`, which the
@@ -157,6 +157,7 @@ export async function recordOutreachClick(
         : held.links
     const engagement: OutreachEnrollmentEngagement = judgement.human
       ? {
+          ...held,
           clicks: held.clicks + 1,
           firstClickAtMs: held.firstClickAtMs ?? nowMs,
           lastClickAtMs: nowMs,

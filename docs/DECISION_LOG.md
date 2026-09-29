@@ -92,6 +92,24 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-28 — A sequence may count opens, per sequence and off by default: an HTML copy with a tracking image, for measuring a slice
+
+- **Decided by:** the account owner, 2026-09-28, as written in AGL-3395 — opens on for a slice of sends, accepting that those sends lose the plain-text one-to-one look.
+- **Scope:** policy
+- **Evidence:** `OutreachSequenceSettings.countOpens`, default `false`; `libs/plugins/outreach/src/lib/engine/open-tracking.ts`; `model/sequence-report.ts` (the caveats); the Sequences doc's Count opens section; AGL-3395.
+
+**This narrows the 2026-09-22 entry below; it does not reverse it.** Every
+sequence stays plain text unless a member turns **Count opens** on for it, and
+the report still says opens are not measured for every sequence with it off.
+On, each send is `multipart/alternative` — the plain-text part unchanged, and
+the same text as HTML with a 1×1 image on the short-link host. Gmail's image
+proxy counts as the reader's open, since Gmail fetches only when the message is
+opened; Apple Mail Privacy Protection (which prefetches on delivery), Yahoo's
+proxy, scanners and fetches within 30 s of delivery are counted apart and kept
+out of the rate, as scanner clicks are.
+
+---
+
 ## 2026-09-23 — A tracked sequence link is on the sending domain's own `links.` host, by the sending-domain process
 
 - **Decided by:** the account owner, 2026-09-23, in AGL-3306: the host follows the `links.` convention campaign mail's provider tracking already uses, and the feature is generic — any organization, and any self-hosted install, sets one up through the product.

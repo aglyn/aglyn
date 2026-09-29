@@ -357,6 +357,11 @@ export interface PresenceSubject {
   pluginId?: string
   /** A marketplace plugin's listing id, which its elements may carry instead. */
   listingId?: string
+  /**
+   * A marketplace plugin's identity, `<publisher handle>.<manifest id>`
+   * (AGL-3390): the `pluginId` its namespaced elements carry.
+   */
+  identity?: string
   /** Its declaration; `undefined` when it declares nothing. */
   contributes?: PluginContributions
 }
@@ -378,6 +383,7 @@ export function isPluginUsedOnPage(
 ): boolean {
   if (subject.pluginId && page.pluginIds.has(subject.pluginId)) return true
   if (subject.listingId && page.pluginIds.has(subject.listingId)) return true
+  if (subject.identity && page.pluginIds.has(subject.identity)) return true
   const site = subject.contributes?.site
   if (!site) return false
   if (site.features?.length) return true
@@ -400,13 +406,13 @@ export function declaresSiteElements(
 
 /**
  * Every id a plugin's elements and presets may carry as their `pluginId`: its
- * own id and, for a marketplace plugin, its listing id. A surface that filters
- * registry entries by plugin set needs all of them, or it hides the elements
- * of a plugin it just loaded.
+ * own id and, for a marketplace plugin, its listing id and its identity. A
+ * surface that filters registry entries by plugin set needs all of them, or it
+ * hides the elements of a plugin it just loaded.
  */
 export function presenceIds(subject: PresenceSubject): string[] {
   const ids: string[] = []
-  for (const id of [subject.pluginId, subject.listingId]) {
+  for (const id of [subject.identity, subject.pluginId, subject.listingId]) {
     if (id && !ids.includes(id)) ids.push(id)
   }
   return ids

@@ -118,10 +118,14 @@ export function isFromEnabledPlugin(
  * the difference. Asking the rendered site's plugin set as well makes the
  * server and the browser give one answer.
  *
- * Only a FIRST-PARTY id is asked about. A marketplace bundle's components name
- * the id in its manifest, which is not the listing id the site's set carries,
- * and a component naming no plugin belongs to none. Both render as registered,
- * as does the base library, which no site can switch off.
+ * A FIRST-PARTY id is asked about, and so is a marketplace IDENTITY
+ * (`<publisher handle>.<manifest id>`, AGL-3390), which the site's set carries
+ * for each signed plugin the page runs. Those are the ones a server renders,
+ * so they are the ones another site's render could otherwise show. A plugin
+ * published before identities (its manifest id, with no `.`) only ever
+ * registers in the browser of a site that runs it, and a component naming no
+ * plugin belongs to none: both render as registered, as does the base
+ * library, which no site can switch off.
  *
  * An EMPTY set is no answer. Every set a site resolves carries the base
  * library, so an empty one is a surface saying it has no site to answer for —
@@ -135,6 +139,7 @@ export function isSwitchedOffForRenderedSite(
 ): boolean {
   if (!pluginId || !enabledPluginIds?.length) return false
   if (isLockedOnForSite(pluginId)) return false
+  if (pluginId.includes('.')) return !enabledPluginIds.includes(pluginId)
   return isFirstPartyPlugin(pluginId) && !enabledPluginIds.includes(pluginId)
 }
 

@@ -57,18 +57,19 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
     }
   },
 }))
-jest.mock('@aglyn/aglyn/plugin-manager/realm-plugins', () => ({
-  loadRealmPlugins: async (installs: Array<{ listingId: string }>) => {
-    mockLoaded.push(installs.map((install) => install.listingId))
-  },
-}))
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-styles', () => ({
   capturePluginStyles: async (_id: string, run: () => Promise<void>) => run(),
 }))
+// The loader travels with the host module (AGL-3390), so a screen that runs
+// no realm plugin carries neither.
 jest.mock('../utils/realm-plugin-host.client', () => ({
   composeRealmPluginHost: () => {
     mockComposed += 1
   },
+  loadRealmPlugins: async (installs: Array<{ listingId: string }>) => {
+    mockLoaded.push(installs.map((install) => install.listingId))
+  },
+  realmRegistry: {},
 }))
 
 import {

@@ -17,8 +17,6 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { MdiIcons } from '@aglyn/shared-data-mdi'
-import { registerPluginInstallPresetMapper } from '@aglyn/aglyn'
 import { mdiPuzzle } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import { forwardRef, useContext } from 'react'
@@ -245,115 +243,11 @@ export const presets: Aglyn.PresetSchema[] = [
   },
 ]
 
-/** The besigner drawer category installed plugins register under (AGL-190). */
-export const PLUGIN_DRAWER_CATEGORY = 'Marketplace'
-
-export interface PluginInstallLike {
-  listingId?: string
-  $id?: string
-  displayName?: string
-  pluginId?: string
-  manifest?: {
-    name?: string
-    restrictParent?: string[]
-    restrictChildren?: string[]
-  }
-}
-
-/**
- * Builds a besigner preset for an installed plugin (AGL-190): a named,
- * draggable drawer entry that drops a `marketplacePlugin` node with the
- * listing id pre-pinned, so editors never hand-type ids. Reuses the single
- * `marketplacePlugin` renderer — no per-plugin component registration. The
- * manifest's lineal rules ride on the node data for later enforcement.
- * Returns null for an install without a resolvable listing id.
- */
-export function muiPluginInstallToPreset(
-  install: PluginInstallLike,
-): Aglyn.PresetSchema | null {
-  const listingId = install.listingId ?? install.$id
-  if (!listingId) return null
-  const name =
-    install.displayName || install.manifest?.name || 'Marketplace plugin'
-  return {
-    $id: `plugin__${listingId}`,
-    type: Aglyn.NodeType.PRESET,
-    displayName: name,
-    pluginId: BUNDLE_ID,
-    description: 'Installed marketplace plugin',
-    category: PLUGIN_DRAWER_CATEGORY,
-    icon: { path: mdiPuzzle.path, sx: { color: '#5e35b1' } },
-    data: {
-      $id: null,
-      componentId: ID,
-      pluginId: BUNDLE_ID,
-      props: { listingId },
-      ...(install.manifest?.restrictParent
-        ? { restrictParent: install.manifest.restrictParent }
-        : {}),
-      ...(install.manifest?.restrictChildren
-        ? { restrictChildren: install.manifest.restrictChildren }
-        : {}),
-    } as any,
-  }
-}
-
-/**
- * Every drawer preset an installed plugin contributes (AGL-1031).
- *
- * The generic Plugin element, plus one per element the PINNED version
- * declares. Declared elements save as the same node with an `elementId`
- * alongside the listing id — the issue's preferred answer, and the one that
- * keeps a single compose path and a single sandbox. What changes is the
- * palette entry and the label, not what executes.
- *
- * Resolved from the pin, so an element appears only where the plugin is
- * installed and disappears with a revoked or downgraded version.
- */
-export function muiPluginInstallToPresets(
-  install: PluginInstallLike,
-): Aglyn.PresetSchema[] {
-  const generic = muiPluginInstallToPreset(install)
-  const presets = generic ? [generic] : []
-  const listingId = install.listingId ?? install.$id
-  if (!listingId) return presets
-
-  for (const element of Aglyn.resolvePluginElements({
-    listingId,
-    capabilities: (install as any).manifest?.capabilities,
-    manifest: (install as any).manifest,
-  })) {
-    // The declared icon is an mdi NAME; look it up in the set the host already
-    // ships. An unresolved name falls back to the puzzle mark rather than
-    // rendering nothing — the entry is still placeable, which matters more
-    // than the glyph.
-    const declared = element.icon ? MdiIcons.get(element.icon as never) : undefined
-    presets.push({
-      $id: `plugin__${listingId}__${element.elementId}`,
-      type: Aglyn.NodeType.PRESET,
-      displayName: element.displayName,
-      pluginId: BUNDLE_ID,
-      description: element.description ?? 'Installed marketplace plugin',
-      category: element.category,
-      icon: {
-        path: (declared as { path?: string } | undefined)?.path ?? mdiPuzzle.path,
-        sx: { color: '#5e35b1' },
-      },
-      data: {
-        $id: null,
-        componentId: ID,
-        pluginId: BUNDLE_ID,
-        props: { listingId, elementId: element.elementId },
-        ...(install.manifest?.restrictParent
-          ? { restrictParent: install.manifest.restrictParent }
-          : {}),
-        ...(install.manifest?.restrictChildren
-          ? { restrictChildren: install.manifest.restrictChildren }
-          : {}),
-      } as any,
-    })
-  }
-  return presets
-}
+export {
+  PLUGIN_DRAWER_CATEGORY,
+  type PluginInstallLike,
+  muiPluginInstallToPreset,
+  muiPluginInstallToPresets,
+} from './plugin-install-presets'
 
 export default MarketplacePlugin

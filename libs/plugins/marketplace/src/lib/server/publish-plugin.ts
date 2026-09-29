@@ -40,6 +40,11 @@ import { publishPreconditionRefusal } from './publish-preconditions'
 import { listingSubmissionRefusal } from './listing-screen'
 import { refreshListingQueryFields } from './listing-query-fields'
 import {
+  claimPluginIdentity,
+  componentNamespaceRefusal,
+  pluginIdentityFor,
+} from './plugin-identity'
+import {
   attestationLabels,
   missingAttestations,
   missingAttestationSubjects,
@@ -443,6 +448,22 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
       ? firestore.collection('marketplaceListings').doc(createResourceUid())
       : existing.docs[0].ref
 
+    // The plugin's identity (AGL-3390): the namespace its elements are saved
+    // under on every site that places one. A listing keeps the identity it
+    // was first given, so renaming the publisher handle cannot orphan them.
+    const frozenIdentity = existing.empty
+      ? undefined
+      : (existing.docs[0].get('identity') as string | undefined)
+    const identity =
+      frozenIdentity || pluginIdentityFor(publisher.handle, manifest.id)
+    const namespaceRefusal = componentNamespaceRefusal(
+      identity,
+      manifest.contributes,
+    )
+    if (namespaceRefusal) {
+      return res.status(422).json({ error: namespaceRefusal })
+    }
+
     // Pre-submission attestation (AGL-969). Blocks the publish rather than
     // warning, because the whole point is that these answers exist BEFORE a
     // reviewer spends time on the bundle.
@@ -508,6 +529,19 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     })
     if (screened) return res.status(screened.status).json(screened.body)
 
+    // Claimed only once everything a publisher can fix has passed, so a
+    // refused submission never takes an identity it then cannot use.
+    const claimed = await claimPluginIdentity(firestore, {
+      identity,
+      listingId: listingRef.id,
+      profileId: publisher.orgId,
+    })
+    if (!claimed) {
+      return res.status(409).json({
+        error: `The plugin identity "${identity}" belongs to another listing`,
+      })
+    }
+
     // Immutable content-addressed write — a new build is a new object, so a
     // consumer's pinned version can never be overwritten underneath it.
     const objectPath = pluginArtifactPath(
@@ -534,6 +568,7 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         artifactType: 'plugin',
         profileId: publisher.orgId,
         pluginId: manifest.id,
+        identity,
         displayName: displayName.trim(),
         // The keys a listing is searched by (AGL-3321): the template gallery's
         // marketplace shelf asks `nameTokens` on its query.
@@ -582,6 +617,9 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         sha256,
         objectPath,
         manifest,
+        // What the loaders hold these bytes to (AGL-3390): every component
+        // they register is `<identity>.<role>` and names this as its plugin.
+        identity,
         ...(changelog.trim() && { changelog: changelog.trim() }),
         // The repository as declared FOR THESE BYTES (AGL-1076). The listing
         // carries whatever the latest publish said, and a publisher may move

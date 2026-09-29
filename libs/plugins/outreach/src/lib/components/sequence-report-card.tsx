@@ -48,8 +48,9 @@ import type { OutreachSequenceLinksLoad } from './use-outreach-data'
 /**
  * WHAT A SEQUENCE MEASURED (AGL-3239).
  *
- * Four figures and one rate, and the sentences saying what each of them is
- * not. The decisions are all in `model/sequence-report.ts`; this renders
+ * Four figures and one rate — and, for a sequence that counts opens
+ * (AGL-3395), the opens beside them — and the sentences saying what each of
+ * them is not. The decisions are all in `model/sequence-report.ts`; this renders
  * them and adds no arithmetic of its own — in particular it never divides,
  * so there is no second place a percentage can be computed differently from
  * the way a campaign's report computes it.
@@ -148,8 +149,10 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
   const report = outreachSequenceReport(
     props.sequence.stats,
     props.sequence.settings.trackClicks,
+    props.sequence.settings.countOpens,
   )
   const clickRate = rateText(report.rates.click)
+  const openRate = rateText(report.rates.open)
   const links = outreachSequenceLinkReport(
     props.links.status === 'ready' ? (props.links.data ?? undefined) : undefined,
   )
@@ -168,6 +171,35 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
               value={report.people === null ? '—' : count(report.people)}
               {...(report.people === null ? { hint: 'Not counted for this sequence' } : {})}
             />
+            {/*
+              * Opens (AGL-3395), only for a sequence whose emails have carried
+              * the tracking image: for every other one, the caveat below
+              * says opens are not measured, and a figure here would say
+              * otherwise.
+              */}
+            {report.openTracked ? (
+              <>
+                <OutreachFigure
+                  label="Opened"
+                  value={count(report.uniqueOpens)}
+                  hint={
+                    report.opens === report.uniqueOpens ? undefined : `${count(report.opens)} opens in all`
+                  }
+                />
+                <OutreachFigure label="Open rate" value={openRate.value} hint={openRate.hint} />
+                {report.machineOpens > 0 ? (
+                  <OutreachFigure
+                    label="Machine opens"
+                    value={count(report.machineOpens)}
+                    hint={
+                      report.proxyOpens > 0
+                        ? `Not in the rate · ${count(report.proxyOpens)} by mail proxies`
+                        : 'Not in the rate'
+                    }
+                  />
+                ) : null}
+              </>
+            ) : null}
             <OutreachFigure
               label="Clicked"
               value={count(report.uniqueClicks)}
@@ -189,6 +221,11 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
               />
             ) : null}
           </Stack>
+          {report.lastOpenAtMs === null ? null : (
+            <Typography variant="body2" color="text.secondary">
+              Last open {formatOutreachTime(report.lastOpenAtMs, props.timeZone)}
+            </Typography>
+          )}
           {report.lastClickAtMs === null ? null : (
             <Typography variant="body2" color="text.secondary">
               Last click {formatOutreachTime(report.lastClickAtMs, props.timeZone)}

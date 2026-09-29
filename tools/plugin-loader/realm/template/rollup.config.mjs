@@ -40,6 +40,9 @@ const HOST_MODULES = {
  * so any part of them in a bundle is a second copy — and a second copy of
  * MUI's styling runtime also misses the site's theme and style cache.
  */
+/** Host modules whose default import may need unwrapping from a namespace. */
+const DEFAULT_INTEROP = new Set(['React', 'jsxRuntime'])
+
 const NEVER_COMPILED_IN =
   /^(react-dom|@mui\/(material|system|utils|styled-engine|private-theming|base|lab)|@emotion\/[^/]+)(\/|$)/
 
@@ -75,11 +78,16 @@ function aglynHostExternals() {
         `if (!(${key} in host)) throw new Error('this Aglyn host does not provide ' + ${key});\n` +
         `export const __aglynHostModule = host[${key}];\n`
       if (id.startsWith('\0aglyn-host:')) {
-        const key = JSON.stringify(id.slice('\0aglyn-host:'.length))
+        const name = id.slice('\0aglyn-host:'.length)
+        const key = JSON.stringify(name)
+        // Only React's modules can be a namespace with a `default` on it. Core
+        // and MUI have none, and reading one would be a read of a name their
+        // host surface does not hold.
+        const defaultExport = DEFAULT_INTEROP.has(name)
+          ? 'export default __aglynHostModule.default !== undefined ? __aglynHostModule.default : __aglynHostModule;\n'
+          : 'export default __aglynHostModule;\n'
         return {
-          code:
-            lookup(key) +
-            'export default __aglynHostModule.default !== undefined ? __aglynHostModule.default : __aglynHostModule;\n',
+          code: lookup(key) + defaultExport,
           syntheticNamedExports: '__aglynHostModule',
         }
       }

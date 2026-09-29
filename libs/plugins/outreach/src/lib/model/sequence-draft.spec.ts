@@ -80,6 +80,7 @@ describe('readOutreachSequenceDraft (AGL-2980)', () => {
         allowedCountries: ['US'],
         allowCustomers: false,
         trackClicks: false,
+        countOpens: false,
         listUnsubscribe: false,
       },
       campaignIds: ['founder-icp2', 'founder-icp1'],
@@ -113,6 +114,8 @@ describe('new steps and sequences (AGL-2980)', () => {
       // visible in the body a cold recipient reads, so it is turned on
       // deliberately or not at all.
       trackClicks: false,
+      // Nor does it count opens (AGL-3395): an HTML part is chosen.
+      countOpens: false,
       // Nor does it carry the List-Unsubscribe header (AGL-3296).
       listUnsubscribe: false,
     })

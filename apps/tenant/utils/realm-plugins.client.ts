@@ -23,7 +23,7 @@
 // `import()` below; see `realm-plugin-host.client.ts`.
 import type * as Aglyn from '@aglyn/aglyn'
 import { capturePluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles'
-import { loadRealmPlugins } from '@aglyn/aglyn/plugin-manager/realm-plugins'
+import type { RealmBundleModule } from '@aglyn/aglyn/plugin-manager/realm-plugins'
 import * as React from 'react'
 import * as jsxRuntime from 'react/jsx-runtime'
 
@@ -61,10 +61,65 @@ function warnMissingPluginOrigin(): void {
   )
 }
 
-export async function loadSiteRealmPlugins(
+/**
+ * Whether a page's install renders on the server (AGL-3390): one published
+ * with an identity, which the loader holds its registrations to, that
+ * declares site components. Anything else loads in the browser only, after
+ * hydration, as every realm plugin did before.
+ */
+export function rendersOnServer(install: Aglyn.RealmPluginInstall): boolean {
+  return Boolean(install.identity && install.contributes?.site?.components?.length)
+}
+
+/**
+ * How long the server waits for a bundle before it renders the page without
+ * it. The browser still loads it, and replaces the fallback it finds.
+ */
+const SERVER_FETCH_TIMEOUT_MS = 5000
+
+/**
+ * Imports verified bytes on the server, where a blob URL cannot be imported.
+ * Node caches a module by its URL, so the same bytes evaluate once per
+ * process however many pages render them.
+ */
+async function importFromDataUrl(bytes: ArrayBuffer): Promise<RealmBundleModule> {
+  const base64 = globalThis.Buffer.from(bytes).toString('base64')
+  return (await import(
+    /* webpackIgnore: true */ /* turbopackIgnore: true */ `data:text/javascript;base64,${base64}`
+  )) as RealmBundleModule
+}
+
+/** One load per install list, shared by every caller that asks for it. */
+const pendingLoads = new Map<string, Promise<void>>()
+
+/**
+ * Loads a page's realm installs, once per list. The page suspends on it on
+ * the server, and a namespaced element suspends on it in the browser while
+ * its server HTML stays in place (AGL-3390).
+ *
+ * Never rejects: a bundle that fails to load, verify or keep to its namespace
+ * is logged and skipped, and its elements render as unregistered ones do.
+ */
+export function loadSiteRealmPlugins(
   installs: readonly Aglyn.RealmPluginInstall[] | undefined,
+  options: { server?: boolean } = {},
 ): Promise<void> {
-  await loadDevRealmBundles()
+  const key = `${options.server ? 'server' : 'browser'}|${(installs ?? [])
+    .map((install) => `${install.listingId}@${install.version}`)
+    .join(',')}`
+  let pending = pendingLoads.get(key)
+  if (!pending) {
+    pending = loadNow(installs, options.server === true)
+    pendingLoads.set(key, pending)
+  }
+  return pending
+}
+
+async function loadNow(
+  installs: readonly Aglyn.RealmPluginInstall[] | undefined,
+  server: boolean,
+): Promise<void> {
+  if (!server) await loadDevRealmBundles()
   const artifactsBase = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
   // Order matters: "no plugins installed" is the ordinary case and stays
   // quiet; a MISSING ORIGIN with plugins to load is the one worth explaining.
@@ -74,15 +129,27 @@ export async function loadSiteRealmPlugins(
     return
   }
   try {
-    const { composeRealmPluginHost } = await import('./realm-plugin-host.client')
+    const { composeRealmPluginHost, loadRealmPlugins, realmRegistry } =
+      await import('./realm-plugin-host.client')
     composeRealmPluginHost({ React, jsxRuntime })
     await loadRealmPlugins(installs, {
       artifactsBase,
       publicKeyBase64: process.env.NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY,
+      registry: realmRegistry,
+      // `typeof window` folds at build time, so the browser drops the
+      // server's importer along with this branch.
+      ...(server && typeof window === 'undefined'
+        ? { importModule: importFromDataUrl, fetchTimeoutMs: SERVER_FETCH_TIMEOUT_MS }
+        : {}),
     })
   } catch (error) {
     console.error('realm plugins skipped:', error)
   }
+}
+
+/** Test seam: forget every install list loaded so far. */
+export function resetSiteRealmLoadsForTests(): void {
+  pendingLoads.clear()
 }
 
 /**

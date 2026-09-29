@@ -115,7 +115,7 @@ const sequence = (): OutreachSequence =>
       { id: 'a', kind: 'email', delayBusinessDays: 0, subject: 'Hi', replyInThread: false, body: 'Hi', templateId: null },
       { id: 'b', kind: 'email', delayBusinessDays: 2, subject: '', replyInThread: true, body: 'Again', templateId: null },
     ],
-    settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: true, listUnsubscribe: false },
+    settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: true, countOpens: false, listUnsubscribe: false },
     stats: { clickTracked: true },
     createdAtMs: 1,
     updatedAtMs: 1,

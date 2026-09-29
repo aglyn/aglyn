@@ -62,6 +62,7 @@ jest.mock('./publisher-profile', () => ({
     }
     return {
       orgId: 'org-1',
+      handle: 'acme',
       stripeChargesEnabled: true,
       agreement: store.__agreement,
     }
@@ -96,7 +97,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       }),
     }),
     runTransaction: async (work: (tx: unknown) => Promise<boolean>) =>
-      work({ get: async () => ({ data: () => ({}) }), set: () => undefined }),
+      work({
+        get: async () => ({ data: () => ({}) }),
+        set: () => undefined,
+        // The identity claim (AGL-3390) creates its doc in the same kind of
+        // transaction.
+        create: () => undefined,
+      }),
   }
   return {
     __versionWrites: [] as Array<Record<string, unknown>>,

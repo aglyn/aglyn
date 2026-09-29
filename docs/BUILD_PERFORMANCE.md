@@ -409,6 +409,33 @@ produced byte-identical output. **Leave it alone** — the duplication a Lightho
 charges to this route is the price of not making those requests, and it is the cheaper
 half of the trade.
 
+#### Sibling `import()`s duplicate; a shared parent does not (measured 2026-09-28, AGL-3401)
+
+The chunker gives each `import()` every module its PARENT chunk group has not
+loaded. Sixty element imports written side by side are sixty siblings, and
+merging then copies what they share into each: on production aglyn.com 30% of
+the module code was a copy (MUI's Button eight times, SvgIcon fifteen). The
+knobs were swept again against that, on a page placing every element:
+
+| setting | files | gzip | duplicated (raw) |
+| --- | --- | --- | --- |
+| **defaults** | **95** | **755.9 KB** | **657.4 KB** |
+| `minChunkSize: 10000` | 181 | 668.3 KB | 262.4 KB |
+| no merging (`minChunkSize`/`maxMergeChunkSize: 1000`) | 287 | 600.8 KB | 17.5 KB |
+| `generateComponentChunks: true` | 102 | 739.9 KB | 587.5 KB |
+| `requestCost: 2000000` | 95 | 755.9 KB | 657.4 KB |
+
+Every one that removes the copies does it by splitting them into files, which
+compress worse. The structural fix removes them for free: write the imports
+inside a module that already loads what they share, so they become its
+children. `libs/plugins/mui/src/lib/element-tier.ts` does that for the mui
+elements, and the same sweep on top of it made most pages worse again:
+`minChunkSize: 10000` cost ready-to-roll's fifteen-element home page 18.5 KB
+gzip and a six-element page 16.5 KB, to save aglyn.com's 7.0 KB. The
+defaults stay. `check:tenant-wire-weight`'s `duplication` entry measures the
+copies a page placing every element holds, so a new sibling import shows up
+as a number rather than as a slower site.
+
 #### `sideEffects` is the build-config lever that pays (measured 2026-09-08)
 
 A library whose `package.json` says nothing about `sideEffects` forces the bundler to

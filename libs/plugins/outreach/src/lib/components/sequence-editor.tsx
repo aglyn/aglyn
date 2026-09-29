@@ -557,10 +557,9 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
               {/*
                 * Click tracking (AGL-3239), with its cost stated where it is
                 * chosen rather than in a document nobody opens. Off by
-                * default: it changes the link a cold recipient sees, and the
-                * emails stay plain text either way — there is no open
-                * tracking to turn on, because a tracking image needs an HTML
-                * email and these are not.
+                * default: it changes the link a cold recipient sees. The
+                * emails stay plain text either way; opens are the separate
+                * switch below.
                 */}
               <Stack spacing={0}>
                 <FormControlLabel
@@ -583,9 +582,43 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
                 <Typography variant="caption" color="text.secondary">
                   Links in these emails are replaced with links of ours that
                   forward to the same page, so clicks can be counted. The
-                  recipient sees the replacement, not your address. Opens
-                  aren’t counted either way: these emails are plain text, and
-                  counting an open needs a tracking image.
+                  recipient sees the replacement, not your address. The
+                  emails stay plain text.
+                </Typography>
+              </Stack>
+              {/*
+                * Open counting (AGL-3395), off by default, its cost stated
+                * where it is chosen: an HTML copy with a tracking image is the
+                * least one-to-one thing a sequence email can carry, so it is
+                * for measuring a slice, not for every sequence.
+                */}
+              <Stack spacing={0}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={draft.settings.countOpens}
+                      onChange={(event) =>
+                        update({
+                          settings: {
+                            ...draft.settings,
+                            countOpens: event.target.checked,
+                          },
+                        })
+                      }
+                      disabled={archived}
+                    />
+                  }
+                  label="Count opens"
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Each email also goes out as HTML — the same words — with a
+                  tiny tracking image, so opens can be counted. The plain-text
+                  version is unchanged. It makes the email look less like one
+                  written by hand, and some spam filters score HTML with a
+                  remote image against you, so turn it on to measure a slice
+                  of your sends rather than for every sequence. Gmail opens
+                  count; Apple Mail loads every image on arrival, so its loads
+                  are counted separately.
                 </Typography>
               </Stack>
               {/*

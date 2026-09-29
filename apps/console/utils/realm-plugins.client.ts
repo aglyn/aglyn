@@ -24,7 +24,6 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { isPluginUsedInConsole } from '@aglyn/aglyn/plugin-manager/plugin-contributions'
 import { capturePluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles'
-import { loadRealmPlugins } from '@aglyn/aglyn/plugin-manager/realm-plugins'
 import {
   authorizedFetch,
   type MaybeTokenSource,
@@ -222,11 +221,13 @@ export async function loadOrgRealmPlugins(
       isPluginUsedInConsole(install.contributes, where),
     )
     if (!inUse.length) return []
-    const { composeRealmPluginHost } = await import('./realm-plugin-host.client')
+    const { composeRealmPluginHost, loadRealmPlugins, realmRegistry } =
+      await import('./realm-plugin-host.client')
     composeRealmPluginHost({ React, jsxRuntime })
     await loadRealmPlugins(inUse, {
       artifactsBase,
       publicKeyBase64: process.env.NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY,
+      registry: realmRegistry,
     })
     return inUse
   } catch (error) {

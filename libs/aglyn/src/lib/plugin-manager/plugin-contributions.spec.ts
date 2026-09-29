@@ -354,5 +354,15 @@ describe('presenceIds (AGL-3391)', () => {
     expect(presenceIds({ pluginId: 'same', listingId: 'same' })).toEqual(['same'])
     expect(presenceIds({ listingId: 'listing-only' })).toEqual(['listing-only'])
   })
+
+  it('names a plugin by its identity too (AGL-3390)', () => {
+    expect(
+      presenceIds({
+        identity: 'aglyn.calculator',
+        pluginId: 'calculator',
+        listingId: 'listing-calc',
+      }),
+    ).toEqual(['aglyn.calculator', 'calculator', 'listing-calc'])
+  })
 })
 

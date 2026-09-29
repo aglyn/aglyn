@@ -38,10 +38,14 @@ import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand
 import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
 // The leaf, not the barrel: a published page pays for what it names.
 import { parseEntryLinkValue } from '@aglyn/aglyn/app-utils/screen-link-value'
+import { unpackWireNodes } from '@aglyn/aglyn/app-utils/wire-nodes'
 import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
 import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
 import { EnabledPluginsContext } from '@aglyn/aglyn/app-utils/enabled-plugins-context'
+import { pluginArtifactPath } from '@aglyn/aglyn/app-utils/plugin-artifact-path'
+import { RealmElementsContext } from '@aglyn/aglyn/app-utils/realm-elements-context'
+import { presenceIds } from '@aglyn/aglyn/plugin-manager/plugin-contributions'
 import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 // The plugin-manager barrel is reachable from `@aglyn/aglyn/server`, and a
 // client-only React hook on that path 500s every server route. See
@@ -51,6 +55,7 @@ import { listSiteRuntimes } from '@aglyn/aglyn/plugin-manager/site-runtime'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
+import { preload } from 'react-dom'
 import {
   type CSSProperties,
   use,
@@ -60,7 +65,10 @@ import {
   useState,
 } from 'react'
 import AttributionGuard from '../../../../components/attribution-guard.component'
-import { loadSiteRealmPlugins } from '../../../../utils/realm-plugins.client'
+import {
+  loadSiteRealmPlugins,
+  rendersOnServer,
+} from '../../../../utils/realm-plugins.client'
 import { sitePluginLoader } from '../../../../utils/site-plugin-loader'
 import type { Props } from './types'
 
@@ -164,12 +172,31 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // until they have registered. Fetching the rest on link intent (AGL-2710)
   // loaded every enabled plugin on any visit that reached for a link, for
   // pages the visitor mostly never opened.
+  //
+  // `placedComponents` narrows it once more, WITHIN each plugin (AGL-3141):
+  // a bundle that can register a part of itself registers the elements this
+  // page places and fetches nothing for the rest. Absent — a page with no
+  // document to read — asks every plugin for all of itself, because an
+  // element whose component never registered renders nothing at all.
+  //
+  // Dropping the third argument breaks no page — every element still
+  // renders — it only puts the whole mui library on every one of them, about
+  // forty element modules for a page that places sixteen. Nothing visible
+  // would catch that, so `site-plugins-load-where-used.spec.tsx` pins it
+  // (AGL-3401).
   const enabledPlugins = props.enabledPlugins ?? [
     ...DEFAULT_ENABLED_PLUGINS,
   ]
-  use(sitePluginLoader.ensure(props.blockingPlugins ?? enabledPlugins, ['site']))
+  const blocking = props.blockingPlugins ?? enabledPlugins
+  const pageUse = props.placedComponents
+    ? { componentIds: props.placedComponents }
+    : undefined
+  use(sitePluginLoader.ensure(blocking, ['site'], pageUse))
 
   const enabledKey = enabledPlugins.join(',')
+  const realmKey = (props.realmPlugins ?? [])
+    .map((install) => `${install.listingId}@${install.version}`)
+    .join(',')
   /**
    * The site's plugin set, as the renderer reads it (AGL-3033): a registered
    * component whose first-party plugin is not in it is drawn as unregistered.
@@ -178,8 +205,62 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
    * elements that this site's browser — which never loads the bundle — does
    * not. One array per set, so the renderer's leaves are not re-rendered by
    * an identical list.
+   *
+   * The signed marketplace plugins this page runs are in it too, under every
+   * id their elements carry (AGL-3390): the server renders those, and the
+   * set is what keeps one site's plugin off another site's page.
    */
-  const renderedPlugins = useMemo(() => enabledKey.split(','), [enabledKey])
+  const renderedPlugins = useMemo(
+    () => [
+      ...enabledKey.split(','),
+      ...(props.realmPlugins ?? []).flatMap((install) => presenceIds(install)),
+    ],
+    // realmKey captures the install list's identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [enabledKey, realmKey],
+  )
+
+  // Signed marketplace plugins with site elements render on the server
+  // (AGL-3390): the page suspends here, as it does for first-party plugins
+  // above, until their verified bundles have registered. `typeof window`
+  // folds at build time, so a browser bundle carries none of this branch.
+  const serverRealm = useMemo(
+    () => (props.realmPlugins ?? []).filter(rendersOnServer),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [realmKey],
+  )
+  if (typeof window === 'undefined' && serverRealm.length) {
+    use(loadSiteRealmPlugins(serverRealm, { server: true }))
+  }
+  // The browser needs the same bundles to hydrate those elements, so it
+  // starts fetching them with the document rather than after hydration.
+  const pluginOrigin = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN
+  if (pluginOrigin) {
+    for (const install of serverRealm) {
+      preload(
+        `${pluginOrigin.replace(/\/+$/, '')}/${pluginArtifactPath(
+          install.listingId,
+          install.version,
+          install.sha256,
+        )}`,
+        { as: 'fetch', crossOrigin: 'anonymous' },
+      )
+    }
+  }
+  /**
+   * The load a namespaced element waits on in the browser (AGL-3390): the
+   * page's install list, when one of its installs owns the element's
+   * namespace. Every element and the effect below share one load.
+   */
+  const realmLoadFor = useMemo(() => {
+    if (typeof window === 'undefined' || !serverRealm.length) return undefined
+    const identities = serverRealm.map((install) => `${install.identity}.`)
+    return (componentId: string) =>
+      identities.some((prefix) => componentId.startsWith(prefix))
+        ? loadSiteRealmPlugins(props.realmPlugins)
+        : undefined
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverRealm])
 
   // Trusted-realm marketplace plugins (AGL-420): additive runtimes loaded
   // AFTER hydration (never blocking first paint); the tick re-renders so a
@@ -187,9 +268,6 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // server sends only the installs this page uses (AGL-3116), so a page that
   // uses none never loads the realm-plugin host.
   const [, setRealmTick] = useState(0)
-  const realmKey = (props.realmPlugins ?? [])
-    .map((install) => `${install.listingId}@${install.version}`)
-    .join(',')
   useEffect(() => {
     // Dev bundles (AGL-427) load even with no realm installs; the env is
     // inlined and the whole dev path is dead code in production builds.
@@ -214,11 +292,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     any
   > | null>(null)
   // const props = { data: exampleData }
+  //
+  // The page ships its map packed (AGL-3401): each node's `$id` and
+  // `parentId` are left for its key and its parent's `nodes` list to state.
+  // Unpacked here, after the patch is merged — unpacking a full node is a
+  // no-op — so nothing below ever sees a node without them.
   const nodes = useMemo(
     () =>
-      deferredPatch && props.nodes
-        ? { ...props.nodes, ...deferredPatch }
-        : props.nodes,
+      unpackWireNodes(
+        deferredPatch && props.nodes
+          ? { ...props.nodes, ...deferredPatch }
+          : props.nodes,
+      ),
     [props.nodes, deferredPatch],
   )
   // Unlocked content for password-protected screens (AGL-87).
@@ -466,7 +551,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       // rendered dead. Only a typed external URL survived.
       <ScreenLinkContext.Provider value={screenLinks}>
         <EnabledPluginsContext.Provider value={renderedPlugins}>
-          <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+          <RealmElementsContext.Provider value={realmLoadFor}>
+            <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+          </RealmElementsContext.Provider>
         </EnabledPluginsContext.Provider>
       </ScreenLinkContext.Provider>
     )
@@ -617,7 +704,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         />
       ))}
       <EnabledPluginsContext.Provider value={renderedPlugins}>
-        <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+        <RealmElementsContext.Provider value={realmLoadFor}>
+          <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+        </RealmElementsContext.Provider>
       </EnabledPluginsContext.Provider>
       {props.showBranding ? (
         // White-label badge (White-Label Phase 2): the "Made with …" credit

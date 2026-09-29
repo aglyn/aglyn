@@ -65,8 +65,21 @@
  * reproduced production's served script bytes to 0.1% (763,848 against
  * 764,497), which is what "on the wire" means here. The raw size is reported
  * beside it.
+ *
+ * ## Duplication
+ *
+ * The groups weigh what a page downloads; they cannot see what it downloads
+ * TWICE. Turbopack gives every `import()` the modules its parent group has
+ * not already loaded, so sibling imports that share a module each carry a
+ * copy — and a page placing twenty elements fetched MUI's Button eight times
+ * (AGL-3401). The budget's `duplication` entry follows every dynamic import
+ * written under one source directory, starting from the every-page chunks,
+ * and counts the module code the resulting chunk set holds more than once.
+ * Those are the chunks a page placing every element of that plugin loads, so
+ * the number is the most a page can pay in copies.
  */
 
+import { runInNewContext } from 'node:vm'
 import { brotliCompressSync, constants as zlib } from 'node:zlib'
 
 /** The published page's route: every customer site is served by it. */
@@ -234,6 +247,148 @@ export function callSpecifiers(site) {
 }
 
 /**
+ * One chunk's async loaders and mapped call sites, read once per chunk:
+ * `indexOf(chunk)` is `{ loaders: Map<id, chunk[]>, sites: [{ id, file,
+ * line, text, after }] }`, empty for a chunk that is not in the build.
+ */
+export function chunkIndexer(io) {
+  const indexed = new Map()
+  return (chunk) => {
+    if (indexed.has(chunk)) return indexed.get(chunk)
+    const entry = { loaders: new Map(), sites: [] }
+    indexed.set(chunk, entry)
+    if (!io.exists(chunk)) return entry
+    const code = io.readText(chunk)
+    for (const loader of asyncLoaders(code)) entry.loaders.set(loader.id, loader.chunks)
+    const calls = loaderCallSites(code)
+    const marker = calls.length ? code.match(/\/\/# sourceMappingURL=(\S+)/) : null
+    const mapPath = marker ? `${chunk.replace(/[^/]+$/, '')}${marker[1]}` : null
+    if (!mapPath || !io.exists(mapPath)) return entry
+    const map = io.readJson(mapPath)
+    const segments = decodeMappings(map.mappings)
+    for (const call of calls) {
+      const origin = originalLineAt(code, map, segments, call.offset)
+      if (origin) entry.sites.push({ id: call.id, ...origin })
+    }
+    return entry
+  }
+}
+
+/**
+ * The modules a chunk defines, in order: each Turbopack module entry is one or
+ * more ids followed by its factory, and a factory's source is what the module
+ * costs. Read by running the chunk's single `TURBOPACK.push([...])` in an
+ * empty context — the factories are collected, never called.
+ *
+ * @returns {Array<{ key: string, text: string, bytes: number }>}
+ */
+export function chunkModules(code) {
+  const pushed = []
+  try {
+    runInNewContext(String(code), {
+      TURBOPACK: { push: (entry) => pushed.push(entry) },
+    })
+  } catch {
+    return []
+  }
+  const modules = []
+  let ids = []
+  for (const item of Array.isArray(pushed[0]) ? pushed[0].slice(1) : []) {
+    if (typeof item === 'number' || typeof item === 'string') {
+      ids.push(item)
+      continue
+    }
+    if (typeof item !== 'function') continue
+    const text = item.toString()
+    modules.push({ key: ids.join('+'), text, bytes: Buffer.byteLength(text) })
+    ids = []
+  }
+  return modules
+}
+
+/**
+ * The module code a page can hold more than once (AGL-3401).
+ *
+ * Starts from `start` — the every-page chunks — and follows every dynamic
+ * import whose call site maps to a file under `follows`, transitively, reading
+ * each loader only from a chunk already in the set (the rule the groups use,
+ * for the same reason). Then counts each module's copies across the set.
+ *
+ * `followed` is how many imports were followed: zero means the directory no
+ * longer matches anything, and a measurement that followed nothing would
+ * report no duplication and pass.
+ *
+ * @returns {{ chunks: string[], followed: number, moduleBytes: number,
+ *   bytes: number, copies: Array<{ file: string, copies: number,
+ *   bytes: number }> }}
+ */
+export function measureDuplication({ start, follows, io, top = 12 }) {
+  const indexOf = chunkIndexer(io)
+  const chunks = new Set(start)
+  const done = new Set()
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const chunk of [...chunks]) {
+      for (const site of indexOf(chunk).sites) {
+        if (done.has(site.id) || !site.file.startsWith(follows)) continue
+        for (const from of chunks) {
+          const list = indexOf(from).loaders.get(site.id)
+          if (!list) continue
+          done.add(site.id)
+          for (const listed of list) {
+            if (chunks.has(listed)) continue
+            chunks.add(listed)
+            grew = true
+          }
+        }
+      }
+    }
+  }
+
+  const seen = new Map()
+  let moduleBytes = 0
+  for (const chunk of [...chunks].sort()) {
+    if (!io.exists(chunk)) continue
+    for (const module of chunkModules(io.readText(chunk))) {
+      moduleBytes += module.bytes
+      const entry = seen.get(module.key)
+      if (entry) entry.copies += 1
+      else seen.set(module.key, { ...module, chunk, copies: 1 })
+    }
+  }
+  const repeated = [...seen.values()]
+    .filter((module) => module.copies > 1)
+    .sort((a, b) => (b.copies - 1) * b.bytes - (a.copies - 1) * a.bytes)
+  const bytes = repeated.reduce((sum, module) => sum + (module.copies - 1) * module.bytes, 0)
+  return {
+    chunks: [...chunks].sort(),
+    followed: done.size,
+    moduleBytes,
+    bytes,
+    copies: repeated.slice(0, top).map((module) => ({
+      file: moduleFile(io, module) ?? `module ${module.key}`,
+      copies: module.copies,
+      bytes: module.bytes,
+    })),
+  }
+}
+
+/** The source file a module's factory maps to, for naming it in a verdict. */
+function moduleFile(io, module) {
+  const code = io.readText(module.chunk)
+  const offset = code.indexOf(module.text.slice(0, 200))
+  const marker = code.match(/\/\/# sourceMappingURL=(\S+)/)
+  const mapPath = marker ? `${module.chunk.replace(/[^/]+$/, '')}${marker[1]}` : null
+  if (offset < 0 || !mapPath || !io.exists(mapPath)) return null
+  const map = io.readJson(mapPath)
+  // The factory's own first tokens are its wrapper; a little way in is code.
+  const at = offset + Math.min(module.text.length - 1, 40)
+  const origin = originalLineAt(code, map, decodeMappings(map.mappings), at)
+  return origin ? origin.file.replace(/^.*node_modules\//, '') : null
+}
+
+/**
  * Weigh the published page's before-settle JavaScript in a production build.
  *
  * `io` is injected so the tests can hand in a synthetic build:
@@ -255,11 +410,19 @@ export function callSpecifiers(site) {
  * the build at large: read from the wrong group, the always-on plugin's loader
  * listed 12 chunks where the page fetches 16.
  *
+ * `duplication` is the budget's entry of that name, when it has one: the
+ * every-page group's chunks are where `measureDuplication` starts.
+ *
  * @returns {{ groups: Array<{ name: string, chunks: string[], bytes: number,
  *   raw: number, missing: Array<{ from: string, import: string }> }>,
- *   eager: string[] }}
+ *   eager: string[], duplication?: object }}
  */
-export function measureWireWeight({ route = PUBLISHED_ROUTE, groups, io }) {
+export function measureWireWeight({
+  route = PUBLISHED_ROUTE,
+  groups,
+  duplication,
+  io,
+}) {
   const eager = eagerChunks({
     buildManifest: io.readJson('build-manifest.json'),
     clientReferenceManifest: io.readText(
@@ -267,27 +430,7 @@ export function measureWireWeight({ route = PUBLISHED_ROUTE, groups, io }) {
     ),
   })
 
-  /** One chunk's loaders and mapped call sites, read once. */
-  const indexed = new Map()
-  const indexOf = (chunk) => {
-    if (indexed.has(chunk)) return indexed.get(chunk)
-    const entry = { loaders: new Map(), sites: [] }
-    indexed.set(chunk, entry)
-    if (!io.exists(chunk)) return entry
-    const code = io.readText(chunk)
-    for (const loader of asyncLoaders(code)) entry.loaders.set(loader.id, loader.chunks)
-    const calls = loaderCallSites(code)
-    const marker = calls.length ? code.match(/\/\/# sourceMappingURL=(\S+)/) : null
-    const mapPath = marker ? `${chunk.replace(/[^/]+$/, '')}${marker[1]}` : null
-    if (!mapPath || !io.exists(mapPath)) return entry
-    const map = io.readJson(mapPath)
-    const segments = decodeMappings(map.mappings)
-    for (const call of calls) {
-      const origin = originalLineAt(code, map, segments, call.offset)
-      if (origin) entry.sites.push({ id: call.id, ...origin })
-    }
-    return entry
-  }
+  const indexOf = chunkIndexer(io)
 
   const size = new Map()
   const measure = (chunk) => {
@@ -339,28 +482,50 @@ export function measureWireWeight({ route = PUBLISHED_ROUTE, groups, io }) {
     }
     out.push({ name: group.name, chunks: own, bytes, raw, missing })
   })
-  return { eager, groups: out }
+  const measured = { eager, groups: out }
+  if (duplication) {
+    measured.duplication = {
+      name: duplication.name,
+      ...measureDuplication({
+        start: out[0]?.chunks ?? eager,
+        follows: duplication.follows,
+        io,
+      }),
+    }
+  }
+  return measured
 }
 
 /** The budget a measurement should be pinned at. */
 export function budgetFor(measured, previous) {
   const byName = new Map((previous?.groups ?? []).map((group) => [group.name, group]))
-  return {
+  const pinned = (bytes) => Math.ceil((bytes * WIRE_HEADROOM) / 1024) * 1024
+  const budget = {
     ...previous,
     groups: measured.groups.map((group) => ({
       ...byName.get(group.name),
       name: group.name,
       baselineBytes: group.bytes,
-      budgetBytes: Math.ceil((group.bytes * WIRE_HEADROOM) / 1024) * 1024,
+      budgetBytes: pinned(group.bytes),
     })),
   }
+  if (measured.duplication) {
+    budget.duplication = {
+      ...previous?.duplication,
+      baselineBytes: measured.duplication.bytes,
+      budgetBytes: pinned(measured.duplication.bytes),
+    }
+  }
+  return budget
 }
 
 /**
  * Compare a measurement with the checked-in budget.
  *
  * Red when a group grew past its budget, when a declared import is not in the
- * build, or when a group in the budget was not measured at all. A group that
+ * build, or when a group in the budget was not measured at all — and, for the
+ * `duplication` entry, when the copies grew past theirs or the directory it
+ * follows led to no import at all. A group that
  * got LIGHTER is not red: this pins a ceiling, and a win that has to be re-cut
  * to pass is a win the gate punishes. `--write` records it.
  */
@@ -386,6 +551,24 @@ export function evaluateWireWeight(measured, budget) {
       })
     }
   }
+  const planned = budget.duplication
+  if (planned) {
+    const measuredCopies = measured.duplication
+    if (!measuredCopies) {
+      reasons.push({ kind: 'unmeasured', group: planned.name })
+    } else if (!measuredCopies.followed) {
+      reasons.push({ kind: 'unfollowed', group: planned.name, follows: planned.follows })
+    } else if (measuredCopies.bytes > planned.budgetBytes) {
+      reasons.push({
+        kind: 'duplicated',
+        group: planned.name,
+        bytes: measuredCopies.bytes,
+        budgetBytes: planned.budgetBytes,
+        baselineBytes: planned.baselineBytes,
+        copies: measuredCopies.copies,
+      })
+    }
+  }
   return { ok: reasons.length === 0, reasons }
 }
 
@@ -399,6 +582,29 @@ export function explainWireVerdict(verdict) {
         `the budget names a group "${reason.group}" that this measurement did ` +
         'not produce. A group the gate stops weighing is a group it stops ' +
         'guarding; rename it in the budget in the same commit that renames it.'
+      )
+    }
+    if (reason.kind === 'unfollowed') {
+      return (
+        `"${reason.group}": no dynamic import is written under ` +
+        `${reason.follows} in this build, so nothing was followed and no copy ` +
+        'could be counted. If the directory moved, point `follows` at its new ' +
+        'home in the same commit; a measure that follows nothing reports no ' +
+        'duplication and would pass.'
+      )
+    }
+    if (reason.kind === 'duplicated') {
+      return (
+        `"${reason.group}" holds more copies than its budget.\n\n` +
+        `  duplicated  ${kb(reason.bytes)} of module code, raw\n` +
+        `  baseline    ${kb(reason.baselineBytes)}\n` +
+        `  budget      ${kb(reason.budgetBytes)}\n\n` +
+        'The largest copies:\n' +
+        reason.copies
+          .map((copy) => `  ${copy.copies}x ${kb(copy.bytes)}  ${copy.file}`)
+          .join('\n') +
+        '\n\n' +
+        WHY_DUPLICATION
       )
     }
     if (reason.kind === 'missing') {
@@ -429,3 +635,14 @@ export const WHY_WIRE_WEIGHT =
   'plugin, a module that reaches a barrel, and a click-only surface loaded ' +
   'with the page. If the growth is deliberate, re-baseline with --write in ' +
   'the same commit, so a reviewer reads the new number beside its cause.'
+
+/** What a duplication failure costs and where it usually comes from. */
+export const WHY_DUPLICATION =
+  'A copy is a module a page downloads again in another chunk. Turbopack ' +
+  'gives each `import()` every module its parent group has not already ' +
+  'loaded, so two imports written side by side that share a module each ' +
+  'carry it. The usual cause is an element whose `import()` was written in ' +
+  '`plugin.ts` beside the others instead of inside `element-tier.ts`, or a ' +
+  'core element moved out of the tier. `npm run check:tenant-wire-weight -- ' +
+  '--list` prints the chunks it followed. If the copies are deliberate, ' +
+  're-baseline with --write in the same commit.'
