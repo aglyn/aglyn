@@ -137,12 +137,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'AGL-1452. The daily upload-CORS drift checker. The literal is the default project fallback for a build tool that is never shipped; a self-host operator runs it against their own project id.',
   },
   {
-    file: 'tools/scripts/move-calculator-nodes-to-marketplace.mjs',
-    count: 1,
-    reason:
-      "An operator's one-off migration of Aglyn's own sites (AGL-3394): it asks aglyn.com's health route which commit production serves before it writes.",
-  },
-  {
     file: 'tools/scripts/release-changelog-entry.mjs',
     count: 1,
     reason:
