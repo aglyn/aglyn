@@ -16,6 +16,18 @@ Canvas elements, all in the plugin's namespace `aglyn.calculator`:
 - `aglyn.calculator.document`, **Calculator Document**: a receipt, invoice or quote laid out on the canvas and filled by results.
 - `aglyn.calculator.saveButton`, **Calculator Save Button**: saves the document as a PDF (the browser's print-to-PDF, scoped to the document), shares it, or copies it as text.
 
+## Data
+
+- **Reads:** the site function a Calculator names, and the site variables that function uses. Compose hands them to the element with the page. The only other input is what a visitor types into the Calculator's inputs.
+- **Stores:** nothing. Nothing is written to the site, to a database, or to the visitor's browser storage.
+- **Sends:** nothing. The plugin declares no network hosts and makes no requests.
+- **Save Button:** everything happens on the visitor's device.
+  - **Save as PDF** opens the browser's print window with only the document in it.
+  - **Share** opens the device's own share sheet.
+  - **Copy as text** writes the document's text to the clipboard.
+
+  In each case, what leaves the device is up to the visitor.
+
 ## Building and publishing
 
 ```bash
