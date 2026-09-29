@@ -254,3 +254,96 @@ describe('function bindings are declared, not named by core (AGL-3393)', () => {
     error.mockRestore()
   })
 })
+
+describe("the dev loop's plugins bind through their manifests on disk (AGL-3394)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { mkdtempSync, writeFileSync } = require('node:fs') as typeof import('node:fs')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { join } = require('node:path') as typeof import('node:path')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { tmpdir } = require('node:os') as typeof import('node:os')
+  const dir = mkdtempSync(join(tmpdir(), 'dev-manifests-'))
+  const manifestPath = join(dir, 'manifest.json')
+  writeFileSync(
+    manifestPath,
+    JSON.stringify({
+      id: 'calculator',
+      contributes: {
+        site: {
+          components: ['aglyn.calculator.scope', 'functionWidget'],
+          functionBindings: {
+            'aglyn.calculator.scope': 'functionName',
+            functionWidget: 'hijack',
+          },
+        },
+      },
+    }),
+  )
+  const env = process.env as Record<string, string | undefined>
+  const saved = { ...env }
+  const calculator = () =>
+    page(
+      {
+        $id: 'calc',
+        componentId: 'aglyn.calculator.scope',
+        props: { functionName: 'quote' },
+      },
+      {
+        $id: 'widget',
+        componentId: 'functionWidget',
+        props: { functionName: 'quote', hijack: 'nothing' },
+      },
+    )
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetPublishedLayoutVersion.mockResolvedValue({ version: { nodes: {} }, layout: {} })
+    mockGetComponents.mockResolvedValue({ definitions: {} })
+    mockGetVariables.mockResolvedValue({})
+    mockGetFunctions.mockResolvedValue({ quote: QUOTE })
+    mockGetDatasets.mockResolvedValue([])
+    mockGetWorkflows.mockResolvedValue([])
+    mockGetPluginInstalls.mockResolvedValue({})
+    mockGetForms.mockResolvedValue({ forms: {} })
+    // A dev bundle has no install.
+    mockGetRealmPluginInstalls.mockResolvedValue([])
+    env['NEXT_PUBLIC_PLUGIN_DEV'] = 'enabled'
+    env['PLUGIN_DEV_MANIFESTS'] = manifestPath
+  })
+
+  afterEach(() => {
+    for (const key of ['NEXT_PUBLIC_PLUGIN_DEV', 'PLUGIN_DEV_MANIFESTS', 'NODE_ENV']) {
+      if (saved[key] === undefined) delete env[key]
+      else env[key] = saved[key]
+    }
+  })
+
+  it("binds a dev plugin's element from its manifest file", async () => {
+    const nodes = await compose(calculator())
+    expect(nodes['calc'].props.definition).toEqual(QUOTE)
+    // The platform's own element keeps its compiled binding.
+    expect(nodes['widget'].props.definition).toEqual(QUOTE)
+  })
+
+  it('reads nothing without the dev loop opt-in', async () => {
+    delete env['NEXT_PUBLIC_PLUGIN_DEV']
+    const nodes = await compose(calculator())
+    expect(nodes['calc'].props.definition).toBeUndefined()
+  })
+
+  it('reads nothing in a production build', async () => {
+    env['NODE_ENV'] = 'production'
+    const nodes = await compose(calculator())
+    expect(nodes['calc'].props.definition).toBeUndefined()
+  })
+
+  it('skips a manifest it cannot read, and still composes', async () => {
+    env['PLUGIN_DEV_MANIFESTS'] = join(dir, 'missing.json')
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const nodes = await compose(calculator())
+    expect(nodes['calc'].props.definition).toBeUndefined()
+    expect(nodes['widget'].props.definition).toEqual(QUOTE)
+    error.mockRestore()
+  })
+})
+

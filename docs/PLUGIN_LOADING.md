@@ -261,6 +261,7 @@ per-request org gate applies to them too.
 | `PLUGIN_REMOTE_SERVER` | server | `enabled` turns on remote server bundles (default off) |
 | `PLUGIN_REMOTE_SERVER_BUNDLES` | server | Comma-separated `listingId@version` allowlist |
 | `NEXT_PUBLIC_PLUGIN_DEV_BUNDLES` | client, **dev only** | `id=http://localhost:PORT/plugin.bundle.mjs,...` — loads UNVERIFIED bundles for the local authoring loop (AGL-427). The code path is compiled out of production builds and refuses non-localhost URLs; never set it anywhere shared. Pair with `npm run watch` in the realm template and refresh. |
+| `PLUGIN_DEV_MANIFESTS` | server, **dev only** | Comma-separated paths to the dev bundles' `manifest.json` files (AGL-3394). A dev bundle has no install, so compose reads its `functionBindings` from these, sanitized like a published manifest. Local files only; ignored without `NEXT_PUBLIC_PLUGIN_DEV=enabled` and in production builds. |
 
 Generate the key pair with
 `node tools/scripts/generate-plugin-trust-key.mjs`. Rotation runbook

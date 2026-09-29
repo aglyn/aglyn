@@ -45,6 +45,7 @@ jest.mock('../utils/realm-plugin-host.client', () => ({
 }))
 
 import {
+  devRealmPluginIds,
   loadSiteRealmPlugins,
   rendersOnServer,
   resetSiteRealmLoadsForTests,
@@ -111,3 +112,24 @@ describe('the server load', () => {
     expect(mockLoads).toHaveLength(1)
   })
 })
+
+describe("the dev loop's plugins are on the rendered site's set (AGL-3394)", () => {
+  const env = process.env as Record<string, string | undefined>
+  afterEach(() => {
+    delete env['NEXT_PUBLIC_PLUGIN_DEV']
+    delete env['NEXT_PUBLIC_PLUGIN_DEV_BUNDLES']
+  })
+
+  it('names each dev bundle by the id it is configured under', () => {
+    env['NEXT_PUBLIC_PLUGIN_DEV'] = 'enabled'
+    env['NEXT_PUBLIC_PLUGIN_DEV_BUNDLES'] =
+      'aglyn.calculator=http://localhost:5173/plugin.bundle.mjs, acme.quote=http://localhost:5174/b.mjs'
+    expect(devRealmPluginIds()).toEqual(['aglyn.calculator', 'acme.quote'])
+  })
+
+  it('names none without the opt-in', () => {
+    env['NEXT_PUBLIC_PLUGIN_DEV_BUNDLES'] = 'aglyn.calculator=http://localhost:5173/plugin.bundle.mjs'
+    expect(devRealmPluginIds()).toEqual([])
+  })
+})
+

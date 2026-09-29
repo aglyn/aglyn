@@ -66,6 +66,7 @@ import {
 } from 'react'
 import AttributionGuard from '../../../../components/attribution-guard.component'
 import {
+  devRealmPluginIds,
   loadSiteRealmPlugins,
   rendersOnServer,
 } from '../../../../utils/realm-plugins.client'
@@ -208,12 +209,15 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
    *
    * The signed marketplace plugins this page runs are in it too, under every
    * id their elements carry (AGL-3390): the server renders those, and the
-   * set is what keeps one site's plugin off another site's page.
+   * set is what keeps one site's plugin off another site's page. So are the
+   * DEV loop's unverified bundles (AGL-427), which have no install to carry
+   * them; the list is empty outside a dev build that opted in.
    */
   const renderedPlugins = useMemo(
     () => [
       ...enabledKey.split(','),
       ...(props.realmPlugins ?? []).flatMap((install) => presenceIds(install)),
+      ...devRealmPluginIds(),
     ],
     // realmKey captures the install list's identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
