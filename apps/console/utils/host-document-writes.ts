@@ -75,7 +75,7 @@ export const SITE_RENDERED_HOST_FIELDS: Readonly<Record<string, string>> = {
     'The persisted MUI theme every published page is styled with, resolved ' +
     'by `resolveSiteTheme` in the tenant layout.',
   themeOverride:
-    'The site\'s patch on top of an installed marketplace theme; the tenant ' +
+    'The site\'s patch on top of the theme it picked (AGL-3404); the tenant ' +
     'renders `theme ⊕ themeOverride`, so a reset here restyles every page.',
   seo:
     'Title, description, separator and title pattern, favicon, app icon, ' +
@@ -167,6 +167,10 @@ export const HOST_FIELDS_WITHOUT_SITE_DROP: Readonly<Record<string, string>> = {
     'Server-owned provenance of an installed theme; the install route that ' +
     'writes it drops the site\'s pages itself.',
   themeReplaced: 'The undo snapshot of the previous theme; never rendered.',
+  themeSelection:
+    'Which library theme the site picked (AGL-3404): a label for the ' +
+    'console. The page renders `theme ⊕ themeOverride`, and the library ' +
+    'route that writes this drops the site itself.',
   suspendedAt: 'Server-owned; the lockdown paths drop the site themselves.',
   suspendedReasonCode: 'Server-owned suspension detail, as `suspendedAt`.',
   suspendedMessage: 'Server-owned suspension detail, as `suspendedAt`.',
