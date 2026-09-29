@@ -9,6 +9,17 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.213 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/6ef313157...v1.0.0-beta.213)
+
+### Added
+
+- **besigner:** the Besigner loads installed plugins that contribute site elements ([AGL-3391](https://linear.app/aglyn/issue/AGL-3391))
+- **site:** a dark-mode site logo beside the light one ([AGL-3400](https://linear.app/aglyn/issue/AGL-3400))
+- **plugins:** signed plugins use the site's MUI through reviewed host surfaces ([AGL-3392](https://linear.app/aglyn/issue/AGL-3392), [AGL-3399](https://linear.app/aglyn/issue/AGL-3399))
+- **seo:** search engine verification meta tags for Search Console and Bing ([AGL-3399](https://linear.app/aglyn/issue/AGL-3399), [AGL-3386](https://linear.app/aglyn/issue/AGL-3386))
+
 ## v1.0.0-beta.212 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.211...v1.0.0-beta.212)
