@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { publishedScreenCount } from './host-status'
+import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
 
 /**
  * Whether the `hostFirstRun` zone has anything to offer on this site — that
@@ -34,9 +34,12 @@ import { publishedScreenCount } from './host-status'
  * ## Nothing published, read off a document already held
  *
  * `host.screens` is the routing map publishing writes, so an empty one is a
- * site with no page a visitor can reach — and `/api/hosts/create` writes
- * exactly `screens: {}` and seeds no starter (AGL-687), so a genuinely new
- * site always qualifies. The settings layout already subscribes the host
+ * site with no page a visitor can reach. A new site is created with exactly
+ * one entry — the placeholder home page named by `defaultHomeScreenId`
+ * (AGL-3408) — and that entry does not count: the platform put it there, not
+ * the owner, so a genuinely new site still qualifies. This is the same
+ * reading `first_publish` makes, through the same predicate, so "blank" and
+ * "has not published yet" cannot come to disagree. The settings layout already subscribes the host
  * document for every form in the hub, so this costs NO additional read, which
  * `host-setup-read-cost.spec.tsx` holds to a budget that has no room for one.
  *
@@ -54,9 +57,12 @@ import { publishedScreenCount } from './host-status'
  * itself, which plans and builds nothing until the person confirms.
  */
 export function hostIsBlankSite(
-  host: { screens?: Record<string, unknown> } | null | undefined,
+  host:
+    | { screens?: Record<string, unknown>; defaultHomeScreenId?: string }
+    | null
+    | undefined,
 ): boolean {
-  return publishedScreenCount(host) === 0
+  return isFirstPublishedRoute(host?.screens, host?.defaultHomeScreenId)
 }
 
 /**

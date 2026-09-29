@@ -362,6 +362,32 @@ export function findScreenIdByRoutePath(
   return entry?.[0]
 }
 
+/**
+ * The screen a publish at `path` would collide with, or `undefined` when the
+ * address is free to take (AGL-3408).
+ *
+ * {@link findScreenIdByRoutePath} with one exception: the placeholder home
+ * page a site is created with (`host.defaultHomeScreenId`) does not block the
+ * site root. It holds `/` only so a new site never answers its own address
+ * with a 404, and the first real page published there replaces it — the
+ * publish seam removes its entry in the same write. It still blocks any other
+ * path it has been moved to, and no other screen is ever passed over.
+ *
+ * Every publish surface's conflict check reads this rather than the raw owner,
+ * so "is this address taken?" has one answer across them.
+ */
+export function blockingRouteOwner(
+  screens: Record<ScreenUid, string> | null | undefined,
+  path: string,
+  defaultHomeScreenId?: string | null,
+): ScreenUid | undefined {
+  const owner = findScreenIdByRoutePath(screens, path)
+  if (owner && path === SCREEN_ROOT_PATH && owner === defaultHomeScreenId) {
+    return undefined
+  }
+  return owner
+}
+
 /** Human-facing URL for a routing-map path (`'/'` stays `/`, `about` → `/about`). */
 export function screenRoutePathToUrl(path: string): string {
   return path === SCREEN_ROOT_PATH ? SCREEN_ROOT_PATH : `/${path}`

@@ -143,6 +143,7 @@ jest.mock('@aglyn/aglyn', () => ({
   composeScreenRoutePath: () => '/promo',
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
+  blockingRouteOwner: () => undefined,
   normalizeScreenSlug: (value: string) => value,
   // Real (AGL-2572): the slug field seeds itself through this, and it is a
   // pure read of one path segment. Listed because this mock is a closed

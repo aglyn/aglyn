@@ -363,6 +363,18 @@ describe('aiDraftScreenSlug', () => {
     expect(aiDraftScreenSlug('/', 'Home', rows, {})).toBe('/')
     expect(aiDraftScreenSlug('/', 'Home', rows, { 'scr-home': '/' })).toBe('home')
   })
+
+  it('asks for the root a new site\'s placeholder home page holds (AGL-3408)', () => {
+    // The placeholder is a routed screen AND a sibling row carrying `/`.
+    const withPlaceholder = [...rows, { id: 'scr-ph', slug: '/', deleted: false }]
+    expect(
+      aiDraftScreenSlug('/', 'Home', withPlaceholder, { 'scr-ph': '/' }, 'scr-ph'),
+    ).toBe('/')
+    // Any other holder of the root still keeps it.
+    expect(
+      aiDraftScreenSlug('/', 'Home', withPlaceholder, { 'scr-ph': '/' }, 'other'),
+    ).toBe('home')
+  })
 })
 
 describe('a later pass, and the listing', () => {

@@ -22,7 +22,7 @@ import {
   composeScreenRoutePath,
   createResourceUid,
   decodeStoredNodes,
-  findScreenIdByRoutePath,
+  blockingRouteOwner,
   formatQuotaLimit,
   normalizeScreenSlug,
   reservedScreenRouteMessage,
@@ -384,7 +384,12 @@ function Screens(props) {
       }
       if (path) {
         const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
-        const owner = findScreenIdByRoutePath(hostSnapshot.get('screens'), path)
+        // The placeholder home page does not block `/` (AGL-3408).
+        const owner = blockingRouteOwner(
+          hostSnapshot.get('screens'),
+          path,
+          hostSnapshot.get('defaultHomeScreenId'),
+        )
         if (owner) {
           dequeueLoading()
           return enqueueSnackbar(
@@ -600,7 +605,11 @@ function Screens(props) {
       }
       const nextSelfPath = composeScreenRoutePath(screenId, nextById)
       const owner = nextSelfPath
-        ? findScreenIdByRoutePath(routingMap, nextSelfPath)
+        ? blockingRouteOwner(
+            routingMap,
+            nextSelfPath,
+            hostData?.defaultHomeScreenId,
+          )
         : undefined
       if (owner && owner !== screenId) {
         enqueueSnackbar(

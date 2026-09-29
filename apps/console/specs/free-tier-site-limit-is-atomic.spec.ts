@@ -88,9 +88,11 @@ function mockTxLock(): Promise<() => void> {
 }
 
 function mockMakeFirestore() {
-  const makeDoc = (path: string) => ({
+  const makeDoc = (path: string): any => ({
     path,
     id: path.split('/').pop(),
+    // The home page a site is created with lives under it (AGL-3408).
+    collection: (name: string) => makeCollection(`${path}/${name}`),
     get: async () => ({
       exists: mockDocs.has(path),
       data: () => mockDocs.get(path),
