@@ -16,6 +16,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **cache:** settings, theme and API writes drop the live site's cache ([AGL-3386](https://linear.app/aglyn/issue/AGL-3386), [AGL-2690](https://linear.app/aglyn/issue/AGL-2690), [AGL-1150](https://linear.app/aglyn/issue/AGL-1150), [AGL-2575](https://linear.app/aglyn/issue/AGL-2575))
+- **links:** an sms: href survives to the published page ([AGL-3388](https://linear.app/aglyn/issue/AGL-3388))
 
 ### Reverted
 
