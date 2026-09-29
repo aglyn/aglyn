@@ -109,8 +109,9 @@ if (result.ok) {
   console.log(
     `monaco-editor@${monacoVersion} inlines DOMPurify ` +
       `${result.dompurifyVersion} (reviewed: ${REVIEWED_DOMPURIFY_VERSION}) in ` +
-      `${result.bundles.join(', ')} and passes none of the config options the ` +
-      `four dismissed advisories need (${files.length} .js file(s) scanned).`,
+      `${result.bundles.join(', ')}; each of the four dismissed advisories is ` +
+      'either fixed in that copy or has no precondition monaco meets ' +
+      `(${files.length} .js file(s) scanned).`,
   )
   process.exit(0)
 }
