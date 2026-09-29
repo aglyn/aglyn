@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.212 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.211...v1.0.0-beta.212)
+
+### Added
+
+- **sites:** a new site starts with User Accounts on ([AGL-3397](https://linear.app/aglyn/issue/AGL-3397))
+- **functions:** elements that run a site function are declared by their plugin ([AGL-3393](https://linear.app/aglyn/issue/AGL-3393), [AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+
+### Fixed
+
+- **seo:** the nested publisher is the site entity, and a local business has an image ([AGL-3398](https://linear.app/aglyn/issue/AGL-3398))
+- **console:** the workspace time zone is set on Settings → General ([AGL-3396](https://linear.app/aglyn/issue/AGL-3396))
+- **billing:** the connect destination requires the payout events ([AGL-3377](https://linear.app/aglyn/issue/AGL-3377))
+
 ## v1.0.0-beta.211 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/67df8d871...v1.0.0-beta.211)
