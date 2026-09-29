@@ -396,7 +396,9 @@ see [Forms](../../content-and-data/forms/overview.md),
 [Commerce](../../commerce-and-bookings/commerce/overview.md) and
 [Member accounts](../../guides/member-accounts.md).
 
-One element in this group belongs to neither:
+The calculator elements belong to neither. They come from the **Calculators** plugin,
+which runs your site's [functions](../bindings/overview.md#a-calculator-you-lay-out) and so
+needs the Logic plugin that authors them:
 
 | Element | What it's for |
 | --- | --- |
@@ -405,6 +407,8 @@ One element in this group belongs to neither:
 | **Calculator Input** | Asks one parameter of the Calculator it sits in. **Ask as** picks the control: Automatic follows the parameter (a list when it has choices, a number box for a number, a switch for a true/false), and **Quick picks** draws buttons that set the value, so `10, 25, 50, 100` can sit beside a number box on the same parameter. **Choices** overrides the function's own, as `value: Label, value: Label`. |
 | **Calculator Result** | Shows one value of the Calculator it sits in: **Value** is a parameter or variable of the function, or empty for its return value. Style it like any text. Text the function wraps in `**two asterisks**` is emphasized, nothing is drawn while the value is empty, and **Read changes aloud** announces it to a screen reader — turn that on for one result, usually the sentence. |
 | **Show When** | A container inside a Calculator that appears only while one of the function's values is true, a number other than zero, or text that is not empty — a table row a filter can remove, a note that applies to one choice. **Show when it is not** inverts it. |
+| **Calculator Document** | A receipt, invoice or quote inside a Calculator, laid out like any other part of the page and filled by Calculator Results. **File name** names the saved PDF and fills in values of the function written in braces, such as `Receipt {invoice_number}`. **Paper** is Letter, A4 or the printer's own, and **Page margin** runs from None to Wide. **On the page** set to **Only in the saved copy** keeps the document off a visitor's screen so it appears only in what is saved; the Besigner still shows it, outlined, so you can design it. |
+| **Calculator Save Button** | Saves the Calculator Document it shares a Calculator with. **Save as PDF** opens the device's print window holding only the document, where the visitor chooses Save as PDF (on an iPhone, Share → Save to Files); the page's header, footer and everything else stay out. **Share** hands the document to the device's share sheet as text, and copies it where there is no share sheet. **Copy as text** copies it for pasting into a message. The button never appears in the saved copy. **Document** picks one by its **Document name** when a Calculator holds more than one. |
 
 ## Related
 

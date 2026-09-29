@@ -51,11 +51,6 @@
             "muiMegaMenu",
             "muiDrawer",
             "muiDrawerToggle",
-            "functionWidget",
-            "functionScope",
-            "functionInput",
-            "functionOutput",
-            "functionShow",
             "product",
             "marketplacePlugin",
             "custom-html",
@@ -769,7 +764,10 @@
           "siteField": "hostId",
           "holdsTransferWhile": {
             "field": "status",
-            "values": ["scheduled", "sending"]
+            "values": [
+              "scheduled",
+              "sending"
+            ]
           }
         },
         {
@@ -970,6 +968,48 @@
         "serverDeclarations": "registerVideoDeliveryServerDeclarations"
       },
       "contributes": {}
+    },
+    {
+      "id": "calculator",
+      "package": "@aglyn/plugins-calculator",
+      "register": {
+        "site": "registerCalculatorPlugin"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "catalog": {
+        "order": 17,
+        "$comment": "The canvas half of site functions (AGL-3387): the elements that put a function on a page and save what it works out as a receipt, invoice or quote. They came from mui, which holds only what MUI itself provides. requires logic: a calculator runs a site function, and functions are the Logic plugin's to author; nothing here imports it.",
+        "label": "Calculators",
+        "description": "Calculators that run your site functions, and the receipts, invoices and quotes they save.",
+        "requires": [
+          "logic"
+        ],
+        "siteOff": {
+          "stops": "Switching Calculators off for this site stops calculators, function widgets and their receipts rendering on its published pages.",
+          "keeps": "The site's functions and variables are kept, and calculators keep working on the workspace's other sites.",
+          "confirm": true,
+          "pages": {
+            "heading": "These published pages carry a calculator. It stops rendering:",
+            "none": "No published page on this site carries a calculator."
+          }
+        },
+        "publishedSiteImpact": "elements"
+      },
+      "contributes": {
+        "site": {
+          "components": [
+            "functionWidget",
+            "functionScope",
+            "functionInput",
+            "functionOutput",
+            "functionShow",
+            "functionDocument",
+            "functionSave"
+          ]
+        }
+      }
     }
   ]
 }

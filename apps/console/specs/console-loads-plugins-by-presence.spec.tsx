@@ -137,6 +137,7 @@ const ALL = [
   'workflows',
   'ai',
   'video-delivery',
+  'calculator',
 ]
 
 /** The ids of every `ensure` made for the console surface, flattened. */
