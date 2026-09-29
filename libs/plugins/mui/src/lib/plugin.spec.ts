@@ -99,9 +99,11 @@ const MUI_DECLARED_CONTAINERS: readonly string[] = [
   // The canvas ROOT — the `Document` layer (AGL-2486). Every node on a page
   // is one of its descendants, so it renders children by definition.
   'div',
-  // The calculator's two containers (AGL-3202): both put the nodes they are
-  // given into their output — `functionShow` CONDITIONALLY, while the value
-  // it watches is true, which is the same shape `muiTabPanel` has.
+  // The calculator's three containers (AGL-3202, AGL-3387): each puts the
+  // nodes it is given into its output — `functionShow` CONDITIONALLY, while
+  // the value it watches is true, which is the same shape `muiTabPanel` has.
+  // `functionDocument` always does; kept off the screen, it still renders.
+  'functionDocument',
   'functionScope',
   'functionShow',
   'muiAccordion',
