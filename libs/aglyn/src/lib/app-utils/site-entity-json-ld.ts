@@ -86,14 +86,23 @@ export function siteEntitySchemaType(
  * the Setup form rather than a media-picker target, and re-keying it to
  * `image` for a Person would change the publisher block on every page of
  * every site that set one — a separate decision from this one.
+ *
+ * Given the site's origin, the node carries the standalone entity's `@id`
+ * (AGL-3398). Without it a consumer reads this name-only node as a SECOND
+ * entity: Google's Rich Results Test listed a site's LocalBusiness twice, the
+ * nested one missing telephone, address, price range and image. With it, the
+ * two are one entity described in two places.
  */
 export function hostSeoEntityJsonLd(
   entity: HostSeoEntity | null | undefined,
+  context?: { origin?: string },
 ): Record<string, unknown> | undefined {
   const name = text(entity?.name, 400)
   if (!name) return undefined
+  const origin = context?.origin?.replace(/\/+$/, '') ?? ''
   return {
     '@type': siteEntitySchemaType(entity),
+    ...(origin ? { '@id': `${origin}/${SITE_ENTITY_FRAGMENT}` } : {}),
     name,
   }
 }
@@ -199,9 +208,10 @@ export function siteEntityJsonLd(
   }
   const address = Object.entries(addressFields).filter(([, value]) => value)
   const schemaType = siteEntitySchemaType(entity)
+  const picture = hostSeoEntityImageJsonLd(entity, context)
   const business =
     schemaType !== 'Person' && schemaType !== 'Organization'
-      ? localBusinessJsonLd(entity, telephone)
+      ? localBusinessJsonLd(entity, telephone, picture.logo)
       : {}
 
   return {
@@ -214,7 +224,7 @@ export function siteEntityJsonLd(
     // `logo` for an Organization, `image` for a Person — the one field whose
     // KEY the branch changes. Shared with the nested publisher so the two
     // nodes cannot describe the same entity with different pictures.
-    ...hostSeoEntityImageJsonLd(entity, context),
+    ...picture,
     ...(sameAs.length ? { sameAs } : {}),
     ...(contactPoint ? { contactPoint } : {}),
     ...(address.length
@@ -235,12 +245,16 @@ export function siteEntityJsonLd(
  * - `areaServed` as named `City` places. A service-area business commonly has
  *   no street address to publish, and this is what says where it works.
  * - `openingHoursSpecification` from the hours text, invalid lines dropped.
+ * - `image`, the entity logo (AGL-3398): Google recommends a picture of a
+ *   LocalBusiness and reads `image`, not the Organization-only `logo`, which
+ *   stays as well.
  *
  * Every one of them is omitted when empty, never published as `[]` or `''`.
  */
 function localBusinessJsonLd(
   entity: HostSeoEntity | null | undefined,
   telephone: string,
+  logo: string | undefined,
 ): Record<string, unknown> {
   const areaServed = normalizeAreaServed(entity?.areaServed)
   const hours = parseOpeningHours(entity?.openingHours)
@@ -266,5 +280,6 @@ function localBusinessJsonLd(
       : {}),
     ...(priceRange ? { priceRange } : {}),
     ...(paymentAccepted ? { paymentAccepted } : {}),
+    ...(logo ? { image: logo } : {}),
   }
 }
