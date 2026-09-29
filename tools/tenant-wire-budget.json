@@ -4,7 +4,7 @@
   "groups": [
     {
       "name": "every published page",
-      "why": "The document's own chunks, plus the three imports every published page makes before it settles. The mui import stopped carrying the element library in AGL-3141: its sixty components load on demand, so this group holds the floor every page pays and no longer holds elements the page does not place. What a page then adds for its own elements is NOT in this measurement — an `import()` is a chunk a branch asks for, and `check:plugins-load-where-used` holds a deferred plugin module to staying deferred. Measured on beta.134's build: 14.7 KB for a six-element page, 127.9 KB for a nineteen-element one, 177.2 KB for a blog entry, 416.7 KB for all sixty, against the 191.0 KB this group shed.",
+      "why": "The document's own chunks, plus the three imports every published page makes before it settles. The mui import stopped carrying the element library in AGL-3141: its sixty components load on demand, so this group holds the floor every page pays and no longer holds elements the page does not place. What a page then adds for its own elements is NOT in this measurement \u2014 an `import()` is a chunk a branch asks for, and `check:plugins-load-where-used` holds a deferred plugin module to staying deferred. Measured on beta.134's build: 14.7 KB for a six-element page, 127.9 KB for a nineteen-element one, 177.2 KB for a blog entry, 416.7 KB for all sixty, against the 191.0 KB this group shed.",
       "loads": [
         {
           "from": "apps/tenant/utils/plugins.client.generated.ts",
@@ -40,7 +40,7 @@
     },
     {
       "name": "a page that uses a realm plugin",
-      "why": "What a page adds when it uses a trusted realm install (AGL-3116): the host ABI hands a remote bundle the whole core namespace, so this group grows with every export added to @aglyn/aglyn. A page whose realm installs it does not use loads none of it. Its baseline rose in AGL-3141 for the reason the marketing group above gives: shared chunks it did not use to pay for are no longer counted by the group above it.",
+      "why": "What a page adds when it uses a trusted realm install (AGL-3116): the host ABI a bundle runs against. Since AGL-3392 that is core's and MUI's realm plugin surfaces, named lists of exports imported statically, instead of the whole core namespace the host used to hand over (260.0 KB measured before, 85.0 KB after, on the same build). Most of it is MUI components a realm element's page usually loads anyway; a bundle compiles none of MUI in. Growing a surface grows this group, which is the point of it.",
       "loads": [
         {
           "from": "apps/tenant/utils/realm-plugins.client.ts",
@@ -48,8 +48,8 @@
           "why": "Composes __AGLYN_PLUGIN_HOST__ before any realm bundle the page uses runs."
         }
       ],
-      "baselineBytes": 248158,
-      "budgetBytes": 261120
+      "baselineBytes": 87039,
+      "budgetBytes": 92160
     }
   ]
 }

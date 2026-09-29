@@ -193,6 +193,8 @@ describe('ProfilePage on an author page (AGL-2518/2535)', () => {
     })
     expect(profile?.value.publisher).toEqual({
       '@type': 'Organization',
+      // The standalone site entity's @id, so the two are one entity (AGL-3398).
+      '@id': 'https://custom.example/#organization',
       name: 'Acme',
       logo: 'https://cdn.example/acme.png',
     })

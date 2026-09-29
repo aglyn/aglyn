@@ -169,10 +169,11 @@ installing.
   with the platform, and what the workspace installed from the marketplace — because
   which one a row is is the first thing you need to know before switching it. A
   marketplace plugin gets the same per-site switch as a built-in one.
-- Most plugins are **on** for a site unless it turns them off. **User Accounts** is the
-  exception: it is **off until a site turns it on**, because it is the one that decides
-  whether the site serves `/signin`, `/signup` and `/recover` — and a sign-in page on a
-  marketing site is worse than a missing one. See
+- Most plugins are **on** for a site unless it turns them off. **User Accounts** reads
+  the other way: a site has it only once the site turns it on, because it is the one
+  that decides whether the site serves `/signin`, `/signup` and `/recover` — and a
+  sign-in page on a marketing site is worse than a missing one. A **new** site is
+  created with it turned on; a site created before that has it off until it asks. See
   [Member accounts](../../guides/member-accounts.md) for what the switch does.
 - **AI** has a site switch and no workspace switch. It is on for every workspace, because
   the AI add-on, credits, allotments and overage billing belong to the workspace rather

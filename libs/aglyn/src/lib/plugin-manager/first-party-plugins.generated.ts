@@ -10,6 +10,7 @@
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { FunctionBindings } from './plugin-contributions'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -46,7 +47,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
     "id": "accounts",
     "label": "User Accounts",
-    "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. Off for a site until you turn it on.",
+    "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
     "releaseFlag": "release_member_accounts",
     "defaultOffPerSite": true,
     "requires": [
@@ -460,3 +461,12 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
     }
   },
 ]
+
+/**
+ * Every first-party element that runs a site function, and the prop naming
+ * it, declared by that element's plugin (AGL-3393). Core names no element.
+ */
+export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {
+  "functionScope": "functionName",
+  "functionWidget": "functionName",
+}

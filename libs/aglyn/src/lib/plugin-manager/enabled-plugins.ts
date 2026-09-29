@@ -35,6 +35,13 @@ import {
 } from './first-party-plugins.generated'
 
 /**
+ * The first-party elements that run a site function (AGL-3393), compiled from
+ * each plugin's `contributes.site.functionBindings`. Compose merges it with the
+ * installed marketplace plugins' declarations via `mergeFunctionBindings`.
+ */
+export { FIRST_PARTY_FUNCTION_BINDINGS } from './first-party-plugins.generated'
+
+/**
  * One quick link on a live site's admin edit bar, declared by the plugin whose
  * console page it opens (AGL-3080).
  *

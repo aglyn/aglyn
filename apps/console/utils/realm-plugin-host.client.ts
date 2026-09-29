@@ -17,31 +17,33 @@
 
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { AGLYN_HOST_SURFACE } from '@aglyn/aglyn/plugin-manager/realm-host-aglyn.generated'
+import { setRealmPluginHost } from '@aglyn/aglyn/plugin-manager/realm-plugins'
+import {
+  MUI_HOST_SURFACE,
+  MUI_STYLES_HOST_SURFACE,
+} from './realm-host-mui.generated'
 
 /**
- * Console side of the realm-plugin host ABI (AGL-420), and the one place the
- * console needs the core namespace as a single VALUE. Remote bundles import
- * nothing; they reach React and every core registry through this object.
+ * Composes `__AGLYN_PLUGIN_HOST__` for the realm bundles a console screen runs
+ * (AGL-420, AGL-3392): the module instances that must be ONE across the app
+ * and a bundle, and nothing else (`plugin-host-abi.ts` says why each is here).
  *
- * The ABI hands a remote bundle the whole core namespace. A namespace passed
- * as a value is opaque to a bundler — it cannot know which exports the
- * consumer reads, so every module reachable from the barrel is kept and
- * shipped. Holding that import in a module the console shell loads eagerly
- * therefore pinned the whole of `app-utils` into the org route's first load:
- * the health checks, the request-IP and upload-CORS helpers, the SVG
- * sanitizer and the collection-delete rules, none of which run in a browser
- * and none of which a console page reads.
+ * Core, MUI and MUI's styling come as their realm plugin SURFACES — named
+ * lists of exports, read one by one so the rest of each module still shakes
+ * out of the page's own copy. A bundle compiles none of them in: the page
+ * already runs them, so nothing it uses is downloaded twice. The host used to
+ * hand over all of core as one namespace, which a bundler cannot tree-shake:
+ * 254 KB on the wire for every page that ran a realm plugin.
  *
- * `realm-plugins.client.ts` reaches this file by RELATIVE `import()`, which
- * crosses no project boundary and so registers no dynamic nx edge. Deferring
- * `@aglyn/aglyn` by its package specifier instead makes
- * `@nx/enforce-module-boundaries` forbid every static import of core across
- * the whole app, which is what `aglyn/no-dynamic-first-party-import` exists
- * to prevent.
+ * Reached only by a relative `import()` from `realm-plugins.client.ts`, so a
+ * page that runs no realm plugin never loads this module. Its imports are
+ * static on purpose: every `import()` reaching a library module made Turbopack
+ * re-cut the chunks every published page loads (`generate-realm-host-exports.mjs`
+ * has the measurements).
  *
- * React and the JSX runtime are the app's own: the blank-canvas invariant is
- * that a remote bundle shares THIS bundle's React singleton.
+ * React and the JSX runtime come from the caller — the blank-canvas invariant
+ * is that a remote bundle shares THIS bundle's React singleton.
  *
  * The tenant twin is `apps/tenant/utils/realm-plugin-host.client.ts`.
  */
@@ -49,5 +51,10 @@ export function composeRealmPluginHost(host: {
   React: unknown
   jsxRuntime: unknown
 }): void {
-  Aglyn.setRealmPluginHost({ ...host, aglyn: Aglyn })
+  setRealmPluginHost({
+    ...host,
+    aglyn: AGLYN_HOST_SURFACE,
+    mui: MUI_HOST_SURFACE,
+    muiStyles: MUI_STYLES_HOST_SURFACE,
+  })
 }

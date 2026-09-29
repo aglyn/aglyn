@@ -45,12 +45,19 @@ import {
 } from '@aglyn/shared-util-email/hosted-page-screen'
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import type { PluginContributions } from '../plugin-manager/plugin-contributions'
+import {
+  PLUGIN_HOST_ABI_KEYS,
+  PLUGIN_HOST_GLOBAL,
+  PLUGIN_HOST_MODULE_KEYS,
+} from './plugin-host-abi'
+import { REALM_HOST_SURFACE_NAMES } from './realm-host-surface.generated'
 
 /** The areas the verifier reports on, in the order a reviewer reads them. */
 export type BundleCheckId =
   | 'parse'
   | 'entry'
   | 'self-contained'
+  | 'host-abi'
   | 'size'
   | 'code-execution'
   | 'globals'
@@ -118,6 +125,7 @@ const CHECK_LABELS: Record<BundleCheckId, string> = {
   parse: 'Parses as an ES module',
   entry: 'Exports an entry point',
   'self-contained': 'Self-contained (no static imports)',
+  'host-abi': 'Reads only what the host provides',
   size: 'Within the size limit',
   'code-execution': 'No eval / Function constructor',
   globals: 'No computed access on a global',
@@ -134,6 +142,7 @@ const CHECK_ORDER: BundleCheckId[] = [
   'parse',
   'entry',
   'self-contained',
+  'host-abi',
   'size',
   'code-execution',
   'globals',
@@ -165,8 +174,9 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * 6 — registrations are compared with the declared contributions (AGL-3116).
  * 7 — inputs that collect a password, card or one-time code (AGL-3362).
  * 8 — declared network origins that are a brand's lookalike (AGL-3365).
+ * 9 — lookups on the host ABI name only keys a host provides (AGL-3392).
  */
-export const PLUGIN_VERIFIER_VERSION = 8
+export const PLUGIN_VERIFIER_VERSION = 9
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -858,6 +868,221 @@ function lookalikeDeclaredOrigins(declared: readonly string[]): string[] {
   return messages
 }
 
+/**
+ * Walks every expression-position node with its parent, by the same rules as
+ * {@link walk}.
+ */
+function walkWithParents(
+  root: AnyNode,
+  visit: (node: AnyNode, parent: AnyNode | null) => void,
+): void {
+  const stack: Array<[AnyNode, AnyNode | null]> = [[root, null]]
+  while (stack.length) {
+    const entry = stack.pop()
+    if (!entry) continue
+    const [node, parent] = entry
+    visit(node, parent)
+    for (const key of Object.keys(node)) {
+      if (key === 'type' || key === 'start' || key === 'end') continue
+      if (skippedChild(node, key)) continue
+      const value = node[key]
+      const children = Array.isArray(value) ? value : [value]
+      for (const child of children) {
+        if (
+          child &&
+          typeof child === 'object' &&
+          typeof (child as AnyNode).type === 'string'
+        ) {
+          stack.push([child as AnyNode, node])
+        }
+      }
+    }
+  }
+}
+
+/**
+ * What a bundle reads from the host ABI (AGL-3392), read off the bytes.
+ *
+ * The realm Rollup configs compile each host import into
+ * `const host = globalThis.__AGLYN_PLUGIN_HOST__; … host["mui"]`, and each use
+ * of an import into a member read on that: `_aglynHost_mui.Button`. So:
+ *
+ * - `read` / `unknown` / `computed` are the KEYS a bundle reads off the host
+ *   object. A key outside `PLUGIN_HOST_ABI_KEYS` is undefined on every host
+ *   and the bundle fails where it is used; a key chosen at runtime cannot be
+ *   reviewed at all.
+ * - `imports` is what it reads from each host MODULE, by name, so each name
+ *   can be checked against what the host holds. A module handed around as a
+ *   value (`import * as M`, a spread, a computed read) cannot be narrowed and
+ *   records `'*'`.
+ *
+ * The host is reached through `globalThis.__AGLYN_PLUGIN_HOST__`, a name bound
+ * to it, or the parameter of the exported `register(host)` — the last only
+ * inside `register` itself, since the same name elsewhere is another variable.
+ * A bad key on that parameter is a warning rather than a refusal: bundles
+ * written before this check read it freely, and refusing them would report a
+ * regression on bytes that are already installed.
+ */
+function hostAbiReads(
+  program: AnyNode,
+  constants: ReadonlyMap<string, string>,
+  isGlobalRef: (node: AnyNode | null | undefined) => boolean,
+): {
+  read: Set<string>
+  unknown: Set<string>
+  /** Read off `register`'s parameter, which could be a bundle's own mistake. */
+  unknownOnParam: Set<string>
+  computed: number
+  computedOnParam: number
+  imports: Partial<Record<string, readonly string[] | '*'>>
+} {
+  const parents = new Map<AnyNode, AnyNode | null>()
+  const identifiers = new Map<string, AnyNode[]>()
+  walkWithParents(program, (node, parent) => {
+    parents.set(node, parent)
+    if (node.type === 'Identifier') {
+      const name = node['name'] as string
+      const list = identifiers.get(name)
+      if (list) list.push(node)
+      else identifiers.set(name, [node])
+    }
+  })
+  const within = (node: AnyNode, ancestor: AnyNode): boolean => {
+    for (let at: AnyNode | null | undefined = node; at; at = parents.get(at)) {
+      if (at === ancestor) return true
+    }
+    return false
+  }
+
+  const isHostGlobal = (node: AnyNode | null | undefined): boolean =>
+    (node?.type === 'Identifier' && node['name'] === PLUGIN_HOST_GLOBAL) ||
+    (node?.type === 'MemberExpression' &&
+      isGlobalRef(node['object'] as AnyNode) &&
+      propertyName(node) === PLUGIN_HOST_GLOBAL)
+
+  // Names bound to the host object, each valid everywhere (`scope` null) or
+  // only inside one function (the `register(host)` parameter).
+  const hostNames = new Map<string, AnyNode | null>()
+  walk(program, (node) => {
+    if (node.type === 'VariableDeclarator') {
+      const id = node['id'] as AnyNode
+      const init = node['init'] as AnyNode | null
+      const roots =
+        init?.type === 'LogicalExpression'
+          ? [init['left'] as AnyNode, init['right'] as AnyNode]
+          : [init]
+      if (id?.type === 'Identifier' && roots.some(isHostGlobal)) {
+        hostNames.set(id['name'] as string, null)
+      }
+    }
+    if (
+      node.type === 'FunctionDeclaration' &&
+      (node['id'] as AnyNode | null)?.['name'] === 'register'
+    ) {
+      const param = ((node['params'] ?? []) as AnyNode[])[0]
+      if (param?.type === 'Identifier' && !hostNames.has(param['name'] as string)) {
+        hostNames.set(param['name'] as string, node)
+      }
+    }
+  })
+  /** `'global'` for the host reached by name, `'param'` for `register(host)`. */
+  const hostRef = (
+    node: AnyNode | null | undefined,
+  ): 'global' | 'param' | null => {
+    if (isHostGlobal(node)) return 'global'
+    if (node?.type !== 'Identifier') return null
+    const name = node['name'] as string
+    if (!hostNames.has(name)) return null
+    const scope = hostNames.get(name)
+    if (!scope) return 'global'
+    return within(node, scope) ? 'param' : null
+  }
+
+  const modules = new Set<string>(PLUGIN_HOST_MODULE_KEYS)
+  const allowed = new Set<string>(PLUGIN_HOST_ABI_KEYS)
+  const read = new Set<string>()
+  const unknown = new Set<string>()
+  const unknownOnParam = new Set<string>()
+  let computed = 0
+  let computedOnParam = 0
+  const names = new Map<string, Set<string> | '*'>()
+  const whole = (key: string): void => {
+    names.set(key, '*')
+  }
+  const note = (key: string, name: string | null): void => {
+    if (name === null) return whole(key)
+    const current = names.get(key)
+    if (current === '*') return
+    if (current) current.add(name)
+    else names.set(key, new Set([name]))
+  }
+  const seenAliases = new Set<string>()
+
+  /** Records how one reference to a lazy key's module is used. */
+  const useOf = (key: string, ref: AnyNode): void => {
+    const parent = parents.get(ref)
+    if (parent?.type === 'MemberExpression' && parent['object'] === ref) {
+      return note(key, propertyName(parent, constants))
+    }
+    if (parent?.type === 'VariableDeclarator' && parent['init'] === ref) {
+      const id = parent['id'] as AnyNode
+      if (id?.type === 'Identifier') {
+        const alias = id['name'] as string
+        if (seenAliases.has(alias)) return
+        seenAliases.add(alias)
+        for (const use of identifiers.get(alias) ?? []) {
+          if (use !== id) useOf(key, use)
+        }
+        return
+      }
+      if (id?.type === 'ObjectPattern') {
+        for (const property of (id['properties'] ?? []) as AnyNode[]) {
+          if (property.type !== 'Property' || property['computed']) {
+            return whole(key)
+          }
+          const propertyKey = property['key'] as AnyNode
+          const name =
+            propertyKey?.type === 'Identifier'
+              ? (propertyKey['name'] as string)
+              : staticString(propertyKey)
+          note(key, name)
+        }
+        return
+      }
+    }
+    whole(key)
+  }
+
+  walk(program, (node) => {
+    if (node.type !== 'MemberExpression') return
+    const via = hostRef(node['object'] as AnyNode)
+    if (!via) return
+    const key = propertyName(node, constants)
+    if (key === null) {
+      if (via === 'param') computedOnParam += 1
+      else computed += 1
+    } else if (!allowed.has(key)) {
+      ;(via === 'param' ? unknownOnParam : unknown).add(key)
+    } else {
+      read.add(key)
+      if (modules.has(key)) useOf(key, node)
+    }
+  })
+
+  const imports: Record<string, readonly string[] | '*'> = {}
+  for (const [key, value] of names) {
+    imports[key] = value === '*' ? '*' : [...value].sort()
+  }
+  return {
+    read,
+    unknown,
+    unknownOnParam,
+    computed,
+    computedOnParam,
+    imports,
+  }
+}
+
 function analyseBundle(
   source: string,
   options?: CheckOptions,
@@ -902,6 +1127,7 @@ function analyseBundle(
       'parse',
       'entry',
       'self-contained',
+      'host-abi',
       'code-execution',
       'globals',
       'storage',
@@ -946,6 +1172,7 @@ function analyseBundle(
     unknownFrom(
       'entry',
       'self-contained',
+      'host-abi',
       'code-execution',
       'globals',
       'storage',
@@ -1516,6 +1743,75 @@ function analyseBundle(
         .join(' · '),
     )
   }
+
+  const host = hostAbiReads(program, constants, isGlobalRef)
+  for (const key of host.unknown) {
+    add(
+      'error',
+      'host-abi',
+      `bundle reads "${key}" from the host, which provides only ` +
+        `${PLUGIN_HOST_ABI_KEYS.join(', ')} — it would be undefined on every site`,
+    )
+  }
+  for (const key of host.unknownOnParam) {
+    add(
+      'warning',
+      'host-abi',
+      `register() reads "${key}" from its host argument, which provides only ` +
+        `${PLUGIN_HOST_ABI_KEYS.join(', ')} — it will be undefined`,
+    )
+  }
+  if (host.computedOnParam) {
+    add(
+      'warning',
+      'host-abi',
+      `register() reads its host argument by a key chosen at runtime ` +
+        `(${host.computedOnParam}×)`,
+    )
+  }
+  if (host.computed) {
+    add(
+      'error',
+      'host-abi',
+      `bundle reads the host by a key chosen at runtime (${host.computed}×) — ` +
+        'a lookup that cannot be named cannot be reviewed',
+    )
+  }
+  // Each name the bundle reads from a host module must be one the host holds
+  // (AGL-3392): core's realm plugin surface, or the whole of the others.
+  for (const key of PLUGIN_HOST_MODULE_KEYS) {
+    const read = host.imports[key]
+    if (!read) continue
+    const holds = REALM_HOST_SURFACE_NAMES[key]
+    if (read === '*') {
+      if (key === 'aglyn') {
+        add(
+          'warning',
+          'host-abi',
+          'uses @aglyn/aglyn as a namespace value — only the realm plugin ' +
+            'surface is on the host, so any other name read through it is ' +
+            'undefined; import what you use by name',
+        )
+      }
+      continue
+    }
+    const missing = read.filter((name) => !holds.has(name))
+    if (missing.length) {
+      add(
+        'error',
+        'host-abi',
+        `reads ${missing.join(', ')} from the host's ${key}, which does not ` +
+          `hold ${missing.length === 1 ? 'it' : 'them'}` +
+          (key === 'aglyn'
+            ? ' — only the realm plugin surface of @aglyn/aglyn is on the host'
+            : ''),
+      )
+    }
+  }
+  details.set(
+    'host-abi',
+    host.read.size ? `reads ${[...host.read].sort().join(', ')}` : 'reads nothing by name',
+  )
 
   const detected = detectRegistrations(program, constants)
   for (const message of credentialInputsIn(program, constants)) {

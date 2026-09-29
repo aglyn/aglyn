@@ -33,6 +33,11 @@ import {
   PRICE_RANGE_MAX_LENGTH,
   invalidOpeningHoursLines,
 } from '@aglyn/aglyn/app-utils/local-business'
+import {
+  SEARCH_ENGINE_VERIFICATION_LABELS,
+  extractSearchEngineVerificationToken,
+  searchEngineVerificationError,
+} from '@aglyn/aglyn/app-utils/search-engine-verification'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import {
   FieldComponentType,
@@ -245,6 +250,21 @@ const CLEARABLE_TRACKING_PATHS = [
  * their empty case never reaches a save and they stay out of this list.
  */
 const CLEARABLE_SEO_PATHS = ['seo.titlePattern'] as const
+
+/**
+ * The verification tokens (AGL-3399), which must come back OFF as well as on.
+ *
+ * Their own list, owned by their own card, for the reason
+ * `CLEARABLE_TRACKING_PATHS` gives: the renderer drops a cleared input from
+ * the submitted values, `merge` then leaves the stored token alone, and the
+ * tag stays on every page of the site. A site that verified the wrong
+ * property, or has moved it to another account, has to be able to take it
+ * down from here.
+ */
+const CLEARABLE_VERIFICATION_PATHS = [
+  'seo.verification.google',
+  'seo.verification.bing',
+] as const
 
 /**
  * The Basic details fields that must be able to go back to EMPTY (AGL-3252).
@@ -1033,6 +1053,74 @@ const seoAgentSchema: FormSchema = {
   ],
 }
 
+/**
+ * SEARCH ENGINE VERIFICATION (AGL-3399) — the HTML-tag method Google Search
+ * Console and Bing Webmaster Tools offer, and the only one a site on a
+ * platform subdomain can use: it has no DNS of its own and cannot put a file
+ * at the origin root.
+ *
+ * Each field takes either the bare code or the whole `<meta … />` tag the
+ * tool hands out, because the tag is what people copy. Only the code is
+ * stored — `verificationFields` below reduces a pasted tag before the save —
+ * and the validator is the same one the tenant re-checks with before it
+ * emits, so a value this card accepts is a value the published head carries.
+ */
+const seoVerificationSchema: FormSchema = {
+  id: 'hostSeoVerification',
+  title: 'Search engine verification',
+  CardDisplayProps: {
+    help: docsHelp('seo', {
+      anchor: '#verify-your-site-with-google-search-console',
+      excerpt:
+        'Prove to Google Search Console and Bing Webmaster Tools that this ' +
+        'site is yours, with the HTML tag each one gives you.',
+    }),
+  },
+  fields: [
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.verification.google',
+      label: SEARCH_ENGINE_VERIFICATION_LABELS.google,
+      type: 'text',
+      helperText:
+        'Search Console → Add property → URL prefix → HTML tag. Paste the ' +
+        'tag or just its code',
+      validate: [
+        (value: unknown) => searchEngineVerificationError('google', value),
+      ],
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.verification.bing',
+      label: SEARCH_ENGINE_VERIFICATION_LABELS.bing,
+      type: 'text',
+      helperText:
+        'Bing Webmaster Tools → Add site → HTML Meta Tag. Paste the tag or ' +
+        'just its code',
+      validate: [
+        (value: unknown) => searchEngineVerificationError('bing', value),
+      ],
+    },
+  ],
+}
+
+/**
+ * The verification card's submission with each pasted tag reduced to its
+ * code (AGL-3399). A new object: the renderer's values are not ours to edit.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const verificationFields = (fields: any) => {
+  const verification = fields?.seo?.verification
+  if (!verification || typeof verification !== 'object') return fields
+  const reduced: Record<string, unknown> = { ...verification }
+  for (const engine of ['google', 'bing'] as const) {
+    if (typeof reduced[engine] === 'string') {
+      reduced[engine] = extractSearchEngineVerificationToken(reduced[engine])
+    }
+  }
+  return { ...fields, seo: { ...fields.seo, verification: reduced } }
+}
+
 
 /**
  * Which form owns each field name (AGL-3258).
@@ -1070,6 +1158,7 @@ const fieldOwner = (() => {
     seoAddressSchema,
     seoLocalBusinessSchema,
     seoAgentSchema,
+    seoVerificationSchema,
     trackingSchema,
   ]) {
     walk(schema.id as string, schema.fields as readonly unknown[])
@@ -1793,6 +1882,18 @@ export function HostSettingsScopeProvider({
       schema: seoAgentSchema,
       initialValues: seedFor(seoAgentSchema.id),
       onSubmit: (fields: any) => saveAndClearDraft(seoAgentSchema.id, fields),
+    },
+    {
+      schema: seoVerificationSchema,
+      initialValues: seedFor(seoVerificationSchema.id),
+      // The only form carrying the verification tokens, so the only one
+      // entitled to read their absence as "cleared" (AGL-3399).
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(
+          seoVerificationSchema.id,
+          verificationFields(fields),
+          CLEARABLE_VERIFICATION_PATHS,
+        ),
     },
     {
       schema: trackingSchema,

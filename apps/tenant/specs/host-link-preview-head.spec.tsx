@@ -25,6 +25,10 @@
  * Mocked exactly as `host-favicon-link.spec.tsx` mocks it, and for the same
  * reasons, except that the theme resolves to the host's own `theme` here so
  * the theme-color tags have something to read.
+ *
+ * The search engine verification tags (AGL-3399) ride the same harness: they
+ * are emitted by the same layout for the same reason — every route beneath it
+ * must carry them — and their absence is just as invisible from the helpers.
  */
 
 const mockGetHostCached = jest.fn()
@@ -91,6 +95,13 @@ const headFor = async (host: Record<string, unknown>) => {
     themeColors: metas
       .filter((meta) => meta.name === 'theme-color')
       .map(({ content, media }) => ({ content, media })),
+    verification: metas
+      .filter(
+        (meta) =>
+          meta.name === 'google-site-verification' ||
+          meta.name === 'msvalidate.01',
+      )
+      .map(({ name, content }) => ({ name, content })),
   }
 }
 
@@ -152,5 +163,48 @@ describe('the layout’s theme-color (AGL-3382)', () => {
   it('emits none for a site with no theme of its own', async () => {
     const { themeColors } = await headFor({})
     expect(themeColors).toEqual([])
+  })
+})
+
+describe('the layout’s search engine verification tags (AGL-3399)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const GOOGLE = 'x3yQ9_abcDEF-1234567890abcdefghijklmnopqrs'
+  const BING = '0123456789ABCDEF0123456789ABCDEF'
+
+  it('emits both tags when both tokens are set', async () => {
+    const { verification } = await headFor({
+      seo: { verification: { google: GOOGLE, bing: BING } },
+    })
+    expect(verification).toEqual([
+      { name: 'google-site-verification', content: GOOGLE },
+      { name: 'msvalidate.01', content: BING },
+    ])
+  })
+
+  it('emits only the engine that is set', async () => {
+    const { verification } = await headFor({
+      seo: { verification: { bing: BING } },
+    })
+    expect(verification).toEqual([{ name: 'msvalidate.01', content: BING }])
+  })
+
+  it('emits nothing for a site that has not verified', async () => {
+    expect((await headFor({ seo: { title: 'Plain' } })).verification).toEqual(
+      [],
+    )
+    expect((await headFor({})).verification).toEqual([])
+  })
+
+  it('never echoes a stored value that is not a token', async () => {
+    const { verification } = await headFor({
+      seo: {
+        verification: {
+          google: '"><script>alert(1)</script>',
+          bing: `<meta name="msvalidate.01" content="${BING}" />`,
+        },
+      },
+    })
+    expect(verification).toEqual([])
   })
 })

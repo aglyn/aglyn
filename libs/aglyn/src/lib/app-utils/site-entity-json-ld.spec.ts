@@ -355,6 +355,8 @@ describe('siteEntityJsonLd — a local business (AGL-3383)', () => {
       ],
       priceRange: '$$',
       paymentAccepted: 'Cash, Zelle, Cash App',
+      // Google reads a LocalBusiness picture from `image` (AGL-3398).
+      image: 'https://acme.test/logo.png',
     })
   })
 
@@ -454,5 +456,42 @@ describe('siteEntityJsonLd — a local business (AGL-3383)', () => {
       name: 'Ada',
     })
     expect(siteEntitySchemaType(undefined)).toBe('Organization')
+  })
+})
+
+describe('the nested publisher is the standalone entity (AGL-3398)', () => {
+  const entity = {
+    name: 'Ready To Roll',
+    type: '1',
+    businessType: 'HomeAndConstructionBusiness',
+    telephone: '+1-512-843-0942',
+    logo: 'https://acme.test/logo.png',
+  }
+
+  it('carries the same @id, so a consumer merges the two instead of listing a second business', () => {
+    const standalone = siteEntityJsonLd({ seo: { entity } }, { origin: ORIGIN })
+    const publisher = hostSeoEntityJsonLd(entity, { origin: `${ORIGIN}/` })
+    expect(publisher).toEqual({
+      '@type': 'HomeAndConstructionBusiness',
+      '@id': `${ORIGIN}/${SITE_ENTITY_FRAGMENT}`,
+      name: 'Ready To Roll',
+    })
+    expect(publisher?.['@id']).toBe(standalone?.['@id'])
+  })
+
+  it('emits no @id without an origin to anchor it', () => {
+    expect(hostSeoEntityJsonLd(entity)).toEqual({
+      '@type': 'HomeAndConstructionBusiness',
+      name: 'Ready To Roll',
+    })
+  })
+
+  it('gives an Organization node no image — only a business node gains one', () => {
+    const node = siteEntityJsonLd(
+      { seo: { entity: { name: 'Acme', logo: 'https://acme.test/logo.png' } } },
+      { origin: ORIGIN },
+    )
+    expect(node).toMatchObject({ '@type': 'Organization', logo: 'https://acme.test/logo.png' })
+    expect(node).not.toHaveProperty('image')
   })
 })

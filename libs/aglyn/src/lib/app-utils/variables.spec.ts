@@ -102,6 +102,12 @@ describe('resolveBindings', () => {
   })
 })
 
+/** What mui declares in plugins.config.json today (AGL-3393). */
+const MUI_BINDINGS = {
+  functionScope: 'functionName',
+  functionWidget: 'functionName',
+}
+
 describe('attachFunctionDefinitions', () => {
   it('injects definitions into function widgets only', () => {
     const { attachFunctionDefinitions } = require('./variables')
@@ -124,10 +130,95 @@ describe('attachFunctionDefinitions', () => {
         props: { functionName: 'Nope' },
       },
     }
-    const result = attachFunctionDefinitions(nodes, { Sum: definition })
+    const result = attachFunctionDefinitions(
+      nodes,
+      { Sum: definition },
+      {},
+      MUI_BINDINGS,
+    )
     expect(result.widget.props.definition).toEqual(definition)
     expect(result.other).toBe(nodes.other)
     expect(result.unknown.props.definition).toBeUndefined()
+  })
+
+  describe('binds only what a plugin declares (AGL-3393)', () => {
+    const { attachFunctionDefinitions } = require('./variables')
+    const definition = {
+      name: 'quote',
+      parameters: [] as unknown[],
+      variables: [] as unknown[],
+      operations: [] as unknown[],
+    }
+
+    it('binds a marketplace element through the prop its manifest names', () => {
+      const nodes = {
+        calc: {
+          $id: 'calc',
+          componentId: 'aglyn.calculator.scope',
+          props: { runs: 'quote' },
+        },
+      }
+      const result = attachFunctionDefinitions(
+        nodes,
+        { quote: definition },
+        {},
+        { 'aglyn.calculator.scope': 'runs' },
+      )
+      expect(result.calc.props.definition).toEqual(definition)
+    })
+
+    it('hands nothing to an element nobody declared, whatever its props say', () => {
+      const nodes = {
+        stray: {
+          $id: 'stray',
+          componentId: 'someone.else.widget',
+          props: { functionName: 'quote' },
+        },
+        widget: {
+          $id: 'widget',
+          componentId: 'functionWidget',
+          props: { functionName: 'quote' },
+        },
+      }
+      const result = attachFunctionDefinitions(
+        nodes,
+        { quote: definition },
+        {},
+        MUI_BINDINGS,
+      )
+      expect(result.stray).toBe(nodes.stray)
+      expect(result.widget.props.definition).toEqual(definition)
+    })
+
+    it('returns the input untouched when nothing is declared', () => {
+      const nodes = {
+        widget: {
+          $id: 'widget',
+          componentId: 'functionWidget',
+          props: { functionName: 'quote' },
+        },
+      }
+      expect(
+        attachFunctionDefinitions(nodes, { quote: definition }, {}, {}),
+      ).toBe(nodes)
+    })
+
+    it('reads a binding named by an inherited key as undeclared', () => {
+      const nodes = {
+        odd: {
+          $id: 'odd',
+          componentId: 'toString',
+          props: { functionName: 'quote' },
+        },
+      }
+      const result = attachFunctionDefinitions(
+        nodes,
+        { quote: definition },
+        {},
+        MUI_BINDINGS,
+      )
+      expect(result.odd).toBe(nodes.odd)
+    })
   })
 })
 
@@ -202,7 +293,7 @@ describe('site variables reach a function (AGL-3202)', () => {
         props: { functionName: 'cost' },
       },
     }
-    const result = attachFunctionDefinitions(nodes, { cost }, prices)
+    const result = attachFunctionDefinitions(nodes, { cost }, prices, MUI_BINDINGS)
     expect(result.widget.props.globals).toEqual({ webflow_site: 25 })
     // `sites` is the function's own parameter, so the site's variable of the
     // same name is neither read nor shipped; the note is simply never named.
@@ -215,7 +306,7 @@ describe('site variables reach a function (AGL-3202)', () => {
       scope: { $id: 'scope', componentId: 'functionScope', nodes: ['input'], props: { functionName: 'cost' } },
       input: { $id: 'input', componentId: 'functionInput', props: { parameter: 'sites' } },
     }
-    const result = attachFunctionDefinitions(nodes, { cost }, prices)
+    const result = attachFunctionDefinitions(nodes, { cost }, prices, MUI_BINDINGS)
     expect(result.scope.props.definition).toEqual(cost)
     expect(result.scope.props.globals).toEqual({ webflow_site: 25 })
     expect(result.scope.nodes).toEqual(['input'])
@@ -232,7 +323,7 @@ describe('site variables reach a function (AGL-3202)', () => {
         props: { functionName: 'plain' },
       },
     }
-    const result = attachFunctionDefinitions(nodes, { plain }, prices)
+    const result = attachFunctionDefinitions(nodes, { plain }, prices, MUI_BINDINGS)
     expect(Object.keys(result.widget.props).sort()).toEqual([
       'definition',
       'functionName',

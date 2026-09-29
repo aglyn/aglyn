@@ -16,8 +16,12 @@
  */
 
 import {
+  isNamespacedComponentId,
+  mergeFunctionBindings,
   consoleLoadPoints,
+  declaresSiteElements,
   isPluginUsedInConsole,
+  presenceIds,
   isPluginUsedOnPage,
   pagePresence,
   PLUGIN_MAX_CONTRIBUTIONS,
@@ -60,6 +64,85 @@ describe('sanitizePluginContributions (AGL-3116)', () => {
   it('refuses unknown surfaces and keys, so a typo is not a silent no-op', () => {
     expect(sanitizePluginContributions({ sites: {} }).ok).toBe(false)
     expect(sanitizePluginContributions({ console: { slot: ['x'] } }).ok).toBe(false)
+  })
+})
+
+describe('contributes.site.functionBindings (AGL-3393)', () => {
+  const site = (functionBindings: unknown) => ({
+    site: { components: ['acme.calc.scope', 'acme.calc.input'], functionBindings },
+  })
+
+  it('keeps a binding on an element the same block declares', () => {
+    const verdict = sanitizePluginContributions(
+      site({ 'acme.calc.scope': 'functionName' }),
+    )
+    expect(verdict).toEqual({
+      ok: true,
+      contributions: {
+        site: {
+          components: ['acme.calc.scope', 'acme.calc.input'],
+          functionBindings: { 'acme.calc.scope': 'functionName' },
+        },
+      },
+    })
+  })
+
+  it('refuses a binding on an element the plugin does not register', () => {
+    const verdict = sanitizePluginContributions(
+      site({ functionWidget: 'functionName' }),
+    )
+    expect(verdict.ok).toBe(false)
+  })
+
+  it('refuses a prop that is not a plain identifier, and a non-object map', () => {
+    expect(
+      sanitizePluginContributions(site({ 'acme.calc.scope': 'a.b' })).ok,
+    ).toBe(false)
+    expect(
+      sanitizePluginContributions(site({ 'acme.calc.scope': 7 })).ok,
+    ).toBe(false)
+    expect(sanitizePluginContributions(site(['acme.calc.scope'])).ok).toBe(
+      false,
+    )
+  })
+
+  it('drops an empty map, which declares nothing', () => {
+    expect(sanitizePluginContributions(site({}))).toEqual({
+      ok: true,
+      contributions: {
+        site: { components: ['acme.calc.scope', 'acme.calc.input'] },
+      },
+    })
+  })
+})
+
+describe('mergeFunctionBindings (AGL-3393)', () => {
+  it('merges maps and installs, the first declaration of an id winning', () => {
+    expect(
+      mergeFunctionBindings(
+        { functionWidget: 'functionName' },
+        null,
+        {
+          contributes: {
+            site: {
+              functionBindings: {
+                functionWidget: 'hijack',
+                'acme.calc.scope': 'runs',
+              },
+            },
+          },
+        },
+        { contributes: undefined },
+      ),
+    ).toEqual({ functionWidget: 'functionName', 'acme.calc.scope': 'runs' })
+  })
+})
+
+describe('isNamespacedComponentId (AGL-3387)', () => {
+  it('reads only a dotted id as a marketplace namespace', () => {
+    expect(isNamespacedComponentId('aglyn.calculator.scope')).toBe(true)
+    expect(isNamespacedComponentId('functionScope')).toBe(false)
+    expect(isNamespacedComponentId(undefined)).toBe(false)
   })
 })
 
@@ -240,3 +323,36 @@ describe('isPluginUsedInConsole (AGL-3142)', () => {
     ).toBe(false)
   })
 })
+
+describe('the editor load point (AGL-3391)', () => {
+  const elements = { site: { components: ['aglyn.calculator.scope'] } }
+  const features = { site: { features: ['overlays'] } }
+  const zonesOnly = { console: { slots: ['hostDashboard'] } }
+
+  it('loads a plugin that declares site elements or site features', () => {
+    expect(declaresSiteElements(elements)).toBe(true)
+    expect(declaresSiteElements(features)).toBe(true)
+    expect(isPluginUsedInConsole(elements, { at: 'editor' })).toBe(true)
+    expect(isPluginUsedInConsole(features, { at: 'editor' })).toBe(true)
+  })
+
+  it('does not load one that draws nothing on a site', () => {
+    expect(isPluginUsedInConsole(zonesOnly, { at: 'editor' })).toBe(false)
+    expect(isPluginUsedInConsole({ site: { components: [] } }, { at: 'editor' })).toBe(false)
+    // An undeclared plugin loads with the shell, the only place that can
+    // discover what it registers.
+    expect(isPluginUsedInConsole(undefined, { at: 'editor' })).toBe(false)
+  })
+})
+
+describe('presenceIds (AGL-3391)', () => {
+  it('names a plugin by its own id and its listing id, once each', () => {
+    expect(presenceIds({ pluginId: 'calculator', listingId: 'listing-calc' })).toEqual([
+      'calculator',
+      'listing-calc',
+    ])
+    expect(presenceIds({ pluginId: 'same', listingId: 'same' })).toEqual(['same'])
+    expect(presenceIds({ listingId: 'listing-only' })).toEqual(['listing-only'])
+  })
+})
+

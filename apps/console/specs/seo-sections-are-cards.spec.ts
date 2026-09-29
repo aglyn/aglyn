@@ -109,6 +109,7 @@ describe('the SEO section is a stack of cards (AGL-3258)', () => {
       'hostSeoAddress',
       'hostSeoLocalBusiness',
       'hostSeoAgent',
+      'hostSeoVerification',
     ]) {
       expect([id, scope.includes(`id: '${id}'`)]).toEqual([id, true])
       const rendered = [
@@ -180,5 +181,61 @@ describe('the SEO section is a stack of cards (AGL-3258)', () => {
     expect(scope).toContain('const fieldOwner')
     expect(scope).toMatch(/proposeFormDraft:\s*\(values: Record<string, string>\) => void/)
     expect(read(SEO_PAGE)).toContain('proposeFormDraft(values)')
+  })
+})
+
+describe('the search engine verification card (AGL-3399)', () => {
+  /** The source of one top-level `const`, up to the next one. */
+  const block = (name: string): string => {
+    const text = read(SCOPE)
+    const start = text.indexOf(`const ${name}`)
+    expect([name, start > -1]).toEqual([name, true])
+    const end = text.indexOf('\nconst ', start + 1)
+    return text.slice(start, end === -1 ? undefined : end)
+  }
+
+  it('declares both fields, each validated by the helper the tenant emits with', () => {
+    const schema = block('seoVerificationSchema')
+    for (const [name, engine] of [
+      ['seo.verification.google', 'google'],
+      ['seo.verification.bing', 'bing'],
+    ]) {
+      expect([name, schema.includes(`name: '${name}'`)]).toEqual([name, true])
+      // The SHARED validator, never a second spelling of the token pattern: a
+      // console that accepts what the tenant drops reads as "saved, and
+      // Search Console still cannot see it".
+      expect([
+        engine,
+        schema.includes(`searchEngineVerificationError('${engine}', value)`),
+      ]).toEqual([engine, true])
+    }
+    expect(read(SCOPE)).toContain(
+      "from '@aglyn/aglyn/app-utils/search-engine-verification'",
+    )
+  })
+
+  it('can clear each token it can set, and only its own form reads absence as cleared', () => {
+    const list = block('CLEARABLE_VERIFICATION_PATHS')
+    const paths = [...list.matchAll(/'([^']+)'/g)].map((m) => m[1])
+    expect(paths.sort()).toEqual([
+      'seo.verification.bing',
+      'seo.verification.google',
+    ])
+    // Handed to the entity or address card, the list would wipe both tokens
+    // every time somebody saved an address.
+    const text = read(SCOPE)
+    const forms = text.slice(text.indexOf('const forms = ['))
+    expect([...forms.matchAll(/CLEARABLE_VERIFICATION_PATHS/g)].length).toBe(1)
+    expect(forms).toMatch(
+      /saveAndClearDraft\(\s*seoVerificationSchema\.id,\s*verificationFields\(fields\),\s*CLEARABLE_VERIFICATION_PATHS,?\s*\)/,
+    )
+  })
+
+  it('stores the code, not the pasted tag', () => {
+    // A pasted `<meta … />` is reduced before the save, so the document holds
+    // what the tenant emits and never the markup somebody copied.
+    expect(block('verificationFields')).toContain(
+      'extractSearchEngineVerificationToken',
+    )
   })
 })

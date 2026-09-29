@@ -43,7 +43,10 @@ the console suggests an available variation.
 - **Setup** — theme, SEO, tracking, and emails under tabbed settings.
   The **Site logo** card (Details tab) sets your brand mark: it's shown on the
   live site's page-navigation loading overlay — a themed, blurred scrim with a
-  progress bar. Without a logo, the loader shows your site name instead.
+  progress bar. Without a logo, the loader shows your site name instead. Add a
+  **Dark mode** logo too if yours is hard to see on a dark background: visitors
+  browsing in dark mode see it on the loader and error pages, and without one
+  they see the light mode logo.
 - **Billing** — the plan and usage meters that gate features and quotas.
 
 ## Switching between sites

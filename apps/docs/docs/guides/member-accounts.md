@@ -28,23 +28,23 @@ never see the console.
 
 ## 1. Turn User Accounts on for the site
 
-**Member accounts are off by default, on every site.** Until you switch them
-on, `/signin`, `/signup` and `/recover` do not exist on that site — they
-return a genuine **404**, the same as any address you have not published.
+**A new site starts with member accounts on.** A site created before that
+change starts with them **off**, and while they are off, `/signin`,
+`/signup` and `/recover` do not exist on that site — they return a genuine
+**404**, the same as any address you have not published.
 
-Turn them on at **Sites → your site → Admin → Plugins**, on the **Site
+The switch is at **Sites → your site → Admin → Plugins**, on the **Site
 plugins** card: flip **User Accounts** and press *Save site plugins*. It is
 a per-site switch, exactly like the other plugin toggles there, so one site
 in a workspace can have member accounts while another does not.
 
-:::caution Why it defaults to off
-Most sites are marketing sites, and a sign-in page on a marketing domain is
-worse than a missing one: it looks like the place to type a password, while
-the real sign-in usually lives somewhere else entirely — a separate app
-domain, or your identity provider. Aglyn's own site is the example. Serving
-`/signin` there would invite people to enter console credentials on a page
-that is not the console. So the pages appear only when you say the site has
-members.
+:::caution Switch it off on a site with no members
+A sign-in page on a marketing domain is worse than a missing one: it looks
+like the place to type a password, while the real sign-in usually lives
+somewhere else entirely — a separate app domain, or your identity provider.
+Aglyn's own site is the example. Serving `/signin` there would invite people
+to enter console credentials on a page that is not the console. If a site
+has no members, switch User Accounts off for it.
 :::
 
 Switching User Accounts **off** again does not delete anything. Existing

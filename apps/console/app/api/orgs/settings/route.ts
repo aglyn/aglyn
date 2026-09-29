@@ -320,6 +320,70 @@ async function handler(request: Request): Promise<Response> {
     // Logo URLs must be https; contact fields are plain strings, length
     // capped — they surface on invoices, the marketplace profile, and the
     // admin console.
+    /*
+     * The workspace's time zone (AGL-3237), which every site it owns reads its
+     * published dates in unless the site sets its own. Its own action, saved
+     * from Settings → General, rather than a field of `update-profile`: that
+     * action posts the whole profile form, so a zone riding it was saved — or
+     * cleared — by every logo edit, and could only be found under a card about
+     * logos and contact details.
+     *
+     * Validated against `Intl` rather than a checked-in list of IANA names:
+     * the list goes stale as zones are renamed, and the only question that
+     * matters is whether THIS runtime can format in it. Empty clears the field
+     * back to the UTC default, which is what an org that never set one already
+     * renders.
+     */
+    if (body?.action === 'set-time-zone') {
+      const timeZone = String(body?.timeZone ?? '')
+        .trim()
+        .slice(0, 64)
+      if (timeZone && !isSupportedTimeZone(timeZone)) {
+        return Response.json(
+          { error: 'Choose a time zone from the list' },
+          { status: 400 },
+        )
+      }
+      const orgFirestore = firebaseAdmin.app().firestore()
+      await orgFirestore
+        .collection('orgs')
+        .doc(orgId)
+        .set(
+          {
+            timeZone: timeZone || firebaseAdmin.firestore.FieldValue.delete(),
+            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      /*
+       * A new workspace zone re-dates every site that has no zone of its own,
+       * and a published page renders its dates at build time — so the cached
+       * pages of every site in the workspace go now, rather than showing
+       * yesterday's day for up to an hour (AGL-3386). Only on an actual
+       * change: an org-wide drop regenerates every page it has.
+       *
+       * Deferred past the response, and best effort — `revalidateOrgHosts`
+       * never throws.
+       */
+      const previousTimeZone = String(
+        (org as { timeZone?: unknown } | null | undefined)?.timeZone ?? '',
+      )
+      if (timeZone !== previousTimeZone) {
+        after(async () => {
+          await revalidateOrgHosts(orgFirestore, orgId)
+        })
+        void logOrgActivity(
+          orgId,
+          { uid: decoded.uid, email: decoded.email },
+          timeZone
+            ? `Set the workspace time zone to ${timeZone}`
+            : 'Set the workspace time zone back to UTC',
+          { type: 'org', id: orgId },
+        )
+      }
+      return Response.json({ ok: true, timeZone }, { status: 200 })
+    }
+
     if (body?.action === 'update-profile') {
       const clean = (value: unknown, max = 200) =>
         String(value ?? '')
@@ -369,53 +433,16 @@ async function handler(request: Request): Promise<Response> {
       if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
         return Response.json({ error: 'Enter a valid contact email' }, { status: 400 })
       }
-      /*
-       * The workspace's time zone (AGL-3237), which every site it owns reads
-       * its published dates in.
-       *
-       * Validated against `Intl` rather than a checked-in list of IANA names:
-       * the list goes stale as zones are renamed, and the only question that
-       * matters is whether THIS runtime can format in it. Empty clears the
-       * field back to the UTC default, which is what an org that never set
-       * one already renders.
-       */
-      const timeZone = clean(body?.timeZone, 64)
-      if (timeZone && !isSupportedTimeZone(timeZone)) {
-        return Response.json(
-          { error: 'Choose a time zone from the list' },
-          { status: 400 },
-        )
-      }
       const orgFirestore = firebaseAdmin.app().firestore()
       const orgDocRef = orgFirestore.collection('orgs').doc(orgId)
       await orgDocRef.set(
         {
           logoUrl: logoUrl || firebaseAdmin.firestore.FieldValue.delete(),
           contact,
-          timeZone: timeZone || firebaseAdmin.firestore.FieldValue.delete(),
           updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },
       )
-      /*
-       * A new workspace zone re-dates every site that has no zone of its own,
-       * and a published page renders its dates at build time — so the cached
-       * pages of every site in the workspace go now, rather than showing
-       * yesterday's day for up to an hour (AGL-3386). Only on an actual
-       * change: a profile save that leaves the zone alone renders nothing
-       * differently, and an org-wide drop regenerates every page it has.
-       *
-       * Deferred past the response for the reason the Stripe sync below is,
-       * and best effort the same way — `revalidateOrgHosts` never throws.
-       */
-      const previousTimeZone = String(
-        (org as { timeZone?: unknown } | null | undefined)?.timeZone ?? '',
-      )
-      if (timeZone !== previousTimeZone) {
-        after(async () => {
-          await revalidateOrgHosts(orgFirestore, orgId)
-        })
-      }
       // Push the contact PHONE to the Stripe customer on change (AGL-1133).
       // The address is deliberately absent: it is set on Billing → Settings,
       // which writes Stripe itself and refuses the save when Stripe rejects

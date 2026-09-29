@@ -209,27 +209,6 @@ export function hasBindings(text: string): boolean {
 }
 
 /**
- * Applies `resolveBindings` to every string prop across a normalized nodes
- * map (mutating a shallow copy). String props only — objects/arrays (sx,
- * option lists) pass through untouched; unsafe values in hrefs remain
- * covered by the render-time SAFE_HREF/sanitizer checks.
- */
-/** Component id of the interactive function widget (plugins-mui). */
-export const FUNCTION_WIDGET_COMPONENT_ID = 'functionWidget'
-
-/**
- * Component id of the Calculator container (plugins-mui, AGL-3202): the
- * other element that runs a function in the visitor's browser, and so the
- * other one compose hands a definition to.
- */
-export const FUNCTION_SCOPE_COMPONENT_ID = 'functionScope'
-
-const FUNCTION_RUNNING_COMPONENT_IDS: ReadonlySet<string> = new Set([
-  FUNCTION_WIDGET_COMPONENT_ID,
-  FUNCTION_SCOPE_COMPONENT_ID,
-])
-
-/**
  * The site variables ONE function reads, by name (AGL-3202).
  *
  * A widget runs in the visitor's browser, so whatever it may read has to be
@@ -254,10 +233,17 @@ export function functionGlobals(
 }
 
 /**
- * Injects each function widget's definition into its props at compose time
- * (AGL-93): the client runs the shared evaluator locally, so the published
- * page carries the definition instead of calling home. Unknown names leave
- * the node untouched (the widget renders its editor placeholder).
+ * Injects each function-running element's definition into its props at
+ * compose time (AGL-93): the client runs the shared evaluator locally, so the
+ * published page carries the definition instead of calling home. Unknown
+ * names leave the node untouched (the element renders its editor
+ * placeholder).
+ *
+ * Which elements run a function is DECLARED (AGL-3393): `bindings` maps a
+ * component id to the prop that names its function, collected from each
+ * plugin's `contributes.site.functionBindings`. Core names no element, so a
+ * marketplace plugin's element is bound exactly as a first-party one is, and
+ * an element nobody declared is never handed a definition.
  *
  * With `variables`, the site variables that function reads ride along as
  * `globals` (AGL-3202) — see {@link functionGlobals} for why it is only
@@ -267,14 +253,21 @@ export function functionGlobals(
 export function attachFunctionDefinitions<T extends Record<string, any>>(
   nodes: T,
   functions: HostFunctionLookup,
-  variables: Record<string, HostVariable> = {},
+  variables: Record<string, HostVariable>,
+  bindings: Readonly<Record<string, string>>,
 ): T {
-  if (!Object.keys(functions).length) return nodes
+  if (!Object.keys(functions).length || !Object.keys(bindings).length) {
+    return nodes
+  }
   const next: Record<string, any> = {}
   for (const [id, node] of Object.entries(nodes)) {
-    const name = FUNCTION_RUNNING_COMPONENT_IDS.has(node?.componentId)
-      ? node?.props?.functionName
-      : undefined
+    const componentId = node?.componentId
+    const prop =
+      typeof componentId === 'string' &&
+      Object.prototype.hasOwnProperty.call(bindings, componentId)
+        ? bindings[componentId]
+        : undefined
+    const name = prop ? node?.props?.[prop] : undefined
     const definition = name ? functions[String(name).trim()] : undefined
     if (!definition) {
       next[id] = node
@@ -293,6 +286,12 @@ export function attachFunctionDefinitions<T extends Record<string, any>>(
   return next as T
 }
 
+/**
+ * Applies `resolveBindings` to every string prop across a normalized nodes
+ * map (mutating a shallow copy). String props only — objects/arrays (sx,
+ * option lists) pass through untouched; unsafe values in hrefs remain
+ * covered by the render-time SAFE_HREF/sanitizer checks.
+ */
 export function resolveNodesBindings<T extends Record<string, any>>(
   nodes: T,
   variables: Record<string, HostVariable>,

@@ -123,3 +123,14 @@ describe('isCompatibleHostAbi (AGL-429)', () => {
     expect(isCompatibleHostAbi(0)).toBe(false)
   })
 })
+
+describe('the host global (AGL-3392)', () => {
+  it('is the name the ABI module declares', async () => {
+    const { PLUGIN_HOST_GLOBAL } = await import('../app-utils/plugin-host-abi')
+    const { setRealmPluginHost } = await import('./realm-plugins')
+    setRealmPluginHost({ marker: true })
+    const scope = globalThis as unknown as Record<string, unknown>
+    expect((scope[PLUGIN_HOST_GLOBAL] as Record<string, unknown>)['marker']).toBe(true)
+    delete scope[PLUGIN_HOST_GLOBAL]
+  })
+})

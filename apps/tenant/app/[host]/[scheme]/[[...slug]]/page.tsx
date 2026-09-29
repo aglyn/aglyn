@@ -784,7 +784,9 @@ function buildJsonLd(props: Props): string[] {
   // `HostEntityType.PERSON`, so a site that declared itself a Person published
   // `"@type": "Organization"` on every page. Strict equality across a string
   // and a number is always false; nothing here could ever have said Person.
-  const publisher = hostSeoEntityJsonLd(host?.seo?.entity)
+  const publisher = hostSeoEntityJsonLd(host?.seo?.entity, {
+    origin: canonicalBase,
+  })
 
   /*
     THE SITE'S OWN ENTITY, as a top-level node (AGL-2716).

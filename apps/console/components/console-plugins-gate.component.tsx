@@ -21,6 +21,7 @@ import {
   EnabledPluginsContext,
   filterPluginsByReleaseFlags,
   listConsoleProviders,
+  presenceIds,
   resolveEnabledPlugins,
   subtractDisabledPlugins,
 } from '@aglyn/aglyn'
@@ -381,8 +382,19 @@ export function withSitePlugins<P extends object>(
   Component: React.ComponentType<P>,
 ): React.ComponentType<P> {
   function WithSitePlugins(props: P) {
-    const ready = useSitePluginsReady()
-    const enabledPluginIds = useEnabledPluginIds()
+    const { ready, realmPluginIds } = useSitePlugins()
+    const siteEnabledPluginIds = useEnabledPluginIds()
+    // A marketplace plugin the site runs is on the site's list too, under
+    // every id its presets may carry (AGL-3391): the switchboard's list names
+    // first-party plugins, and the drawer would otherwise hide the elements
+    // this gate just loaded.
+    const enabledPluginIds = useMemo(
+      () =>
+        realmPluginIds.length
+          ? [...new Set([...siteEnabledPluginIds, ...realmPluginIds])]
+          : siteEnabledPluginIds,
+      [siteEnabledPluginIds, realmPluginIds],
+    )
     if (!ready) return null
     return (
       <EnabledPluginsContext.Provider value={enabledPluginIds}>
@@ -395,7 +407,29 @@ export function withSitePlugins<P extends object>(
 }
 
 export function useSitePluginsReady(): boolean {
+  return useSitePlugins().ready
+}
+
+const NO_REALM_PLUGINS: readonly string[] = []
+
+/**
+ * The editor surface's plugins: the site's first-party canvas bundles, and the
+ * marketplace installs the site runs that declare site elements or features
+ * (AGL-3391), loaded together so the canvas never mounts ahead of either.
+ * `realmPluginIds` are the ids those installs' presets may carry.
+ *
+ * The installs are the site's list, the one its published pages load from:
+ * the workspace's pins with the site's own on top. A realm load never throws
+ * and never holds the canvas past settling; a bundle that fails to load is
+ * logged and its elements are simply absent, as on the published page.
+ */
+function useSitePlugins(): {
+  ready: boolean
+  realmPluginIds: readonly string[]
+} {
   const { orgId } = useCurrentOrg()
+  const { user } = usePluginLoadScope()
+  const hostId = useHostId()
   // Same fallback-org gate as the console gate above (AGL-1937). Every
   // `withSitePlugins` route lives under `/[orgSlug]/hosts/[host]/…`, so this
   // never withholds the canvas from a page that has one — the org-less
@@ -403,19 +437,32 @@ export function useSitePluginsReady(): boolean {
   // than resolving a plugin set from whichever org the scope fell back to.
   const namesOrg = useUrlNamesOrg()
   const [ready, setReady] = useState(false)
+  const [realmPluginIds, setRealmPluginIds] =
+    useState<readonly string[]>(NO_REALM_PLUGINS)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
 
   useEffect(() => {
     if (!namesOrg || !orgId || !flagsReady) return undefined
     let active = true
     setReady(false)
-    void consolePluginLoader.ensure(enabledKey.split(','), ['site']).then(() => {
-      if (active) setReady(true)
+    void Promise.all([
+      consolePluginLoader.ensure(enabledKey.split(','), ['site']),
+      hostId
+        ? loadOrgRealmPlugins(orgId, user, { at: 'editor' }, { hostId })
+        : Promise.resolve([]),
+    ]).then(([, installs]) => {
+      if (!active) return
+      const ids = installs.flatMap((install) => presenceIds(install))
+      setRealmPluginIds(ids.length ? ids : NO_REALM_PLUGINS)
+      setReady(true)
     })
     return () => {
       active = false
     }
-  }, [namesOrg, orgId, flagsReady, enabledKey])
+    // `user` identity churns with token refreshes; the org and the host name
+    // the load, as they do for every other place the console loads plugins.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namesOrg, orgId, flagsReady, enabledKey, hostId])
 
-  return ready
+  return { ready, realmPluginIds }
 }

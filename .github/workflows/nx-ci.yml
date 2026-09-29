@@ -425,6 +425,11 @@ jobs:
       # reason as the two above: the input is a root-level plugins.config.json
       # that is no app's source, and the outputs land in two apps at once.
       - run: npm run generate:plugin-manifests:check
+      # Same shape (AGL-3392): where each export a realm bundle may read from
+      # the host lives, generated from core's barrel and the installed MUI. A
+      # core export that moves or a MUI upgrade stales it, and neither marks
+      # the apps holding the tables affected.
+      - run: npm run generate:realm-host-exports:check
       # Fourth of the same shape (AGL-2905): the element palette a model
       # composes from is generated from the plugin bundles, and goes stale
       # when a bundle gains a component or a schema changes an attribute.

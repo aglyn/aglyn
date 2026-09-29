@@ -341,6 +341,42 @@ async function expandCollectionEntryBlocks(
  * path (which has no screen doc) build identical trees through this one
  * pipeline.
  */
+/**
+ * The function bindings that apply to a composed tree (AGL-3393).
+ *
+ * First-party declarations are compiled in and cost nothing. A marketplace
+ * plugin's live in its pinned version's manifest, which rides on the host's
+ * realm installs — a read (render-cached, and the same one the page loader
+ * issues for the bundles), so it is made only when it could change the
+ * answer: the host has a function to hand out and the tree places an element
+ * in a marketplace namespace. First-party declarations are listed first, so
+ * no manifest can rebind a first-party element.
+ *
+ * A failed lookup binds first-party elements only. A marketplace element then
+ * renders without its definition, which is its unconfigured placeholder —
+ * the same fail-open the bundle lookup takes.
+ */
+async function functionBindingsFor(
+  nodes: Record<string, { componentId?: unknown } | null | undefined>,
+  hostId: string,
+  functions: Record<string, unknown>,
+): Promise<Aglyn.FunctionBindings> {
+  const firstParty = Aglyn.FIRST_PARTY_FUNCTION_BINDINGS
+  if (!Object.keys(functions).length) return firstParty
+  const placesMarketplaceElement = Object.values(nodes).some((node) =>
+    Aglyn.isNamespacedComponentId(node?.componentId),
+  )
+  if (!placesMarketplaceElement) return firstParty
+  try {
+    const { getRealmPluginInstalls } = await import('./realm-installs-seam')
+    const installs = await getRealmPluginInstalls({ hostId })
+    return Aglyn.mergeFunctionBindings(firstParty, ...installs)
+  } catch (error) {
+    console.error('function bindings: realm install lookup failed:', error)
+    return firstParty
+  }
+}
+
 export async function composeNodesWithChrome(options: {
   hostId: string
   /**
@@ -671,13 +707,15 @@ export async function composeNodesWithChrome(options: {
     bound as any,
     options.host,
   )
-  // Function widgets run client-side: embed their definitions (AGL-93), and
-  // beside each the site variables that function reads and no others
-  // (AGL-3202).
+  // Function-running elements run client-side: embed their definitions
+  // (AGL-93), and beside each the site variables that function reads and no
+  // others (AGL-3202). Which elements those are is declared by their plugins
+  // (AGL-3393), never named here.
   const withFunctions = Aglyn.attachFunctionDefinitions(
     withHostTokens,
     functions,
     variables,
+    await functionBindingsFor(withHostTokens, hostId, functions),
   )
   // Marketplace plugins (AGL-45): stamp each marketplacePlugin node with its
   // pinned install (version/sha256/capabilities) + kill-switch state.

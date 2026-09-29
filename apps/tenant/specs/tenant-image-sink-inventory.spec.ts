@@ -347,6 +347,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'raw',
     why: "An author profile's avatar, read out of the raw document with only a length bound applied, and emitted into Article.author JSON-LD. Out of band, so no browser policy sees it.",
   },
+  'libs/aglyn/src/lib/app-utils/site-entity-json-ld.ts': {
+    markers: 1,
+    guard: 'media-ref',
+    why: "A LocalBusiness site entity's `image` (AGL-3398): the same URL as its `logo`, which hostSeoEntityImageJsonLd in content-authors resolves through absoluteMediaSrc from host.seo.entity.logo. Emitted into the site-entity JSON-LD. Out of band, so no browser policy sees it.",
+  },
   'libs/aglyn/src/lib/plugin-manager/plugin-styles-ui.tsx': {
     markers: 1,
     guard: 'scheme-guard',
@@ -491,6 +496,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 1,
     guard: 'platform',
     why: "The one-click unsubscribe confirmation page (AGL-2981), answered by the plugin API dispatchers for a link mailed in a List-Unsubscribe header. The marker is the `<style>` built in `outreachUnsubscribePage` in this file: six declarations of type and margin, every one a literal in the template string beside it, and no `url()` anywhere in it. Nothing a member or an author stored reaches the page at all — its title and body are module constants, escaped, and the page carries no logo, no brand image and no script, deliberately, so that it renders for a stranger with nothing of ours fetched. It is also never a tenant render: it is a recipient link, gated by its own signature rather than by the site pipeline.",
+  },
+  'libs/plugins/outreach/src/lib/engine/open-tracking.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Email, never a tenant render: the open-tracking image (AGL-3395) in the HTML part `outreachOpenTrackedHtml` writes for a sequence email whose sequence counts opens. `pixelUrl` is our own short link — `deps.clickLinkUrl` in runtime/send-job.ts (or the step test in routes/step-test-routes.ts) builds it from a fresh `newOutreachLinkId` on the outreach link host or the console's `/api/outreach/l/<id>` path, and returns nothing without an HTTPS origin. No author or member string reaches the src; it is escaped into the attribute regardless. The fetch it causes lands on our own route, which is the whole point of it.",
   },
   'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts': {
     markers: 1,
