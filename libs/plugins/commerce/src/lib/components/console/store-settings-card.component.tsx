@@ -29,12 +29,13 @@ import {
 } from '@mui/material'
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { hostPublicOrigin, pluginDocsHelp } from '@aglyn/aglyn'
+import { announceSiteWideChange } from '@aglyn/aglyn/app-utils/announce-site-wide-change'
 
 export interface StoreSettingsCardProps {
   hostId: string
@@ -60,6 +61,7 @@ interface StoreSettings {
 export function StoreSettingsCard(props: StoreSettingsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const {
     data: store,
@@ -171,11 +173,23 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
       })
     }
     setDraft(null)
+    // The product and collection templates, the currency and the checkout
+    // rules render on the live store with no publish step: drop its cached
+    // pages so they show now rather than within the hour.
+    void announceSiteWideChange({ user, hostId })
     enqueueSnackbar('Store settings saved', {
       variant: 'success',
       persist: false,
     })
-  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
+  }, [
+    current,
+    firestore,
+    hostId,
+    user,
+    enqueueSnackbar,
+    storeStatus,
+    storeFromCache,
+  ])
 
   return (
     <CardDisplay

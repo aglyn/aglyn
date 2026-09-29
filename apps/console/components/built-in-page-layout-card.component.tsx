@@ -25,10 +25,10 @@ import {
   doc,
   limit,
   query,
-  updateDoc,
 } from 'firebase/firestore'
 import { useCallback } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { updateHostDocument } from '../utils/host-document-writes'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
@@ -54,6 +54,7 @@ export interface BuiltInPageLayoutCardProps {
 export function BuiltInPageLayoutCard(props: BuiltInPageLayoutCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { data: host } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
@@ -77,7 +78,7 @@ export function BuiltInPageLayoutCard(props: BuiltInPageLayoutCardProps) {
 
   const handleChange = useCallback(
     async (value: string) => {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
+      await updateHostDocument(firestore, { user, hostId }, {
         builtInPageLayoutId: value || deleteField(),
       })
       enqueueSnackbar(
@@ -85,7 +86,7 @@ export function BuiltInPageLayoutCard(props: BuiltInPageLayoutCardProps) {
         { variant: 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   return (

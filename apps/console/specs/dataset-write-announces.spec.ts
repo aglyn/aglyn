@@ -62,8 +62,9 @@ describe('a dataset record write announces to the live pages', () => {
     )
     // AGL-2462 recorded that a `/v1` write cannot publish and only the TTL
     // made it visible. All three legs answer that now: a deleted row is as
-    // stale on a page as a changed one.
-    expect(resources.match(/announceDatasetChange\(\{/g)).toHaveLength(3)
+    // stale on a page as a changed one. The fourth is the dataset's own
+    // schema update, which reformats every bound page (AGL-3386).
+    expect(resources.match(/announceDatasetChange\(\{/g)).toHaveLength(4)
   })
 
   it('the form submission leg announces, inside the swallow that protects the lead', () => {

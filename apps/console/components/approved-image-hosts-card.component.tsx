@@ -27,9 +27,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { arrayRemove, arrayUnion, doc, updateDoc } from 'firebase/firestore'
+import { arrayRemove, arrayUnion, doc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { updateHostDocument } from '../utils/host-document-writes'
 // The SAME parse the tenant middleware builds the header from. Root-level
 // CommonJS, outside the nx graph, because `next.config.js` must `require` it
 // (AGL-523) — the console middleware imports it the same way.
@@ -107,6 +108,7 @@ export function ApprovedImageHostsCard(props: ApprovedHostsCardProps) {
     privacyNote = 'Every host here can see the IP address of anyone who visits your site, because their browser fetches the image directly.',
   } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -155,7 +157,7 @@ export function ApprovedImageHostsCard(props: ApprovedHostsCardProps) {
     if (!value || draftError) return
     setBusy(true)
     try {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
+      await updateHostDocument(firestore, { user, hostId }, {
         [field]: arrayUnion(value),
       })
       setDraft('')
@@ -166,13 +168,13 @@ export function ApprovedImageHostsCard(props: ApprovedHostsCardProps) {
     } finally {
       setBusy(false)
     }
-  }, [draft, draftError, firestore, hostId, enqueueSnackbar])
+  }, [draft, draftError, firestore, hostId, user, enqueueSnackbar])
 
   const remove = useCallback(
     async (value: string) => {
       setBusy(true)
       try {
-        await updateDoc(doc(firestore, 'hosts', hostId), {
+        await updateHostDocument(firestore, { user, hostId }, {
           [field]: arrayRemove(value),
         })
         enqueueSnackbar(`${value} removed`, {
@@ -183,7 +185,7 @@ export function ApprovedImageHostsCard(props: ApprovedHostsCardProps) {
         setBusy(false)
       }
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   return (

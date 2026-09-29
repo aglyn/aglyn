@@ -47,6 +47,9 @@ const mockHostDoc: { data: any } = { data: {} }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHost: () => ({ doc: mockHostDoc, setDoc: mockSetDoc }),
   useHostOrgId: () => 'org1',
+  // Read by the console's `useHost`, which drops the live site's cache after
+  // a rendered write (AGL-3386).
+  useUser: () => ({ data: null }),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

@@ -52,6 +52,7 @@ import {
   validateConsoleDomain,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 
 /**
  * Org settings mutations (AGL-236). Rename goes through the API rather
@@ -396,6 +397,25 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
+      /*
+       * A new workspace zone re-dates every site that has no zone of its own,
+       * and a published page renders its dates at build time — so the cached
+       * pages of every site in the workspace go now, rather than showing
+       * yesterday's day for up to an hour (AGL-3386). Only on an actual
+       * change: a profile save that leaves the zone alone renders nothing
+       * differently, and an org-wide drop regenerates every page it has.
+       *
+       * Deferred past the response for the reason the Stripe sync below is,
+       * and best effort the same way — `revalidateOrgHosts` never throws.
+       */
+      const previousTimeZone = String(
+        (org as { timeZone?: unknown } | null | undefined)?.timeZone ?? '',
+      )
+      if (timeZone !== previousTimeZone) {
+        after(async () => {
+          await revalidateOrgHosts(orgFirestore, orgId)
+        })
+      }
       // Push the contact PHONE to the Stripe customer on change (AGL-1133).
       // The address is deliberately absent: it is set on Billing → Settings,
       // which writes Stripe itself and refuses the save when Stripe rejects

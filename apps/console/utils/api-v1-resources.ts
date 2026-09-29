@@ -396,6 +396,18 @@ async function updateDataset(
   // 400: a client re-sending an unchanged object should not have to special-
   // case it, and there is no state to disagree about.
   if (Object.keys(update).length > 0) await datasetRef.update(update)
+  // The fields and the model decide how every bound page formats and orders
+  // this dataset's rows, so a schema change is a change to those pages — and
+  // no publish follows a `/v1` write (AGL-3386). A rename alone renders
+  // nothing: the display name is the console's label for the dataset. Best
+  // effort, like the record writes' announce; the update is already stored.
+  if (fields !== undefined || model !== undefined) {
+    await announceDatasetChange({
+      firestore: ctx.firestore,
+      orgId: ctx.orgId,
+      datasetId: datasetRef.id,
+    })
+  }
   return apiJson(datasetView(await datasetRef.get()), { headers: ctx.headers })
 }
 

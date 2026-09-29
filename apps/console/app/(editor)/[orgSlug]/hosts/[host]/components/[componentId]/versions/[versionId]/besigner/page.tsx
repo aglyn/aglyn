@@ -59,10 +59,10 @@ import {
   useComponent,
   useComponentVersion,
   useComponentVersionRef,
-  useHost,
   useHostActivityLogger,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../../../../../../../../../../hooks/use-host'
 import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'

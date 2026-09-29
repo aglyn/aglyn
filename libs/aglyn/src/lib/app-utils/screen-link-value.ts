@@ -247,11 +247,15 @@ export function screenRoutesAnswerFor(
  * Navigable protocols only. A stored `javascript:`/`data:` href would
  * execute in visitors' browsers, so the guard the linking components each
  * carried is here instead — one copy, one place to harden.
+ *
+ * `sms:` sits beside `tel:` (AGL-3388): it opens the visitor's messaging app
+ * and executes nothing, the same list `safe-url-scheme.ts` keeps. Leaving it
+ * out rendered every "Text us" button as a button with no link.
  */
-export const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:|\/|#)/i
+export const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:|sms:|\/|#)/i
 
 /** Of those, the ones that actually leave the site (new-tab decisions). */
-export const EXTERNAL_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:)/i
+export const EXTERNAL_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:|sms:)/i
 
 /**
  * The id a link value jumps to when a fragment is ALL it holds — `#watch`

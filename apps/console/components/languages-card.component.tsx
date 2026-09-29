@@ -19,12 +19,14 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
-import { deleteField, doc, updateDoc } from 'firebase/firestore'
+import { deleteField, doc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
+  useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { updateHostDocument } from '../utils/host-document-writes'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -41,6 +43,7 @@ const LOCALE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
 export function LanguagesCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { org, ready: orgReady } = useCurrentOrg()
   const {
@@ -114,7 +117,7 @@ export function LanguagesCard(props: { hostId: string }) {
           fromCache: hostFromCache,
         },
         async () => {
-          await updateDoc(doc(firestore, 'hosts', hostId), {
+          await updateHostDocument(firestore, { user, hostId }, {
             locales: parsed.length ? parsed : deleteField(),
             defaultLocale:
               parsed.length && parsed.includes(defaultLocale)
@@ -150,6 +153,7 @@ export function LanguagesCard(props: { hostId: string }) {
     orgReady,
     firestore,
     hostId,
+    user,
     parsed,
     defaultLocale,
     enqueueSnackbar,

@@ -26,7 +26,8 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
-import { useFirestore, useHost, useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../hooks/use-host'
 import { hostBrandKey, HostSiteKeyContext } from '@aglyn/shared-ui-theme'
 import { useAuthRecovery } from '../hooks/use-auth-recovery'
 import { useHostResolution } from '../hooks/use-host-resolution'

@@ -19,7 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHost } from '@aglyn/tenant-feature-instance'
+import { useHost } from '../hooks/use-host'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import {
   MEDIA_ALT_MAX_LENGTH,
