@@ -354,6 +354,18 @@ export const MUI_COMPONENT_SOURCES: Readonly<
     schema: 'functionShowSchema',
     presets: 'functionShowPresets',
   },
+  functionDocument: {
+    module: functionScope,
+    component: 'FunctionDocument',
+    schema: 'functionDocumentSchema',
+    presets: 'functionDocumentPresets',
+  },
+  functionSave: {
+    module: functionScope,
+    component: 'FunctionSave',
+    schema: 'functionSaveSchema',
+    presets: 'functionSavePresets',
+  },
   product: {
     module: product,
     component: 'default',

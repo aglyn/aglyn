@@ -54,6 +54,8 @@ const NEVER_OFFERED = [
   'functionInput',
   'functionOutput',
   'functionShow',
+  'functionDocument',
+  'functionSave',
   'div',
   'reusableInstance',
   'marketplacePlugin',

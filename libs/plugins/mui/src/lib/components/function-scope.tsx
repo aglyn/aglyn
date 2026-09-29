@@ -19,22 +19,38 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiCalculatorVariantOutline,
   mdiEyeOutline,
+  mdiFileDocumentOutline,
+  mdiFilePdfBox,
   mdiFormTextbox,
   mdiFunctionVariant,
 } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import type { SxProps, Theme } from '@mui/material/styles'
 import {
   createContext,
   forwardRef,
   Fragment,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
+  type ForwardedRef,
   type ReactNode,
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  FUNCTION_DOCUMENT_PAPERS,
+  copyFunctionDocumentText,
+  fillDocumentTitle,
+  functionDocumentText,
+  printFunctionDocument,
+  shareFunctionDocumentText,
+  type FunctionDocumentPaper,
+} from './function-document-save'
 import {
   FUNCTION_CONTROL_KINDS,
   FunctionParameterControl,
@@ -72,6 +88,14 @@ import {
  * Everything between them is whatever the author builds: stacks, grids,
  * headings, borders. The design is theirs and the arithmetic is the site's
  * function, reading the site's variables.
+ *
+ * What a calculator works out can also leave the page (AGL-3387):
+ *
+ * - **Calculator Document** (`functionDocument`) is a container whose
+ *   contents are a receipt, an invoice or a quote — laid out on the canvas,
+ *   filled by Calculator Results.
+ * - **Calculator Save Button** (`functionSave`) saves that document as a
+ *   PDF, shares it, or copies it as text.
  */
 
 // Component ids are persisted in screen documents; never rename.
@@ -79,12 +103,26 @@ export const SCOPE_ID: Aglyn.ComponentId = 'functionScope'
 export const INPUT_ID: Aglyn.ComponentId = 'functionInput'
 export const OUTPUT_ID: Aglyn.ComponentId = 'functionOutput'
 export const SHOW_ID: Aglyn.ComponentId = 'functionShow'
+export const DOCUMENT_ID: Aglyn.ComponentId = 'functionDocument'
+export const SAVE_ID: Aglyn.ComponentId = 'functionSave'
+
+/** A Calculator Document as its Save Buttons find it. */
+interface RegisteredDocument {
+  element: HTMLElement
+  title?: string
+  paper?: FunctionDocumentPaper
+  margin?: number
+}
 
 interface FunctionScopeValue {
   definition?: Aglyn.HostFunction
   args: Record<string, string>
   setArgument: (name: string, value: string) => void
   run: Aglyn.FunctionRunResult | null
+  /** Returns the unregister. */
+  registerDocument: (name: string, entry: RegisteredDocument) => () => void
+  /** By name, or the first one placed when no name is given. */
+  findDocument: (name?: string) => RegisteredDocument | null
 }
 
 const FunctionScopeContext = createContext<FunctionScopeValue | null>(null)
@@ -120,9 +158,27 @@ const FunctionScope = forwardRef<HTMLDivElement, FunctionScopeProps>(
           : null,
       [definition, args, globals],
     )
+    // Documents register themselves; a ref, because a Save Button reads the
+    // list when it is clicked and a document appearing re-renders nothing.
+    const documents = useRef(new Map<string, RegisteredDocument>())
+    const registerDocument = useCallback(
+      (name: string, entry: RegisteredDocument) => {
+        documents.current.set(name, entry)
+        return () => {
+          if (documents.current.get(name) === entry) documents.current.delete(name)
+        }
+      },
+      [],
+    )
+    const findDocument = useCallback((name?: string) => {
+      const key = String(name ?? '').trim()
+      if (key) return documents.current.get(key) ?? null
+      const first = documents.current.values().next()
+      return first.done ? null : first.value
+    }, [])
     const value = useMemo(
-      () => ({ definition, args, setArgument, run }),
-      [definition, args, setArgument, run],
+      () => ({ definition, args, setArgument, run, registerDocument, findDocument }),
+      [definition, args, setArgument, run, registerDocument, findDocument],
     )
     return (
       <FunctionScopeContext.Provider value={value}>
@@ -287,6 +343,167 @@ const FunctionShow = forwardRef<HTMLDivElement, FunctionShowProps>(
   },
 )
 FunctionShow.displayName = 'AglynFunctionShow'
+
+// ── Calculator Document ────────────────────────────────────────────────────
+
+export type FunctionDocumentMargin = 'none' | 'narrow' | 'normal' | 'wide'
+
+const DOCUMENT_MARGINS_MM: Record<FunctionDocumentMargin, number> = {
+  none: 0,
+  narrow: 6,
+  normal: 12,
+  wide: 20,
+}
+
+export interface FunctionDocumentProps {
+  /** Which document a Save Button saves, when a calculator has several. */
+  name?: string
+  /** The saved file's name; `{value}` fills from the calculator. */
+  title?: string
+  paper?: FunctionDocumentPaper
+  margin?: FunctionDocumentMargin
+  /** `hide` keeps it off the page: it exists only in what is saved. */
+  onScreen?: 'show' | 'hide'
+  children?: ReactNode
+  sx?: SxProps<Theme>
+}
+
+function assignRef<T>(ref: ForwardedRef<T>, value: T | null) {
+  if (typeof ref === 'function') ref(value)
+  else if (ref) ref.current = value
+}
+
+const FunctionDocument = forwardRef<HTMLDivElement, FunctionDocumentProps>(
+  (props, ref) => {
+    const { name, title, paper, margin, onScreen, children, sx, ...rest } = props
+    const scope = useContext(FunctionScopeContext)
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+    const own = useRef<HTMLDivElement | null>(null)
+    const setRef = useCallback(
+      (element: HTMLDivElement | null) => {
+        own.current = element
+        assignRef(ref, element)
+      },
+      [ref],
+    )
+    const key = String(name ?? '').trim() || 'document'
+    const register = scope?.registerDocument
+    const paperKind = FUNCTION_DOCUMENT_PAPERS.includes(paper as FunctionDocumentPaper)
+      ? (paper as FunctionDocumentPaper)
+      : 'letter'
+    const marginMm = DOCUMENT_MARGINS_MM[margin as FunctionDocumentMargin] ?? DOCUMENT_MARGINS_MM.normal
+    useEffect(() => {
+      const element = own.current
+      if (!register || !element) return undefined
+      return register(key, { element, title, paper: paperKind, margin: marginMm })
+    }, [register, key, title, paperKind, marginMm])
+    const offScreen = onScreen === 'hide'
+    // Kept off a visitor's screen, but never off the canvas: a document
+    // nobody can see cannot be designed. The dashed outline says which it is.
+    const placement = offScreen
+      ? suppressNavigation
+        ? { outline: '1px dashed', outlineColor: 'divider', outlineOffset: '4px' }
+        : { '@media screen': { display: 'none' } }
+      : null
+    const ownSx = Array.isArray(sx) ? sx : sx ? [sx] : []
+    return (
+      <Box
+        ref={setRef}
+        data-function-document={key}
+        sx={[...(placement ? [placement] : []), ...ownSx]}
+        {...rest}
+      >
+        {children}
+      </Box>
+    )
+  },
+)
+FunctionDocument.displayName = 'AglynFunctionDocument'
+
+// ── Calculator Save Button ─────────────────────────────────────────────────
+
+export type FunctionSaveAction = 'pdf' | 'share' | 'copy'
+
+export const FUNCTION_SAVE_ACTIONS: readonly FunctionSaveAction[] = ['pdf', 'share', 'copy']
+
+const SAVE_LABELS: Record<FunctionSaveAction, string> = {
+  pdf: 'Save PDF',
+  share: 'Share',
+  copy: 'Copy as text',
+}
+
+export interface FunctionSaveProps {
+  action?: FunctionSaveAction
+  /** The button's words; each action has its own when left empty. */
+  label?: string
+  /** The Calculator Document to save; empty is the first one placed. */
+  document?: string
+  variant?: 'contained' | 'outlined' | 'text'
+  fullWidth?: boolean
+  sx?: SxProps<Theme>
+}
+
+const FunctionSave = forwardRef<HTMLButtonElement, FunctionSaveProps>(
+  (props, ref) => {
+    const { action, label, document: documentName, variant, fullWidth, sx, ...rest } = props
+    const scope = useContext(FunctionScopeContext)
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+    const [status, setStatus] = useState('')
+    useEffect(() => {
+      if (!status) return undefined
+      const timer = setTimeout(() => setStatus(''), 2500)
+      return () => clearTimeout(timer)
+    }, [status])
+    const kind = FUNCTION_SAVE_ACTIONS.includes(action as FunctionSaveAction)
+      ? (action as FunctionSaveAction)
+      : 'pdf'
+    // Outside a Calculator there is nothing to save. The besigner still
+    // draws it, so the button can be placed before the calculator works.
+    if (!scope && !suppressNavigation) return null
+    const onClick = async () => {
+      if (suppressNavigation || !scope) return
+      const entry = scope.findDocument(documentName)
+      if (!entry) {
+        setStatus('Nothing to save yet')
+        return
+      }
+      const run = scope.run
+      const title = fillDocumentTitle(entry.title, (name) =>
+        run?.ok ? displayFunctionValue(run.scope[name]) : '',
+      )
+      if (kind === 'pdf') {
+        if (!printFunctionDocument(entry.element, { title, paper: entry.paper, margin: entry.margin })) {
+          setStatus('This browser can’t save a PDF')
+        }
+        return
+      }
+      const text = functionDocumentText(entry.element)
+      if (kind === 'copy') {
+        setStatus((await copyFunctionDocumentText(text)) ? 'Copied' : 'Couldn’t copy')
+        return
+      }
+      const outcome = await shareFunctionDocumentText(title, text)
+      if (outcome === 'copied') setStatus('Copied')
+      else if (outcome === 'failed') setStatus('Couldn’t share')
+    }
+    const ownSx = Array.isArray(sx) ? sx : sx ? [sx] : []
+    return (
+      <Button
+        ref={ref}
+        type="button"
+        variant={variant ?? 'contained'}
+        fullWidth={Boolean(fullWidth)}
+        onClick={onClick}
+        // A save button inside the document it saves stays out of the copy.
+        sx={[{ '@media print': { display: 'none' } }, ...ownSx]}
+        {...rest}
+      >
+        <span aria-live="polite">{status || label?.trim() || SAVE_LABELS[kind]}</span>
+      </Button>
+    )
+  },
+)
+FunctionSave.displayName = 'AglynFunctionSave'
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 
@@ -453,6 +670,129 @@ export const functionShowSchema: Aglyn.ComponentSchema<FunctionShowProps> = {
   ],
 }
 
+export const functionDocumentSchema: Aglyn.ComponentSchema<FunctionDocumentProps> = {
+  $id: DOCUMENT_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Calculator Document',
+  description:
+    'A receipt, invoice or quote inside a Calculator. Lay it out with ' +
+    'Calculator Results and text; a Calculator Save Button saves it as a PDF.',
+  category: Aglyn.ComponentCategory.INPUT,
+  icon: { path: mdiFileDocumentOutline.path, sx: { color: ICON_COLOR } },
+  attributes: [
+    {
+      name: 'title',
+      description:
+        'The saved file’s name. Put a value of the function in braces to fill ' +
+        'it in, e.g. "Receipt {invoice_number} {customer}".',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'File name',
+    },
+    {
+      name: 'paper',
+      description: 'The page size of the saved PDF.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'Paper',
+      options: [
+        { value: 'letter', label: 'Letter (US)' },
+        { value: 'a4', label: 'A4' },
+        { value: 'auto', label: 'The printer’s own' },
+      ],
+    },
+    {
+      name: 'margin',
+      description: 'White space around the page edge in the saved PDF.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'Page margin',
+      options: [
+        { value: 'none', label: 'None' },
+        { value: 'narrow', label: 'Narrow' },
+        { value: 'normal', label: 'Normal' },
+        { value: 'wide', label: 'Wide' },
+      ],
+    },
+    {
+      name: 'onScreen',
+      description:
+        'Show it on the page, or keep it off the page so it exists only in ' +
+        'what is saved. It always shows here in the Besigner.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'On the page',
+      options: [
+        { value: 'show', label: 'Show it' },
+        { value: 'hide', label: 'Only in the saved copy' },
+      ],
+    },
+    {
+      name: 'name',
+      description:
+        'Only needed when a Calculator holds more than one document: the ' +
+        'name a Save Button uses to pick this one.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Document name',
+    },
+  ],
+}
+
+export const functionSaveSchema: Aglyn.ComponentSchema<FunctionSaveProps> = {
+  $id: SAVE_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Calculator Save Button',
+  description:
+    'Saves the Calculator Document in the same Calculator: as a PDF, to the ' +
+    'device’s share sheet, or copied as text.',
+  category: Aglyn.ComponentCategory.INPUT,
+  icon: { path: mdiFilePdfBox.path, sx: { color: ICON_COLOR } },
+  flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+  attributes: [
+    {
+      name: 'action',
+      description:
+        'Save as PDF opens the device’s print window with only the document ' +
+        'in it; choose Save as PDF there. Share opens the share sheet with ' +
+        'the document as text, and copies it where there is none.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'Does',
+      options: [
+        { value: 'pdf', label: 'Save as PDF' },
+        { value: 'share', label: 'Share' },
+        { value: 'copy', label: 'Copy as text' },
+      ],
+    },
+    {
+      name: 'label',
+      description: 'The button’s words. Empty uses Save PDF, Share or Copy as text.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Label',
+    },
+    {
+      name: 'variant',
+      description: 'Filled, outlined or plain text.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'Style',
+      options: [
+        { value: 'contained', label: 'Filled' },
+        { value: 'outlined', label: 'Outlined' },
+        { value: 'text', label: 'Text' },
+      ],
+    },
+    {
+      name: 'fullWidth',
+      description: 'If true, the button spans the width it is given.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Full width?',
+    },
+    {
+      name: 'document',
+      description:
+        'The Document name to save, when the Calculator holds more than one. ' +
+        'Empty saves the first.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Document',
+    },
+  ],
+}
+
 export const presets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(SCOPE_ID),
@@ -505,5 +845,36 @@ export const functionShowPresets: Aglyn.PresetSchema[] = [
   },
 ]
 
-export { FunctionInput, FunctionOutput, FunctionShow }
+export const functionDocumentPresets: Aglyn.PresetSchema[] = [
+  {
+    $id: generatePresetId(DOCUMENT_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Calculator Document',
+    pluginId: BUNDLE_ID,
+    description: 'A receipt, invoice or quote a Save Button turns into a PDF',
+    category: Aglyn.ComponentCategory.INPUT,
+    icon: { path: mdiFileDocumentOutline.path, sx: { color: ICON_COLOR } },
+    data: {
+      $id: null,
+      componentId: DOCUMENT_ID,
+      pluginId: BUNDLE_ID,
+      props: { paper: 'letter', margin: 'normal', onScreen: 'show' },
+    },
+  },
+]
+
+export const functionSavePresets: Aglyn.PresetSchema[] = [
+  {
+    $id: generatePresetId(SAVE_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Calculator Save Button',
+    pluginId: BUNDLE_ID,
+    description: 'Saves the Calculator Document as a PDF, shares or copies it',
+    category: Aglyn.ComponentCategory.INPUT,
+    icon: { path: mdiFilePdfBox.path, sx: { color: ICON_COLOR } },
+    data: { $id: null, componentId: SAVE_ID, pluginId: BUNDLE_ID, props: { action: 'pdf' } },
+  },
+]
+
+export { FunctionDocument, FunctionInput, FunctionOutput, FunctionSave, FunctionShow }
 export default FunctionScope

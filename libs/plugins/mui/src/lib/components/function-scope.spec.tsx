@@ -16,14 +16,19 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { PRINT_HIDE_ATTRIBUTE, PRINT_TARGET_ATTRIBUTE } from './function-document-save'
 import FunctionScope, {
+  FunctionDocument,
   FunctionInput,
   FunctionOutput,
+  FunctionSave,
   FunctionShow,
+  functionDocumentSchema,
   functionInputSchema,
   functionOutputSchema,
+  functionSaveSchema,
   functionShowSchema,
   renderFunctionEmphasis,
   schema,
@@ -217,10 +222,96 @@ describe('Calculator elements with no function behind them', () => {
   })
 })
 
+describe('A calculator’s document and its save button (AGL-3387)', () => {
+  const receipt = (options: { onScreen?: 'show' | 'hide'; action?: 'pdf' | 'share' | 'copy' } = {}) => (
+    <Calculator>
+      <FunctionInput parameter="sites" />
+      <FunctionDocument title="Quote {sites} sites {missing}" paper="a4" margin="narrow" onScreen={options.onScreen}>
+        <h2>{'Quote'}</h2>
+        <FunctionShow when="show_webflow">
+          <p>
+            {'Webflow '}
+            <FunctionOutput name="month_webflow" element="span" />
+          </p>
+        </FunctionShow>
+        <FunctionOutput />
+      </FunctionDocument>
+      <FunctionSave action={options.action} />
+    </Calculator>
+  )
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('saves the document as a PDF under a title the calculator fills in', () => {
+    let seen: { title: string; target: string | null; hidden: number; page: string } | null = null
+    jest.spyOn(window, 'print').mockImplementation(() => {
+      const target = document.querySelector(`[${PRINT_TARGET_ATTRIBUTE}]`)
+      seen = {
+        title: document.title,
+        target: target?.getAttribute('data-function-document') ?? null,
+        hidden: document.querySelectorAll(`[${PRINT_HIDE_ATTRIBUTE}]`).length,
+        page: document.getElementById('aglyn-function-document-print')?.textContent ?? '',
+      }
+    })
+    document.title = 'Page'
+    render(receipt())
+    fireEvent.change(screen.getByLabelText(/Client sites you run/), { target: { value: '40' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save PDF' }))
+    expect(seen).toEqual({
+      title: 'Quote 40 sites',
+      target: 'document',
+      hidden: expect.any(Number),
+      page: expect.stringContaining('size: A4; margin: 6mm'),
+    })
+    expect((seen as unknown as { hidden: number }).hidden).toBeGreaterThan(0)
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'))
+    })
+    expect(document.title).toBe('Page')
+  })
+
+  it('copies the document as text, and says so on the button', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true })
+    render(receipt({ action: 'copy' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Copy as text' }))
+    })
+    expect(writeText).toHaveBeenCalledWith('Quote\nWebflow $625\nAglyn is $25 less, for 25 sites.')
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy()
+  })
+
+  it('keeps an off-screen document out of the visitor’s page but not out of the besigner', () => {
+    const visitor = render(receipt({ onScreen: 'hide' }))
+    const hidden = visitor.container.querySelector('[data-function-document]') as HTMLElement
+    // Rendered (so it can be printed and read), and styled off the screen.
+    expect(hidden.textContent).toContain('Quote')
+    visitor.unmount()
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ screens: {}, suppressNavigation: true, editorInert: true } as never}>
+        {receipt({ onScreen: 'hide' })}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    const print = jest.spyOn(window, 'print').mockImplementation(() => undefined)
+    // In the besigner the button is drawn and does nothing.
+    fireEvent.click(screen.getByRole('button', { name: 'Save PDF' }))
+    expect(print).not.toHaveBeenCalled()
+  })
+
+  it('outside a Calculator, a save button is nothing', () => {
+    const { container } = render(<FunctionSave />)
+    expect(container.textContent).toBe('')
+  })
+})
+
 describe('the schemas', () => {
   it('declares which pieces hold children and which do not', () => {
     expect(schema.flags?.selfClosing).toBeUndefined()
     expect(functionShowSchema.flags?.selfClosing).toBeUndefined()
+    expect(functionDocumentSchema.flags?.selfClosing).toBeUndefined()
+    expect(functionSaveSchema.flags?.selfClosing).toBe(Aglyn.FEATURE_FLAG.ENABLED)
     expect(functionInputSchema.flags?.selfClosing).toBe(Aglyn.FEATURE_FLAG.ENABLED)
     expect(functionOutputSchema.flags?.selfClosing).toBe(Aglyn.FEATURE_FLAG.ENABLED)
   })
