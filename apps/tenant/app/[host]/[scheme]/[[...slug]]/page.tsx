@@ -29,6 +29,7 @@ import {
   toOpenGraphLocale,
 } from '@aglyn/aglyn/app-utils/seo-locale'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
+import { packNodesForWire } from '@aglyn/aglyn/app-utils/wire-nodes'
 import { isFirstPartySite } from '@aglyn/tenant-data-admin/server/first-party-hosts'
 import { FIRST_TOUCH_ROUTE_PATH } from '@aglyn/tenant-data-admin/server/first-touch-route'
 import {
@@ -1587,7 +1588,15 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
           whole root and takes `SiteAnalytics` and Next's global error
           boundary (i.e. the root layout, `ErrorBeacon` included) with it. */}
       <PageBodyBoundary>
-        <CatchAllClient {...clientProps} />
+        {/* The node map without the ids its keys and `nodes` lists already
+            state (AGL-3401): it is the largest thing in the page's flight
+            payload, and `CatchAllClient` puts them back before the canvas
+            reads a node. Packed HERE, at the one place the map becomes a
+            client prop, so everything above reads the whole map. */}
+        <CatchAllClient
+          {...clientProps}
+          nodes={packNodesForWire(clientProps.nodes)}
+        />
       </PageBodyBoundary>
     </>
   )

@@ -38,6 +38,7 @@ import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand
 import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
 // The leaf, not the barrel: a published page pays for what it names.
 import { parseEntryLinkValue } from '@aglyn/aglyn/app-utils/screen-link-value'
+import { unpackWireNodes } from '@aglyn/aglyn/app-utils/wire-nodes'
 import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
 import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
@@ -291,11 +292,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     any
   > | null>(null)
   // const props = { data: exampleData }
+  //
+  // The page ships its map packed (AGL-3401): each node's `$id` and
+  // `parentId` are left for its key and its parent's `nodes` list to state.
+  // Unpacked here, after the patch is merged — unpacking a full node is a
+  // no-op — so nothing below ever sees a node without them.
   const nodes = useMemo(
     () =>
-      deferredPatch && props.nodes
-        ? { ...props.nodes, ...deferredPatch }
-        : props.nodes,
+      unpackWireNodes(
+        deferredPatch && props.nodes
+          ? { ...props.nodes, ...deferredPatch }
+          : props.nodes,
+      ),
     [props.nodes, deferredPatch],
   )
   // Unlocked content for password-protected screens (AGL-87).
