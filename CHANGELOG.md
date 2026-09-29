@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.210 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.209...v1.0.0-beta.210)
+
+### Added
+
+- **calculator:** calculators leave mui for a plugin of their own ([AGL-3387](https://linear.app/aglyn/issue/AGL-3387), [AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+
+### Fixed
+
+- **staff:** the abuse queue opens on open-or-reviewing reports ([AGL-3389](https://linear.app/aglyn/issue/AGL-3389))
+
 ## v1.0.0-beta.209 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/25cc1505f...v1.0.0-beta.209)
