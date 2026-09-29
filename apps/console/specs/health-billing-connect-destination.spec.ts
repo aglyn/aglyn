@@ -114,7 +114,7 @@ const connectEndpoint = (overrides: Record<string, unknown> = {}) => ({
   id: 'we_connect',
   url: WEBHOOK_URL,
   status: 'enabled',
-  enabled_events: ['account.updated'],
+  enabled_events: ['account.updated', 'payout.failed', 'payout.paid'],
   // The stamp setup-stripe writes. Nothing else distinguishes it.
   metadata: { aglyn_scope: 'connect' },
   ...overrides,
@@ -202,7 +202,9 @@ describe('/api/health/billing tells the two destinations apart (AGL-1948)', () =
 
   it('goes red when the Connect destination lost account.updated', async () => {
     const check = await probe([
-      connectEndpoint({ enabled_events: ['account.application.deauthorized'] }),
+      connectEndpoint({
+        enabled_events: ['account.application.deauthorized', 'payout.failed', 'payout.paid'],
+      }),
       platformEndpoint,
     ])
 

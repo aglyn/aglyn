@@ -143,7 +143,11 @@ export const CONNECT_SCOPE_METADATA_VALUE = 'connect'
  * meeting the failure at payment time. Without this event the handler cannot
  * run — which is exactly the state AGL-2122 found and fixed.
  */
-export const REQUIRED_CONNECT_WEBHOOK_EVENTS: readonly string[] = ['account.updated']
+export const REQUIRED_CONNECT_WEBHOOK_EVENTS: readonly string[] = [
+  'account.updated',
+  'payout.failed',
+  'payout.paid',
+]
 
 /**
  * Does this Stripe endpoint object carry our Connect scope marker?
