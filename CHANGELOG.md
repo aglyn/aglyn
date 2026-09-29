@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.208 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.207...v1.0.0-beta.208)
+
+### Added
+
+- **mui:** a calculator saves its receipt, invoice or quote as a PDF ([AGL-3387](https://linear.app/aglyn/issue/AGL-3387))
+
 ## v1.0.0-beta.207 — 2026-09-28
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/699a9e833...v1.0.0-beta.207)
