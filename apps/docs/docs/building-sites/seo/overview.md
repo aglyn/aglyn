@@ -196,6 +196,31 @@ Walking through a staged launch end to end — coming-soon page, hidden site, si
 collection, and the reversal on launch day — is covered in
 [Launch a coming-soon page](../../guides/coming-soon-launch.md).
 
+## Verify your site with Google Search Console
+
+Search Console and Bing Webmaster Tools want proof the site is yours before they show
+you its search data. A site on an `aglyn.app` address has no DNS of its own to add a
+record to, so use the **HTML tag** method — it works on every site, custom domain or not.
+
+1. In [Google Search Console](https://search.google.com/search-console), choose
+   **Add property → URL prefix**, enter your site's full address, and pick **HTML tag**
+   under **Other verification methods**.
+2. Copy the tag it shows you. You can paste the whole
+   `<meta name="google-site-verification" content="…" />` tag or just the code inside
+   `content` — Aglyn keeps only the code.
+3. In **Setup → SEO → Search engine verification**, paste it into **Google Search
+   Console** and press **Update**.
+4. Back in Search Console, press **Verify**. Allow a minute for the published site to
+   pick up the change if the first attempt fails.
+
+Bing works the same way: in [Bing Webmaster Tools](https://www.bing.com/webmasters),
+choose **Add site**, pick **HTML Meta Tag**, and paste the `msvalidate.01` tag into
+**Bing Webmaster Tools**.
+
+Keep the code in place after verifying — both tools re-check it from time to time, and
+removing it un-verifies the site. Clearing a field and pressing **Update** removes that
+tag from every page.
+
 ## Sitemap & robots
 
 Aglyn generates **`sitemap.xml`** and **`robots.txt`** for your site automatically, so

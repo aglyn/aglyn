@@ -167,12 +167,18 @@ export async function verifyRealmBundle(
 // Host ABI + client loader (browser only past this point).
 // ---------------------------------------------------------------------------
 
+/**
+ * `PLUGIN_HOST_GLOBAL` (`app-utils/plugin-host-abi.ts`), spelled out: this
+ * module ships on every published page and the ABI module's key lists would
+ * ride along for one string. `realm-plugins.spec.ts` holds the two equal.
+ */
 const HOST_GLOBAL = '__AGLYN_PLUGIN_HOST__'
 
 /**
  * Publishes the host ABI realm bundles build against. The APP composes it
- * (React/jsxRuntime must come from the app bundle so singletons hold) —
- * core only owns the slot and the version stamp.
+ * (React/jsxRuntime/MUI must come from the app bundle so singletons hold) —
+ * core only owns the slot, the version stamp and the key list
+ * (`PLUGIN_HOST_ABI_KEYS`).
  */
 export function setRealmPluginHost(host: Record<string, unknown>): void {
   ;(globalThis as Record<string, unknown>)[HOST_GLOBAL] = {

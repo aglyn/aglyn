@@ -44,9 +44,13 @@ let mockLoaded: string[][]
 /** Each time the host ABI was composed for a bundle to run against. */
 let mockComposed: number
 
+/** Each endpoint URL asked for. */
+let mockUrls: string[]
+
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
-  authorizedFetch: async () => {
+  authorizedFetch: async (_user: unknown, url: string) => {
     mockFetches += 1
+    mockUrls.push(url)
     return {
       ok: true,
       json: async () => ({ installs: mockInstalls }),
@@ -80,6 +84,15 @@ const ZONE_INSTALL = {
   trust: 'realm',
   contributes: { console: { slots: ['hostDashboard'] } },
 }
+/** Places an element on a site (AGL-3391). */
+const SITE_INSTALL = {
+  listingId: 'listing-calc',
+  pluginId: 'calculator',
+  version: '1.0.0',
+  sha256: 'c'.repeat(64),
+  trust: 'realm',
+  contributes: { site: { components: ['aglyn.calculator.scope'] } },
+}
 /** Published before the contract: no declaration at all. */
 const UNDECLARED_INSTALL = {
   listingId: 'office-hours',
@@ -94,6 +107,7 @@ const load = (where: Parameters<typeof loadOrgRealmPlugins>[2]) =>
 beforeEach(() => {
   mockInstalls = []
   mockFetches = 0
+  mockUrls = []
   mockLoaded = []
   mockComposed = 0
   resetOrgRealmInstallsForTests()
@@ -171,5 +185,54 @@ describe('a realm install loads where the console draws it (AGL-3142)', () => {
 
     expect(mockComposed).toBe(0)
     expect(mockLoaded).toEqual([])
+  })
+})
+
+describe('the Besigner loads the installs that draw on a site (AGL-3391)', () => {
+  it('loads an install that declares site elements, and answers with it', async () => {
+    mockInstalls = [SITE_INSTALL, ZONE_INSTALL, UNDECLARED_INSTALL]
+
+    const loaded = await loadOrgRealmPlugins(
+      MOCK_ORG_ID,
+      MOCK_USER,
+      { at: 'editor' },
+      { hostId: 'host-1' },
+    )
+
+    // A zone-only install draws nothing on a site; one that declares nothing
+    // already loaded with the shell, which is the only way to discover it.
+    expect(mockLoaded).toEqual([['listing-calc']])
+    expect(loaded.map((install) => install.listingId)).toEqual(['listing-calc'])
+  })
+
+  it("asks for the site's list, which carries the site's own pins", async () => {
+    mockInstalls = [SITE_INSTALL]
+
+    await loadOrgRealmPlugins(MOCK_ORG_ID, MOCK_USER, { at: 'editor' }, { hostId: 'host-1' })
+
+    expect(mockUrls).toEqual(['/api/orgs/realm-plugins?orgId=org-1&hostId=host-1'])
+  })
+
+  it("keeps a site's list apart from the workspace's", async () => {
+    mockInstalls = [SITE_INSTALL]
+
+    await load({ at: 'shell' })
+    await loadOrgRealmPlugins(MOCK_ORG_ID, MOCK_USER, { at: 'editor' }, { hostId: 'host-1' })
+    await loadOrgRealmPlugins(MOCK_ORG_ID, MOCK_USER, { at: 'editor' }, { hostId: 'host-1' })
+
+    expect(mockUrls).toEqual([
+      '/api/orgs/realm-plugins?orgId=org-1',
+      '/api/orgs/realm-plugins?orgId=org-1&hostId=host-1',
+    ])
+  })
+
+  it('answers with nothing when the origin is unset', async () => {
+    delete process.env['NEXT_PUBLIC_PLUGIN_ORIGIN']
+    mockInstalls = [SITE_INSTALL]
+
+    const loaded = await loadOrgRealmPlugins(MOCK_ORG_ID, MOCK_USER, { at: 'editor' })
+
+    expect(loaded).toEqual([])
+    expect(mockFetches).toBe(0)
   })
 })

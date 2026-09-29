@@ -4,7 +4,7 @@
  * - `register(host)` — CLIENT surfaces. Runs in the console and/or
  *   published sites after the platform verifies your bundle's sha256 pin
  *   and staff signature. `host` is `__AGLYN_PLUGIN_HOST__`:
- *   `{ version, React, jsxRuntime, aglyn }`.
+ *   `{ version, React, jsxRuntime, aglyn, mui, muiStyles }`.
  * - `registerApi()` — SERVER API handlers. Only ever loaded on
  *   deployments that explicitly enable remote server bundles
  *   (`PLUGIN_REMOTE_SERVER=enabled` + a per-deploy allowlist); most

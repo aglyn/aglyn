@@ -131,17 +131,20 @@ const contentCode = code(CONTENT_SOURCES, 'components/content/*')
 
 describe('site logo card (AGL-1407)', () => {
   it('writes the picked asset through mediaNodeSrc, not media.url', () => {
-    expect(logoCode).toMatch(/logoUrl:\s*src/)
-    expect(logoCode).toMatch(/mediaNodeSrc\(media\)/)
+    // One slot component writes both `logoUrl` and its dark-scheme partner
+    // `logoDarkUrl` (AGL-3400), keyed by the field it was handed.
+    expect(logoCode).toMatch(/const src = Aglyn\.mediaNodeSrc\(media\)/)
+    expect(logoCode).toMatch(/write\(src,/)
+    expect(logoCode).toMatch(/\[field\]:\s*next/)
     // The exact regression: `setDoc({ logoUrl: media.url }, …)`.
-    expect(logoCode).not.toMatch(/logoUrl:\s*media\.url/)
+    expect(logoCode).not.toMatch(/(write\(|:\s*)media\.url/)
   })
 
   it('resolves the stored value before showing it back', () => {
-    expect(logoCode).toMatch(/resolveMediaSrc\(logoUrl/)
-    // `src={logoUrl}` renders `media:…` as a broken image, which is what the
+    expect(logoCode).toMatch(/resolveMediaSrc\(value/)
+    // `src={value}` renders `media:…` as a broken image, which is what the
     // preview did until the data was converted underneath it.
-    expect(logoCode).not.toMatch(/src=\{logoUrl\}/)
+    expect(logoCode).not.toMatch(/src=\{(value|logoUrl|logoDarkUrl)\}/)
   })
 })
 

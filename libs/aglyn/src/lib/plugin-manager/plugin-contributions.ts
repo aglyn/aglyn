@@ -385,6 +385,34 @@ export function isPluginUsedOnPage(
 }
 
 /**
+ * Whether a plugin declares anything a site draws: an element an author can
+ * place, or a feature that runs on the site's pages. The editor loads exactly
+ * these (AGL-3391). A plugin that declares nothing is not among them: its
+ * site half is only discoverable by running `register()`, and the console
+ * shell already does that for it.
+ */
+export function declaresSiteElements(
+  contributes: PluginContributions | undefined,
+): boolean {
+  const site = contributes?.site
+  return Boolean(site?.components?.length || site?.features?.length)
+}
+
+/**
+ * Every id a plugin's elements and presets may carry as their `pluginId`: its
+ * own id and, for a marketplace plugin, its listing id. A surface that filters
+ * registry entries by plugin set needs all of them, or it hides the elements
+ * of a plugin it just loaded.
+ */
+export function presenceIds(subject: PresenceSubject): string[] {
+  const ids: string[] = []
+  for (const id of [subject.pluginId, subject.listingId]) {
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
+/**
  * Function bindings (AGL-3393): component id → the prop naming the site
  * function that element runs.
  */
@@ -480,11 +508,16 @@ export function routeServes(route: string, href: string): boolean {
  * - `route`: the path the reader has open, plugin-relative (`/products`,
  *   `/products/orders`), on the level its route tree serves — `site` beneath
  *   `/hosts/[host]`, `org` beneath the organization.
+ * - `editor`: the Besigner, which draws a site's elements and offers them in
+ *   its Elements panel (AGL-3391). A plugin loads here when it declares site
+ *   elements or site features, whether or not the page open uses them, since
+ *   the author is choosing what to place.
  */
 export type ConsoleLoadWhere =
   | { at: 'shell' }
   | { at: 'slots'; slots: readonly string[] }
   | { at: 'route'; href: string; level: 'site' | 'org' }
+  | { at: 'editor' }
 
 /**
  * Whether a console surface uses a plugin, so it must load it.
@@ -504,6 +537,7 @@ export function isPluginUsedInConsole(
   contributes: PluginContributions | undefined,
   where: ConsoleLoadWhere,
 ): boolean {
+  if (where.at === 'editor') return declaresSiteElements(contributes)
   const points = consoleLoadPoints(contributes)
   if (where.at === 'shell') return points.shell
   if (where.at === 'slots') {

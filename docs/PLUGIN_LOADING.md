@@ -115,8 +115,10 @@ Every link must hold before a byte executes:
    rebuild against the new host object.
 
    **What does and does not require a bump** (AGL-2486) — the ABI names the
-   shape of the INJECTED HOST OBJECT (`{ version, React, jsxRuntime, aglyn }`
-   on `globalThis.__AGLYN_PLUGIN_HOST__`), not the shape of every type
+   shape of the INJECTED HOST OBJECT (`{ version, React, jsxRuntime, aglyn,
+   mui, muiStyles }` on `globalThis.__AGLYN_PLUGIN_HOST__`, listed in
+   `PLUGIN_HOST_ABI_KEYS`; `aglyn`, `mui` and `muiStyles` are reviewed
+   SURFACES of their libraries), not the shape of every type
    reachable through it. So:
 
    - **No bump** for adding an OPTIONAL field to a type a bundle consumes
@@ -125,7 +127,14 @@ Every link must hold before a byte executes:
      the host reads `undefined`, which is what an optional field means.
      `ComponentSchema` has carried a long tail of optional fields this way
      with the ABI at `1` throughout.
-   - **Bump** when the host object gains, loses or changes a slot; when an
+   - **No bump** for a NEW slot on the host object either (`mui`,
+     `muiStyles`, AGL-3392). No bundle built before it reads it, and the
+     host check is equality, so a bump would stop every one of them loading
+     to announce something none of them uses. A bundle that reads the new
+     slot on a host without it stops at its first lookup with "this Aglyn
+     host does not provide …", and the verifier refuses a lookup on a key
+     not in `PLUGIN_HOST_ABI_KEYS`.
+   - **Bump** when the host object loses or changes a slot; when an
      existing field changes meaning or type; and — the one that actually
      breaks sites — when a field becomes REQUIRED, because every bundle
      built before it now omits something the host insists on.
@@ -133,11 +142,29 @@ Every link must hold before a byte executes:
    The rule is about who breaks: an addition nobody has to notice is not a
    break, and bumping for one costs every publisher a rebuild for nothing.
 5. **Host ABI, no imports** — bundles are built with
-   `tools/plugin-loader/realm/rollup.config.mjs`: `react`,
-   `react/jsx-runtime`, and `@aglyn/aglyn` compile to lookups on
-   `globalThis.__AGLYN_PLUGIN_HOST__`, which each APP composes from its
-   own bundle (`setRealmPluginHost`) so there is exactly one React and one
-   registry instance (the blank-canvas invariant).
+   `tools/plugin-loader/realm/rollup.config.mjs`. `react`,
+   `react/jsx-runtime`, `@aglyn/aglyn`, `@mui/material` (and any one
+   component under it) and `@mui/material/styles` compile to lookups on
+   `globalThis.__AGLYN_PLUGIN_HOST__`, which each APP composes from its own
+   bundle (`setRealmPluginHost`). That gives one React and one registry
+   instance (the blank-canvas invariant), and one MUI theme and style cache.
+   The build refuses to compile in MUI, emotion or `react-dom`, so the page
+   never downloads them twice.
+
+   Core and MUI are held as SURFACES (AGL-3392): short, reviewed lists of
+   named exports (`tools/scripts/generate-realm-host-exports.mjs`), imported
+   statically by the host module a page loads only when it runs a realm
+   plugin. The verifier refuses a name off them. Three shapes were measured
+   on the tenant build and rejected because each cost EVERY published page:
+   - an `import()` per export (+0.7–1.6 KB: Turbopack re-cut the page's
+     chunks);
+   - a whole module passed as a value (`@mui/material/styles`: +0.66 KB,
+     because the page's copy could no longer shake out unused exports);
+   - class-name objects on the surface (+0.1 KB).
+
+   Compiling MUI into each bundle instead duplicated about 45 KB of MUI's
+   styling runtime per plugin. Sharing it file by file would tie every bundle
+   to the host's exact MUI version.
 
 ### Client loading
 

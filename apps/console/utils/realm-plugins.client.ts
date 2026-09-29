@@ -140,16 +140,26 @@ function warnMissingPluginOrigin(): void {
  */
 const installsByOrg = new Map<string, Promise<Aglyn.RealmPluginInstall[]>>()
 
+/**
+ * `hostId` narrows the list to what one site runs: the workspace's pins plus
+ * that site's own, the site's winning for the same listing — the list its
+ * published pages load from. The Besigner asks for it that way (AGL-3391);
+ * every other place in the console asks for the workspace's.
+ */
 function orgRealmInstalls(
   orgId: string,
   user: MaybeTokenSource,
+  hostId?: string,
 ): Promise<Aglyn.RealmPluginInstall[]> {
-  let pending = installsByOrg.get(orgId)
+  const key = hostId ? `${orgId}|${hostId}` : orgId
+  let pending = installsByOrg.get(key)
   if (!pending) {
     pending = (async () => {
+      const query = new URLSearchParams({ orgId })
+      if (hostId) query.set('hostId', hostId)
       const response = await authorizedFetch(
         user,
-        `/api/orgs/realm-plugins?orgId=${encodeURIComponent(orgId)}`,
+        `/api/orgs/realm-plugins?${query.toString()}`,
       )
       if (!response.ok) {
         // Was silent, and indistinguishable from "this org has none" (AGL-1184).
@@ -166,14 +176,15 @@ function orgRealmInstalls(
       console.error('realm plugins skipped:', error)
       return []
     })
-    installsByOrg.set(orgId, pending)
+    installsByOrg.set(key, pending)
   }
   return pending
 }
 
 /**
  * Loads the org's realm installs that belong at `where` (AGL-3142), and only
- * those.
+ * those, and answers with the ones it handed the loader: the editor needs
+ * their ids to offer their elements (AGL-3391).
  *
  * Installation is not use in the console either. This used to run once, on the
  * shell, with the org's whole install list: a workspace that had installed a
@@ -195,29 +206,32 @@ export async function loadOrgRealmPlugins(
   orgId: string,
   user: MaybeTokenSource,
   where: Aglyn.ConsoleLoadWhere,
-): Promise<void> {
+  options: { hostId?: string } = {},
+): Promise<Aglyn.RealmPluginInstall[]> {
   // The dev loop's bundles carry no declaration, so they load where an
   // undeclared install loads: with the shell, once.
   if (where.at === 'shell') await loadDevRealmBundles()
   const artifactsBase = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
   if (!artifactsBase) {
     if (where.at === 'shell') warnMissingPluginOrigin()
-    return
+    return []
   }
   try {
-    const installs = await orgRealmInstalls(orgId, user)
+    const installs = await orgRealmInstalls(orgId, user, options.hostId)
     const inUse = installs.filter((install) =>
       isPluginUsedInConsole(install.contributes, where),
     )
-    if (!inUse.length) return
+    if (!inUse.length) return []
     const { composeRealmPluginHost } = await import('./realm-plugin-host.client')
     composeRealmPluginHost({ React, jsxRuntime })
     await loadRealmPlugins(inUse, {
       artifactsBase,
       publicKeyBase64: process.env.NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY,
     })
+    return inUse
   } catch (error) {
     console.error('realm plugins skipped:', error)
+    return []
   }
 }
 
