@@ -164,6 +164,50 @@ describe('hostThemeToThemeOptions', () => {
   })
 })
 
+describe('the platform text styles (AGL-3411)', () => {
+  it('lets a theme restyle displayXl, lede, bodyCompact and micro', () => {
+    const { createTheme } = jest.requireActual('@mui/material/styles')
+    const theme = createTheme(
+      mergeThemeOptions(
+        consoleOptions,
+        hostThemeToThemeOptions(
+          {
+            typography: {
+              variants: {
+                displayXl: { fontWeight: 300 },
+                lede: { fontSize: '1.25rem' },
+                bodyCompact: { lineHeight: 1.29 },
+                micro: { fontSize: '0.75rem' },
+              },
+            },
+          },
+          'light',
+        ),
+      ),
+    )
+    expect(theme.typography.displayXl.fontWeight).toBe(300)
+    // Only what the theme names changes: the rest of the platform's rung stays.
+    expect(theme.typography.displayXl.fontSize).toBe(
+      (consoleOptions.typography as any).displayXl.fontSize,
+    )
+    expect(theme.typography.lede.fontSize).toBe('1.25rem')
+    expect(theme.typography.bodyCompact.lineHeight).toBe(1.29)
+    expect(theme.typography.micro.fontSize).toBe('0.75rem')
+  })
+})
+
+describe('the tertiary tab indicator (AGL-3411)', () => {
+  it('paints the indicator in tertiary, which MUI styles for primary and secondary only', () => {
+    const { createTheme } = jest.requireActual('@mui/material/styles')
+    const theme = createTheme(consoleOptions)
+    const [variant] = (theme.components as any).MuiTabs.variants
+    expect(variant.props).toEqual({ indicatorColor: 'tertiary' })
+    expect(variant.style({ theme })).toEqual({
+      '& .MuiTabs-indicator': { backgroundColor: theme.palette.tertiary.main },
+    })
+  })
+})
+
 describe('theme-aware component overrides (AGL-3403)', () => {
   const unstable_sx = (style: Record<string, unknown>) => ({ resolved: style })
   const theme = { unstable_sx }

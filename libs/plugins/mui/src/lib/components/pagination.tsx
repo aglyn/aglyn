@@ -30,7 +30,7 @@ export const ID: Aglyn.ComponentId = 'muiPagination'
 export interface PaginationElementProps {
   count?: number | string
   defaultPage?: number | string
-  color?: 'primary' | 'secondary' | 'standard'
+  color?: 'primary' | 'secondary' | 'tertiary' | 'standard'
   shape?: 'circular' | 'rounded'
   size?: 'small' | 'medium' | 'large'
   variant?: 'text' | 'outlined'
@@ -168,6 +168,7 @@ export const schema: Aglyn.ComponentSchema<PaginationElementProps> = {
         { value: 'standard', label: 'Standard (default)' },
         { value: 'primary', label: 'Primary' },
         { value: 'secondary', label: 'Secondary' },
+        { value: 'tertiary', label: 'Tertiary' },
       ],
     },
     {

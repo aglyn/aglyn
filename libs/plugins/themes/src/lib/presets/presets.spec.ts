@@ -57,6 +57,23 @@ describe.each(THEME_PRESETS.map((preset) => [preset.name, preset] as const))(
       expect(verdict.warnings).toEqual([])
     })
 
+    it('sets the platform text styles and a tertiary accent in both schemes (AGL-3411)', () => {
+      // Left out, a platform style keeps the platform's own font and weights,
+      // so it reads as a different design dropped into this one.
+      for (const variant of ['displayXl', 'lede', 'bodyCompact', 'micro'] as const) {
+        expect([variant, preset.theme.typography?.variants?.[variant]?.fontSize]).toEqual([
+          variant,
+          expect.any(String),
+        ])
+      }
+      for (const scheme of ['light', 'dark'] as const) {
+        expect([scheme, preset.theme.colorSchemes?.[scheme]?.tertiary?.main]).toEqual([
+          scheme,
+          expect.any(String),
+        ])
+      }
+    })
+
     it('styles only components a theme may style', () => {
       expect(Object.keys(sanitizeHostTheme(preset.theme).components ?? {}).sort()).toEqual(
         Object.keys(preset.theme.components ?? {}).sort(),
@@ -102,6 +119,10 @@ describe('the Themes plugin (AGL-3405)', () => {
       'theme-presets.bootstrap',
       'theme-presets.minimal',
       'theme-presets.material3',
+      'theme-presets.ant-design',
+      'theme-presets.fluent',
+      'theme-presets.carbon',
+      'theme-presets.cupertino',
     ])
     expect(new Set(listed.map((preset) => preset.pluginId))).toEqual(new Set(['theme-presets']))
     // Off for a site, it contributes nothing.

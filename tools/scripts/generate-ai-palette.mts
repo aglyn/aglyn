@@ -538,9 +538,16 @@ function buildCatalog(
     )
   }
   const allowed = new Set(definition.allow)
-  const named = blocks
-    .filter((block) => [...block.ids].every((id) => allowed.has(id)))
-    .map((block) => `${block.name} (${block.rootId})`)
+  // De-duplicated: two blocks that print the same name on the same root read
+  // as one example to the model, so the second copy is paid-for prompt that
+  // teaches nothing — two FAQ blocks both print `FAQ (muiStack)` (AGL-3411).
+  const named = [
+    ...new Set(
+      blocks
+        .filter((block) => [...block.ids].every((id) => allowed.has(id)))
+        .map((block) => `${block.name} (${block.rootId})`),
+    ),
+  ]
   if (named.length) lines.push(`Named blocks to imitate: ${named.join('; ')}.`)
   return lines.join('\n')
 }

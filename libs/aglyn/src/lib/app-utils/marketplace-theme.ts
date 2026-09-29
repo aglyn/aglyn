@@ -277,7 +277,9 @@ function validateScheme(
 
   // A button whose label disappears into its own fill. Only checkable when the
   // theme states contrastText — otherwise MUI derives one, and derives it well.
-  for (const key of ['primary', 'secondary', 'error'] as const) {
+  // Every accent a button can be filled with. Tertiary is one (AGL-3411):
+  // `<Button color="tertiary">` is offered wherever primary and secondary are.
+  for (const key of ['primary', 'secondary', 'tertiary', 'error'] as const) {
     const color = colors[key]
     const ratio = contrastRatio(color?.contrastText, color?.main)
     if (ratio != null && ratio < CONTRAST_AA_LARGE) {
