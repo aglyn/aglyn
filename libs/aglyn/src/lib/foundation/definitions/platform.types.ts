@@ -483,6 +483,14 @@ export interface AglynHost extends AglynDocument {
     advertising?: boolean
   }
   screens?: Record<ScreenUid, ScreenSlug>
+  /**
+   * The placeholder home page the site was created with (AGL-3408), while it
+   * still holds `/`. A starter applied afterwards may take the root from this
+   * screen — and only this one — leaving it as a draft; `first_publish` does
+   * not count its routing entry. Absent on sites created before it and once a
+   * starter has taken the root.
+   */
+  defaultHomeScreenId?: ScreenUid
   /** Screen rendered (noindex) for unmatched paths (AGL-87). */
   notFoundScreenId?: ScreenUid
   /**

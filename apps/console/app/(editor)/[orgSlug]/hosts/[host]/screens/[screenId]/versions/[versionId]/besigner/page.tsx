@@ -313,6 +313,9 @@ function BesignerPage(props) {
   // further down is read in its temporal dead zone and throws on the way in.
   const routingMap = hostResult?.data?.screens as
     Record<string, string> | undefined
+  // The site's placeholder home page (AGL-3408), which `first_publish` does
+  // not count as a route.
+  const defaultHomeScreenId = hostResult?.data?.defaultHomeScreenId
   const publishedPath = routingMap?.[screenId]
   const { doc: screenResult, setDoc: updateScreenDoc } = useScreen({
     hostId,
@@ -1335,7 +1338,10 @@ function BesignerPage(props) {
     // it down there would answer `false` for a genuine first publish. The
     // stale closure happens to preserve the old value today; that is an
     // accident of `useCallback` identity, not something to depend on.
-    const firstPublish = isFirstPublishedRoute(routingMap)
+    const firstPublish = isFirstPublishedRoute(
+      routingMap,
+      defaultHomeScreenId,
+    )
     const action =
       normalizedSlug && composedPath
         ? // `publishedAt` rides the same write the routing entry does
@@ -1487,7 +1493,10 @@ function BesignerPage(props) {
       // Read before the two writes below, for the reason given in
       // `handlePublish`: the live routing map grows this entry as soon as the
       // sync lands (AGL-1588).
-      const firstPublish = isFirstPublishedRoute(routingMap)
+      const firstPublish = isFirstPublishedRoute(
+        routingMap,
+        defaultHomeScreenId,
+      )
       await updateScreenDoc({
         slug: normalizedSlug,
         versionId,

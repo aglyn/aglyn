@@ -55,6 +55,8 @@ const DOORS = [
   'apps/console/app/api/hosts/resources/route.ts',
   // A site import writes each bundled screen whole.
   'apps/console/app/api/hosts/import/route.ts',
+  // Site creation, which writes the placeholder home page (AGL-3408).
+  'apps/console/utils/server/provision-host.ts',
   // Duplicate, from the console, the AI tool and the page step.
   'libs/tenant/data/admin/src/lib/server/duplicate-resource.ts',
   'libs/plugins/marketplace/src/lib/server/install-email-starter.ts',

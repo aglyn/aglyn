@@ -230,17 +230,18 @@ export async function applyDuePublishSchedule(options: {
   let firstPublish: boolean | undefined
   if (collectionName === 'screens') {
     try {
-      const routing = ((await hostRef.get()).get('screens') ?? {}) as Record<
-        string,
-        string
-      >
+      const host = await hostRef.get()
+      const routing = (host.get('screens') ?? {}) as Record<string, string>
       // An existing entry is the republish case: the route is already live,
       // this only swaps which version it serves, and there is nothing to
       // register and no activation to report.
       if (!routing[docId]) {
         // The same predicate the console's three publish surfaces use, so a
         // `first_publish` breakdown means one thing across all four senders.
-        firstPublish = isFirstPublishedRoute(routing)
+        firstPublish = isFirstPublishedRoute(
+          routing,
+          host.get('defaultHomeScreenId'),
+        )
         const resolved = await resolveScheduledRoutePath({
           hostRef,
           screenId: docId,

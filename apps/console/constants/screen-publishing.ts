@@ -20,7 +20,10 @@ import {
   isFirstPublishedRoute,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
+import {
+  SCREEN_ROOT_PATH,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn/app-utils/screen-route'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   collection,
@@ -231,6 +234,7 @@ export async function publishScreenRoute(
     before = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
     firstPublish = isFirstPublishedRoute(
       hostSnapshot.get('screens') as Record<string, unknown> | undefined,
+      hostSnapshot.get('defaultHomeScreenId'),
     )
   } catch {
     firstPublish = undefined
@@ -306,6 +310,56 @@ export async function syncScreenRouteEntries(
   const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
   await batch.commit()
   announceRouteChange({ user: announcer.user, hostId, paths, outboxRef })
+}
+
+/**
+ * TAKES THE SITE ROOT BACK FROM THE PLACEHOLDER HOME PAGE (AGL-3408).
+ *
+ * Every new site is created with a home page routed at `/` so its address
+ * never answers with a 404. A starter is somebody's whole site and has to land
+ * on that address (AGL-1575), but `withBundleRootScreen` and
+ * `resolveTemplateSlug` never move a live home page — so without this, the
+ * first starter a new customer applied would put its home at `/home` behind
+ * the placeholder.
+ *
+ * Only ever the screen the host names as `defaultHomeScreenId`, and only while
+ * it still holds `/`. The screen is unpublished, not deleted: anything its
+ * owner typed into it is still in Screens as a draft. The marker goes in the
+ * same batch, so the root is handed back exactly once.
+ *
+ * Answers whether `/` was released, so the caller can free it in the slug set
+ * it de-conflicts against. A host that cannot be read releases nothing.
+ */
+export async function releaseDefaultHomeRoot(
+  firestore: Firestore,
+  ids: { hostId: HostUid } & PublishAnnouncer,
+): Promise<boolean> {
+  const { hostId, user } = ids
+  let before: Record<string, string>
+  let screenId: string | undefined
+  try {
+    const snapshot = await getDoc(doc(firestore, 'hosts', hostId))
+    before = (snapshot.get('screens') ?? {}) as Record<string, string>
+    screenId = snapshot.get('defaultHomeScreenId')
+  } catch {
+    return false
+  }
+  if (!screenId || before[screenId] !== SCREEN_ROOT_PATH) return false
+  const paths = changedPaths(before, { [screenId]: null })
+  const batch = writeBatch(firestore)
+  batch.update(doc(firestore, 'hosts', hostId), {
+    [`screens.${screenId}`]: deleteField(),
+    defaultHomeScreenId: deleteField(),
+  })
+  batch.set(
+    doc(firestore, 'hosts', hostId, 'screens', screenId),
+    { publishedAt: deleteField() },
+    { merge: true },
+  )
+  const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
+  await batch.commit()
+  announceRouteChange({ user, hostId, paths, outboxRef })
+  return true
 }
 
 /**
