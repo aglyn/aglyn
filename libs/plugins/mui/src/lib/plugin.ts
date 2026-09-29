@@ -43,7 +43,17 @@ type LazyElement = Exclude<keyof ElementTier, 'CORE_ELEMENTS'>
 
 type ElementModule = Promise<Record<string, unknown>>
 
-const elementTier = (): Promise<ElementTier> => import('./element-tier')
+/**
+ * One load of the tier, however many thunks ask at once. The bundler shares
+ * a module across concurrent imports anyway; a loader that hands out a
+ * module while it is still evaluating does not — jiti, which the AI palette
+ * and page-axe generators load this bundle through, resolved the second of
+ * sixty concurrent imports to the tier's exports before `CORE_ELEMENTS` was
+ * assigned.
+ */
+let tierLoad: Promise<ElementTier> | undefined
+const elementTier = (): Promise<ElementTier> =>
+  (tierLoad ??= import('./element-tier'))
 const inTier =
   (name: TierElement): MuiComponentSource['module'] =>
   () =>
