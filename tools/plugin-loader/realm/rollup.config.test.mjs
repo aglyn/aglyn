@@ -144,10 +144,8 @@ test('refuses to compile in MUI, emotion or react-dom', async () => {
   }
 })
 
-test('the verifier refuses a component off the MUI surface', async () => {
-  const code = await build(
-    "import Slider from '@mui/material/Slider'\nexport function register() { return Slider }\n",
-  )
+/** The publish verifier, loaded from source the way the publish route runs it. */
+async function loadVerifier() {
   const require = createRequire(join(ROOT, 'package.json'))
   const { createJiti } = require('jiti')
   // The workspace's path aliases, as `generate-plugin-manifests.mjs` builds them.
@@ -160,13 +158,50 @@ test('the verifier refuses a component off the MUI surface', async () => {
       : join(ROOT, path)
   }
   const jiti = createJiti(join(ROOT, 'package.json'), { alias })
-  const { checkPluginBundle } = await jiti.import(
-    join(ROOT, 'libs/aglyn/src/lib/app-utils/plugin-bundle-checks.ts'),
+  return jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/plugin-bundle-checks.ts'))
+}
+
+test('the verifier refuses a component off the MUI surface', async () => {
+  const code = await build(
+    "import Slider from '@mui/material/Slider'\nexport function register() { return Slider }\n",
   )
+  const { checkPluginBundle } = await loadVerifier()
   const verdict = checkPluginBundle(code)
   assert.equal(verdict.ok, false)
   assert.match(
     verdict.problems.map((problem) => problem.message).join('\n'),
     /reads Slider from the host's mui/,
   )
+})
+
+// The Calculators marketplace plugin (AGL-3394), built with its own config:
+// TypeScript and JSX, minified, reaching core and MUI only through the host.
+test('the Calculators bundle builds, carries no host code, and verifies for publishing', async () => {
+  const { default: config } = await import(
+    join(ROOT, 'libs/plugins/calculator/rollup.config.mjs')
+  )
+  const bundle = await rollup({ ...config, onwarn: () => undefined })
+  const { output } = await bundle.generate(config.output)
+  await bundle.close()
+  const code = output[0].code
+
+  assert.doesNotMatch(code, /emotion|MuiButtonBase-root|createTheme/)
+  for (const role of ['scope', 'input', 'result', 'showWhen', 'document', 'saveButton']) {
+    assert.match(code, new RegExp(`aglyn\\.calculator\\.${role}|\\.${role}\``))
+  }
+
+  const manifest = JSON.parse(
+    readFileSync(join(ROOT, 'libs/plugins/calculator/manifest.json'), 'utf8'),
+  )
+  const { checkPluginBundle } = await loadVerifier()
+  const verdict = checkPluginBundle(code, {
+    declaredNetwork: [],
+    declaredContributions: manifest.contributes,
+    requireContributions: true,
+  })
+  assert.deepEqual(
+    verdict.problems.filter((problem) => problem.level === 'error'),
+    [],
+  )
+  assert.equal(verdict.ok, true)
 })

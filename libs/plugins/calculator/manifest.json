@@ -1,0 +1,25 @@
+{
+  "id": "calculator",
+  "name": "Calculators",
+  "version": "1.0.0",
+  "entry": "plugin.bundle.mjs",
+  "hostAbi": 1,
+  "description": "Calculators that run a site function, and the receipts, invoices and quotes they save as PDFs.",
+  "capabilities": {
+    "network": [],
+    "events": []
+  },
+  "contributes": {
+    "site": {
+      "components": [
+        "aglyn.calculator.scope",
+        "aglyn.calculator.input",
+        "aglyn.calculator.result",
+        "aglyn.calculator.showWhen",
+        "aglyn.calculator.document",
+        "aglyn.calculator.saveButton"
+      ],
+      "functionBindings": { "aglyn.calculator.scope": "functionName" }
+    }
+  }
+}

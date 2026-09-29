@@ -900,6 +900,159 @@ function walkWithParents(
   }
 }
 
+const FUNCTION_TYPES = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+])
+
+/** Nodes that open a scope a name can be declared in. */
+const SCOPE_TYPES = new Set([
+  'Program',
+  ...FUNCTION_TYPES,
+  'BlockStatement',
+  'StaticBlock',
+  'SwitchStatement',
+  'CatchClause',
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'ClassExpression',
+])
+
+/** The names a binding pattern declares: `a`, `{ a, b: c }`, `[a, ...b]`, `a = 1`. */
+function patternNames(pattern: AnyNode | null | undefined, into: Set<string>): void {
+  if (!pattern) return
+  switch (pattern.type) {
+    case 'Identifier':
+      into.add(pattern['name'] as string)
+      return
+    case 'AssignmentPattern':
+      return patternNames(pattern['left'] as AnyNode, into)
+    case 'RestElement':
+      return patternNames(pattern['argument'] as AnyNode, into)
+    case 'ArrayPattern':
+      for (const element of (pattern['elements'] ?? []) as AnyNode[]) patternNames(element, into)
+      return
+    case 'ObjectPattern':
+      for (const property of (pattern['properties'] ?? []) as AnyNode[]) {
+        patternNames(
+          (property.type === 'RestElement' ? property : property['value']) as AnyNode,
+          into,
+        )
+      }
+      return
+  }
+}
+
+/** The declarations a statement list makes itself: `let`/`const`/`class`/`function`. */
+function lexicalNames(statements: readonly AnyNode[], into: Set<string>): void {
+  for (const statement of statements) {
+    if (statement?.type === 'VariableDeclaration' && statement['kind'] !== 'var') {
+      for (const declarator of (statement['declarations'] ?? []) as AnyNode[]) {
+        patternNames(declarator['id'] as AnyNode, into)
+      }
+    }
+    if (
+      (statement?.type === 'FunctionDeclaration' || statement?.type === 'ClassDeclaration') &&
+      statement['id']
+    ) {
+      into.add((statement['id'] as AnyNode)['name'] as string)
+    }
+  }
+}
+
+/** Every `var` a function body declares, however deep, short of a nested function. */
+function varNames(node: AnyNode | null | undefined, into: Set<string>): void {
+  if (!node || typeof node !== 'object') return
+  if (FUNCTION_TYPES.has(node.type)) return
+  if (node.type === 'VariableDeclaration' && node['kind'] === 'var') {
+    for (const declarator of (node['declarations'] ?? []) as AnyNode[]) {
+      patternNames(declarator['id'] as AnyNode, into)
+    }
+  }
+  for (const [field, value] of Object.entries(node)) {
+    if (field === 'type' || !value || typeof value !== 'object') continue
+    if (Array.isArray(value)) for (const child of value) varNames(child as AnyNode, into)
+    else if ('type' in (value as object)) varNames(value as AnyNode, into)
+  }
+}
+
+/** The names a scope node declares for its own body. */
+function declaredNames(scope: AnyNode): Set<string> {
+  const names = new Set<string>()
+  if (FUNCTION_TYPES.has(scope.type)) {
+    for (const param of (scope['params'] ?? []) as AnyNode[]) patternNames(param, names)
+    if (scope.type === 'FunctionExpression' && scope['id']) {
+      names.add((scope['id'] as AnyNode)['name'] as string)
+    }
+    const body = scope['body'] as AnyNode
+    if (body?.type === 'BlockStatement') {
+      for (const statement of (body['body'] ?? []) as AnyNode[]) varNames(statement, names)
+      lexicalNames((body['body'] ?? []) as AnyNode[], names)
+    }
+    return names
+  }
+  switch (scope.type) {
+    case 'Program':
+    case 'BlockStatement':
+    case 'StaticBlock':
+      lexicalNames((scope['body'] ?? []) as AnyNode[], names)
+      break
+    case 'SwitchStatement':
+      for (const branch of (scope['cases'] ?? []) as AnyNode[]) {
+        lexicalNames((branch['consequent'] ?? []) as AnyNode[], names)
+      }
+      break
+    case 'CatchClause':
+      patternNames(scope['param'] as AnyNode, names)
+      break
+    case 'ForStatement':
+    case 'ForInStatement':
+    case 'ForOfStatement': {
+      const head = (scope['init'] ?? scope['left']) as AnyNode | null
+      if (head?.type === 'VariableDeclaration' && head['kind'] !== 'var') lexicalNames([head], names)
+      break
+    }
+    case 'ClassExpression':
+      if (scope['id']) names.add((scope['id'] as AnyNode)['name'] as string)
+      break
+  }
+  return names
+}
+
+/**
+ * Whether an identifier refers to a variable, rather than naming a property,
+ * a key or a label.
+ */
+function isReference(node: AnyNode, parent: AnyNode | null | undefined): boolean {
+  if (!parent) return true
+  switch (parent.type) {
+    case 'MemberExpression':
+      return parent['object'] === node || parent['computed'] === true
+    case 'Property':
+      if (parent['key'] === node && parent['computed'] !== true) {
+        return parent['shorthand'] === true && parent['value'] === node
+      }
+      return true
+    case 'MethodDefinition':
+    case 'PropertyDefinition':
+      return parent['key'] !== node || parent['computed'] === true
+    case 'LabeledStatement':
+    case 'BreakStatement':
+    case 'ContinueStatement':
+      return false
+    case 'ExportSpecifier':
+      return parent['local'] === node
+    case 'ImportSpecifier':
+    case 'ImportDefaultSpecifier':
+    case 'ImportNamespaceSpecifier':
+      return false
+    default:
+      return true
+  }
+}
+
 /**
  * What a bundle reads from the host ABI (AGL-3392), read off the bytes.
  *
@@ -947,11 +1100,37 @@ function hostAbiReads(
       else identifiers.set(name, [node])
     }
   })
-  const within = (node: AnyNode, ancestor: AnyNode): boolean => {
-    for (let at: AnyNode | null | undefined = node; at; at = parents.get(at)) {
-      if (at === ancestor) return true
+  // Scope (AGL-3394). A minifier names the host alias `e`, and names every
+  // other function's first parameter `e` too, so a name only resolves to the
+  // host where no nearer scope declares it again.
+  const scopeNames = new Map<AnyNode, Set<string>>()
+  const namesOf = (scope: AnyNode): Set<string> => {
+    let found = scopeNames.get(scope)
+    if (!found) {
+      found = declaredNames(scope)
+      scopeNames.set(scope, found)
     }
-    return false
+    return found
+  }
+  /** The scope a declarator's name belongs to: its function for `var`, else its block. */
+  const bindingScope = (declarator: AnyNode): AnyNode | null => {
+    const declaration = parents.get(declarator)
+    const functionScoped = declaration?.['kind'] === 'var'
+    for (let at = parents.get(declaration as AnyNode); at; at = parents.get(at)) {
+      if (functionScoped ? FUNCTION_TYPES.has(at.type) || at.type === 'Program' : SCOPE_TYPES.has(at.type)) {
+        return at
+      }
+    }
+    return null
+  }
+  /** Whether `ref` means the binding `name` declared in `scope`. */
+  const resolvesTo = (ref: AnyNode, name: string, scope: AnyNode | null): boolean => {
+    if (!isReference(ref, parents.get(ref))) return false
+    for (let at = parents.get(ref); at; at = parents.get(at)) {
+      if (at === scope) return true
+      if (SCOPE_TYPES.has(at.type) && namesOf(at).has(name)) return false
+    }
+    return scope === null
   }
 
   const isHostGlobal = (node: AnyNode | null | undefined): boolean =>
@@ -960,9 +1139,10 @@ function hostAbiReads(
       isGlobalRef(node['object'] as AnyNode) &&
       propertyName(node) === PLUGIN_HOST_GLOBAL)
 
-  // Names bound to the host object, each valid everywhere (`scope` null) or
-  // only inside one function (the `register(host)` parameter).
-  const hostNames = new Map<string, AnyNode | null>()
+  // Names bound to the host object, each with the scope it is declared in:
+  // a declarator's block or function, or the `register(host)` function for its
+  // parameter.
+  const hostNames = new Map<string, { scope: AnyNode | null; param: boolean }>()
   walk(program, (node) => {
     if (node.type === 'VariableDeclarator') {
       const id = node['id'] as AnyNode
@@ -972,7 +1152,7 @@ function hostAbiReads(
           ? [init['left'] as AnyNode, init['right'] as AnyNode]
           : [init]
       if (id?.type === 'Identifier' && roots.some(isHostGlobal)) {
-        hostNames.set(id['name'] as string, null)
+        hostNames.set(id['name'] as string, { scope: bindingScope(node), param: false })
       }
     }
     if (
@@ -981,7 +1161,7 @@ function hostAbiReads(
     ) {
       const param = ((node['params'] ?? []) as AnyNode[])[0]
       if (param?.type === 'Identifier' && !hostNames.has(param['name'] as string)) {
-        hostNames.set(param['name'] as string, node)
+        hostNames.set(param['name'] as string, { scope: node, param: true })
       }
     }
   })
@@ -992,10 +1172,9 @@ function hostAbiReads(
     if (isHostGlobal(node)) return 'global'
     if (node?.type !== 'Identifier') return null
     const name = node['name'] as string
-    if (!hostNames.has(name)) return null
-    const scope = hostNames.get(name)
-    if (!scope) return 'global'
-    return within(node, scope) ? 'param' : null
+    const binding = hostNames.get(name)
+    if (!binding || !resolvesTo(node, name, binding.scope)) return null
+    return binding.param ? 'param' : 'global'
   }
 
   const modules = new Set<string>(PLUGIN_HOST_MODULE_KEYS)
@@ -1016,7 +1195,7 @@ function hostAbiReads(
     if (current) current.add(name)
     else names.set(key, new Set([name]))
   }
-  const seenAliases = new Set<string>()
+  const seenAliases = new Set<AnyNode>()
 
   /** Records how one reference to a lazy key's module is used. */
   const useOf = (key: string, ref: AnyNode): void => {
@@ -1039,10 +1218,11 @@ function hostAbiReads(
       const id = parent['id'] as AnyNode
       if (id?.type === 'Identifier') {
         const alias = id['name'] as string
-        if (seenAliases.has(alias)) return
-        seenAliases.add(alias)
+        if (seenAliases.has(parent)) return
+        seenAliases.add(parent)
+        const scope = bindingScope(parent)
         for (const use of identifiers.get(alias) ?? []) {
-          if (use !== id) useOf(key, use)
+          if (use !== id && resolvesTo(use, alias, scope)) useOf(key, use)
         }
         return
       }
