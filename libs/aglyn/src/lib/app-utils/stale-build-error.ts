@@ -51,6 +51,8 @@
  * drag its whole installer in with it.
  */
 
+import { redispatchCaughtError } from './redispatch-caught-error'
+
 const RELOADED_KEY = 'aglyn.staleBuildReloaded'
 
 /** How long one recovery suppresses the next, in this tab. */
@@ -106,4 +108,47 @@ export function shouldReloadForStaleBuild(error: unknown): boolean {
     return false
   }
   return true
+}
+
+/** Re-load the document; a refused reload leaves the tab where it was. */
+function reloadDocument(): void {
+  try {
+    window.location.reload()
+  } catch {
+    // Nothing to do: the crash page is already on screen.
+  }
+}
+
+/**
+ * What EVERY error boundary does with what it caught: reload once for a stale
+ * build, and otherwise hand the error to the beacon.
+ *
+ * One function so that no boundary can run half of it. The ones that matter
+ * most are not the root boundaries but the two below them on a published
+ * site — `PageBodyBoundary` around the page body and
+ * `[host]/[scheme]/error.tsx` around the page — because a site plugin's chunk
+ * is loaded by the page body, so those are what a stale tab reaches. A
+ * boundary there that only re-dispatched would leave an empty body, or a
+ * **Try again** that cannot work, and report a `ChunkLoadError` for it.
+ *
+ * A reloaded error is NOT reported; the fresh document is the fix, and the
+ * tab it happened in is gone. What still reaches the beacon is the failure a
+ * reload did not cure — a second one inside the recovery window, or a
+ * browser that refuses storage — which the beacon labels `chunk-load`.
+ *
+ * `reload` is a parameter only so a spec can observe it: jsdom refuses to let
+ * one redefine `location.reload`.
+ *
+ * @returns whether the tab is reloading.
+ */
+export function recoverStaleBuildOrReport(
+  error: unknown,
+  reload: () => void = reloadDocument,
+): boolean {
+  if (shouldReloadForStaleBuild(error)) {
+    reload()
+    return true
+  }
+  redispatchCaughtError(error)
+  return false
 }

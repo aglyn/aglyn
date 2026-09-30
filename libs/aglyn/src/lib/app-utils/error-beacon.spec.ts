@@ -34,10 +34,15 @@
  * is reported once per test that has run so far.
  */
 import {
+  anonymousScriptFrameCount,
+  AUTH_DESYNC_KIND,
+  CHUNK_LOAD_KIND,
   describeRejectionReason,
   installErrorBeacon,
+  isBenignBrowserNotice,
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
+  recoveredErrorKind,
 } from './error-beacon'
 
 const PAGE = 'https://aglyn.com/pricing'
@@ -76,6 +81,47 @@ const ANDROID_INJECTED_STACK = [
 /** One frame in a script we served. */
 const OWN_FRAME =
   '    at rJ (https://aglyn.com/_next/static/immutable/chunks/3cuw.js:31:45769)'
+
+/**
+ * An automation driver's `evaluate` on the sign-up page, captured verbatim out
+ * of `client-errors` on 2026-09-29 (AGL-3423). The page's CSP refused the
+ * driver's own `eval`; no script we served is on the stack.
+ */
+const AUTOMATION_EVAL_STACK = [
+  "EvalError: Refused to evaluate a string as JavaScript because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self' https: blob: 'nonce-4cf1186565b04e22ae1a665908a4b07d'\".",
+  '',
+  '    at eval (<anonymous>)',
+  '    at predicate (eval at evaluate (:234:30), <anonymous>:11:37)',
+  '    at next (eval at evaluate (:234:30), <anonymous>:32:31)',
+].join('\n')
+
+/**
+ * A devtools snippet clicking a button that was not there, captured verbatim
+ * out of `client-errors` on 2026-09-23 from aglyn.com/solutions/agencies.
+ */
+const SNIPPET_STACK = [
+  "TypeError: Cannot read properties of null (reading 'click')",
+  '    at <anonymous>:1:54',
+  '    at <anonymous>:1:64',
+].join('\n')
+
+/**
+ * Firebase's cross-pool assert, captured verbatim out of `client-errors` on
+ * 2026-09-29 from app.aglyn.com/signin. Every frame is a chunk we served.
+ */
+const TENANT_MISMATCH_STACK = [
+  'FirebaseError: Firebase: Error (auth/tenant-id-mismatch).',
+  '    at m (https://app.aglyn.com/_next/static/immutable/chunks/2v7qrpjkelxiy.js:22:8332)',
+  '    at _ (https://app.aglyn.com/_next/static/immutable/chunks/2v7qrpjkelxiy.js:22:8404)',
+  '    at ev._updateCurrentUser (https://app.aglyn.com/_next/static/immutable/chunks/2v7qrpjkelxiy.js:22:37216)',
+  '    at ev._onStorageEvent (https://app.aglyn.com/_next/static/immutable/chunks/2v7qrpjkelxiy.js:22:34961)',
+].join('\n')
+
+/** A tab open across a deploy, captured verbatim on aglyn.com 2026-09-29. */
+const CHUNK_LOAD_STACK = [
+  'ChunkLoadError: Failed to load chunk /_next/static/immutable/chunks/40dbnln1sqm49.js from module 964893',
+  '    at https://aglyn.com/_next/static/immutable/chunks/turbopack-2_94opkch9l8s.js:1:5089',
+].join('\n')
 
 describe('isInjectedThirdPartyFrame (AGL-2523)', () => {
   it('is TRUE only when every frame is the document itself', () => {
@@ -138,6 +184,151 @@ describe('isInjectedThirdPartyFrame — foreign schemes (AGL-2786)', () => {
     const extension =
       'TypeError: x is undefined\n    at run (chrome-extension://abcdefghijklmnop/content.js:4:17)'
     expect(isInjectedThirdPartyFrame(extension, PAGE)).toBe(true)
+  })
+})
+
+describe('isInjectedThirdPartyFrame — scripts with no URL (AGL-3423)', () => {
+  it('is TRUE for an automation driver evaluate, in V8 format', () => {
+    expect(isInjectedThirdPartyFrame(AUTOMATION_EVAL_STACK, PAGE)).toBe(true)
+  })
+
+  it('is TRUE for a devtools snippet', () => {
+    expect(isInjectedThirdPartyFrame(SNIPPET_STACK, PAGE)).toBe(true)
+  })
+
+  it('is TRUE for the Firefox devtools console, in the fn@location format', () => {
+    const firefox = [
+      'predicate@debugger eval code:11:37',
+      'next@debugger eval code:32:31',
+    ].join('\n')
+    expect(isInjectedThirdPartyFrame(firefox, PAGE)).toBe(true)
+  })
+
+  it('is TRUE when anonymous frames mix with the document and a foreign scheme', () => {
+    const mixed = [
+      'Error: x',
+      '    at <anonymous>:1:54',
+      '    at https://aglyn.com/pricing:3:4',
+      '    at run (chrome-extension://abcdefghijklmnop/content.js:4:17)',
+    ].join('\n')
+    expect(isInjectedThirdPartyFrame(mixed, PAGE)).toBe(true)
+  })
+
+  it('is FALSE once one of our frames joins anonymous ones', () => {
+    // `every`, never `some`: a snippet that calls into our code and trips on
+    // it has found OUR bug.
+    expect(isInjectedThirdPartyFrame(`${SNIPPET_STACK}\n${OWN_FRAME}`, PAGE)).toBe(
+      false,
+    )
+    expect(
+      isInjectedThirdPartyFrame(`${AUTOMATION_EVAL_STACK}\n${OWN_FRAME}`, PAGE),
+    ).toBe(false)
+  })
+
+  it('is FALSE for code OUR script evaluated, since the eval origin is ours', () => {
+    // The marketing plugin's `runJs` step runs `new Function(code)` from a
+    // chunk; V8 names that chunk inside the frame's eval origin.
+    const ownEval = [
+      'ReferenceError: foo is not defined',
+      '    at eval (eval at runStep (https://aglyn.com/_next/static/chunks/site.js:1:200), <anonymous>:1:1)',
+    ].join('\n')
+    expect(isInjectedThirdPartyFrame(ownEval, PAGE)).toBe(false)
+  })
+
+  it('is FALSE for a builtin, which V8 prints as a bare (<anonymous>)', () => {
+    // Builtins are called by whoever called them, including us, so a stack
+    // made only of them is no evidence either way.
+    const builtin = [
+      'SyntaxError: Unexpected token < in JSON at position 0',
+      '    at JSON.parse (<anonymous>)',
+    ].join('\n')
+    expect(isInjectedThirdPartyFrame(builtin, PAGE)).toBe(false)
+  })
+
+  it('is FALSE for an empty frame list, which is no evidence of anything', () => {
+    expect(isInjectedThirdPartyFrame('TypeError: x is null', PAGE)).toBe(false)
+    expect(isInjectedThirdPartyFrame('', PAGE)).toBe(false)
+  })
+})
+
+describe('anonymousScriptFrameCount (AGL-3423)', () => {
+  it('counts frames, not mentions in the message line', () => {
+    expect(anonymousScriptFrameCount(AUTOMATION_EVAL_STACK)).toBe(2)
+    expect(anonymousScriptFrameCount(SNIPPET_STACK)).toBe(2)
+    expect(anonymousScriptFrameCount('Error: parse failed at <anonymous>:1:2')).toBe(0)
+  })
+
+  it('counts nothing on a stack of ours', () => {
+    expect(anonymousScriptFrameCount(OWN_STACK)).toBe(0)
+    expect(anonymousScriptFrameCount(TENANT_MISMATCH_STACK)).toBe(0)
+  })
+})
+
+describe('isBenignBrowserNotice (AGL-3423)', () => {
+  it('knows the ResizeObserver notice in both wordings', () => {
+    expect(
+      isBenignBrowserNotice('ResizeObserver loop completed with undelivered notifications.'),
+    ).toBe(true)
+    expect(isBenignBrowserNotice('ResizeObserver loop limit exceeded')).toBe(true)
+    expect(isBenignBrowserNotice('Uncaught ResizeObserver loop limit exceeded')).toBe(true)
+  })
+
+  it('leaves an error that merely mentions a ResizeObserver alone', () => {
+    expect(
+      isBenignBrowserNotice(
+        "Cannot read properties of null (reading 'observe') in ResizeObserver loop",
+      ),
+    ).toBe(false)
+    expect(isBenignBrowserNotice('ResizeObserver is not defined')).toBe(false)
+  })
+})
+
+describe('recoveredErrorKind (AGL-3423)', () => {
+  it('labels the cross-pool desync by code, or by message when that is all it has', () => {
+    const firebase = Object.assign(
+      new Error('Firebase: Error (auth/tenant-id-mismatch).'),
+      { code: 'auth/tenant-id-mismatch' },
+    )
+    expect(recoveredErrorKind(firebase)).toBe(AUTH_DESYNC_KIND)
+    expect(
+      recoveredErrorKind({ message: 'Firebase: Error (auth/tenant-id-mismatch).' }),
+    ).toBe(AUTH_DESYNC_KIND)
+  })
+
+  it('labels a stale-build chunk failure', () => {
+    const chunk = Object.assign(new Error('Failed to load chunk /_next/x.js'), {
+      name: 'ChunkLoadError',
+    })
+    expect(recoveredErrorKind(chunk)).toBe(CHUNK_LOAD_KIND)
+    expect(
+      recoveredErrorKind(
+        new TypeError('Failed to fetch dynamically imported module: https://a/b.js'),
+      ),
+    ).toBe(CHUNK_LOAD_KIND)
+  })
+
+  it('labels nothing else, so every other auth error still pages', () => {
+    expect(recoveredErrorKind({ code: 'auth/user-token-expired' })).toBeUndefined()
+    expect(recoveredErrorKind(new Error('Minified React error #185'))).toBeUndefined()
+    expect(recoveredErrorKind(null)).toBeUndefined()
+    expect(recoveredErrorKind('auth/tenant-id-mismatch')).toBeUndefined()
+  })
+
+  it('never throws, whatever the error does', () => {
+    const hostile = {
+      get code(): string {
+        throw new Error('nope')
+      },
+    }
+    expect(recoveredErrorKind(hostile)).toBeUndefined()
+  })
+
+  it('names kinds short enough to survive the server clamp', () => {
+    // `parseClientErrorEvents` keeps 32 characters of `kind`.
+    expect(AUTH_DESYNC_KIND).toBe('auth-desync')
+    expect(CHUNK_LOAD_KIND).toBe('chunk-load')
+    expect(AUTH_DESYNC_KIND.length).toBeLessThanOrEqual(32)
+    expect(CHUNK_LOAD_KIND.length).toBeLessThanOrEqual(32)
   })
 })
 
@@ -212,6 +403,14 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     jest.runOnlyPendingTimers()
   }
 
+  /** jsdom has no PromiseRejectionEvent; dispatch the shape the browser does. */
+  function rejectInPage(reason: unknown): void {
+    const event = new Event('unhandledrejection') as Event & { reason?: unknown }
+    event.reason = reason
+    window.dispatchEvent(event)
+    jest.runOnlyPendingTimers()
+  }
+
   function reported(): Array<Record<string, unknown>> {
     return beacon.mock.calls.flatMap(
       (call) => JSON.parse(call[1] as string).events as Array<Record<string, unknown>>,
@@ -260,6 +459,86 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
 
   it('REPORTS our error when the bridge is on the same stack (AGL-2786)', () => {
     throwInPage('bridge called into ours', `${ANDROID_INJECTED_STACK}\n${OWN_FRAME}`)
+    expect(reported()).toHaveLength(1)
+  })
+
+  it('DROPS a devtools snippet, every frame anonymous (AGL-3423)', () => {
+    throwInPage("Cannot read properties of null (reading 'click')", SNIPPET_STACK)
+    expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('REPORTS a snippet that tripped on our code (AGL-3423)', () => {
+    throwInPage('snippet called into ours', `${SNIPPET_STACK}\n${OWN_FRAME}`)
+    expect(reported()).toHaveLength(1)
+  })
+
+  it('DROPS the ResizeObserver notice, which carries no error at all (AGL-3423)', () => {
+    window.dispatchEvent(
+      new ErrorEvent('error', {
+        message: 'ResizeObserver loop completed with undelivered notifications.',
+      }),
+    )
+    jest.runOnlyPendingTimers()
+    expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('LABELS a chunk the origin no longer serves chunk-load (AGL-3423)', () => {
+    const error = Object.assign(
+      new Error(
+        'Failed to load chunk /_next/static/immutable/chunks/40dbnln1sqm49.js from module 964893',
+      ),
+      { name: 'ChunkLoadError' },
+    )
+    error.stack = CHUNK_LOAD_STACK
+    window.dispatchEvent(
+      new ErrorEvent('error', { error, message: error.message, filename: PAGE }),
+    )
+    jest.runOnlyPendingTimers()
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]['kind']).toBe('chunk-load')
+  })
+
+  it('LABELS the cross-pool rejection auth-desync, and still reports it (AGL-3423)', () => {
+    // AGL-3280 recovers the tab and deliberately leaves the rejection
+    // unhandled so it is seen. It must arrive, under its own kind.
+    const error = Object.assign(
+      new Error('Firebase: Error (auth/tenant-id-mismatch).'),
+      { code: 'auth/tenant-id-mismatch' },
+    )
+    error.name = 'FirebaseError'
+    error.stack = TENANT_MISMATCH_STACK
+    rejectInPage(error)
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      kind: 'auth-desync',
+      message: 'Firebase: Error (auth/tenant-id-mismatch).',
+    })
+  })
+
+  it('keeps every other rejection unhandledrejection (AGL-3423)', () => {
+    const error = new Error('a save of ours was refused')
+    error.stack = `Error: a save of ours was refused\n${OWN_FRAME}`
+    rejectInPage(error)
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]['kind']).toBe('unhandledrejection')
+  })
+
+  it('DROPS a rejection an automation driver raised (AGL-3423)', () => {
+    const error = new Error('Refused to evaluate a string as JavaScript')
+    error.name = 'EvalError'
+    error.stack = AUTOMATION_EVAL_STACK
+    rejectInPage(error)
+    expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('REPORTS a stackless rejection rather than guessing about it (AGL-3423)', () => {
+    rejectInPage({
+      code: 'permission-denied',
+      message: 'Missing or insufficient permissions.',
+    })
     expect(reported()).toHaveLength(1)
   })
 

@@ -1188,7 +1188,34 @@ Notes that keep these honest:
   and never against `/_next/static/`: an asset-path rule would delete every
   error from a self-hosted deployment serving assets off a CDN. The honest cost
   is that a throw from one of our own inline bootstrap scripts looks identical
-  and goes with it.
+  and goes with it. The same rule counts a frame under a foreign scheme
+  (`iabjs:`, `chrome-extension:`, AGL-2786) and, since AGL-3423, a frame in a
+  script with NO URL — `<anonymous>:line:col`, V8's `eval at …` origin, and
+  Firefox's `debugger eval code` — which is what an automation driver's
+  `evaluate` and a devtools snippet produce. It is `every`, never `some`: one
+  frame of ours, including a URL of ours inside an `eval at` origin, keeps the
+  report, and a stack with no frame the rule can read is kept too. It applies
+  to unhandled rejections as well as to uncaught errors.
+- **The `ResizeObserver` loop notice never arrives (AGL-3423).** `ResizeObserver
+  loop completed with undelivered notifications` (older wording: `…loop limit
+  exceeded`) is the browser deferring resize callbacks to the next frame. It
+  carries no error and no stack, and the beacon drops it on its exact wording.
+- **A fault we RECOVER from is labeled, not dropped (AGL-3423).** Both could
+  be ours, so both are written at full severity under their own top-level
+  `jsonPayload.kind`, excluded from the per-entry `Client error beacon`
+  policy, and watched by rate — the same split `hydration` has.
+    - `kind: "auth-desync"` — Firebase's `auth/tenant-id-mismatch`, raised in a
+      tab when a sibling tab signs in to a different account pool. The console
+      reloads that tab once it is hidden (AGL-3280) and deliberately leaves the
+      rejection unhandled so it is still seen. One storage event raises several
+      of them.
+    - `kind: "chunk-load"` — a `ChunkLoadError` or failed dynamic import: a tab
+      open across a deploy asking for a chunk the origin no longer serves.
+      Every boundary, including the two a published page's body actually
+      reaches (`PageBodyBoundary` and `[host]/[scheme]/error.tsx`), reloads once
+      per tab per half hour and does not report what it reloaded (AGL-3279).
+      What arrives is the failure the reload did not cure, and a burst of them
+      is a broken deploy.
 - `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
   the second condition here that watches for **silence**. The `Cloud
   Scheduler` row below it can only report the *presence* of a failed attempt:

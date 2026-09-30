@@ -66,22 +66,19 @@
  *    reload rather than an unbounded one.
  */
 
+import { isCrossPoolDesync } from '@aglyn/aglyn/app-utils/cross-pool-desync'
+
 const RELOADED_KEY = 'aglyn.crossPoolReloaded'
 
 /** How long one recovery suppresses the next, in this tab. */
 export const CROSS_POOL_RECOVERY_INTERVAL_MS = 5 * 60 * 1_000
 
 /**
- * The SDK's code for "the incoming user is not in this instance's pool".
- * Matched on `code` first, which is the field Firebase promises; the message
- * is the fallback for a rejection that arrived as something plainer.
+ * The recognizer lives beside the error beacon, which labels this same
+ * rejection `auth-desync` so it is watched by rate rather than paged per
+ * entry. Re-exported so the recovery and its callers keep one import.
  */
-export function isCrossPoolDesync(reason: unknown): boolean {
-  if (!reason || typeof reason !== 'object') return false
-  const error = reason as { code?: unknown; message?: unknown }
-  if (String(error.code ?? '') === 'auth/tenant-id-mismatch') return true
-  return String(error.message ?? '').includes('auth/tenant-id-mismatch')
-}
+export { isCrossPoolDesync }
 
 /**
  * Should this tab reload itself to re-read the shared auth record — and, if

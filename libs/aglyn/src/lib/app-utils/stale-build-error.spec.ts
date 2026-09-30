@@ -28,6 +28,7 @@
 
 import {
   isStaleBuildError,
+  recoverStaleBuildOrReport,
   RECOVERY_INTERVAL_MS,
   shouldReloadForStaleBuild,
 } from './stale-build-error'
@@ -112,5 +113,58 @@ describe('shouldReloadForStaleBuild', () => {
     window.sessionStorage.setItem('aglyn.staleBuildReloaded', 'not a number')
 
     expect(shouldReloadForStaleBuild(stale())).toBe(true)
+  })
+})
+
+/**
+ * The one recovery every boundary runs (AGL-3423). Before it, the two
+ * boundaries a published page's body actually reaches only re-dispatched, so a
+ * stale tab kept an empty body and the beacon reported a `ChunkLoadError`.
+ */
+describe('recoverStaleBuildOrReport', () => {
+  const stale = () =>
+    Object.assign(new Error('Failed to load chunk /_next/x.js'), {
+      name: 'ChunkLoadError',
+    })
+
+  function withReportError(): jest.Mock {
+    const reportError = jest.fn()
+    Object.defineProperty(window, 'reportError', {
+      value: reportError,
+      configurable: true,
+      writable: true,
+    })
+    return reportError
+  }
+
+  it('reloads a stale build and does NOT report it', () => {
+    const reportError = withReportError()
+    const reload = jest.fn()
+
+    expect(recoverStaleBuildOrReport(stale(), reload)).toBe(true)
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(reportError).not.toHaveBeenCalled()
+  })
+
+  it('reports the failure a reload already failed to cure, and reloads no more', () => {
+    const reportError = withReportError()
+    const reload = jest.fn()
+    recoverStaleBuildOrReport(stale(), reload)
+    reload.mockClear()
+
+    const again = stale()
+    expect(recoverStaleBuildOrReport(again, reload)).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
+    expect(reportError).toHaveBeenCalledWith(again)
+  })
+
+  it('reports every other error without reloading', () => {
+    const reportError = withReportError()
+    const reload = jest.fn()
+    const boom = new TypeError("Cannot read properties of null (reading 'indexOf')")
+
+    expect(recoverStaleBuildOrReport(boom, reload)).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
+    expect(reportError).toHaveBeenCalledWith(boom)
   })
 })
