@@ -106,6 +106,7 @@ import {
 } from './ai-job-campaign-step'
 import { registerAiJobStep } from './ai-jobs'
 import { removeStandInProductIndexes, standInProductIndexes } from '../testing/stand-in-product-index'
+import { removeStandInListSendTime, standInListSendTime } from '../testing/stand-in-list-send-time'
 
 const NOW = new Date('2026-09-15T20:00:00.000Z')
 /** Starter sends no campaign email: `emailSendsPerMonth` resolves to 0. */
@@ -189,6 +190,10 @@ const firestore = {
 // this spec's Firestore double: the AI plugin reads products through them.
 beforeEach(() => standInProductIndexes(firestore))
 afterEach(() => removeStandInProductIndexes())
+// And the send history the marketing plugin keeps, which the send-time
+// suggestion is asked of rather than read.
+beforeEach(() => standInListSendTime(firestore))
+afterEach(() => removeStandInListSendTime())
 
 // ── The two writers, as their owning plugins register them ───────────────
 
@@ -523,6 +528,15 @@ describe('who a drafted campaign is for', () => {
     const outcome = await run({ brief: `Announce the box to the ${LIST_NAME}.` })
     const campaign = outcome.outputs.find((output) => output.resource === 'campaign')
     expect(campaign?.note).toContain('too little send history on this site')
+  })
+
+  it('says nothing about a send time when no plugin keeps the sends', async () => {
+    removeStandInListSendTime()
+    mockRunAiRequest.mockResolvedValueOnce(emailAnswer(GOLDENS['launch']))
+    const outcome = await run({ brief: `Announce the box to the ${LIST_NAME}.` })
+    const campaign = outcome.outputs.find((output) => output.resource === 'campaign')
+    expect(campaign?.note).toContain(LIST_NAME)
+    expect(campaign?.note).not.toMatch(/opened most when sent on/)
   })
 
   it('says so plainly when the brief names no list', async () => {

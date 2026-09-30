@@ -196,7 +196,7 @@
       "reason": "To fix: a media folder (made by a member or by the legacy-name migration); media carry it as folderId, child folders as parentId, and the public API accepts and returns it."
     },
     {
-      "site": "apps/tenant/app/api/forms/submit/route.ts: datasetDoc.ref.collection('records').add(…)",
+      "site": "libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts: datasetDoc.ref.collection('records').add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3088",
       "reason": "To fix: a dataset record a form or an automation appends; routed at /v1/datasets/{datasetId}/records/{recordId} and referenced by other records and by the submission."

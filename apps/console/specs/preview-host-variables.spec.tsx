@@ -170,9 +170,9 @@ jest.mock('@aglyn/tenant-runtime/get-screen-version', () => ({
   __esModule: true,
   default: jest.fn(),
 }))
-jest.mock('@aglyn/tenant-runtime/stamp-form-dataset-bindings', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/submission-record-target', () => ({
   __esModule: true,
-  stampFormDatasetBindings: (nodes: unknown) => nodes,
+  stampFormRecordTargets: async (nodes: unknown) => nodes,
 }))
 
 // ── Preview's surroundings ─────────────────────────────────────────────────

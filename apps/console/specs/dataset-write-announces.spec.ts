@@ -68,7 +68,9 @@ describe('a dataset record write announces to the live pages', () => {
   })
 
   it('the form submission leg announces, inside the swallow that protects the lead', () => {
-    const route = source('apps/tenant/app/api/forms/submit/route.ts')
+    // The leg is the data plugin's form record target now (AGL-3080); the
+    // submit route files through the platform's contract and names no dataset.
+    const route = source('libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts')
     expect(route).toContain(
       "import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'",
     )

@@ -426,6 +426,67 @@ async function pluginSubprocessors() {
 }
 
 /**
+ * The emails a site sends its own customers (AGL-769/770), each declared by
+ * the plugin that sends it (AGL-3080): a plugin names a function under
+ * `tenantEmails`, and this loads `${package}/tenant-emails` through jiti,
+ * calls it, and compiles the answer into the email lib's catalog as data. The
+ * readers include the send path (`loadHostEmail`), which loads no plugin
+ * code, so a runtime registry would be one it had not filled.
+ *
+ * Checked here: every entry names its plugin (the console groups by it, and
+ * `enabledPlugins` decides whether it is listed), a key is declared once
+ * across all plugins (it is the template document id), `control` is one the
+ * console knows, and an `external` entry says where its copy is authored.
+ */
+const TENANT_EMAILS_FILE = 'libs/shared/util/email/src/lib/tenant-emails.generated.ts'
+const TENANT_EMAIL_CONTROLS = ['besigner', 'external', 'fixed']
+
+async function pluginTenantEmails() {
+  const jiti = jitiForWorkspace()
+  const entries = []
+  const keys = new Set()
+  for (const plugin of config.plugins.filter((entry) => entry.register?.tenantEmails)) {
+    const specifier = `${plugin.package}/tenant-emails`
+    const fnName = plugin.register.tenantEmails
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') throw new Error(`${specifier} exports no function named ${fnName}`)
+    const answer = await fn()
+    const where = `${specifier}: ${fnName}()`
+    if (!Array.isArray(answer)) throw new Error(`${where} is not a list`)
+    requireStringFields(answer, ['key', 'name', 'description', 'pluginId', 'plugin', 'control'], where)
+    for (const entry of answer) {
+      if (entry.pluginId !== plugin.id) {
+        throw new Error(`${where}: "${entry.key}" names plugin "${entry.pluginId}"; a plugin declares only its own emails`)
+      }
+      if (keys.has(entry.key)) throw new Error(`${where}: "${entry.key}" is declared twice`)
+      keys.add(entry.key)
+      if (!TENANT_EMAIL_CONTROLS.includes(entry.control)) {
+        throw new Error(`${where}: "${entry.key}" has control "${entry.control}"; one of ${TENANT_EMAIL_CONTROLS.join(', ')}`)
+      }
+      if (entry.control === 'external' && !entry.authoredIn) {
+        throw new Error(`${where}: "${entry.key}" is external and names no "authoredIn"`)
+      }
+      entries.push(entry)
+    }
+  }
+  return entries
+}
+
+function tenantEmailsContent(entries) {
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The emails sites send their own customers (AGL-3080): what each plugin's\n` +
+    ` * \`tenantEmails\` entry returned when this file was generated, in config\n` +
+    ` * order. \`TENANT_EMAILS\` in \`tenant-email-catalog.ts\` is this list.\n` +
+    ` * Source of truth: plugins.config.json and the entries it names.\n */\n\n` +
+    `import type { TenantEmailEntry } from './tenant-email-catalog'\n\n` +
+    `export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = ` +
+    `${JSON.stringify(entries, null, 2)}\n`
+  )
+}
+
+/**
  * The video hosts whose own player the Video element frames (AGL-3080), each
  * declared by the plugin that plays them: a plugin names a function under
  * `videoEmbedProviders`, and this loads `${package}/video-embed-providers`
@@ -1168,6 +1229,39 @@ function repeatSourceRow() {
 }
 
 /**
+ * The plugin whose records a form's submission may also be filed as
+ * (AGL-3080), through `plugin-manager/submission-record-target.ts`. Declared
+ * as well as registered for the reason `repeatSourceRow` gives: a boot that
+ * did not register it must be refused, not read as "forms write nowhere".
+ *
+ * Checked here: one declarer at most — a form node carries one destination —
+ * a plain `id`, and the `serverDeclarations` entry it registers from.
+ */
+function formRecordTargetRow() {
+  const declared = config.plugins.filter((plugin) => plugin.formRecordTarget)
+  if (declared.length > 1) {
+    throw new Error(
+      `plugins.config.json: "${declared.map((plugin) => plugin.id).join('", "')}" each declare a formRecordTarget — ` +
+        'a submission is filed in one place, and two targets would each read the other\'s binding',
+    )
+  }
+  const plugin = declared[0]
+  if (!plugin) return null
+  const where = `plugins.config.json: "${plugin.id}" formRecordTarget`
+  const { id } = plugin.formRecordTarget
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) {
+    throw new Error(`${where}: "id" is the target's plain lowercase id`)
+  }
+  if (!plugin.register?.serverDeclarations) {
+    throw new Error(
+      `${where}: the target is registered from a "serverDeclarations" entry, and this plugin names none — ` +
+        'a declared target nothing registers refuses every page that carries a form',
+    )
+  }
+  return { pluginId: plugin.id, id }
+}
+
+/**
  * A plugin's top-level collections whose documents name an organization in a
  * field (AGL-3080), which a workspace erasure sweeps by that field in every
  * process. One owner per collection; plain names only.
@@ -1344,7 +1438,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1430,6 +1524,12 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(p
 export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(repeatSourceRow(), null, 2)}
 
 /**
+ * The plugin whose records a form's submission may also be filed as, declared
+ * by that plugin (AGL-3080). \`null\` when none does, and no form writes one.
+ */
+export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = ${JSON.stringify(formRecordTargetRow(), null, 2)}
+
+/**
  * The analytics settings each provider mounts a tag for, declared by the
  * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
  * setting configures a tag.
@@ -1471,6 +1571,7 @@ const ALL = [
   })),
   { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
+  { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {

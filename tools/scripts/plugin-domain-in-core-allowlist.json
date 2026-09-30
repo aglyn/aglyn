@@ -553,7 +553,6 @@
       "rules": [
         "domain-name",
         "plugin-collection:forms",
-        "domain-declares:data",
         "domain-declares:forms",
         "domain-declares:marketing"
       ],
@@ -885,14 +884,6 @@
       "lane": "forms"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/form-dataset-binding.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/forms.ts",
       "rules": [
         "domain-name",
@@ -1161,15 +1152,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-send-time.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/jsx-forms/src/lib/mapper/form-field-grid.tsx",
       "rules": [
         "domain-name"
@@ -1192,13 +1174,6 @@
       ],
       "lane": "stays",
       "why": "`'marketing'` here is a SEND PURPOSE, the legal category opposite `'transactional'` that decides which identity and which consent rules apply to a message. Any sender has it, whether or not the Marketing plugin exists."
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/tenant-email-catalog.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/campaign-attribution-store.ts",
@@ -1373,14 +1348,6 @@
         "domain-declares:email"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/form-dataset-binding-token.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts",
