@@ -16,6 +16,7 @@
  */
 
 import type { PluginUsageAxesDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import { AI_USAGE_METER_ID } from './constants'
 import {
   ASSIST_CREDIT_COST_USD,
   ASSIST_PROVIDER_COST_FIELD,
@@ -76,6 +77,7 @@ export function aiUsageAxes(): PluginUsageAxesDeclaration {
         unitCostUsd: ASSIST_CREDIT_COST_USD,
       },
     ],
+    meters: [{ id: AI_USAGE_METER_ID }],
     spendLines: [
       {
         id: AI_ASSIST_SPEND_LINE_ID,

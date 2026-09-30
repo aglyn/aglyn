@@ -12,7 +12,7 @@ import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from '
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
-import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand } from './plugin-usage-axes'
+import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
@@ -1087,6 +1087,15 @@ export const PLUGIN_SPEND_LINES_DECLARED: readonly ResolvedPluginSpendLine[] = [
       "label": "Assist credits"
     }
   },
+]
+
+/**
+ * Every meter a first-party plugin measures in the monthly usage sweep, in
+ * catalog order, declared by that plugin (AGL-3080). The sweep refuses to bill
+ * a month while one of these is unregistered.
+ */
+export const PLUGIN_USAGE_METERS_DECLARED: readonly ResolvedPluginUsageMeter[] = [
+  {"pluginId":"ai","id":"assist"},
 ]
 
 /**

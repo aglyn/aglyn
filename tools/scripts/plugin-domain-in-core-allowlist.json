@@ -36,11 +36,9 @@
     {
       "path": "apps/console/app/api/billing/report-usage/route.ts",
       "rules": [
-        "plugin-collection:ai",
         "plugin-collection:crm",
         "plugin-collection:data",
         "plugin-collection:forms",
-        "domain-declares:ai",
         "domain-declares:crm",
         "domain-declares:forms",
         "domain-declares:workflows"

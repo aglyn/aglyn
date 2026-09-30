@@ -252,15 +252,17 @@ describe('every reader takes the figure it means', () => {
       why: "The discount guardrail's cost of goods and the fleet margin page: the provider figure, the billed one only on a month closed before the split.",
     },
     {
-      path: 'apps/console/app/api/billing/report-usage/route.ts',
+      // The invoice sweep measures the AI's month through the plugin's usage
+      // meter, which records both figures side by side.
+      path: 'libs/plugins/ai/src/lib/billing/ai-month-meter.ts',
       means: 'what we pay',
       fragment: 'const assistCostUsd = assistProviderCostUsd(',
       why: 'The COGS line the discount guardrail reads off the invoice sweep.',
     },
     {
-      path: 'apps/console/app/api/billing/report-usage/route.ts',
+      path: 'libs/plugins/ai/src/lib/billing/ai-month-meter.ts',
       means: 'what the customer draws',
-      fragment: 'const assistOverage = assistMonthOverage(',
+      fragment: 'const overage = assistMonthOverage(',
       why: 'The overage credits that actually enter `billedCents`.',
     },
     {

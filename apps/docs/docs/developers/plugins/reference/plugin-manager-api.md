@@ -1492,28 +1492,40 @@ registerPluginSiteBeacon(
 The site runtime posts with `sendAnalyticsBeacon({ hostId, tasting: 'poured' })`.
 Marketing's announcement bar and popup are the first: `{ overlay, overlayId? }`.
 
-## A meter line a plugin bills itself — `plugin-metered-lines` (`/server`)
-
-The monthly usage sweep prices several lines into one figure and posts it as a
-single Stripe meter event. A plugin that bills one of those lines its own way
-claims it, and the sweep leaves it out of the metered figure from the month the
-claim names — so one month's usage reaches exactly one invoice.
-
-| API | Semantics |
-| --- | --- |
-| `registerPluginMeteredLine({ lineId, billsFrom, closeMonth?, pluginId? })` | Claims a line. `billsFrom()` answers the first `YYYY-MM` the plugin bills, or `null` while it is registered and not yet switched on; it is called per question, so a deployment change takes effect without a restart. One plugin per line — a second claimant throws. |
-| `pluginBillsMeteredLine(lineId, month)` | What the sweep asks. `false` for an unclaimed line, a month before the claim, an unparseable start month, and a claim that throws — so every failure bills through the sweep, which already works. |
-| `runPluginMeteredLineClose(lineId, context)` | Run by the sweep once a month has CLOSED, per workspace, with `{ orgId, month, org, stripeCustomerId }` — the remainder of a line charged as it accrues is owed whether or not the meter reported. Errors are logged, never the sweep's. |
-| `pluginMeteredLineOwner(lineId)` | The claiming plugin, for diagnostics. |
-
-Only the BILLING moves. A claimed line is still measured, still priced and
-still written to the month's audit fields, so a month's usage history reads the
-same either way and the handover is countable from the rows.
-
 | API | Semantics |
 | --- | --- |
 | `registerPluginEventHandler(event, handler, { pluginId? })` | Subscribes; attributed to the registering plugin. Idempotence is the subscriber's to keep — check `listPluginEventHandlers(event)` before subscribing again after a registry reset. |
 | `runPluginEventHandlers(event, payload)` | What the core route calls after its write: every handler in registration order, a failure logged and counted (`{ handled, failed }`), never the route's failure. |
+
+## Usage meters — `plugin-usage-meters` (`/server`)
+
+The monthly usage sweep writes one rollup per workspace and month
+(`orgs/{orgId}/usage/{month}`) and posts the month's billed figure as one
+Stripe meter event. A plugin whose usage is measured in its own storage and
+priced by its own band registers a meter from its `serverDeclarations` entry,
+and the sweep asks it once per workspace; the plugin also declares the meter's
+id under `usageAxes` → `meters`, so the sweep refuses to bill a month while a
+declared meter is unregistered — the workspace fails loudly for that pass and
+is swept again the next day, rather than billed without it. Import the
+registry by its subpath; it is not on a barrel.
+
+```ts
+registerPluginUsageMeter({
+  pluginId: 'cellar',
+  id: 'tastings',
+  measure: async (context) => {
+    const { measureTastings } = await import('./billing/tastings-meter')
+    return measureTastings(context)
+  },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginUsageMeter({ id, measure, closeMonth?, pluginId? })` | Idempotent per plugin and id. A meter with no owner, no id or no `measure` throws. |
+| `measure(context)` | `context` is `{ orgId, org, month, closed, previous, releaseFlagOn(key) }` — `previous` is the month's rollup as it stood before this run, for a stock meter's period-end reading. Answers `{ fields, periodEndFields?, billedUsd, periodEndBasis? }`: `fields` are written onto the rollup on every run, under the names the plugin's usage axes read, and never over a field the platform writes; `periodEndFields` only while the month is open; `billedUsd` enters the billed figure, rounded to cents. A throw fails that workspace's pass. |
+| `closeMonth(context)` | Run for every workspace of a CLOSED month, every day the sweep runs, before its already-reported skip — for a plugin that bills part of its usage itself and settles the remainder at the month's end. `context.stripeCustomerId()` reads the workspace's billing document only when called. Errors are logged, never the sweep's. |
+| `listPluginUsageMeters()` / `unregisteredPluginUsageMeters()` | What the sweep runs, declared meters first in catalog order; and every declared meter nothing registered, as `pluginId:id`. |
 
 ## Account erasure — `plugin-user-erasure` (`/server`)
 
@@ -2036,6 +2048,7 @@ export function cellarUsageAxes(): PluginUsageAxesDeclaration {
 | `costAxes[]` | `{ id, order, fields, fallbackFields?, recordedFields?, rate?, live? }`. `fields` are summed from the month's usage rollup; `fallbackFields` are read only when a rollup carries none of `fields` (an older, narrower basis — a measured zero never falls back); `recordedFields` ride along so the sum stays legible and are never priced. `rate` names a key of `ORG_COGS_UNIT_RATES_USD` — never a number: the money stays core's, beside the billed table it reconciles against — or is left out when the fields are already dollars. `live: { collection, fields }` names `orgs/{orgId}/{collection}/{month}`, whose first positive field replaces the rollup's snapshot wherever a reader fetches it. |
 | `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd?, hostCounter?, alert? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. `hostCounter` names the per-site monthly counter the band is measured by (`hosts/{hostId}/counters/{hostCounter}`, field `{month}`). `alert: { label, noun, outcome, reached, approach }` warns the workspace as it approaches and reaches the band, from that counter, once per threshold per month: `label` names the band in the title, `noun` in the opening sentence, and `outcome`, `reached` and `approach` say what happens at it. |
 | `spendLines[]` | `{ id, label, live: { collection, field }, billedFromEnv, unit? }`. A line of the workspace's monthly spend on its usage budget: `orgs/{orgId}/{collection}/{month}`'s `field`, in the dollars it is billed at. It is always shown and counts toward the budget only from the month the deployment variable `billedFromEnv` names (anything that is not a `YYYY-MM` bills nothing). `unit: { costUsd, label }` is set when the stored dollars are the platform's cost: the customer's browser then receives `ceil(dollars / costUsd)` of the unit and never the dollars. |
+| `meters[]` | `{ id }` of each meter the plugin registers with the monthly usage sweep ([Usage meters](#usage-meters--plugin-usage-meters-server)). The code is registered at runtime; the declaration is what lets the sweep refuse to bill a month the registration is missing from. |
 | `pluginCostAxes()` / `pluginUsageBands()` / `pluginSpendLines()` / `pluginCostAxisFields()` | Every compiled declaration, and every rollup field the cost axes read or record (`orgCogsInputFrom` forwards them). |
 | `declaredMeterReading(rollup, declared)` / `liveMeterReading(doc, live)` | The one reading of a declared meter: a positive finite number, or nothing. |
 

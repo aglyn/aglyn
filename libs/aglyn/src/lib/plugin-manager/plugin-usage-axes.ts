@@ -41,6 +41,9 @@
  *    came to at the rates it bills, the deployment variable naming the month
  *    it is first charged for, and the unit a customer sees it in. The usage
  *    budget shows it beside the metered figure and counts it once charged.
+ *  - a METER names what the plugin measures in the monthly usage sweep
+ *    (`plugin-usage-meters.ts`), so the sweep can refuse to bill a month the
+ *    registered meter is missing from.
  *
  * ## What core keeps
  *
@@ -173,15 +176,27 @@ export interface PluginSpendLineDeclaration {
   unit?: { costUsd: number; label: string }
 }
 
+/**
+ * A meter the plugin measures in the platform's monthly usage sweep and
+ * registers at runtime (`plugin-usage-meters.ts`). Declared as well as
+ * registered so the sweep can refuse to bill a workspace's month without it.
+ */
+export interface PluginUsageMeterDeclaration {
+  /** As `registerPluginUsageMeter` names it. */
+  id: string
+}
+
 export type ResolvedPluginCostAxis = PluginCostAxisDeclaration & { pluginId: string }
 export type ResolvedPluginUsageBand = PluginUsageBandDeclaration & { pluginId: string }
 export type ResolvedPluginSpendLine = PluginSpendLineDeclaration & { pluginId: string }
+export type ResolvedPluginUsageMeter = PluginUsageMeterDeclaration & { pluginId: string }
 
 /** What a plugin's `usageAxes` function answers. */
 export interface PluginUsageAxesDeclaration {
   costAxes?: readonly PluginCostAxisDeclaration[]
   bands?: readonly PluginUsageBandDeclaration[]
   spendLines?: readonly PluginSpendLineDeclaration[]
+  meters?: readonly PluginUsageMeterDeclaration[]
 }
 
 export function pluginCostAxes(): readonly ResolvedPluginCostAxis[] {

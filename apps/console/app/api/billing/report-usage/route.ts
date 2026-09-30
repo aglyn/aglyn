@@ -17,14 +17,10 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
-  ASSIST_PROVIDER_COST_FIELD,
-  assistMonthOverage,
-  assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
-import {
-  pluginBillsMeteredLine,
-  runPluginMeteredLineClose,
-} from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
+  listPluginUsageMeters,
+  unregisteredPluginUsageMeters,
+  type PluginUsageMeterContext,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
@@ -464,6 +460,12 @@ async function meterReportBlockedReason(
   }
 }
 
+/** A meter's dollars as a finite, positive figure — anything else bills nothing. */
+function finiteUsd(value: unknown): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
 async function hostUsage(
   hostRef: FirebaseFirestore.DocumentReference,
   month: string,
@@ -509,14 +511,6 @@ async function hostUsage(
  * already-reported org-months. Validate rates against a real invoice
  * month before enabling live billing.
  */
-/**
- * The name this sweep knows the AI overage line by, and the name a plugin
- * claims it under. One string, stated here because this is the file that
- * computes the line — a plugin's internal name for it would be the plugin's
- * to change.
- */
-const ASSIST_OVERAGE_METER_LINE_ID = 'assist-overage'
-
 async function handler(request: Request): Promise<Response> {
   const {
     method,
@@ -592,35 +586,28 @@ async function handler(request: Request): Promise<Response> {
   // the next, which would report half the platform and freeze the other half.
   const closed = monthIsClosed(month)
   /*==========================================
-   * A METER LINE A PLUGIN BILLS FOR ITSELF (AGL-3011).
+   * THE PLUGINS' METERS (AGL-3080).
    *
-   * One line of the figure below — AI credits past a plan's included band —
-   * can be billed by the AI plugin as it accrues, on its own one-off
-   * invoices, from a month the plugin names. From that month the line must
-   * be LEFT OUT of what this sweep meters, or the customer pays for it
-   * twice.
+   * A plugin's usage — its storage, its band, its price past the band — is
+   * measured by the plugin's own meter (`plugin-usage-meters.ts`), which this
+   * sweep asks once per workspace for the fields it writes onto the rollup
+   * and the dollars it adds to the billed figure. The plugins' declarations
+   * are loaded first because this is a core cron that never touches a
+   * plugin's own doors.
    *
-   * Only the BILLING moves. The line is still measured and still written to
-   * the month's audit fields below, so a month's usage history reads the
-   * same either way and the handover is visible in it.
-   *
-   * Resolved ONCE for the sweep, like `closed` above and for the same
-   * reason: a run straddling midnight on the 1st must not bill one org
-   * through the meter and the next by invoice for the same month. The
-   * plugins' declarations are loaded first because this is a core cron that
-   * never touches a plugin's own doors — and a failure to load them leaves
-   * the line billed through the meter, which is the channel that already
-   * works.
+   * Listed ONCE for the sweep, like `closed` above and for the same reason:
+   * every workspace in one run is measured by the same meters. A meter a
+   * plugin DECLARED and did not register refuses every workspace below —
+   * each fails loudly for this pass and is swept again tomorrow, where a
+   * month billed without the meter would be short and final.
    *=========================================*/
   try {
     await registerPluginServerDeclarations()
   } catch (error) {
     console.error('[report-usage] plugin declarations failed', error)
   }
-  const assistOverageBilledByPlugin = pluginBillsMeteredLine(
-    ASSIST_OVERAGE_METER_LINE_ID,
-    month,
-  )
+  const usageMeters = listPluginUsageMeters()
+  const missingUsageMeters = unregisteredPluginUsageMeters()
   const stripeKey = process.env.STRIPE_SECRET_KEY
   const meterEventName =
     process.env.STRIPE_METER_EVENT_NAME ?? 'aglyn_metered_usage'
@@ -706,7 +693,6 @@ async function handler(request: Request): Promise<Response> {
         companiesSnap,
         dealsSnap,
         counterTotals,
-        assistUsageSnap,
         offlineFeesSnap,
         existing,
       ] = await Promise.all([
@@ -742,20 +728,14 @@ async function handler(request: Request): Promise<Response> {
         // to a sum taken over hosts alone. Since AGL-1473 it also carries the
         // org LIBRARY's stored bytes, which had the identical defect.
         orgCounterTotals(firestore, hostRefs, month, orgRef),
-        // Aglyn Assist provider spend for the month (AGL-2280). `estCostUsd`
-        // was written by the assist route from day one, expressly so the paid
-        // constraint — and it lived in a collection the rollup never touched,
-        // so the one cost line big enough to matter was absent from the
-        // document every cost reader on the platform reads.
-        orgRef.collection('assistUsage').doc(month).get(),
         // Platform fee on POS sales that never touched Stripe (AGL-2111).
         // Cash and folio tenders have no charge to net an
         // `application_fee_amount` out of, so `pos-order.ts` accrues the fee
         // here — in the same transaction as the order — and this is the only
-        // place it can reach an invoice. PRICED, unlike `assistUsage` beside
-        // it: this is not a cost we absorb, it is the platform fee the
-        // merchant's own plan already charges, collected on the one channel
-        // where Stripe cannot collect it for us.
+        // place it can reach an invoice. PRICED: this is not a cost we
+        // absorb, it is the platform fee the merchant's own plan already
+        // charges, collected on the one channel where Stripe cannot collect it
+        // for us.
         orgRef.collection('offlineFees').doc(month).get(),
         // THE ROLLUP DOCUMENT ITSELF (AGL-2399), moved into this batch from a
         // sequential read further down.
@@ -781,6 +761,33 @@ async function handler(request: Request): Promise<Response> {
       // came back empty. An unknown tier must refuse; a KNOWN `'free'` must
       // match. Those are different facts, so they are spelled differently.
       const releaseFlagPlan = orgData ? resolveEffectivePlan(orgData) : null
+      // THE PLUGINS' METERS, one pass per workspace after the batch above,
+      // because each measures against the workspace document it read. A
+      // missing declared meter or a meter that throws fails this workspace
+      // for the pass — see where they are listed.
+      if (missingUsageMeters.length) {
+        throw new Error(
+          `usage meters declared and not registered: ${missingUsageMeters.join(', ')}`,
+        )
+      }
+      const meterContext: PluginUsageMeterContext = {
+        orgId,
+        org: (orgData ?? {}) as Record<string, unknown>,
+        month,
+        closed,
+        previous: (existing.data() ?? {}) as Record<string, unknown>,
+        releaseFlagOn: (key) =>
+          isReleaseFlagOnForOrg(
+            key,
+            releaseFlagValues[key],
+            orgId,
+            parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
+            releaseFlagPlan,
+          ),
+      }
+      const meterReadings = await Promise.all(
+        usageMeters.map((meter) => meter.measure(meterContext)),
+      )
       // The ORG LIBRARY as one more storage snapshot (AGL-1473).
       //
       // `resolveMediaScope` sends an org DAM upload to
@@ -989,7 +996,8 @@ async function handler(request: Request): Promise<Response> {
         ? 'in-progress'
         : contactsAtPeriodEnd !== null ||
             crmRecordsAtPeriodEnd !== null ||
-            dataStorageMbAtPeriodEnd !== null
+            dataStorageMbAtPeriodEnd !== null ||
+            meterReadings.some((reading) => reading.periodEndBasis)
           ? 'period-end'
           : 'sweep-time'
       // The two are resolved INDEPENDENTLY, so one missing field never drags
@@ -1140,65 +1148,6 @@ async function handler(request: Request): Promise<Response> {
         ? emailOveragePrice.overageMonthlyUsd
         : 0
       /*==========================================
-       * AGLYN ASSIST PROVIDER SPEND, RECORDED AND PRICED (AGL-2280).
-       *
-       * The SPEND is deliberately absent from `billedCents` below — Assist is
-       * entitled by plan up to its band, and putting our provider bill on the
-       * invoice would charge for what the subscription already bought. It IS
-       * priced by `orgMonthlyCogsUsd`, because it is a real dollar cost we
-       * pay a provider, and the discount guardrail's entire job is to compare
-       * revenue against what an org costs us.
-       *
-       * Already dollars, and the PROVIDER figure of the two the rollup keeps
-       * (AGL-3015): `estCostUsd` beside it is the same tokens at the billed
-       * rates a customer's credits come out of, and a cost of goods carrying
-       * our own markup would understate the margin the guardrail defends.
-       * Re-deriving either from tokens here would be a second cost model to
-       * drift from the first.
-       *=========================================*/
-      const assistCostUsd = assistProviderCostUsd(
-        assistUsageSnap.get('estCostUsd'),
-        assistUsageSnap.get(ASSIST_PROVIDER_COST_FIELD),
-      )
-      /*==========================================
-       * AGLYN ASSIST OVERAGE, PRICED ONTO THE INVOICE (AGL-2653).
-       *
-       * The credits PAST the plan's band are a different thing from the spend
-       * above: they were sold, at `extraAssistCreditsUsdPer1k`, and they enter
-       * `billedCents` beside contacts, API requests and dataset storage with
-       * the same cent rounding. One derivation — `assistMonthOverage` turns
-       * the measured spend into credits, subtracts the band the org resolves
-       * to, and prices the rest — so the console meter and this line cannot
-       * disagree about what was over.
-       *
-       * Off the BILLED figure, not the provider one above it (AGL-3015). A
-       * credit is a fixed quantity of billed spend, so this is the only
-       * reading under which the credits invoiced here are the credits the
-       * customer's own meter counted down.
-       *
-       * The org's hard-cap switch is NOT read here, on purpose. The switch
-       * lives at the gate: on, `reserveAssistMessage` refuses at the band and
-       * at most the one exchange that crossed the line can land past it; off,
-       * the org bought the excess. Either way what landed is what bills,
-       * exactly as storage bills stored bytes whatever `storageOverage.capUsd`
-       * says — reading the switch at sweep time would let a flip on the 1st
-       * erase a month's overage, which is AGL-2399 on a different meter. A
-       * plan with no band or no rate prices zero structurally.
-       *=========================================*/
-      const assistBilledRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
-      const assistOverage = assistMonthOverage(
-        orgData,
-        Number.isFinite(assistBilledRaw) && assistBilledRaw > 0 ? assistBilledRaw : 0,
-      )
-      // WITHHELD from the meter figure once a plugin bills the line itself
-      // (AGL-3011) — the same shape as `emailOverageUsd` above, and for the
-      // same reason: one month's usage must reach exactly one invoice. The
-      // priced figure is kept and still written to the audit fields below,
-      // so the month still records what the overage WAS.
-      const assistOverageBilledUsd = assistOverageBilledByPlugin
-        ? 0
-        : assistOverage.overageMonthlyUsd
-      /*==========================================
        * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).
        *
        * Already cents, already the plan's own rate, already floored — the
@@ -1225,31 +1174,41 @@ async function handler(request: Request): Promise<Response> {
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(contactsOverageUsd * 100) +
         Math.round(emailOverageUsd * 100) +
-        Math.round(assistOverageBilledUsd * 100) +
+        // Each plugin meter's line, rounded to cents on its own like every
+        // plan-priced line above.
+        meterReadings.reduce(
+          (sum, reading) => sum + Math.round(finiteUsd(reading.billedUsd) * 100),
+          0,
+        ) +
         offlinePosFeeCents
       // `usageRef` / `existing` come from the batch above (AGL-2399) — the
       // stock basis needs the same document this guard does, and reading it
       // twice per org bought nothing.
-      // THE PLUGIN'S CLOSE-OUT (AGL-3011), before the already-reported skip
-      // below: the remainder of a line a plugin bills itself is owed whether
-      // or not the meter reported for this workspace, and a month that has
-      // reported is exactly the month whose remainder is due. Awaited, and
-      // isolated by the registry — a plugin's Stripe call failing must not
-      // cost the platform's own metering.
+      // THE PLUGINS' CLOSE-OUTS, before the already-reported skip below: what
+      // a plugin bills on its own is settled whether or not the meter reported
+      // for this workspace, and a month that has reported is exactly the month
+      // whose remainder is due. Awaited and isolated — a plugin's Stripe call
+      // failing must not cost the platform's own metering.
       //
-      // No cost at all before a plugin claims the line and names a month:
-      // `runPluginMeteredLineClose` answers `false` without calling anything.
-      //
-      // The billing read is made only when a plugin actually claims the line
-      // for this month, so a deployment with no claim adds no read per org.
-      if (closed && assistOverageBilledByPlugin) {
-        const closeCustomerId = (await readOrgBilling(orgId)).stripeCustomerId
-        await runPluginMeteredLineClose(ASSIST_OVERAGE_METER_LINE_ID, {
-          orgId,
-          month,
-          org: orgData as Record<string, unknown>,
-          stripeCustomerId: closeCustomerId ? String(closeCustomerId) : null,
-        })
+      // The billing document is read only when a close-out asks for it, so a
+      // month with nothing of a plugin's to settle adds no read per org.
+      if (closed) {
+        let customerId: Promise<string | null> | undefined
+        const stripeCustomerId = () =>
+          (customerId ??= readOrgBilling(orgId).then((billing) =>
+            billing.stripeCustomerId ? String(billing.stripeCustomerId) : null,
+          ))
+        for (const meter of usageMeters) {
+          if (!meter.closeMonth) continue
+          try {
+            await meter.closeMonth({ ...meterContext, stripeCustomerId })
+          } catch (error) {
+            console.error(
+              `[report-usage] ${meter.pluginId}:${meter.id} failed to close ${month} for ${orgId}`,
+              error,
+            )
+          }
+        }
       }
       if (existing.get('reportedAt')) {
         orgResults[orgId] = { billedCents, skipped: true }
@@ -1345,6 +1304,17 @@ async function handler(request: Request): Promise<Response> {
 
       await usageRef.set(
         {
+          // Each plugin meter's fields FIRST, so a field the platform writes
+          // below can never be overwritten by one; its period-end stamp only
+          // while the month is open, for the reason the platform's own stock
+          // readings below are.
+          ...Object.assign(
+            {},
+            ...meterReadings.map((reading) => ({
+              ...reading.fields,
+              ...(closed ? {} : (reading.periodEndFields ?? {})),
+            })),
+          ),
           month,
           hostCount: hostRefs.length,
           storageGb: estimate.storageGb,
@@ -1485,33 +1455,12 @@ async function handler(request: Request): Promise<Response> {
           contactsOverageWithheldUsd: contactsOverageBilled
             ? 0
             : contactQuota.overageMonthlyUsd,
-          // AGL-2280 — see where it is computed. Priced into COGS, never into
-          // `billedCents`: the subscription bought the band.
-          assistCostUsd,
-          // The credit view of the same month (AGL-2653): what was drawn, the
-          // band it was drawn against, and the part past it that DID enter
-          // `billedCents`, with the rate it was priced at. Recorded always,
-          // zeros included, so a month inside its band is legible as one and
-          // the count sits beside the amount on the row a customer asks
-          // about. `assistCreditsBand` is `null` where the plan sells none.
-          assistCredits: assistOverage.usedCredits,
-          assistCreditsBand: assistOverage.bandCredits,
-          assistCreditsOverage: assistOverage.overageCredits,
-          assistOverageUsd: assistOverage.overageMonthlyUsd,
-          assistOverageRateUsd: assistOverage.overageRateUsd,
-          // Whether the meter billed it, or a plugin did (AGL-3011). Same
-          // pair, same reason, as `emailSendsOverageBilled` below: a month
-          // billed through the other channel must not read as a month that
-          // stayed inside its band, and the handover must be countable from
-          // the rows rather than inferred from a deployment variable.
-          assistOverageMeteredUsd: assistOverageBilledUsd,
-          assistOverageBilledByPlugin,
           // The cash/folio POS platform fee this month (AGL-2111), and the
           // number of sales it came from. Recorded ALWAYS, including at zero,
           // so "this store took no cash" is legible as a fact rather than as
           // a missing field — and so a merchant querying why their invoice
-          // moved has the count beside the amount. Unlike `assistCostUsd`
-          // above, this IS inside `billedCents`.
+          // moved has the count beside the amount. It IS inside
+          // `billedCents`.
           offlinePosFeeCents,
           offlinePosFeeOrders:
             Number.isFinite(offlinePosFeeOrders) && offlinePosFeeOrders > 0
