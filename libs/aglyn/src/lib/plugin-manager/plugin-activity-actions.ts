@@ -101,6 +101,13 @@ export interface PluginActivityRegistration {
   pluginId: string
   group: PluginActivityGroup
   actions: readonly PluginActivityAction[]
+  /**
+   * Target types the plugin's rows are filed under that are NOT namespaced,
+   * with the noun a reader sees for each (AGL-3080): rows written before
+   * `pluginId:noun` existed, whose stored type cannot change. A namespaced
+   * type needs no entry — the feed reads its noun off the type itself.
+   */
+  targetTypes?: Readonly<Record<string, string>>
 }
 
 const registrations = new Map<string, PluginActivityRegistration>()
@@ -140,7 +147,31 @@ export function registerPluginActivityActions(
       )
     }
   }
+  for (const type of Object.keys(registration.targetTypes ?? {})) {
+    const owner = [...registrations.values()].find(
+      (entry) => entry.pluginId !== pluginId && entry.targetTypes?.[type] !== undefined,
+    )?.pluginId
+    if (owner) {
+      throw new Error(
+        `activity target type "${type}" is already declared by "${owner}"; ` +
+          `refused "${pluginId}"`,
+      )
+    }
+  }
   registrations.set(pluginId, registration)
+}
+
+/**
+ * The noun a plugin declared for one of its un-namespaced target types, or
+ * `undefined` when no plugin declared the type.
+ */
+export function pluginActivityTargetLabel(type: unknown): string | undefined {
+  if (typeof type !== 'string') return undefined
+  for (const registration of registrations.values()) {
+    const label = registration.targetTypes?.[type]
+    if (label) return label
+  }
+  return undefined
 }
 
 function ownerOfActivityAction(key: string): string | undefined {

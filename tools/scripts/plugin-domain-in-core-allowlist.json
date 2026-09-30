@@ -776,7 +776,6 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/activity-presenter.ts",
       "rules": [
-        "domain-declares:ai",
         "domain-declares:crm"
       ],
       "lane": "ai"
