@@ -68,6 +68,7 @@ import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { FORM_CONTACT_FIELDS_ZONE } from './form-zones'
+import { FORMS_DOCUMENT_SEGMENT } from '../constants/bundle-common'
 import FormDesignPreview from './form-design-preview.component'
 import FormMetricsCard from './form-metrics-card.component'
 import FormSubmissionsCard from './form-submissions-card.component'
@@ -460,7 +461,13 @@ export function FormDetailCard(props: FormDetailCardProps) {
         // disabled, so this branch cannot be reached without them.
         if (orgSlug && host) {
           router.push(
-            buildRoute(Route.FORM_BESIGNER, { orgSlug, host, formId, versionId }),
+            buildRoute(Route.PLUGIN_DOCUMENT_BESIGNER, {
+              orgSlug,
+              host,
+              documentSegment: FORMS_DOCUMENT_SEGMENT,
+              docId: formId,
+              versionId,
+            }),
           )
         }
       } catch (error) {

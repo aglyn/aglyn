@@ -141,7 +141,6 @@ describe('AGL-3330 · every write to a form keeps the Forms list true', () => {
       'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
       'libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx',
       'apps/console/app/api/hosts/forms/promote/route.ts',
-      'apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx',
       'apps/tenant/utils/increment-form-stats.ts',
     ]) {
       expect([file, files.has(file)]).toEqual([file, true])

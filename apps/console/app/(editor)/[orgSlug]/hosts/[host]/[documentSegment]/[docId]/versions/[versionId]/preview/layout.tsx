@@ -15,9 +15,20 @@
  * limitations under the License.
  */
 
+import {
+  besignerDocumentForSegment,
+  besignerDocumentTitle,
+} from '@aglyn/aglyn/plugin-manager/besigner-documents'
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { entityPageTitle } from '../../../../../../../../../entity-page-title'
+
+interface DocumentRouteParams {
+  host: string
+  documentSegment: string
+  docId: string
+}
 
 // Title-only shell. Without it this route inherits its title from the host
 // layout six segments up, which is the string the besigner tab beside it
@@ -26,22 +37,29 @@ import { entityPageTitle } from '../../../../../../../../../entity-page-title'
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ host: string; formId: string }>
+  params: Promise<DocumentRouteParams>
 }): Promise<Metadata> {
-  const { host, formId } = await params
+  const { host, documentSegment, docId } = await params
+  const declared = besignerDocumentForSegment(documentSegment)
+  if (!declared) return {}
   return {
     title: entityPageTitle({
-      subject: formId,
-      noun: 'Form preview',
+      subject: docId,
+      noun: `${besignerDocumentTitle(declared.noun)} preview`,
       scope: host,
     }),
   }
 }
 
-export default function FormPreviewTitleLayout({
+/** The preview of a plugin document's version; an undeclared segment 404s. */
+export default async function PluginDocumentPreviewLayout({
   children,
+  params,
 }: {
   children: ReactNode
+  params: Promise<DocumentRouteParams>
 }) {
+  const { documentSegment } = await params
+  if (!besignerDocumentForSegment(documentSegment)) notFound()
   return <>{children}</>
 }

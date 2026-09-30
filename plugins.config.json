@@ -124,6 +124,18 @@
           "routeSlug": "forms"
         }
       ],
+      "besignerDocuments": [
+        {
+          "kind": "form",
+          "segment": "forms",
+          "collection": "forms",
+          "noun": "form",
+          "publish": {
+            "path": "/api/hosts/forms/promote",
+            "idField": "formId"
+          }
+        }
+      ],
       "contributes": {
         "site": {
           "components": [

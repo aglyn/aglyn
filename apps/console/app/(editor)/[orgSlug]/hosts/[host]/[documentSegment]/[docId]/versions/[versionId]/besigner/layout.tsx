@@ -15,9 +15,20 @@
  * limitations under the License.
  */
 
+import {
+  besignerDocumentForSegment,
+  besignerDocumentTitle,
+} from '@aglyn/aglyn/plugin-manager/besigner-documents'
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { entityPageTitle } from '../../../../../../../../../entity-page-title'
 import type { ReactNode } from 'react'
+
+interface DocumentRouteParams {
+  host: string
+  documentSegment: string
+  docId: string
+}
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
@@ -25,22 +36,32 @@ import type { ReactNode } from 'react'
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ host: string; formId: string }>
+  params: Promise<DocumentRouteParams>
 }): Promise<Metadata> {
-  const { host, formId } = await params
+  const { host, documentSegment, docId } = await params
+  const declared = besignerDocumentForSegment(documentSegment)
+  if (!declared) return {}
   return {
     title: entityPageTitle({
-      subject: formId,
-      noun: 'Form besigner',
+      subject: docId,
+      noun: `${besignerDocumentTitle(declared.noun)} besigner`,
       scope: host,
     }),
   }
 }
 
-export default function FormBesignerTitleLayout({
+/**
+ * The besigner for a document a plugin keeps under a site (AGL-3080): the
+ * segment names the kind, and a segment no plugin declared is not a route.
+ */
+export default async function PluginDocumentBesignerLayout({
   children,
+  params,
 }: {
   children: ReactNode
+  params: Promise<DocumentRouteParams>
 }) {
+  const { documentSegment } = await params
+  if (!besignerDocumentForSegment(documentSegment)) notFound()
   return <>{children}</>
 }

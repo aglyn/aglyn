@@ -455,6 +455,52 @@ is told the site holds, and a section missing from a process that had not
 loaded the plugin would read to a crawler as pages that no longer exist.
 `listPluginSitemapSections()` / `pluginSitemapSection(section)` read them.
 
+## Documents authored in the besigner — `besigner-documents`
+
+Screens, layouts and components are the platform's own besigner documents. A
+plugin can keep one too — a node tree under `hosts/{hostId}/{collection}/{docId}`,
+its working copies under `versions/{versionId}` and the published copy on the
+document itself — and the console serves its editor and its preview without
+naming it, at `/{orgSlug}/hosts/{host}/{segment}/{docId}/versions/{versionId}/besigner`
+and `…/preview`. The plugin declares the kind in a `besignerDocuments` block of
+`plugins.config.json`:
+
+```json
+"besignerDocuments": [
+  {
+    "kind": "bottle-label",
+    "segment": "labels",
+    "collection": "labels",
+    "noun": "label",
+    "publish": { "path": "/api/hosts/labels/promote", "idField": "labelId" }
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `kind` | What presence rooms, saved drafts and previews key on — a stored value, never renamed. One owner per kind. |
+| `segment` | The URL segment under a site. The document's own page is the plugin's hub at `<segment>/<docId>` (declare `ownsSubtree` on the nav item), where the editor's Back and Close land. Never one the console routes itself (`screens`, `layouts`, `components`, `templates`, `emails`, `theme`). |
+| `collection` | The host subcollection the documents live in; it must also be in the same plugin's `hostCollections`. |
+| `noun` | What one is called in the editor's sentences, lower case. |
+| `publish` | The console route that makes a version the one the site serves, and the body field that carries the document id. |
+
+The editor saves the working version itself; publishing is the plugin's. It
+POSTs `{ hostId, [idField]: docId, versionId }` to `publish.path`, a server
+route that reads the stored version itself (nothing about the design crosses
+the wire), refuses a design that breaks what the document promises, writes the
+published copy and drops the live pages that place it. A refusal answers
+`{ error, violations?: [{ message }] }`; the editor shows the first violation
+in full with a count of the rest (`besignerPublishRefusal`). A version the site
+already serves is published again when an author asks to publish with nothing
+new saved, which is how the live pages are refreshed.
+
+The kinds are COMPILED, not registered: the route resolves its segment in a
+server layout that loads no plugin code, and a segment nobody declared is a
+404. `besignerDocuments()` / `besignerDocumentForSegment(segment)`
+(`@aglyn/aglyn/plugin-manager/besigner-documents`) read them, and
+`useHostDocumentVersion` (`@aglyn/tenant-feature-instance`) reads a version.
+
 ## Record addresses — `plugin-record-routes`
 
 Where a plugin's records are read, published by the plugin that owns them, so

@@ -30,32 +30,47 @@ import {
 import useDoc from './helpers/use-doc'
 
 /**
- * A form's working version, at
- * `hosts/{hostId}/forms/{formId}/versions/{versionId}`.
+ * A plugin document's working version, at
+ * `hosts/{hostId}/{collection}/{docId}/versions/{versionId}` — the storage a
+ * kind declared in `besignerDocuments` keeps (`plugin-manager/
+ * besigner-documents.ts`).
  *
  * Compressed at rest, and carrying the same asymmetry a component version
- * does: the PUBLISHED tree lives on the parent `forms/{formId}` document,
- * because a placed form has to resolve on the hot path of a page render and
- * one collection query reaches every form on the site. These documents are
+ * does: the PUBLISHED tree lives on the parent document, because a placed
+ * document has to resolve on the hot path of a page render and one
+ * collection query reaches every one on the site. These documents are
  * editing history — the besigner's draft surface — and nothing renders from
  * them.
  */
-export const useFormVersionRef = ({
-  hostId,
-  formId,
-  versionId,
-}: {
+export interface HostDocumentVersion {
+  displayName?: string
+  /** The node a placed copy grafts from; absent on a tree never published. */
+  rootId?: Aglyn.NodeId
+  nodes?: Record<Aglyn.NodeId, Aglyn.AglynNodeSchema>
+  updatedAt?: unknown
+}
+
+export interface HostDocumentVersionIds {
   hostId: string
-  formId: string
+  /** The subcollection under `hosts/{hostId}` the document lives in. */
+  collection: string
+  docId: string
   versionId: string
-}) => {
+}
+
+export const useHostDocumentVersionRef = ({
+  hostId,
+  collection,
+  docId,
+  versionId,
+}: HostDocumentVersionIds) => {
   const firestore = useFirestore()
   const ref = doc(
     firestore,
     'hosts',
     hostId,
-    'forms',
-    formId,
+    collection,
+    docId,
     'versions',
     versionId,
   )
@@ -80,22 +95,18 @@ export const useFormVersionRef = ({
         return {
           ...data,
           nodes: decompress(data.nodes),
-        } as Aglyn.FormVersion
+        } as HostDocumentVersion
       }
-      return data as Aglyn.FormVersion
+      return data as HostDocumentVersion
     },
-  }) as DocumentReference<Aglyn.FormVersion>
+  }) as DocumentReference<HostDocumentVersion>
 }
 
-export const useFormVersion = (
-  data: {
-    hostId: string
-    formId: string
-    versionId: string
-  },
-  options?: FirestoreDocOptions<Aglyn.FormVersion>,
+export const useHostDocumentVersion = (
+  ids: HostDocumentVersionIds,
+  options?: FirestoreDocOptions<HostDocumentVersion>,
 ) => {
-  return useDoc(useFormVersionRef(data), options)
+  return useDoc(useHostDocumentVersionRef(ids), options)
 }
 
-export default useFormVersion
+export default useHostDocumentVersion

@@ -1563,6 +1563,68 @@ function repeatSourceRow() {
 }
 
 /**
+ * The site documents a plugin authors in the besigner (AGL-3080), served by
+ * the console's one editor route for plugin documents
+ * (`plugin-manager/besigner-documents.ts`).
+ *
+ * Checked here, because a mistake in any of these is an editor link that
+ * 404s or a publish that goes nowhere: a unique `kind` and `segment`, a
+ * segment the console does not already route for its own documents, a
+ * `collection` the same plugin declares in `hostCollections` (so the media
+ * scan, the reference rows and the counters already know it), a noun, and a
+ * `publish` route under `/api/` with the body field that names the document.
+ */
+const CONSOLE_EDITOR_SEGMENTS = new Set(['components', 'emails', 'layouts', 'screens', 'templates', 'theme'])
+
+function besignerDocumentRows() {
+  const rows = []
+  const kinds = new Map()
+  const segments = new Map()
+  const plainId = /^[a-z][a-z0-9-]*$/
+  for (const plugin of config.plugins) {
+    for (const [index, declared] of (plugin.besignerDocuments ?? []).entries()) {
+      const where = `plugins.config.json: "${plugin.id}" besignerDocuments[${index}]`
+      const { kind, segment, collection, noun, publish } = declared ?? {}
+      for (const [field, value] of Object.entries({ kind, segment, collection })) {
+        if (typeof value !== 'string' || !plainId.test(value)) {
+          throw new Error(`${where}: "${field}" is a plain lowercase id`)
+        }
+      }
+      if (typeof noun !== 'string' || !noun.trim() || noun !== noun.toLowerCase()) {
+        throw new Error(`${where}: "noun" is what one is called, lower case`)
+      }
+      if (kinds.has(kind)) {
+        throw new Error(`${where}: kind "${kind}" is already declared by "${kinds.get(kind)}"`)
+      }
+      if (segments.has(segment)) {
+        throw new Error(`${where}: segment "${segment}" is already declared by "${segments.get(segment)}"`)
+      }
+      if (CONSOLE_EDITOR_SEGMENTS.has(segment)) {
+        throw new Error(`${where}: segment "${segment}" is one the console routes for its own documents`)
+      }
+      if (!(plugin.hostCollections ?? []).some((one) => one?.name === collection)) {
+        throw new Error(
+          `${where}: collection "${collection}" is not in this plugin's "hostCollections" — ` +
+            'a document the besigner edits is one the media scan and the counters must know',
+        )
+      }
+      if (
+        typeof publish?.path !== 'string' ||
+        !/^\/api\/[a-z0-9/-]+$/.test(publish.path) ||
+        typeof publish?.idField !== 'string' ||
+        !/^[a-z][A-Za-z0-9]*$/.test(publish.idField)
+      ) {
+        throw new Error(`${where}: "publish" is { "path": "/api/…", "idField": "<bodyField>" }`)
+      }
+      kinds.set(kind, plugin.id)
+      segments.set(segment, plugin.id)
+      rows.push({ pluginId: plugin.id, kind, segment, collection, noun, publish: { path: publish.path, idField: publish.idField } })
+    }
+  }
+  return rows
+}
+
+/**
  * The plugin whose records a form's submission may also be filed as
  * (AGL-3080), through `plugin-manager/submission-record-target.ts`. Declared
  * as well as registered for the reason `repeatSourceRow` gives: a boot that
@@ -1931,7 +1993,7 @@ function catalogContent(videoEmbedRows, planEntitlements) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2040,6 +2102,15 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(p
  * once, as written.
  */
 export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(repeatSourceRow(), null, 2)}
+
+/**
+ * The site documents a plugin authors in the besigner, declared by that
+ * plugin (AGL-3080). Empty when none does, and the console's plugin-document
+ * editor routes answer 404.
+ */
+export const PLUGIN_BESIGNER_DOCUMENTS_DECLARED: readonly ResolvedBesignerDocument[] = [
+${besignerDocumentRows().map((row) => `  ${JSON.stringify(row, null, 2).split('\n').join('\n  ')},`).join('\n')}
+]
 
 /**
  * The plugin whose records a form's submission may also be filed as, declared

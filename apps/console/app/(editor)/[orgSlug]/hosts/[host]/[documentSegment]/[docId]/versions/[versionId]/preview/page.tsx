@@ -17,27 +17,41 @@
 
 'use client'
 
+import { besignerDocumentForSegment } from '@aglyn/aglyn/plugin-manager/besigner-documents'
 import { useParams } from 'next/navigation'
 import '../../../../../../../../../../constants/app-setup'
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import DocumentPreview from '../../../../../../../../../../components/document-preview.component'
 import { useHostId } from '../../../../../../../../../../components/host-id-provider'
+import { isPreviewKind } from '../../../../../../../../../../utils/staff-site-links'
 
-function FormPreviewPage() {
-  const params = useParams<{ formId: string; versionId: string }>()
+/**
+ * A plugin document's version, rendered the way the site will (AGL-1203).
+ *
+ * The kind comes from the plugin's declaration for this segment. The preview
+ * surface composes only the kinds it knows how to read, so a declared kind it
+ * does not is shown as nothing to preview rather than as a guess.
+ */
+function PluginDocumentPreviewPage() {
+  const params = useParams<{
+    documentSegment: string
+    docId: string
+    versionId: string
+  }>()
   const hostId = useHostId()
-  const formId = params?.formId as string
+  const docId = params?.docId as string
   const versionId = params?.versionId as string
+  const kind = besignerDocumentForSegment(params?.documentSegment)?.kind
 
   return (
     <DocumentPreview
       ids={
-        hostId && formId
-          ? { hostId, kind: 'form', docId: formId, versionId }
+        hostId && docId && isPreviewKind(kind)
+          ? { hostId, kind, docId, versionId }
           : null
       }
     />
   )
 }
 
-export default withSitePlugins(FormPreviewPage)
+export default withSitePlugins(PluginDocumentPreviewPage)

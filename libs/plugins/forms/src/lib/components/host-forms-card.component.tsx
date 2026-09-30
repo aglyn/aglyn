@@ -77,7 +77,7 @@ import {
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BUNDLE_ID } from '../constants/bundle-common'
+import { BUNDLE_ID, FORMS_DOCUMENT_SEGMENT } from '../constants/bundle-common'
 import {
   FORM_IN_CAMPAIGN_OPTIONS,
   FORM_LEAD_ROUTING_OPTIONS,
@@ -536,10 +536,11 @@ export function HostFormsCard(props: HostFormsCardProps) {
             // than a link to an empty preview.
             ...(versionId && orgSlug && host
               ? {
-                  to: buildRoute(Route.FORM_PREVIEW, {
+                  to: buildRoute(Route.PLUGIN_DOCUMENT_PREVIEW, {
                     orgSlug,
                     host,
-                    formId: form.$id,
+                    documentSegment: FORMS_DOCUMENT_SEGMENT,
+                    docId: form.$id,
                     versionId,
                   }),
                 }
@@ -570,10 +571,11 @@ export function HostFormsCard(props: HostFormsCardProps) {
                */
               href:
                 versionId && orgSlug && host
-                  ? buildRoute(Route.FORM_BESIGNER, {
+                  ? buildRoute(Route.PLUGIN_DOCUMENT_BESIGNER, {
                       orgSlug,
                       host,
-                      formId: form.$id,
+                      documentSegment: FORMS_DOCUMENT_SEGMENT,
+                      docId: form.$id,
                       versionId,
                     })
                   : formHref(form.$id),

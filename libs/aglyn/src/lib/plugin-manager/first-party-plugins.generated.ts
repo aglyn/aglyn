@@ -17,6 +17,7 @@ import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
 import type { PluginTemplateSource } from './plugin-template-sources'
 import type { FormRecordTargetDeclaration } from './submission-record-target'
+import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
@@ -932,6 +933,25 @@ export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
   "pluginId": "data",
   "id": "dataset"
 }
+
+/**
+ * The site documents a plugin authors in the besigner, declared by that
+ * plugin (AGL-3080). Empty when none does, and the console's plugin-document
+ * editor routes answer 404.
+ */
+export const PLUGIN_BESIGNER_DOCUMENTS_DECLARED: readonly ResolvedBesignerDocument[] = [
+  {
+    "pluginId": "forms",
+    "kind": "form",
+    "segment": "forms",
+    "collection": "forms",
+    "noun": "form",
+    "publish": {
+      "path": "/api/hosts/forms/promote",
+      "idField": "formId"
+    }
+  },
+]
 
 /**
  * The plugin whose records a form's submission may also be filed as, declared

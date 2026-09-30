@@ -34,35 +34,6 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:forms"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview/layout.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview/page.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/_lib/org-cogs.ts",
       "rules": [
         "plugin-collection:ai",

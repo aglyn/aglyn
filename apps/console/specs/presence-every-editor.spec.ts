@@ -17,6 +17,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { besignerDocuments } from '@aglyn/aglyn/plugin-manager/besigner-documents'
 
 /**
  * EVERY editable document kind gets presence, in its own room (AGL-2486).
@@ -113,12 +114,19 @@ describe('presence in every editable document (AGL-2486)', () => {
       if (NO_ORG_TO_SCOPE_WITH.test(path)) continue
       const source = readFileSync(path, 'utf8')
       const call = /usePresence\(\{[\s\S]{0,400}?\}\)/.exec(source)?.[0] ?? ''
-      const docType = /docType:\s*'([^']+)'/.exec(call)?.[1] ?? '(none)'
+      // The plugin-document editor serves every declared kind and names its
+      // room by the declaration's `kind`, checked below against these.
+      const docType =
+        /docType:\s*'([^']+)'/.exec(call)?.[1] ??
+        (/docType:\s*kind\b/.test(call) ? '(declared)' : '(none)')
       byType.set(docType, [...(byType.get(docType) ?? []), relative(ROOT, path)])
     }
     expect(byType.get('(none)')).toBeUndefined()
     const shared = [...byType.entries()].filter(([, files]) => files.length > 1)
     expect(shared).toEqual([])
+    // A declared kind shares no room with a platform editor's literal one.
+    const declared = besignerDocuments().map((one) => one.kind)
+    expect(declared.filter((kind) => byType.has(kind))).toEqual([])
   })
 
   it('covers every editable document kind', () => {

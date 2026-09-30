@@ -21,15 +21,14 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
   CANVAS_ROOT_ELEMENT_ID,
-  canvasTreeToDefinition,
-  carryContactFieldMappings,
-  checkFormContract,
   definitionToCanvasTree,
-  encodeStoredNodes,
-  formContractIsSatisfied,
-  formFieldDeclsFromNodes,
   ScreenLinkContext,
 } from '@aglyn/aglyn'
+import {
+  besignerDocumentForSegment,
+  besignerDocumentTitle,
+  besignerPublishRefusal,
+} from '@aglyn/aglyn/plugin-manager/besigner-documents'
 import * as Besigner from '@aglyn/besigner'
 import {
   BesignerConflictAlertComponent,
@@ -50,8 +49,8 @@ import {
 } from '@aglyn/shared-data-enums'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   getGoogleFontsUrl,
   HostThemeDocumentContext,
@@ -60,21 +59,21 @@ import {
   saveNodesGuarded,
   useFirestore,
   useFirestoreDoc,
-  useFormVersion,
-  useFormVersionRef,
   useHostActivityLogger,
+  useHostDocumentVersion,
+  useHostDocumentVersionRef,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
 import { Stack, Typography } from '@mui/material'
-import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import { collection, doc, limit, query } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
-import { useParams } from 'next/navigation'
+import { notFound as routeNotFound, useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-// Dynamic site-plugin activation (AGL-417): the `form` and `formField`
-// components this editor exists to arrange are plugin-registered, so the
-// canvas is gated on the loader being ready.
+// Dynamic site-plugin activation (AGL-417): the elements a plugin document
+// exists to arrange are that plugin's, so the canvas is gated on the loader
+// being ready.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
@@ -93,7 +92,7 @@ import {
 } from '../../../../../../../../../../constants/route-links'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
-import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
+import { isPreviewKind } from '../../../../../../../../../../utils/staff-site-links'
 import useScreenLinkRoutes, {
   screenLinkLabels,
 } from '../../../../../../../../../../hooks/use-screen-link-routes'
@@ -108,7 +107,6 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
-import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -125,43 +123,45 @@ const ViewportCanvasComponent = dynamic<WorkspaceEditorComponentProps>(
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
 
-/**
- * The plugin component id a form node carries. The contract check and the
- * field-declaration read both key off it, so the search for the node and the
- * two functions that consume it agree by construction.
- */
-const FORM_COMPONENT_ID = 'form'
-
-/**
- * Author-facing summary of everything blocking a publish.
- *
- * The first violation in full plus a count, rather than every message joined:
- * the messages are sentences, and a stack of six of them in one snackbar is
- * read as a wall rather than as instructions. The count is what says the list
- * does not end at the one being shown.
- */
-function publishBlockedByContract(
-  violations: Aglyn.FormContractViolation[],
-): string {
-  const [first, ...rest] = violations
-  const message = first?.message ?? ''
-  if (!rest.length) return message
-  return (
-    `${message} There ${rest.length === 1 ? 'is' : 'are'} ${rest.length} ` +
-    `other problem${rest.length === 1 ? '' : 's'} to fix before this form ` +
-    'can be published.'
-  )
+/** What a plugin document's parent carries that this editor reads. */
+interface PluginDocumentParent {
+  displayName?: string
+  /** The version the site serves; the published copy is on this document. */
+  versionId?: string
 }
 
-function FormBesignerPage() {
+/**
+ * THE BESIGNER FOR A DOCUMENT A PLUGIN KEEPS UNDER A SITE (AGL-3080).
+ *
+ * The segment names the kind, declared by the plugin that keeps it
+ * (`plugin-manager/besigner-documents.ts`): where its documents live, what
+ * one is called and how a version is published. Everything else is the
+ * editor every besigner document gets — the canvas lifecycle, the guarded
+ * save, the shared working draft, presence and preview.
+ *
+ * Publishing is the plugin's. The editor saves the version it holds, then
+ * asks the plugin's publish route to make that version the one the site
+ * serves; the route reads the stored version itself, refuses a design that
+ * breaks what the document promises, writes the published copy and drops
+ * the live pages that place it. A form is the case this was built for: it is
+ * drawn AND it is a contract the submit route resolves by name, so a design
+ * can stop the submissions arriving while still rendering perfectly.
+ */
+function PluginDocumentBesignerPage() {
   const params = useParams<{
-    hostId: string
-    formId: string
+    documentSegment: string
+    docId: string
     versionId: string
   }>()
   const hostId = useHostId()
-  const formId = params?.formId as string
+  const docId = params?.docId as string
   const versionId = params?.versionId as string
+  const declared = besignerDocumentForSegment(params?.documentSegment)
+  // The layout above already refuses a segment no plugin declared; this is
+  // the same answer for a client navigation that lands here first.
+  if (!declared) routeNotFound()
+  const { kind, segment, collection: documentCollection, noun } = declared
+  const nounTitle = besignerDocumentTitle(noun)
   const { enqueueSnackbar } = useSnackbar()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
@@ -176,30 +176,33 @@ function FormBesignerPage() {
     ? 'Your role on this site can edit content but not publish it'
     : 'Checking your access…'
   // Installed plugins as drawer entries and as the element panel's plugin
-  // picker (AGL-1030). `form` and `formField` are themselves plugin
+  // picker (AGL-1030). The elements a plugin document is made of are plugin
   // components, so without this the drawer has nothing this editor is for.
   usePluginDrawerRegistration(hostId)
   const handleAddElementClick = useAddElementDrawerCallback()
-  // Back and Close both land on the form's own detail page rather than the
-  // list: the declaration the design has to satisfy — routing, the consent
-  // field — is edited there, so it is where an author goes next.
-  const detailsUrl = buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId })
+  // Back and Close both land on the document's own page in its plugin rather
+  // than the list: what the design has to satisfy is edited there, so it is
+  // where an author goes next.
+  const detailsUrl = buildRoute(Route.PLUGIN_DOCUMENT_DETAILS, {
+    orgSlug,
+    host,
+    documentSegment: segment,
+    docId,
+  })
   const { doc: hostResult } = useHost({ hostId })
-  /**
-   * The form document itself — the PUBLISHED design and, more importantly
-   * here, the declaration the design has to keep satisfying: what it
-   * `routing`s to and which field it reads consent from.
-   */
-  const formResult = useFirestoreDoc<Aglyn.FormDocument>(
+  /** The document itself: its name and the version the site serves. */
+  const parentResult = useFirestoreDoc<PluginDocumentParent>(
     () =>
-      hostId && formId ? doc(firestore, 'hosts', hostId, 'forms', formId) : null,
-    [firestore, hostId, formId],
+      hostId && docId
+        ? doc(firestore, 'hosts', hostId, documentCollection, docId)
+        : null,
+    [firestore, hostId, documentCollection, docId],
   )
-  const formDoc = formResult.data
+  const parentDoc = parentResult.data
   // The browser tab names THIS document, not just its site (AGL-2486).
-  useDeclareDocumentSubject(formId, formDoc?.displayName)
+  useDeclareDocumentSubject(docId, parentDoc?.displayName)
   const { data: user } = useUser()
-  const publishedVersionId = formDoc?.versionId
+  const publishedVersionId = parentDoc?.versionId
   /**
    * Did the last save actually LAND? (AGL-1152)
    *
@@ -217,8 +220,8 @@ function FormBesignerPage() {
    * opposite handling: nothing-to-save promotes, a refusal must not. Nor can
    * `remoteChanged`, which is React state and still false in this tick for a
    * conflict the save itself discovered — without this, a stale-baseline
-   * refusal is followed by writing this canvas onto the form every page that
-   * places it renders.
+   * refusal is followed by publishing this canvas onto the document every
+   * page that places it renders.
    */
   const saveRefusedRef = useRef(false)
 
@@ -227,22 +230,22 @@ function FormBesignerPage() {
    *
    * `publishedVersionId === versionId` only says the parent was promoted from
    * this version at some point — a later save writes the VERSION document and
-   * leaves the PARENT, which is what a live page renders the form from,
+   * leaves the PARENT, which is what a live page renders the document from,
    * behind. So the pointer alone cannot answer "is the live site current".
    */
   const [savedSincePublish, setSavedSincePublish] = useState(false)
   /**
-   * Only the LIVE version has a draft (AGL-1152) — and for a form the test is
-   * not the pointer alone, for the same reason the save button's is not.
+   * Only the LIVE version has a draft (AGL-1152) — and for a document with a
+   * published copy the test is not the pointer alone, for the same reason the
+   * save button's is not.
    */
   const editingLiveVersion = Boolean(
     versionId && versionId === publishedVersionId,
   )
   const [draftPending, setDraftPending] = useState(false)
-  // Id-based screen links: a form's confirmation copy or its surrounding
-  // layout can contain a link, so the canvas needs the routing map to resolve
-  // hrefs and the Attributes panel needs screen names for the screen-select
-  // field.
+  // Id-based screen links: a document's copy can contain a link, so the
+  // canvas needs the routing map to resolve hrefs and the Attributes panel
+  // needs screen names for the screen-select field.
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
     [firestore, hostId],
@@ -269,20 +272,21 @@ function FormBesignerPage() {
     }),
     [linkableRoutes, screenDocs, collectionTemplates.listingTargets],
   )
-  const { doc: result } = useFormVersion({ hostId, formId, versionId })
-  const formVersionRef = useFormVersionRef({ hostId, formId, versionId })
+  const versionIds = { hostId, collection: documentCollection, docId, versionId }
+  const { doc: result } = useHostDocumentVersion(versionIds)
+  const versionRef = useHostDocumentVersionRef(versionIds)
   const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
   // The canvas is a singleton shared by every editing session; without a
   // reset on leave, client-side navigation to another document keeps (and
-  // could save) this form's nodes.
+  // could save) this document's nodes.
   useEffect(() => {
     return () => {
       canvas.reset()
       Besigner.focus.clearFocusStatus()
     }
-  }, [hostId, formId, versionId])
+  }, [hostId, documentCollection, docId, versionId])
 
   useEffect(() => {
     if (status === 'loading') {
@@ -293,20 +297,20 @@ function FormBesignerPage() {
   // Conditional write (AGL-1301): the transaction re-checks the baseline
   // against what Firestore actually holds, so a save racing another writer's
   // commit aborts server-side instead of clobbering it.
-  const saveFormVersion = useCallback(
+  const saveVersion = useCallback(
     async (
       nextNodes: Record<string, unknown>,
       baseline?: BesignerSaveBaseline,
     ) => {
       await saveNodesGuarded(
-        formVersionRef,
+        versionRef,
         {
-          nodes: nextNodes as unknown as Aglyn.FormVersion['nodes'],
+          nodes: nextNodes as Record<Aglyn.NodeId, Aglyn.AglynNodeSchema>,
         },
         baseline,
       )
     },
-    [formVersionRef],
+    [versionRef],
   )
 
   // Who else is in this document (AGL-675).
@@ -318,8 +322,8 @@ function FormBesignerPage() {
   )
   const presence = usePresence({
     hostId,
-    docType: 'form',
-    docId: formId,
+    docType: kind,
+    docId,
     versionId,
     selectedNodeId,
     broadcastCursor: true,
@@ -328,7 +332,7 @@ function FormBesignerPage() {
 
   // Canvas lifecycle, first load, concurrent-write detection (AGL-674) and
   // the size-guarded save (AGL-678) are shared by every besigner editor
-  // (AGL-746). What stays here is what is actually about a form.
+  // (AGL-746). What stays here is what is actually about a plugin document.
   const {
     saveAvailable,
     remoteChanged,
@@ -345,13 +349,13 @@ function FormBesignerPage() {
     pendingWrites: hasPendingWrites,
     status,
     error,
-    save: saveFormVersion,
-    noun: 'form',
-    documentKey: `${hostId}:${formId}:${versionId}`,
+    save: saveVersion,
+    noun,
+    documentKey: `${hostId}:${kind}:${docId}:${versionId}`,
     draft: {
       scope: hostId,
-      kind: 'form',
-      docId: formId,
+      kind,
+      docId,
       versionId,
     },
     // The SHARED working draft, live version only.
@@ -365,15 +369,15 @@ function FormBesignerPage() {
       presence.entries.length,
     ),
     notify: enqueueSnackbar,
-    // A form save writes the VERSION document, and a live page renders the
-    // form from the PARENT — so on a draft version the honest next step to
-    // name is the publish, never "wait". Suppressed on the live version,
+    // A save writes the VERSION document, and a live page renders the
+    // document from the PARENT — so on a draft version the honest next step
+    // to name is the publish, never "wait". Suppressed on the live version,
     // where `handleSaveAndPublish` owns the message and can only write it
-    // once the promote has resolved.
+    // once the publish has resolved.
     savedMessage:
       publishedVersionId === versionId
         ? undefined
-        : 'Form saved to this version. Publish it to update the live pages.',
+        : `${nounTitle} saved to this version. Publish it to update the live pages.`,
     queueLoading,
     // The refusal half of `onSaved`: together they let `handleSaveAndPublish`
     // tell a document that needs no save from one that could not be saved.
@@ -396,143 +400,82 @@ function FormBesignerPage() {
       // The version moved; the parent did not. Until a publish the live site
       // is behind, and the button should say so rather than "Up to date".
       setSavedSincePublish(true)
-      return logActivity('Saved the form', {
+      return logActivity(`Saved the ${noun}`, {
         // `content` rather than a new activity type: the presenter branches
         // on this persisted value, and a member it does not know renders as
         // an unlinked row.
         type: 'content',
-        id: formId,
-        name: formDoc?.displayName,
+        id: docId,
+        name: parentDoc?.displayName,
       })
     },
   })
 
   const [publishing, setPublishing] = useState(false)
-  // Whether Forms runs on this site (AGL-3029): the contract refuses every
-  // design on a site that switched it off.
-  const { formsOnForSite } = useFormsPublishBlock()
 
   /**
-   * Publish: copy this version's tree onto the form document — AND refuse to,
-   * when the design would stop the submissions arriving.
+   * Publish: ask the document's plugin to make this version the one the site
+   * serves — and say plainly when it refuses.
    *
-   * This is the one way a form editor is not a component editor. A component
-   * is only ever drawn, so its publish is a copy. A form is drawn AND it is a
-   * contract: `/api/forms/submit` keys submissions on the id the form node
-   * carries, reads consent out of a field the document NAMES, and creates a
-   * lead from an address it expects to find. Every one of those couplings is
-   * resolved by name at submit time, so the design can break them — and every
-   * break is silent. The form still renders, the visitor still submits, the
-   * row still lands, and the thing the merchant believed they were collecting
-   * is simply not there.
+   * Nothing about the design crosses the wire. The plugin's route reads the
+   * stored version itself, which is why every publish follows a save: the
+   * version it reads is the canvas. A refusal answers the violations the
+   * design would introduce, and the first of them is shown in full with a
+   * count of the rest. `quiet` is the republish of a version the site already
+   * serves, which says nothing on success because the caller already has.
    *
-   * So the check runs on the tree that is ABOUT to be written, not on the one
-   * that is stored, and a violation stops the write. `checkFormContract` is
-   * the pure module that owns which couplings those are; this function's only
-   * job is to run it at the moment it can still say no.
+   * Answers whether the plugin published it.
    */
-  const promoteToSites = useCallback(async () => {
-    setPublishing(true)
-    try {
-      // Unwrap the synthetic canvas root: a placed form grafts from `rootId`,
-      // so publishing the wrapper would put an always-empty container around
-      // every instance (AGL-680).
-      const definition = canvasTreeToDefinition(
-        canvas.toJSON().nodes as Record<string, unknown>,
-      )
-      if (definition.ambiguousRoot) {
-        return enqueueSnackbar(
-          'A form needs a single top-level element. Wrap what you have in ' +
-            'one container, then publish.',
-          { variant: 'warning', allowDuplicate: true },
-        )
-      }
-      const formNodeId = Object.keys(definition.nodes).find(
-        (nodeId) =>
-          definition.nodes[nodeId]?.componentId === FORM_COMPONENT_ID,
-      )
-      const violations = checkFormContract({
-        form: formDoc,
-        formId,
-        nodes: definition.nodes,
-        formNodeId,
-        formsOnForSite,
-      })
-      if (!formContractIsSatisfied(violations)) {
-        // `persist` because this is a refusal an author has to act on: an
-        // auto-dismissed warning is how someone walks away believing the
-        // form shipped.
-        return enqueueSnackbar(publishBlockedByContract(violations), {
-          variant: 'warning',
+  const publishVersion = useCallback(
+    async (options?: { quiet?: boolean }): Promise<boolean> => {
+      setPublishing(true)
+      try {
+        const response = await authorizedFetch(user, declared.publish.path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostId,
+            [declared.publish.idField]: docId,
+            versionId,
+          }),
+        })
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}))
+          // `persist` because this is a refusal an author has to act on: an
+          // auto-dismissed warning is how someone walks away believing the
+          // document shipped.
+          enqueueSnackbar(besignerPublishRefusal(body, noun), {
+            variant: response.status >= 500 ? 'error' : 'warning',
+            allowDuplicate: true,
+            persist: true,
+          })
+          return false
+        }
+        setSavedSincePublish(false)
+        if (!options?.quiet) {
+          enqueueSnackbar('Published. The live sites now serve this design.', {
+            variant: 'success',
+            persist: false,
+          })
+        }
+        return true
+      } catch (error) {
+        // A publish that throws must never read like a success (AGL-1334).
+        enqueueSnackbar(publishFailureMessage(error), {
+          variant: 'error',
           allowDuplicate: true,
           persist: true,
         })
+        return false
+      } finally {
+        setPublishing(false)
       }
-      const publishedNodes = definition.nodes
-      const rootId = definition.rootId ?? formDoc?.rootId
-      /**
-       * The DECLARATION publishes with the DESIGN.
-       *
-       * `fields` is what the submit route validates against and what the
-       * detail page's consent-field picker offers; `nodes` is what the author
-       * drew. Writing one without the other is how they drift, and the drift
-       * is exactly what the check above just refused to ship — so the two go
-       * out in a single write, derived from the same tree.
-       *
-       * `checkFormContract` reports `form-node-missing` when there is no form
-       * node, so reaching here means this id resolved.
-       *
-       * Where each field saves to is edited on the form's page, not drawn
-       * here, so it is carried from the stored declaration by field name —
-       * the same carry the server promote route applies (AGL-2601).
-       */
-      const fields = carryContactFieldMappings(
-        formDoc?.fields,
-        formFieldDeclsFromNodes(
-          definition.nodes,
-          formNodeId as Aglyn.NodeId,
-        ),
-      )
-      await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
-        // Compressed at rest (AGL-1151), like the version this promotes from
-        // and like the server promote route that writes the same document.
-        nodes: Bytes.fromUint8Array(encodeStoredNodes(publishedNodes)!),
-        ...(rootId ? { rootId } : {}),
-        fields,
-        versionId,
-        updatedAt: Timestamp.now(),
-      })
-      setSavedSincePublish(false)
-      /*
-       * Make the sentence below true.
-       *
-       * Every page that PLACES this form renders the design just written, so
-       * each of them is now serving fields the form no longer has. The console
-       * route owns the fan-out — it is the side holding both the node graph and
-       * the tenant's cache keys — and this fires without awaiting, as every
-       * other publish surface does: the write already landed, and a cache hint
-       * that fails must never make a successful publish look failed.
-       */
-      void revalidateLivePages({ user, hostId, formId: formId as string })
-      enqueueSnackbar(
-        'Published. The live sites now serve this design, and the form’s ' +
-          'declared fields match it.',
-        { variant: 'success', persist: false },
-      )
-    } catch (error) {
-      // A publish that throws must never read like a success (AGL-1334).
-      enqueueSnackbar(publishFailureMessage(error), {
-        variant: 'error',
-        allowDuplicate: true,
-        persist: true,
-      })
-    } finally {
-      setPublishing(false)
-    }
-  }, [firestore, hostId, formId, versionId, formDoc, formsOnForSite, enqueueSnackbar])
+    },
+    [user, declared, hostId, docId, versionId, noun, enqueueSnackbar],
+  )
 
   /**
-   * Saves the working draft rather than the form the sites are serving.
+   * Saves the working draft rather than the document the sites are serving.
    */
   const handleSaveDraft = useCallback(async () => {
     // A saved draft on offer is replaced by the next draft save (AGL-2874).
@@ -580,10 +523,10 @@ function FormBesignerPage() {
   /**
    * Do the live sites already match this version?
    *
-   * A form is live only once its tree has been promoted onto the PARENT
-   * document — the pointer alone is not enough, which is the asymmetry with
-   * screens. An unpublished draft makes the sites out of date just as surely
-   * as an unpromoted save does.
+   * A plugin document is live only once its tree has been published onto the
+   * PARENT document — the pointer alone is not enough, which is the asymmetry
+   * with screens. An unpublished draft makes the sites out of date just as
+   * surely as an unpublished save does.
    */
   const livePublished =
     publishedVersionId === versionId &&
@@ -624,27 +567,28 @@ function FormBesignerPage() {
           moved while the pointer stood still — a direct Firestore write, an
           import, or an earlier publish whose revalidate the tenant refused.
 
-          A form is embedded on pages that are cached separately from it, which
-          is the fan-out this call already exists to walk. Best effort like the
-          success path.
+          A placed document lives on pages that are cached separately from it,
+          and the plugin's publish is what walks them — so the version the site
+          already serves is published again, which drops those pages.
         */
-        void revalidateLivePages({ user, hostId, formId: formId as string })
-        return enqueueSnackbar(
+        enqueueSnackbar(
           'Already published — refreshing the live pages to match.',
           { variant: 'info', persist: false },
         )
+        await publishVersion({ quiet: true })
+        return
       }
       if (remoteChanged) return
     }
-    await promoteToSites()
+    await publishVersion()
     // Only a draft this canvas took in is published by this; one withheld
     // from a shared room and never opened is still somebody's unpublished
     // work (AGL-2874).
     if (!draft.sharedDraftUnopened) {
       void clearServerDraft(firestore, {
         scope: hostId,
-        kind: 'form',
-        docId: formId,
+        kind,
+        docId,
         versionId,
       })
     }
@@ -653,15 +597,15 @@ function FormBesignerPage() {
     publishing,
     refuseOverUnopenedDraft,
     handleSave,
-    promoteToSites,
+    publishVersion,
     livePublished,
     remoteChanged,
     enqueueSnackbar,
     firestore,
     draft.sharedDraftUnopened,
-    user,
     hostId,
-    formId,
+    kind,
+    docId,
     versionId,
   ])
 
@@ -672,21 +616,24 @@ function FormBesignerPage() {
     [hostResult?.data],
   )
 
-  // Draft preview (AGL-1203): a form renders on its own, so the canvas
-  // snapshot is the whole story — no layout chain to compose.
+  // Draft preview (AGL-1203): a placed document renders on its own, so the
+  // canvas snapshot is the whole story — no layout chain to compose. Only a
+  // kind the preview surface knows how to compose offers one.
   const handlePreview = useOpenPreview({
-    ids: hostId
-      ? {
-          hostId,
-          kind: 'form',
-          docId: formId,
-          versionId,
-        }
-      : null,
-    href: buildRoute(Route.FORM_PREVIEW, {
+    ids:
+      hostId && isPreviewKind(kind)
+        ? {
+            hostId,
+            kind,
+            docId,
+            versionId,
+          }
+        : null,
+    href: buildRoute(Route.PLUGIN_DOCUMENT_PREVIEW, {
       orgSlug,
       host,
-      formId,
+      documentSegment: segment,
+      docId,
       versionId,
     }),
     hostTheme,
@@ -703,12 +650,12 @@ function FormBesignerPage() {
         allowDuplicate: true,
       })
     } else if (notFound) {
-      enqueueSnackbar('404: Form not found', {
+      enqueueSnackbar(`404: ${nounTitle} not found`, {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [enqueueSnackbar, hasError, error, notFound])
+  }, [enqueueSnackbar, hasError, error, notFound, nounTitle])
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
@@ -721,11 +668,11 @@ function FormBesignerPage() {
           collections={collectionTemplates.listingTargets}
         >
         <EntityPickerProvider hostId={hostId}>
-          {/* This canvas IS the form, and a form design names itself, so its
-              published copy is withheld from the placed-form graft. */}
+          {/* This canvas IS the document, and a placed document's design can
+              name itself, so its published copy is withheld from the graft. */}
           <ReusableComponentsProvider
             hostId={hostId}
-            editingFormId={formId as string}
+            editingDocument={{ kind, id: docId }}
           >
             <BindingPickerProvider hostId={hostId}>
               <InteractionsProvider hostId={hostId}>
@@ -862,9 +809,9 @@ function FormBesignerPage() {
                           presence={<PresenceAvatars presence={presence} />}
                           onSave={saveDraft}
                           onSaveAndPublish={handleSaveAndPublish}
-                          // A form is live only once its tree has been
-                          // promoted onto the PARENT document — the pointer
-                          // alone is not enough.
+                          // A plugin document is live only once its tree has
+                          // been published onto the PARENT document — the
+                          // pointer alone is not enough.
                           livePublished={livePublished}
                           publishBlockedReason={
                             canPublish ? undefined : publishBlock
@@ -879,14 +826,14 @@ function FormBesignerPage() {
                         />
                         <BesignerDraftAlertComponent
                           draft={draft}
-                          noun="form"
+                          noun={noun}
                           remoteChanged={remoteChanged}
                         />
                         {/* Shown as soon as their save lands, not on Save —
                 finding out after twenty more minutes of editing is the
                 bad version of this (AGL-674). */}
                         {remoteChanged && !draft.available ? (
-                          <BesignerConflictAlertComponent noun="form" />
+                          <BesignerConflictAlertComponent noun={noun} />
                         ) : null}
                         <WorkspaceEditorComponent>
                           <ViewportRootComponent>
@@ -907,6 +854,8 @@ function FormBesignerPage() {
   )
 }
 
-FormBesignerPage.displayName = 'Page:FormBesigner'
+PluginDocumentBesignerPage.displayName = 'Page:PluginDocumentBesigner'
 
-export default withSitePlugins(withBesignerContext(observer(FormBesignerPage)))
+export default withSitePlugins(
+  withBesignerContext(observer(PluginDocumentBesignerPage)),
+)
