@@ -16,12 +16,21 @@ content on the marketing site and is written separately.
 ### Added
 
 - **themes:** four more built-in themes, the platform type styles and tertiary in every theme ([AGL-3411](https://linear.app/aglyn/issue/AGL-3411))
+- **release:** production promotions are capped at three per Central day ([AGL-3413](https://linear.app/aglyn/issue/AGL-3413))
 
 ### Fixed
 
 - **rules:** trim the AGL-3408 rules comment under the 256 KiB source limit ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
 - **sites:** the first real home page replaces the placeholder at `/` ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
 - **sites:** a new site is born with a published Home page, not a 404 ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **tools:** the monaco DOMPurify guard skips preconditions the vendored copy fixed ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+
+### Changed
+
+- **mui:** the calculator family leaves mui for the Calculators marketplace plugin; every site's calculator elements already run on the plugin ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+- **workspace:** Nx 23.1.1 → 23.2.1 with its migrations; mobx 7, mobx-state-tree 8, mobx-react-lite 5; stripe-js 9 and react-stripe-js 6; base-ui 1.8.0; the simplewebauthn, undici, dotenv, jsdom and framer-motion majors; every root patch/minor, the docs site and cloud functions deps, and the open Dependabot alerts cleared ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+- **ci:** the last checkout pins move to v7 and the nx cache to v6 ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+- **scripts:** the calculator node migration is deleted now that every site has converged ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
 
 ## v1.0.0-beta.217 — 2026-09-29
 
