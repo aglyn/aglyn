@@ -463,7 +463,11 @@ describe('the alert says which of the two actually happens (AGL-2070)', () => {
     await run()
     const alert = bandwidthAlert()
     expect(alert?.title).toMatch(/reached your monthly bandwidth limit/i)
-    expect(alert?.body).toMatch(/upgrade in Billing to raise the limit/i)
+    // What visitors see, that nothing is charged, and the way back (AGL-3431).
+    expect(alert?.body).toMatch(/temporary notice until next month/i)
+    expect(alert?.body).toMatch(/nothing is charged/i)
+    expect(alert?.body).toMatch(/upgrade in Billing to keep them serving/i)
+    expect(alert?.body).not.toMatch(/invoice/i)
     // …and the site really is stopped, in the same run.
     expect(capWrite('org-1')).toBeDefined()
   })

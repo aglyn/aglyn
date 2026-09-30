@@ -39,8 +39,6 @@ import {
 const ORGS_PER_RUN = 25
 /** Firestore's hard cap on writes in one batched commit. */
 const BATCH_LIMIT = 500
-/** Ceiling on the legacy-dataset scan; a hit is reported, never swallowed. */
-const LEGACY_SCAN_LIMIT = 5000
 
 /**
  * One-shot scope backfill (AGL-1040) — staff-only, resumable, idempotent.
@@ -61,9 +59,7 @@ const LEGACY_SCAN_LIMIT = 5000
  * are meant to be read by a human before any bytes move.
  *
  * Dataset records are NOT stamped: a record inherits its dataset's scope
- * (AGL-1041). Legacy host-scoped datasets — `hosts/{hostId}/datasets`, the
- * pre-AGL-237 fallback — are counted and left alone; see
- * `ScopeBackfillTotals.legacyHostDatasets`.
+ * (AGL-1041).
  *
  * ## The detector (AGL-1478)
  *
@@ -212,11 +208,6 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    // Only on the first page: the count is org-independent, so repeating
-    // it per page would scan every dataset in the product N times.
-    const legacy = afterOrg ? null : await countLegacyHostDatasets(db)
-    if (legacy) totals.legacyHostDatasets = legacy.count
-
     if (!dryRun) {
       for (let i = 0; i < pending.length; i += BATCH_LIMIT) {
         const batch = db.batch()
@@ -259,10 +250,6 @@ async function handler(request: Request): Promise<Response> {
         // What the scheduled run is FOR. Present on every dry run, so a
         // staff curl reads the same number the alert did.
         ...(drift ? { drift } : {}),
-        // Surfaced rather than swallowed: a truncated scan means the legacy
-        // count is a floor, not the answer, and the migrate-or-delete call
-        // in AGL-1040 needs to know which it is reading.
-        legacyScanTruncated: legacy?.truncated ?? null,
         // Null when this page finished the collection; feed it back as
         // `?afterOrg=` otherwise. A run that plans nothing and returns a null
         // cursor is the acceptance criterion.
@@ -287,29 +274,6 @@ async function handler(request: Request): Promise<Response> {
     console.error(error)
     return Response.json({ error: 'Scope backfill failed' }, { status: 500 })
   }
-}
-
-/**
- * Counts docs still living under the pre-AGL-237 `hosts/{hostId}/datasets`
- * fallback. Reported so the migrate-or-delete call in AGL-1040 is made with
- * the number in front of it; if this is 0 the host branch of
- * `orgDataCollectionForHost` is dead code, not a migration.
- */
-async function countLegacyHostDatasets(
-  db: FirebaseFirestore.Firestore,
-): Promise<{ count: number; truncated: boolean }> {
-  // `select()` with no fields fetches document refs only — the parent path
-  // is all this needs, and it keeps a whole-product scan cheap.
-  const snapshot = await db
-    .collectionGroup('datasets')
-    .select()
-    .limit(LEGACY_SCAN_LIMIT + 1)
-    .get()
-  const truncated = snapshot.docs.length > LEGACY_SCAN_LIMIT
-  const count = snapshot.docs
-    .slice(0, LEGACY_SCAN_LIMIT)
-    .filter((doc) => doc.ref.parent.parent?.parent.id === 'hosts').length
-  return { count, truncated }
 }
 
 export const GET = handler

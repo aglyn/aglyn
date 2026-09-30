@@ -381,6 +381,7 @@ jest.mock('firebase-admin/firestore', () => {
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { checkContactQuota, PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
@@ -469,6 +470,9 @@ const meteredRequests = () =>
 /** `recordApiRequest` is fire-and-forget; let its microtasks settle. */
 const settleMeter = () => new Promise((resolve) => setImmediate(resolve))
 
+// The console's boot, which registers the CRM's `/v1` resources (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
+
 beforeEach(() => {
   mockDocs.clear()
   mockUidSeq = 0
@@ -503,7 +507,7 @@ describe('the premise', () => {
     expect(
       readSource('libs/tenant/data/admin/src/lib/server/api-keys.ts'),
     ).toContain("'contacts:write'")
-    expect(readSource('apps/console/utils/api-v1-resources.ts')).toContain(
+    expect(readSource('libs/plugins/crm/src/lib/server/api-v1/contacts.ts')).toContain(
       "requireScope(ctx, 'contacts:write')",
     )
     // And it is offered in the console picker, without which nobody can grant

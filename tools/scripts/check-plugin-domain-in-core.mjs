@@ -57,6 +57,23 @@
 //  7. DOMAIN DECLARES — ANY declaration in a plugin's vocabulary inside a file:
 //     the platform file with a plugin's rows, keys or types mixed into it.
 //
+// Rule 3 says "nor in another plugin" as well, and two of its breaches are as
+// invisible to `check:lib-boundaries` between plugins as between a plugin and
+// core, because neither is an import. So inside `libs/plugins/<dir>/` two
+// rules hold what one plugin may not do to another:
+//
+//  5. PLUGIN COLLECTION, again — a Firestore collection ANOTHER plugin owns,
+//     addressed from this one. The owner publishes a record index, card,
+//     facts reader or figure reader; the reader asks it.
+//
+//  8. CONSOLE PATH — an address on ANOTHER plugin's console surface, built
+//     here: its nav slug as a `pluginSlug`, a `*_SLUG` constant or a path
+//     segment, or a core route that is its page (`Route.FORM_DETAILS`). The
+//     owner publishes the address under a record kind
+//     (`plugin-record-routes`); the linking plugin asks for the kind. The
+//     slugs are read from each plugin's own `plugin.ts` nav items, so a new
+//     surface is covered the day it lands.
+//
 // ## The allowlist, and why it may only shrink
 //
 // `plugin-domain-in-core-allowlist.json` has one row per file that trips a
@@ -258,6 +275,82 @@ const PLUGIN_IMPORT =
   /from\s+['"](@aglyn\/plugins-[a-z-]+)(?:\/[^'"]*)?['"]|import\(\s*['"](@aglyn\/plugins-[a-z-]+)|(?:\.\.\/)+(libs\/plugins\/[a-z-]+)\//
 const COMMENT_LINE = /^\s*(?:\/\/|\*|\/\*)/
 
+/** A plugin's own tree, by its directory under `libs/plugins/`. */
+const PLUGIN_TREE = /^libs\/plugins\/([a-z0-9-]+)\//
+/**
+ * A spec's stand-in for ANOTHER plugin's registration: it imitates the owner
+ * over a spec's Firestore double, on purpose, because the plugin under test
+ * may not load the owner.
+ */
+const STAND_IN = /^libs\/plugins\/[a-z0-9-]+\/src\/lib\/testing\//
+/** A plugin's nav declaration: the file its console surfaces' slugs are read from. */
+const PLUGIN_NAV = /^libs\/plugins\/([a-z0-9-]+)\/src\/(?:.*\/)?plugin\.ts$/
+const CONSOLE_ROUTES = 'libs/aglyn/src/lib/app-utils/console-routes.ts'
+/** A console route whose first segment under the org or the site is a plugin's surface. */
+const ROUTE_SURFACE = /^\/\[orgSlug\](?:\/hosts\/\[host\])?\/([a-z0-9-]+)/
+
+/**
+ * Rule 8's vocabulary, read from the corpus itself: which plugin each console
+ * slug belongs to (every `href: '/slug'` and `legacyHrefs` entry in a plugin's
+ * `plugin.ts`), and which core routes are a plugin's page because their first
+ * segment is one of its slugs.
+ */
+export function consoleAddresses(files, pluginIdOfDir = (dir) => dir) {
+  const slugOwner = new Map()
+  for (const { path, text } of files) {
+    const dir = PLUGIN_NAV.exec(path)?.[1]
+    if (!dir) continue
+    const owner = pluginIdOfDir(dir)
+    for (const match of text.matchAll(/\bhref:\s*['"]\/([a-z0-9-]+)['"]/g)) slugOwner.set(match[1], owner)
+    for (const legacy of text.matchAll(/\blegacyHrefs:\s*\[([^\]]*)\]/g)) {
+      for (const match of legacy[1].matchAll(/['"]\/([a-z0-9-]+)['"]/g)) slugOwner.set(match[1], owner)
+    }
+  }
+  const routeOwner = new Map()
+  const routes = files.find((file) => file.path === CONSOLE_ROUTES)?.text ?? ''
+  for (const [, name, route] of routes.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*'([^']+)'/gm)) {
+    const surface = ROUTE_SURFACE.exec(route)?.[1]
+    if (surface && slugOwner.has(surface)) routeOwner.set(name, slugOwner.get(surface))
+  }
+  const slugs = [...slugOwner.keys()].join('|')
+  const names = [...routeOwner.keys()].join('|')
+  return {
+    slugOwner,
+    routeOwner,
+    // A slug as a `pluginSlug`, as a `*_SLUG` constant, or as a path segment
+    // after an interpolation or opening a literal. A bare quoted word is not
+    // matched: `'data'` and `'forms'` are ordinary strings.
+    slugPattern: slugs
+      ? new RegExp(
+          `\\bpluginSlug:\\s*['"\`](${slugs})['"\`]|\\b[A-Z_]*SLUG\\s*=\\s*['"\`](${slugs})['"\`]|\\}/(${slugs})(?=[/'"\`?#])|['"\`]/(${slugs})(?=[/'"\`?#])`,
+          'g',
+        )
+      : null,
+    routePattern: names ? new RegExp(`\\bRoute\\.(${names})\\b`, 'g') : null,
+  }
+}
+
+/** A literal that is an API path or a Firestore document path, not a page. */
+const NOT_A_PAGE = /\/api\/|['"`](?:hosts|orgs)\//
+
+/** The plugins whose console surfaces a file's CODE lines address. */
+export function consolePathOwners(text, addresses) {
+  const owners = new Set()
+  for (const line of text.split('\n')) {
+    if (COMMENT_LINE.test(line)) continue
+    if (addresses.slugPattern) {
+      for (const match of line.matchAll(addresses.slugPattern)) {
+        if (NOT_A_PAGE.test(line.slice(0, match.index))) continue
+        owners.add(addresses.slugOwner.get(match[1] ?? match[2] ?? match[3] ?? match[4]))
+      }
+    }
+    if (addresses.routePattern) {
+      for (const match of line.matchAll(addresses.routePattern)) owners.add(addresses.routeOwner.get(match[1]))
+    }
+  }
+  return [...owners].sort()
+}
+
 /** Prose is not code: a comment that spells a package or an id is judged by neither rule. */
 function codeLineMatches(text, pattern) {
   return text.split('\n').some((line) => !COMMENT_LINE.test(line) && pattern.test(line))
@@ -268,13 +361,26 @@ export function pluginIdPattern(ids) {
   return distinctive.length ? new RegExp(`['"\`](${distinctive.join('|')})['"\`]`) : null
 }
 
-/** The rules a corpus of {path, text} trips: Map<path, string[]>. */
-export function findFindings(files, pluginIds) {
+/**
+ * The rules a corpus of {path, text} trips: Map<path, string[]>. `pluginIdOfDir`
+ * names the plugin a `libs/plugins/<dir>/` tree is, where the two differ.
+ */
+export function findFindings(files, pluginIds, pluginIdOfDir = (dir) => dir) {
   const idPattern = pluginIdPattern(pluginIds)
+  const addresses = consoleAddresses(files, pluginIdOfDir)
   const findings = new Map()
   const add = (path, rule) => findings.set(path, [...(findings.get(path) ?? []), rule])
   for (const { path, text } of files) {
     if (!SOURCE.test(path) || SPEC.test(path) || GENERATED.test(path)) continue
+    const pluginDir = PLUGIN_TREE.exec(path)?.[1]
+    if (pluginDir && !STAND_IN.test(path)) {
+      // Rules 5 and 8 inside a plugin: another plugin's storage and pages.
+      const self = pluginIdOfDir(pluginDir)
+      for (const owner of collectionOwnersAddressed(text)) if (owner !== self) add(path, `plugin-collection:${owner}`)
+      if (!PLUGIN_NAV.test(path)) {
+        for (const owner of consolePathOwners(text, addresses)) if (owner !== self) add(path, `console-path:${owner}`)
+      }
+    }
     const guarded = GUARDED.test(path)
     // tools/ names hosts and package strings in lint rules and weight budgets;
     // only a domain-named script is evidence there.
@@ -334,6 +440,16 @@ export function firstPartyPluginIds(root = ROOT) {
   return JSON.parse(readFileSync(join(root, 'plugins.config.json'), 'utf8')).plugins.map((plugin) => plugin.id)
 }
 
+/** The plugin id a `libs/plugins/<dir>/` tree registers as (`themes` is `theme-presets`). */
+export function pluginIdsByDir(root = ROOT) {
+  const byDir = new Map()
+  for (const plugin of JSON.parse(readFileSync(join(root, 'plugins.config.json'), 'utf8')).plugins) {
+    const dir = /^@aglyn\/plugins-(.+)$/.exec(plugin.package ?? '')?.[1]
+    if (dir) byDir.set(dir, plugin.id)
+  }
+  return (dir) => byDir.get(dir) ?? dir
+}
+
 function selfTest() {
   // The forced-red fixture: one file per rule, the homes and exemptions beside
   // them, and a list with a stale rule and an unargued `stays` — each must be
@@ -368,8 +484,20 @@ function selfTest() {
     { path: 'libs/aglyn/src/lib/app-utils/type-user.ts', text: "import {\n  crmRoutes,\n  type CrmDeal,\n  type CrmStage as Stage,\n} from './x'\nexport const deal: CrmDeal | null = null\n" },
     { path: 'libs/aglyn/src/lib/app-utils/type-alias.ts', text: 'export type CrmDealId = string\ntype CrmStageMap<T> = Record<string, T>\n' },
     { path: 'libs/aglyn/src/lib/app-utils/mentions-one.ts', text: 'export const MARKETPLACE_A = 1\nexport const a = 1\nexport const b = 2\nexport const c = 3\n' },
+    { path: 'libs/plugins/crm/src/lib/plugin.ts', text: "nav: [{ label: 'CRM', href: '/crm', legacyHrefs: ['/contacts'] }]\n" },
+    { path: 'libs/plugins/forms/src/lib/plugin.ts', text: "nav: [{ label: 'Forms', href: '/forms' }]\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/console-routes.ts', text: "export enum Route {\n  FORM_DETAILS = '/[orgSlug]/hosts/[host]/forms/[formId]',\n  HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',\n}\n" },
+    { path: 'libs/plugins/inbox/src/lib/row.tsx', text: 'const href = buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId })\n' },
+    { path: 'libs/plugins/inbox/src/lib/hub.ts', text: "const CRM_SLUG = 'crm'\n" },
+    { path: 'libs/plugins/inbox/src/lib/link.ts', text: 'const href = `${hostsPath}/${sub}/forms/${id}`\n' },
+    { path: 'libs/plugins/inbox/src/lib/legacy.ts', text: "router.push('/contacts?email=' + email)\n" },
+    { path: 'libs/plugins/inbox/src/lib/not-pages.ts', text: "const events = `/api/ai/jobs/${id}/crm?org=${org}`\nconst path = `hosts/${hostId}/forms`\nconst setup = buildRoute(Route.HOST_SETUP, { orgSlug, host })\nconst kind = 'crm'\n" },
+    { path: 'libs/plugins/crm/src/lib/own.ts', text: "const hub = `${base}/crm`\nconst to = buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' })\n" },
+    { path: 'libs/plugins/inbox/src/lib/reads.ts', text: "const rows = await db.collection('orgs').doc(orgId).collection('contacts').get()\n" },
+    { path: 'libs/plugins/shop/src/lib/read.ts', text: "db.collection('products')\n" },
+    { path: 'libs/plugins/inbox/src/lib/testing/stand-in-contacts.ts', text: "db.collection('orgs').doc(orgId).collection('contacts')\n" },
   ]
-  const findings = findFindings(corpus, ids)
+  const findings = findFindings(corpus, ids, (dir) => (dir === 'shop' ? 'commerce' : dir))
   const ok = (label, condition) => {
     if (!condition) {
       console.error(`self-test FAILED: ${label}`)
@@ -405,6 +533,16 @@ function selfTest() {
   ok('USING a plugin’s symbol declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/caller.ts'))
   ok('a type named inside a multi-line import declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/type-user.ts'))
   ok('a type alias in a plugin’s words is a declaration', has('libs/aglyn/src/lib/app-utils/type-alias.ts', 'domain-declares:crm'))
+  ok('a plugin reading another plugin’s collection is reported', has('libs/plugins/inbox/src/lib/reads.ts', 'plugin-collection:crm'))
+  ok('a plugin whose directory is not its id reads its own collection unreported', !findings.has('libs/plugins/shop/src/lib/read.ts'))
+  ok('another plugin’s page, by core route, is reported', has('libs/plugins/inbox/src/lib/row.tsx', 'console-path:forms'))
+  ok('another plugin’s nav slug as a constant is reported', has('libs/plugins/inbox/src/lib/hub.ts', 'console-path:crm'))
+  ok('another plugin’s page, spelled as a path, is reported', has('libs/plugins/inbox/src/lib/link.ts', 'console-path:forms'))
+  ok('a legacy slug is the plugin’s too', has('libs/plugins/inbox/src/lib/legacy.ts', 'console-path:crm'))
+  ok('an API path, a storage path, a core page and a bare word are not pages', !findings.has('libs/plugins/inbox/src/lib/not-pages.ts'))
+  ok('a plugin addressing its own pages is not reported', !findings.has('libs/plugins/crm/src/lib/own.ts'))
+  ok('a plugin’s nav declaration is not reported', !findings.has('libs/plugins/crm/src/lib/plugin.ts'))
+  ok('a spec’s stand-in for another plugin’s seam is not reported', !findings.has('libs/plugins/inbox/src/lib/testing/stand-in-contacts.ts'))
 
   const rows = [
     { path: 'libs/aglyn/src/lib/app-utils/crm-deals.ts', rules: ['domain-name', 'plugin-id'], lane: 'crm' },
@@ -434,7 +572,7 @@ function main(argv) {
 
   const list = JSON.parse(readFileSync(ALLOWLIST, 'utf8'))
   const corpus = loadCorpus(ROOT)
-  const findings = findFindings(corpus, firstPartyPluginIds(ROOT))
+  const findings = findFindings(corpus, firstPartyPluginIds(ROOT), pluginIdsByDir(ROOT))
   const { refused, stale, unargued } = judge(findings, list.files)
 
   if (argv.includes('--prune')) {
@@ -459,10 +597,12 @@ function main(argv) {
     process.exitCode = 1
     return
   }
-  const moving = list.files.filter((row) => row.lane !== 'stays').length
+  const moving = list.files.filter((row) => row.lane !== 'stays' && row.lane !== 'coupling').length
+  const coupled = list.files.filter((row) => row.lane === 'coupling').length
   console.log(
     `check:plugin-domain-in-core: clean (${corpus.length} source files; ${moving} file(s) still to move, ` +
-      `${list.files.length - moving} argued to stay)`,
+      `${coupled} plugin file(s) still reaching into another plugin, ` +
+      `${list.files.length - moving - coupled} argued to stay)`,
   )
 }
 

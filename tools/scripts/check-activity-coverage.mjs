@@ -129,9 +129,10 @@ const MUTATION_PATHS = [
   // Converting a lead brings a contact, a company and a deal into being from
   // one lead. `convertHostLead` performs every write and writes the entry,
   // and both doors call it: the console's `crm/lead-convert` route and the
-  // REST leads handler in `apps/console/utils/api-v1/crm-leads.ts`. Neither
-  // door writes the conversion itself, so the module that does is the one
-  // listed, as with the merge below (AGL-2823).
+  // REST leads handler in
+  // `libs/plugins/crm/src/lib/server/api-v1/crm-leads.ts`. Neither door
+  // writes the conversion itself, so the module that does is the one listed,
+  // as with the merge below (AGL-2823).
   'libs/tenant/runtime/src/lib/convert-host-lead.ts',
   // `crm/contacts-merge` (AGL-2625) destroys one contact document by folding
   // it into another; the entry is written by the data library's

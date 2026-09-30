@@ -40,8 +40,6 @@
 //   so the backfill must SKIP them (idempotency proof).
 // - `scope-ds-empty`: `visibleTo: []` — "visible to nobody". The backfill
 //   must leave it alone; stamping it `['org']` would widen it.
-// - `scope-legacy-host-ds`: a dataset under `hosts/{id}/datasets`, the
-//   pre-AGL-237 path, so `legacyHostDatasets` reports a non-zero count.
 
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
@@ -229,18 +227,9 @@ async function main() {
     { merge: true },
   )
 
-  // Legacy host-scoped dataset (pre-AGL-237 path) so the route's
-  // `legacyHostDatasets` count has something to find.
-  await db
-    .collection('hosts')
-    .doc('scope-client-2')
-    .collection('datasets')
-    .doc('scope-legacy-host-ds')
-    .set({ displayName: 'Legacy Host Data', fields: ['name'] }, { merge: true })
-
   console.log(
     `Seeded ${ORG_ID}: ${ALL_HOSTS.length} hosts, ${USERS.length} members, ` +
-      '5 datasets (2 pre-scoped), 3 media, 1 folder, 1 legacy host dataset.',
+      '5 datasets (2 pre-scoped), 3 media, 1 folder.',
   )
 }
 

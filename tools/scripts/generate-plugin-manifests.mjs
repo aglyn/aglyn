@@ -983,6 +983,7 @@ function releaseFlagsContent(flags) {
 function hostCollectionRows() {
   const rows = []
   const owners = new Map()
+  const resourceKinds = new Map()
   for (const plugin of config.plugins) {
     const declared = plugin.hostCollections
     if (!declared) continue
@@ -1019,6 +1020,183 @@ function hostCollectionRows() {
       if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
         throw new Error(`${what}: "label" is what ONE of its documents is called, or is left out`)
       }
+      const row = { pluginId: plugin.id, ...declaration }
+      if (declaration.resource !== undefined) {
+        row.resource = hostResourceRow(declaration.resource, `${what} resource`, resourceKinds, plugin.id)
+      }
+      rows.push(row)
+    }
+  }
+  return rows
+}
+
+/**
+ * The kinds `/api/hosts/resources` creates from its own table: the platform's
+ * documents, which exist with no plugin loaded. A plugin declaring one of
+ * these would be a second allow-list for the same create.
+ */
+const CORE_HOST_RESOURCE_KINDS = ['screen', 'template', 'layout', 'reusableComponent', 'form', 'entry', 'author']
+
+/** Fields the create route stamps on every document; no declaration may let a client send them. */
+const SERVER_STAMPED_FIELDS = ['createdAt', 'updatedAt', 'createdBy', 'deletedAt']
+
+const PLAIN_FIELD = /^[A-Za-z][A-Za-z0-9]*$/
+
+/**
+ * A plugin's host collection as a KIND the generic create route writes
+ * (AGL-3080): the route is the writable-field allowlist for client creates,
+ * so everything a reader would otherwise have to trust is checked here.
+ *
+ *  - ONE OWNER PER KIND, and none of core's own.
+ *  - A COUNT. A kind with neither a plan `quotaKey` nor a `platformCap` is
+ *    unbounded documents mintable from a browser (AGL-2266).
+ *  - NO SERVER FIELD ON THE ALLOW-LIST. `createdAt`, `updatedAt`,
+ *    `createdBy` and `deletedAt` are stamped; a stamp, and the field an
+ *    external destination's approver lands in, are never client-writable —
+ *    provenance the caller supplies is provenance the caller chose.
+ *  - AN APPROVAL ONLY THE PUBLISH ROLE GIVES. `externalDestination` stamps
+ *    the creator's uid as the approval a serve path trusts, which is only true
+ *    when the create required the publishing role.
+ *  - A COPY THAT IS A SUBSET. `duplicate.fields` are the create's own fields,
+ *    less what a copy must not inherit.
+ */
+function hostResourceRow(resource, what, kinds, pluginId) {
+  if (!resource || typeof resource !== 'object' || Array.isArray(resource)) throw new Error(`${what} is an object`)
+  const { $comment: _note, ...fields } = resource
+  const { kind, label, activityNoun, activityType, quotaKey, entitlement, platformCap, softDeletes, requiresPublishRole } = fields
+  if (typeof kind !== 'string' || !/^[a-z][A-Za-z0-9]*$/.test(kind)) throw new Error(`${what} needs a "kind" in camelCase`)
+  if (CORE_HOST_RESOURCE_KINDS.includes(kind)) throw new Error(`${what}: "${kind}" is a kind the platform creates itself`)
+  const held = kinds.get(kind)
+  if (held) throw new Error(`${what}: kind "${kind}" is already declared by "${held}" — one kind has one allow-list`)
+  kinds.set(kind, pluginId)
+  for (const [key, value] of [['label', label], ['activityNoun', activityNoun]]) {
+    if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${key}"`)
+  }
+  for (const [key, value] of [['activityType', activityType], ['quotaKey', quotaKey], ['entitlement', entitlement], ['platformCap', platformCap]]) {
+    if (value !== undefined && (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(value))) {
+      throw new Error(`${what}: "${key}" is a plain key, or is left out`)
+    }
+  }
+  if (!quotaKey && !platformCap) {
+    throw new Error(`${what} needs a "quotaKey" or a "platformCap" — a create nothing counts is unbounded documents from a browser`)
+  }
+  for (const [key, value] of [['softDeletes', softDeletes], ['requiresPublishRole', requiresPublishRole]]) {
+    if (value !== undefined && typeof value !== 'boolean') throw new Error(`${what}: "${key}" is true or false`)
+  }
+  const writable = plainFieldList(fields.fields, `${what} fields`)
+  for (const field of writable) {
+    if (SERVER_STAMPED_FIELDS.includes(field)) throw new Error(`${what}: "${field}" is stamped by the server and never sent by a client`)
+  }
+  const stamped = stampRecord(fields.stamps, `${what} stamps`, writable)
+  if (fields.externalDestination !== undefined) {
+    const { field, approvedByField } = fields.externalDestination ?? {}
+    if (!writable.includes(field)) throw new Error(`${what}: "externalDestination.field" is one of its own fields`)
+    if (typeof approvedByField !== 'string' || !PLAIN_FIELD.test(approvedByField)) {
+      throw new Error(`${what}: "externalDestination.approvedByField" is a plain field name`)
+    }
+    if (writable.includes(approvedByField) || SERVER_STAMPED_FIELDS.includes(approvedByField) || approvedByField in stamped) {
+      throw new Error(`${what}: "${approvedByField}" is the approver the server stamps, so no client and no other stamp writes it`)
+    }
+    if (requiresPublishRole !== true) {
+      throw new Error(`${what}: "externalDestination" stamps an approval, and only a create that required the publishing role is one`)
+    }
+  }
+  if (fields.livePathField !== undefined && !writable.includes(fields.livePathField)) {
+    throw new Error(`${what}: "livePathField" is one of its own fields`)
+  }
+  if (fields.duplicate !== undefined) {
+    const { nameField } = fields.duplicate ?? {}
+    if (!writable.includes(nameField)) throw new Error(`${what}: "duplicate.nameField" is one of its own fields`)
+    const copied = plainFieldList(fields.duplicate.fields, `${what} duplicate.fields`)
+    for (const field of copied) {
+      if (!writable.includes(field)) throw new Error(`${what}: duplicate field "${field}" is not one a create may write`)
+      if (field === nameField) throw new Error(`${what}: the copy's name is made unique, not copied — drop "${field}" from duplicate.fields`)
+    }
+    stampRecord(fields.duplicate.stamps, `${what} duplicate.stamps`, copied)
+    const { $comment: _why, ...duplicate } = fields.duplicate
+    fields.duplicate = duplicate
+  }
+  return fields
+}
+
+function plainFieldList(list, what) {
+  if (!Array.isArray(list) || !list.length) throw new Error(`${what} names at least one field`)
+  for (const field of list) {
+    if (typeof field !== 'string' || !PLAIN_FIELD.test(field)) throw new Error(`${what}: "${field}" is not a plain field name`)
+  }
+  if (new Set(list).size !== list.length) throw new Error(`${what} names a field twice`)
+  return list
+}
+
+/** Constant values written on every create: never a client field, never another stamp's. */
+function stampRecord(stamps, what, writable) {
+  if (stamps === undefined) return {}
+  if (!stamps || typeof stamps !== 'object' || Array.isArray(stamps)) throw new Error(`${what} is an object`)
+  for (const [field, value] of Object.entries(stamps)) {
+    if (!PLAIN_FIELD.test(field)) throw new Error(`${what}: "${field}" is not a plain field name`)
+    if (writable.includes(field)) throw new Error(`${what}: "${field}" is also client-writable — a stamp is the server's word`)
+    if (field === 'deletedAt' ? value !== null : SERVER_STAMPED_FIELDS.includes(field)) {
+      throw new Error(`${what}: "${field}" is stamped by the server (deletedAt only as null, born live)`)
+    }
+    if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
+      throw new Error(`${what}: "${field}" is a string, number, boolean or null`)
+    }
+  }
+  return stamps
+}
+
+/**
+ * The child sitemaps each plugin's documents fill (AGL-3080).
+ *
+ * Compiled because the reader is the tenant's `/sitemap.xml`: a section a
+ * process had not registered would drop the plugin's pages from a live
+ * site's index, and a crawler reads that as pages that no longer exist.
+ *
+ * Checked here: one owner per section and none of the platform's own
+ * (`pages`, `authors`, or a `content-` collection's), plain field names, a
+ * two-segment settings document, and a path with exactly one `{slug}`.
+ */
+const CORE_SITEMAP_SECTIONS = ['pages', 'authors']
+
+function sitemapSectionRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.sitemapSections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" sitemapSections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the section`)
+    }
+    for (const entry of declared) {
+      const { $comment: _note, ...declaration } = entry
+      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, lastmod } = declaration
+      const what = `${where} "${section ?? ''}"`
+      if (typeof section !== 'string' || !/^[a-z][a-z0-9-]*$/.test(section)) throw new Error(`${where}: a section is a lowercase path segment`)
+      if (CORE_SITEMAP_SECTIONS.includes(section) || section.startsWith('content-')) {
+        throw new Error(`${what} is a section the platform builds itself`)
+      }
+      const held = owners.get(section)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one section has one owner`)
+      owners.set(section, plugin.id)
+      if (typeof collection !== 'string' || !PLAIN_FIELD.test(collection)) throw new Error(`${what} needs a "collection"`)
+      if (filter !== undefined) {
+        if (!PLAIN_FIELD.test(filter?.field ?? '')) throw new Error(`${what}: "where.field" is a plain field name`)
+        if (!['string', 'number', 'boolean'].includes(typeof filter.equals)) throw new Error(`${what}: "where.equals" is a string, number or boolean`)
+      }
+      if (enabledBy !== undefined) {
+        if (!/^[A-Za-z][A-Za-z0-9]*\/[A-Za-z0-9_-]+$/.test(enabledBy?.doc ?? '')) {
+          throw new Error(`${what}: "enabledBy.doc" is a collection/doc path under the host`)
+        }
+        if (!PLAIN_FIELD.test(enabledBy.field ?? '')) throw new Error(`${what}: "enabledBy.field" is a plain field name`)
+      }
+      if (typeof path !== 'string' || !path.startsWith('/') || path.split('{slug}').length !== 2) {
+        throw new Error(`${what}: "path" is a site path with exactly one {slug}`)
+      }
+      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen]]) {
+        if (value !== undefined && !PLAIN_FIELD.test(value)) throw new Error(`${what}: "${key}" is a plain field name`)
+      }
+      if (lastmod !== undefined) plainFieldList(lastmod, `${what} lastmod`)
       rows.push({ pluginId: plugin.id, ...declaration })
     }
   }
@@ -1161,6 +1339,48 @@ function orgCapacityRows() {
     }
   }
   return rows.sort((a, b) => a.order - b.order)
+}
+
+/**
+ * What a site's template library calls a template a plugin INSTALLED
+ * (AGL-3080): the `source.type` the plugin's install route stamps, and the
+ * badge and sentence the library shows for it. `authored` and `starter` are
+ * the platform's own values and cannot be declared; a type belongs to one
+ * plugin, because a library that found two owners for one stamp could not say
+ * where the template came from.
+ */
+function templateSourceRows() {
+  const rows = []
+  const taken = new Map([
+    ['authored', 'the platform'],
+    ['starter', 'the platform'],
+  ])
+  for (const plugin of config.plugins) {
+    const declared = plugin.templateSource
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" templateSource`
+    if (!declared || typeof declared !== 'object' || Array.isArray(declared)) {
+      throw new Error(`${where} is an object: { "type", "label", "description" }`)
+    }
+    const { type, label, description, $comment: _note, ...rest } = declared
+    const unknown = Object.keys(rest)
+    if (unknown.length) throw new Error(`${where}: unknown key(s) ${unknown.join(', ')}`)
+    if (typeof type !== 'string' || !/^[a-z][A-Za-z0-9]*$/.test(type)) {
+      throw new Error(`${where}: "type" is the plain word the install route stamps as source.type`)
+    }
+    if (taken.has(type)) {
+      throw new Error(`${where}: "${type}" is already a template source of ${taken.get(type)}`)
+    }
+    taken.set(type, `"${plugin.id}"`)
+    if (typeof label !== 'string' || !label.trim() || label.length > 40) {
+      throw new Error(`${where}: "label" is the badge's text, 1 to 40 characters`)
+    }
+    if (typeof description !== 'string' || !description.trim()) {
+      throw new Error(`${where}: "description" says in a sentence where the template came from`)
+    }
+    rows.push({ pluginId: plugin.id, type, label, description })
+  }
+  return rows
 }
 
 /**
@@ -1335,6 +1555,165 @@ function analyticsProviderRows() {
   return rows
 }
 
+/**
+ * The notification categories the core owns (`CoreNotificationCategory` in
+ * core `notifications.ts`). A declaration may not reuse one: the id keys
+ * every stored preference, so a plugin that claimed `billing` would take over
+ * a switch people set about their invoices.
+ */
+const CORE_NOTIFICATION_CATEGORIES = ['billing', 'team', 'content', 'support', 'system', 'staff']
+
+/**
+ * Notification categories a plugin declares for the notifications it sends
+ * (AGL-3080), compiled into core because the fan-out resolves a recipient's
+ * channels in server processes that load no plugin.
+ *
+ * Checked here: an id that is a plain type prefix, owned by one plugin and
+ * not by the core, a label and a description a reader can act on, and a
+ * default for each channel.
+ */
+function notificationCategoryRows() {
+  const owners = new Map(CORE_NOTIFICATION_CATEGORIES.map((id) => [id, 'the core']))
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.notificationCategories
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" notificationCategories`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the category`)
+    }
+    for (const declaration of declared) {
+      const { id, label, description, defaults } = declaration ?? {}
+      const what = `${where} "${id ?? ''}"`
+      if (typeof id !== 'string' || !/^[a-z][a-zA-Z]*$/.test(id)) {
+        throw new Error(`${what}: "id" is the plain prefix before the dot in the plugin's notification types`)
+      }
+      if (owners.has(id)) {
+        throw new Error(`${what} is already a category of ${owners.get(id)} — a stored preference would change meaning`)
+      }
+      owners.set(id, `"${plugin.id}"`)
+      for (const [field, value] of [['label', label], ['description', description]]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      for (const channel of ['console', 'email']) {
+        if (typeof defaults?.[channel] !== 'boolean') {
+          throw new Error(`${what} needs "defaults.${channel}" — what the channel does before anybody says`)
+        }
+      }
+      rows.push({
+        pluginId: plugin.id,
+        id,
+        label,
+        description,
+        defaults: { console: defaults.console, email: defaults.email },
+      })
+    }
+  }
+  return rows
+}
+
+/**
+ * Digests a plugin sends on its own schedule (AGL-3080), compiled into core
+ * so the settings page draws each switch without loading the plugin.
+ *
+ * Checked here: a plain key no other digest stores its switch under, and a
+ * label and a description.
+ */
+function notificationDigestRows() {
+  const owners = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.notificationDigests
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" notificationDigests`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the digest`)
+    }
+    for (const declaration of declared) {
+      const { key, label, description } = declaration ?? {}
+      const what = `${where} "${key ?? ''}"`
+      if (typeof key !== 'string' || !/^[a-z][a-zA-Z0-9]*$/.test(key)) {
+        throw new Error(`${what}: "key" is the plain name its switch is stored under`)
+      }
+      if (owners.has(key)) {
+        throw new Error(`${what} is already the switch of "${owners.get(key)}"'s digest`)
+      }
+      owners.set(key, plugin.id)
+      for (const [field, value] of [['label', label], ['description', description]]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      rows.push({ pluginId: plugin.id, key, label, description })
+    }
+  }
+  return rows
+}
+
+/**
+ * The interaction steps (AGL-3080): each plugin whose step the interaction
+ * builder offers declares it under `interactionSteps` — the `type` it is
+ * stored under, how the builder names it, and, for a step that PICKS one of
+ * the plugin's records, the site collection the records are listed from and
+ * the step fields that hold the pick. Core compiles them into the catalog,
+ * because the builder and every validator read them with no plugin loaded,
+ * and a step whose pick nothing checked would save naming nothing.
+ *
+ * Checked here: a plain type no other plugin declares, a label, only the
+ * known keys, and a pick listed from a collection the SAME plugin declares
+ * under `hostCollections` — a plugin offers its own records, never another's —
+ * with plain, distinct field names, a limit from 1 to 200, and the words the
+ * builder shows.
+ */
+function interactionStepRows() {
+  const claimed = new Map()
+  const rows = []
+  const plain = /^[a-z][A-Za-z0-9]*$/
+  const words = (value) => typeof value === 'string' && value.trim().length > 0
+  for (const plugin of config.plugins) {
+    const declared = plugin.interactionSteps
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" interactionSteps`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the steps the plugin offers`)
+    }
+    const owned = new Set((plugin.hostCollections ?? []).map((collection) => collection.name))
+    for (const step of declared) {
+      const { type, label, picks, ...rest } = step ?? {}
+      if (typeof type !== 'string' || !plain.test(type)) {
+        throw new Error(`${where}: "type" is the plain name a step is stored under`)
+      }
+      const what = `${where} "${type}"`
+      if (Object.keys(rest).length) throw new Error(`${what}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+      if (claimed.has(type)) throw new Error(`${what} is already declared by "${claimed.get(type)}"`)
+      claimed.set(type, plugin.id)
+      if (!words(label)) throw new Error(`${what}: "label" is how the builder names the step`)
+      const row = { pluginId: plugin.id, type, label }
+      if (picks !== undefined) {
+        const { collection, limit, idField, nameField, label: pickLabel, missing, ...extra } = picks ?? {}
+        if (Object.keys(extra).length) throw new Error(`${what}: unknown "picks" key(s) ${Object.keys(extra).join(', ')}`)
+        if (!owned.has(collection)) {
+          throw new Error(
+            `${what}: "picks.collection" "${collection}" is not one of "${plugin.id}"'s own hostCollections ` +
+              `(${owned.size ? [...owned].join(', ') : 'it declares none'}) — a step picks its own plugin's records`,
+          )
+        }
+        if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+          throw new Error(`${what}: "picks.limit" is a whole number from 1 to 200`)
+        }
+        if (typeof idField !== 'string' || !plain.test(idField) || typeof nameField !== 'string' || !plain.test(nameField)) {
+          throw new Error(`${what}: "picks.idField" and "picks.nameField" are the plain names of the step's fields`)
+        }
+        if (idField === nameField) throw new Error(`${what}: the id and the name are two fields`)
+        if (!words(pickLabel) || !words(missing)) {
+          throw new Error(`${what}: "picks.label" names the picker and "picks.missing" tells a step with no pick what to do`)
+        }
+        row.picks = { collection, limit, idField, nameField, label: pickLabel, missing }
+      }
+      rows.push(row)
+    }
+  }
+  return rows
+}
+
 /** The plugins whose org eraser an erasure may not run without (AGL-3080). */
 function requiredOrgEraserIds() {
   return config.plugins
@@ -1438,7 +1817,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1462,6 +1841,14 @@ ${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\
  */
 export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollection[] = [
 ${hostCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every child sitemap a first-party plugin's documents fill, declared by that
+ * plugin (AGL-3080), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSection[] = [
+${sitemapSectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**
@@ -1530,12 +1917,29 @@ export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${J
 export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = ${JSON.stringify(formRecordTargetRow(), null, 2)}
 
 /**
+ * What a site's template library calls a template a plugin installed, by the
+ * \`source.type\` that plugin stamps, declared by that plugin (AGL-3080).
+ * Core names no installer.
+ */
+export const PLUGIN_TEMPLATE_SOURCES: readonly PluginTemplateSource[] = [
+${templateSourceRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
  * The analytics settings each provider mounts a tag for, declared by the
  * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
  * setting configures a tag.
  */
 export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
 ${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: row.plugin.id, settings: row.settings }, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every interaction step a first-party plugin offers in the interaction
+ * builder, declared by that plugin (AGL-3080). Core names no plugin step.
+ */
+export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
+${interactionStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**
@@ -1550,6 +1954,23 @@ export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries
  */
 export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [
 ${videoEmbedRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * The notification categories first-party plugins add to the settings page
+ * and to every recipient's preferences, declared by each plugin (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_CATEGORIES_DECLARED: readonly NotificationCategoryDeclaration[] = [
+${notificationCategoryRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * The digests first-party plugins send on their own schedule, each with the
+ * key its switch is stored under, declared by the plugin that sends it
+ * (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_DIGESTS_DECLARED: readonly NotificationDigestDeclaration[] = [
+${notificationDigestRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 `
   )

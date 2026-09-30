@@ -728,6 +728,39 @@ export const CONSOLE_WIDGET_SLOTS = {
    * the installing plugin's own surface, which the widget may link to.
    */
   pluginInstallStatus: 'pluginInstallStatus',
+  /**
+   * The template gallery — "Start from a template" on a site's Screens,
+   * Layouts and Components pages — below the site's own templates and the
+   * starters (AGL-3080): a shelf of templates a plugin offers to INSTALL.
+   * Props: {@link ConsoleTemplateGalleryZoneProps}.
+   *
+   * The gallery is the shell's: what the site holds and what ships with the
+   * platform. Templates offered from elsewhere are the offering plugin's —
+   * what it lists, how it is searched, what it costs and the route that
+   * installs one, with every check that route makes — so the dialog hands
+   * over the kind it picks and the word typed in its search, and the plugin
+   * draws its own shelf. An install lands in the site's library and
+   * publishes nothing; the widget calls `onInstalled` so the gallery closes.
+   *
+   * The dialog's "nothing matches" line covers every shelf, so a widget
+   * reports whether its shelf is loading, empty or showing something through
+   * `reportShelf`. A widget that never reports is a shelf the line ignores;
+   * with no widget at all the gallery is the site's own and the starters.
+   */
+  templateGallery: 'templateGallery',
+  /**
+   * One row of a site's Templates library whose template a plugin INSTALLED,
+   * beside its Source badge (AGL-3080): what the installer says about the
+   * copy the site holds — that a newer version can be installed, and the
+   * control that installs it. Props: {@link ConsoleTemplateInstallStatusZoneProps}.
+   *
+   * Drawn once per such row, and never for a template saved here or a
+   * starter. A widget draws nothing for a template it did not install, and
+   * nothing when there is nothing to say. Applying an update goes through
+   * the installing plugin's own route, which keeps all its checks; the
+   * library's rows re-read the templates it replaced.
+   */
+  templateInstallStatus: 'templateInstallStatus',
   /** Bottom of the host dashboard. Props: hostId, org. (AGL-433) */
   dashboardFooter: 'dashboardFooter',
   /** Org settings page, below the tabbed cards. Props: orgId, org. */
@@ -1204,6 +1237,43 @@ export interface ConsoleDockZoneProps {
   isStaff: boolean
   /** The reader's verdict for every declared permission key on the site in view. */
   permissionsOnHost?: { loaded: boolean; granted: Readonly<Record<string, boolean>> }
+}
+
+/** How one plugin's shelf of the template gallery stands (AGL-3080). */
+export type ConsoleTemplateGalleryShelfState = 'loading' | 'empty' | 'shown'
+
+/** What the `templateGallery` zone hands each widget (AGL-3080). */
+export interface ConsoleTemplateGalleryZoneProps {
+  /** The site a template installs into. */
+  hostId: string
+  /**
+   * The kind of template the gallery picks: `page` on the Screens page,
+   * `layout` and `component` on theirs. A shelf offering only one kind
+   * draws nothing for the others.
+   */
+  kind: 'page' | 'component' | 'layout'
+  /** The word typed in the gallery's search box, `''` for none. */
+  search: string
+  /** Closes the gallery once an install has landed in the library. */
+  onInstalled: () => void
+  /**
+   * Says how this shelf stands, keyed by a name the widget chooses and keeps,
+   * so the gallery's "nothing matches" line counts it. Report `empty` rather
+   * than nothing once a read answers with nothing.
+   */
+  reportShelf: (shelfId: string, state: ConsoleTemplateGalleryShelfState) => void
+}
+
+/** What the `templateInstallStatus` zone hands each widget (AGL-3080). */
+export interface ConsoleTemplateInstallStatusZoneProps {
+  /** The site whose library the row is in. */
+  hostId: string
+  /**
+   * The row's template document as the library read it, `$id` included:
+   * its server-managed `source` and `installedFrom` stamps say who installed
+   * it, and `editedAt` whether the site has edited its copy since.
+   */
+  template: Readonly<Record<string, unknown>>
 }
 
 /** What the `hostArtifactPublish` zone hands each widget (AGL-3080). */

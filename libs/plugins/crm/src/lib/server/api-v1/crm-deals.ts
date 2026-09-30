@@ -78,7 +78,12 @@ import {
   restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { type ApiV1Context, requireScope } from '../api-v1'
+import {
+  type ApiV1Context,
+  claimWrite,
+  readJsonBody,
+  requireScope,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { orderedStages, type ResolvedPipeline, resolvePipeline } from './crm-pipelines'
 import {
   type Clearable,
@@ -106,7 +111,6 @@ import {
   refuseUnknownKeys,
   updatePayload,
 } from './crm-shared'
-import { claimWrite, readJsonBody } from './shared'
 
 const DEAL_STATUSES = ['open', 'won', 'lost'] as const
 

@@ -131,10 +131,13 @@ describe('a soft allotment’s crossing', () => {
         link: '/acme/billing/usage#ai-allotments',
         orgId: ORG,
       }),
+      // The crossing's own email is the only one (AGL-3431).
+      { skipEmail: true },
     )
     expect(pipeline.notify).toHaveBeenCalledWith(
       ['m1'],
       expect.not.objectContaining({ link: expect.anything() }),
+      { skipEmail: true },
     )
     expect(pipeline.send).toHaveBeenCalledWith(
       expect.objectContaining({ to: ['owner@example.test', 'admin@example.test'], context: 'ai-allotment-alert' }),
@@ -157,6 +160,7 @@ describe('a soft allotment’s crossing', () => {
     expect(pipeline.notify).toHaveBeenCalledWith(
       ['admin-1'],
       expect.objectContaining({ title: 'Sam is past 80% of their AI allotment' }),
+      { skipEmail: true },
     )
     expect(pipeline.send).toHaveBeenCalledTimes(1)
     expect(pipeline.send).toHaveBeenCalledWith(expect.objectContaining({ to: ['admin@example.test'] }))
@@ -201,6 +205,7 @@ describe('a soft allotment’s crossing', () => {
     expect(pipeline.notify).toHaveBeenCalledWith(
       ['owner-1', 'admin-1'],
       expect.objectContaining({ title: 'The Acme site has used its whole AI allotment' }),
+      { skipEmail: true },
     )
     expect(pipeline.send).toHaveBeenCalledTimes(1)
   })

@@ -23,6 +23,7 @@
  * (verifyConsoleIdToken / email-verify) — API keys, not Firebase sessions.
  */
 import type { AglynOrganization } from '@aglyn/aglyn'
+import type { ApiV1Context } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import {
   apiRequestEnforcementShape,
   checkApiRequestQuota,
@@ -48,22 +49,12 @@ import {
   readClientIp,
 } from '@aglyn/aglyn/app-utils/request-ip'
 
-export interface ApiV1Context {
-  orgId: string
-  keyId: string
-  /**
-   * The key's name, as the organization labeled it, or null for a key with
-   * none. What a write made with the key is attributed to in the console's
-   * activity feeds (AGL-2632) — the key is the actor, and "API key Zapier"
-   * is its name the way an address is a person's.
-   */
-  keyName: string | null
-  scopes: ApiScope[]
-  org: Partial<AglynOrganization>
-  firestore: FirebaseFirestore.Firestore
-  /** Rate-limit headers to echo on every response for this request. */
-  headers: Record<string, string>
-}
+/**
+ * What the pipeline resolved for one request, and the scope check every
+ * handler asks — the data layer's (AGL-3080), where a plugin's `/v1`
+ * resource reaches them too.
+ */
+export { type ApiV1Context, requireScope } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 
 /** `Authorization: Bearer <key>` (preferred) or `X-Api-Key: <key>`. */
 function extractToken(request: Request): string {
@@ -417,14 +408,4 @@ export async function authenticateApiV1(
       headers,
     },
   }
-}
-
-/** Return a 403 unless the key carries `scope`; otherwise `null` (proceed). */
-export function requireScope(
-  context: ApiV1Context,
-  scope: ApiScope,
-): Response | null {
-  return context.scopes.includes(scope)
-    ? null
-    : ApiErrors.insufficientScope(scope, context.headers)
 }

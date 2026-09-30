@@ -21,7 +21,6 @@
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { hostRoleCanPublish, hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
-  ACTIONS_MAX_PER_HOST,
   AUTHORS_MAX_PER_HOST,
   checkEntitlement,
   checkHostRegisterQuota,
@@ -35,7 +34,6 @@ import {
   type OrgFeatureFlags,
   SCREEN_KIND_EMAIL,
   screenClaimsToBeAPage,
-  WEBHOOK_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
 import {
   duplicateResource,
@@ -49,6 +47,10 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { isDuplicableHostResourceKind } from '@aglyn/aglyn/app-utils/duplicate-resource'
+import {
+  hostResourcePlatformCap,
+  pluginHostResource,
+} from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 import { isReusableComponentKind } from '@aglyn/aglyn/app-utils/reusable-component-kind'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import {
@@ -65,49 +67,36 @@ import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
- * Is a redirect destination an INTERNAL path? (AGL-1881.)
+ * Is a destination a path on the site itself? (AGL-1881.)
  *
- * The negation of `isExternalRedirectDestination` in the redirects model, and
- * that file is the definition of record — restated here only because
- * `@nx/enforce-module-boundaries` forbids an app from statically importing an
- * `aglyn:addons` library.
+ * The question behind a declared `externalDestination`: a value that is not
+ * plainly a site path is one that sends traffic off the platform, and takes
+ * the approver stamp. Written to answer FALSE for anything that is not plainly
+ * a path, including `undefined`, so a create that omits the field is treated
+ * as external and takes the stamp rather than skipping it. `strictNullChecks`
+ * is off, so the `typeof` test is what keeps a missing value out of
+ * `.startsWith`.
  *
- * Written to answer FALSE for anything that is not plainly a path, including
- * `undefined`, so a create that omits `destination` is treated as external and
- * takes the stamp rather than skipping it. `strictNullChecks` is off, so the
- * `typeof` test is what keeps a missing value out of `.startsWith`.
+ * The redirects plugin's `isExternalRedirectDestination` is the same predicate
+ * negated, for the one kind that declares a destination today; the two must
+ * agree, and the direction of any disagreement is a rule that does not fire,
+ * never one that fires unapproved.
  */
-function isInternalRedirectDestination(destination: unknown): boolean {
+function isSitePath(destination: unknown): boolean {
   if (typeof destination !== 'string') return false
   const value = destination.trim()
   return value.startsWith('/') && !value.startsWith('//')
 }
 
 /**
- * Quota-governed host subcollections (AGL-473): each entry maps a create
- * action to its collection, per-plan quota key, and (when the feature
- * itself is paid) the entitlement flag. Firestore rules deny client-side
- * `create` on these collections, so this route is the only creation path
- * — updates and deletes stay client-direct (they don't consume quota).
- *
- * Every entry carries `fields`: the keys the client may set, and nothing
- * else is stored (AGL-1377). This was a deny-list — everything persisted
- * unless a `serverManagedFields` entry named it — which is the bet this
- * repo lost three times in one night: AGL-1354 (four entitlement-bearing
- * org fields client-writable because the rules deny-list never learned
- * them), AGL-1364 (two more, each the sibling of a field somebody DID
- * remember), and AGL-1355/AGL-1361 filed to stop the recurrence. A
- * deny-list is only correct while somebody keeps it current; an
- * allow-list makes the next field fail until it is classified, which is
- * the property the sibling route /api/hosts/collections already has.
- *
- * `createdAt`/`updatedAt` appear in no list: they are stamped below on
- * every create, so a client clock is never a fact about the document.
- * Nor does any list carry `deletedAt` — soft-delete state is what the
- * caps count, and a client that could create an already-deleted doc
- * could create any number of them.
+ * The one plan quota billed as a per-site ALLOCATION of an org pool rather
+ * than an org-level number (AGL-1775): register seats. Whichever kind declares
+ * it is counted against the site's allocation.
  */
-const RESOURCES: Record<string, {
+const HOST_ALLOCATED_QUOTA_KEY = 'posRegisters'
+
+/** One kind this route creates: core's own, or one a plugin declared. */
+interface HostResource {
   collection: string
   /**
    * The host subcollection whose DOCUMENT owns `collection`, for a resource
@@ -140,10 +129,10 @@ const RESOURCES: Record<string, {
    * Require the PUBLISH role rather than the write role (AGL-1881).
    *
    * The default below is `hostRoleCanWrite`, which admits `author`, and for
-   * every other resource here that is correct: creating a screen, layout or
+   * almost every resource that is correct: creating a screen, layout or
    * component is authoring, and nothing it creates is reachable until a
-   * publish act registers it. A redirect has no such second step — it decides
-   * what the live site serves the moment it exists — so it asks the narrower
+   * publish act registers it. A kind with no such second step — one that
+   * decides what the live site serves the moment it exists — asks the narrower
    * question, and asks it on the same axis the rules do.
    */
   requiresPublishRole?: boolean
@@ -168,8 +157,46 @@ const RESOURCES: Record<string, {
    * creation paths actually send, not guessed: a list narrower than its
    * callers loses authoring input silently, which is the worse failure.
    */
-  fields: Array<string>
-}> = {
+  fields: ReadonlyArray<string>
+  /** Constant values every create writes, never from the client (a declared kind's). */
+  stamps?: Readonly<Record<string, unknown>>
+  /** The destination that takes the approver's uid when it leaves the site (a declared kind's). */
+  externalDestination?: { field: string; approvedByField: string }
+  /** The field whose site path is live the moment the document exists (a declared kind's). */
+  livePathField?: string
+}
+
+/**
+ * The platform's own quota-governed host subcollections (AGL-473): each entry
+ * maps a create action to its collection, per-plan quota key, and (when the
+ * feature itself is paid) the entitlement flag. Firestore rules deny
+ * client-side `create` on these collections, so this route is the only
+ * creation path — updates and deletes stay client-direct (they don't consume
+ * quota).
+ *
+ * A plugin's kinds are not here. The plugin that owns a collection declares
+ * the kind it is created as in `plugins.config.json`, compiled into
+ * `plugin-host-resources` ({@link resourceFor}), so this route names no
+ * plugin's model and a kind nobody declares is refused as unknown (AGL-3080).
+ *
+ * Every entry carries `fields`: the keys the client may set, and nothing
+ * else is stored (AGL-1377). This was a deny-list — everything persisted
+ * unless a `serverManagedFields` entry named it — which is the bet this
+ * repo lost three times in one night: AGL-1354 (four entitlement-bearing
+ * org fields client-writable because the rules deny-list never learned
+ * them), AGL-1364 (two more, each the sibling of a field somebody DID
+ * remember), and AGL-1355/AGL-1361 filed to stop the recurrence. A
+ * deny-list is only correct while somebody keeps it current; an
+ * allow-list makes the next field fail until it is classified, which is
+ * the property the sibling route /api/hosts/collections already has.
+ *
+ * `createdAt`/`updatedAt` appear in no list: they are stamped below on
+ * every create, so a client clock is never a fact about the document.
+ * Nor does any list carry `deletedAt` — soft-delete state is what the
+ * caps count, and a client that could create an already-deleted doc
+ * could create any number of them.
+ */
+const RESOURCES: Record<string, HostResource> = {
   // Sent by the screens page (displayName/description/slug), the template
   // installers (adds `seo`) and the email composer (`kind: 'email'`).
   // `versionId` points at the first version the caller is about to mint.
@@ -219,149 +246,6 @@ const RESOURCES: Record<string, {
     label: 'shared layouts',
     activity: { type: 'layout', noun: 'shared layout' },
     fields: ['displayName', 'description', 'versionId'],
-  },
-  variable: {
-    collection: 'variables',
-    quotaKey: 'variablesPerHost',
-    label: 'variables',
-    activity: { type: 'variable', noun: 'variable' },
-    fields: ['name', 'type', 'value', 'workflowId', 'workflowName'],
-  },
-  function: {
-    collection: 'functions',
-    quotaKey: 'functionsPerHost',
-    label: 'functions',
-    activity: { type: 'function', noun: 'function' },
-    fields: ['name', 'parameters', 'variables', 'operations', 'returnValue'],
-  },
-  workflow: {
-    collection: 'workflows',
-    quotaKey: 'workflowsPerHost',
-    entitlement: 'workflows',
-    label: 'workflows',
-    activity: { type: 'workflow', noun: 'workflow' },
-    fields: ['name', 'steps', 'returnValue', 'trigger'],
-  },
-  service: {
-    collection: 'services',
-    quotaKey: 'servicesPerHost',
-    entitlement: 'bookings',
-    label: 'services',
-    activity: { type: 'content', noun: 'service' },
-    fields: [
-      'name',
-      'description',
-      'durationMinutes',
-      'priceUsd',
-      'timezone',
-      'windows',
-      // The two CRM switches a service carries (AGL-2660): whether a
-      // booking files a meeting on the record, and whether it owes a
-      // follow-up task.
-      'crmFollowUpTask',
-      'crmMeetingActivity',
-    ],
-  },
-  // A redirect is a ROUTING statement over the whole live site, not a draft
-  // (AGL-1881) — hence `requiresPublishRole`, matching the redirects block in
-  // `cloud/firebase-firestore.rules` that now owns update and delete.
-  //
-  // `externalDestinationApprovedBy` is NOT on this list and must not be: it is
-  // the serve path's evidence that a publisher chose to send traffic off the
-  // platform, so it is stamped below from the VERIFIED uid. A client able to
-  // send it would be supplying its own provenance, which is the failure mode
-  // the allow-list note above is about.
-  redirect: {
-    collection: 'redirects',
-    quotaKey: 'redirectsPerHost',
-    entitlement: 'redirects',
-    requiresPublishRole: true,
-    label: 'redirects',
-    activity: { type: 'content', noun: 'redirect' },
-    fields: [
-      'source',
-      'destination',
-      'statusCode',
-      'kind',
-      'priority',
-      'enabled',
-    ],
-  },
-  location: {
-    collection: 'locations',
-    quotaKey: 'inventoryLocations',
-    entitlement: 'commerce',
-    label: 'inventory locations',
-    activity: { type: 'content', noun: 'inventory location' },
-    fields: ['name', 'isDefault', 'address'],
-  },
-  // The whole `HostProduct` model: the editor, the duplicate action and
-  // the CSV importer each send a full product, so this list is the model
-  // rather than one form's subset. `deletedAt` is excluded — duplicating
-  // a product must not carry its predecessor's soft-delete state.
-  product: {
-    collection: 'products',
-    quotaKey: 'productsPerHost',
-    entitlement: 'commerce',
-    label: 'products',
-    activity: { type: 'content', noun: 'product' },
-    fields: [
-      'name',
-      'slug',
-      'description',
-      'type',
-      'status',
-      'mediaUrls',
-      'categoryIds',
-      'tags',
-      'options',
-      'variants',
-      'seo',
-      'supplierId',
-      'oversellPolicy',
-      'taxExempt',
-      'digitalFiles',
-      'downloadLimit',
-      'subscription',
-      'subscriptionOptional',
-      'gatedVideos',
-      'relatedProductIds',
-      'giftCard',
-      'lowStockThreshold',
-      'createdAtMs',
-      'updatedAtMs',
-      /*
-       * Search keys, derived by the plugin that owns the catalog (AGL-2501).
-       *
-       * The console shell does not import the commerce plugin, so it cannot
-       * flatten `variants[].sku` or normalize a name the way the products hub
-       * queries them — `CommerceModel.productSearchFields` is the one place
-       * that knows both, and it runs on the payload the caller builds. That
-       * makes these allow-listed rather than stamped here like a screen's
-       * `nameLower` below.
-       *
-       * They index a host's own catalog, so a caller writing its own values is
-       * no worse than the same caller writing its own product names; the
-       * failure that matters is the keys going MISSING, which is what
-       * `product-search-keys-travel-with-the-name.spec` exists to catch.
-       */
-      'nameLower',
-      'nameTokens',
-      'nameReversed',
-      'skus',
-      'barcodes',
-      // The storefront catalog's price and In stock keys (AGL-3321), from
-      // `productSearchFields` / `productStockFields` on the same payload.
-      'priceFromCents',
-      'soldOut',
-      // The smart collections its rules answer (AGL-3321), from
-      // `productCollectionIds` on the same payload and the host's rules.
-      'collectionIds',
-      // Legacy Commerce Starter fields, still written by every caller.
-      'priceUsd',
-      'inventory',
-      'imageUrl',
-    ],
   },
   // Entitlement-only (boolean feature, no numeric cap): reusable
   // components render on the live site, so a Starter+ gate must be
@@ -430,91 +314,6 @@ const RESOURCES: Record<string, {
       'legacyMatch',
       'rootId',
       'nodes',
-    ],
-  },
-  // POS registers (AGL-472): the `posRegisters` cap becomes enforceable
-  // by routing register creation here. `pos` gates access to POS at all
-  // (Pro+); `posRegisters` caps how many named registers a host runs.
-  //
-  // `quotaKey` is kept for the label/shape, but the CAP is resolved by
-  // `checkHostRegisterQuota` below, not by `checkQuota` on this key
-  // (AGL-1775) — the purchased seats are an org pool allocated per site, so
-  // the org-level value is the plan cap alone.
-  register: {
-    collection: 'registers',
-    quotaKey: 'posRegisters',
-    entitlement: 'pos',
-    label: 'POS registers',
-    activity: { type: 'content', noun: 'POS register' },
-    fields: ['name', 'locationId'],
-  },
-  // Webhooks (AGL-1360): the cap used to be checked in the console by
-  // counting the rows the card held from a Firestore LISTENER. The console
-  // runs `persistentLocalCache`, so under a stale session that count could
-  // be arbitrarily old and low, and a site could exceed the cap — the write
-  // itself was legitimate, the count it was authorised against was not.
-  // A client-side count is not an enforcement point regardless of freshness
-  // (the same lesson as AGL-1354's `brandingProfile`), so the cap moved
-  // here and the rules deny client `create` on `webhooks`.
-  //
-  // `deletedAt` is absent from `fields` BECAUSE the cap counts live docs: a
-  // client allowed to create an already-soft-deleted webhook could create any
-  // number of them (each one counting zero) and then clear the field with
-  // the update that stays client-side, arriving at an uncapped set of live
-  // webhooks through a cap that never said no.
-  //
-  // `secret` stays client-supplied: it is generated with `crypto`
-  // `.getRandomValues` and the site's own editors can read it off the card
-  // anyway, so nothing crosses a privilege boundary by their choosing it.
-  webhook: {
-    collection: 'webhooks',
-    entitlement: 'webhooks',
-    maxPerHost: WEBHOOK_MAX_PER_HOST,
-    softDeletes: true,
-    label: 'webhooks',
-    activity: { type: 'content', noun: 'webhook' },
-    fields: ['name', 'direction', 'url', 'workflowName', 'secret', 'enabled'],
-  },
-  /**
-   * Actions (AGL-2266): the collection the import route's own table named as
-   * having "no `RESOURCES` entry and no quota key anywhere". The rules granted
-   * client `create` through the host catch-all, so a free org could mint
-   * unbounded documents from the browser — the AGL-1360 shape, and the answer
-   * is AGL-1360's: a flat platform cap counted from a server read.
-   *
-   * NO `entitlement`. `actions` is a Pro flag but `interactions` is free and
-   * both write this collection — the besigner's preset wiring and the
-   * interaction builder create the same document the Pro actions card does.
-   * Gating creation on the paid flag would remove element interactions from
-   * every free site, which is a pricing change and not a cap. The entitlement
-   * is checked where it decides what RUNS (`run-event-actions.ts`).
-   *
-   * `softDeletes` because the interactions provider retires an action by
-   * stamping `deletedAt`; counting tombstones would mean removing an
-   * interaction never frees its slot.
-   *
-   * `fields` is the full `HostAction` model rather than one form's subset:
-   * three creators send it — the actions card, the interaction builder dialog
-   * and `onCreatePresetInteractions` — and a list narrower than its callers
-   * loses authoring input silently (AGL-1377).
-   */
-  action: {
-    collection: 'actions',
-    maxPerHost: ACTIONS_MAX_PER_HOST,
-    softDeletes: true,
-    label: 'interactions and actions',
-    activity: { type: 'content', noun: 'action' },
-    fields: [
-      'name',
-      'description',
-      'trigger',
-      'steps',
-      'enabled',
-      'frequency',
-      'cooldownMinutes',
-      'audience',
-      'nodeId',
-      'screenId',
     ],
   },
   /**
@@ -611,6 +410,50 @@ const RESOURCES: Record<string, {
   },
 }
 
+/**
+ * The kind a `resource` names, or `null` for one nobody declares — which the
+ * handler refuses as unknown. Never an open field list.
+ *
+ * Core's own table first, by OWN property only: a key like `constructor`
+ * reads the object prototype on a plain lookup. Then the kinds plugins
+ * declared, compiled from `plugins.config.json` so the answer does not depend
+ * on this process having loaded any plugin (AGL-3080). A declaration's flat
+ * cap is resolved by name from core's constants; a name core does not hold is
+ * `misdeclared`, and the create is refused rather than left uncapped.
+ */
+function resourceFor(key: string): HostResource | 'misdeclared' | null {
+  if (Object.prototype.hasOwnProperty.call(RESOURCES, key)) return RESOURCES[key]
+  const declared = pluginHostResource(key)
+  if (!declared) return null
+  const maxPerHost = declared.platformCap
+    ? hostResourcePlatformCap(declared.platformCap)
+    : undefined
+  if (maxPerHost === null) return 'misdeclared'
+  return {
+    collection: declared.collection,
+    ...(declared.quotaKey
+      ? { quotaKey: declared.quotaKey as keyof OrgEntitlements & string }
+      : {}),
+    ...(maxPerHost != null ? { maxPerHost } : {}),
+    ...(declared.softDeletes ? { softDeletes: true } : {}),
+    ...(declared.entitlement
+      ? { entitlement: declared.entitlement as keyof OrgFeatureFlags }
+      : {}),
+    ...(declared.requiresPublishRole ? { requiresPublishRole: true } : {}),
+    label: declared.label,
+    activity: {
+      type: (declared.activityType ?? 'content') as HostActivityTarget['type'],
+      noun: declared.activityNoun,
+    },
+    fields: declared.fields,
+    ...(declared.stamps ? { stamps: declared.stamps } : {}),
+    ...(declared.externalDestination
+      ? { externalDestination: declared.externalDestination }
+      : {}),
+    ...(declared.livePathField ? { livePathField: declared.livePathField } : {}),
+  }
+}
+
 /** Payload cap: none of these docs legitimately approach this size. */
 const MAX_DATA_BYTES = 256 * 1024
 
@@ -649,7 +492,12 @@ async function handler(request: Request): Promise<Response> {
    * the stored source, never from anything the client sends about it.
    */
   const duplicating = String(body?.action ?? '') === 'duplicate'
-  const resource = duplicating ? undefined : RESOURCES[resourceKey]
+  const found = duplicating ? undefined : resourceFor(resourceKey)
+  if (found === 'misdeclared') {
+    console.error(`hosts/resources: "${resourceKey}" names a platform cap core does not hold`)
+    return Response.json({ error: 'That resource cannot be created' }, { status: 500 })
+  }
+  const resource = found ?? undefined
   if (!hostId || (!duplicating && !resource)) {
     return Response.json({ error: 'Missing hostId or unknown resource' }, { status: 400 })
   }
@@ -958,21 +806,22 @@ async function handler(request: Request): Promise<Response> {
             : resourceKey === 'screen'
               ? billableScreenIds(screenRows, routingMap).size
               : (await tx.get(collectionRef.count())).data().count
-        // Registers are the one quota whose cap is not the org-level value
-        // (AGL-1775). `seatAddons.posRegisters` is an org POOL and
+        // Register seats are the one quota whose cap is not the org-level
+        // value (AGL-1775). `seatAddons.posRegisters` is an org POOL and
         // `org.registerAllocations` says which site holds each seat, so a
         // `checkQuota(org, 'posRegisters', …)` here would read the plan cap with
         // no pool in it and refuse a site the seats it is invoiced for. This is
         // the enforcement point the decision moved onto the allocation; it did
-        // not move anywhere else.
-        const quota =
-          resourceKey === 'register'
-            ? checkHostRegisterQuota(org, hostId, used)
-            : checkQuota(org, resource.quotaKey as any, used)
+        // not move anywhere else. Keyed by the QUOTA, which is core's billing
+        // vocabulary, rather than by the kind a plugin declares against it.
+        const hostAllocated = resource.quotaKey === HOST_ALLOCATED_QUOTA_KEY
+        const quota = hostAllocated
+          ? checkHostRegisterQuota(org, hostId, used)
+          : checkQuota(org, resource.quotaKey as any, used)
         if (!quota.allowed) {
           return {
             error:
-              resourceKey === 'register'
+              hostAllocated
                 ? `This site can run ${quota.limit} ${resource.label} — ` +
                   'assign another register seat to it in Billing, or buy one'
                 : `Your plan includes ${quota.limit} ${resource.label} — ` +
@@ -1031,28 +880,20 @@ async function handler(request: Request): Promise<Response> {
         ...listKeys,
         ...formListFields,
         ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
-        // A redirect that leaves the platform carries the uid of the publisher
-        // who chose that (AGL-1881). `matchRedirect` refuses to serve an
-        // absolute destination without this stamp, which is what makes a rule
-        // written before that issue — by a role the rules have since refused —
-        // stop firing instead of being trusted.
+        // A destination that leaves the platform carries the uid of the
+        // publisher who chose that (AGL-1881). A redirect's serve path refuses
+        // an absolute destination without this stamp, which is what makes a
+        // rule written before that issue — by a role the rules have since
+        // refused — stop firing instead of being trusted.
         //
-        // Stamped from `decoded.uid`, never from `data`: the field is off the
-        // allow-list above precisely so a caller cannot supply its own
-        // provenance. The role check has already run, so reaching this line
-        // IS the approval.
-        //
-        // The predicate is "not an internal path" and is the same one
-        // `isExternalRedirectDestination` states in
-        // `libs/plugins/redirects/src/lib/model/redirects.ts`, which is the
-        // definition of record. It is restated rather than imported because
-        // `@nx/enforce-module-boundaries` forbids an app from depending on an
-        // `aglyn:addons` library; the two must agree, and the direction of any
-        // disagreement is a rule that does not fire, never one that fires
-        // unapproved.
-        ...(resourceKey === 'redirect' &&
-        !isInternalRedirectDestination(doc['destination'])
-          ? { externalDestinationApprovedBy: decoded.uid }
+        // Stamped from `decoded.uid`, never from `data`: the generator refuses
+        // a declaration whose allow-list carries the approver field, precisely
+        // so a caller cannot supply its own provenance. It also refuses one
+        // that does not require the publishing role, which the role check
+        // above has enforced — so reaching this line IS the approval.
+        ...(resource.externalDestination &&
+        !isSitePath(doc[resource.externalDestination.field])
+          ? { [resource.externalDestination.approvedByField]: decoded.uid }
           : {}),
         // An entry is born a DRAFT, decided here rather than sent (AGL-2266).
         // The rules admit an author's client create only when it is a draft;
@@ -1069,11 +910,12 @@ async function handler(request: Request): Promise<Response> {
         // What the Authors table queries (AGL-3321) — the name's key and
         // tokens, and the schema type as one word — derived the same way.
         ...(resourceKey === 'author' ? contentAuthorQueryFields(doc) : {}),
-        // A product is born LIVE, said with an explicit null (AGL-3321): the
-        // products table's query is scoped `deletedAt == null`, and Firestore
-        // cannot match a field that is absent. Off the allow-list above, so a
-        // duplicate never carries its source's soft delete.
-        ...(resourceKey === 'product' ? { deletedAt: null } : {}),
+        // The constants a declared kind is born with — a product born LIVE
+        // with an explicit `deletedAt: null` (AGL-3321), because its table
+        // queries `deletedAt == null` and Firestore cannot match an absent
+        // field. Never on the allow-list, so a duplicate never carries its
+        // source's soft delete.
+        ...(resource.stamps ?? {}),
         // Unconditional now that no allow-list carries them: the client cannot
         // supply either, so there is no client value left to preserve. The
         // callers already relied on this — a Timestamp does not survive the
@@ -1119,32 +961,32 @@ async function handler(request: Request): Promise<Response> {
       } satisfies HostActivityTarget,
     )
     /**
-     * A REDIRECT IS LIVE THE MOMENT IT EXISTS (AGL-2573).
+     * A KIND THAT IS LIVE THE MOMENT IT EXISTS (AGL-2573).
      *
-     * Alone among the resources this route creates. Everything else is born
-     * unreferenced — a screen has no routing entry until something publishes
-     * one, an entry is created `status: 'draft'`, a layout or component is
-     * served only where a page places it — so their creation changes nothing
-     * a visitor can reach, and announcing would spend a tenant round trip per
-     * document created to drop nothing.
+     * Almost nothing this route creates is. A screen has no routing entry
+     * until something publishes one, an entry is created `status: 'draft'`, a
+     * layout or component is served only where a page places it — so their
+     * creation changes nothing a visitor can reach, and announcing would spend
+     * a tenant round trip per document created to drop nothing.
      *
-     * A redirect is the opposite: it is a routing statement over the whole
-     * site the instant it is written, which is exactly why it needs the
-     * publish role above. The address it captures is already cached as the
-     * page that used to answer there, so without this the new rule sits
-     * behind the hour-long `tenant-data:{hostId}` backstop while the manager
-     * says redirects take about thirty seconds.
+     * A kind that declares `livePathField` — a redirect — is the opposite: a
+     * routing statement over the whole site the instant it is written, which
+     * is exactly why it needs the publish role above. The address it captures
+     * is already cached as the page that used to answer there, so without this
+     * the new rule sits behind the hour-long `tenant-data:{hostId}` backstop
+     * while the manager says redirects take about thirty seconds.
      *
-     * The rule's own source is the one path worth naming — a prefix or regex
-     * rule matches more, and those catch up on their own windows. It is the
-     * same single-path choice `/api/screens/revalidate` makes for a redirect
+     * The declared path is the one worth naming — a prefix or regex rule
+     * matches more, and those catch up on their own windows. It is the same
+     * single-path choice `/api/screens/revalidate` makes for a redirect
      * announced from the browser.
      *
      * Not awaited, and best effort: the create has already succeeded, and a
      * cache hint must never turn it into a failure.
      */
-    if (resourceKey === 'redirect' && typeof doc['source'] === 'string') {
-      const source = (doc['source'] as string).trim()
+    const livePath = resource.livePathField ? doc[resource.livePathField] : undefined
+    if (typeof livePath === 'string') {
+      const source = livePath.trim()
       if (source.startsWith('/')) {
         void announceLivePaths({ hostSnapshot, hostId, paths: [source] })
       }
