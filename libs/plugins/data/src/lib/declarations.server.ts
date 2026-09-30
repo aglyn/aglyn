@@ -17,6 +17,7 @@
 
 // The seam from its own module, not the plugin-manager barrel: boot needs the
 // registry and nothing else, and the barrel reaches the client contexts.
+import { registerFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 import { registerRepeatRowReader } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import { BUNDLE_ID, DATASET_REPEAT_SOURCE_ID } from './constants/bundle-common'
 
@@ -30,6 +31,11 @@ import { BUNDLE_ID, DATASET_REPEAT_SOURCE_ID } from './constants/bundle-common'
  * Admin SDK with it, loads on the first page that repeats, not at boot.
  * `plugins.config.json` declares the same source (`repeatSource`), so a boot
  * that skipped this is refused rather than rendered as "no rows".
+ *
+ * A form can also file every submission as a dataset record, and this is the
+ * target that stamps such a form with its signed binding when a page renders
+ * and writes the record when the submission comes back. Declared the same way
+ * (`formRecordTarget`), and just as light: both halves load on first use.
  */
 export function registerDataServerDeclarations(): void {
   registerRepeatRowReader(
@@ -38,6 +44,20 @@ export function registerDataServerDeclarations(): void {
       (await import('./repeat/dataset-repeat-rows.server')).readPublishedDatasetRows(
         request,
       ),
+    { pluginId: BUNDLE_ID },
+  )
+  registerFormRecordTarget(
+    {
+      stamp: async (nodes, hostId) =>
+        (await import('./form-target/stamp-form-dataset-bindings')).stampFormDatasetBindings(
+          nodes,
+          hostId,
+        ),
+      write: async (request) =>
+        (await import('./form-target/dataset-form-record-target.server')).writeFormSubmissionRecord(
+          request,
+        ),
+    },
     { pluginId: BUNDLE_ID },
   )
 }

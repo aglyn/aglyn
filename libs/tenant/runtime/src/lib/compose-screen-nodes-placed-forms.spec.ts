@@ -59,6 +59,12 @@ jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
   readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
 }))
+// Where a form files its records is the record target's to stamp, and the
+// data plugin's specs hold it; this file is about which design a form renders.
+jest.mock('@aglyn/aglyn/plugin-manager/submission-record-target', () => ({
+  __esModule: true,
+  stampFormRecordTargets: async (nodes: unknown) => nodes,
+}))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetPluginInstalls(...a),
