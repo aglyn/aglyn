@@ -42,6 +42,24 @@ let mockStore: Record<string, Record<string, unknown>> = {}
 const mockDecodedToken: Record<string, unknown> = {}
 const mockNotices: Array<Record<string, any>> = []
 let mockNoticeFails = false
+/** Notices and mail-list writes, in the order the route made them. */
+const mockOrder: string[] = []
+const mockMailLists: Array<Record<string, any>> = []
+
+// What the lock writes onto the suppression lists (AGL-3420), recorded.
+jest.mock('@aglyn/tenant-data-admin/server/account-lock-mail', () => ({
+  __esModule: true,
+  applyAccountLockToMail: async (input: Record<string, any>) => {
+    mockOrder.push(`apply:${input['ban'] ? 'ban' : 'lock'}`)
+    mockMailLists.push({ fn: 'apply', uid: input['uid'], ban: input['ban'] })
+    return { addresses: 1, incomplete: false, banRows: input['ban'] ? 1 : 0, houseSites: 1, houseRows: 1, failed: 0 }
+  },
+  liftAccountLockFromMail: async (input: Record<string, any>) => {
+    mockOrder.push('lift')
+    mockMailLists.push({ fn: 'lift', uid: input['uid'] })
+    return { addresses: 1, incomplete: false, banRows: 1, houseSites: 1, houseRows: 1, failed: 0 }
+  },
+}))
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -123,6 +141,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   readSignupsCreationTriggerStatus: async () => ({ status: 'unknown', reason: 'not probed in tests' }),
   notifyRiskEvent: async (input: Record<string, any>) => {
     mockNotices.push(input)
+    mockOrder.push(`notice:${input['kind']}`)
     const recipients = input['recipients']?.length ?? 2
     const skipped = input['emailOwners'] === false
     return {
@@ -172,6 +191,8 @@ async function post(body: Record<string, unknown>) {
 
 beforeEach(() => {
   mockNotices.length = 0
+  mockOrder.length = 0
+  mockMailLists.length = 0
   mockNoticeFails = false
   mockStore = {
     'orgs/org-fraud': { slug: 'fraud-co', name: 'Fraud Co', ownerUid: 'user-fraud' },
@@ -261,6 +282,51 @@ describe('a lock emails the people it locked', () => {
       userUid: 'user-fraud',
     })
     expect(body.ownerNotice).toMatchObject({ kind: 'account-locked' })
+  })
+
+  it('bans on an abuse lock — onto the lists only after every notice has gone (AGL-3420)', async () => {
+    const { body } = await post({
+      action: 'lock',
+      scope: 'user',
+      targetId: 'user-fraud',
+      reason: 'abuse',
+      lockOwnedWorkspaces: true,
+    })
+    expect(mockOrder[mockOrder.length - 1]).toBe('apply:ban')
+    expect(mockOrder.filter((step) => step.startsWith('notice:')).sort()).toEqual([
+      'notice:account-locked',
+      'notice:workspace-locked',
+    ])
+    expect(body.mailLists).toMatchObject({ outcome: 'banned', banRows: 1 })
+  })
+
+  it('suppresses a non-ban lock on the house sites only, and lifts it before the "restored" notice', async () => {
+    await post({ action: 'lock', scope: 'user', targetId: 'user-fraud', reason: 'billing' })
+    expect(mockMailLists).toEqual([{ fn: 'apply', uid: 'user-fraud', ban: false }])
+    mockOrder.length = 0
+    const { body } = await post({ action: 'unlock', scope: 'user', targetId: 'user-fraud' })
+    expect(mockOrder).toEqual(['lift', 'notice:account-unlocked'])
+    expect(body.mailLists).toMatchObject({ outcome: 'lifted' })
+  })
+
+  it('quotes one reference an appeal can name, on the notice and on every resend (AGL-3420)', async () => {
+    const { body } = await post({ action: 'lock', scope: 'user', targetId: 'user-fraud', reason: 'abuse' })
+    const reference = mockNotices.find((notice) => notice['kind'] === 'account-locked')?.['reference']
+    expect(reference).toMatch(/^LK-[0-9A-F]{10}$/)
+    expect(body.ownerNotice).toMatchObject({ reference })
+    mockNotices.length = 0
+    await post({ action: 'resend-notice', targets: [{ scope: 'user', targetId: 'user-fraud' }] })
+    expect(mockNotices.map((notice) => notice['reference'])).toContain(reference)
+  })
+
+  it('lifts the ban when a ban is re-placed under a milder reason', async () => {
+    await post({ action: 'lock', scope: 'user', targetId: 'user-fraud', reason: 'abuse' })
+    mockMailLists.length = 0
+    await post({ action: 'lock', scope: 'user', targetId: 'user-fraud', reason: 'security' })
+    expect(mockMailLists).toEqual([
+      { fn: 'lift', uid: 'user-fraud' },
+      { fn: 'apply', uid: 'user-fraud', ban: false },
+    ])
   })
 
   it('emails nobody for a platform-wide lock, which names no workspace', async () => {

@@ -76,6 +76,7 @@ export const MINIMAL_THEME: HostTheme = {
   typography: {
     fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif',
     variants: {
+      displayXl: { fontSize: '3.75rem', fontWeight: 800, lineHeight: 1, letterSpacing: TIGHT },
       h1: { fontSize: '2.25rem', fontWeight: 800, lineHeight: 1.1, letterSpacing: TIGHT },
       h2: { fontSize: '1.875rem', fontWeight: 600, lineHeight: 1.2, letterSpacing: TIGHT },
       h3: { fontSize: '1.5rem', fontWeight: 600, lineHeight: 1.3, letterSpacing: TIGHT },
@@ -86,6 +87,10 @@ export const MINIMAL_THEME: HostTheme = {
       body2: { fontSize: '0.875rem', lineHeight: 1.5 },
       button: { fontSize: '0.875rem', fontWeight: 500, textTransform: 'none' },
       overline: { fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.05em' },
+      // shadcn's `lead`, `text-sm` and `text-xs`.
+      lede: { fontSize: '1.25rem', fontWeight: 400, lineHeight: 1.75 },
+      bodyCompact: { fontSize: '0.8125rem', fontWeight: 400, lineHeight: 1.5 },
+      micro: { fontSize: '0.75rem', fontWeight: 400, lineHeight: 1.33 },
     },
   },
   shape: { borderRadius: 8 },

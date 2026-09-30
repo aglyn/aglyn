@@ -47,6 +47,7 @@ export const FIELD_COLOR: AglynAttributeSchema = {
     { value: 'inherit', label: 'Inherit' },
     { value: 'primary', label: 'Primary' },
     { value: 'secondary', label: 'Secondary' },
+    { value: 'tertiary', label: 'Tertiary' },
     { value: 'success', label: 'Success' },
     { value: 'error', label: 'Error' },
     { value: 'info', label: 'Info' },

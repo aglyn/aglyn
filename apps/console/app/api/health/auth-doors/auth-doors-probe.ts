@@ -922,12 +922,25 @@ export const passwordSignInProbe = memoizeWithTtl<AuthDoorCheck>(
               : classifyIdentityToolkitFailure(reply.status, reply.message),
         }
       : { answered: false, verdict: 'refused' }
+    if (answer.verdict === 'refused') {
+      // The one thing an unrecognised refusal may leave behind: its leading
+      // error TOKEN, and only when it is the provider's upper-case code shape.
+      // The prose after it can name a project or an address; the token
+      // cannot, and without it the next unknown answer is a guess (AGL-3419).
+      const token = /^[A-Z][A-Z_]{2,63}(?=$|[\s:])/.exec(reply.message)?.[0]
+      console.warn(
+        `[health/auth-doors] password sign-in refused: ${reply.status} ${token ?? 'unrecognised'}`,
+      )
+    }
 
     // Sequential, not parallel: two sign-ins arriving together from one
     // address — one of them failing — is the shape Identity Platform
     // throttles, and a monitor that trips the defense it is watching reports
     // its own noise.
-    const identity = signInProbeIdentity()
+    // A throttled address refuses the credentialed sign-in too, and a second
+    // failed attempt only extends the block.
+    const identity =
+      answer.verdict === 'throttled' ? null : signInProbeIdentity()
     let probe: { signedIn: boolean } | null = null
     if (identity) {
       const credentialed = await callIdentityToolkit(

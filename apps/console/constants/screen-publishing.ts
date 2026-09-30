@@ -20,7 +20,10 @@ import {
   isFirstPublishedRoute,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
+import {
+  SCREEN_ROOT_PATH,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn/app-utils/screen-route'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   collection,
@@ -71,6 +74,76 @@ async function readRouteMap(
   } catch {
     return {}
   }
+}
+
+/**
+ * {@link readRouteMap}, plus which screen is the placeholder home page the
+ * site was created with (AGL-3408) — the two facts a write that might take
+ * the site root needs. Same failure answer: nothing known, nothing released.
+ */
+async function readRouteState(
+  firestore: Firestore,
+  hostId: HostUid,
+): Promise<RouteState> {
+  try {
+    const snapshot = await getDoc(doc(firestore, 'hosts', hostId))
+    return {
+      screens: (snapshot.get('screens') ?? {}) as Record<string, string>,
+      defaultHomeScreenId: snapshot.get('defaultHomeScreenId'),
+    }
+  } catch {
+    return { screens: {} }
+  }
+}
+
+interface RouteState {
+  screens: Record<string, string>
+  defaultHomeScreenId?: string
+}
+
+/**
+ * THE FIRST REAL HOME PAGE REPLACES THE PLACEHOLDER (AGL-3408).
+ *
+ * A new site is created with a placeholder home page on `/`, and every
+ * surface's conflict check passes over it (`blockingRouteOwner`) — so a write
+ * that routes another screen to `/` has to take the placeholder's entry out
+ * in the SAME batch, or two screens would answer the root and which one a
+ * visitor gets would be undefined.
+ *
+ * Adds its fields to `hostUpdates`, the caller's one update of the host
+ * document, rather than staging a second update of its own: one write per
+ * document keeps the batch what the rules evaluate as a single change. The
+ * placeholder's own `publishedAt` goes too, so Screens lists it as the draft
+ * it now is, and the marker goes so the root is handed over exactly once.
+ *
+ * Answers the entry it removed, for the caller to fold into the addresses it
+ * announces — `{}` when nothing was released.
+ */
+function stagePlaceholderRelease(
+  batch: WriteBatch,
+  firestore: Firestore,
+  options: {
+    hostId: HostUid
+    state: RouteState
+    entries: Record<string, string | null | undefined>
+    hostUpdates: Record<string, unknown>
+  },
+): Record<string, null> {
+  const { hostId, state, entries, hostUpdates } = options
+  const placeholder = state.defaultHomeScreenId
+  if (!placeholder || state.screens[placeholder] !== SCREEN_ROOT_PATH) return {}
+  const takesRoot = Object.entries(entries).some(
+    ([screenId, path]) => screenId !== placeholder && path === SCREEN_ROOT_PATH,
+  )
+  if (!takesRoot) return {}
+  hostUpdates[`screens.${placeholder}`] = deleteField()
+  hostUpdates['defaultHomeScreenId'] = deleteField()
+  batch.set(
+    doc(firestore, 'hosts', hostId, 'screens', placeholder),
+    { publishedAt: deleteField() },
+    { merge: true },
+  )
+  return { [placeholder]: null }
 }
 
 /**
@@ -226,21 +299,31 @@ export async function publishScreenRoute(
   // one (AGL-2573). One read, two questions, both of which can only be asked
   // before the write.
   let before: Record<string, string> = {}
+  let defaultHomeScreenId: string | undefined
   try {
     const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
     before = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
+    defaultHomeScreenId = hostSnapshot.get('defaultHomeScreenId')
     firstPublish = isFirstPublishedRoute(
       hostSnapshot.get('screens') as Record<string, unknown> | undefined,
+      hostSnapshot.get('defaultHomeScreenId'),
     )
   } catch {
     firstPublish = undefined
   }
-  const paths = changedPaths(before, { [screenId]: path })
   // ONE BATCH, and the outbox entry is in it (AGL-2575). Two independent
   // writes could already half-land; adding a third document that has to be
   // atomic with them is what makes the batch the right shape rather than a
   // tidier `Promise.all`.
   const batch = writeBatch(firestore)
+  const hostUpdates: Record<string, unknown> = { [`screens.${screenId}`]: path }
+  const released = stagePlaceholderRelease(batch, firestore, {
+    hostId,
+    state: { screens: before, defaultHomeScreenId },
+    entries: { [screenId]: path },
+    hostUpdates,
+  })
+  const paths = changedPaths(before, { ...released, [screenId]: path })
   // `publishedAt` records when the route went live; it rides the same merge
   // as the slug so publishing stamps it in one write (cleared on unpublish).
   batch.set(
@@ -248,9 +331,7 @@ export async function publishScreenRoute(
     { slug, publishedAt: Timestamp.now() },
     { merge: true },
   )
-  batch.update(doc(firestore, 'hosts', hostId), {
-    [`screens.${screenId}`]: path,
-  })
+  batch.update(doc(firestore, 'hosts', hostId), hostUpdates)
   const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
   await batch.commit()
   // "% who publish a site" — the GTM plan's headline activation metric
@@ -295,17 +376,73 @@ export async function syncScreenRouteEntries(
   // Read before the write: an entry being REMOVED carries `null`, so the
   // address that is about to stop resolving exists nowhere else by the time
   // the announcement is made (AGL-2573).
-  const before = await readRouteMap(firestore, hostId)
+  const state = await readRouteState(firestore, hostId)
   const updates: Record<string, unknown> = {}
   for (const [screenId, path] of Object.entries(entries)) {
     updates[`screens.${screenId}`] = path ?? deleteField()
   }
-  const paths = changedPaths(before, entries)
   const batch = writeBatch(firestore)
+  const released = stagePlaceholderRelease(batch, firestore, {
+    hostId,
+    state,
+    entries,
+    hostUpdates: updates,
+  })
+  const paths = changedPaths(state.screens, { ...released, ...entries })
   batch.update(doc(firestore, 'hosts', hostId), updates)
   const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
   await batch.commit()
   announceRouteChange({ user: announcer.user, hostId, paths, outboxRef })
+}
+
+/**
+ * TAKES THE SITE ROOT BACK FROM THE PLACEHOLDER HOME PAGE (AGL-3408).
+ *
+ * Every new site is created with a home page routed at `/` so its address
+ * never answers with a 404. A starter is somebody's whole site and has to land
+ * on that address (AGL-1575), but `withBundleRootScreen` and
+ * `resolveTemplateSlug` never move a live home page — so without this, the
+ * first starter a new customer applied would put its home at `/home` behind
+ * the placeholder.
+ *
+ * Only ever the screen the host names as `defaultHomeScreenId`, and only while
+ * it still holds `/`. The screen is unpublished, not deleted: anything its
+ * owner typed into it is still in Screens as a draft. The marker goes in the
+ * same batch, so the root is handed back exactly once.
+ *
+ * Answers whether `/` was released, so the caller can free it in the slug set
+ * it de-conflicts against. A host that cannot be read releases nothing.
+ */
+export async function releaseDefaultHomeRoot(
+  firestore: Firestore,
+  ids: { hostId: HostUid } & PublishAnnouncer,
+): Promise<boolean> {
+  const { hostId, user } = ids
+  let before: Record<string, string>
+  let screenId: string | undefined
+  try {
+    const snapshot = await getDoc(doc(firestore, 'hosts', hostId))
+    before = (snapshot.get('screens') ?? {}) as Record<string, string>
+    screenId = snapshot.get('defaultHomeScreenId')
+  } catch {
+    return false
+  }
+  if (!screenId || before[screenId] !== SCREEN_ROOT_PATH) return false
+  const paths = changedPaths(before, { [screenId]: null })
+  const batch = writeBatch(firestore)
+  batch.update(doc(firestore, 'hosts', hostId), {
+    [`screens.${screenId}`]: deleteField(),
+    defaultHomeScreenId: deleteField(),
+  })
+  batch.set(
+    doc(firestore, 'hosts', hostId, 'screens', screenId),
+    { publishedAt: deleteField() },
+    { merge: true },
+  )
+  const outboxRef = stagePublishOutboxEntry(batch, firestore, { hostId, paths })
+  await batch.commit()
+  announceRouteChange({ user, hostId, paths, outboxRef })
+  return true
 }
 
 /**

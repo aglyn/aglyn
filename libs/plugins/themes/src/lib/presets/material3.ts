@@ -71,6 +71,8 @@ export const MATERIAL3_THEME: HostTheme = {
     // The M3 type scale: display for h1–h3, headline for h4–h5, title for
     // h6 and the subtitles, body and label for the rest.
     variants: {
+      // Above display-large, at M3's display weight: regular, never heavy.
+      displayXl: { fontSize: '4.5rem', fontWeight: 400, lineHeight: 1.1, letterSpacing: '-0.5px' },
       h1: { fontSize: '3.5625rem', fontWeight: 400, lineHeight: 1.12, letterSpacing: '-0.25px' },
       h2: { fontSize: '2.8125rem', fontWeight: 400, lineHeight: 1.16, letterSpacing: 0 },
       h3: { fontSize: '2.25rem', fontWeight: 400, lineHeight: 1.22, letterSpacing: 0 },
@@ -89,6 +91,10 @@ export const MATERIAL3_THEME: HostTheme = {
         textTransform: 'none',
       },
       caption: { fontSize: '0.75rem', fontWeight: 400, lineHeight: 1.33, letterSpacing: '0.4px' },
+      // body-large for the lede, body-small and label-small below body.
+      lede: { fontSize: '1.125rem', fontWeight: 400, lineHeight: 1.5, letterSpacing: '0.15px' },
+      bodyCompact: { fontSize: '0.8125rem', fontWeight: 400, lineHeight: 1.38, letterSpacing: '0.25px' },
+      micro: { fontSize: '0.6875rem', fontWeight: 500, lineHeight: 1.45, letterSpacing: '0.5px' },
       overline: {
         fontSize: '0.6875rem',
         fontWeight: 500,
@@ -204,8 +210,15 @@ export const MATERIAL3_THEME: HostTheme = {
       styleOverrides: { tooltip: { borderRadius: 4, fontSize: '0.75rem', padding: '4px 8px' } },
       sx: { tooltip: { bgcolor: 'text.primary', color: 'background.default' } },
     },
+    // M3 has no alert; its closest is a tonal container, so the message sits
+    // on the surface tone and only the icon carries the severity — which
+    // also keeps it legible in dark, where MUI's own tinted fill all but
+    // disappears into the page.
     MuiAlert: {
       styleOverrides: { root: { borderRadius: 12 } },
+      variants: [
+        { props: { variant: 'standard' }, sx: { bgcolor: 'surface.main', color: 'text.primary' } },
+      ],
     },
     MuiLinearProgress: {
       styleOverrides: { root: { height: 4, borderRadius: 4 }, bar: { borderRadius: 4 } },

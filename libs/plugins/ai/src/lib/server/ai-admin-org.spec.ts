@@ -232,16 +232,10 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     expect(mockRecordAdminAudit).not.toHaveBeenCalled()
   })
 
-  it('records the open as an ACCESS row about the org, naming no person', async () => {
+  it('writes no audit row for opening the card', async () => {
     staff()
     expect((await get({ token: 'tok' })).status).toBe(200)
-    expect(mockRecordAdminAudit).toHaveBeenCalledTimes(1)
-    const [entry] = mockRecordAdminAudit.mock.calls[0] as unknown as [Record<string, unknown>]
-    expect(entry.actorUid).toBe('staff-1')
-    expect(entry.action).toBe('org.ai-viewed')
-    expect(entry.target).toBe('orgs/org-1/assistUsage')
-    // The leaderboard names ten people; the row is about the ORG.
-    expect(entry.subjectUid).toBeUndefined()
+    expect(mockRecordAdminAudit).not.toHaveBeenCalled()
   })
 
   it('composes the pool, overage, refusals, jobs and users from the real helpers', async () => {

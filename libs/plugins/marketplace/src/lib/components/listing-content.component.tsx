@@ -69,7 +69,6 @@ import {
 import {
   AppLink,
   CardDisplay,
-  Container,
   GridItems,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
@@ -1264,7 +1263,10 @@ export function MarketplaceListingContent({
   return (
     <>
       <NextPageTitle screen={listing?.displayName ?? 'Marketplace listing'} />
-        <Container gutterY maxWidth="xl">
+        {/* No Container of its own: the detail page owns the page layout and
+            stacks this under the owner's review cards, so gutters here would
+            inset the body from the cards above it. */}
+        <Box>
           {/* A designed zero-state, not a loose sentence (AGL-998). It is
               reached by ordinary means — a bookmark to something since
               unpublished, a link from another environment — so it has to
@@ -2537,7 +2539,7 @@ export function MarketplaceListingContent({
               />
             ) : null}
           </Dialog>
-        </Container>
+        </Box>
     </>
   )
 }

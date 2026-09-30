@@ -28,6 +28,7 @@ import {
 import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
+import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
 import { filterSuppressedEmails } from './email-suppression'
 import { meterOrgEmail, meterPlatformEmail } from './email-metering'
@@ -325,6 +326,9 @@ export async function notifyUsers(
      * Digests are excluded: they compose and send their own mail, under
      * their own switches, and the generic channel would send a second
      * message announcing that the first one had been sent.
+     *
+     * A locked or disabled account is not mailed (AGL-3418); its feed entry
+     * above still records the event.
      */
     if (
       mailTo.length &&
@@ -332,8 +336,10 @@ export async function notifyUsers(
       isEmailConfigured() &&
       !NOTIFICATION_SELF_SENT_EMAIL_TYPES.has(payload.type)
     ) {
+      const reachable = await withoutMailWithheldAccounts(mailTo)
+      if (!reachable.length) return
       await emailNotification(
-        mailTo,
+        reachable,
         payload,
         options.emails ?? {},
         options.audience,

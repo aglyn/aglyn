@@ -62,6 +62,7 @@ import {
   ORG_LIST_FILTER_FIELDS,
   ORG_LIST_FILTER_HEADERS,
   ORG_LIST_QUERY,
+  ORG_SUSPENDED_FILTER_OPTIONS,
 } from '../../../../utils/org-list-query'
 import { mdiChartLine } from '@aglyn/shared-data-mdi'
 import {
@@ -129,7 +130,8 @@ const SUBSCRIPTION_STATUS_LABELS: Readonly<Record<string, string>> = {
 
 /**
  * The org fields picked rather than typed, shown in the panel as selects:
- * the stored plan by its label, and the billing status by its Stripe word.
+ * the stored plan by its label, the billing status by its Stripe word, and
+ * Suspended by the row chip's word.
  */
 const ORG_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>> = {
   plan: (Object.keys(PLAN_LABELS) as Array<keyof typeof PLAN_LABELS>).map((plan) => ({
@@ -140,6 +142,7 @@ const ORG_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption
     value,
     label,
   })),
+  suspended: ORG_SUSPENDED_FILTER_OPTIONS,
 }
 const ORG_SELECT_FIELDS = Object.keys(ORG_LIST_FILTER_OPTIONS)
 
@@ -454,7 +457,10 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 color={row.plan ? 'primary' : 'default'}
                 sx={{ flexShrink: 0 }}
               />
-              {row.suspendedAt ? (
+              {/* In force NOW, as the Suspended filter answers: a timed
+                  suspension that has lapsed keeps its fields and loses
+                  the chip. */}
+              {row.suspended ? (
                 <Chip
                   label="suspended"
                   size="small"

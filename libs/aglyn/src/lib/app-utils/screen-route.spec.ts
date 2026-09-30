@@ -19,6 +19,7 @@ import {
   buildScreenRouteEntries,
   collectionEntryRoutePath,
   collectionFeedRoutePath,
+  blockingRouteOwner,
   collectScreenDescendantIds,
   composeScreenRoutePath,
   findScreenIdByRoutePath,
@@ -123,6 +124,24 @@ describe('screenSlugHasPathSeparator', () => {
 
     expect(normalizeScreenSlug('/layout-test/')).toBe('layout-test')
     expect(normalizeScreenSlug(SCREEN_ROOT_PATH)).toBe(SCREEN_ROOT_PATH)
+  })
+})
+
+describe('blockingRouteOwner (AGL-3408)', () => {
+  const screens = { placeholder: '/', about: 'about' }
+
+  it('passes over the placeholder home page at the root, and only there', () => {
+    expect(blockingRouteOwner(screens, '/', 'placeholder')).toBeUndefined()
+    // Moved off the root, it blocks its new address like any page.
+    expect(
+      blockingRouteOwner({ placeholder: 'welcome' }, 'welcome', 'placeholder'),
+    ).toBe('placeholder')
+  })
+
+  it('is findScreenIdByRoutePath for every other screen', () => {
+    expect(blockingRouteOwner(screens, '/', undefined)).toBe('placeholder')
+    expect(blockingRouteOwner(screens, '/', 'about')).toBe('placeholder')
+    expect(blockingRouteOwner(screens, 'about', 'placeholder')).toBe('about')
   })
 })
 

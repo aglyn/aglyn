@@ -63,6 +63,14 @@
     ],
     "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
   },
+  "@marijn/find-cluster-break": {
+    "decision": "unreachable",
+    "class": "caller-host",
+    "packages": [
+      "@marijn/find-cluster-break"
+    ],
+    "note": "The only `fetch` is bin/build-extenders.js, the maintainer's script that downloads the Unicode GraphemeBreakProperty table to generate src/. It is outside the package `exports` (src/index.js, dist/index.cjs), so nothing we ship can reach it. Arrived with the CodeMirror refresh (AGL-3410)."
+  },
   "@protobufjs/fetch": {
     "decision": "transport",
     "class": "caller-host",
@@ -79,14 +87,6 @@
       "gtoken"
     ],
     "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
-  },
-  "agent-base": {
-    "decision": "transport",
-    "class": "caller-host",
-    "packages": [
-      "agent-base"
-    ],
-    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
   },
   "aka.ms": {
     "decision": "documentation",
@@ -475,14 +475,6 @@
     ],
     "note": "A placeholder or documentation stand-in host in vendor source. Contacts nothing."
   },
-  "form-data": {
-    "decision": "transport",
-    "class": "caller-host",
-    "packages": [
-      "form-data"
-    ],
-    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
-  },
   "fpnv.googleapis.com": {
     "decision": "disclosed",
     "class": "vendor-host",
@@ -707,14 +699,6 @@
     ],
     "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
   },
-  "mobx-utils": {
-    "decision": "transport",
-    "class": "caller-host",
-    "packages": [
-      "mobx-utils"
-    ],
-    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
-  },
   "motion.dev": {
     "decision": "documentation",
     "class": "vendor-host",
@@ -779,14 +763,6 @@
       "gtoken"
     ],
     "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
-  },
-  "openjsf.org": {
-    "decision": "documentation",
-    "class": "vendor-host",
-    "packages": [
-      "node-addon-api"
-    ],
-    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
   },
   "phrogz.net": {
     "decision": "documentation",
@@ -903,6 +879,14 @@
     "class": "vendor-host",
     "packages": [
       "redux"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "reselect.js.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "reselect"
     ],
     "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
   },

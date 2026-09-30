@@ -30,6 +30,7 @@ import {
   formatMonacoDompurifyFailure,
   FORBIDDEN_CALLS,
   FORBIDDEN_OPTIONS,
+  isPatched,
   REVIEWED_DOMPURIFY_VERSION,
   REVIEWED_MONACO_VERSION,
   SENTINEL_OPTION,
@@ -42,12 +43,12 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
  * the sentinel option, and — like the real bundle — contains the library's own
  * READS of every dangerous option, which must NOT be mistaken for passing one.
  */
-function bundle(extra = '') {
+function bundle(extra = '', version = REVIEWED_DOMPURIFY_VERSION) {
   return {
     path: 'editor-TESTHASH.js',
     source:
       `const policyName="dompurify"+(suffix?"#"+suffix:"");` +
-      `e.version="${REVIEWED_DOMPURIFY_VERSION}";` +
+      `e.version="${version}";` +
       // the library reading its config — the shape that must stay quiet
       `const Rf=N.IN_PLACE||!1,V=It(N,"CUSTOM_ELEMENT_HANDLING"),D=N.TRUSTED_TYPES_POLICY;` +
       `e.setConfig=function(){SET_CONFIG=!0};e.clearConfig=function(){};` +
@@ -78,11 +79,17 @@ describe('evaluateMonacoDompurify', () => {
     assert.equal(result.failures.length, 0)
   })
 
+  // The precondition checks only bite while the vendored copy is still
+  // vulnerable, so they are exercised against a pre-fix DOMPurify (3.4.8, what
+  // monaco 0.56 shipped). The extra `dompurify-moved` failure that version also
+  // raises is expected; each test asks only for its own finding.
+  const VULNERABLE = '3.4.8'
+
   for (const { token, advisory } of FORBIDDEN_OPTIONS) {
     it(`fails when monaco passes ${token} (${advisory})`, () => {
       const result = evaluateMonacoDompurify({
         monacoVersion: REVIEWED_MONACO_VERSION,
-        files: [bundle(`Kc.sanitize(o,{...i,${token}:!0});`)],
+        files: [bundle(`Kc.sanitize(o,{...i,${token}:!0});`, VULNERABLE)],
       })
       assert.equal(result.ok, false)
       assert.ok(
@@ -98,7 +105,7 @@ describe('evaluateMonacoDompurify', () => {
     it(`fails when ${token}() gains a call site (${advisory})`, () => {
       const result = evaluateMonacoDompurify({
         monacoVersion: REVIEWED_MONACO_VERSION,
-        files: [bundle(`purify.${token}({ALLOWED_ATTR:["href"]});`)],
+        files: [bundle(`purify.${token}({ALLOWED_ATTR:["href"]});`, VULNERABLE)],
       })
       assert.equal(result.ok, false)
       assert.ok(
@@ -109,6 +116,27 @@ describe('evaluateMonacoDompurify', () => {
       )
     })
   }
+
+  for (const { token, advisory, patchedIn, code } of [
+    ...FORBIDDEN_OPTIONS.map((o) => ({ ...o, code: `Kc.sanitize(o,{...i,${o.token}:!0});` })),
+    ...FORBIDDEN_CALLS.map((c) => ({ ...c, code: `purify.${c.token}({});` })),
+  ]) {
+    it(`lets ${token} through once the vendored copy is past ${advisory}'s fix (${patchedIn})`, () => {
+      const result = evaluateMonacoDompurify({
+        monacoVersion: REVIEWED_MONACO_VERSION,
+        files: [bundle(code)],
+      })
+      assert.equal(result.ok, true, formatMonacoDompurifyFailure(result))
+    })
+  }
+
+  it('compares versions numerically, and never calls an unreadable one patched', () => {
+    assert.equal(isPatched('3.4.15', '3.4.9'), true)
+    assert.equal(isPatched('3.4.9', '3.4.9'), true)
+    assert.equal(isPatched('3.4.8', '3.4.9'), false)
+    assert.equal(isPatched('3.10.0', '3.4.13'), true)
+    assert.equal(isPatched(undefined, '3.4.9'), false)
+  })
 
   it('fails when the bundled DOMPurify version moves off the reviewed pin', () => {
     const moved = bundle().source.replace(
@@ -124,7 +152,7 @@ describe('evaluateMonacoDompurify', () => {
   })
 
   it('fails when monaco itself moves, so a bump forces a re-read', () => {
-    const result = evaluateMonacoDompurify({ ...ok(), monacoVersion: '0.57.0' })
+    const result = evaluateMonacoDompurify({ ...ok(), monacoVersion: '0.58.0' })
     assert.equal(result.ok, false)
     assert.ok(result.failures.some((f) => f.kind === 'monaco-moved'))
   })

@@ -523,6 +523,17 @@ async function writeSiteSuppression(
   await firestore.runTransaction(async (transaction: any) => {
     const existing = await transaction.get(ref)
     created = !existing.exists
+    /*
+     * A row of ANOTHER kind already refuses this address — a bounce, an
+     * erasure, a locked account's hold — and it stays that kind. Rewritten as
+     * an unsubscribe, the resubscribe link could delete it, and an erasure
+     * row would get the address it removed written back.
+     */
+    // An absent reason is a pre-AGL-2408 unsubscribe (see SUPPRESSION_REASONS).
+    const kind = existing.exists ? (existing.get('reason') ?? UNSUBSCRIBE_SUPPRESSION_REASON) : null
+    if (kind && kind !== UNSUBSCRIBE_SUPPRESSION_REASON) {
+      return
+    }
     transaction.set(
       ref,
       {

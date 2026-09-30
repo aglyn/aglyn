@@ -2147,24 +2147,40 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   sx={{ justifyContent: 'space-between' }}
                                 >
                                   <Chip label={entry.action} size="small" />
-                                  <Tooltip
-                                    title={
-                                      actor ? (entry.actorUid ?? '') : ''
-                                    }
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
                                   >
-                                    <Typography
-                                      variant="caption"
-                                      color="text.secondary"
-                                    >
-                                      {`${actor ?? entry.actorUid ?? '—'} · ${
-                                        entry.at?.seconds
-                                          ? new Date(
-                                              entry.at.seconds * 1000,
-                                            ).toLocaleString()
-                                          : '—'
-                                      }`}
-                                    </Typography>
-                                  </Tooltip>
+                                    {/* A uid is an account: it links to
+                                        that account's staff page. A
+                                        `system:*` actor has none. */}
+                                    {entry.actorUid &&
+                                    !String(entry.actorUid).includes(':') ? (
+                                      <Tooltip
+                                        title={actor ? entry.actorUid : ''}
+                                      >
+                                        <AppLink
+                                          variant="caption"
+                                          underline="hover"
+                                          href={buildRoute(
+                                            Route.ADMIN_USER_DETAIL,
+                                            { uid: entry.actorUid },
+                                          )}
+                                        >
+                                          {actor ?? entry.actorUid}
+                                        </AppLink>
+                                      </Tooltip>
+                                    ) : (
+                                      (entry.actorUid ?? '—')
+                                    )}
+                                    {` · ${
+                                      entry.at?.seconds
+                                        ? new Date(
+                                            entry.at.seconds * 1000,
+                                          ).toLocaleString()
+                                        : '—'
+                                    }`}
+                                  </Typography>
                                 </Stack>
                                 {why ? (
                                   <Typography

@@ -160,13 +160,6 @@ const COMPONENT_EXTRA_IDS = ['icon']
  */
 const NEVER_IDS = new Set([
   'custom-html',
-  'functionWidget',
-  // The calculator elements (AGL-3202) mean nothing without a site function
-  // to bind, and a model cannot create one.
-  'functionScope',
-  'functionInput',
-  'functionOutput',
-  'functionShow',
   'div',
   'reusableInstance',
   'marketplacePlugin',
@@ -538,9 +531,16 @@ function buildCatalog(
     )
   }
   const allowed = new Set(definition.allow)
-  const named = blocks
-    .filter((block) => [...block.ids].every((id) => allowed.has(id)))
-    .map((block) => `${block.name} (${block.rootId})`)
+  // De-duplicated: two blocks that print the same name on the same root read
+  // as one example to the model, so the second copy is paid-for prompt that
+  // teaches nothing — two FAQ blocks both print `FAQ (muiStack)` (AGL-3411).
+  const named = [
+    ...new Set(
+      blocks
+        .filter((block) => [...block.ids].every((id) => allowed.has(id)))
+        .map((block) => `${block.name} (${block.rootId})`),
+    ),
+  ]
   if (named.length) lines.push(`Named blocks to imitate: ${named.join('; ')}.`)
   return lines.join('\n')
 }

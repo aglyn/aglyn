@@ -6437,6 +6437,76 @@
       ]
     },
     {
+      "collectionGroup": "orgs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orgs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orgs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orgs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orgs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "suspendedUntilMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "hosts",
       "queryScope": "COLLECTION",
       "fields": [
@@ -6517,6 +6587,34 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "hosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "hosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "suspendedUntilMs",
+          "order": "ASCENDING"
         }
       ]
     },

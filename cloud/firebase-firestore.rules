@@ -618,7 +618,7 @@ service cloud.firestore {
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
-             'suspendedEnforcement', 'crmInbound', 'acquisition',
+             'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
              'marketingConsentPolicy'])) ||
         (isBillingStaff() &&
@@ -632,7 +632,7 @@ service cloud.firestore {
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
-             'suspendedEnforcement',
+             'suspendedEnforcement', 'suspended',
              'erasureRequestedAt', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
              'marketingConsentPolicy'])) ||
@@ -660,7 +660,7 @@ service cloud.firestore {
              'usageBudget', 'usageAlerts', 'usageAlertsSeeded',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
-             'suspendedEnforcement',
+             'suspendedEnforcement', 'suspended',
              'erasureRequestedAt',
              // AGL-3237. The workspace's IANA time zone, which decides which
              // calendar day a published entry is attributed to on every site
@@ -2779,7 +2779,7 @@ service cloud.firestore {
                      'cnameDetachmentPending', 'themeInstalledFrom',
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
-                     'bandwidthCeiling',
+                     'suspended', 'bandwidthCeiling',
                      // `sendingDomain`/`sendingLocalPart` are this site's
                      // half of the custom-sending-domain model: together they
                      // are the `From:` address every recipient of this site's
@@ -2868,9 +2868,10 @@ service cloud.firestore {
           // Deliberately NOT added to the blanket `hasAny` list above: that
           // list is the Admin-SDK-only set, and `screens` has a legitimate
           // client writer. Two different questions, two conditions.
+          // defaultHomeScreenId (AGL-3408) picks what a publish at / unroutes.
           (canPublishHostContent(hostId) ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['screens'])));
+              .hasAny(['screens', 'defaultHomeScreenId'])));
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && isVerified() &&
           !hostWritesFrozen(hostId));

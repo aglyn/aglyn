@@ -441,6 +441,8 @@ export type EmailDeliverabilityCode =
   | 'disposable_domain'
   | 'role_address'
   | 'gateway_held'
+  /** The account holding the address is banned (AGL-3420). */
+  | 'account_banned'
 
 export type EmailDeliverabilitySeverity = 'refuse' | 'hold' | 'warn'
 
@@ -631,10 +633,15 @@ export interface EmailDeliverabilityPreflightRequest {
   sendingSource: 'custom' | 'shared' | 'platform'
   context?: string
   hostId?: string | null
+  /** The send is a lock or lift notice, which reaches a banned account. */
+  accountBanExempt?: boolean
 }
 
 export interface EmailDeliverabilityPreflightVerdict {
-  /** Recipients whose domain takes no mail. Never sent, whatever the purpose. */
+  /**
+   * Recipients whose domain takes no mail, or whose account is banned.
+   * Never sent, whatever the purpose.
+   */
   refused: Array<{ email: string; code: EmailDeliverabilityCode; reason: string }>
   /** Recipients behind a gateway that refused this sender twice. Bulk and cold mail only. */
   held: Array<{ email: string; gateway: MailGateway; reason: string }>

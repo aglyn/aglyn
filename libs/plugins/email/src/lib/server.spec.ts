@@ -406,6 +406,20 @@ describe('email/unsubscribe', () => {
     expect(entry['suppressedAt']).toBe('t3')
   })
 
+  it('leaves a row of another kind as that kind, so a resubscribe cannot delete it (AGL-3420)', async () => {
+    for (const row of [
+      { email: RECIPIENT, reason: 'account_lock', subjectUid: 'u1' },
+      { email: null, reason: 'erasure' },
+    ]) {
+      docs.set(SUPPRESSION_PATH, row)
+      const reply = await call({ method: 'POST', query: validQuery() })
+      expect(reply.status).toBe(200)
+      expect(docs.get(SUPPRESSION_PATH)).toEqual(row)
+      await call({ route: 'email/resubscribe', method: 'POST', query: validQuery() })
+      expect(docs.get(SUPPRESSION_PATH)).toEqual(row)
+    }
+  })
+
   it('refuses a bad signature on POST without writing', async () => {
     const reply = await call({
       method: 'POST',

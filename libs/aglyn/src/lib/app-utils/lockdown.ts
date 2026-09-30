@@ -406,12 +406,21 @@ export function lockdownBlocks(
 
 export type LockdownReasonCode =
   | 'security'
+  /**
+   * Phishing, fraud or malicious content (AGL-3420). On an ACCOUNT it is a
+   * permanent ban: the account is kept only so its address can never sign up
+   * again, and after the lock notice it is sent no mail at all — see
+   * {@link isAccountBanLockdownReason}. Everywhere a lock's strictness is
+   * read from its reason it is at least as strict as `security`.
+   */
+  | 'abuse'
   | 'billing'
   | 'maintenance'
   | 'manual'
 
 const LOCKDOWN_REASON_CODE_KEYS: Record<LockdownReasonCode, true> = {
   security: true,
+  abuse: true,
   billing: true,
   maintenance: true,
   manual: true,
@@ -426,6 +435,33 @@ export function isLockdownReasonCode(
   return (
     typeof value === 'string' && value in LOCKDOWN_REASON_CODE_KEYS
   )
+}
+
+/** Staff-surface labels; the key stays the wire/API identity. */
+export const LOCKDOWN_REASON_LABELS: Record<LockdownReasonCode, string> = {
+  security: 'Security — investigating a concern',
+  abuse: 'Abuse — phishing, fraud or malicious content (permanent ban)',
+  billing: 'Billing — unresolved payment',
+  maintenance: 'Maintenance',
+  manual: 'Manual',
+}
+
+/**
+ * The reasons that mean "a threat, act now": `security`, and `abuse`, which
+ * is a confirmed one. Every rule that is stricter for a security lock — who
+ * is signed out, which bytes stop serving, which tokens rotate — reads it
+ * through here, so a ban is never the milder of the two.
+ */
+export function isSecurityClassLockdownReason(reason: unknown): boolean {
+  return reason === 'security' || reason === 'abuse'
+}
+
+/**
+ * A lock with this reason, on an account, is a permanent ban (AGL-3420):
+ * after its notice the account is sent nothing, by any sender.
+ */
+export function isAccountBanLockdownReason(reason: unknown): boolean {
+  return reason === 'abuse'
 }
 
 /** The one shape every enforcement point consumes. */
@@ -1042,6 +1078,13 @@ export interface LockdownNotice {
   body: string
   /** Shown as the action line; undefined = no contact line (maintenance). */
   contact?: string
+  /**
+   * The lock is a decision the account holder may appeal — a `security` or
+   * `abuse` lock (AGL-3420) — so the contact line offers the appeal rather
+   * than taking questions. Set by reason, never by staff's message, so a
+   * custom message cannot remove the way to appeal.
+   */
+  appeal?: boolean
 }
 
 /**
@@ -1125,6 +1168,19 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
           'Access is temporarily disabled while we investigate a security ' +
             'concern.',
         contact: lockdownSupportEmail() ?? undefined,
+        // A platform-wide lock is ours, with nobody to appeal it.
+        ...(state.scope !== 'platform' ? { appeal: true } : {}),
+      }
+    case 'abuse':
+      return {
+        title: 'Unavailable',
+        body:
+          custom ??
+          'This account has been closed for a violation of our Terms of ' +
+            'Service.',
+        contact: lockdownSupportEmail() ?? undefined,
+        // A platform-wide lock is ours, with nobody to appeal it.
+        ...(state.scope !== 'platform' ? { appeal: true } : {}),
       }
     case 'manual':
     default:
@@ -1188,6 +1244,15 @@ function domainLockdownNotice(
           custom ??
           'This web address is not currently serving while we investigate ' +
             'a report about it.',
+        contact,
+      }
+    case 'abuse':
+      return {
+        title,
+        body:
+          custom ??
+          'This web address is not serving because of a violation of our ' +
+            'Terms of Service.',
         contact,
       }
     case 'manual':
@@ -1367,6 +1432,7 @@ export interface LockdownRefusalBody {
   title?: unknown
   message?: unknown
   contact?: unknown
+  appeal?: unknown
   untilMs?: unknown
 }
 
@@ -1375,6 +1441,8 @@ export interface LockdownRefusalNotice {
   title: string
   message: string
   contact?: string
+  /** The contact line offers an appeal — see {@link LockdownNotice.appeal}. */
+  appeal?: boolean
   scope?: LockdownScope
   feature?: LockdownFeatureKey
   /**
@@ -1497,6 +1565,7 @@ export function parseLockdownRefusal(
     title,
     message,
     ...(contact ? { contact } : {}),
+    ...(contact && payload.appeal === true ? { appeal: true } : {}),
     ...(typeof payload.scope === 'string'
       ? { scope: payload.scope as LockdownScope }
       : {}),

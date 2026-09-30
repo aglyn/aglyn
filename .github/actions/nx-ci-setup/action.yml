@@ -129,7 +129,7 @@ runs:
     # the first writer wins. `actions/cache` entries are immutable, so
     # `github.sha` in the key makes every run save a fresh entry while the
     # restore-keys fall back to the most recent one for this job and lockfile.
-    - uses: actions/cache@v4
+    - uses: actions/cache@v6
       with:
         path: .nx/cache
         key: nx-${{ runner.os }}-${{ inputs.cache-scope }}-${{ hashFiles('package-lock.json', 'apps/docs/package-lock.json', 'cloud/functions/package-lock.json') }}-${{ github.sha }}

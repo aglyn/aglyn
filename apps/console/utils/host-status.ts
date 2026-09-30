@@ -39,10 +39,10 @@ export interface HostStatus {
  * that means "has anyone worked on this?" is asking a different question and
  * this is the wrong number for it.
  *
- * One function rather than the same `Object.keys` in each caller: the two
- * that exist read the same map for two different decisions — the Live/Draft
- * pill and the first-run offer (AGL-2918) — and a map whose meaning is
- * spelled out twice is a map that comes to mean two things.
+ * The placeholder home page a new site is created with (AGL-3408) COUNTS
+ * here: it is a page a visitor reaches, so a new site is Live. The first-run
+ * offer asks a different question — has the OWNER published anything? — and
+ * reads `hostIsBlankSite`, which discounts it.
  */
 export function publishedScreenCount(
   host: { screens?: Record<string, unknown> } | null | undefined,
@@ -54,8 +54,8 @@ export function publishedScreenCount(
  * The `Live` / `Draft` pill the console Sites mockup puts on every card
  * (AGL-2166).
  *
- * Derived from {@link publishedScreenCount}, so what the pill claims and what
- * the rest of the console calls a blank site are the same reading.
+ * Derived from {@link publishedScreenCount}: the pill reports what a visitor
+ * can reach, placeholder home page included.
  *
  * The staff admin host page has rendered a `published` / `draft` chip since
  * AGL-390 off `host.published`, which is not a field on `AglynHost` and is

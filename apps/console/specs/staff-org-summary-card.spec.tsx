@@ -163,7 +163,7 @@ describe('StaffOrgSummaryCard (AGL-938)', () => {
         onImpersonateOwner={jest.fn()}
       />,
     )
-    const link = screen.getByText('Zach Gover')
+    const link = screen.getByText('Zach Gover (staff@aglyn.com)')
     expect(link.closest('a')?.getAttribute('href')).toContain(org.ownerUid)
     // The raw uid is not card text any more — it lives in the tooltip.
     expect(screen.queryByText(org.ownerUid)).toBeNull()
@@ -222,7 +222,7 @@ describe('StaffOrgSummaryCard (AGL-938)', () => {
 })
 
 describe('staffPersonLabel', () => {
-  it('prefers the display name, then the email, then null', () => {
+  it('names both when both resolved, else whichever did, else null', () => {
     expect(
       staffPersonLabel({
         uid: 'u',
@@ -230,6 +230,9 @@ describe('staffPersonLabel', () => {
         email: 'a@b.c',
         source: 'auth',
       }),
+    ).toBe('A (a@b.c)')
+    expect(
+      staffPersonLabel({ uid: 'u', displayName: 'A', email: null, source: 'auth' }),
     ).toBe('A')
     expect(
       staffPersonLabel({ uid: 'u', displayName: null, email: 'a@b.c', source: 'roster' }),

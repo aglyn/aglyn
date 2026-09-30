@@ -22,7 +22,6 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { readUserAiUsageMonths } from '../usage/ai-usage-by-user'
-import { recordAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
@@ -36,9 +35,8 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
  * person has left is not listed, and its months expire on the retention
  * window.
  *
- * Opening it is recorded as an ACCESS about THIS person — `subjectUid` set,
- * unlike the org card's row — because the whole response is about one
- * account, and that is exactly the row their page exists to show.
+ * Read only, and not audited: the card loads with every open of the staff
+ * user page, the same reason the org card writes no row.
  */
 
 /** The most workspaces one account is walked across. */
@@ -83,22 +81,6 @@ async function handler(request: Request): Promise<Response> {
       .collection('orgs')
       .limit(MAX_ORGS)
       .get()
-
-    // Recorded BEFORE the person-shaped read is served, and awaited, for
-    // the reason the org card gives: a card that rendered and then failed
-    // to record the look would be the access this collection exists to
-    // never lose.
-    try {
-      await recordAdminAudit({
-        actorUid: decoded.uid,
-        action: 'user.ai-usage-viewed',
-        target: `users/${uid}`,
-        subjectUid: uid,
-        note: `AI usage opened across ${reverse.size} workspace(s)`,
-      })
-    } catch (error) {
-      console.error('[ai/admin/user] audit write failed', error)
-    }
 
     const rows: StaffUserAiUsageRow[] = []
     for (const entry of reverse.docs) {

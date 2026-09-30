@@ -36,6 +36,11 @@ jest.mock('./auth-pools', () => ({
   findUserByUidAcrossPools: async (uid: string) =>
     directory.has(uid) ? { record: { email: directory.get(uid) }, tenantId: null } : null,
 }))
+const withheld = new Set<string>()
+jest.mock('./account-mail', () => ({
+  withoutMailWithheldAccounts: async (uids: readonly string[]) =>
+    uids.filter((uid) => !withheld.has(uid)),
+}))
 jest.mock('./email-suppression', () => ({
   filterSuppressedEmails: async (addresses: readonly string[]) =>
     addresses.filter((address) => !suppressed.has(address)),
@@ -65,6 +70,7 @@ beforeEach(() => {
   sends.length = 0
   metered.length = 0
   suppressed.clear()
+  withheld.clear()
   directory.clear()
   emailConfigured = true
   sendOk = true
@@ -96,6 +102,12 @@ describe('sendOrgMemberNotice (AGL-3244)', () => {
     directory.set('uid-rep', 'Rep@Example.org')
     expect(await notice()).toEqual({ sent: 1 })
     expect(sends[0]['to']).toBe('rep@example.org')
+  })
+
+  it('writes to no locked or disabled account (AGL-3418)', async () => {
+    withheld.add('uid-owner')
+    expect(await notice({ includeAdmins: true })).toEqual({ sent: 2 })
+    expect(sends.map((send) => send['to']).sort()).toEqual(['admin@example.com', 'rep@example.com'])
   })
 
   it('skips a suppressed address, and says when there was nobody to write to', async () => {

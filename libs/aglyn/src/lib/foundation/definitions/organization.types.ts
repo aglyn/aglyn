@@ -170,6 +170,11 @@ export interface AglynOrganization extends AglynDocument {
   suspendedReasonCode?: string
   suspendedMessage?: string
   suspendedUntilMs?: number
+  /**
+   * Whether that suspension is in force, stored for the staff list's
+   * Suspended filter (AGL-3416). See `AglynOrgBilling.suspended`.
+   */
+  suspended?: boolean
   erasureRequestedAt?: ITimestamp | null
   /**
    * Scope applied to newly created datasets and media when nobody chooses

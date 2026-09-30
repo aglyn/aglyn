@@ -22,7 +22,7 @@ import {
 import { lookup } from 'dns/promises'
 import { isIPv4, isIPv6 } from 'net'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { Agent } from 'undici'
+import { Agent, type Dispatcher, Dispatcher1Wrapper } from 'undici'
 import { firebaseAdmin } from './firebase-admin'
 
 const FETCH_TIMEOUT_MS = 8000
@@ -95,22 +95,35 @@ export async function resolvePublicIp(hostname: string): Promise<string | null> 
  * is a **declared direct dependency** for exactly this reason: it used to
  * arrive only as a transitive of the dev-only `jsdom`, which meant a
  * `--omit=dev` install had no `undici` at all and a jsdom bump silently
- * re-versioned the HTTP client behind a production security control. undici 8
- * rejects this `lookup` shape with `UND_ERR_INVALID_ARG` on every request —
- * fail-closed, but the plugin-fetch route stops working outright. The spec
- * drives a real request through this dispatcher so that break is a red test,
- * not a production discovery.
+ * re-versioned the HTTP client behind a production security control. The spec
+ * drives a real request through this dispatcher so that a transport break is a
+ * red test, not a production discovery.
+ *
+ * ## Why the agent is wrapped
+ *
+ * The request goes through Node's BUILT-IN `fetch`, which is undici 7 inside
+ * Node 24 and speaks the v1 handler protocol. An undici 8 `Agent` speaks v2, so
+ * handing it to the built-in `fetch` bare fails every request with
+ * `InvalidArgumentError: invalid onRequestStart method` — fail-closed, but the
+ * plugin-fetch route stops working outright. `Dispatcher1Wrapper` is undici's
+ * own bridge for exactly that pairing, and it forwards `close()` to the agent.
+ *
+ * `allowH2: false` keeps the transport HTTP/1.1, which is what this pin was
+ * written and measured against; undici 8 turned HTTP/2 on by default.
  */
-export function createPinnedDispatcher(pinnedIp: string): Agent {
+export function createPinnedDispatcher(pinnedIp: string): Dispatcher {
   const family = isIPv6(pinnedIp) ? 6 : 4
-  return new Agent({
-    connect: {
-      lookup: (_host, options, cb) =>
-        options && options.all
-          ? cb(null, [{ address: pinnedIp, family }])
-          : cb(null, pinnedIp, family),
-    },
-  })
+  return new Dispatcher1Wrapper(
+    new Agent({
+      allowH2: false,
+      connect: {
+        lookup: (_host, options, cb) =>
+          options && options.all
+            ? cb(null, [{ address: pinnedIp, family }])
+            : cb(null, pinnedIp, family),
+      },
+    }),
+  )
 }
 
 /**

@@ -250,7 +250,8 @@ export function registerAiActivityActions(): void {
         (prefix) => prefix !== 'ai.',
       ),
       // The staff cards opening on an org (AGL-2930) and on one account
-      // (AGL-2928): reads of spend and attribution, and nothing altered.
+      // (AGL-2928). Neither writes these any more; the rows already in the
+      // log still classify as reads rather than changes.
       staffAuditAccessActions: ['org.ai-viewed', 'user.ai-usage-viewed'],
     },
     actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({

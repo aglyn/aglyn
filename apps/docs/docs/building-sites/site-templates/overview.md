@@ -21,7 +21,9 @@ scale with your tier.
 - Spin up a new site from the **starter template gallery**, which instantiates published
   screens for you. Starters are copied into your site's own
   [template library](./templates-library.md), so you can edit and version them like any
-  other template.
+  other template. A starter's first page becomes the site's home page: it replaces the
+  placeholder **Home** screen a new site is created with (which is kept as a draft),
+  but never a home page you published yourself.
 - **Save a site as a template** from **Setup → Site template**, which publishes it to the
   marketplace — see [save & share a template](./save-a-template.md). Browsing and installing
   marketplace templates happens in the **Start from a template** picker, opened by the

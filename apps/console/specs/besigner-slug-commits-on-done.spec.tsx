@@ -189,6 +189,7 @@ jest.mock('@aglyn/aglyn', () => ({
   buildScreenRouteEntries: mockRealScreenRoute.buildScreenRouteEntries,
   composeScreenRoutePath: mockRealScreenRoute.composeScreenRoutePath,
   findScreenIdByRoutePath: mockRealScreenRoute.findScreenIdByRoutePath,
+  blockingRouteOwner: mockRealScreenRoute.blockingRouteOwner,
   linkableScreenRoutes: mockRealScreenRoute.linkableScreenRoutes,
   normalizeScreenSlug: mockRealScreenRoute.normalizeScreenSlug,
   ownScreenSlugFromRoutePath: mockRealScreenRoute.ownScreenSlugFromRoutePath,

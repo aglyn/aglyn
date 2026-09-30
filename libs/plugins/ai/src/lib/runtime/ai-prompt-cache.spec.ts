@@ -645,14 +645,18 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       plan: { prefixTokens: 2_980, minimum: 1_024, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
-      layout: { prefixTokens: 4_434, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 4_976, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_042, minimum: 1_024, caches: true, toolsStable: true },
+      // All four then came DOWN 2 at AGL-3411: Tertiary
+      // joined the Button and Screen Link colors, and the catalog stopped
+      // printing a second identical `FAQ (muiStack)`, which more than paid
+      // for it.
+      layout: { prefixTokens: 4_432, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 4_974, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_040, minimum: 1_024, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate.
       email: { prefixTokens: 2_919, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_730, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_618, minimum: 1_024, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_616, minimum: 1_024, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
       theme: { prefixTokens: 3_514, minimum: 1_024, caches: true, toolsStable: true },

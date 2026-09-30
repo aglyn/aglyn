@@ -235,3 +235,14 @@ describe('riskKindForAbuseRow', () => {
     expect(riskKindForAbuseRow({ source: 'outbound-screen', riskNotice: { kind: 'link-blocked' } })).toBe('link-blocked')
   })
 })
+
+describe('a locked account is told how to appeal (AGL-3420)', () => {
+  it('names the appeal, the reply, the support address and the reference', () => {
+    const steps = RISK_NOTICE_CATALOG['account-locked'].owner.steps.join(' ')
+    expect(steps).toMatch(/appeal/)
+    expect(steps).toMatch(/reply to this email/)
+    expect(steps).toContain('{{support.email}}')
+    expect(steps).toContain('{{reference}}')
+  })
+})
+

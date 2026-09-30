@@ -229,8 +229,11 @@ wrote for you, and what the lock affects, for example:
 The email is sent to the workspace's owners and admins (or, for an account lock, to you)
 even though the workspace itself cannot send anything while it is locked.
 
-- **What to do.** Read the message in the notice; it says what we need from you. To appeal,
-  reply to the email or write to support with the reference. A person reads every appeal.
+- **What to do.** Read the message in the notice; it says what we need from you.
+- **To appeal.** Reply to the notice email, or write to support with the reference it
+  gives (it starts `LK-`). Tell us anything that explains what happened. A person reviews
+  every appeal and answers from the support address. You don't need to sign in to appeal,
+  and you can appeal even if the account was closed.
 - **When it is lifted.** You get a "restored" notice saying what happens now. Sign in again;
   sessions that were signed out stay signed out. A subscription canceled with a lock stays
   canceled until you restart it from **Billing**.

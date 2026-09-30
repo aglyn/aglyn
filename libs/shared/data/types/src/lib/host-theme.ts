@@ -81,7 +81,15 @@ export interface HostThemeFont {
   source?: 'google' | 'system'
 }
 
+/**
+ * The text styles a theme can set: MUI's own, plus the four the platform adds
+ * (AGL-3411) — `displayXl`, the rung above `h1`, and the `lede`, `bodyCompact`
+ * and `micro` body rungs (17/13/11px in the platform theme). Leaving one out
+ * of a theme keeps the platform's own definition, so a theme that restyles
+ * every heading but not these renders them in the platform's font and weights.
+ */
 export type HostThemeTypographyVariantKey =
+  | 'displayXl'
   | 'h1'
   | 'h2'
   | 'h3'
@@ -95,6 +103,9 @@ export type HostThemeTypographyVariantKey =
   | 'button'
   | 'caption'
   | 'overline'
+  | 'lede'
+  | 'bodyCompact'
+  | 'micro'
 
 export interface HostThemeTypographyVariant {
   fontFamily?: string

@@ -21,10 +21,29 @@
  * line. Neither existed.
  */
 
+import { hostIsBlankSite } from '../utils/host-first-run'
 import {
   describeHostStatus,
   describeSiteAllowance,
 } from '../utils/host-status'
+
+describe('the placeholder home page a new site is created with (AGL-3408)', () => {
+  const newSite = { screens: { ph: '/' }, defaultHomeScreenId: 'ph' }
+
+  it('makes the site Live — a visitor reaches it', () => {
+    expect(describeHostStatus(newSite).label).toBe('Live')
+  })
+
+  it('still leaves the site blank for the first-run offer — the owner published nothing', () => {
+    expect(hostIsBlankSite(newSite)).toBe(true)
+    expect(
+      hostIsBlankSite({ ...newSite, screens: { ph: '/', about: 'about' } }),
+    ).toBe(false)
+    // A site with no marker counts every route, as before.
+    expect(hostIsBlankSite({ screens: { mine: '/' } })).toBe(false)
+    expect(hostIsBlankSite({ screens: {} })).toBe(true)
+  })
+})
 
 describe('describeHostStatus', () => {
   it('calls a site with published screens Live', () => {

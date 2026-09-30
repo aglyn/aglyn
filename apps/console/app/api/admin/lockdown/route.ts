@@ -79,6 +79,8 @@ import {
   LOCKDOWNS_COLLECTION,
   type LockdownEnforcement,
   type LockdownMode,
+  isAccountBanLockdownReason,
+  isSecurityClassLockdownReason,
   PLATFORM_LOCKDOWN_DOC_ID,
   pluginRequestFromWeb,
   userLockdownDocId,
@@ -110,6 +112,7 @@ import {
 import {
   LOCKDOWN_RESEND_MAX_TARGETS,
   type LockdownNoticeEffects,
+  lockdownNoticeReference,
   lockRecipientsFor,
   resendLockdownOwnerNotices,
   sendLockdownOwnerNotice,
@@ -122,6 +125,10 @@ import {
   runOrgLockdownParticipants,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-lockdown'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  applyAccountLockToMail,
+  liftAccountLockFromMail,
+} from '@aglyn/tenant-data-admin/server/account-lock-mail'
 
 export const dynamic = 'force-dynamic'
 
@@ -249,6 +256,11 @@ async function audit(options: {
   target: string
   before: Record<string, unknown>
   after: Record<string, unknown>
+  /**
+   * The reference the lock's notice quotes (AGL-3420), as the row's note:
+   * an appeal names it, and the audit log's search finds the lock by it.
+   */
+  reference?: string
 }): Promise<void> {
   await addAdminAudit(firebaseAdmin.app().firestore(), {
     actorUid: options.actorUid,
@@ -258,6 +270,7 @@ async function audit(options: {
     target: options.target,
     before: options.before,
     after: options.after,
+    ...(options.reference ? { note: `Notice reference ${options.reference}` } : {}),
     at: FieldValue.serverTimestamp(),
   })
 }
@@ -634,6 +647,49 @@ async function ownerNoticeStep(options: {
 }
 
 /**
+ * An account lock written onto the suppression lists (AGL-3420), reported as
+ * its own step and never able to undo the lock. A lock suppresses the
+ * account's addresses on the house workspace's sites, and a ban (`abuse`)
+ * on the platform list too; a lift — or re-placing a ban under a milder
+ * reason — takes its rows off again.
+ */
+async function accountMailStep(options: {
+  action: 'lock' | 'unlock'
+  uid: string
+  record: Parameters<typeof applyAccountLockToMail>[0]['record']
+  ban: boolean
+  wasBan: boolean
+  actorUid: string
+}): Promise<{ mailLists: Record<string, unknown> }> {
+  try {
+    if (options.action === 'unlock' || (options.wasBan && !options.ban)) {
+      const lifted = await liftAccountLockFromMail({
+        uid: options.uid,
+        record: options.record,
+        releasedByUid: options.actorUid,
+      })
+      if (options.action === 'unlock') {
+        return { mailLists: { outcome: 'lifted', ...lifted } }
+      }
+    }
+    const applied = await applyAccountLockToMail({
+      uid: options.uid,
+      record: options.record,
+      ban: options.ban,
+    })
+    return {
+      mailLists: {
+        outcome: applied.failed ? 'partial' : options.ban ? 'banned' : 'suppressed',
+        ...applied,
+      },
+    }
+  } catch (error) {
+    console.error('[admin/lockdown] account mail lists failed', options.uid, error)
+    return { mailLists: { outcome: 'failed' } }
+  }
+}
+
+/**
  * Whether a money step confirmed a change, read off its reported result: a
  * confirmed step that touched nothing (no subscription to pause, no payout
  * schedule held) did not happen, as far as the owners' notice is concerned.
@@ -681,13 +737,14 @@ async function lockOrgAndAudit(options: {
     // session is not the mechanism.
     revokeMemberTokens:
       lock.mode !== 'read-only' &&
-      (lock.reason === 'security' || lock.reason === 'manual'),
+      (isSecurityClassLockdownReason(lock.reason) || lock.reason === 'manual'),
   })
   await audit({
     ...actor,
     action: `lockdown.${action}`,
     scope: 'org',
     target: `orgs/${orgId}`,
+    reference: lockdownNoticeReference('org', orgId),
     before: {
       locked: orgSnapshot.get('suspendedAt') != null,
       // The org scope carries the lock on the org doc's `suspended*`
@@ -1657,6 +1714,7 @@ async function handler(request: Request): Promise<Response> {
         action: `lockdown.${action}`,
         scope: 'domain',
         target: `lockdowns/${domainLockdownDocId(hostname)}`,
+        reference: lockdownNoticeReference('domain', hostname),
         before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
@@ -1713,6 +1771,18 @@ async function handler(request: Request): Promise<Response> {
         .doc(userLockdownDocId(targetId))
       const before = (await ref.get()).data() ?? null
       const pool = authForPool(found.tenantId)
+      const mailStep = () =>
+        accountMailStep({
+          action,
+          uid: targetId,
+          record: found.record,
+          ban: action === 'lock' && isAccountBanLockdownReason(lock.reason),
+          wasBan: isAccountBanLockdownReason(before?.['reason']),
+          actorUid: decoded.uid,
+        })
+      // A lift takes the account off the lists BEFORE its notice goes, so
+      // the "restored" email reaches an address nothing still refuses.
+      const liftedMail = action === 'unlock' ? await mailStep() : undefined
       if (action === 'lock') {
         await ref.set({
           scope: 'user',
@@ -1747,6 +1817,7 @@ async function handler(request: Request): Promise<Response> {
         action: `lockdown.${action}`,
         scope: 'user',
         target: `users/${targetId}`,
+        reference: lockdownNoticeReference('user', targetId),
         before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
@@ -1781,12 +1852,20 @@ async function handler(request: Request): Promise<Response> {
             : 0,
         },
       })
+      // A lock goes onto the lists AFTER every notice it sends — the
+      // account's own and its workspaces' — so a ban's notice is the last
+      // mail the account receives.
+      const mailLists = liftedMail ?? (await mailStep())
       return actionResponse({
         firestore,
         scope,
         targetId,
         action,
-        extra: { ...(ownedWorkspaces ? { ownedWorkspaces } : {}), ...userNotice },
+        extra: {
+          ...(ownedWorkspaces ? { ownedWorkspaces } : {}),
+          ...userNotice,
+          ...mailLists,
+        },
       })
     }
 
@@ -1882,6 +1961,7 @@ async function handler(request: Request): Promise<Response> {
       action: `lockdown.${action}`,
       scope: 'host',
       target: `hosts/${targetId}`,
+      reference: lockdownNoticeReference('host', targetId),
       before: {
         locked: hostSnapshot.get('suspendedAt') != null,
         ...auditLockShape({

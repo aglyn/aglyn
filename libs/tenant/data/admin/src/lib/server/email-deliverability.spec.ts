@@ -33,7 +33,10 @@ import type { EmailDeliveryEvent, MailDnsResolver } from '@aglyn/shared-util-ema
 import { fakeFirestore, type FakeFirestore } from './test-firestore'
 
 const mockSuppressions: Array<Record<string, unknown>> = []
+const mockBanned = new Set<string>()
 jest.mock('./email-suppression', () => ({
+  accountBannedRecipients: async (emails: readonly string[]) =>
+    new Set(emails.filter((email) => mockBanned.has(email))),
   suppressEmail: async (input: Record<string, unknown>) => {
     mockSuppressions.push({ email: input['email'], reason: input['reason'], hostId: input['hostId'] ?? null })
     return { key: 'k', created: true }
@@ -96,6 +99,7 @@ beforeEach(() => {
   asked = []
   mockOperatorAlerts.length = 0
   mockSuppressions.length = 0
+  mockBanned.clear()
   mx = {
     'lifespire.example': [{ exchange: 'd78608a.ess.barracudanetworks.com', priority: 10 }],
     'workspace.example': [{ exchange: 'aspmx.l.google.com', priority: 1 }],
@@ -159,6 +163,28 @@ describe('runEmailDeliverabilityPreflight — the seam on sendEmail', () => {
     ])
     expect(verdict.held).toEqual([])
     expect(mockSuppressions).toEqual([{ email: 'nobody@parked.example', reason: 'no_mail_server', hostId: null }])
+  })
+
+  it('refuses a banned account on every purpose, transactional included — unless the send is a lock notice (AGL-3420)', async () => {
+    mockBanned.add('banned@workspace.example')
+    const request = {
+      recipients: ['banned@workspace.example', 'casey@workspace.example'],
+      purpose: 'transactional' as const,
+      sendingDomain: 'aglyn.com',
+      sendingSource: 'platform' as const,
+      context: 'password-reset',
+    }
+    const verdict = await runEmailDeliverabilityPreflight(request, deps())
+    expect(verdict.refused).toEqual([
+      expect.objectContaining({ email: 'banned@workspace.example', code: 'account_banned' }),
+    ])
+    // A ban is not a dead mailbox: nothing is filed for it here.
+    expect(mockSuppressions).toEqual([])
+    const notice = await runEmailDeliverabilityPreflight(
+      { ...request, context: 'risk-notice', accountBanExempt: true },
+      deps(),
+    )
+    expect(notice.refused).toEqual([])
   })
 
   it('never refuses, nor suppresses, a public mailbox provider on a bad MX answer', async () => {

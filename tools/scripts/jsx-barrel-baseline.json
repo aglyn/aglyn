@@ -47,7 +47,6 @@
     "js-cookie",
     "lodash-es",
     "mobx",
-    "mobx-utils",
     "nanoid",
     "next",
     "react",

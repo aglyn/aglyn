@@ -98,7 +98,7 @@ export interface TabsElementProps extends TabLinkProps {
   /** Centres a standard strip; MUI ignores it when scrollable. */
   centered?: boolean
   textColor?: 'primary' | 'secondary' | 'inherit'
-  indicatorColor?: 'primary' | 'secondary'
+  indicatorColor?: 'primary' | 'secondary' | 'tertiary'
   /**
    * Render every panel into the SSR output up front instead of building each
    * panel the first time its tab is opened (AGL-1283 option 3).
@@ -893,6 +893,7 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
       options: [
         { value: 'primary', label: 'Primary (default)' },
         { value: 'secondary', label: 'Secondary' },
+        { value: 'tertiary', label: 'Tertiary' },
       ],
     },
     {

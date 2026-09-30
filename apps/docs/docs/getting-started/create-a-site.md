@@ -17,12 +17,13 @@ settings. Everything you build lives under a site, and you can own several.
 2. Open the **site switcher** in the app bar (top-left) and choose **Create site**.
 3. Give it a name. Aglyn generates a working subdomain immediately, so the site has a
    real address from the first moment — you can attach a
-   [custom domain](../building-sites/custom-domains/overview.md) later. The address
-   resolves right away, but it has nothing to serve until you publish a screen at the
-   site root, so a brand-new site answers its own URL with a not-found page. Starting
-   from a [starter template](../building-sites/site-templates/overview.md) creates and
-   publishes a home page for you; building by hand, that's
-   [your first screen](publish-your-first-screen.md).
+   [custom domain](../building-sites/custom-domains/overview.md) later. Every new site
+   starts with a published **Home** screen at the site root — your site's name over a
+   short welcome line — so the address shows a real page from the first visit. Open
+   it from **Screens** to make it your own. Or replace it: the first page you publish
+   at the site root — one you build, one the AI drafts for you, or a
+   [starter template](../building-sites/site-templates/overview.md)'s home page —
+   takes over `/`, and the placeholder Home screen is kept as an unpublished draft.
 4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for
    Basic details, SEO, Tracking, Theme, and Emails; the custom domain and the
    activity log are under **Admin**. To start building

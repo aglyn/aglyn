@@ -16,7 +16,7 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { makeAutoObservable, observable } from 'mobx'
+import { makeAutoObservable, observableRef } from 'mobx'
 
 export interface InlineTextEditRect {
   left: number
@@ -55,7 +55,7 @@ export interface InlinePropEditTarget {
  * edit measures a grafted preview leaf, which is not a canvas node and has no
  * ref — the case a ref lookup would have missed silently.
  *
- * An `observable.ref`: a DOM node is a foreign object graph, and mobx has no
+ * An `observableRef`: a DOM node is a foreign object graph, and mobx has no
  * business walking into it.
  */
 class InlineTextEditStore {
@@ -65,7 +65,7 @@ class InlineTextEditStore {
   propTarget?: InlinePropEditTarget = undefined
 
   constructor() {
-    makeAutoObservable(this, { anchor: observable.ref })
+    makeAutoObservable(this, { anchor: observableRef })
   }
 
   open(

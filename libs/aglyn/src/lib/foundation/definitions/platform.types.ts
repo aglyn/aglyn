@@ -483,6 +483,14 @@ export interface AglynHost extends AglynDocument {
     advertising?: boolean
   }
   screens?: Record<ScreenUid, ScreenSlug>
+  /**
+   * The placeholder home page the site was created with (AGL-3408), while it
+   * still holds `/`. A starter applied afterwards may take the root from this
+   * screen — and only this one — leaving it as a draft; `first_publish` does
+   * not count its routing entry. Absent on sites created before it and once a
+   * starter has taken the root.
+   */
+  defaultHomeScreenId?: ScreenUid
   /** Screen rendered (noindex) for unmatched paths (AGL-87). */
   notFoundScreenId?: ScreenUid
   /**
@@ -530,6 +538,14 @@ export interface AglynHost extends AglynDocument {
   suspendedReasonCode?: string
   suspendedMessage?: string
   suspendedUntilMs?: number
+  /**
+   * Whether the takedown above is IN FORCE, stored so the staff Sites list
+   * can filter by it with an equality (AGL-3416). `false` on every site not
+   * taken down; written beside the family by the lockdown core, and cleared
+   * on a lapsed timed takedown before the list queries it. Never an
+   * enforcement input: every enforcing reader asks the family itself.
+   */
+  suspended?: boolean
   /**
    * Per-site plugin deny-list (AGL-1014): plugin ids the org has enabled
    * but this site switches OFF. Subtracted from the org's resolved set by

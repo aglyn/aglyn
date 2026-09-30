@@ -6759,8 +6759,11 @@ describe("the deliverability store is server-written: staff read the platform ha
  * be a takedown.
  */
 describe('the staff host takedown keys are not the site\'s to write (AGL-1507)', () => {
+  // `suspended` is the stored in-force flag the staff Sites list filters by
+  // (AGL-3416): clearing it would take a takedown off that list.
   const TAKEDOWN_KEYS = [
     'suspendedAt', 'suspendedReasonCode', 'suspendedMessage', 'suspendedUntilMs',
+    'suspended',
   ]
 
   it('editors and site admins cannot set any suspended* key', async () => {
@@ -6784,7 +6787,7 @@ describe('the staff host takedown keys are not the site\'s to write (AGL-1507)',
       await updateDoc(doc(context.firestore(), 'hosts', HOST), {
         suspendedAt: new Date(), suspendedReasonCode: 'abuse',
         suspendedMessage: 'Suspended pending review',
-        suspendedUntilMs: Date.now() + 86_400_000,
+        suspendedUntilMs: Date.now() + 86_400_000, suspended: true,
       })
     })
     for (const uid of [EDITOR, OWNER]) {
@@ -7536,9 +7539,11 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
  * client-side as super staff.
  */
 describe('the org suspended* family is Admin-SDK-only — even for super staff (AGL-1517)', () => {
+  // `suspended` is the stored in-force flag the staff Organizations list
+  // filters by (AGL-3416), written beside the family and nowhere else.
   const ORG_SUSPENSION_KEYS = [
     'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
-    'suspendedMessage', 'suspendedUntilMs',
+    'suspendedMessage', 'suspendedUntilMs', 'suspended',
   ]
 
   it('super staff cannot set, clear, shorten or smuggle any suspended* key', async () => {
@@ -7561,7 +7566,7 @@ describe('the org suspended* family is Admin-SDK-only — even for super staff (
       await updateDoc(doc(context.firestore(), 'orgs', ORG), {
         suspendedAt: new Date(), suspendedReason: 'manual',
         suspendedReasonCode: 'manual', suspendedMessage: 'Suspended',
-        suspendedUntilMs: Date.now() + 86_400_000,
+        suspendedUntilMs: Date.now() + 86_400_000, suspended: true,
       })
     })
     for (const key of ORG_SUSPENSION_KEYS) {

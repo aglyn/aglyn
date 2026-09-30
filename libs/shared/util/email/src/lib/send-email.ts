@@ -140,6 +140,13 @@ export interface SendEmailOptions {
    */
   audience?: SendingIdentityAudience
   /**
+   * Delivers to an address whose account is BANNED (AGL-3420). A banned
+   * account is sent nothing after its ban notice, by any sender; the lock
+   * and lift notices themselves are the only mail that states this, and no
+   * other sender may.
+   */
+  accountBanExempt?: boolean
+  /**
    * Short label for logs, e.g. `'invite'` or `'usage-summary'`. Makes a
    * failure in the runtime logs traceable to the feature that caused it.
    *
@@ -837,6 +844,7 @@ export async function sendEmail(
       sendingSource: options.sendingIdentity?.source ?? 'platform',
       context: options.context,
       hostId: options.marketing?.hostId ?? null,
+      ...(options.accountBanExempt ? { accountBanExempt: true } : {}),
     },
     label,
   )

@@ -144,6 +144,7 @@ import {
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
 import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
+import { SUSPENDED_FIELD, suspensionInForce } from '../../../../utils/server/suspended-flag'
 
 export const dynamic = 'force-dynamic'
 
@@ -782,7 +783,15 @@ async function scheduleRestoration(
   if (typeof existing === 'number' && existing <= restoreAtMs) {
     return 'alreadySooner'
   }
-  await ref.set({ suspendedUntilMs: restoreAtMs }, { merge: true })
+  // The stored flag follows the window it now has: a put-back instant
+  // already passed ends the lock on this write (`suspended-flag.ts`).
+  await ref.set(
+    {
+      suspendedUntilMs: restoreAtMs,
+      [SUSPENDED_FIELD]: suspensionInForce(true, restoreAtMs),
+    },
+    { merge: true },
+  )
   return 'scheduled'
 }
 
@@ -811,7 +820,12 @@ async function cancelRestoration(
     return 'nothingScheduled'
   }
   if (snapshot.get('suspendedUntilMs') == null) return 'nothingScheduled'
-  await ref.set({ suspendedUntilMs: FieldValue.delete() }, { merge: true })
+  // Open-ended again, so in force again — even when the put-back instant had
+  // already passed and the lists had cleared the flag (`suspended-flag.ts`).
+  await ref.set(
+    { suspendedUntilMs: FieldValue.delete(), [SUSPENDED_FIELD]: true },
+    { merge: true },
+  )
   return 'cancelled'
 }
 

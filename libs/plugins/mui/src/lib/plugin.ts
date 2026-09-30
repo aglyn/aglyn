@@ -102,8 +102,6 @@ const languageSwitcher = viaTier('languageSwitcher')
 const reusableInstance = viaTier('reusableInstance')
 const navMenu = viaTier('navMenu')
 const drawer = viaTier('drawer')
-const functionWidget = viaTier('functionWidget')
-const functionScope = viaTier('functionScope')
 const product = viaTier('product')
 const plugin = viaTier('plugin')
 const customHtml = viaTier('customHtml')
@@ -365,36 +363,6 @@ export const MUI_COMPONENT_SOURCES: Readonly<
     module: drawer,
     component: 'DrawerToggle',
     schema: 'drawerToggleSchema',
-  },
-  functionWidget: {
-    module: functionWidget,
-    component: 'default',
-    schema: 'schema',
-    presets: 'presets',
-  },
-  functionScope: {
-    module: functionScope,
-    component: 'default',
-    schema: 'schema',
-    presets: 'presets',
-  },
-  functionInput: {
-    module: functionScope,
-    component: 'FunctionInput',
-    schema: 'functionInputSchema',
-    presets: 'functionInputPresets',
-  },
-  functionOutput: {
-    module: functionScope,
-    component: 'FunctionOutput',
-    schema: 'functionOutputSchema',
-    presets: 'functionOutputPresets',
-  },
-  functionShow: {
-    module: functionScope,
-    component: 'FunctionShow',
-    schema: 'functionShowSchema',
-    presets: 'functionShowPresets',
   },
   product: {
     module: product,

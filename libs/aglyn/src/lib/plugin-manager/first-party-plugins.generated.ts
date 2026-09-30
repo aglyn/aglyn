@@ -477,7 +477,4 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
  * Every first-party element that runs a site function, and the prop naming
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
-export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {
-  "functionScope": "functionName",
-  "functionWidget": "functionName",
-}
+export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {}

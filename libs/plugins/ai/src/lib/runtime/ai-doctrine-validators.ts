@@ -2094,7 +2094,7 @@ export function detectCutLines(
 }
 
 const PURE_CONTAINERS = new Set(['muiBox', 'muiStack', 'muiContainer', 'muiGrid', 'section'])
-const EMBED_COMPONENTS = new Set(['videoEmbed', 'custom-html', 'functionWidget'])
+const EMBED_COMPONENTS = new Set(['videoEmbed', 'custom-html'])
 const DUPLICATE_SX_MIN_KEYS = 2
 const DUPLICATE_SX_MIN_NODES = 4
 

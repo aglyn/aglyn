@@ -53,6 +53,26 @@ const mockResolveOrgMembership = jest.fn()
 const mockCheckQuota = jest.fn()
 /** Every `tx.set` the create transaction performs, in order. */
 const mockTxSets: string[] = []
+/** A subcollection whose documents carry a path, and nest further. */
+function mockSubcollection(path: string): unknown {
+  return {
+    doc: (id: string) => ({
+      path: `${path}/${id}`,
+      collection: (sub: string) => mockSubcollection(`${path}/${id}/${sub}`),
+    }),
+  }
+}
+/**
+ * The transaction's writes on a successful create: the host, its home page
+ * and that page's first version (AGL-3408), and the org's claim. Every id is
+ * `host-new` because `createResourceUid` is stubbed to it.
+ */
+const CREATE_WRITES = [
+  'hosts/host-new',
+  'hosts/host-new/screens/host-new',
+  'hosts/host-new/screens/host-new/versions/host-new',
+  'orgs/org-1',
+]
 /**
  * What the TRANSACTION's uniqueness re-read finds — empty unless a test stages
  * a competitor that committed inside the race window (AGL-2465).
@@ -130,6 +150,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
               data: () => ORG,
               get: (field: string) => (ORG as Record<string, unknown>)[field],
             }),
+            // The home page the site is created with (AGL-3408) is written
+            // under the host, so its refs need a path and nothing else.
+            collection: (sub: string) => mockSubcollection(`${name}/${id}/${sub}`),
           }),
         }),
         runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -347,7 +370,7 @@ describe('AGL-1968 · /api/hosts/create is rate limited', () => {
       orgId: 'org-1',
     })
     // Both halves of the AGL-2063 claim still happen.
-    expect(mockTxSets).toEqual(['hosts/host-new', 'orgs/org-1'])
+    expect(mockTxSets).toEqual(CREATE_WRITES)
     expect(mockRegisterOrgHost).toHaveBeenCalledWith(
       'org-1',
       'host-new',
@@ -412,7 +435,7 @@ describe('AGL-2465 · losing the subdomain race writes nothing', () => {
   it('THE CONTROL: with no competitor the identical request creates the site', async () => {
     const response = await post()
     expect(response.status).toBe(200)
-    expect(mockTxSets).toEqual(['hosts/host-new', 'orgs/org-1'])
+    expect(mockTxSets).toEqual(CREATE_WRITES)
     expect(mockRegisterOrgHost).toHaveBeenCalled()
   })
 
@@ -423,7 +446,7 @@ describe('AGL-2465 · losing the subdomain race writes nothing', () => {
     mockRivalHosts = [{ id: 'host-new' }]
     const response = await post()
     expect(response.status).toBe(200)
-    expect(mockTxSets).toEqual(['hosts/host-new', 'orgs/org-1'])
+    expect(mockTxSets).toEqual(CREATE_WRITES)
   })
 
   it('the 409 is NOT the quota 403 — the quota said yes', async () => {

@@ -376,6 +376,15 @@ const REVIEW_TIME =
 const CANNOT_SIGN_IN =
   'If you cannot sign in, reply to this email or write to {{support.email}} with the reference {{reference}}.'
 
+/**
+ * How a locked ACCOUNT appeals (AGL-3420). It cannot sign in, so the way in
+ * is mail: a reply to the notice reaches support (the notice's Reply-To),
+ * and support answers from its own mailbox — which a ban does not refuse,
+ * because a ban refuses what the platform sends, not what a person does.
+ */
+const APPEAL_BY_REPLY =
+  'If you believe this is a mistake, you can appeal: reply to this email, or write to {{support.email}} with the reference {{reference}}. Tell us anything that explains what happened. A person reviews every appeal and answers from that address.'
+
 /*
  * The catalog. Exhaustive by type: a kind added to RISK_EVENT_KINDS is a
  * compile error here until somebody writes what each audience is told.
@@ -1331,7 +1340,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       meaning: 'While it is locked: {{lock.affected}}',
       steps: [
         'Read the message above; it says what we need from you.',
-        CANNOT_SIGN_IN,
+        APPEAL_BY_REPLY,
       ],
       actions: ['contact-support'],
     },

@@ -133,7 +133,9 @@ export function ListingDetailPage(props: {
           onDone={() => setEditing(false)}
         />
       ) : (
-        <>
+        // One stack, one gap: the owner cards and the listing body share the
+        // same edges and the same spacing between them.
+        <Stack spacing={3}>
           {/* The publisher's own view of the queue (AGL-1079). Owner-only:
               review state, rejection reasons and what was attested are the
               publisher's business, and a buyer is never offered a version
@@ -176,7 +178,7 @@ export function ListingDetailPage(props: {
               hosts={hosts}
             />
           )}
-        </>
+        </Stack>
       )}
     </>
   )

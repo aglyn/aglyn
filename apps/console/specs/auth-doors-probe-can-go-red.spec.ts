@@ -896,6 +896,7 @@ describe('classifyIdentityToolkitFailure', () => {
     [400, 'API key not valid. Please pass a valid API key.', 'api-key-rejected'],
     [403, 'Requests to this API are blocked.', 'api-key-rejected'],
     [400, 'INVALID_OOB_CODE', 'refused'],
+    [400, 'TOO_MANY_ATTEMPTS_TRY_LATER : We have blocked all requests from this device due to unusual activity.', 'throttled'],
   ])('maps %s %s to %s', (status, message, expected) => {
     expect(classifyIdentityToolkitFailure(status as number, message as string)).toBe(
       expected,
@@ -1141,6 +1142,34 @@ describe('password-sign-in door (AGL-2583)', () => {
     )
     expect(check.ok).toBe(false)
     expect(check.code).toBe('unexpected-answer')
+  })
+
+  it('a throttle on the probe\'s own address is green, and says so in its code', () => {
+    // AGL-3419: Identity Platform blocked the Vercel egress the probe calls
+    // from while every customer, signing in from their own browser, was
+    // unaffected. Reading that as an outage paged for nothing.
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({
+        answer: { answered: true, verdict: 'throttled' },
+        refusedTheAbsentAccount: false,
+      }),
+      12,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBe('probe-throttled')
+  })
+
+  it('a throttle cannot mute an absent account being ADMITTED', () => {
+    const check = passwordSignInDoorHealth(
+      signedInAnswer({
+        answer: { answered: true, verdict: 'throttled' },
+        refusedTheAbsentAccount: false,
+        unexpectedAcceptance: true,
+      }),
+      12,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('admitted-absent-account')
   })
 
   it('REDS when the configured probe identity cannot sign in', () => {

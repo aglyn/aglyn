@@ -49,6 +49,7 @@ import {
   utcDayKey,
 } from '@aglyn/aglyn/server'
 import { rateLimitedRetryAtMs, sendEmail } from '@aglyn/shared-util-email'
+import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
 import {
   findUserByUidAcrossPools,
   firebaseAdmin,
@@ -350,9 +351,15 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
 
   if (!tasks.length && !leads.length) return { ...quiet, skipped: 'nothing-owed' }
 
-  const members = (await listOrgMembers(orgId)).filter(
+  const listed = (await listOrgMembers(orgId)).filter(
     (member) => member.orgSuspended !== true,
   )
+  // A locked or disabled account is not told (AGL-3418): it cannot sign in
+  // to act on it.
+  const reachable = new Set(
+    await withoutMailWithheldAccounts(listed.map((member) => member.$id)),
+  )
+  const members = listed.filter((member) => reachable.has(member.$id))
   const memberById = new Map(members.map((member) => [member.$id, member]))
   const digests = buildMemberDigests({
     tasks,

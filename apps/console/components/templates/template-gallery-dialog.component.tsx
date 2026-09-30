@@ -82,6 +82,8 @@ import createPageFromTemplate, {
   templateScreenAddressRefusal,
   withBundleRootScreen,
 } from './create-page-from-template'
+import { releaseDefaultHomeRoot } from '../../constants/screen-publishing'
+import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import UseTemplateDialog from './use-template-dialog.component'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
@@ -530,7 +532,15 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             console.error('Could not copy starter into the library', error)
           })
         }
+        // A new site is born with a placeholder home page on `/` (AGL-3408).
+        // A bundle is somebody's whole site, so it takes the root from that
+        // placeholder — and only from it; a home page the owner made is never
+        // moved. The placeholder stays in Screens as a draft.
+        const releasedRoot =
+          template.screens.length > 0 &&
+          (await releaseDefaultHomeRoot(firestore, { hostId, user }))
         const used = new Set(existingSlugs)
+        if (releasedRoot) used.delete(SCREEN_ROOT_PATH)
         // A screen whose address the site cannot serve is left out and named
         // afterwards (AGL-2588). The other two answers are both worse: an
         // abort part-way leaves a half-applied bundle with pages on the site
@@ -577,7 +587,10 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           enqueueSnackbar(
             `Added ${added} screen${added === 1 ? '' : 's'} from "${
               template.displayName
-            }"`,
+            }"` +
+              (releasedRoot
+                ? '. The placeholder home page is kept in Screens as a draft.'
+                : ''),
             { variant: 'success', persist: false },
           )
         }

@@ -87,6 +87,37 @@ declare module '@mui/material/IconButton' {
 declare module '@mui/material/Tabs' {
   interface TabsPropsIndicatorColorOverrides extends ColorPropOverrides {}
 }
+// Tertiary everywhere primary and secondary are (AGL-3411). Each of these
+// already renders any palette color with a `main` — MUI builds their color
+// styles from the palette's entries — so tertiary worked at runtime and was
+// only refused by the types.
+declare module '@mui/material/Checkbox' {
+  interface CheckboxPropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/Radio' {
+  interface RadioPropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/Switch' {
+  interface SwitchPropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/Slider' {
+  interface SliderPropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/Badge' {
+  interface BadgePropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/CircularProgress' {
+  interface CircularProgressPropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/LinearProgress' {
+  interface LinearProgressPropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/Pagination' {
+  interface PaginationPropsColorOverrides extends ColorPropOverrides {}
+}
+declare module '@mui/material/PaginationItem' {
+  interface PaginationItemPropsColorOverrides extends ColorPropOverrides {}
+}
 declare module '@mui/system' {
   interface Shape {
     appIconBorderRadius: number | string

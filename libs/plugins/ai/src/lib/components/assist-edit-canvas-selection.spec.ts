@@ -405,8 +405,13 @@ describe('the block the model reads for the reported document', () => {
     // Up 93 and 62 characters at AGL-3284, meant: the palette lists Color
     // scheme among the layout elements' settings, so pinning a band light or
     // dark is an edit the assistant can make like any other setting.
+    //
+    // Up 9 characters and 2 tokens at AGL-3411, meant: Tertiary is one of the
+    // Button's colors, so recoloring a button to it is an edit the assistant
+    // can name. This block is not a catalog, so the de-duplicated named
+    // blocks that paid for it there do not appear here.
     expect({ selected: measure(LINK), nothingSelected: measure(null) }).toEqual({
-      selected: { chars: 4_118, tokens: 1_030 },
+      selected: { chars: 4_127, tokens: 1_032 },
       nothingSelected: { chars: 1_750, tokens: 438 },
     })
   })

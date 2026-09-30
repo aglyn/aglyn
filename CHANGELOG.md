@@ -9,6 +9,37 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.218 — 2026-09-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/61ee7f8e1...v1.0.0-beta.218)
+
+### Added
+
+- **themes:** four more built-in themes, the platform type styles and tertiary in every theme ([AGL-3411](https://linear.app/aglyn/issue/AGL-3411))
+- **release:** production promotions are capped at three per Central day ([AGL-3413](https://linear.app/aglyn/issue/AGL-3413))
+- **console:** the staff Organizations, Sites and Users lists filter by Suspended, as a Firestore equality on a stored `suspended` flag for orgs and sites ([AGL-3416](https://linear.app/aglyn/issue/AGL-3416))
+- **lockdown:** a new `abuse` lock reason (phishing, fraud, malicious content) makes an account lock a permanent ban: after its notice the account is sent no mail at all by any sender, and every account lock now stops Aglyn's own marketing to it. Every contestable lock offers an appeal in its notice email, at sign-in and in the console notice, quoting an `LK-` reference ([AGL-3420](https://linear.app/aglyn/issue/AGL-3420))
+
+### Fixed
+
+- **rules:** trim the AGL-3408 rules comment under the 256 KiB source limit ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **sites:** the first real home page replaces the placeholder at `/` ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **sites:** a new site is born with a published Home page, not a 404 ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
+- **tools:** the monaco DOMPurify guard skips preconditions the vendored copy fixed ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+- **docs:** lodash-es is overridden to 4.18.1 under mermaid's chevrotain, clearing the docs site's last two Dependabot alerts ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+- **marketplace:** the listing page's owner cards and body share one set of edges, and Verified publisher gets its content gutters ([AGL-3414](https://linear.app/aglyn/issue/AGL-3414))
+- **console:** the saved workspace URL is no longer flagged invalid; only a new one is judged ([AGL-3415](https://linear.app/aglyn/issue/AGL-3415))
+- **console:** opening a staff org page no longer writes audit rows; actors show name and email, and recipients open their message ([AGL-3417](https://linear.app/aglyn/issue/AGL-3417))
+- **email:** automated platform mail — usage and budget alerts, notification email, digests, reminders, usage summaries — skips locked and disabled accounts and suspended workspaces; lock notices, security and receipt mail still go ([AGL-3418](https://linear.app/aglyn/issue/AGL-3418))
+- **health:** the Sign-in doors check no longer reports an outage when Identity Platform throttles the probe's own server address; it answers green with `probe-throttled` ([AGL-3419](https://linear.app/aglyn/issue/AGL-3419))
+
+### Changed
+
+- **mui:** the calculator family leaves mui for the Calculators marketplace plugin; every site's calculator elements already run on the plugin ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+- **workspace:** Nx 23.1.1 → 23.2.1 with its migrations; mobx 7, mobx-state-tree 8, mobx-react-lite 5; stripe-js 9 and react-stripe-js 6; base-ui 1.8.0; the simplewebauthn, undici, dotenv, jsdom and framer-motion majors; every root patch/minor, the docs site and cloud functions deps, and the open Dependabot alerts cleared ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+- **ci:** the last checkout pins move to v7 and the nx cache to v6 ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+- **scripts:** the calculator node migration is deleted now that every site has converged ([AGL-3394](https://linear.app/aglyn/issue/AGL-3394))
+
 ## v1.0.0-beta.217 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.216...v1.0.0-beta.217)

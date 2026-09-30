@@ -21,6 +21,7 @@
 
 import { writeCronBeat } from '@aglyn/aglyn/app-utils/health-report'
 import { rateLimitedRetryAtMs, sendEmail } from '@aglyn/shared-util-email'
+import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin/server/email-metering'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
@@ -90,7 +91,15 @@ export async function POST(request: Request): Promise<Response> {
       firestore,
       now: new Date(),
       flagValue: flags['release_ai_generative'],
-      listMembers: listOrgMembers,
+      // The digest's audience: a locked or disabled account is not told
+      // (AGL-3418).
+      listMembers: async (orgId) => {
+        const members = await listOrgMembers(orgId)
+        const reachable = new Set(
+          await withoutMailWithheldAccounts(members.map((member) => member.$id)),
+        )
+        return members.filter((member) => reachable.has(member.$id))
+      },
       mayGenerate: (orgId, hostId, member) => memberHasPermissionOnHost(orgId, hostId, member, 'ai.generate'),
       paused: async (orgId) => Boolean(await featureLockdownRefusal({ feature: 'ai-generate', orgId })),
       notify: (uid, payload) => notifyUsers([uid], { type: 'content.insightsDigest', ...payload }),
