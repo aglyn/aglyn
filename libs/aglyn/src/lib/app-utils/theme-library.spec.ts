@@ -102,7 +102,7 @@ describe('readThemeSelection (AGL-3404)', () => {
     expect(readThemeSelection({})).toEqual({
       kind: 'default',
       id: 'default',
-      name: 'Material UI',
+      name: 'Platform default',
     })
     expect(readThemeSelection({ theme: bootstrap })).toEqual({
       kind: 'custom',
@@ -115,6 +115,14 @@ describe('readThemeSelection (AGL-3404)', () => {
         themeInstalledFrom: { listingId: 'L1', sha256: 'abc' },
       }),
     ).toMatchObject({ kind: 'installed', id: 'installed--L1' })
+  })
+
+  it('names the default by the constant, not by a name stored before AGL-3422', () => {
+    expect(
+      readThemeSelection({
+        themeSelection: { kind: 'default', id: 'default', name: 'Material UI' },
+      }).name,
+    ).toBe('Platform default')
   })
 
   it('prefers the stored selection and ignores junk', () => {

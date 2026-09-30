@@ -24,8 +24,10 @@ immediately.
 
 The **Theme** card at the top of the page picks the theme your site runs:
 
-- **Built-in** — **Material UI (default)** and seven themes modeled on the design systems
-  people know best, plus any your plugins add:
+- **Built-in** — the platform's **default** theme, what every site runs until it picks another
+  (MUI's colors in the platform's own type and component defaults); stock **Material UI**; and
+  seven themes modeled on the design systems people know best, plus any your plugins add:
+  - **Material UI** — MUI's own default theme: Roboto, the stock type scale and palette.
   - **Bootstrap** — Bootstrap 5's blue, system fonts, flat bordered cards and focus rings.
   - **Minimal** — neutral and quiet, in the style of shadcn/ui.
   - **Material 3** — Material Design 3's tonal surfaces and pill buttons.

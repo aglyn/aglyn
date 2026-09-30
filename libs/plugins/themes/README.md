@@ -2,6 +2,9 @@
 
 Built-in themes for an Aglyn site's theme picker (**Setup → Theme**):
 
+- **Material UI** — MUI's own default theme, as its default theme viewer documents it: Roboto,
+  the stock type scale and palettes, 4px corners and the stock component defaults. (The
+  platform's default theme is not this: it draws MUI's colors in the platform's own type.)
 - **Bootstrap** — Bootstrap 5.3's palette and dark mode, the system font stack, flat bordered
   cards, compact inputs and focus rings.
 - **Minimal** — neutral zinc, Inter, hairline borders and no elevation, in the style of
