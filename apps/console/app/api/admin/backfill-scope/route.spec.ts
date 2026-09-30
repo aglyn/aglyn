@@ -88,9 +88,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({ verifyIdToken: mockVerifyIdToken }),
       firestore: () => ({
         batch: () => ({ set: mockBatchSet, commit: mockCommit }),
-        collectionGroup: () => ({
-          select: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
-        }),
         collection: (name: string) =>
           name === 'orgs'
             ? {

@@ -41,13 +41,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/(app)/admin/orgs/[orgId]/page.tsx",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
       "rules": [
         "domain-name"
@@ -90,13 +83,6 @@
         "plugin-id"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/admin/backfill-scope/route.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "apps/console/app/api/admin/margin-utilization/route.ts",
