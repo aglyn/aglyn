@@ -17,6 +17,7 @@ import type { FormRecordTargetDeclaration } from './submission-record-target'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -618,5 +619,36 @@ export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvi
         "on": "loop"
       }
     ]
+  },
+]
+
+/**
+ * The notification categories first-party plugins add to the settings page
+ * and to every recipient's preferences, declared by each plugin (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_CATEGORIES_DECLARED: readonly NotificationCategoryDeclaration[] = [
+  {
+    "pluginId": "marketplace",
+    "id": "marketplace",
+    "label": "Marketplace",
+    "description": "Decisions on plugin listings you submitted for review.",
+    "defaults": {
+      "console": true,
+      "email": false
+    }
+  },
+]
+
+/**
+ * The digests first-party plugins send on their own schedule, each with the
+ * key its switch is stored under, declared by the plugin that sends it
+ * (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_DIGESTS_DECLARED: readonly NotificationDigestDeclaration[] = [
+  {
+    "pluginId": "crm",
+    "key": "crmDaily",
+    "label": "Daily CRM digest",
+    "description": "Each morning: your overdue and due-today tasks and the leads nobody has worked, here and by email."
   },
 ]

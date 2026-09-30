@@ -858,14 +858,6 @@
       "why": "The mail rail's consent-to-market, not the Marketing plugin's model. `marketing` here is the SEND PURPOSE opposite `transactional` (the argued stay on sending-domain.ts), and this is the per-person, per-brand basis every marketing-purpose message is checked against whoever sends it: a campaign, an outreach sequence, a CRM one-to-one, a commerce newsletter or restock alert, a workflow email, and the operator's own product updates. Several plugins' capture doors write it, and core's contact writer, merge, erasure refusals and email-flow gate read it, so no single plugin can hold it; with every plugin uninstalled the platform still owes it for its own product email. `marketing consent` is the legal term for what it records, and its fields are persisted on every contact, list member and account (the host's `marketingConsentPolicy` is named by the Firestore rules)."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/notifications.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
       "rules": [
         "domain-declares:ai",

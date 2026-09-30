@@ -255,7 +255,9 @@ jest.mock('@aglyn/tenant-data-admin/server/email-suppression', () => ({
 
 // ---------------------------------------------------------------------------
 
+import { NOTIFICATION_DIGESTS } from '@aglyn/aglyn/server'
 import {
+  CRM_DAILY_DIGEST_KEY,
   CRM_DIGEST_JOB_ID,
   CRM_DIGEST_MARKER_COLLECTION,
   digestTimeZone,
@@ -643,5 +645,18 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
       'America/Chicago',
     )
     expect(warn).toHaveBeenCalled()
+  })
+})
+
+describe('the digest switch this route reads (AGL-3080)', () => {
+  /*
+   * The settings page draws the switch from the CRM's declaration and writes
+   * it under the declared key; this route reads its own constant. One
+   * spelling, or a person who turned the digest off keeps receiving it.
+   */
+  it('is the key the CRM declares for its digest', () => {
+    expect(NOTIFICATION_DIGESTS.map((digest) => digest.key)).toContain(
+      CRM_DAILY_DIGEST_KEY,
+    )
   })
 })

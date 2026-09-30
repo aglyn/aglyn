@@ -1335,6 +1335,99 @@ function analyticsProviderRows() {
   return rows
 }
 
+/**
+ * The notification categories the core owns (`CoreNotificationCategory` in
+ * core `notifications.ts`). A declaration may not reuse one: the id keys
+ * every stored preference, so a plugin that claimed `billing` would take over
+ * a switch people set about their invoices.
+ */
+const CORE_NOTIFICATION_CATEGORIES = ['billing', 'team', 'content', 'support', 'system', 'staff']
+
+/**
+ * Notification categories a plugin declares for the notifications it sends
+ * (AGL-3080), compiled into core because the fan-out resolves a recipient's
+ * channels in server processes that load no plugin.
+ *
+ * Checked here: an id that is a plain type prefix, owned by one plugin and
+ * not by the core, a label and a description a reader can act on, and a
+ * default for each channel.
+ */
+function notificationCategoryRows() {
+  const owners = new Map(CORE_NOTIFICATION_CATEGORIES.map((id) => [id, 'the core']))
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.notificationCategories
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" notificationCategories`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the category`)
+    }
+    for (const declaration of declared) {
+      const { id, label, description, defaults } = declaration ?? {}
+      const what = `${where} "${id ?? ''}"`
+      if (typeof id !== 'string' || !/^[a-z][a-zA-Z]*$/.test(id)) {
+        throw new Error(`${what}: "id" is the plain prefix before the dot in the plugin's notification types`)
+      }
+      if (owners.has(id)) {
+        throw new Error(`${what} is already a category of ${owners.get(id)} — a stored preference would change meaning`)
+      }
+      owners.set(id, `"${plugin.id}"`)
+      for (const [field, value] of [['label', label], ['description', description]]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      for (const channel of ['console', 'email']) {
+        if (typeof defaults?.[channel] !== 'boolean') {
+          throw new Error(`${what} needs "defaults.${channel}" — what the channel does before anybody says`)
+        }
+      }
+      rows.push({
+        pluginId: plugin.id,
+        id,
+        label,
+        description,
+        defaults: { console: defaults.console, email: defaults.email },
+      })
+    }
+  }
+  return rows
+}
+
+/**
+ * Digests a plugin sends on its own schedule (AGL-3080), compiled into core
+ * so the settings page draws each switch without loading the plugin.
+ *
+ * Checked here: a plain key no other digest stores its switch under, and a
+ * label and a description.
+ */
+function notificationDigestRows() {
+  const owners = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.notificationDigests
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" notificationDigests`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the digest`)
+    }
+    for (const declaration of declared) {
+      const { key, label, description } = declaration ?? {}
+      const what = `${where} "${key ?? ''}"`
+      if (typeof key !== 'string' || !/^[a-z][a-zA-Z0-9]*$/.test(key)) {
+        throw new Error(`${what}: "key" is the plain name its switch is stored under`)
+      }
+      if (owners.has(key)) {
+        throw new Error(`${what} is already the switch of "${owners.get(key)}"'s digest`)
+      }
+      owners.set(key, plugin.id)
+      for (const [field, value] of [['label', label], ['description', description]]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      rows.push({ pluginId: plugin.id, key, label, description })
+    }
+  }
+  return rows
+}
+
 /** The plugins whose org eraser an erasure may not run without (AGL-3080). */
 function requiredOrgEraserIds() {
   return config.plugins
@@ -1438,7 +1531,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1550,6 +1643,23 @@ export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries
  */
 export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [
 ${videoEmbedRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * The notification categories first-party plugins add to the settings page
+ * and to every recipient's preferences, declared by each plugin (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_CATEGORIES_DECLARED: readonly NotificationCategoryDeclaration[] = [
+${notificationCategoryRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * The digests first-party plugins send on their own schedule, each with the
+ * key its switch is stored under, declared by the plugin that sends it
+ * (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_DIGESTS_DECLARED: readonly NotificationDigestDeclaration[] = [
+${notificationDigestRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 `
   )

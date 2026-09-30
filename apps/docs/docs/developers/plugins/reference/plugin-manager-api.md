@@ -835,6 +835,47 @@ The adapter is declared in `plugins.config.json`, not registered from code:
 The pageview beacon (`/api/analytics/collect`) is not a tag and never goes
 through this contract: it is the platform's metered door.
 
+## Notification categories and digests — `notifications`
+
+A notification's category is the prefix of its type (`marketplace.review` is
+filed under `marketplace`), and a person's preferences are stored per category:
+muted or not, in the console and by email, for their account, a workspace or a
+site. The core owns six categories. A plugin whose notifications need their own
+row on the settings page declares it in `plugins.config.json`:
+
+```json
+"notificationCategories": [
+  {
+    "id": "marketplace",
+    "label": "Marketplace",
+    "description": "Decisions on plugin listings you submitted for review.",
+    "defaults": { "console": true, "email": false }
+  }
+]
+```
+
+- The declaration is compiled into core (`PLUGIN_NOTIFICATION_CATEGORIES_DECLARED`),
+  because the fan-out resolves a recipient's channels in server processes that
+  load no plugin. A type whose prefix nothing declares is filed under `system`.
+- `id` keys every stored preference. It may not be a core category or another
+  plugin's, and it is never renamed: a renamed id would leave everyone's
+  preferences under a key nothing reads.
+- `defaults` says what each channel does before anybody says. Declared rows are
+  listed after the workspace's own work and before the platform's notices.
+
+A digest the plugin sends on its own schedule is declared the same way, so the
+settings page draws its switch without loading the plugin:
+
+```json
+"notificationDigests": [
+  { "key": "crmDaily", "label": "Daily CRM digest", "description": "Each morning: …" }
+]
+```
+
+The switch is stored under `key` in `users/{uid}.digestPrefs` and is on until
+the person turns it off. The sender reads it with
+`digestEnabled(prefs, key)`; the settings page writes it under the same key.
+
 ## Platform events — `plugin-events` (`/server`)
 
 Core raises the events; a plugin that must react to what a core route did
