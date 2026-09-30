@@ -1072,6 +1072,41 @@ function pluginDistributionRow() {
 }
 
 /**
+ * The plugin that answers a published page's repeats (AGL-3080): whose rows an
+ * element repeats over, read by the server composition through
+ * `plugin-manager/repeat-rows.ts`. Declared here as well as registered at boot,
+ * so a boot that failed to register the reader is refused rather than read as
+ * "no rows"; with none declared, a repeat renders its element once.
+ *
+ * Checked here: one declarer at most — the expansion reads one key per node,
+ * so two sources would each answer for the other's keys — a plain `id`, and
+ * the `serverDeclarations` entry the reader is registered from.
+ */
+function repeatSourceRow() {
+  const declared = config.plugins.filter((plugin) => plugin.repeatSource)
+  if (declared.length > 1) {
+    throw new Error(
+      `plugins.config.json: "${declared.map((plugin) => plugin.id).join('", "')}" each declare a repeatSource — ` +
+        'a repeat names one key, and two sources would each answer for the other\'s rows',
+    )
+  }
+  const plugin = declared[0]
+  if (!plugin) return null
+  const where = `plugins.config.json: "${plugin.id}" repeatSource`
+  const { id } = plugin.repeatSource
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) {
+    throw new Error(`${where}: "id" is the source's plain lowercase id`)
+  }
+  if (!plugin.register?.serverDeclarations) {
+    throw new Error(
+      `${where}: the reader is registered from a "serverDeclarations" entry, and this plugin names none — ` +
+        'a declared source nothing registers refuses every page that repeats',
+    )
+  }
+  return { pluginId: plugin.id, id }
+}
+
+/**
  * A plugin's top-level collections whose documents name an organization in a
  * field (AGL-3080), which a workspace erasure sweeps by that field in every
  * process. One owner per collection; plain names only.
@@ -1230,7 +1265,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1300,6 +1335,13 @@ export const PLUGIN_TAX_RETURN_SOURCES: readonly string[] = ${JSON.stringify(tax
  * the realm loader then resolves nothing.
  */
 export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(pluginDistributionRow(), null, 2)}
+
+/**
+ * The plugin that answers a published page's repeats, declared by that plugin
+ * (AGL-3080). \`null\` when none does, and a repeat then renders its element
+ * once, as written.
+ */
+export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(repeatSourceRow(), null, 2)}
 
 /**
  * The analytics settings each provider mounts a tag for, declared by the

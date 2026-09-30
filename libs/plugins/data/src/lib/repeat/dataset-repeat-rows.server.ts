@@ -15,15 +15,26 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn/server'
+import {
+  effectiveDatasetModel,
+  type HostDataset,
+  type HostDatasetRecord,
+  REPEAT_MAX_RECORDS,
+  type RepeatableDataset,
+  visibleToHost,
+} from '@aglyn/aglyn/server'
+import type {
+  RepeatRowsAnswer,
+  RepeatRowsRequest,
+} from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import { orgDataQueryForHost } from '@aglyn/tenant-data-admin'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
+import { repeatRecordsFromPages } from '@aglyn/tenant-runtime/repeat-record-pages'
 import { FieldPath } from 'firebase-admin/firestore'
-import { repeatRecordsFromPages } from './repeat-record-pages'
 
 /**
  * The render path's largest read (AGL-1302): up to two pages of records per
@@ -34,10 +45,12 @@ import { repeatRecordsFromPages } from './repeat-record-pages'
 const DATASETS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
- * The datasets a page repeats over, with their records, for repeatable
- * expansion (AGL-103).
+ * The datasets a published page repeats over, with their records — this
+ * plugin's answer to the platform's repeat-rows contract
+ * (`plugin-manager/repeat-rows.ts`), registered from
+ * `registerDataServerDeclarations` and read by the tenant composition.
  *
- * `keys` are the page's repeat keys (`repeatDatasetKeys`), each a dataset id or
+ * `keys` are the page's repeat keys (`repeatKeys`), each a dataset id or
  * a display name — editors type the friendly name into the Repeat attribute.
  * The map answers under every key exactly as written, and under every loaded
  * dataset's id, which is how a reference hop (AGL-180) finds its target.
@@ -56,10 +69,9 @@ const DATASETS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
  * does not evaluate rules, so AGL-1041 does not cover this path; the filter
  * has to live here.
  */
-export async function getDatasets(options: {
-  hostId: string
-  keys: readonly string[]
-}): Promise<Record<string, Aglyn.RepeatableDataset>> {
+export async function readPublishedDatasetRows(
+  options: RepeatRowsRequest,
+): Promise<RepeatRowsAnswer> {
   const keys = [
     ...new Set(options.keys.map((key) => key.trim()).filter(Boolean)),
   ].sort()
@@ -80,8 +92,8 @@ export async function getDatasets(options: {
 async function readDatasets(
   hostId: string,
   keys: readonly string[],
-): Promise<Record<string, Aglyn.RepeatableDataset>> {
-  const datasets: Record<string, Aglyn.RepeatableDataset> = {}
+): Promise<Record<string, RepeatableDataset>> {
+  const datasets: Record<string, RepeatableDataset> = {}
   try {
     const { ref, query } = await orgDataQueryForHost(hostId, 'datasets')
     // The same visibility rule `resolveDatasetDoc` applies: a keyed read
@@ -90,16 +102,16 @@ async function readDatasets(
     const usable = (snapshot: FirebaseFirestore.DocumentSnapshot | undefined) =>
       Boolean(snapshot?.exists) &&
       !snapshot?.get('deletedAt') &&
-      (!orgScoped || Aglyn.visibleToHost(snapshot?.get('visibleTo'), hostId))
+      (!orgScoped || visibleToHost(snapshot?.get('visibleTo'), hostId))
 
-    const loads = new Map<string, Promise<Aglyn.RepeatableDataset>>()
+    const loads = new Map<string, Promise<RepeatableDataset>>()
     const load = (snapshot: FirebaseFirestore.DocumentSnapshot) => {
       let dataset = loads.get(snapshot.id)
       if (!dataset) {
         dataset = readRepeatRecords(snapshot.ref).then((records) => ({
           records,
-          model: Aglyn.effectiveDatasetModel(
-            snapshot.data() as Aglyn.HostDataset,
+          model: effectiveDatasetModel(
+            snapshot.data() as HostDataset,
           ),
         }))
         loads.set(snapshot.id, dataset)
@@ -182,20 +194,18 @@ async function readRepeatRecords(
   const page = (snapshot: FirebaseFirestore.QuerySnapshot) =>
     snapshot.docs.map((doc) => ({
       id: doc.id,
-      data: doc.data() as Aglyn.HostDatasetRecord,
+      data: doc.data() as HostDatasetRecord,
     }))
   const byOrder = await recordsRef
     .orderBy('order')
-    .limit(Aglyn.REPEAT_MAX_RECORDS)
+    .limit(REPEAT_MAX_RECORDS)
     .get()
   const byId =
-    byOrder.docs.length < Aglyn.REPEAT_MAX_RECORDS
+    byOrder.docs.length < REPEAT_MAX_RECORDS
       ? await recordsRef
           .orderBy(FieldPath.documentId())
-          .limit(Aglyn.REPEAT_MAX_RECORDS)
+          .limit(REPEAT_MAX_RECORDS)
           .get()
       : undefined
   return repeatRecordsFromPages(page(byOrder), byId ? page(byId) : [])
 }
-
-export default getDatasets

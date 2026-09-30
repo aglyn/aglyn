@@ -12,6 +12,7 @@ import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from '
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
+import type { RepeatSourceDeclaration } from './repeat-rows'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
@@ -517,6 +518,16 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = {
   "listings": "marketplaceListings",
   "versions": "pluginVersions",
   "revocations": "revocations"
+}
+
+/**
+ * The plugin that answers a published page's repeats, declared by that plugin
+ * (AGL-3080). `null` when none does, and a repeat then renders its element
+ * once, as written.
+ */
+export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
+  "pluginId": "data",
+  "id": "dataset"
 }
 
 /**

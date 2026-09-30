@@ -16,6 +16,10 @@
  */
 
 /**
+ * @jest-environment node
+ */
+
+/**
  * What a published repeat READS.
  *
  * A repeat renders at most `REPEAT_MAX_RECORDS` rows in the editor's `order`.
@@ -160,7 +164,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
   withRenderCache: async (options: { read: () => unknown }) => options.read(),
 }))
 
-import { getDatasets } from './get-datasets'
+import { readPublishedDatasetRows } from './dataset-repeat-rows.server'
 
 const pad = (index: number) => String(index).padStart(3, '0')
 
@@ -185,7 +189,7 @@ const dataset = (
 
 const titlesOf = async (key: string) =>
   (
-    (await getDatasets({ hostId: HOST_ID, keys: [key] }))[key]?.records ?? []
+    (await readPublishedDatasetRows({ hostId: HOST_ID, keys: [key] }))[key]?.records ?? []
   ).map((row) => row['title'])
 
 beforeEach(() => {
@@ -252,7 +256,7 @@ describe('a repeat over more records than it renders (AGL-2773)', () => {
       ),
     ]
 
-    await getDatasets({ hostId: HOST_ID, keys: ['leads'] })
+    await readPublishedDatasetRows({ hostId: HOST_ID, keys: ['leads'] })
 
     expect(mockRecordReads.length).toBeLessThanOrEqual(2)
     expect(
@@ -301,7 +305,7 @@ describe('a site with more datasets than one page of them (AGL-2773)', () => {
       dataset('zz-authors', [record('a1', 0, 'Ada')]),
     ]
 
-    const datasets = await getDatasets({ hostId: HOST_ID, keys: ['zz-posts'] })
+    const datasets = await readPublishedDatasetRows({ hostId: HOST_ID, keys: ['zz-posts'] })
 
     expect(datasets['zz-authors']?.records.map((row) => row['title'])).toEqual(
       ['Ada'],
@@ -311,7 +315,7 @@ describe('a site with more datasets than one page of them (AGL-2773)', () => {
   it('reads records only for the datasets the page repeats over', async () => {
     mockDatasets = many(60)
 
-    await getDatasets({ hostId: HOST_ID, keys: ['d001'] })
+    await readPublishedDatasetRows({ hostId: HOST_ID, keys: ['d001'] })
 
     expect(mockRecordReads.length).toBeLessThanOrEqual(2)
   })
@@ -319,7 +323,7 @@ describe('a site with more datasets than one page of them (AGL-2773)', () => {
   it('reads nothing for a page that repeats over nothing', async () => {
     mockDatasets = many(3)
 
-    expect(await getDatasets({ hostId: HOST_ID, keys: [] })).toEqual({})
+    expect(await readPublishedDatasetRows({ hostId: HOST_ID, keys: [] })).toEqual({})
     expect(mockRecordReads).toHaveLength(0)
   })
 
@@ -333,7 +337,7 @@ describe('a site with more datasets than one page of them (AGL-2773)', () => {
       }),
     ]
 
-    const datasets = await getDatasets({
+    const datasets = await readPublishedDatasetRows({
       hostId: HOST_ID,
       keys: ['internal', 'Internal rates'],
     })

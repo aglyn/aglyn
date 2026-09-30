@@ -32,10 +32,13 @@
  * (docs/E2E_LOCAL.md), then:
  *
  *   FIRESTORE_EMULATOR_HOST=localhost:8082 \
- *     npx jest -c libs/tenant/runtime/jest.config.ts \
+ *     npx jest -c libs/plugins/data/jest.config.ts \
  *       --testPathPatterns scoped-sharing
  */
 
+// Static, unlike the reader below: a lib reached by `import()` anywhere is
+// read by nx as lazy-loaded everywhere (AGL-2282).
+import { resolveDatasetDoc } from '@aglyn/tenant-runtime/resolve-dataset'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 
@@ -53,19 +56,18 @@ const describeEmulated = EMULATED ? describe : describe.skip
 
 describeEmulated('scoped sharing, agency scenario (AGL-1047)', () => {
   let db: Firestore
-  let getDatasets: typeof import('./get-datasets').getDatasets
-  let resolveDatasetDoc: typeof import('./resolve-dataset').resolveDatasetDoc
+  let readPublishedDatasetRows: typeof import('./dataset-repeat-rows.server').readPublishedDatasetRows
 
   beforeAll(async () => {
     db = getFirestore()
     await seed(db)
-    getDatasets = (await import('./get-datasets')).getDatasets
-    resolveDatasetDoc = (await import('./resolve-dataset')).resolveDatasetDoc
+    readPublishedDatasetRows = (await import('./dataset-repeat-rows.server'))
+      .readPublishedDatasetRows
   }, 60_000)
 
   it('a client site renders only what it may see', async () => {
     // Asked for all three by name, as three repeats on one page would.
-    const datasets = await getDatasets({
+    const datasets = await readPublishedDatasetRows({
       hostId: CLIENT,
       keys: ['Shared Brand', 'Client Products', 'Internal Rates'],
     })
@@ -77,7 +79,7 @@ describeEmulated('scoped sharing, agency scenario (AGL-1047)', () => {
   }, 60_000)
 
   it('an internal site still sees the internal data', async () => {
-    const datasets = await getDatasets({
+    const datasets = await readPublishedDatasetRows({
       hostId: INTERNAL,
       keys: ['Internal Rates'],
     })
@@ -88,8 +90,8 @@ describeEmulated('scoped sharing, agency scenario (AGL-1047)', () => {
     // Both sites bind a repeatable to "Products". Each must get its own.
     // This is the shape the original bug took: the map was keyed by
     // displayName across the whole org, so whichever loaded last won.
-    const clientSets = await getDatasets({ hostId: CLIENT, keys: ['Products'] })
-    const internalSets = await getDatasets({
+    const clientSets = await readPublishedDatasetRows({ hostId: CLIENT, keys: ['Products'] })
+    const internalSets = await readPublishedDatasetRows({
       hostId: INTERNAL,
       keys: ['Products'],
     })

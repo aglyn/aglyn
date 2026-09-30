@@ -523,7 +523,11 @@
       "id": "data",
       "package": "@aglyn/plugins-data",
       "register": {
-        "console": "registerDataConsole"
+        "console": "registerDataConsole",
+        "serverDeclarations": "registerDataServerDeclarations"
+      },
+      "repeatSource": {
+        "id": "dataset"
       },
       "catalog": {
         "order": 10,

@@ -93,7 +93,7 @@ describe('screenIdsRepeatingDataset', () => {
 
   it('finds a binding written by DISPLAY NAME, not only by id', () => {
     // Editors type the friendly name into the Repeat attribute, and
-    // `getDatasets` resolves an id first and then a display name. Matching
+    // `readPublishedDatasetRows` resolves an id first and then a display name. Matching
     // only the id would leave every by-name binding unrefreshed.
     const screen: UsageCandidate = { id: 's1', nodes: repeating(DATASET_NAME) }
     expect(screenIdsRepeatingDataset(keys, sources({ screens: [screen] }))).toEqual(

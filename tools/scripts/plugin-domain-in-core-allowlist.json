@@ -1548,26 +1548,12 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/runtime/src/lib/compose-screen-nodes.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/tenant/runtime/src/lib/convert-host-lead.ts",
       "rules": [
         "plugin-collection:crm",
         "domain-declares:crm"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/get-datasets.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/tenant/runtime/src/lib/get-variables.ts",
