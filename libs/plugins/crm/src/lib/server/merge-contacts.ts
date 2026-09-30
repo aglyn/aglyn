@@ -55,14 +55,14 @@ import {
   contactEmails,
 } from '@aglyn/aglyn/app-utils/contacts'
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
-import { planContactMerge } from '@aglyn/aglyn/app-utils/contact-merge'
+import { planContactMerge } from '../model/contact-merge'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { FieldValue } from 'firebase-admin/firestore'
-import { settleCompanyContactsCounts } from './contact-company-link'
-import { recomputeCrmNextTaskAt } from './crm-next-activity'
-import { restampCrmListFieldsAt } from './crm-records'
-import { logHostActivity } from './organizations'
+import { settleCompanyContactsCounts } from '@aglyn/tenant-data-admin/server/contact-company-link'
+import { recomputeCrmNextTaskAt } from '@aglyn/tenant-data-admin/server/crm-next-activity'
+import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
+import { logHostActivity } from '@aglyn/tenant-data-admin/server/organizations'
 
 /** How many pointing rows one repoint pass reads — and one batch writes. */
 const REPOINT_PAGE = 400
@@ -181,12 +181,6 @@ async function repointLeads(
   return moved
 }
 
-function strings(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item !== '')
-    : []
-}
-
 export async function mergeContacts(
   options: MergeContactsOptions,
 ): Promise<MergeContactsResult> {
@@ -219,13 +213,6 @@ export async function mergeContacts(
       survivorId,
     ),
   ])
-  const leadHosts = [
-    ...new Set([
-      ...strings(mergedData['capturedByHostIds']),
-      ...strings(survivorData['capturedByHostIds']),
-      ...strings([mergedData['hostId'], survivorData['hostId'], hostId]),
-    ]),
-  ]
   const leads = await repointLeads(
     orgRef,
     contactEmails(mergedData),

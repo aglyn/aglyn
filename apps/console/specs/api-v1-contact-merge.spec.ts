@@ -65,7 +65,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ),
     // The REAL merge (AGL-2625): the repoint, the transaction and the index
     // are the properties under test, not a double's idea of them.
-    ...jest.requireActual('../../../libs/tenant/data/admin/src/lib/server/contact-merge'),
+    ...jest.requireActual('../../../libs/plugins/crm/src/lib/server/merge-contacts'),
   }
 })
 

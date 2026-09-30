@@ -610,7 +610,10 @@
         "crm"
       ],
       "activityMutationPaths": [
-        "libs/plugins/crm/src/lib/server/lead-create.ts"
+        "libs/plugins/crm/src/lib/server.ts",
+        "libs/plugins/crm/src/lib/server/convert-host-lead.ts",
+        "libs/plugins/crm/src/lib/server/lead-create.ts",
+        "libs/plugins/crm/src/lib/server/merge-contacts.ts"
       ],
       "catalog": {
         "order": 8,

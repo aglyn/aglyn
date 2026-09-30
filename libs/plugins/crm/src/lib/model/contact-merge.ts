@@ -72,13 +72,13 @@ import {
   contactEmails,
   normalizeContactEmail,
   readContactFacet,
-} from './contacts'
-import { CONTACT_COMPANY_IDS_FIELD, CONTACT_LIFECYCLE_STAGE_LABELS } from './crm'
+} from '@aglyn/aglyn/app-utils/contacts'
+import { CONTACT_COMPANY_IDS_FIELD, CONTACT_LIFECYCLE_STAGE_LABELS } from '@aglyn/aglyn/app-utils/crm'
 import {
   MARKETING_CONSENT_BY_HOST_FIELD,
   MARKETING_CONSENT_FIELD,
-} from './marketing-consent'
-import { nameSearchFields } from './name-search'
+} from '@aglyn/aglyn/app-utils/marketing-consent'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 
 /** The tags cap every writer applies, so a union cannot exceed it. */
 const TAGS_CAP = 20

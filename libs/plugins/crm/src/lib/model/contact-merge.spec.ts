@@ -21,9 +21,9 @@ import {
   mergeInteractions,
   planContactMerge,
 } from './contact-merge'
-import { CONTACT_INTERACTIONS_CAP } from './contacts'
-import { soloConsentGroup } from './consent-groups'
-import { readMarketingBasis } from './marketing-consent'
+import { CONTACT_INTERACTIONS_CAP } from '@aglyn/aglyn/app-utils/contacts'
+import { soloConsentGroup } from '@aglyn/aglyn/app-utils/consent-groups'
+import { readMarketingBasis } from '@aglyn/aglyn/app-utils/marketing-consent'
 
 /**
  * The merge rule (AGL-2625): survivor wins per field, empty fields fill,

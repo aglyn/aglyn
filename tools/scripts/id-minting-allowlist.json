@@ -74,7 +74,7 @@
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
     },
     {
-      "site": "libs/tenant/data/admin/src/lib/server/contact-merge.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
+      "site": "libs/plugins/crm/src/lib/server/merge-contacts.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
@@ -116,19 +116,19 @@
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
     },
     {
-      "site": "libs/tenant/runtime/src/lib/convert-host-lead.ts: orgRef.collection(CRM_COLLECTIONS.companies).add(…)",
+      "site": "libs/plugins/crm/src/lib/server/convert-host-lead.ts: orgRef.collection(CRM_COLLECTIONS.companies).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
     },
     {
-      "site": "libs/tenant/runtime/src/lib/convert-host-lead.ts: orgRef.collection(CRM_COLLECTIONS.deals).add(…)",
+      "site": "libs/plugins/crm/src/lib/server/convert-host-lead.ts: orgRef.collection(CRM_COLLECTIONS.deals).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
     },
     {
-      "site": "libs/tenant/runtime/src/lib/convert-host-lead.ts: pipelinesRef.add(…)",
+      "site": "libs/plugins/crm/src/lib/server/convert-host-lead.ts: pipelinesRef.add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."

@@ -38,11 +38,11 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 const mockLogHostActivity = jest.fn(async () => undefined)
-jest.mock('./organizations', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...(args as [])),
 }))
 
-import { mergeContacts } from './contact-merge'
+import { mergeContacts } from './merge-contacts'
 
 // ---------------------------------------------------------------------------
 // In-memory Firestore

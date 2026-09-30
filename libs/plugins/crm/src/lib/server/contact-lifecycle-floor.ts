@@ -52,7 +52,7 @@ import {
   readContactFacet,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
-import { restampCrmListFieldsAt } from './crm-records'
+import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 
 export type ContactLifecycleFloor =
   | {

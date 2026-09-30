@@ -83,10 +83,6 @@ export * from './crm-email-templates'
 // link carries, the record reference inside it, and the wording and due
 // date of what a booking files back on the record.
 export * from './crm-booking'
-// Two contact documents folded into one (AGL-2625): the plan the console
-// previews and the server writes, reading the facet shape from `contacts`
-// and the company mirror from `crm`.
-export * from './contact-merge'
 // A person's privacy erasure from one workspace (AGL-2623): the request's
 // shape and id, the marker a record carries while it waits, and the lists
 // the dialog and the docs share. Pure like `crm`; the sweep is server-side.

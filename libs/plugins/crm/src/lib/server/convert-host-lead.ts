@@ -106,9 +106,9 @@ import {
   writeContactCompanyLink,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
-import { assignOwnerForCapture, notifyRecordAssigned } from './assign-contact-owner'
-import { captureHostContact } from './capture-host-contact'
-import { handOffLeadRecords } from './hand-off-lead'
+import { assignOwnerForCapture, notifyRecordAssigned } from '@aglyn/tenant-runtime/assign-contact-owner'
+import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
+import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
 
 /** Who is converting, as far as the writes need to know. */
 export interface LeadConvertActor {

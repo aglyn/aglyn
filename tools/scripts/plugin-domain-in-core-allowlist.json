@@ -562,14 +562,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/contact-merge.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketing"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
       "rules": [
         "domain-name",
@@ -1261,21 +1253,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/contact-merge.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/contact-suppression.ts",
       "rules": [
         "domain-name"
@@ -1457,14 +1434,6 @@
       "path": "libs/tenant/runtime/src/lib/associate-company-by-domain.ts",
       "rules": [
         "plugin-collection:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/convert-host-lead.ts",
-      "rules": [
-        "plugin-collection:crm",
-        "domain-declares:crm"
       ],
       "lane": "crm"
     },
