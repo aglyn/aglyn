@@ -3992,7 +3992,7 @@ service cloud.firestore {
       // the same reason, only more so: it is a direct INPUT to the sale gate.
       // A profile owner who could write it could assert their own test-mode
       // account into live readiness and rebuild the exact defect. Every money
-      // door asks `connectLinkageIsReady`, which trusts this field.
+      // door asks `merchantAccountIsReady`, which trusts this field.
       // `stripePayoutsEnabled` is frozen alongside it — it was left writable
       // when AGL-1547 added it, and a seller could forge their own
       // "payouts are enabled" banner.

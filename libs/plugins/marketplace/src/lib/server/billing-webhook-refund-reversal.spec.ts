@@ -85,7 +85,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     __store: store,
     __ga4: ga4,
     __ga4Refunds: ga4Refunds,
-    syncConnectAccountStatus: async () => 0,
     sendGa4Purchase: async (
       input: Ga4PurchaseInput,
     ): Promise<Ga4SendResult> => {

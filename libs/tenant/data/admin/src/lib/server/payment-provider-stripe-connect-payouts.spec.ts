@@ -138,7 +138,7 @@ jest.mock('./operator-alerts', () => ({
 import {
   clearConnectPayoutFailure,
   recordConnectPayoutFailure,
-} from './connect-payout-failure'
+} from './payment-provider-stripe-connect-payouts'
 
 const payout = {
   id: 'po_1',

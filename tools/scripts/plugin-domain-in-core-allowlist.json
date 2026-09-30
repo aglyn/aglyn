@@ -1448,20 +1448,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/connect-account-status.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "payment-provider"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/connect-payout-failure.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "payment-provider"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/contact-company-link.ts",
       "rules": [
         "domain-name"
@@ -1678,13 +1664,6 @@
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/stripe-account-mode.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "payment-provider"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/upsert-contact.ts",

@@ -60,6 +60,9 @@ import { updateExisting } from './update-existing'
  * the document the merchant and publisher surfaces already read. A card that
  * had to open a second collection would be a second, disagreeing read of the
  * same fact.
+ *
+ * Part of the Stripe Connect payment provider: a plugin reaches it through
+ * the contract's `applyAccountEvent`, never by importing it.
  */
 
 /** Which leg of the money movement failed. */

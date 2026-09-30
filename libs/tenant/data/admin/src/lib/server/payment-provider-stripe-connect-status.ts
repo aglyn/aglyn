@@ -52,6 +52,9 @@ import { updateExisting } from './update-existing'
  * IDEMPOTENT AND ORDER-INDEPENDENT by construction — it mirrors current state,
  * never a delta — so a Stripe redelivery and an out-of-order pair both
  * converge.
+ *
+ * Part of the Stripe Connect payment provider: a plugin reaches it through
+ * the contract's `applyAccountEvent`, never by importing it.
  */
 export interface ConnectAccountStatusEvent {
   /** `event.data.object` for `account.updated` — the Stripe Account. */

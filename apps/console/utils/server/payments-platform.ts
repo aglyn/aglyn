@@ -24,8 +24,8 @@
  * including ours. Import it from server components and route handlers only.
  *
  * ⚠️ THIS IS A DELIBERATE TWIN OF `platformStripeMode()` in
- * `libs/tenant/data/admin/src/lib/server/stripe-account-mode.ts` (AGL-2471),
- * and the duplication is not an oversight. `apps/console` cannot statically
+ * `libs/tenant/data/admin/src/lib/server/payment-provider-stripe-connect.ts`
+ * (AGL-2471), and the duplication is not an oversight. `apps/console` cannot statically
  * import `@aglyn/tenant-data-admin`: a dynamic `import()` in
  * `app/api/auth/sso-lookup/route.emulator.spec.ts` marks that library
  * lazy-loaded in the nx graph, so `@nx/enforce-module-boundaries` rejects

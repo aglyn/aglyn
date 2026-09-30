@@ -20,7 +20,7 @@ import {
   publisherAgreementRefusal,
   publisherAgreementState,
 } from '../model/publisher-agreement'
-import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { marketplacePriceRefusal } from '../model/marketplace'
 import type { ResolvedPublisher } from './publisher-profile'
 
@@ -129,7 +129,7 @@ export function publishPreconditionRefusal(
   // stops checking.
   if (
     options.priceUsd > 0 &&
-    !connectLinkageIsReady(
+    !merchantAccountIsReady(
       {
         accountId: publisher.stripeAccountId,
         chargesEnabled: publisher.stripeChargesEnabled,

@@ -91,7 +91,7 @@ jest.mock('./ga4-measurement-protocol', () => ({
     sendGa4StripeConnected(...(args as [])),
 }))
 
-import { syncConnectAccountStatus } from './connect-account-status'
+import { syncConnectAccountStatus } from './payment-provider-stripe-connect-status'
 
 const read = (collection: string, id: string) => store.get(collection)?.get(id)
 

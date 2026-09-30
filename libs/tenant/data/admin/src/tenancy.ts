@@ -21,9 +21,22 @@ export * from './lib/server/api-keys'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
 export * from './lib/server/client-error-report'
-export * from './lib/server/connect-account-status'
-export * from './lib/server/connect-payout-failure'
-export * from './lib/server/stripe-account-mode'
+// The merchant's payment account, as a contract. Its adapter is not exported:
+// a plugin asks the contract, and the doors that only need the readiness rule
+// import `@aglyn/tenant-data-admin/server/payment-provider` directly, which
+// loads no Firebase.
+export {
+  merchantAccountIsReady,
+  merchantAccountReadiness,
+  paymentProvider,
+} from './lib/server/payment-provider'
+export type {
+  MerchantAccountReadiness,
+  MerchantAccountReadinessInput,
+  PaymentMode,
+  PaymentProvider,
+  PaymentProviderEvent,
+} from './lib/server/payment-provider'
 export * from './lib/server/auth-handoff'
 export * from './lib/server/console-domains'
 export * from './lib/server/dns-probe'

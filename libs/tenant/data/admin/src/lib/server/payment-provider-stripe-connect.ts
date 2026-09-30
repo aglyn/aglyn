@@ -15,8 +15,20 @@
  * limitations under the License.
  */
 
+import type { PaymentMode, PaymentProvider, PaymentProviderEvent } from './payment-provider'
+
 /**
- * Whether a stored Connect linkage can actually take money HERE (AGL-2471).
+ * The Stripe Connect adapter behind the payment-provider contract
+ * (`payment-provider.ts`): a tenant's merchant account is a Stripe Connect
+ * account, charged and paid out through the platform's Stripe key.
+ *
+ * This module is the part that is Stripe's — which mode a key states, how the
+ * API is asked, which webhook events describe a connected account and where
+ * each one keeps the account id. What an event WRITES lives in the two modules
+ * it dispatches to, loaded only when such an event arrives, so the money doors
+ * that import the contract for its readiness rule load no Firebase.
+ *
+ * ## Whether a stored Connect linkage can actually take money HERE (AGL-2471)
  *
  * THE DEFECT. Production Firestore held three Connect linkages and all three
  * named TEST-mode accounts. One — `profiles/7AVEMtDa…`, `stripeAccountId:
@@ -51,20 +63,10 @@
  *      (above), so the account's mode IS the key's mode; the key's mode is
  *      then confirmed against the API via `resolvePlatformStripeMode`.
  *
- * WHY THE RULE IS ASYMMETRIC, AND NOT "REFUSE ANYTHING UNPROVEN". An absent
- * `stripeAccountLivemode` refuses only on a LIVE deployment. That is where
- * real money moves and where the defect was found, and a live deployment can
- * always re-establish the field: the merchant reconnects, or Stripe sends one
- * `account.updated`. Everywhere else — a test-key deployment, a developer
- * machine, a self-hosted install still in sandbox, the whole test suite — an
- * unverified linkage keeps the behaviour it had before, because no real money
- * can move there and Stripe enforces the mode boundary itself. Refusing
- * everywhere would have bought production nothing extra and broken every
- * non-production deployment.
- *
- * A PROVEN mismatch (`stripeAccountLivemode` recorded and disagreeing) is
- * refused in BOTH directions, because that costs nothing to detect and is
- * never right.
+ * The profile field is `stripeAccountLivemode`, and the rule that reads it —
+ * refused on a live deployment when absent, refused in both directions when
+ * it disagrees — is the contract's `merchantAccountReadiness`, which says why
+ * it is asymmetric.
  *
  * WHAT IS SNIFFED, AND WHY THAT ONE IS FAIR. The SECRET KEY states its own
  * mode — `sk_live_`, `sk_test_`, `rk_live_`, `rk_test_` — and that is a
@@ -82,43 +84,6 @@
  * that notices.
  */
 
-/** Which Stripe world a key or an account belongs to. */
-export type StripeMode = 'live' | 'test'
-
-/**
- * Why a stored linkage may not be charged against. Every value other than
- * `'ready'` is a refusal, and the mode ones are refusals the old two-field
- * test could not make.
- */
-export type ConnectReadiness =
-  /** Charge away. */
-  | 'ready'
-  /** No Connect account is stored at all — the onboarding call to action. */
-  | 'not-connected'
-  /** Stripe will not let this account take charges. */
-  | 'charges-disabled'
-  /**
-   * The linkage predates AGL-2471 (or was written by something that did not
-   * record mode), so its mode was never established — AND this deployment is
-   * LIVE. This is the shape all three poisoned production records have.
-   * The connect route and the `account.updated` sync both write the field, so
-   * a genuine merchant self-heals on the next of either.
-   */
-  | 'mode-unverified'
-  /** The account belongs to the OTHER Stripe world. The AGL-2471 defect. */
-  | 'mode-mismatch'
-
-export interface ConnectReadinessInput {
-  /** `stripeAccountId` off the profile, whatever shape the document has. */
-  accountId?: unknown
-  /** `stripeChargesEnabled` off the profile. */
-  chargesEnabled?: unknown
-  /** `stripeAccountLivemode` off the profile — absent before AGL-2471. */
-  accountLivemode?: unknown
-  /** Defaults to the mode of `STRIPE_SECRET_KEY`. */
-  platformMode?: StripeMode | undefined
-}
-
 /**
  * The mode a Stripe secret key states about itself, or `undefined` when the
  * string is not a Stripe secret key.
@@ -129,9 +94,9 @@ export interface ConnectReadinessInput {
  */
 export function platformStripeMode(
   key: string | undefined = process.env.STRIPE_SECRET_KEY,
-): StripeMode | undefined {
+): PaymentMode | undefined {
   const match = /^[sr]k_(live|test)_/.exec(String(key ?? '').trim())
-  return match ? (match[1] as StripeMode) : undefined
+  return match ? (match[1] as PaymentMode) : undefined
 }
 
 /**
@@ -146,7 +111,7 @@ export function platformStripeMode(
 export async function resolvePlatformStripeMode(
   key: string | undefined = process.env.STRIPE_SECRET_KEY,
   fetchImpl: typeof fetch = fetch,
-): Promise<StripeMode | undefined> {
+): Promise<PaymentMode | undefined> {
   const fromKey = platformStripeMode(key)
   if (!key) return fromKey
   try {
@@ -168,59 +133,79 @@ export async function resolvePlatformStripeMode(
 }
 
 /**
- * Decides whether a stored Connect linkage may be charged against.
+ * A Stripe webhook event about a connected account, applied to the profiles in
+ * `collection` that store it — the contract's `applyAccountEvent`.
  *
- * Order matters: the two refusals that existed before AGL-2471 are asked
- * first, so an unconnected or restricted merchant still gets the answer they
- * always got, and only a linkage that WOULD have passed reaches the mode
- * question.
+ * Three events describe a connected account, and each keeps the account id
+ * somewhere different:
+ *
+ *  - `account.updated` — its readiness changed (AGL-1997). The object IS the
+ *    Account, and the EVENT carries `livemode` (AGL-2471): the Account object
+ *    has no such field, and the event's is what lets a linkage whose mode was
+ *    never recorded heal itself instead of staying refused forever.
+ *  - `payout.failed` / `transfer.failed` — money headed for the account never
+ *    landed. A payout is the connected account's balance failing to reach its
+ *    bank, so its account id is `event.account`: the Payout's own
+ *    `destination` names the BANK. A transfer is the platform's balance
+ *    failing to reach the connected account, a platform event whose
+ *    `destination` IS the account. Recorded and surfaced, never retried:
+ *    Stripe runs its own retry schedule, and a second transfer against an
+ *    account that has just refused one is how a duplicate lands.
+ *  - `payout.paid` — a later payout landed, which retires the warning the
+ *    failure left on the profile. The history is kept.
+ *
+ * Every other event answers `false` without loading anything. A write that
+ * fails throws, and the webhook's 500 earns the redelivery; every write
+ * mirrors current state or is keyed by Stripe's id, so a redelivery converges.
  */
-export function connectReadiness(
-  input: ConnectReadinessInput,
-): ConnectReadiness {
-  const accountId =
-    typeof input.accountId === 'string' ? input.accountId.trim() : ''
-  if (!accountId) return 'not-connected'
-  if (input.chargesEnabled !== true) return 'charges-disabled'
-  const platformMode =
-    'platformMode' in input ? input.platformMode : platformStripeMode()
-  // Three-valued on purpose, exactly as AGL-1997 reads `payoutsEnabled`: only
-  // a literal boolean is a recorded answer. A string `'true'` or a `1` is a
-  // field somebody else wrote, and inventing `true` from it would re-open the
-  // hole this closes.
-  if (typeof input.accountLivemode === 'boolean') {
-    // A PROVEN mismatch is refused in either direction. It costs nothing to
-    // detect and it is always wrong.
-    if (!platformMode) return 'ready'
-    return input.accountLivemode === (platformMode === 'live')
-      ? 'ready'
-      : 'mode-mismatch'
+export async function applyStripeConnectAccountEvent(
+  collection: string,
+  delivered: PaymentProviderEvent,
+): Promise<boolean> {
+  const type = delivered?.type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const object = delivered?.object as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const event = delivered?.event as any
+  if (type === 'account.updated') {
+    const { syncConnectAccountStatus } = await import(
+      './payment-provider-stripe-connect-status'
+    )
+    await syncConnectAccountStatus(collection, object, event?.livemode)
+    return true
   }
-  return platformMode === 'live' ? 'mode-unverified' : 'ready'
+  if (type === 'payout.failed' || type === 'transfer.failed') {
+    const failedAccountId =
+      type === 'payout.failed'
+        ? String(event?.account ?? '')
+        : String(object?.destination?.id ?? object?.destination ?? '')
+    const { recordConnectPayoutFailure } = await import(
+      './payment-provider-stripe-connect-payouts'
+    )
+    await recordConnectPayoutFailure(collection, {
+      kind: type === 'payout.failed' ? 'payout' : 'transfer',
+      object,
+      accountId: failedAccountId,
+      livemode: event?.livemode,
+    })
+    return true
+  }
+  if (type === 'payout.paid') {
+    const { clearConnectPayoutFailure } = await import(
+      './payment-provider-stripe-connect-payouts'
+    )
+    await clearConnectPayoutFailure(collection, String(event?.account ?? ''))
+    return true
+  }
+  return false
 }
 
-/**
- * The form every money door calls: `true` only when the linkage may be
- * charged, with the two mode refusals reported to the server log.
- *
- * The log line is the part the shopper's generic 409 cannot carry. Before
- * this, a mode mismatch surfaced as a 502 from Stripe with nothing anywhere
- * naming the cause; the sale is still refused the same way, but now somebody
- * can find out why.
- */
-export function connectLinkageIsReady(
-  input: ConnectReadinessInput,
-  context?: { subject?: string },
-): boolean {
-  const readiness = connectReadiness(input)
-  if (readiness === 'mode-mismatch' || readiness === 'mode-unverified') {
-    console.error(
-      `[AGL-2471] Refusing a charge against Connect account ` +
-        `${String(input.accountId)}${
-          context?.subject ? ` (${context.subject})` : ''
-        }: ${readiness}. The stored linkage is not verified for this ` +
-        `deployment's Stripe mode; the merchant must re-onboard.`,
-    )
-  }
-  return readiness === 'ready'
+/** The adapter the contract returns. */
+export const STRIPE_CONNECT_PAYMENT_PROVIDER: PaymentProvider = {
+  id: 'stripe-connect',
+  // Called with no argument, so the key is read when asked — not when this
+  // module was first evaluated.
+  platformMode: () => platformStripeMode(),
+  resolvePlatformMode: () => resolvePlatformStripeMode(),
+  applyAccountEvent: applyStripeConnectAccountEvent,
 }

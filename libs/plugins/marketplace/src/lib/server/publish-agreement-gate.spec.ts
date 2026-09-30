@@ -54,7 +54,7 @@ const CURRENT = { version: PUBLISHER_AGREEMENT_VERSION }
 const PROFILE = {
   orgId: 'org-1',
   handle: 'acme',
-  // AGL-2471: the payout precondition asks `connectLinkageIsReady`, which
+  // AGL-2471: the payout precondition asks `merchantAccountIsReady`, which
   // wants the payout DESTINATION as well as the flag. `stripeChargesEnabled`
   // with no account id was never a real publisher, only a fixture.
   stripeAccountId: 'acct_spec',

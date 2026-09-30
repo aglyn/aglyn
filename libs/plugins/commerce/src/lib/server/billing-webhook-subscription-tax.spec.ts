@@ -177,7 +177,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   upsertHostContact: async () => undefined,
   renderHostEmailWithTokens: async () => null,
-  syncConnectAccountStatus: async () => undefined,
   updateExisting: async () => undefined,
 }))
 
