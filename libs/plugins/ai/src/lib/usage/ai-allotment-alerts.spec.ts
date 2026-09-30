@@ -77,6 +77,7 @@ const mockFirestore: any = {
 jest.mock('@aglyn/tenant-data-admin/server/notifications', () => ({ __esModule: true, notifyUsers: jest.fn() }))
 jest.mock('@aglyn/tenant-data-admin/server/email-suppression', () => ({ __esModule: true, filterSuppressedEmails: jest.fn() }))
 jest.mock('@aglyn/tenant-data-admin/server/email-metering', () => ({ __esModule: true, meterPlatformEmail: jest.fn() }))
+jest.mock('@aglyn/tenant-data-admin/server/account-mail', () => ({ __esModule: true, withoutMailWithheldAccounts: jest.fn() }))
 jest.mock('@aglyn/shared-util-email', () => ({ __esModule: true, sendEmail: jest.fn() }))
 
 import { announceAiAllotmentAlerts } from './ai-allotment-alerts'
@@ -89,6 +90,7 @@ const channels = () => ({
   send: jest.fn(async () => ({ sent: true as const, id: 'email-1' })),
   filter: jest.fn(async (emails: readonly string[]) => [...emails]),
   meter: jest.fn(async () => undefined),
+  reachable: jest.fn(async (uids: readonly string[]) => [...uids]),
 })
 
 const memberStanding = {
@@ -139,6 +141,25 @@ describe('a soft allotment’s crossing', () => {
     )
     expect(pipeline.send).toHaveBeenCalledWith(expect.objectContaining({ to: ['sam@example.test'] }))
     expect(pipeline.meter).toHaveBeenCalledTimes(2)
+  })
+
+  it('tells a locked or disabled account nothing, by either channel (AGL-3418)', async () => {
+    const pipeline = channels()
+    pipeline.reachable.mockImplementation(async (uids: readonly string[]) =>
+      uids.filter((uid) => uid !== 'owner-1' && uid !== 'm1'),
+    )
+    await announceAiAllotmentAlerts(
+      mockFirestore,
+      { orgId: ORG, orgSlug: 'acme', month: MONTH, alerts: [{ standing: memberStanding, threshold: 80 }] },
+      pipeline,
+    )
+    expect(pipeline.notify).toHaveBeenCalledTimes(1)
+    expect(pipeline.notify).toHaveBeenCalledWith(
+      ['admin-1'],
+      expect.objectContaining({ title: 'Sam is past 80% of their AI allotment' }),
+    )
+    expect(pipeline.send).toHaveBeenCalledTimes(1)
+    expect(pipeline.send).toHaveBeenCalledWith(expect.objectContaining({ to: ['admin@example.test'] }))
   })
 
   it('announces a threshold ONCE a month, a higher one again, and the same one next month', async () => {

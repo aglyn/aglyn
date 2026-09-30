@@ -18,6 +18,8 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   brandMergeTokens,
+  isLockdownActive,
+  normalizeOrgLockdown,
   pluginRequestFromWeb,
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
@@ -51,6 +53,7 @@ import {
 // lists. A suppression check that is not actually running is the exact defect
 // this issue is about, one level up. Same reasoning as `email-events.ts`.
 import { isEmailSuppressed } from '@aglyn/tenant-data-admin/server/email-suppression'
+import { isAccountMailWithheld } from '@aglyn/tenant-data-admin/server/account-mail'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller.
 
@@ -187,13 +190,24 @@ async function handler(request: Request): Promise<Response> {
       // on the `enterprise` plan and its owner is exactly such a user, so the
       // one org most likely to want a usage summary was the one silently not
       // getting one.
-      const email = ownerUid
-        ? await findUserByUidAcrossPools(ownerUid)
-            .then((found) => found?.record.email)
-            .catch(() => undefined)
-        : undefined
+      const owner = ownerUid
+        ? await findUserByUidAcrossPools(ownerUid).catch(() => null)
+        : null
+      const email = owner?.record.email
       if (!email) {
         results[orgId] = { skipped: 'no email' }
+        continue
+      }
+      // A locked or disabled owner, or a suspended workspace, is sent no
+      // summary (AGL-3418). The Auth record is already here, so its
+      // `disabled` costs nothing.
+      if (
+        isLockdownActive(normalizeOrgLockdown(orgData as never), Date.now()) ||
+        (await isAccountMailWithheld(ownerUid, {
+          authDisabled: owner?.record.disabled === true,
+        }))
+      ) {
+        results[orgId] = { skipped: 'locked' }
         continue
       }
       /*

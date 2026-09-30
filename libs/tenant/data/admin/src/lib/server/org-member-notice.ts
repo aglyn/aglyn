@@ -16,6 +16,7 @@
  */
 
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools } from './auth-pools'
 import { filterSuppressedEmails } from './email-suppression'
 import { listOrgMembers } from './organizations'
@@ -82,7 +83,8 @@ export async function sendOrgMemberNotice(input: OrgMemberNoticeInput): Promise<
     }
     const addresses = new Set<string>()
     let lookups = 0
-    for (const uid of uids) {
+    // A locked or disabled account is not mailed (AGL-3418).
+    for (const uid of await withoutMailWithheldAccounts([...uids])) {
       let address = rosterEmail.get(uid) ?? ''
       if (!address && lookups < MAX_LOOKUPS) {
         lookups += 1

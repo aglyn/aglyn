@@ -239,6 +239,14 @@ jest.mock('@aglyn/shared-util-email', () => ({
 
 // The LEAF the route imports the gate from, so the barrel mock above cannot
 // replace it with nothing.
+// Locked or disabled accounts (AGL-3418), from the leaf the route imports.
+const mockWithheld = new Set<string>()
+jest.mock('@aglyn/tenant-data-admin/server/account-mail', () => ({
+  __esModule: true,
+  withoutMailWithheldAccounts: async (uids: string[]) =>
+    uids.filter((uid) => !mockWithheld.has(uid)),
+}))
+
 jest.mock('@aglyn/tenant-data-admin/server/email-suppression', () => ({
   __esModule: true,
   filterSuppressedEmails: async (addresses: string[]) =>
@@ -365,6 +373,7 @@ beforeEach(() => {
   mockSendResults = []
   mockMetered = 0
   mockSuppressed.clear()
+  mockWithheld.clear()
   mockAutoId = 0
   process.env.CRON_SECRET = SECRET
   delete process.env.CRM_DIGEST_TIME_ZONE
@@ -544,6 +553,14 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
       emailReason: 'suppressed',
       notified: true,
     })
+  })
+
+  it('tells a locked or disabled member nothing (AGL-3418)', async () => {
+    mockWithheld.add('bob')
+    const body = await (await post()).json()
+    expect(mockSent.flatMap((mail) => mail.to)).not.toContain('bob@acme.com')
+    expect(mockNotified.some((entry) => entry.uids.includes('bob'))).toBe(false)
+    expect(body.orgs['org-a']?.members?.bob).toBeUndefined()
   })
 
   it('plans without sending on a GET, and writes no marker', async () => {
