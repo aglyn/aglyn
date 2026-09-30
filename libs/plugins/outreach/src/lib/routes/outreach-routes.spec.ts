@@ -34,6 +34,7 @@ import { outreachLocalDay } from '../mailboxes/mailbox-settings'
 import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.types'
 import { FakeGmail } from '../runtime/fixtures/fake-gmail'
 import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
+import { gmailApiError, OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE } from '../transport/gmail-errors'
 import { createOutreachDoNotContactDomainsRoute, OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY } from './do-not-contact-routes'
 import { createOutreachCurateRoutes, OUTREACH_CURATION_PURPOSE, outreachCuratedActivity } from './curate-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
@@ -1698,6 +1699,54 @@ describe('outreach/steps/test (AGL-3325)', () => {
     })
     expect(refused).toMatchObject({ status: 400, body: { reason: 'invalid-override' } })
     expect(gmail.sent).toHaveLength(1)
+  })
+
+  it('answers a Google refusal about the account with a 4xx, and only an outage with a 502 (AGL-3423)', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    const sequenceId = saved.body.sequence.id
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    gmail.failNextSend = gmailApiError(400, {
+      error: {
+        code: 400,
+        message: 'Mail service not enabled',
+        errors: [{ reason: 'failedPrecondition' }],
+        status: 'FAILED_PRECONDITION',
+      },
+    })
+    const noGmail = await post(test(), REP, { sequenceId })
+    expect(noGmail).toMatchObject({
+      status: 422,
+      body: { reason: 'mail-service-unavailable', error: OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE },
+    })
+
+    gmail.failNextSend = gmailApiError(403, { error: { code: 403, message: 'Delegation denied.', errors: [{ reason: 'forbidden' }] } })
+    const barred = await post(test(), REP, { sequenceId })
+    expect(barred.status).toBe(422)
+    expect(barred.body.reason).toBe('google-refused')
+    expect(barred.body.error).toContain('Delegation denied.')
+
+    gmail.failNextSend = gmailApiError(429, { error: { code: 429, errors: [{ reason: 'rateLimitExceeded' }] } })
+    expect((await post(test(), REP, { sequenceId })).status).toBe(429)
+
+    gmail.failNextSend = gmailApiError(503, { error: { code: 503, message: 'Backend Error' } })
+    const down = await post(test(), REP, { sequenceId })
+    expect(down).toMatchObject({ status: 502, body: { reason: 'google-unavailable' } })
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('step test send'),
+      expect.objectContaining({ code: 'mail_service_unavailable', status: 400, providerReason: 'failedPrecondition' }),
+    )
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('step test send'),
+      expect.objectContaining({ code: 'unavailable', status: 503 }),
+    )
+    // None of these is the grant gone: the mailbox stays connected.
+    expect(fieldOf(docs.get(org(`outreachMailboxes/${MAILBOX}`)), 'status')).not.toBe('reconnect_required')
+    expect(gmail.sent).toHaveLength(0)
+    warn.mockRestore()
+    error.mockRestore()
   })
 
   it('says why the mailbox cannot be opened, and marks it for reconnecting', async () => {

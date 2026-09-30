@@ -27,7 +27,7 @@ import type {
   OutreachMailboxStatus,
 } from '../model/outreach.types'
 import { createGmailClient } from '../transport/gmail-client'
-import { GmailTransportError } from '../transport/gmail-errors'
+import { GmailTransportError, googleFailureAnswer } from '../transport/gmail-errors'
 import {
   buildGoogleAuthorizationUrl,
   exchangeGoogleAuthorizationCode,
@@ -801,61 +801,8 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
   return { availability, connect, oauthCallback, connectComplete, settings, status, test, disconnect, readiness }
 }
 
-/** What a person reads when the Google account they chose has no Gmail. */
-export const OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE =
-  'This Google account does not have Gmail turned on yet. A new Google Workspace user can take up to a day ' +
-  'before Gmail is ready; otherwise ask your Workspace administrator to turn Gmail on for the account. ' +
-  'Then connect the mailbox again.'
-
-/**
- * A Google failure, answered by whose failure it is.
- *
- * Only an answer Google did not give — an outage, a dropped connection, a body
- * that could not be read — or a request Google called malformed (which is this
- * code's to fix) is a 5xx. A refusal about the ACCOUNT the person chose is
- * theirs to act on: an account with no Gmail, one an administrator has barred
- * from the Gmail API, or one Google is rate-limiting. Those are 4xx with a
- * sentence that says what to do, so they do not page as an outage.
- *
- * Every failure is logged with Google's own code, status and reason, which is
- * the one place an operator can read what Google actually said.
- */
+/** A Google failure the route could not handle itself, as the refusal {@link googleFailureAnswer} decides. */
 function googleFailure(error: unknown, route: string): Response {
-  if (!(error instanceof GmailTransportError)) throw error
-  const detail = {
-    code: error.code,
-    status: error.status,
-    providerReason: error.providerReason,
-    message: error.message,
-  }
-  switch (error.code) {
-    case 'mail_service_unavailable':
-      console.warn(`[outreach] ${route}: the Google account has no Gmail service`, detail)
-      return refusal(422, 'mail-service-unavailable', OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE)
-    case 'forbidden':
-      console.warn(`[outreach] ${route}: Google refused the account`, detail)
-      return refusal(
-        422,
-        'google-refused',
-        `Google refused this account's request: ${error.message} ` +
-          'If it is a Google Workspace account, ask its administrator whether Gmail API access is allowed for it.',
-      )
-    case 'rate_limited':
-    case 'quota_exceeded':
-      console.warn(`[outreach] ${route}: Google is limiting the account`, detail)
-      return refusal(
-        429,
-        'rate-limited',
-        error.code === 'quota_exceeded'
-          ? 'This Google account has used its Gmail quota for today. Try again tomorrow.'
-          : 'Google is rate-limiting this account. Try again in a few minutes.',
-      )
-    default:
-      console.error(`[outreach] ${route}: Google call failed`, detail)
-      return refusal(
-        502,
-        'google-unavailable',
-        error.retryable ? 'Google did not answer. Try again in a moment.' : `Google refused the request: ${error.message}`,
-      )
-  }
+  const answer = googleFailureAnswer(error, route)
+  return refusal(answer.status, answer.reason, answer.error)
 }

@@ -29,11 +29,11 @@ import {
   GOOGLE_OAUTH_ENDPOINTS,
 } from '../transport/google-oauth'
 import { GMAIL_API_BASE } from '../transport/gmail-client'
+import { OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE } from '../transport/gmail-errors'
 import { parseConnectReturnFragment } from './mailbox-api'
 import { refreshTokenSealContext } from './mailbox-credentials'
 import {
   createOutreachMailboxRoutes,
-  OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE,
   OUTREACH_TEST_SENDS_PER_HOUR,
   type OutreachMailboxRouteDeps,
 } from './mailbox-routes'
