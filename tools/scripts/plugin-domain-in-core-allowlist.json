@@ -48,13 +48,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/app/(auth)/signup/page.tsx",
-      "rules": [
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
       "rules": [
         "domain-name"
@@ -732,23 +725,6 @@
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/campaign-attribution.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/campaign-forwarding.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/campaign-membership.ts",

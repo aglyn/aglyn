@@ -20,9 +20,9 @@
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
 import dynamic from 'next/dynamic'
 import {
-  installCampaignForwarding,
-  setCampaignForwardingConsent,
-} from '@aglyn/aglyn/app-utils/campaign-forwarding'
+  installUtmForwarding,
+  setUtmForwardingConsent,
+} from '@aglyn/aglyn/app-utils/utm-forwarding'
 import { setCampaignTouchConsent } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { setPageFirstTouchStorage } from '@aglyn/shared-util-first-touch/first-touch-page'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
@@ -459,8 +459,8 @@ export default function SiteAnalytics({
       ? isAnalyticsAllowed(host, consent.stored)
       : null
     : true
-  setCampaignForwardingConsent(analyticsStorageAllowed)
-  installCampaignForwarding({ consoleOrigin: CONSOLE_ORIGIN })
+  setUtmForwardingConsent(analyticsStorageAllowed)
+  installUtmForwarding({ consoleOrigin: CONSOLE_ORIGIN })
 
   // Carry the campaign to the moment the visitor identifies themselves. The
   // UTM labels on the beacon above are a page-view label and go no further,

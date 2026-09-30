@@ -31,16 +31,16 @@
  */
 
 import {
-  CAMPAIGN_QUERY_KEYS,
-  campaignAttributionQuery,
-  campaignEventParams,
-  parseCampaignAttribution,
-} from './campaign-attribution'
+  UTM_QUERY_KEYS,
+  utmAttributionQuery,
+  utmEventParams,
+  parseUtmAttribution,
+} from './utm-attribution'
 
-describe('parseCampaignAttribution (AGL-1731)', () => {
+describe('parseUtmAttribution (AGL-1731)', () => {
   it('reads the three allowlisted keys off a signup URL', () => {
     expect(
-      parseCampaignAttribution(
+      parseUtmAttribution(
         new URLSearchParams(
           '?utm_source=google&utm_medium=cpc&utm_campaign=sept-launch',
         ),
@@ -56,7 +56,7 @@ describe('parseCampaignAttribution (AGL-1731)', () => {
     // A partner link routinely carries only `utm_source`. Refusing it would
     // throw away the attribution the link exists to provide.
     expect(
-      parseCampaignAttribution(new URLSearchParams('?utm_source=hn')),
+      parseUtmAttribution(new URLSearchParams('?utm_source=hn')),
     ).toEqual({ source: 'hn' })
   })
 
@@ -64,13 +64,13 @@ describe('parseCampaignAttribution (AGL-1731)', () => {
     // Not `{}` — the callers branch on null to write nothing, and an empty
     // object stored against an account would read as "arrived from nowhere,
     // confirmed" rather than "never asked".
-    expect(parseCampaignAttribution(new URLSearchParams('?plan=pro'))).toBeNull()
-    expect(parseCampaignAttribution(null)).toBeNull()
-    expect(parseCampaignAttribution(undefined)).toBeNull()
+    expect(parseUtmAttribution(new URLSearchParams('?plan=pro'))).toBeNull()
+    expect(parseUtmAttribution(null)).toBeNull()
+    expect(parseUtmAttribution(undefined)).toBeNull()
   })
 
   it('takes ONLY the allowlisted keys, whatever else rides the URL', () => {
-    const parsed = parseCampaignAttribution(
+    const parsed = parseUtmAttribution(
       new URLSearchParams(
         '?utm_source=twitter&utm_term=free+cms&utm_content=variant-b&ref=hn&gclid=abc',
       ),
@@ -88,7 +88,7 @@ describe('parseCampaignAttribution (AGL-1731)', () => {
     // `?utm_source=newsletter-someone@example.com`. The address must not
     // reach `users/{uid}`, and dropping the one value beats dropping the
     // campaign.
-    const parsed = parseCampaignAttribution(
+    const parsed = parseUtmAttribution(
       new URLSearchParams(
         '?utm_source=someone@example.com&utm_campaign=sept-launch',
       ),
@@ -99,7 +99,7 @@ describe('parseCampaignAttribution (AGL-1731)', () => {
   })
 
   it('caps a value rather than storing an unbounded string', () => {
-    const parsed = parseCampaignAttribution(
+    const parsed = parseUtmAttribution(
       new URLSearchParams(`?utm_campaign=${'a'.repeat(500)}`),
     )
 
@@ -108,13 +108,13 @@ describe('parseCampaignAttribution (AGL-1731)', () => {
 
   it('drops a blank or whitespace-only value instead of storing an empty one', () => {
     expect(
-      parseCampaignAttribution(new URLSearchParams('?utm_source=&utm_medium=%20%20')),
+      parseUtmAttribution(new URLSearchParams('?utm_source=&utm_medium=%20%20')),
     ).toBeNull()
   })
 
   it('accepts the plain-record shape a Server Component holds', () => {
     expect(
-      parseCampaignAttribution({
+      parseUtmAttribution({
         utm_source: 'google',
         // A repeated parameter arrives as an array; the first wins, rather
         // than the parser throwing or joining them into a nonsense value.
@@ -125,26 +125,26 @@ describe('parseCampaignAttribution (AGL-1731)', () => {
   })
 })
 
-describe('campaignAttributionQuery — the stored wire form (AGL-1731)', () => {
+describe('utmAttributionQuery — the stored wire form (AGL-1731)', () => {
   it('round-trips through the parser, which is what makes storing it safe', () => {
     const original = { source: 'google', medium: 'cpc', campaign: 'sept' }
-    const query = campaignAttributionQuery(original)
+    const query = utmAttributionQuery(original)
 
     expect(query).toBe('utm_source=google&utm_medium=cpc&utm_campaign=sept')
     // The stored value is re-PARSED on read, never trusted: `users/{uid}` is
     // owner-writable, so a hand-edited document must not be a second, more
     // trusting path into what we record as an acquisition source.
-    expect(parseCampaignAttribution(new URLSearchParams(query))).toEqual(original)
+    expect(parseUtmAttribution(new URLSearchParams(query))).toEqual(original)
   })
 
   it('omits the keys it does not have, so a partial stays partial', () => {
-    expect(campaignAttributionQuery({ source: 'hn' })).toBe('utm_source=hn')
+    expect(utmAttributionQuery({ source: 'hn' })).toBe('utm_source=hn')
   })
 
   it('names the keys through the exported constant, not a second spelling', () => {
     // Two spellings of `utm_source` would read as two dimensions in GA and
     // the reports would silently split.
-    expect(CAMPAIGN_QUERY_KEYS).toEqual([
+    expect(UTM_QUERY_KEYS).toEqual([
       'utm_source',
       'utm_medium',
       'utm_campaign',
@@ -152,10 +152,10 @@ describe('campaignAttributionQuery — the stored wire form (AGL-1731)', () => {
   })
 })
 
-describe('campaignEventParams — what rides the GA4 hit (AGL-1731)', () => {
+describe('utmEventParams — what rides the GA4 hit (AGL-1731)', () => {
   it('maps to the registerable param names, not the raw utm_ spellings', () => {
     expect(
-      campaignEventParams({ source: 'google', medium: 'cpc', campaign: 'sept' }),
+      utmEventParams({ source: 'google', medium: 'cpc', campaign: 'sept' }),
     ).toEqual({
       campaign_source: 'google',
       campaign_medium: 'cpc',
@@ -174,9 +174,9 @@ describe('campaignEventParams — what rides the GA4 hit (AGL-1731)', () => {
     // Found by mutation: the `toEqual` version of these two lines survived a
     // helper rewritten to emit undefined keys. With `strictNullChecks` off the
     // types would not have objected either.
-    expect(Object.keys(campaignEventParams(null))).toEqual([])
-    expect(campaignEventParams(null)).toStrictEqual({})
-    expect(Object.keys(campaignEventParams({}))).toEqual([])
-    expect(campaignEventParams({})).toStrictEqual({})
+    expect(Object.keys(utmEventParams(null))).toEqual([])
+    expect(utmEventParams(null)).toStrictEqual({})
+    expect(Object.keys(utmEventParams({}))).toEqual([])
+    expect(utmEventParams({})).toStrictEqual({})
   })
 })

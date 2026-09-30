@@ -61,11 +61,11 @@ jest.mock('../utils/hard-navigate', () => ({
  */
 jest.mock('@aglyn/aglyn', () => {
   const campaign = jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
   )
   return {
-    campaignAttributionQuery: campaign.campaignAttributionQuery,
-    parseCampaignAttribution: campaign.parseCampaignAttribution,
+    utmAttributionQuery: campaign.utmAttributionQuery,
+    parseUtmAttribution: campaign.parseUtmAttribution,
   }
 })
 

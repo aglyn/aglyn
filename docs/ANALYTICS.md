@@ -2159,7 +2159,7 @@ because **attribution is not retroactive either**: a signup that lands
 unattributed is unattributed forever, and a September ad spend with no
 attribution cannot be evaluated at all.
 
-`libs/aglyn/src/lib/app-utils/campaign-attribution.ts` owns the contract.
+`libs/aglyn/src/lib/app-utils/utm-attribution.ts` owns the contract.
 Three parameters, allowlisted:
 
 | URL parameter  | `sign_up` param   | Stored as  |
@@ -2248,7 +2248,7 @@ one rather than deferring to it.
 **What was actually needed** is per-visitor forwarding: the landing page copies
 the campaign off its OWN inbound URL onto the console-bound href at click time.
 
-**That is what `campaign-forwarding.ts` now does** (`libs/aglyn/src/lib/app-utils/`),
+**That is what `utm-forwarding.ts` now does** (`libs/aglyn/src/lib/app-utils/`),
 installed by `site-analytics.tsx` beside the click and web-vitals listeners.
 `AppLink` (`libs/shared/ui/jsx`) was the obvious seam and is the wrong one
 twice over: it would need `useSearchParams` in a component the console renders

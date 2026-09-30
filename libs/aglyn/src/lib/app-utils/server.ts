@@ -209,7 +209,7 @@ export * from './onboarding-deep-link'
 // Where an account came from (AGL-1731). Beside the plan intent because
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.
-export * from './campaign-attribution'
+export * from './utm-attribution'
 // The edge between a campaign and the forms, screens and contacts a push is
 // coordinated across. Beside the attribution above because the two answer
 // opposite questions about the same word: attribution records where somebody

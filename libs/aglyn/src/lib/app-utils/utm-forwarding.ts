@@ -16,9 +16,9 @@
  */
 
 /**
- * Carry the campaign across the domain hop (AGL-1731).
+ * Carry the visit's UTM labels across the domain hop (AGL-1731).
  *
- * `campaign-attribution.ts` is the READER half of this contract and it works.
+ * `utm-attribution.ts` is the READER half of this contract and it works.
  * This is the half that was missing, and without it the reader was fed
  * nothing: `aglyn.com` is a tenant published site and `app.aglyn.com` is the
  * console, a real cross-origin hop, and no code anywhere put a `utm_*`
@@ -96,7 +96,7 @@
  * it. There is no default, no inference from the referrer, and no
  * `utm_source=direct` — a signup with no campaign must reach the console with
  * no campaign, so that "arrived from nowhere" and "never asked" stay the
- * distinct facts `campaign-attribution.ts` keeps them.
+ * distinct facts `utm-attribution.ts` keeps them.
  *
  * Only links to OUR OWN console origin are touched, and the origin is supplied
  * by the caller rather than written here — a self-host install points
@@ -118,11 +118,11 @@
  */
 
 import {
-  CAMPAIGN_QUERY_KEYS,
-  campaignAttributionQuery,
-  parseCampaignAttribution,
-  type CampaignAttribution,
-} from './campaign-attribution'
+  UTM_QUERY_KEYS,
+  utmAttributionQuery,
+  parseUtmAttribution,
+  type UtmAttribution,
+} from './utm-attribution'
 
 /**
  * Where the first touch of this visit is held. `sessionStorage`, so it dies
@@ -130,7 +130,7 @@ import {
  * outlived the visit would start attributing next week's organic return to
  * this week's ad.
  */
-export const CAMPAIGN_VISIT_STORAGE_KEY = 'aglyn:campaign'
+export const UTM_VISIT_STORAGE_KEY = 'aglyn:campaign'
 
 /**
  * What a read of the first-touch store produced.
@@ -143,8 +143,8 @@ export const CAMPAIGN_VISIT_STORAGE_KEY = 'aglyn:campaign'
  * treats it differently: it falls through to the live URL instead of
  * concluding anything.
  */
-export type VisitCampaignRead =
-  | { status: 'campaign'; campaign: CampaignAttribution }
+export type VisitUtmRead =
+  | { status: 'campaign'; campaign: UtmAttribution }
   | { status: 'none' }
   | { status: 'unreadable' }
 
@@ -182,18 +182,18 @@ function sessionStore(): Storage | null {
  * string can claim no more than an inbound URL could — three allowlisted keys,
  * trimmed, email shapes refused, capped.
  */
-export function readVisitCampaign(): VisitCampaignRead {
+export function readVisitUtm(): VisitUtmRead {
   if (storageConsent !== true) return { status: 'none' }
   const store = sessionStore()
   if (!store) return { status: 'unreadable' }
   let raw: string | null
   try {
-    raw = store.getItem(CAMPAIGN_VISIT_STORAGE_KEY)
+    raw = store.getItem(UTM_VISIT_STORAGE_KEY)
   } catch {
     return { status: 'unreadable' }
   }
   if (!raw) return { status: 'none' }
-  const campaign = parseCampaignAttribution(new URLSearchParams(raw))
+  const campaign = parseUtmAttribution(new URLSearchParams(raw))
   return campaign ? { status: 'campaign', campaign } : { status: 'none' }
 }
 
@@ -207,8 +207,8 @@ export function readVisitCampaign(): VisitCampaignRead {
  *
  * Returns what is now remembered so a caller can assert on it.
  */
-export function rememberVisitCampaign(search?: string): CampaignAttribution | null {
-  const existing = readVisitCampaign()
+export function rememberVisitUtm(search?: string): UtmAttribution | null {
+  const existing = readVisitUtm()
   if (existing.status === 'campaign') return existing.campaign
   if (storageConsent !== true) return null
   const store = sessionStore()
@@ -219,10 +219,10 @@ export function rememberVisitCampaign(search?: string): CampaignAttribution | nu
       : typeof window === 'undefined'
         ? ''
         : window.location.search
-  const campaign = parseCampaignAttribution(new URLSearchParams(source))
+  const campaign = parseUtmAttribution(new URLSearchParams(source))
   if (!campaign) return null
   try {
-    store.setItem(CAMPAIGN_VISIT_STORAGE_KEY, campaignAttributionQuery(campaign))
+    store.setItem(UTM_VISIT_STORAGE_KEY, utmAttributionQuery(campaign))
   } catch {
     // A store that refuses the write costs the walk from the landing page to
     // the pricing page, never the click itself — tier 1 still carries a
@@ -241,17 +241,17 @@ export function rememberVisitCampaign(search?: string): CampaignAttribution | nu
  * visitor who changes their mind mid-visit should not leave the thing they
  * withdrew consent for sitting on their device.
  */
-export function setCampaignForwardingConsent(allowed: boolean | null): void {
+export function setUtmForwardingConsent(allowed: boolean | null): void {
   storageConsent = allowed === true ? true : allowed === false ? false : null
   if (storageConsent === true) {
-    rememberVisitCampaign()
+    rememberVisitUtm()
     return
   }
   if (storageConsent === false) {
     const store = sessionStore()
     if (!store) return
     try {
-      store.removeItem(CAMPAIGN_VISIT_STORAGE_KEY)
+      store.removeItem(UTM_VISIT_STORAGE_KEY)
     } catch {
       // Nothing else to try, and a failed cleanup must not break the page.
     }
@@ -265,8 +265,8 @@ export function setCampaignForwardingConsent(allowed: boolean | null): void {
  * which is the point of carrying that state at all: a broken store degrades
  * this to tier 1 rather than to silence.
  */
-export function campaignToForward(search?: string): CampaignAttribution | null {
-  const stored = readVisitCampaign()
+export function utmToForward(search?: string): UtmAttribution | null {
+  const stored = readVisitUtm()
   if (stored.status === 'campaign') return stored.campaign
   const live =
     typeof search === 'string'
@@ -274,7 +274,7 @@ export function campaignToForward(search?: string): CampaignAttribution | null {
       : typeof window === 'undefined'
         ? ''
         : window.location.search
-  return parseCampaignAttribution(new URLSearchParams(live))
+  return parseUtmAttribution(new URLSearchParams(live))
 }
 
 function normalizeOrigin(value: string | null | undefined): string {
@@ -300,11 +300,11 @@ function normalizeOrigin(value: string | null | undefined): string {
  * row describes an event that never happened. Everything else on the href —
  * `plan`, `interval`, the AGL-1535 intent — is preserved untouched.
  */
-export function decorateCampaignHref(
+export function decorateUtmHref(
   href: string,
   baseHref: string,
   consoleOrigin: string,
-  campaign: CampaignAttribution | null,
+  campaign: UtmAttribution | null,
 ): string | null {
   if (!campaign) return null
   const origin = normalizeOrigin(consoleOrigin)
@@ -316,8 +316,8 @@ export function decorateCampaignHref(
     return null
   }
   if (url.origin !== origin) return null
-  for (const key of CAMPAIGN_QUERY_KEYS) url.searchParams.delete(key)
-  const query = new URLSearchParams(campaignAttributionQuery(campaign))
+  for (const key of UTM_QUERY_KEYS) url.searchParams.delete(key)
+  const query = new URLSearchParams(utmAttributionQuery(campaign))
   query.forEach((value, key) => url.searchParams.set(key, value))
   const next = url.toString()
   return next === href ? null : next
@@ -341,7 +341,7 @@ export function decorateCampaignHref(
  * Returns an uninstall function for tests and for a caller that owns the page
  * lifecycle.
  */
-export function installCampaignForwarding(options: {
+export function installUtmForwarding(options: {
   consoleOrigin: string
 }): () => void {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
@@ -357,11 +357,11 @@ export function installCampaignForwarding(options: {
       if (!target || typeof target.closest !== 'function') return
       const anchor = target.closest('a[href]')
       if (!anchor) return
-      const decorated = decorateCampaignHref(
+      const decorated = decorateUtmHref(
         anchor.getAttribute('href') || '',
         window.location.href,
         origin,
-        campaignToForward(),
+        utmToForward(),
       )
       if (decorated) anchor.setAttribute('href', decorated)
     } catch {
@@ -373,11 +373,11 @@ export function installCampaignForwarding(options: {
   installedHandler = onActivate
   document.addEventListener('pointerdown', onActivate, true)
   document.addEventListener('click', onActivate, true)
-  return resetCampaignForwarding
+  return resetUtmForwarding
 }
 
 /** Test seam — removes both listeners, forgets them, and forgets consent. */
-export function resetCampaignForwarding(): void {
+export function resetUtmForwarding(): void {
   if (installedHandler && typeof document !== 'undefined') {
     document.removeEventListener('pointerdown', installedHandler, true)
     document.removeEventListener('click', installedHandler, true)

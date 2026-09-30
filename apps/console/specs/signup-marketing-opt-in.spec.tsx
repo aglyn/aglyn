@@ -83,12 +83,12 @@ jest.mock('@aglyn/aglyn', () => ({
   generateOrgSlug: (value: string) => value.toLowerCase(),
   onboardingDestination: (slug: string) => `/${slug}`,
   parseOnboardingPlanIntent: () => null,
-  parseCampaignAttribution: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
-  ).parseCampaignAttribution,
-  campaignEventParams: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
-  ).campaignEventParams,
+  parseUtmAttribution: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
+  ).parseUtmAttribution,
+  utmEventParams: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
+  ).utmEventParams,
 }))
 jest.mock('@aglyn/shared-data-forms', () => ({
   FIELD_SCHEMA_EMAIL: { name: 'email' },

@@ -26,7 +26,7 @@
  * The capture on `app.aglyn.com` was verified twice and was correct twice; it
  * was fed nothing, because nothing on `aglyn.com` ever put a `utm_*` parameter
  * on a console-bound link. So the assertions that matter here are not "does
- * the parser work" — that is `campaign-attribution.spec.ts` — but "does a real
+ * the parser work" — that is `utm-attribution.spec.ts` — but "does a real
  * click on a real anchor leave with the campaign on it, and does a click with
  * no campaign leave with nothing invented".
  *
@@ -39,15 +39,15 @@
  */
 
 import {
-  CAMPAIGN_VISIT_STORAGE_KEY,
-  campaignToForward,
-  decorateCampaignHref,
-  installCampaignForwarding,
-  readVisitCampaign,
-  rememberVisitCampaign,
-  resetCampaignForwarding,
-  setCampaignForwardingConsent,
-} from './campaign-forwarding'
+  UTM_VISIT_STORAGE_KEY,
+  utmToForward,
+  decorateUtmHref,
+  installUtmForwarding,
+  readVisitUtm,
+  rememberVisitUtm,
+  resetUtmForwarding,
+  setUtmForwardingConsent,
+} from './utm-forwarding'
 
 const CONSOLE = 'https://app.aglyn.com'
 
@@ -77,14 +77,14 @@ function hrefOf(element: Element): string {
 }
 
 beforeEach(() => {
-  resetCampaignForwarding()
+  resetUtmForwarding()
   window.sessionStorage.clear()
   document.body.innerHTML = ''
   landOn('https://aglyn.com/')
 })
 
 afterEach(() => {
-  resetCampaignForwarding()
+  resetUtmForwarding()
 })
 
 describe('the hop, driven end to end', () => {
@@ -95,8 +95,8 @@ describe('the hop, driven end to end', () => {
     landOn(
       'https://aglyn.com/?utm_source=google&utm_medium=cpc&utm_campaign=sept-launch',
     )
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint(CTA)
 
     clickOn(cta)
@@ -119,8 +119,8 @@ describe('the hop, driven end to end', () => {
     // campaign, which is the bug AGL-1731 exists to end, arriving from the
     // other side.
     landOn('https://aglyn.com/pricing')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint(CTA)
 
     clickOn(cta)
@@ -140,8 +140,8 @@ describe('the hop, driven end to end', () => {
     // signs up from the page the ad landed on. By the time they click, the
     // campaign is off the address bar.
     landOn('https://aglyn.com/?utm_source=hn&utm_campaign=show-hn')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
 
     landOn('https://aglyn.com/pricing')
     const cta = paint(CTA)
@@ -157,8 +157,8 @@ describe('the hop, driven end to end', () => {
     // HTML link is a plain DOM anchor written with `dangerouslySetInnerHTML`
     // and has no React handler at all, so an `AppLink` prop would miss it.
     landOn('https://aglyn.com/?utm_source=partner&utm_medium=referral')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const inline = paint(
       '<p>Ready? <a id="target" href="https://app.aglyn.com/signup">sign up here</a>.</p>',
     )
@@ -172,8 +172,8 @@ describe('the hop, driven end to end', () => {
 
   it('decorates before a middle-click or a copy-link, which never fire click', () => {
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint(CTA)
 
     pointerDownOn(cta)
@@ -183,8 +183,8 @@ describe('the hop, driven end to end', () => {
 
   it('does not accumulate when pointerdown and click both fire', () => {
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint(CTA)
 
     pointerDownOn(cta)
@@ -202,8 +202,8 @@ describe('the hop, driven end to end', () => {
 describe('what is never decorated', () => {
   beforeEach(() => {
     landOn('https://aglyn.com/?utm_source=google&utm_medium=cpc')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
   })
 
   it('leaves a third-party link alone', () => {
@@ -245,9 +245,9 @@ describe('what is never decorated', () => {
   it('does nothing at all when the caller supplies no console origin', () => {
     // A self-host install with the variable unset must not fall back to
     // `app.aglyn.com` and start decorating links to someone else's console.
-    resetCampaignForwarding()
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: '' })
+    resetUtmForwarding()
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: '' })
     const cta = paint('<a id="target" href="https://app.aglyn.com/signup">Go</a>')
 
     clickOn(cta)
@@ -262,8 +262,8 @@ describe('whose campaign wins', () => {
     // every clicker to Google whatever their real origin. The visitor's own
     // inbound campaign is the only one that describes a real event.
     landOn('https://aglyn.com/?utm_source=hn&utm_medium=referral')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint(
       '<a id="target" href="https://app.aglyn.com/signup?utm_source=google&utm_medium=cpc&utm_campaign=always-on">Go</a>',
     )
@@ -283,8 +283,8 @@ describe('whose campaign wins', () => {
     // Last touch answers a different question and would disagree with GA4's
     // own session attribution.
     landOn('https://aglyn.com/?utm_source=hn')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
 
     landOn('https://aglyn.com/pricing?utm_source=newsletter')
     const cta = paint('<a id="target" href="https://app.aglyn.com/signup">Go</a>')
@@ -295,8 +295,8 @@ describe('whose campaign wins', () => {
 
   it('an authored campaign survives when the visitor brought none', () => {
     landOn('https://aglyn.com/pricing')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint(
       '<a id="target" href="https://app.aglyn.com/signup?utm_source=newsletter">Go</a>',
     )
@@ -316,56 +316,56 @@ describe('consent, and the three states of it', () => {
     // Failing closed here costs an attribution; failing open writes to a
     // visitor's device before they have answered.
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(null)
+    setUtmForwardingConsent(null)
 
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
-    expect(readVisitCampaign()).toStrictEqual({ status: 'none' })
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBeNull()
+    expect(readVisitUtm()).toStrictEqual({ status: 'none' })
   })
 
   it('DENIED stores nothing', () => {
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(false)
+    setUtmForwardingConsent(false)
 
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBeNull()
   })
 
   it('refuses a DIRECT request to remember, denied or merely undecided', () => {
     // The setter reaches the store through one door and this is the other one.
     // Asserting only through the setter left the guard inside
-    // `rememberVisitCampaign` unexecuted: a mutation that deleted it kept the
+    // `rememberVisitUtm` unexecuted: a mutation that deleted it kept the
     // whole suite green, because a denial takes the `removeItem` branch and
     // never calls this function at all.
     landOn('https://aglyn.com/?utm_source=google')
 
-    setCampaignForwardingConsent(false)
-    expect(rememberVisitCampaign()).toBeNull()
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
+    setUtmForwardingConsent(false)
+    expect(rememberVisitUtm()).toBeNull()
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBeNull()
 
-    resetCampaignForwarding()
-    setCampaignForwardingConsent(null)
-    expect(rememberVisitCampaign()).toBeNull()
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
+    resetUtmForwarding()
+    setUtmForwardingConsent(null)
+    expect(rememberVisitUtm()).toBeNull()
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBeNull()
   })
 
   it('GRANTED stores the first touch, in the canonical wire form', () => {
     landOn(
       'https://aglyn.com/?utm_source=google&utm_medium=cpc&utm_campaign=sept-launch',
     )
-    setCampaignForwardingConsent(true)
+    setUtmForwardingConsent(true)
 
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBe(
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBe(
       'utm_source=google&utm_medium=cpc&utm_campaign=sept-launch',
     )
   })
 
   it('a WITHDRAWAL drops what was stored, rather than merely ignoring it', () => {
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(true)
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).not.toBeNull()
+    setUtmForwardingConsent(true)
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).not.toBeNull()
 
-    setCampaignForwardingConsent(false)
+    setUtmForwardingConsent(false)
 
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBeNull()
   })
 
   it('the live URL still forwards without any consent at all — it writes nothing', () => {
@@ -374,20 +374,20 @@ describe('consent, and the three states of it', () => {
     // declined analytics and converts from the landing page is still
     // attributable, and no byte was left on their device to do it.
     landOn('https://aglyn.com/pricing?utm_source=google&utm_medium=cpc')
-    setCampaignForwardingConsent(false)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(false)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint('<a id="target" href="https://app.aglyn.com/signup">Go</a>')
 
     clickOn(cta)
 
     expect(new URL(hrefOf(cta)).searchParams.get('utm_source')).toBe('google')
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBeNull()
   })
 
   it('a declined visitor who walks to /pricing forwards nothing, rather than a guess', () => {
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(false)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(false)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
 
     landOn('https://aglyn.com/pricing')
     const cta = paint('<a id="target" href="https://app.aglyn.com/signup">Go</a>')
@@ -452,19 +452,19 @@ function withThrowingGetItem(body: () => void): void {
 describe('an unreadable store is not an organic visitor', () => {
   it('reports `unreadable` when the READ itself throws', () => {
     withThrowingGetItem(() => {
-      setCampaignForwardingConsent(true)
+      setUtmForwardingConsent(true)
 
-      expect(readVisitCampaign()).toStrictEqual({ status: 'unreadable' })
-      expect(readVisitCampaign()).not.toStrictEqual({ status: 'none' })
+      expect(readVisitUtm()).toStrictEqual({ status: 'unreadable' })
+      expect(readVisitUtm()).not.toStrictEqual({ status: 'none' })
     })
   })
 
   it('falls through to the live URL when the READ throws', () => {
     landOn('https://aglyn.com/?utm_source=google')
     withThrowingGetItem(() => {
-      setCampaignForwardingConsent(true)
+      setUtmForwardingConsent(true)
 
-      expect(campaignToForward()).toStrictEqual({ source: 'google' })
+      expect(utmToForward()).toStrictEqual({ source: 'google' })
     })
   })
 
@@ -473,19 +473,19 @@ describe('an unreadable store is not an organic visitor', () => {
     // say "this visitor named no campaign" — a measured zero standing in for a
     // failure, which is how attribution silently becomes 100% direct.
     withBrokenSessionStorage(() => {
-      setCampaignForwardingConsent(true)
+      setUtmForwardingConsent(true)
 
-      expect(readVisitCampaign()).toStrictEqual({ status: 'unreadable' })
-      expect(readVisitCampaign()).not.toStrictEqual({ status: 'none' })
+      expect(readVisitUtm()).toStrictEqual({ status: 'unreadable' })
+      expect(readVisitUtm()).not.toStrictEqual({ status: 'none' })
     })
   })
 
   it('falls through to the live URL rather than to silence', () => {
     landOn('https://aglyn.com/?utm_source=google')
     withBrokenSessionStorage(() => {
-      setCampaignForwardingConsent(true)
+      setUtmForwardingConsent(true)
 
-      expect(campaignToForward()).toStrictEqual({ source: 'google' })
+      expect(utmToForward()).toStrictEqual({ source: 'google' })
     })
   })
 })
@@ -494,26 +494,26 @@ describe('the stored value is re-parsed, never trusted', () => {
   it('refuses an address someone put in the store by hand', () => {
     // `sessionStorage` is writable by anything on the page, so a stored string
     // may claim no more than an inbound URL could.
-    setCampaignForwardingConsent(true)
+    setUtmForwardingConsent(true)
     window.sessionStorage.setItem(
-      CAMPAIGN_VISIT_STORAGE_KEY,
+      UTM_VISIT_STORAGE_KEY,
       'utm_source=someone@example.com&utm_campaign=real',
     )
 
-    expect(readVisitCampaign()).toStrictEqual({
+    expect(readVisitUtm()).toStrictEqual({
       status: 'campaign',
       campaign: { campaign: 'real' },
     })
   })
 
   it('drops a key the allowlist does not name', () => {
-    setCampaignForwardingConsent(true)
+    setUtmForwardingConsent(true)
     window.sessionStorage.setItem(
-      CAMPAIGN_VISIT_STORAGE_KEY,
+      UTM_VISIT_STORAGE_KEY,
       'utm_source=google&gclid=abc123&utm_term=cheap+website',
     )
 
-    expect(readVisitCampaign()).toStrictEqual({
+    expect(readVisitUtm()).toStrictEqual({
       status: 'campaign',
       campaign: { source: 'google' },
     })
@@ -521,28 +521,28 @@ describe('the stored value is re-parsed, never trusted', () => {
 
   it('never replaces a first touch already remembered', () => {
     landOn('https://aglyn.com/?utm_source=hn')
-    setCampaignForwardingConsent(true)
+    setUtmForwardingConsent(true)
 
     landOn('https://aglyn.com/?utm_source=newsletter')
-    expect(rememberVisitCampaign()).toStrictEqual({ source: 'hn' })
-    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBe(
+    expect(rememberVisitUtm()).toStrictEqual({ source: 'hn' })
+    expect(window.sessionStorage.getItem(UTM_VISIT_STORAGE_KEY)).toBe(
       'utm_source=hn',
     )
   })
 })
 
-describe('decorateCampaignHref, decided rather than guessed', () => {
+describe('decorateUtmHref, decided rather than guessed', () => {
   it('returns null for "leave it alone", distinctly from an unchanged string', () => {
     expect(
-      decorateCampaignHref('https://app.aglyn.com/signup', 'https://aglyn.com/', CONSOLE, null),
+      decorateUtmHref('https://app.aglyn.com/signup', 'https://aglyn.com/', CONSOLE, null),
     ).toBeNull()
     expect(
-      decorateCampaignHref('https://github.com/aglyn', 'https://aglyn.com/', CONSOLE, {
+      decorateUtmHref('https://github.com/aglyn', 'https://aglyn.com/', CONSOLE, {
         source: 'google',
       }),
     ).toBeNull()
     expect(
-      decorateCampaignHref(
+      decorateUtmHref(
         'https://app.aglyn.com/signup?utm_source=google',
         'https://aglyn.com/',
         CONSOLE,
@@ -554,7 +554,7 @@ describe('decorateCampaignHref, decided rather than guessed', () => {
   it('honours a console origin that is not app.aglyn.com', () => {
     // A self-host install, and the localhost console every drive here runs on.
     expect(
-      decorateCampaignHref(
+      decorateUtmHref(
         'http://localhost:4200/signup',
         'http://localhost:4300/',
         'http://localhost:4200',
@@ -567,10 +567,10 @@ describe('decorateCampaignHref, decided rather than guessed', () => {
 describe('installation', () => {
   it('installs once, however many times render calls it', () => {
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(true)
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
-    installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    installUtmForwarding({ consoleOrigin: CONSOLE })
+    installUtmForwarding({ consoleOrigin: CONSOLE })
+    installUtmForwarding({ consoleOrigin: CONSOLE })
     const cta = paint('<a id="target" href="https://app.aglyn.com/signup">Go</a>')
 
     clickOn(cta)
@@ -580,8 +580,8 @@ describe('installation', () => {
 
   it('stops when uninstalled', () => {
     landOn('https://aglyn.com/?utm_source=google')
-    setCampaignForwardingConsent(true)
-    const uninstall = installCampaignForwarding({ consoleOrigin: CONSOLE })
+    setUtmForwardingConsent(true)
+    const uninstall = installUtmForwarding({ consoleOrigin: CONSOLE })
     uninstall()
     const cta = paint('<a id="target" href="https://app.aglyn.com/signup">Go</a>')
 

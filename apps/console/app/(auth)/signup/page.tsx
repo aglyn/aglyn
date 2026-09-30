@@ -19,10 +19,10 @@
 
 import {
   PLAN_LABELS,
-  campaignEventParams,
+  utmEventParams,
   generateOrgSlug,
   onboardingDestination,
-  parseCampaignAttribution,
+  parseUtmAttribution,
   parseOnboardingPlanIntent,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
@@ -371,16 +371,16 @@ function SignUp() {
   // Which campaign produced this signup (AGL-1731) — the same hop, the same
   // defensive posture. Parsed once, from an ALLOWLIST of three `utm_` keys,
   // so the rest of whatever a marketing link carries never reaches either
-  // exit. See `campaign-attribution.ts` for why the allowlist is the privacy
+  // exit. See `utm-attribution.ts` for why the allowlist is the privacy
   // mechanism rather than a convenience.
   const campaign = useMemo(
-    () => parseCampaignAttribution(searchParams),
+    () => parseUtmAttribution(searchParams),
     [searchParams],
   )
   // The GA4 params, memoised so the redirect hook below is not handed a new
   // object every render.
-  const campaignParams = useMemo(
-    () => campaignEventParams(campaign),
+  const utmParams = useMemo(
+    () => utmEventParams(campaign),
     [campaign],
   )
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
@@ -472,7 +472,7 @@ function SignUp() {
     // The redirect door fires its own `sign_up` inside the hook — the page
     // that started the flow is gone by then — so the campaign has to be
     // handed across rather than read there (AGL-1731).
-    campaignParams,
+    utmParams,
   )
   // Hold the loading splash during the post-auth redirect window instead of
   // flashing the form back at the user (AGL-476).
@@ -563,7 +563,7 @@ function SignUp() {
             // Which campaign produced this account (AGL-1731). Spread rather
             // than assigned, so an organic signup carries no campaign keys at
             // all instead of three empty ones.
-            ...campaignParams,
+            ...utmParams,
           })
           /*
            * The Google Ads conversion, beside the GA4 event and never instead

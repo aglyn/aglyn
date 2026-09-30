@@ -107,7 +107,7 @@ jest.mock('next/navigation', () => ({
 }))
 jest.mock('@aglyn/aglyn', () => {
   const campaign = jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
   )
   return {
     PLAN_LABELS: {},
@@ -115,9 +115,9 @@ jest.mock('@aglyn/aglyn', () => {
     generateOrgSlug: (value: string) => value.toLowerCase(),
     onboardingDestination: (slug: string) => `/${slug}`,
     parseOnboardingPlanIntent: () => null,
-    campaignEventParams: campaign.campaignEventParams,
-    parseCampaignAttribution: campaign.parseCampaignAttribution,
-    campaignAttributionQuery: campaign.campaignAttributionQuery,
+    utmEventParams: campaign.utmEventParams,
+    parseUtmAttribution: campaign.parseUtmAttribution,
+    utmAttributionQuery: campaign.utmAttributionQuery,
   }
 })
 jest.mock('@aglyn/shared-data-forms', () => ({

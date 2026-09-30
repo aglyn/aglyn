@@ -43,7 +43,7 @@
  *
  * `localStorage`, expiring at {@link ATTRIBUTION_WINDOW_DAYS}.
  *
- * `campaign-forwarding.ts` holds its own campaign in `sessionStorage` and
+ * `utm-forwarding.ts` holds its own campaign in `sessionStorage` and
  * argues for it: a first touch that outlived the visit would start
  * attributing next week's organic return to this week's ad. That argument is
  * correct for the question it answers — which campaign produced THIS SIGNUP,
@@ -65,7 +65,7 @@
  * The revenue join credits the LAST click, and a product where a lead and an
  * order attribute by different rules is worse than one that is uniformly
  * approximate. So a new campaign arrival OVERWRITES the stored one. This is
- * the deliberate opposite of {@link rememberVisitCampaign}, which keeps the
+ * the deliberate opposite of {@link rememberVisitUtm}, which keeps the
  * first — that one describes a single visit's origin and this one describes
  * which campaign most recently brought a person back.
  *
@@ -105,7 +105,7 @@
  * ## What is never carried
  *
  * Only the three allowlisted `utm_` labels, scrubbed by
- * {@link parseCampaignAttribution} — which refuses an email-shaped value
+ * {@link parseUtmAttribution} — which refuses an email-shaped value
  * outright. No address, no person's identifier, no click id, nothing that
  * names the visitor. A campaign link is exactly where putting a recipient in
  * a query string would be tempting, and the parser is what makes it
@@ -123,10 +123,10 @@
  */
 
 import {
-  campaignAttributionQuery,
-  parseCampaignAttribution,
-  type CampaignAttribution,
-} from './campaign-attribution'
+  utmAttributionQuery,
+  parseUtmAttribution,
+  type UtmAttribution,
+} from './utm-attribution'
 
 /*==========================================
  * THE WINDOW, AND WHY THIS IS THE SECOND COPY OF A NUMBER.
@@ -183,7 +183,7 @@ export const CAMPAIGN_TOUCH_STORAGE_KEY = 'aglyn:campaign-touch'
 export const CAMPAIGN_TOUCH_TIME_KEY = 't'
 
 /** A campaign the visitor arrived from, and when they arrived from it. */
-export interface CampaignTouch extends CampaignAttribution {
+export interface CampaignTouch extends UtmAttribution {
   /** When the visitor followed the campaign link, epoch ms. */
   atMs: number
 }
@@ -213,7 +213,7 @@ function localStore(): Storage | null {
  */
 export function campaignTouchWire(touch: CampaignTouch | null | undefined): string {
   if (!touch) return ''
-  const labels = campaignAttributionQuery(touch)
+  const labels = utmAttributionQuery(touch)
   if (!labels) return ''
   const atMs = Math.round(Number(touch.atMs))
   if (!Number.isFinite(atMs) || atMs <= 0) return ''
@@ -240,7 +240,7 @@ export function parseCampaignTouch(
   } catch {
     return null
   }
-  const campaign = parseCampaignAttribution(params)
+  const campaign = parseUtmAttribution(params)
   if (!campaign) return null
   const atMs = Number(params.get(CAMPAIGN_TOUCH_TIME_KEY))
   if (!touchIsInWindow(atMs, nowMs)) return null
@@ -294,7 +294,7 @@ export function rememberCampaignTouch(
       : typeof window === 'undefined'
         ? ''
         : window.location.search
-  const campaign = parseCampaignAttribution(new URLSearchParams(source))
+  const campaign = parseUtmAttribution(new URLSearchParams(source))
   if (!campaign) return null
   const touch: CampaignTouch = { ...campaign, atMs: nowMs }
   const wire = campaignTouchWire(touch)
@@ -332,7 +332,7 @@ export function readCampaignTouch(
   const live =
     typeof window === 'undefined'
       ? null
-      : parseCampaignAttribution(new URLSearchParams(window.location.search))
+      : parseUtmAttribution(new URLSearchParams(window.location.search))
   if (live) return { ...live, atMs: nowMs }
 
   if (storageConsent !== true) return null

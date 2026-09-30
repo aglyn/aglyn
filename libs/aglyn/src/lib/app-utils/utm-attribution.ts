@@ -19,6 +19,11 @@
  * Where an account came from (AGL-1731) — the campaign contract between the
  * marketing site's links and the console's signup.
  *
+ * Named for what it parses, the web's UTM labels. The `campaign` in
+ * `utm_campaign` is the label an ad push carries; it is not the Marketing
+ * plugin's campaign, and nothing here reads one. What a site's own visitors
+ * carry to the moment they identify is `campaign-touch.ts`'s.
+ *
  * Until this existed a paid click, an organic visit and a partner link
  * arrived indistinguishable: `sign_up` carried `method` and nothing else, so
  * no report could say which spend produced a customer. That is tolerable
@@ -72,14 +77,14 @@
  * identically — two spellings would read as two dimensions in GA4 and split
  * every report in half.
  */
-export const CAMPAIGN_QUERY_KEYS = [
+export const UTM_QUERY_KEYS = [
   'utm_source',
   'utm_medium',
   'utm_campaign',
 ] as const
 
 /** A campaign, with every field optional — a partial one is still worth having. */
-export interface CampaignAttribution {
+export interface UtmAttribution {
   /** `utm_source` — the channel: `google`, `hn`, a partner's name. */
   source?: string
   /** `utm_medium` — the kind of placement: `cpc`, `email`, `referral`. */
@@ -94,10 +99,10 @@ const MAX_VALUE_LENGTH = 100
 /** The same shape test the event sanitizer uses, applied to the stored exit too. */
 const EMAIL_SHAPED = /[^\s@]+@[^\s@]+\.[^\s@]+/
 
-/** Which `CampaignAttribution` field each URL key fills. */
+/** Which `UtmAttribution` field each URL key fills. */
 const FIELD_FOR_KEY: Record<
-  (typeof CAMPAIGN_QUERY_KEYS)[number],
-  keyof CampaignAttribution
+  (typeof UTM_QUERY_KEYS)[number],
+  keyof UtmAttribution
 > = {
   utm_source: 'source',
   utm_medium: 'medium',
@@ -105,13 +110,13 @@ const FIELD_FOR_KEY: Record<
 }
 
 /** What a Server Component holds before it has a `URLSearchParams`. */
-export type CampaignParamSource =
+export type UtmParamSource =
   | URLSearchParams
   | Record<string, string | string[] | undefined>
   | null
   | undefined
 
-function rawValue(params: CampaignParamSource, key: string): string | null {
+function rawValue(params: UtmParamSource, key: string): string | null {
   if (!params) return null
   if (typeof (params as URLSearchParams).get === 'function') {
     return (params as URLSearchParams).get(key)
@@ -148,12 +153,12 @@ function scrubValue(value: string | null): string | null {
  * all". An empty object written to an account would read as "arrived from
  * nowhere, confirmed" instead of "never asked", and those are different facts.
  */
-export function parseCampaignAttribution(
-  params: CampaignParamSource,
-): CampaignAttribution | null {
+export function parseUtmAttribution(
+  params: UtmParamSource,
+): UtmAttribution | null {
   if (!params) return null
-  const attribution: CampaignAttribution = {}
-  for (const key of CAMPAIGN_QUERY_KEYS) {
+  const attribution: UtmAttribution = {}
+  for (const key of UTM_QUERY_KEYS) {
     const value = scrubValue(rawValue(params, key))
     if (value) attribution[FIELD_FOR_KEY[key]] = value
   }
@@ -164,12 +169,12 @@ export function parseCampaignAttribution(
  * The canonical query string for a campaign — the ONLY place the stored form
  * is written, so it cannot drift from what the parser reads back.
  */
-export function campaignAttributionQuery(
-  attribution: CampaignAttribution | null | undefined,
+export function utmAttributionQuery(
+  attribution: UtmAttribution | null | undefined,
 ): string {
   if (!attribution) return ''
   const params = new URLSearchParams()
-  for (const key of CAMPAIGN_QUERY_KEYS) {
+  for (const key of UTM_QUERY_KEYS) {
     const value = attribution[FIELD_FOR_KEY[key]]
     if (value) params.set(key, value)
   }
@@ -191,8 +196,8 @@ export function campaignAttributionQuery(
  * sanitizer as an absence but read, to whoever writes the report, as a
  * dimension that is populated sometimes and broken the rest of the time.
  */
-export function campaignEventParams(
-  attribution: CampaignAttribution | null | undefined,
+export function utmEventParams(
+  attribution: UtmAttribution | null | undefined,
 ): {
   campaign_source?: string
   campaign_medium?: string
