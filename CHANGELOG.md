@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.219 — 2026-09-30
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.218...v1.0.0-beta.219)
+
+### Added
+
+- **themes:** a stock Material UI built-in theme; the default is named as the platform's ([AGL-3422](https://linear.app/aglyn/issue/AGL-3422))
+
+### Fixed
+
+- **health:** the journeys marker reads get a budget a cold Firestore connect fits ([AGL-3421](https://linear.app/aglyn/issue/AGL-3421))
+
 ## v1.0.0-beta.218 — 2026-09-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/61ee7f8e1...v1.0.0-beta.218)
