@@ -11,6 +11,7 @@ import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from '.
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
@@ -718,6 +719,157 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
       "one": "dataset",
       "many": "datasets",
       "addon": "extra datasets"
+    }
+  },
+]
+
+/**
+ * What each plan includes of every quota a first-party plugin owns, declared
+ * by that plugin (AGL-3080). `PLAN_ENTITLEMENTS` composes these; core names
+ * no key.
+ */
+export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
+  {
+    "pluginId": "forms",
+    "key": "formSubmissionsPerMonth",
+    "label": "Form subs / mo",
+    "byPlan": {
+      "free": 20,
+      "starter": 200,
+      "pro": 1000,
+      "business": 8000,
+      "scale": 25000,
+      "advanced": 40000,
+      "agency": 25000,
+      "enterprise": 50000
+    }
+  },
+  {
+    "pluginId": "marketplace",
+    "key": "marketplaceFeePct",
+    "label": "Marketplace fee %",
+    "price": true,
+    "byPlan": {
+      "free": 30,
+      "starter": 20,
+      "pro": 20,
+      "business": 20,
+      "scale": 20,
+      "advanced": 20,
+      "agency": 20,
+      "enterprise": 20
+    }
+  },
+  {
+    "pluginId": "crm",
+    "key": "crmEmailsPerDay",
+    "label": "One-to-one emails / day",
+    "byPlan": {
+      "free": 0,
+      "starter": 50,
+      "pro": 150,
+      "business": 200,
+      "scale": 300,
+      "advanced": 500,
+      "agency": 1000,
+      "enterprise": 2000
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "key": "workflowRunsPerMonth",
+    "label": "Workflow runs / mo",
+    "byPlan": {
+      "free": 0,
+      "starter": 500,
+      "pro": 5000,
+      "business": 50000,
+      "scale": 150000,
+      "advanced": 500000,
+      "agency": 2000000,
+      "enterprise": 4000000
+    }
+  },
+  {
+    "pluginId": "ai",
+    "key": "assistCreditsPerMonth",
+    "label": "AI credits / mo",
+    "byPlan": {
+      "free": 300,
+      "starter": 750,
+      "pro": 2750,
+      "business": 7500,
+      "scale": 10000,
+      "advanced": 13000,
+      "agency": 58000,
+      "enterprise": 116000
+    }
+  },
+]
+
+/**
+ * What each plan includes of every feature a first-party plugin owns,
+ * declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[] = [
+  {
+    "pluginId": "commerce",
+    "key": "storefrontSubscriptions",
+    "label": "Storefront subscriptions",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": false,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "commerce",
+    "key": "giftCards",
+    "label": "Gift cards",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": false,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerceAnalytics",
+    "label": "Commerce analytics",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": true,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "marketplace",
+    "key": "marketplaceSelling",
+    "label": "Sell on the marketplace",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": true,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
     }
   },
 ]

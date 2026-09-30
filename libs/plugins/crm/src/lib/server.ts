@@ -737,3 +737,7 @@ export function registerCrmConsoleApi(): void {
   // do-not-contact mark — stamps the lead and the contact through it.
   registerCrmRecordEmailStateWriter()
 }
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { crmPlanEntitlements } from './plan-entitlements'

@@ -221,3 +221,7 @@ export function registerMarketplaceConsoleApi(): void {
   // listings (AGL-3365).
   registerMarketplaceLockdown()
 }
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { marketplacePlanEntitlements } from './plan-entitlements'

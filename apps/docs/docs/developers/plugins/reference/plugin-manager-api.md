@@ -1468,9 +1468,9 @@ nothing in the core names a bottle.
 **`Required` is over the CORE halves.** `CoreOrgEntitlements` and
 `CoreOrgFeatureFlags` are what `PLAN_ENTITLEMENTS` declares and what
 `ResolvedOrgEntitlements` keeps exhaustive — a plan that forgets a platform
-quota or gate does not compile. A plugin's band comes from its own seat add-on
-declaration instead, so it joins as declared: present, and optional, because a
-workspace without the plugin has no value for it.
+quota or gate does not compile. A plugin's figure per plan comes from its own
+plan declaration (below) instead, so it joins as declared: present, and
+optional, because the core compiles without the plugin's type.
 
 **No prices here.** A seat add-on's price stays a `PLAN_PRICING` row that the
 Stripe wiring reads and `check-pricing-drift` reconciles. Two places holding a
@@ -1482,6 +1482,49 @@ the Firestore write-deny rules, so a field declared from a plugin's own file
 would be a hole in a rules-coverage guard. A plugin's settings block goes
 through `registerPluginConfigSchema` into `pluginSettings/{pluginId}`, which is
 its own document under its own rule.
+
+
+## Plan figures — `plugin-plan-entitlements`
+
+The VALUE half of a typed key: what each plan includes of it. A first-party
+plugin names a function under `register.planEntitlements` in
+`plugins.config.json`; the manifest generator loads
+`${package}/plan-entitlements`, calls it and compiles the answer into
+`first-party-plugins.generated.ts`, and `PLAN_ENTITLEMENTS` composes it into
+every plan row. `/pricing`, the plan comparison and every quota gate read the
+composed table, so a figure reads the same whether core or a plugin wrote it.
+
+```ts
+// libs/plugins/cellar/src/lib/plan-entitlements.ts
+export function cellarPlanEntitlements(): PluginPlanEntitlementsDeclaration {
+  return {
+    quotas: [
+      {
+        key: 'bottlesPerHost',
+        label: 'Bottles per site',
+        byPlan: { free: 0, starter: 50, pro: 500 /* …every plan */ },
+      },
+    ],
+    features: [
+      { key: 'cellarTastings', label: 'Tasting notes', byPlan: { free: false /* … */ } },
+    ],
+  }
+}
+```
+
+| API | Semantics |
+| --- | --- |
+| `register.planEntitlements` | The function's name. Called by the generator, never at runtime — the pricing tables and the plan comparison read the table without loading a plugin, so a runtime registry would be one they had not filled. |
+| `quotas[]` / `features[]` | `{ key, label, byPlan }`. `byPlan` names every plan (the compiled rows are typed per plan, so a missing one does not compile); a quota is a non-negative number or `Infinity` (`UNLIMITED`), a feature a boolean. A quota that is a percentage of a sale says `price: true`, which keeps an uncapped plan comp from lifting it. |
+| `pluginPlanQuotas()` / `pluginPlanFeatures()` / `pluginPlanEntitlementOwner(key)` | Every compiled declaration, and who declared a key. |
+| `planQuotaOf(entitlements, key)` | A resolved quota by key, for core code that compiles without the plugin's type. An undeclared key reads as `0` — nothing included — never as unlimited. |
+
+The generator refuses a key two plugins declare, a declaration naming a
+different set of plans from the others, and a figure that is not a number or a
+boolean. A key the platform's own rows already carry keeps the platform's
+figure, and `plugin-plan-entitlements.spec.ts` fails on it. A plugin's entry
+points re-export the declaring function as a type (`export type { … }`), which
+brings the key's augmentation into every program that loads the package.
 
 ## Enablement, flags, config, fields, permissions, jobs
 

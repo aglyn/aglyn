@@ -857,12 +857,7 @@
     {
       "path": "libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts",
       "rules": [
-        "domain-declares:ai",
-        "domain-declares:commerce",
-        "domain-declares:crm",
-        "domain-declares:forms",
-        "domain-declares:marketplace",
-        "domain-declares:workflows"
+        "domain-declares:ai"
       ],
       "lane": "ai"
     },

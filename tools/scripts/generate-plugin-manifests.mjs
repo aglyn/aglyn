@@ -606,6 +606,120 @@ async function pluginVideoEmbedProviders() {
   return rows.sort((a, b) => a.id.localeCompare(b.id))
 }
 
+/**
+ * What each plan includes of a plugin's own keys (AGL-3080), declared by the
+ * plugin that owns them: a plugin names a function under `planEntitlements`,
+ * and this loads `${package}/plan-entitlements` through jiti, calls it, and
+ * compiles the answer into the catalog file as data. Core's
+ * `PLAN_ENTITLEMENTS` composes it, and the readers include the published
+ * pricing tables and the plan comparison, neither of which loads a plugin —
+ * so a runtime registry would be one they had not filled
+ * (core `plugin-plan-entitlements.ts`).
+ *
+ * Checked here, because every figure is on a price list:
+ *
+ *  - ONE KEY, ONE OWNER, across quotas and features alike: two meanings for
+ *    one stored value would leave the plan table choosing by config order.
+ *  - EVERY PLAN, THE SAME PLANS: each declaration names the same plans as
+ *    every other, and the generated rows are typed `Record<OrgPlan, …>`, so
+ *    a plan left out or misspelled does not compile.
+ *  - A FIGURE THAT MEANS SOMETHING: a quota is a non-negative number, finite
+ *    or `Infinity` (`UNLIMITED`); a feature is a boolean. `NaN`, a string or
+ *    a negative would each read as a different answer in a different gate.
+ */
+const PLAIN_KEY = /^[a-z][A-Za-z0-9]*$/
+
+async function pluginPlanEntitlements() {
+  const declaring = config.plugins.filter((plugin) => plugin.register?.planEntitlements)
+  const quotas = []
+  const features = []
+  if (!declaring.length) return { quotas, features }
+  const jiti = jitiForWorkspace()
+  const owners = new Map()
+  let plans = null
+  const checkPlans = (byPlan, what) => {
+    if (!byPlan || typeof byPlan !== 'object' || Array.isArray(byPlan)) {
+      throw new Error(`${what} needs "byPlan", one entry per plan`)
+    }
+    const names = Object.keys(byPlan).sort()
+    if (!names.length) throw new Error(`${what}: "byPlan" names no plan`)
+    if (plans === null) plans = names
+    else if (names.join() !== plans.join()) {
+      throw new Error(`${what}: "byPlan" names ${names.join(', ')}, where every other declaration names ${plans.join(', ')}`)
+    }
+  }
+  for (const plugin of declaring) {
+    const specifier = `${plugin.package}/plan-entitlements`
+    const fnName = plugin.register.planEntitlements
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') {
+      throw new Error(`${specifier} exports no function named ${fnName}`)
+    }
+    const answer = (await fn()) ?? {}
+    const where = `${specifier}: ${fnName}()`
+    const declaredQuotas = answer.quotas ?? []
+    const declaredFeatures = answer.features ?? []
+    if (!Array.isArray(declaredQuotas) || !Array.isArray(declaredFeatures)) {
+      throw new Error(`${where}: "quotas" and "features" are lists`)
+    }
+    if (!declaredQuotas.length && !declaredFeatures.length) {
+      throw new Error(`${where} declares nothing — drop the entry, or declare a key`)
+    }
+    for (const [kind, list, out] of [
+      ['quota', declaredQuotas, quotas],
+      ['feature', declaredFeatures, features],
+    ]) {
+      for (const declaration of list) {
+        const { key, label, byPlan, price } = declaration ?? {}
+        const what = `${where} ${kind} "${key ?? ''}"`
+        if (typeof key !== 'string' || !PLAIN_KEY.test(key)) {
+          throw new Error(`${where}: a ${kind} needs a plain camelCase "key"`)
+        }
+        const held = owners.get(key)
+        if (held) throw new Error(`${what} is already declared by "${held}" — one key has one owner`)
+        owners.set(key, plugin.id)
+        if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label"`)
+        checkPlans(byPlan, what)
+        for (const [plan, value] of Object.entries(byPlan)) {
+          const valid =
+            kind === 'quota'
+              ? typeof value === 'number' && value >= 0 && (Number.isFinite(value) || value === Infinity)
+              : typeof value === 'boolean'
+          if (!valid) {
+            throw new Error(
+              `${what}: "${plan}" is ${JSON.stringify(value)}; a ${kind} is ` +
+                (kind === 'quota' ? 'a non-negative number, or Infinity for UNLIMITED' : 'true or false'),
+            )
+          }
+        }
+        if (price !== undefined && (kind !== 'quota' || typeof price !== 'boolean')) {
+          throw new Error(`${what}: "price" is a boolean, and only on a quota`)
+        }
+        out.push({
+          pluginId: plugin.id,
+          key,
+          label,
+          ...(price ? { price: true } : {}),
+          byPlan: Object.fromEntries(Object.keys(byPlan).map((plan) => [plan, byPlan[plan]])),
+        })
+      }
+    }
+  }
+  return { quotas, features }
+}
+
+/**
+ * One row as TypeScript source. JSON cannot spell `Infinity`, and a quota
+ * that reads `null` in the generated file would be a band of zero to every
+ * reader, so the one value JSON loses is written as the literal it is.
+ */
+function literalRow(row) {
+  return JSON.stringify(row, (_key, value) => (value === Infinity ? '__INFINITY__' : value), 2).replace(
+    /"__INFINITY__"/g,
+    'Infinity',
+  )
+}
+
 /** One list of declarations as the manifest writes it, or '' for an empty optional one. */
 function declarationList(name, list, fields, { always = false } = {}) {
   if (!list.length) return always ? `    ${name}: [],\n` : ''
@@ -1794,7 +1908,7 @@ function revenueSourceIds() {
     .map((plugin) => plugin.id)
 }
 
-function catalogContent(videoEmbedRows) {
+function catalogContent(videoEmbedRows, planEntitlements) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
   const editBarRows = rows
@@ -1817,7 +1931,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1866,6 +1980,23 @@ ${orgCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`)
  */
 export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
 ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * What each plan includes of every quota a first-party plugin owns, declared
+ * by that plugin (AGL-3080). \`PLAN_ENTITLEMENTS\` composes these; core names
+ * no key.
+ */
+export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
+${planEntitlements.quotas.map((row) => `  ${indent(literalRow(row))},`).join('\n')}
+]
+
+/**
+ * What each plan includes of every feature a first-party plugin owns,
+ * declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[] = [
+${planEntitlements.features.map((row) => `  ${indent(literalRow(row))},`).join('\n')}
 ]
 
 /**
@@ -1990,7 +2121,10 @@ const ALL = [
     ...manifest,
     content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
   })),
-  { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
+  {
+    file: CATALOG_FILE,
+    content: catalogContent(await pluginVideoEmbedProviders(), await pluginPlanEntitlements()),
+  },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
   { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),

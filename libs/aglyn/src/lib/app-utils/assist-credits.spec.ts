@@ -56,14 +56,24 @@ import {
 } from './assist-credits'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
-  FREE_AI_TASTE_CREDITS_PER_MONTH,
-  ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
   hasAiAddon,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveEffectivePlan,
 } from './plan-entitlements'
 import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
+
+/*
+ * The plugins' keys this suite reads, as their own `plan-entitlements`
+ * modules declare them (AGL-3080). `PLAN_ENTITLEMENTS` carries them at
+ * runtime — the manifest generator compiles each plugin's figures into it —
+ * but their types live in the plugins, which this library compiles without.
+ */
+declare module '../plugin-manager/plugin-entitlement-keys' {
+  interface PluginEntitlementQuotas {
+    assistCreditsPerMonth?: number
+  }
+}
 
 // The AI add-on is the AI plugin's declaration (AGL-2939), and core cannot
 // import a plugin: a stand-in with the plugin's own figures, so the fold
@@ -92,6 +102,16 @@ beforeAll(() => {
  * meter's own `estimateAssistCostUsd` and asserts these exact numbers, so a
  * rate change cannot leave this file quietly asserting a stale ratio.
  */
+// The two named AI bands, read off the composed table. The AI plugin declares
+// them, beside the reasoning that sized them, and its own suite holds each
+// constant to its row; this suite measures the credits either way.
+const FREE_AI_TASTE_CREDITS_PER_MONTH = Number(
+  PLAN_ENTITLEMENTS.free.assistCreditsPerMonth,
+)
+const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = Number(
+  PLAN_ENTITLEMENTS.enterprise.assistCreditsPerMonth,
+)
+
 const A_QUESTION_USD = 0.01287
 const A_SCREEN_BUILD_USD = 0.2292
 
