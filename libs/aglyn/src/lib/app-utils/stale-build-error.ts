@@ -110,6 +110,18 @@ export function shouldReloadForStaleBuild(error: unknown): boolean {
   return true
 }
 
+/**
+ * Withdraws the reload {@link recoverStaleBuildRejection} scheduled; true
+ * when there was one.
+ */
+let cancelPending: (() => void) | null = null
+
+function cancelPendingReload(): boolean {
+  if (!cancelPending) return false
+  cancelPending()
+  return true
+}
+
 /** Re-load the document; a refused reload leaves the tab where it was. */
 function reloadDocument(): void {
   try {
@@ -121,7 +133,9 @@ function reloadDocument(): void {
 
 /**
  * What EVERY error boundary does with what it caught: reload once for a stale
- * build, and otherwise hand the error to the beacon.
+ * build, and otherwise hand the error to the beacon. `global-error.tsx`
+ * included: it catches what the root layout threw, and a stale tab's root
+ * layout asks for its chunks like any other segment.
  *
  * One function so that no boundary can run half of it. The ones that matter
  * most are not the root boundaries but the two below them on a published
@@ -145,10 +159,66 @@ export function recoverStaleBuildOrReport(
   error: unknown,
   reload: () => void = reloadDocument,
 ): boolean {
+  // A rejection already spent this tab's recovery on a reload that waits for
+  // the tab to be hidden. The page has crashed now, so there is nothing left
+  // on screen to protect: take that reload immediately.
+  if (isStaleBuildError(error) && cancelPendingReload()) {
+    reload()
+    return true
+  }
   if (shouldReloadForStaleBuild(error)) {
     reload()
     return true
   }
   redispatchCaughtError(error)
   return false
+}
+
+/**
+ * THE SAME TAB, WHEN NO BOUNDARY SAW IT (AGL-3423).
+ *
+ * An `import()` that nothing awaits inside a render, a click handler's lazy
+ * module or an effect's, rejects past every boundary and reaches `window` as
+ * an `unhandledrejection`. The beacon labels it `chunk-load`, and until now
+ * that was all: the tab stayed on the old build with one feature silently
+ * dead.
+ *
+ * The recovery differs from a boundary's in WHEN it reloads. A boundary
+ * reloads a page that has already crashed. Here the page is still up and
+ * may hold work the visitor has not saved: a Besigner edit, a half-typed
+ * form. So the reload waits until the tab is hidden, the moment AGL-3280's
+ * cross-pool recovery also uses, and runs at once only when the tab is
+ * already hidden. The visitor comes back to the build that is deployed.
+ *
+ * It spends the same rate-bound mark as a boundary, so it can never loop,
+ * and it absorbs every later stale-build rejection in the tab while the
+ * reload is pending: they are the same stale document, not new failures.
+ * A boundary that catches one meanwhile takes the pending reload at once.
+ *
+ * @returns whether the rejection was recovered, and so should not be
+ *   reported. False for any other rejection, and for a stale build whose
+ *   recovery is spent, which the beacon still reports as `chunk-load`.
+ */
+export function recoverStaleBuildRejection(
+  reason: unknown,
+  reload: () => void = reloadDocument,
+): boolean {
+  if (typeof document === 'undefined' || !isStaleBuildError(reason)) return false
+  if (cancelPending) return true
+  if (!shouldReloadForStaleBuild(reason)) return false
+  if (document.visibilityState === 'hidden') {
+    reload()
+    return true
+  }
+  const onVisibilityChange = () => {
+    if (document.visibilityState !== 'hidden') return
+    cancelPendingReload()
+    reload()
+  }
+  cancelPending = () => {
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    cancelPending = null
+  }
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  return true
 }

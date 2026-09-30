@@ -32,9 +32,10 @@
  * handed to `reportError`.
  */
 
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import PageBodyBoundary from '../app/[host]/[scheme]/[[...slug]]/page-body-boundary'
 import HostError from '../app/[host]/[scheme]/error'
+import GlobalError from '../app/global-error'
 
 jest.mock('next/dynamic', () => () => () => null)
 
@@ -123,5 +124,39 @@ describe('[host]/[scheme]/error.tsx', () => {
 
     expect(reportError).toHaveBeenCalledWith(error)
     expect(window.sessionStorage.getItem(RECOVERY_MARK)).toBeNull()
+  })
+})
+
+/**
+ * The last boundary, for a throw in the root layout. A stale tab's root layout
+ * asks for its chunks like any other segment, and this only re-dispatched.
+ */
+describe('global-error.tsx', () => {
+  it('reloads a stale build and does not report it', () => {
+    render(<GlobalError error={staleBuild()} reset={jest.fn()} />)
+
+    expect(window.sessionStorage.getItem(RECOVERY_MARK)).toBeTruthy()
+    expect(reportError).not.toHaveBeenCalled()
+  })
+
+  it('offers a reload, not a crash, when the recovery is spent', () => {
+    window.sessionStorage.setItem(RECOVERY_MARK, String(Date.now()))
+    const error = staleBuild()
+
+    render(<GlobalError error={error} reset={jest.fn()} />)
+
+    expect(reportError).toHaveBeenCalledWith(error)
+    expect(screen.getByText('This page is out of date')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
+  })
+
+  it('reports every other error, without spending the recovery', () => {
+    const error = new Error('root layout failed')
+
+    render(<GlobalError error={error} reset={jest.fn()} />)
+
+    expect(reportError).toHaveBeenCalledWith(error)
+    expect(window.sessionStorage.getItem(RECOVERY_MARK)).toBeNull()
+    expect(screen.getByText('Something went wrong')).toBeTruthy()
   })
 })

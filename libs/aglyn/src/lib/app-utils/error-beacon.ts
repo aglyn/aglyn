@@ -47,7 +47,7 @@
 
 import { isCrossPoolDesync } from './cross-pool-desync'
 import { isForeignScriptUrl, stackFrameUrls } from './foreign-script'
-import { isStaleBuildError } from './stale-build-error'
+import { isStaleBuildError, recoverStaleBuildRejection } from './stale-build-error'
 
 export interface ErrorBeaconEvent {
   /**
@@ -347,6 +347,37 @@ export function describeRejectionReason(reason: unknown): string {
   }
 }
 
+/**
+ * How many frames a thrown error keeps, on a pageview that reports (AGL-3423).
+ *
+ * V8 keeps ten by default, and ten is not enough to find where a render loop
+ * STARTED. The Besigner's one React #185 report (2026-09-24) was a
+ * react-final-form field's `setState` inside final-form's `notify` loop, and
+ * every one of its ten frames was inside those two libraries: the component
+ * whose update fed the loop was cut off below them. Fifty reaches past a
+ * form library's own frames to ours, and still fits the {@link MAX_STACK}
+ * clamp at the length a minified frame line has.
+ */
+export const BEACON_STACK_TRACE_LIMIT = 50
+
+/**
+ * Raises the engine's frame limit to `limit`, never lowers it. V8 and
+ * JavaScriptCore read `Error.stackTraceLimit`; an engine that does not has no
+ * such number, and is left without one rather than handed a property it
+ * ignores. It applies to errors created after the call, which is why the
+ * beacon sets it at install, at module scope of the app's first client chunk.
+ */
+export function raiseStackTraceLimit(limit: number): void {
+  try {
+    const engine = Error as ErrorConstructor & { stackTraceLimit?: number }
+    const current = engine.stackTraceLimit
+    if (typeof current !== 'number' || current >= limit) return
+    engine.stackTraceLimit = limit
+  } catch {
+    // A frozen or exotic `Error` keeps its own limit.
+  }
+}
+
 let installed = false
 
 /**
@@ -414,7 +445,11 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   const endpoint = options?.endpoint ?? '/api/errors'
   const sampleRate = options?.sampleRate ?? 1
   const maxPerPage = options?.maxPerPage ?? 10
-  if (Math.random() >= sampleRate) return
+  // Only a sampled pageview REPORTS. Every pageview recovers a stale build
+  // (the rejection handler below), because a tab left on a dead deploy is a
+  // visitor's problem whether or not its errors are counted.
+  const sampled = Math.random() < sampleRate
+  if (sampled) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
 
   const seen = new Set<string>()
   let queued: ErrorBeaconEvent[] = []
@@ -444,7 +479,7 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   }
 
   const enqueue = (event: ErrorBeaconEvent) => {
-    if (sent >= maxPerPage) return
+    if (!sampled || sent >= maxPerPage) return
     // Message + first stack line: enough identity to collapse a render loop
     // without collapsing distinct errors that share a message.
     const key = `${event.message}\x00${(event.stack ?? '').split('\n', 2).join('\n')}`
@@ -454,10 +489,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
     queued.push(event)
     if (!timer) timer = setTimeout(flush, FLUSH_DELAY_MS)
   }
-  // Published AFTER the sample-rate return above, so an unsampled pageview
-  // reports nothing by either door rather than one by one and none by the
-  // other.
-  publishEvent = enqueue
+  // Null on an unsampled pageview, so it reports nothing by either door
+  // rather than one by one and none by the other.
+  publishEvent = sampled ? enqueue : null
 
   window.addEventListener('error', (event) => {
     try {
@@ -497,6 +531,12 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
 
   window.addEventListener('unhandledrejection', (event) => {
     try {
+      // An `import()` of a chunk this document names and the origin dropped,
+      // which no boundary saw. Recovered by a reload once the tab is hidden,
+      // and, like a boundary's reload, not reported: see
+      // `recoverStaleBuildRejection`. A tab whose recovery is spent still
+      // reports it, as `chunk-load`.
+      if (recoverStaleBuildRejection(event.reason)) return
       const reason = event.reason as Error | undefined
       const message = clamp(describeRejectionReason(event.reason), MAX_MESSAGE)
       if (!message) return

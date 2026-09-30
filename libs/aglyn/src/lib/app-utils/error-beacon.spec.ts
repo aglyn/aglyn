@@ -36,12 +36,14 @@
 import {
   anonymousScriptFrameCount,
   AUTH_DESYNC_KIND,
+  BEACON_STACK_TRACE_LIMIT,
   CHUNK_LOAD_KIND,
   describeRejectionReason,
   installErrorBeacon,
   isBenignBrowserNotice,
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
+  raiseStackTraceLimit,
   recoveredErrorKind,
 } from './error-beacon'
 
@@ -367,8 +369,12 @@ describe('isHydrationMismatch (AGL-2523)', () => {
 
 describe('the installed beacon applies both rules end to end (AGL-2523)', () => {
   let beacon: jest.Mock
+  const engine = Error as ErrorConstructor & { stackTraceLimit: number }
+  const engineLimit = engine.stackTraceLimit
 
   beforeAll(() => {
+    // V8's own default, which the runner may have raised already.
+    engine.stackTraceLimit = 10
     beacon = jest.fn().mockReturnValue(true)
     Object.defineProperty(navigator, 'sendBeacon', {
       value: beacon,
@@ -383,10 +389,18 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
 
   afterAll(() => {
     jest.useRealTimers()
+    engine.stackTraceLimit = engineLimit
   })
 
   beforeEach(() => {
     beacon.mockClear()
+  })
+
+  it('keeps enough frames to reach past a form library to our code (AGL-3423)', () => {
+    expect(engine.stackTraceLimit).toBe(BEACON_STACK_TRACE_LIMIT)
+    const depth = (n: number): Error => (n ? depth(n - 1) : new Error('deep'))
+    const frames = String(depth(40).stack).split('\n').filter((line) => /^\s+at /.test(line))
+    expect(frames.length).toBeGreaterThan(40)
   })
 
   /**
@@ -542,6 +556,59 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     expect(reported()).toHaveLength(1)
   })
 
+  describe('an import() of a dropped chunk that no boundary saw (AGL-3423)', () => {
+    function chunkRejection(label: string): Error {
+      const error = Object.assign(
+        new Error(`Failed to load chunk /_next/static/immutable/chunks/${label}.js`),
+        { name: 'ChunkLoadError' },
+      )
+      error.stack = CHUNK_LOAD_STACK
+      return error
+    }
+
+    function setVisibility(state: DocumentVisibilityState | undefined): void {
+      if (state === undefined) {
+        delete (document as { visibilityState?: unknown }).visibilityState
+        return
+      }
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => state,
+      })
+    }
+
+    beforeEach(() => {
+      window.sessionStorage.clear()
+      // jsdom logs the reload it cannot perform.
+      jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+      // Fire any reload still pending, so no case leaves one for the next.
+      setVisibility('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+      setVisibility(undefined)
+      jest.restoreAllMocks()
+    })
+
+    it('RECOVERS the tab and does not report it', () => {
+      rejectInPage(chunkRejection('recovered'))
+
+      expect(reported()).toHaveLength(0)
+      expect(window.sessionStorage.getItem('aglyn.staleBuildReloaded')).toBeTruthy()
+    })
+
+    it('still REPORTS it as chunk-load once the recovery is spent', () => {
+      window.sessionStorage.setItem('aglyn.staleBuildReloaded', String(Date.now()))
+
+      rejectInPage(chunkRejection('spent'))
+
+      const events = reported()
+      expect(events).toHaveLength(1)
+      expect(events[0]['kind']).toBe(CHUNK_LOAD_KIND)
+    })
+  })
+
   it('judges the WHOLE stack, so our frame past the clamp still keeps it (AGL-2786)', () => {
     const bridgeFrames = Array.from(
       { length: 150 },
@@ -552,6 +619,37 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     expect(long.indexOf(OWN_FRAME)).toBeGreaterThan(8_192)
     throwInPage('long bridge stack', long)
     expect(reported()).toHaveLength(1)
+  })
+})
+
+describe('raiseStackTraceLimit (AGL-3423)', () => {
+  const engine = Error as ErrorConstructor & { stackTraceLimit?: number }
+  let saved: number | undefined
+
+  beforeEach(() => {
+    saved = engine.stackTraceLimit
+  })
+
+  afterEach(() => {
+    engine.stackTraceLimit = saved
+  })
+
+  it('raises the engine limit', () => {
+    engine.stackTraceLimit = 10
+    raiseStackTraceLimit(50)
+    expect(engine.stackTraceLimit).toBe(50)
+  })
+
+  it('never lowers a limit that is already higher', () => {
+    engine.stackTraceLimit = 200
+    raiseStackTraceLimit(50)
+    expect(engine.stackTraceLimit).toBe(200)
+  })
+
+  it('hands an engine with no limit nothing to ignore', () => {
+    delete engine.stackTraceLimit
+    raiseStackTraceLimit(50)
+    expect('stackTraceLimit' in Error).toBe(false)
   })
 })
 

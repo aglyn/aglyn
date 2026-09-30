@@ -1230,10 +1230,13 @@ Notes that keep these honest:
     - `kind: "chunk-load"` — a `ChunkLoadError` or failed dynamic import: a tab
       open across a deploy asking for a chunk the origin no longer serves.
       Every boundary, including the two a published page's body actually
-      reaches (`PageBodyBoundary` and `[host]/[scheme]/error.tsx`), reloads once
-      per tab per half hour and does not report what it reloaded (AGL-3279).
-      What arrives is the failure the reload did not cure, and a burst of them
-      is a broken deploy.
+      reaches (`PageBodyBoundary` and `[host]/[scheme]/error.tsx`) and both
+      apps' `global-error.tsx`, reloads once per tab per half hour and does not
+      report what it reloaded (AGL-3279). An `import()` no boundary saw arrives
+      as an unhandled rejection; the beacon spends the same recovery on it but
+      reloads only once the tab is hidden, because that page is still up and
+      may hold unsaved work (AGL-3423). What arrives is the failure the reload
+      did not cure, and a burst of them is a broken deploy.
 - `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
   the second condition here that watches for **silence**. The `Cloud
   Scheduler` row below it can only report the *presence* of a failed attempt:
