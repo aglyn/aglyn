@@ -1152,15 +1152,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-send-time.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/jsx-forms/src/lib/mapper/form-field-grid.tsx",
       "rules": [
         "domain-name"

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { campaignRate } from './campaign-report'
+import { campaignRate } from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 
 /**
  * WHEN A LIST READS ITS MAIL: a suggested send time, taken from the sends that
