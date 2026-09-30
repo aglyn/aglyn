@@ -119,6 +119,28 @@ export interface PluginUsageBandDeclaration {
    * made never reads as less of the band.
    */
   unitCostUsd?: number
+  /**
+   * The per-site monthly counter the band is measured by:
+   * `hosts/{hostId}/counters/{hostCounter}`, field `{month}`, summed over the
+   * workspace's sites.
+   */
+  hostCounter?: string
+  /**
+   * The workspace is WARNED as it approaches and reaches this band, by the
+   * usage-alerts sweep, from its `hostCounter` against what the plan includes
+   * of `entitlement`, once per threshold per month. `label` names the band in
+   * the title ("monthly workflow runs") and `noun` in the opening sentence
+   * ("workflow runs"); `outcome` is what happens at the band — `stops`,
+   * `bills` or `continues` — and `reached` and `approach` are the sentences
+   * that say so, at the band and approaching it.
+   */
+  alert?: {
+    label: string
+    noun: string
+    outcome: 'stops' | 'bills' | 'continues'
+    reached: string
+    approach: string
+  }
 }
 
 /**

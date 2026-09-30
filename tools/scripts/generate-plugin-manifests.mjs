@@ -863,7 +863,7 @@ async function pluginUsageAxes() {
       costAxes.push({ pluginId: plugin.id, ...axis })
     }
     for (const band of declaredBands) {
-      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd } = band ?? {}
+      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert } = band ?? {}
       const what = `${where} band "${id ?? ''}"`
       if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a band needs a plain "id"`)
       if (bandOwners.has(id)) throw new Error(`${what} is already measured by ${bandOwners.get(id)}`)
@@ -880,6 +880,19 @@ async function pluginUsageAxes() {
       if (perHost !== undefined && typeof perHost !== 'boolean') throw new Error(`${what}: "perHost" is a boolean`)
       if (unitCostUsd !== undefined && !(typeof unitCostUsd === 'number' && Number.isFinite(unitCostUsd) && unitCostUsd > 0)) {
         throw new Error(`${what}: "unitCostUsd" is a positive number of dollars`)
+      }
+      if (hostCounter !== undefined && (typeof hostCounter !== 'string' || !PLAIN_NAME.test(hostCounter))) {
+        throw new Error(`${what}: "hostCounter" is the plain name of the per-site counter holding the month's figure`)
+      }
+      if (
+        alert !== undefined &&
+        (['label', 'noun', 'reached', 'approach'].some((field) => typeof alert?.[field] !== 'string' || !alert[field].trim()) ||
+          !['stops', 'bills', 'continues'].includes(alert?.outcome))
+      ) {
+        throw new Error(`${what}: "alert" is { label, noun, outcome, reached, approach }: the band's name in the title and the sentence, stops/bills/continues, and the words at the band and approaching it`)
+      }
+      if (alert !== undefined && hostCounter === undefined) {
+        throw new Error(`${what}: "alert" needs the "hostCounter" the band is measured by`)
       }
       bands.push({ pluginId: plugin.id, ...band })
     }

@@ -48,18 +48,6 @@
       "lane": "ai"
     },
     {
-      "path": "apps/console/app/api/billing/usage-alerts/route.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "plugin-collection:data",
-        "domain-declares:ai",
-        "domain-declares:data",
-        "domain-declares:marketing",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "apps/console/app/api/billing/usage-email/route.ts",
       "rules": [
         "domain-declares:forms"

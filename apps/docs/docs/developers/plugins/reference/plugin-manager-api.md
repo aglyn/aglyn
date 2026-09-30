@@ -1769,14 +1769,25 @@ and no function deploy.
 The usage-alerts sweep walks every org once, reads its usage, and sends core's
 own alerts: the plan quotas, the customer's budget and the free plan's
 bandwidth cap. A plugin that meters a cost or enforces a ceiling core knows
-nothing about adds staff alerts to the same sweep by registering a contributor
-from its `serverDeclarations` entry, importing the rule itself lazily. Import
-the registry by its subpath; it is not on a barrel.
+nothing about adds to the same sweep by registering a contributor from its
+`serverDeclarations` entry, importing the rule itself lazily: `quotaChecks`
+for the bands the WORKSPACE is warned about, `evaluate` for STAFF alerts, or
+both. Import the registry by its subpath; it is not on a barrel.
+
+A band that needs no code — a monthly host counter against what the plan
+includes of an entitlement — is declared on the plugin's usage band instead
+(`bands[].alert`, [Usage axes](#usage-axes--plugin-usage-axes)), and an org
+capacity a plugin declares (`plugin-org-capacity`) is warned about as it
+fills with no contributor at all.
 
 ```ts
 registerUsageAlertContributor({
   pluginId: 'acme-sms',
   id: 'carrier-spend',
+  quotaChecks: async (context) => {
+    const { smsQuotaChecks } = await import('./usage/sms-quota-checks')
+    return smsQuotaChecks(context)
+  },
   evaluate: async (context) => {
     const { evaluateCarrierSpend } = await import('./usage/carrier-spend-alerts')
     await evaluateCarrierSpend(context)
@@ -1786,7 +1797,8 @@ registerUsageAlertContributor({
 
 | API | Semantics |
 | --- | --- |
-| `registerUsageAlertContributor(contributor)` | Idempotent per plugin and id: the same pair again replaces the earlier contributor in place. A contributor with no plugin id, no id or no `evaluate` throws. |
+| `registerUsageAlertContributor(contributor)` | Idempotent per plugin and id: the same pair again replaces the earlier contributor in place. A contributor with no plugin id, no id, or neither `evaluate` nor `quotaChecks` throws. |
+| `quotaChecks(context)` | Answers `{ key, label, noun, used, limit, cadence, outcome, reached, approach, reachedTitle? }[]` for one org, from `context.org`, `spend` and `month`. `cadence` is `crossing` (something the workspace has: announced once when reached, again only after usage falls back) or `monthly` (a meter that resets on the 1st); `outcome` is `stops`, `bills` or `continues`; `reached` and `approach` are the sentences that say what happens at the band. The sweep opens every notice itself — the workspace, the figures, then `noun` — and runs the checks after its own through the same approach threshold, guard map, first-sweep seeding, console notification and email, so a plugin's band warns exactly as a platform band does. A throw costs only that contributor's checks. |
 | `listUsageAlertContributors()` | What the sweep runs for each org, after the budget alert and before the bandwidth cap: `FIRST_PARTY_PLUGINS` catalog order, then any other plugin id, then registration order within a plugin. |
 | `context.recordAlert(key, threshold)` | Records the dedupe guard and answers whether the alert may be sent. On an org's first, silent evaluation it records the guard and answers `false`. Guard keys share one map with core's checks, so name yours for what it measures. |
 | `context.alertStaff(alert)` | The sweep's own sender: the staff bell, the staff inbox with the same words, and a row in the run's report. It sends nothing on an org's first, silent evaluation. |
@@ -2022,7 +2034,7 @@ export function cellarUsageAxes(): PluginUsageAxesDeclaration {
 | --- | --- |
 | `register.usageAxes` | The function's name. Called by the generator, never at runtime — the guardrail and the staff page price a rollup without loading a plugin, and a meter a registry had not filled would price at nothing, which approves a discount. |
 | `costAxes[]` | `{ id, order, fields, fallbackFields?, recordedFields?, rate?, live? }`. `fields` are summed from the month's usage rollup; `fallbackFields` are read only when a rollup carries none of `fields` (an older, narrower basis — a measured zero never falls back); `recordedFields` ride along so the sum stays legible and are never priced. `rate` names a key of `ORG_COGS_UNIT_RATES_USD` — never a number: the money stays core's, beside the billed table it reconciles against — or is left out when the fields are already dollars. `live: { collection, fields }` names `orgs/{orgId}/{collection}/{month}`, whose first positive field replaces the rollup's snapshot wherever a reader fetches it. |
-| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. |
+| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd?, hostCounter?, alert? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. `hostCounter` names the per-site monthly counter the band is measured by (`hosts/{hostId}/counters/{hostCounter}`, field `{month}`). `alert: { label, noun, outcome, reached, approach }` warns the workspace as it approaches and reaches the band, from that counter, once per threshold per month: `label` names the band in the title, `noun` in the opening sentence, and `outcome`, `reached` and `approach` say what happens at it. |
 | `spendLines[]` | `{ id, label, live: { collection, field }, billedFromEnv, unit? }`. A line of the workspace's monthly spend on its usage budget: `orgs/{orgId}/{collection}/{month}`'s `field`, in the dollars it is billed at. It is always shown and counts toward the budget only from the month the deployment variable `billedFromEnv` names (anything that is not a `YYYY-MM` bills nothing). `unit: { costUsd, label }` is set when the stored dollars are the platform's cost: the customer's browser then receives `ceil(dollars / costUsd)` of the unit and never the dollars. |
 | `pluginCostAxes()` / `pluginUsageBands()` / `pluginSpendLines()` / `pluginCostAxisFields()` | Every compiled declaration, and every rollup field the cost axes read or record (`orgCogsInputFrom` forwards them). |
 | `declaredMeterReading(rollup, declared)` / `liveMeterReading(doc, live)` | The one reading of a declared meter: a positive finite number, or nothing. |

@@ -169,6 +169,10 @@ export function registerAiServerDeclarations(): void {
         const { evaluateAiUsageAlerts } = await import('./usage/ai-usage-alerts')
         await evaluateAiUsageAlerts(context)
       },
+      quotaChecks: async (context) => {
+        const { aiQuotaChecks } = await import('./usage/ai-quota-checks')
+        return aiQuotaChecks(context)
+      },
     })
   }
 }

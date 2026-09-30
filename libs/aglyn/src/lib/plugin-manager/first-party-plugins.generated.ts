@@ -1046,7 +1046,15 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
     "fields": [
       "workflowRuns"
     ],
-    "entitlement": "workflowRunsPerMonth"
+    "entitlement": "workflowRunsPerMonth",
+    "hostCounter": "workflowRuns",
+    "alert": {
+      "label": "monthly workflow runs",
+      "noun": "workflow runs",
+      "outcome": "stops",
+      "reached": "Workflows pause until next month and nothing is charged — upgrade in Billing to keep them running.",
+      "approach": "Nothing changes and nothing is charged — at the included amount, workflows pause until next month unless you upgrade in Billing."
+    }
   },
   {
     "pluginId": "workflows",
