@@ -41,13 +41,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/(app)/admin/orgs/[orgId]/page.tsx",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
       "rules": [
         "domain-name"
@@ -90,13 +83,6 @@
         "plugin-id"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/admin/backfill-scope/route.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "apps/console/app/api/admin/margin-utilization/route.ts",
@@ -199,13 +185,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/api/hosts/resources/route.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/orgs/datasets/export/route.ts",
       "rules": [
         "domain-name",
@@ -283,16 +262,6 @@
         "domain-declares:crm"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "apps/console/components/interaction-builder-dialog.component.tsx",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:marketing",
-        "plugin-collection:workflows",
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
     },
     {
       "path": "apps/console/components/interactions-provider.component.tsx",
@@ -412,10 +381,7 @@
     {
       "path": "apps/console/utils/api-v1-openapi.ts",
       "rules": [
-        "plugin-id",
-        "domain-declares:crm",
-        "domain-declares:data",
-        "domain-declares:marketing"
+        "domain-declares:data"
       ],
       "lane": "plugin-id"
     },
@@ -424,86 +390,13 @@
       "rules": [
         "plugin-id",
         "plugin-collection:commerce",
-        "plugin-collection:crm",
         "plugin-collection:data",
         "plugin-collection:forms",
-        "domain-declares:crm",
         "domain-declares:data",
         "domain-declares:forms",
         "domain-declares:marketing"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/utils/api-v1/contacts-merge.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-activities.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-companies.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-deals.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-email-templates.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-leads.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:crm",
-        "domain-declares:crm",
-        "domain-declares:marketing"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-pipelines.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-shared.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/utils/api-v1/crm-tasks.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
     },
     {
       "path": "apps/console/utils/org-counter-totals.ts",
@@ -553,7 +446,6 @@
       "rules": [
         "domain-name",
         "plugin-collection:forms",
-        "domain-declares:data",
         "domain-declares:forms",
         "domain-declares:marketing"
       ],
@@ -572,13 +464,6 @@
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "apps/tenant/app/api/sitemap/route.ts",
-      "rules": [
-        "plugin-collection:commerce"
-      ],
-      "lane": "commerce"
     },
     {
       "path": "apps/tenant/utils/search-content.ts",
@@ -648,13 +533,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/binding-token-catalog.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/campaign-membership.ts",
@@ -862,13 +740,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/entity-picker-context.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/form-abuse-ceiling.ts",
       "rules": [
         "domain-name",
@@ -883,14 +754,6 @@
         "domain-declares:forms"
       ],
       "lane": "forms"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/form-dataset-binding.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/forms.ts",
@@ -936,14 +799,6 @@
       ],
       "lane": "stays",
       "why": "The mail rail's consent-to-market, not the Marketing plugin's model. `marketing` here is the SEND PURPOSE opposite `transactional` (the argued stay on sending-domain.ts), and this is the per-person, per-brand basis every marketing-purpose message is checked against whoever sends it: a campaign, an outreach sequence, a CRM one-to-one, a commerce newsletter or restock alert, a workflow email, and the operator's own product updates. Several plugins' capture doors write it, and core's contact writer, merge, erasure refusals and email-flow gate read it, so no single plugin can hold it; with every plugin uninstalled the platform still owes it for its own product email. `marketing consent` is the legal term for what it records, and its fields are persisted on every contact, list member and account (the host's `marketingConsentPolicy` is named by the Firestore rules)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/notifications.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
@@ -1079,33 +934,12 @@
       "lane": "commerce"
     },
     {
-      "path": "libs/besigner/feature/designer/src/lib/components/element-props-form.component.tsx",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",
       "rules": [
         "domain-name"
       ],
       "lane": "stays",
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
-    },
-    {
-      "path": "libs/besigner/feature/designer/src/lib/hooks/use-insert-token-options.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "libs/besigner/feature/designer/src/lib/utils/token-segments.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/shared/data/forms/src/lib/forms.ts",
@@ -1161,15 +995,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-send-time.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/jsx-forms/src/lib/mapper/form-field-grid.tsx",
       "rules": [
         "domain-name"
@@ -1192,13 +1017,6 @@
       ],
       "lane": "stays",
       "why": "`'marketing'` here is a SEND PURPOSE, the legal category opposite `'transactional'` that decides which identity and which consent rules apply to a message. Any sender has it, whether or not the Marketing plugin exists."
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/tenant-email-catalog.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/campaign-attribution-store.ts",
@@ -1318,13 +1136,6 @@
       "lane": "data"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/duplicate-resource.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts",
       "rules": [
         "domain-name",
@@ -1373,14 +1184,6 @@
         "domain-declares:email"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/form-dataset-binding-token.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts",

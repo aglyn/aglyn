@@ -18,6 +18,10 @@
  */
 
 /**
+ * @jest-environment node
+ */
+
+/**
  * A form's dataset binding is trusted only when the page's own signature says
  * so (AGL-2773). Every refusal below returns null rather than throwing: the
  * route treats null as "this submission writes no record", which keeps the

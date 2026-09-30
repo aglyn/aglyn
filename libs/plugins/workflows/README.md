@@ -54,10 +54,16 @@ The same declarations publish the record indexes of a site's `workflow`,
 AI plugin and the console's "Used by" scan read them without reaching for this
 plugin's collections. The readers load on the first read.
 
-The vocabulary the engine runs — event types, step types, limits, condition
-shapes, validation — stays in the core (`@aglyn/aglyn/app-utils/actions` and
-`@aglyn/aglyn/app-utils/workflows`), because the console, the AI plugin and
-the core's own compose path read it too.
+An action is a site interaction (`@aglyn/aglyn/app-utils/site-interactions`,
+the platform's: the trigger, its conditions, the client steps, validation)
+with this plugin's server steps added. The `runWorkflow` step is declared under
+`interactionSteps` in `plugins.config.json`, so the besigner's interaction
+builder offers it and lists the site's workflows without naming this plugin.
+The automation vocabulary itself — server steps, flows, recipes, webhooks,
+workflows — is still in the core (`@aglyn/aglyn/app-utils/actions` and
+`@aglyn/aglyn/app-utils/workflows`), because the AI plugin drafts automations
+against it and the CRM plugin installs its recipes, and neither may import
+this plugin.
 
 ## Entry points
 

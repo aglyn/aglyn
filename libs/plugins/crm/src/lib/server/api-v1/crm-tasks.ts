@@ -50,7 +50,12 @@ import {
   restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { type ApiV1Context, requireScope } from '../api-v1'
+import {
+  type ApiV1Context,
+  claimWrite,
+  readJsonBody,
+  requireScope,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import {
   type Clearable,
   CRM_TEXT_MAX,
@@ -73,7 +78,6 @@ import {
   refuseUnknownKeys,
   updatePayload,
 } from './crm-shared'
-import { claimWrite, readJsonBody } from './shared'
 
 const TASK_KINDS = ['call', 'email', 'meeting', 'todo'] as const
 const TASK_PRIORITIES = ['low', 'normal', 'high'] as const

@@ -27,18 +27,33 @@ import {
   bandwidthCapShouldEngage,
   type OrgBandwidthCap,
   checkDatasetQuota,
+  checkDataStorageQuota,
   planMetersInfraOverage,
+  priceEmailSendOverage,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn/server'
 import {
   bandwidthGbFromPageViews,
+  billsEmailSendOverage,
   pageViewsFromBandwidthGb,
 } from '../../../../utils/usage-metering'
 import {
   usageAlertApproachPct,
   usageAlertThreshold,
 } from '../../../../utils/storage-overage'
+import {
+  formatBandwidthGb,
+  formatCount,
+  formatStorageMb,
+  listNames,
+  usageAlertGuardDecision,
+  usagePhrase,
+  workspacePhrases,
+  type UsageAlertCadence,
+  type UsageAlertGuard,
+  type UsageAlertGuardEntry,
+} from '../../../../utils/usage-alert-notice'
 import {
   ASSIST_HARD_CAP_CONTROL_LABEL,
   ASSIST_HARD_CAP_CONTROL_LOCATION,
@@ -140,6 +155,13 @@ const USAGE_ALERT_HOST_PAGE = 100
 export const USAGE_ALERT_HOST_CEILING = 10_000
 
 /**
+ * The most sites one pages notice names — the bound the recorded over-cap
+ * list carries too (`OVER_CAP_IDS_MAX`). More than this is a report, not a
+ * sentence.
+ */
+const NAMED_SITES_MAX = 20
+
+/**
  * Every host owned by an org, paged by document id (AGL-2421).
  *
  * Ordered by `__name__` for the same reason the orgs sweep is: Firestore's
@@ -201,9 +223,14 @@ export async function hostsForOrg(
  * `billing.usage` notification to org admins when a quota crosses the
  * approach threshold (80% by default, `USAGE_ALERT_APPROACH_PCT`) or 100%
  * — see `utils/storage-overage.ts` for why those two numbers and not
- * others. One alert per quota per threshold per month, guarded by
- * `orgs/{orgId}.usageAlerts`. Covers sites, media storage, monthly email
- * sends, dataset count + storage, workflow/automation runs, and — added
+ * others. Each threshold is announced ONCE PER CROSSING, guarded by
+ * `orgs/{orgId}.usageAlerts` (AGL-3431): a quota the workspace HAS — sites,
+ * pages on a site, datasets, stored bytes — is announced when it is reached
+ * and not again while it stays there, and re-arms when usage falls back
+ * below; a monthly meter resets on the 1st, so once per threshold per month
+ * is once per crossing. See `usageAlertGuardDecision`. Covers sites, pages
+ * on a site, media storage, monthly email sends, dataset count + storage,
+ * workflow/automation runs, and — added
  * AGL-1106 — monthly bandwidth, which is the included band the invoice meters
  * page views against, so the alert is a real pre-invoice heads-up. The
  * published-site-size check AGL-1107 added was removed in AGL-1370 as
@@ -327,6 +354,13 @@ async function handler(request: Request): Promise<Response> {
      * the silent pass indistinguishable from a mass mailing.
      */
     const seeded: Array<Record<string, unknown>> = []
+    /**
+     * Guards LOWERED OR REMOVED because usage fell back below a threshold
+     * already announced (AGL-3431), so the next crossing is announced again.
+     * Nothing is sent for these; they are counted so a re-armed quota is
+     * visible rather than inferred from the next notice.
+     */
+    const rearmed: Array<Record<string, unknown>> = []
     /** Plugin staff alert rules, listed once for the run in the seam's fixed order. */
     const usageAlertContributors = listUsageAlertContributors()
 
@@ -372,12 +406,13 @@ async function handler(request: Request): Promise<Response> {
       // Hoisted to the top of the loop body (AGL-2420): the seed decision
       // below has to read the guard map before any check runs.
       const guards =
-        (orgData['usageAlerts'] as Record<
-          string,
-          { month?: string; threshold?: number }
-        >) ?? {}
-      const guardUpdates: Record<string, { month: string; threshold: number }> =
-        {}
+        (orgData['usageAlerts'] as Record<string, UsageAlertGuard>) ?? {}
+      /**
+       * What this run decided per key: a guard to record, or — for a quota
+       * whose usage fell back below every band it announced (AGL-3431) —
+       * `FieldValue.delete()`, inside the same delta write.
+       */
+      const guardUpdates: Record<string, UsageAlertGuardEntry | FieldValue> = {}
 
       /*==========================================
        * THE FIRST SWEEP OF AN ORG IS SILENT — it BACKFILLS the guard map
@@ -610,14 +645,51 @@ async function handler(request: Request): Promise<Response> {
       const hostLabels = new Map<string, string>(
         hosts.docs.map((host) => [
           host.id,
-          String(
-            host.get('subdomain') ?? host.get('displayName') ?? host.id,
-          ),
+          // The name the owner gave the site first, then its address.
+          [host.get('displayName'), host.get('subdomain')]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .find(Boolean) ?? host.id,
         ]),
       )
       const overCapSites = screenCap.overCapHostIds.map(
         (hostId) => hostLabels.get(hostId) ?? hostId,
       )
+      /**
+       * WHICH site the pages notice is about (AGL-3431), asked only when that
+       * notice is actually going out.
+       *
+       * The limit is per site, so "6 of 6" means nothing without the site's
+       * name. The recorded list names only sites PAST the cap; a site AT it —
+       * the ordinary case, and the one this notice exists for — is named from
+       * the one host a single-site workspace has, and otherwise by measuring
+       * which sites hold the figure being reported. That measurement is the
+       * scan AGL-1440 took off the daily path, so it runs only on the rare run
+       * that announces a crossing, never on the days that dedupe.
+       */
+      const screenSiteNames = async (): Promise<string[]> => {
+        if (overCapSites.length) return overCapSites
+        if (hosts.docs.length === 1) {
+          return [hostLabels.get(hosts.docs[0].id) ?? hosts.docs[0].id]
+        }
+        if (!hosts.docs.length || !(maxBillableScreens > 0)) return []
+        try {
+          const report = await measureScreenCaps(
+            hosts.docs.map((host) => ({
+              id: host.id,
+              ref: host.ref,
+              routingMap: host.get('screens'),
+            })),
+            orgData,
+          )
+          return (report.rows ?? [])
+            .filter((row) => row.billable >= maxBillableScreens)
+            .map((row) => hostLabels.get(row.hostId) ?? row.hostId)
+            .slice(0, NAMED_SITES_MAX)
+        } catch (error) {
+          console.error('[usage-alerts] naming the site at its page limit failed', org.id, error)
+          return []
+        }
+      }
 
       // Does THIS org's plan bill storage past the band, rather than refusing
       // it? Read once, and only used to choose the alert's wording — the
@@ -669,213 +741,6 @@ async function handler(request: Request): Promise<Response> {
         orgData as never,
       )
 
-      const checks: Array<{
-        key: string
-        label: string
-        used: number
-        limit: number
-        /**
-         * TRUE when crossing this band produces an INVOICE LINE rather than a
-         * refusal (2026-08-18). The alert has to say which, because the two
-         * call for opposite actions: "upgrade to raise the limit" is right
-         * when the product is about to stop working and actively misleading
-         * when the product will keep working and bill.
-         */
-        billsOverage?: boolean
-        /**
-         * One extra sentence appended to the alert body, for a check whose
-         * number alone is not actionable (AGL-2321). Appended to BOTH channels
-         * from the same string, for the AGL-2052 reason: an email that says
-         * something the console does not is how a customer ends up arguing
-         * with support about which one meant it.
-         */
-        detail?: string
-        /**
-         * Replaces the generic 100% words for a meter whose consequence the
-         * generic copy cannot state (AGL-2898). The AI credits band has two
-         * outcomes the storage sentence does not cover — metered at a rate
-         * unless a stop is set, or stopped until next month with no charge
-         * ever — and telling a Free org to "set a monthly cap" on a charge it
-         * can never incur would be the surprise bill in reverse.
-         */
-        reachedCopy?: { title: string; body: string }
-      }> = [
-        {
-          // AGL-484: a downgrade can leave an org over its site/storage
-          // caps; these persist and keep serving, so surface them here.
-          key: 'hosts',
-          label: 'sites',
-          used: hostCount,
-          limit: entitlements.hostLimit,
-        },
-        {
-          // AGL-1390: per SITE, so the org-level alert reports the worst one.
-          // Reaching it is not an error — a site at its cap is a site using
-          // what it bought — but crossing it means something created screens
-          // the gate never saw, and this is the only place that would notice.
-          key: 'screens',
-          label: 'screens on a site',
-          used: maxBillableScreens,
-          limit: entitlements.screensPerHost,
-          // Named only when there is something to name. An empty list is a
-          // real answer — the recorded measurement found nothing over — and
-          // "Over the cap: ." would be worse than the silence it replaced.
-          detail: overCapSites.length
-            ? `Over the cap: ${overCapSites.join(', ')}.`
-            : undefined,
-        },
-        {
-          key: 'mediaStorage',
-          label: 'media storage',
-          // Every site's library PLUS the org's shared one (AGL-1473).
-          used: mediaMb,
-          // Org-wide media allowance: per-host cap × the site allowance.
-          limit: entitlements.hostLimit * entitlements.storagePerHostMb,
-          billsOverage: metersInfra,
-        },
-        {
-          // THE ORG LIBRARY ON ITS OWN (AGL-1886), and this is the blind spot,
-          // not a duplicate of the line above.
-          //
-          // AGL-1473 got the org library's bytes INTO the org-wide sum, which
-          // is why `mediaStorage` is no longer blind to them. It is still
-          // structurally unable to WARN about them, because the two numbers
-          // are measured against different allowances: uploads are enforced
-          // PER SCOPE against `storagePerHostMb` (`api/media/upload-url` reads
-          // the very counter it increments), while the check above compares a
-          // summed total against `hostLimit × storagePerHostMb`. On a Pro org
-          // — three sites, 10 GB each — an org library sitting at its full
-          // 10 GB is AT the cap that refuses the next upload and reads as 33%
-          // of the org-wide band. It can never reach 80%, so the alert cannot
-          // fire, on the one surface whose whole job is telling somebody
-          // before a limit bites. An alert that cannot fire reads as coverage.
-          //
-          // Its own key, so it thresholds and dedupes independently: an org
-          // over its org-library allowance and comfortably inside its
-          // org-wide one must get this warning and only this one.
-          key: 'orgLibraryStorage',
-          label: 'organization library storage',
-          used: orgLibraryBytes / (1024 * 1024),
-          limit: entitlements.storagePerHostMb,
-          billsOverage: metersInfra,
-        },
-        {
-          // The only email figure a quota can refuse (AGL-1438). Reading the
-          // all-mail counter here would tell an owner they were at their
-          // campaign limit because their store had a busy week of orders.
-          key: 'emailSends',
-          label: 'monthly campaign email sends',
-          used: campaignEmailSends,
-          limit: entitlements.emailSendsPerMonth,
-        },
-        {
-          // Total volume, including the transactional mail the cap never
-          // refuses (AGL-1438). Crossing the band is not an error and nothing
-          // is blocked — this exists so the overage is not first seen on an
-          // invoice. Distinct key, so it thresholds and dedupes on its own.
-          key: 'emailSendsTotal',
-          label: 'monthly email sends including transactional (not capped)',
-          used: emailSends,
-          limit: entitlements.emailSendsPerMonth,
-        },
-        {
-          key: 'datasets',
-          label: 'datasets',
-          used: datasetCount,
-          // The limit a create is refused at: included plus bought, clamped
-          // to the plan's maximum — the number the console banner shows too.
-          limit: checkDatasetQuota(orgData as never, datasetCount).limit,
-        },
-        {
-          key: 'dataStorage',
-          label: 'data storage',
-          used: dataStorageMb,
-          limit: entitlements.dataStorageMbPerOrg,
-        },
-        {
-          key: 'workflowRuns',
-          label: 'monthly workflow runs',
-          used: workflowRuns,
-          limit: entitlements.workflowRunsPerMonth,
-        },
-        {
-          key: 'actionRuns',
-          label: 'monthly automation runs',
-          used: actionRuns,
-          limit: entitlements.actionRunsPerMonth,
-        },
-        {
-          // AGL-1106: bandwidth was displayed but never alerted/enforced.
-          //
-          // ⚠️ THIS FIELD WAS MISSING UNTIL AGL-2070, and its absence was a
-          // lie in both directions. A falsy `billsOverage` selects the "the
-          // product stops at the band" copy below — so a free customer was
-          // told they had been cut off while their site kept serving every
-          // page, and a PAID customer, whose bandwidth overage does bill, was
-          // told to "upgrade to raise the limit" as though they were stuck.
-          //
-          // Both halves are now true, and the second half is why the copy
-          // could not simply be softened: the cap added in this same commit
-          // (AGL-2155) makes free genuinely stop at the band, so the wall
-          // wording is the correct wording for the plan that gets it.
-          // `metersInfra` is the same predicate the cap keys off, which is
-          // what keeps the sentence and the behaviour from drifting apart
-          // again.
-          key: 'bandwidth',
-          label: 'monthly bandwidth',
-          used: bandwidthGb,
-          limit: entitlements.bandwidthGb,
-          billsOverage: metersInfra,
-        },
-        {
-          // The AI credits band (AGL-2898). Approaching it is the generic
-          // warning; reaching it says what happens next, which differs by
-          // plan and by the org's own controls.
-          key: 'assistCredits',
-          label: 'AI assist credits',
-          used: assistUsedCredits,
-          limit: assistBandCredits ?? 0,
-          billsOverage: !assistBandIsWall,
-          reachedCopy: assistBandIsWall
-            ? {
-                title: "You've used your included AI assist credits",
-                body:
-                  `${assistUsedCredits.toLocaleString('en-US')} of ` +
-                  `${(assistBandCredits ?? 0).toLocaleString('en-US')} ` +
-                  'credits used. AI assist stops here until next month — ' +
-                  'nothing past the band is ever billed. Upgrade in Billing ' +
-                  'to add credits' +
-                  (resolveAssistHardCap(orgData as never) &&
-                  assistRateUsdPer1k !== null
-                    ? `, or turn off "${ASSIST_HARD_CAP_CONTROL_LABEL}" ` +
-                      `under ${ASSIST_HARD_CAP_CONTROL_LOCATION} to keep ` +
-                      `going at your plan’s rate.`
-                    : '.'),
-              }
-            : {
-                title:
-                  "You've used your included AI assist credits — extra " +
-                  'credits are now billed',
-                body:
-                  `${assistUsedCredits.toLocaleString('en-US')} of ` +
-                  `${(assistBandCredits ?? 0).toLocaleString('en-US')} ` +
-                  'credits used. The assistant keeps answering, and the ' +
-                  'extra credits are metered on your monthly invoice at ' +
-                  `$${(assistRateUsdPer1k ?? 0).toFixed(2)} per 1,000 — ` +
-                  `unless you set a stop under ` +
-                  `${ASSIST_HARD_CAP_CONTROL_LOCATION}: stop at the ` +
-                  'included band, or stop once this month’s overage ' +
-                  'reaches a figure you choose.',
-              },
-        },
-        // No `siteSize` check (AGL-1370). It was added in AGL-1107 and could
-        // never fire: `measure-node-map.ts` refuses any node map over 900 KB
-        // (AGL-678) and the rollup sweep is bounded per host, so the measured
-        // total tops out at 2.3–20.9% of `totalSiteSizeMb` depending on plan —
-        // never the 80% this loop alerts at. The measurement itself stays on
-        // the rollup as an internal signal; the dead alert does not.
-      ]
-
       // Frozen once per org, and used by BOTH channels. Billing is org-scoped
       // now (AGL-621/644); links are frozen at write time, so emit canonical
       // and let the reader repair the legacy ones.
@@ -901,18 +766,553 @@ async function handler(request: Request): Promise<Response> {
       const approachPct = usageAlertApproachPct(
         process.env.USAGE_ALERT_APPROACH_PCT,
       )
+
+      /**
+       * The workspace, by name, for the first sentence of every notice
+       * (AGL-3431). An owner of several workspaces reads the body, not the
+       * footer, to learn which one this is about.
+       */
+      const workspace = workspacePhrases(
+        (orgData['name'] as string | undefined) ||
+          (org.get('slug') as string | undefined),
+      )
+      // Whether data storage past the band BILLS (a plan with a per-GB rate)
+      // or is refused (a plan without one) — the same predicate the write
+      // gate enforces, so the notice and the refusal cannot disagree.
+      const dataStorageBills =
+        checkDataStorageQuota(orgData as never, 0).overageRateUsd !== null
+      // All mail past the band is invoiced only once the switch names this
+      // month AND the plan has a rate. Until then nothing is charged for it,
+      // and transactional mail is never refused, so the notice must say both.
+      const emailOverageBills =
+        billsEmailSendOverage(month, process.env.BILL_EMAIL_SEND_OVERAGE_FROM) &&
+        priceEmailSendOverage(orgData as never, 0).overageRateUsd !== null
+      // Whether a free site past its bandwidth band is paused — the cap
+      // engages strictly PAST the band, so this asks the predicate with a
+      // reading that is, rather than restating its conditions here.
+      const bandwidthPauses = bandwidthCapShouldEngage({
+        org: orgData as never,
+        usedBandwidthGb: Number.MAX_SAFE_INTEGER,
+        includedBandwidthGb: entitlements.bandwidthGb,
+      })
+
+      const checks: Array<{
+        key: string
+        /** The quota's name in the TITLE ("sites", "pages on a site"). */
+        label: string
+        used: number
+        limit: number
+        /**
+         * How often one threshold may be announced (AGL-3431) — see
+         * {@link usageAlertGuardDecision}. `crossing` for what a workspace
+         * HAS, `monthly` for a meter that resets on the 1st.
+         */
+        cadence: UsageAlertCadence
+        /**
+         * `false` when today's figure could not be read, so a `crossing`
+         * guard is held rather than re-armed on a reading of 0.
+         */
+        measured?: boolean
+        /**
+         * What happens at the band, which the notice has to say because the
+         * three call for different actions (2026-08-18, AGL-3431):
+         *
+         *   stops:     new use is refused; what exists keeps working and
+         *              nothing is charged. Upgrading is how to ADD more.
+         *   bills:     the product keeps working and starts charging; the
+         *              action is "cap it or upgrade", never "upgrade to
+         *              raise the limit", which implies you are stuck.
+         *   continues: nothing is refused and nothing is charged.
+         */
+        outcome: 'stops' | 'bills' | 'continues'
+        /**
+         * The first sentence of the body: WHAT the limit is on, WHICH site
+         * when the limit is per site, and in WHICH workspace, with the figures
+         * (AGL-3431). The body must stand on its own — a client who read only
+         * "6 of 6 used" asked "6 of 6 what? And now I have to pay?". A thunk,
+         * so a name that costs a read is only looked up for a notice that is
+         * actually going out.
+         */
+        lead: () => string | Promise<string>
+        /** What is true now, at or past the band. */
+        reached: string
+        /** What will happen at the band, said while approaching it. */
+        approach: string
+        /** Replaces the generic 100% title (AGL-2898). */
+        reachedTitle?: string
+      }> = [
+        {
+          // AGL-484: a downgrade can leave an org over its site/storage
+          // caps; these persist and keep serving, so surface them here.
+          key: 'hosts',
+          label: 'sites',
+          used: hostCount,
+          limit: entitlements.hostLimit,
+          cadence: 'crossing',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.subject} has ` +
+            usagePhrase({
+              used: hostCount,
+              limit: entitlements.hostLimit,
+              usedText: formatCount(hostCount),
+              limitText: formatCount(entitlements.hostLimit),
+              noun: 'sites',
+            }) +
+            '.',
+          reached:
+            'Every site already there keeps working and nothing is charged — ' +
+            'you only need to upgrade in Billing to add another site.',
+          approach:
+            'Nothing changes and nothing is charged — at ' +
+            `${formatCount(entitlements.hostLimit)}, adding another site will ` +
+            'need an upgrade in Billing.',
+        },
+        {
+          // AGL-1390: per SITE, so the org-level alert reports the worst one.
+          // Reaching it is not an error — a site at its cap is a site using
+          // what it bought — but crossing it means something created pages
+          // the gate never saw, and this is the only place that would notice.
+          // The lead names the site (AGL-2321, AGL-3431): an alert about a
+          // per-site limit that cannot say which site is one nobody can act
+          // on, and an empty list is a real answer, never "Over the cap: .".
+          key: 'screens',
+          label: 'pages on a site',
+          used: maxBillableScreens,
+          limit: entitlements.screensPerHost,
+          cadence: 'crossing',
+          outcome: 'stops',
+          lead: async () => {
+            const sites = await screenSiteNames()
+            const limit = entitlements.screensPerHost
+            const pages = usagePhrase({
+              used: maxBillableScreens,
+              limit,
+              usedText: formatCount(maxBillableScreens),
+              limitText: formatCount(limit),
+              noun: 'pages',
+              suffix: 'per site',
+            })
+            if (sites.length === 1) {
+              return `Your site ${sites[0]} in ${workspace.object} has ${pages}.`
+            }
+            if (sites.length > 1) {
+              return maxBillableScreens > limit
+                ? `In ${workspace.object}, the sites ${listNames(sites)} each ` +
+                    `have more than the ${formatCount(limit)} pages your plan ` +
+                    `includes per site — the largest has ` +
+                    `${formatCount(maxBillableScreens)}.`
+                : `In ${workspace.object}, the sites ${listNames(sites)} each ` +
+                    `have ${formatCount(maxBillableScreens)} of the ` +
+                    `${formatCount(limit)} pages your plan includes per site.`
+            }
+            return `A site in ${workspace.object} has ${pages}.`
+          },
+          reached:
+            'Every page already there keeps working and nothing is charged — ' +
+            'you only need to upgrade in Billing to add more pages.',
+          approach:
+            'Nothing changes and nothing is charged — at ' +
+            `${formatCount(entitlements.screensPerHost)}, adding another page ` +
+            'will need an upgrade in Billing.',
+        },
+        {
+          key: 'mediaStorage',
+          label: 'media storage',
+          // Every site's library PLUS the org's shared one (AGL-1473).
+          used: mediaMb,
+          // Org-wide media allowance: per-host cap × the site allowance.
+          limit: entitlements.hostLimit * entitlements.storagePerHostMb,
+          cadence: 'crossing',
+          outcome: metersInfra ? 'bills' : 'stops',
+          lead: () =>
+            `${workspace.subject} is storing ` +
+            usagePhrase({
+              used: mediaMb,
+              limit: entitlements.hostLimit * entitlements.storagePerHostMb,
+              usedText: formatStorageMb(mediaMb),
+              limitText: formatStorageMb(
+                entitlements.hostLimit * entitlements.storagePerHostMb,
+              ),
+              noun: 'of media storage',
+              suffix: 'across its sites',
+            }) +
+            '.',
+          reached: metersInfra
+            ? 'Your files keep working, and storage past the included amount ' +
+              'is billed on your monthly invoice — upgrade in Billing for a ' +
+              'bigger allowance, or set a monthly cap there if you would ' +
+              'rather it stopped.'
+            : 'Your files keep working and nothing is charged — to upload ' +
+              'more, free up space or upgrade in Billing.',
+          approach: metersInfra
+            ? 'Nothing is charged yet — past the included amount, extra ' +
+              'storage is billed on your monthly invoice unless you set a ' +
+              'monthly cap in Billing.'
+            : 'Nothing changes and nothing is charged — past the included ' +
+              'amount, uploads will need more room or an upgrade in Billing.',
+        },
+        {
+          // THE ORG LIBRARY ON ITS OWN (AGL-1886), and this is the blind spot,
+          // not a duplicate of the line above.
+          //
+          // AGL-1473 got the org library's bytes INTO the org-wide sum, which
+          // is why `mediaStorage` is no longer blind to them. It is still
+          // structurally unable to WARN about them, because the two numbers
+          // are measured against different allowances: uploads are enforced
+          // PER SCOPE against `storagePerHostMb` (`api/media/upload-url` reads
+          // the very counter it increments), while the check above compares a
+          // summed total against `hostLimit × storagePerHostMb`. On a Pro org
+          // — three sites, 10 GB each — an org library sitting at its full
+          // 10 GB is AT the cap that refuses the next upload and reads as 33%
+          // of the org-wide band. It can never reach 80%, so the alert cannot
+          // fire, on the one surface whose whole job is telling somebody
+          // before a limit bites. An alert that cannot fire reads as coverage.
+          //
+          // Its own key, so it thresholds and dedupes independently: an org
+          // over its org-library allowance and comfortably inside its
+          // org-wide one must get this warning and only this one.
+          key: 'orgLibraryStorage',
+          label: 'organization library storage',
+          used: orgLibraryBytes / (1024 * 1024),
+          limit: entitlements.storagePerHostMb,
+          cadence: 'crossing',
+          outcome: metersInfra ? 'bills' : 'stops',
+          lead: () =>
+            `${workspace.possessive} shared library is storing ` +
+            usagePhrase({
+              used: orgLibraryBytes / (1024 * 1024),
+              limit: entitlements.storagePerHostMb,
+              usedText: formatStorageMb(orgLibraryBytes / (1024 * 1024)),
+              limitText: formatStorageMb(entitlements.storagePerHostMb),
+              noun: 'of storage',
+              suffix: 'for it',
+            }) +
+            '.',
+          reached: metersInfra
+            ? 'Its files keep working, and storage past the included amount ' +
+              'is billed on your monthly invoice — upgrade in Billing for a ' +
+              'bigger allowance, or set a monthly cap there if you would ' +
+              'rather it stopped.'
+            : 'Its files keep working and nothing is charged — to upload more ' +
+              'to it, free up space or upgrade in Billing.',
+          approach: metersInfra
+            ? 'Nothing is charged yet — past the included amount, extra ' +
+              'storage is billed on your monthly invoice unless you set a ' +
+              'monthly cap in Billing.'
+            : 'Nothing changes and nothing is charged — past the included ' +
+              'amount, uploads to it will need more room or an upgrade in ' +
+              'Billing.',
+        },
+        {
+          // The only email figure a quota can refuse (AGL-1438). Reading the
+          // all-mail counter here would tell an owner they were at their
+          // campaign limit because their store had a busy week of orders.
+          key: 'emailSends',
+          label: 'monthly campaign email sends',
+          used: campaignEmailSends,
+          limit: entitlements.emailSendsPerMonth,
+          cadence: 'monthly',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.subject} has sent ` +
+            usagePhrase({
+              used: campaignEmailSends,
+              limit: entitlements.emailSendsPerMonth,
+              usedText: formatCount(campaignEmailSends),
+              limitText: formatCount(entitlements.emailSendsPerMonth),
+              noun: 'campaign emails',
+              suffix: 'this month',
+            }) +
+            '.',
+          reached:
+            'Campaign sends pause until next month and nothing is charged; ' +
+            'transactional email such as receipts and form notifications ' +
+            'keeps sending. Upgrade in Billing to send more campaigns this ' +
+            'month.',
+          approach:
+            'Nothing changes and nothing is charged — at the included amount, ' +
+            'campaign sends pause until next month unless you upgrade in ' +
+            'Billing.',
+        },
+        {
+          // Total volume, including the transactional mail the cap never
+          // refuses (AGL-1438). Crossing the band is not an error and nothing
+          // is blocked — this exists so the overage is not first seen on an
+          // invoice. Distinct key, so it thresholds and dedupes on its own.
+          key: 'emailSendsTotal',
+          label: 'total monthly email',
+          used: emailSends,
+          limit: entitlements.emailSendsPerMonth,
+          cadence: 'monthly',
+          outcome: emailOverageBills ? 'bills' : 'continues',
+          lead: () =>
+            `${workspace.subject} has sent ` +
+            usagePhrase({
+              used: emailSends,
+              limit: entitlements.emailSendsPerMonth,
+              usedText: formatCount(emailSends),
+              limitText: formatCount(entitlements.emailSendsPerMonth),
+              noun: 'emails',
+              suffix: 'this month',
+            }) +
+            ', counting transactional mail such as receipts and notifications.',
+          reached: emailOverageBills
+            ? 'Nothing is stopped — transactional mail is never refused — and ' +
+              'email past the included amount is billed on your monthly ' +
+              'invoice. Upgrade in Billing for a bigger allowance.'
+            : 'Nothing is stopped and nothing is charged for it — ' +
+              'transactional mail is never refused. Upgrade in Billing if you ' +
+              'expect to keep sending this much.',
+          approach: emailOverageBills
+            ? 'Nothing is stopped — past the included amount, extra email is ' +
+              'billed on your monthly invoice.'
+            : 'Nothing is stopped and nothing is charged.',
+        },
+        {
+          key: 'datasets',
+          label: 'datasets',
+          used: datasetCount,
+          // The limit a create is refused at: included plus bought, clamped
+          // to the plan's maximum — the number the console banner shows too.
+          limit: checkDatasetQuota(orgData as never, datasetCount).limit,
+          cadence: 'crossing',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.subject} has ` +
+            usagePhrase({
+              used: datasetCount,
+              limit: checkDatasetQuota(orgData as never, datasetCount).limit,
+              usedText: formatCount(datasetCount),
+              limitText: formatCount(
+                checkDatasetQuota(orgData as never, datasetCount).limit,
+              ),
+              noun: 'datasets',
+            }) +
+            '.',
+          reached:
+            'Every dataset already there keeps working and nothing is ' +
+            'charged — you only need to upgrade in Billing, or add datasets ' +
+            'there, to create another.',
+          approach:
+            'Nothing changes and nothing is charged — at the limit, creating ' +
+            'another dataset will need an upgrade in Billing.',
+        },
+        {
+          key: 'dataStorage',
+          label: 'data storage',
+          used: dataStorageMb,
+          limit: entitlements.dataStorageMbPerOrg,
+          cadence: 'crossing',
+          // A rollup without the figure reads as 0 above; re-arming on that
+          // would announce the same band again the day the figure is back.
+          measured: Number.isFinite(rollup?.get('dataStorageMb') ?? Number.NaN),
+          outcome: dataStorageBills ? 'bills' : 'stops',
+          lead: () =>
+            `${workspace.possessive} datasets are storing ` +
+            usagePhrase({
+              used: dataStorageMb,
+              limit: entitlements.dataStorageMbPerOrg,
+              usedText: formatStorageMb(dataStorageMb),
+              limitText: formatStorageMb(entitlements.dataStorageMbPerOrg),
+              noun: 'of data storage',
+            }) +
+            '.',
+          reached: dataStorageBills
+            ? 'Your data keeps working, and storage past the included amount ' +
+              'is billed on your monthly invoice — upgrade in Billing for a ' +
+              'bigger allowance.'
+            : 'Your data keeps working and nothing is charged — adding more ' +
+              'records needs more room: delete some, or upgrade in Billing.',
+          approach: dataStorageBills
+            ? 'Nothing is charged yet — past the included amount, extra data ' +
+              'storage is billed on your monthly invoice.'
+            : 'Nothing changes and nothing is charged — past the included ' +
+              'amount, new records will need more room or an upgrade in ' +
+              'Billing.',
+        },
+        {
+          key: 'workflowRuns',
+          label: 'monthly workflow runs',
+          used: workflowRuns,
+          limit: entitlements.workflowRunsPerMonth,
+          cadence: 'monthly',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.subject} has used ` +
+            usagePhrase({
+              used: workflowRuns,
+              limit: entitlements.workflowRunsPerMonth,
+              usedText: formatCount(workflowRuns),
+              limitText: formatCount(entitlements.workflowRunsPerMonth),
+              noun: 'workflow runs',
+              suffix: 'this month',
+            }) +
+            '.',
+          reached:
+            'Workflows pause until next month and nothing is charged — ' +
+            'upgrade in Billing to keep them running.',
+          approach:
+            'Nothing changes and nothing is charged — at the included amount, ' +
+            'workflows pause until next month unless you upgrade in Billing.',
+        },
+        {
+          key: 'actionRuns',
+          label: 'monthly automation runs',
+          used: actionRuns,
+          limit: entitlements.actionRunsPerMonth,
+          cadence: 'monthly',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.subject} has used ` +
+            usagePhrase({
+              used: actionRuns,
+              limit: entitlements.actionRunsPerMonth,
+              usedText: formatCount(actionRuns),
+              limitText: formatCount(entitlements.actionRunsPerMonth),
+              noun: 'automation runs',
+              suffix: 'this month',
+            }) +
+            '.',
+          reached:
+            'Automations pause until next month and nothing is charged — ' +
+            'upgrade in Billing to keep them running.',
+          approach:
+            'Nothing changes and nothing is charged — at the included amount, ' +
+            'automations pause until next month unless you upgrade in Billing.',
+        },
+        {
+          // AGL-1106: bandwidth was displayed but never alerted/enforced.
+          //
+          // The outcome is the cap's own predicate (AGL-2070/2155): a plan
+          // that meters infrastructure BILLS past the band, and a plan that
+          // does not is PAUSED past it — so the free customer is told their
+          // sites stop, and the paid one that they keep serving and are
+          // billed. Before AGL-2070 a missing field told each the other's
+          // story.
+          key: 'bandwidth',
+          label: 'monthly bandwidth',
+          used: bandwidthGb,
+          limit: entitlements.bandwidthGb,
+          cadence: 'monthly',
+          outcome: metersInfra ? 'bills' : bandwidthPauses ? 'stops' : 'continues',
+          lead: () =>
+            `${workspace.possessive} sites have used about ` +
+            usagePhrase({
+              used: bandwidthGb,
+              limit: entitlements.bandwidthGb,
+              usedText: formatBandwidthGb(bandwidthGb),
+              limitText: formatBandwidthGb(entitlements.bandwidthGb),
+              noun: 'of bandwidth',
+              suffix: 'this month',
+            }) +
+            '.',
+          reached: metersInfra
+            ? 'Your sites keep serving, and bandwidth past the included amount ' +
+              'is billed on your monthly invoice — upgrade in Billing for a ' +
+              'bigger allowance, or set a monthly cap there if you would ' +
+              'rather it stopped.'
+            : bandwidthPauses
+              ? 'Past the included amount, your sites show visitors a ' +
+                'temporary notice until next month — nothing is charged. ' +
+                'Upgrade in Billing to keep them serving.'
+              : 'Your sites keep serving and nothing extra is charged.',
+          approach: metersInfra
+            ? 'Nothing is charged yet — past the included amount, extra ' +
+              'bandwidth is billed on your monthly invoice unless you set a ' +
+              'monthly cap in Billing.'
+            : bandwidthPauses
+              ? 'Nothing changes and nothing is charged — past the included ' +
+                'amount, your sites show visitors a temporary notice until ' +
+                'next month unless you upgrade in Billing.'
+              : 'Nothing changes and nothing extra is charged.',
+        },
+        {
+          // The AI credits band (AGL-2898). Approaching it is the generic
+          // warning; reaching it says what happens next, which differs by
+          // plan and by the org's own controls: metered at a rate unless a
+          // stop is set, or stopped until next month with no charge ever.
+          // Telling a Free org to "set a monthly cap" on a charge it can
+          // never incur would be the surprise bill in reverse.
+          key: 'assistCredits',
+          label: 'AI assist credits',
+          used: assistUsedCredits,
+          limit: assistBandCredits ?? 0,
+          cadence: 'monthly',
+          outcome: assistBandIsWall ? 'stops' : 'bills',
+          lead: () =>
+            `${workspace.subject} has used ` +
+            usagePhrase({
+              used: assistUsedCredits,
+              limit: assistBandCredits ?? 0,
+              usedText: formatCount(assistUsedCredits),
+              limitText: formatCount(assistBandCredits ?? 0),
+              noun: 'AI assist credits',
+              suffix: 'this month',
+            }) +
+            '.',
+          reachedTitle: assistBandIsWall
+            ? "You've used your included AI assist credits"
+            : "You've used your included AI assist credits — extra credits " +
+              'are now billed',
+          reached: assistBandIsWall
+            ? 'AI assist stops here until next month — nothing past the band ' +
+              'is ever billed. Upgrade in Billing to add credits' +
+              (resolveAssistHardCap(orgData as never) &&
+              assistRateUsdPer1k !== null
+                ? `, or turn off "${ASSIST_HARD_CAP_CONTROL_LABEL}" ` +
+                  `under ${ASSIST_HARD_CAP_CONTROL_LOCATION} to keep ` +
+                  `going at your plan’s rate.`
+                : '.')
+            : 'The assistant keeps answering, and the extra credits are ' +
+              'metered on your monthly invoice at ' +
+              `$${(assistRateUsdPer1k ?? 0).toFixed(2)} per 1,000 — unless ` +
+              `you set a stop under ${ASSIST_HARD_CAP_CONTROL_LOCATION}: stop ` +
+              'at the included band, or stop once this month’s overage ' +
+              'reaches a figure you choose.',
+          approach: assistBandIsWall
+            ? 'Nothing changes and nothing is charged — at the included band, ' +
+              'AI assist stops until next month, and nothing past it is ever ' +
+              'billed.'
+            : 'Nothing is charged yet — past the included band, extra credits ' +
+              'are metered on your monthly invoice at ' +
+              `$${(assistRateUsdPer1k ?? 0).toFixed(2)} per 1,000 unless you ` +
+              `set a stop under ${ASSIST_HARD_CAP_CONTROL_LOCATION}.`,
+        },
+        // No `siteSize` check (AGL-1370). It was added in AGL-1107 and could
+        // never fire: `measure-node-map.ts` refuses any node map over 900 KB
+        // (AGL-678) and the rollup sweep is bounded per host, so the measured
+        // total tops out at 2.3–20.9% of `totalSiteSizeMb` depending on plan —
+        // never the 80% this loop alerts at. The measurement itself stays on
+        // the rollup as an internal signal; the dead alert does not.
+      ]
+
       for (const check of checks) {
-        if (check.limit === UNLIMITED || !(check.limit > 0)) continue
-        const threshold = usageAlertThreshold(
-          check.used,
-          check.limit,
-          approachPct,
-        )
-        if (!threshold) continue
-        const guard = guards[check.key]
-        if (guard?.month === month && (guard.threshold ?? 0) >= threshold) {
+        const limited = check.limit !== UNLIMITED && check.limit > 0
+        const threshold = limited
+          ? usageAlertThreshold(check.used, check.limit, approachPct)
+          : 0
+        // ONCE PER CROSSING (AGL-3431). A quota the workspace HAS is not
+        // announced again while it stays at a threshold — a month guard
+        // re-sent every one of them on the 1st, and a workspace sitting at
+        // its site limit was told so every month — and it re-arms when usage
+        // falls back below. A monthly meter keeps its month guard, which is
+        // the same rule for a figure that resets.
+        const decision = usageAlertGuardDecision({
+          cadence: check.cadence,
+          threshold,
+          guard: guards[check.key],
+          month,
+          measured: check.measured,
+        })
+        if (decision.action === 'rearm') {
+          // A DELETE inside the delta, never a rewrite of the map — see the
+          // write at the bottom of this loop for why (AGL-2420).
+          guardUpdates[check.key] = decision.guard ?? FieldValue.delete()
+          rearmed.push({ orgId: org.id, quota: check.key, threshold })
           continue
         }
+        if (decision.action !== 'send') continue
         // Records the guard and answers whether to SEND (AGL-2420). On an
         // org's first evaluation it records and returns false, so the org is
         // deduped from here on without ever having been mailed about a state
@@ -922,52 +1322,49 @@ async function handler(request: Request): Promise<Response> {
         // rather than being refused, and the condition attached to that is
         // that no customer gets a surprise bill — so this notification is the
         // entire thing standing between a customer and a number they did not
-        // expect. It must describe what actually happens at the band:
+        // expect. It must describe what actually happens at the band — see
+        // `outcome` — and it must never imply a charge where there is none.
         //
-        //   billsOverage -> the product keeps working and starts charging;
-        //                   the action is "cap it or upgrade", never "upgrade
-        //                   to raise the limit", which implies you are stuck.
-        //   otherwise    -> the product stops at the band; upgrading is the
-        //                   only way through, and always was.
         // ONE set of words for BOTH channels (AGL-2052). Hoisted rather than
         // written twice: an email that says something the console does not is
         // how a customer ends up arguing with support about which one meant
         // it.
-        const reached = threshold >= 100 ? check.reachedCopy : undefined
         const alertTitle =
-          reached?.title ??
-          (threshold >= 100
-            ? check.billsOverage
-              ? `You're past your included ${check.label} — extra usage is now billed`
-              : `You've reached your ${check.label} limit`
-            : `You're above ${approachPct}% of your ${check.label} quota`)
+          threshold >= 100
+            ? (check.reachedTitle ??
+              (check.outcome === 'bills'
+                ? `You're past your included ${check.label} — extra usage is now billed`
+                : check.outcome === 'continues'
+                  ? `You've used your included ${check.label}`
+                  : `You've reached your ${check.label} limit`))
+            : `You're above ${approachPct}% of your ${check.label} quota`
         const alertBody =
-          (reached?.body ??
-            (check.billsOverage
-              ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
-                `${check.limit}, extra ${check.label} is billed on your ` +
-                'monthly invoice — upgrade in Billing for a bigger allowance, ' +
-                'or set a monthly cap there if you would rather it stopped.'
-              : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
-                'in Billing to raise the limit.')) +
-          (check.detail ? ` ${check.detail}` : '')
-        await notifyOrgAdmins(org.id, {
-          type: 'billing.usage',
-          title: alertTitle,
-          body: alertBody,
-          orgId: org.id,
-          // Billing is org-scoped now (AGL-621/644); links are frozen at write
-          // time, so emit canonical and let the reader repair the legacy ones.
-          link: billingLink,
-        })
-        // AND BY EMAIL (AGL-2052). This route's header claimed for months
-        // that it "emails org admins"; it never did — `notifyOrgAdmins`
-        // writes `users/{uid}/notifications` and nothing turns that into
-        // mail. So the one pre-invoice warning on the platform reached only
-        // people already signed in and looking at the bell, which is the
-        // audience a push warning is not for. Sequenced AFTER the console
+          `${await check.lead()} ` +
+          (threshold >= 100 ? check.reached : check.approach)
+        // `skipEmail` (AGL-3431): the email below IS this notice's email. An
+        // admin who switched billing email on was otherwise mailed twice for
+        // one crossing — once by the notification channel, once here.
+        await notifyOrgAdmins(
+          org.id,
+          {
+            type: 'billing.usage',
+            title: alertTitle,
+            body: alertBody,
+            orgId: org.id,
+            // Billing is org-scoped now (AGL-621/644); links are frozen at
+            // write time, so emit canonical and let the reader repair the
+            // legacy ones.
+            link: billingLink,
+          },
+          { skipEmail: true },
+        )
+        // AND BY EMAIL (AGL-2052), to every owner and admin. The console
+        // notice alone reaches only people signed in and looking at the bell,
+        // and the notification channel's own email (AGL-3224) only those who
+        // switched billing email on — which is why it is skipped above and
+        // this is the one email a crossing sends. Sequenced AFTER the console
         // write and independently: mail is best-effort, and a Resend outage
-        // must degrade to what this route did before, not to nothing.
+        // must degrade to the console notice, not to nothing.
         const emailed = await emailOrgAdmins({
           firestore,
           orgId: org.id,
@@ -1052,18 +1449,26 @@ async function handler(request: Request): Promise<Response> {
           ? ` ($${spend.meteredUsd.toFixed(2)} metered usage, ` +
             `$${spend.assistUsd.toFixed(2)} Assist)`
           : ''
+        // Names the workspace and the budget in its first sentence, like every
+        // notice here (AGL-3431): the body is read on its own.
         const body =
-          `About $${spend.totalUsd.toFixed(2)} of usage so far this month` +
-          `${split}, against the $${amount.toFixed(0)} budget you set. ` +
+          `${workspace.subject} has about $${spend.totalUsd.toFixed(2)} of ` +
+          `usage so far this month${split}, against the ` +
+          `$${amount.toFixed(0)} monthly usage budget you set. ` +
           'A budget is a heads-up, not a limit — nothing stops and nothing ' +
           'is refused. Change or remove it any time in Billing.'
-        await notifyOrgAdmins(org.id, {
-          type: 'billing.usage',
-          title,
-          body,
-          orgId: org.id,
-          link: billingLink,
-        })
+        // `skipEmail`: the email below is this notice's only email (AGL-3431).
+        await notifyOrgAdmins(
+          org.id,
+          {
+            type: 'billing.usage',
+            title,
+            body,
+            orgId: org.id,
+            link: billingLink,
+          },
+          { skipEmail: true },
+        )
         const budgetEmail = await emailOrgAdmins({
           firestore,
           orgId: org.id,
@@ -1113,7 +1518,7 @@ async function handler(request: Request): Promise<Response> {
         /** Guards recorded for alerts not yet delivered, with the entry each replaced. */
         const undelivered = new Map<
           string,
-          { month: string; threshold: number } | undefined
+          UsageAlertGuardEntry | FieldValue | undefined
         >()
         try {
           await contributor.evaluate({
@@ -1389,6 +1794,8 @@ async function handler(request: Request): Promise<Response> {
         // fix working, and it is only visible because it is counted here.
         seeded: seeded.length,
         seededDetails: seeded,
+        rearmed: rearmed.length,
+        rearmedDetails: rearmed,
         // The sweep's own extent (AGL-2220). `alerted: 0` is the answer we
         // want most days, and it used to be indistinguishable from a sweep
         // that stopped at 500 orgs and never said so. `swept` is how many

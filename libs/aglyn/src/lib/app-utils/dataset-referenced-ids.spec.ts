@@ -163,7 +163,9 @@ describe('every record write path carries the index', () => {
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx'
   const CONSOLE_ROUTE = 'apps/console/app/api/orgs/datasets/route.ts'
   const REST_API = 'apps/console/utils/api-v1-resources.ts'
-  const FORM_SUBMIT = 'apps/tenant/app/api/forms/submit/route.ts'
+  // The form-submit leg: the data plugin's form record target (AGL-3080).
+  const FORM_SUBMIT =
+    'libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts'
   const EVENT_ACTIONS = 'libs/plugins/workflows/src/lib/engine/run-event-actions.ts'
   const SITE_IMPORT = 'apps/console/app/api/hosts/import/route.ts'
 

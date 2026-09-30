@@ -20,23 +20,19 @@ import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
   attributeCampaignConversion,
   consumeRateLimit,
-  dataStorageRefusal,
   firebaseAdmin,
   getOrgForHost,
   notifyHostManagers,
-  orgDataCollectionForHost,
   resolveCampaignTouch,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
-import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
+import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 // The leaf: the Inbox list's search keys, the same function its backfill
 // restates and its query's normalizers read (AGL-3321).
 import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
-import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
-// The leaf, not the barrel: this route's specs substitute the barrel wholesale,
-// and the verification must be the real one under them.
-import { verifyFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
+// By path: the server-only contract a submission is filed as a record through.
+import { writeFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 import { FieldValue } from 'firebase-admin/firestore'
 import { isCredentialFieldName } from '@aglyn/shared-util-email/hosted-page-screen'
 import { incrementFormStats } from '../../../../utils/increment-form-stats'
@@ -805,177 +801,29 @@ export async function POST(request: Request): Promise<Response> {
         (captured.sourceAdded ?? captured.created) === true
     }
     /*
-     * THE DATASET A SUBMISSION ALSO WRITES A RECORD TO (AGL-141/556), decided
-     * on the server.
+     * WHERE ELSE THE SUBMISSION IS FILED (AGL-3080): a record in whatever
+     * plugin keeps the records a form may write into — a dataset row, today.
      *
-     * The body is public and unauthenticated, so nothing in it may choose
-     * where a record lands: a dataset id or field map taken from it let anyone
-     * add rows to any dataset the site can see and send any submitted value
-     * into any of its fields. The binding is the one the page's compose read
-     * off this form and signed (`stampFormDatasetBindings`): for this site
-     * only, and exactly what the form's own props and fields declare, so a
-     * form writes where it always wrote. Without a valid signature there is no
-     * record. The Inbox copy above is canonical either way.
-     *
-     * Best-effort: a missing dataset or a full record quota never fails the
+     * Asked AFTER the submission is stored, through the platform's contract
+     * (`plugin-manager/submission-record-target.ts`), and the target decides from
+     * what the page's compose stamped onto this form, never from the body
+     * alone: the route is public. It answers the submission's `routing`,
+     * which the Inbox reads to say where it went or why it did not. The Inbox
+     * copy above is canonical either way, and nothing here can fail the
      * submission.
      */
-    const binding = verifyFormDatasetBinding(hostId, payload['datasetBinding'])
-    if (binding) {
+    const filed = await writeFormRecordTarget({
+      hostId,
+      orgId: owningOrg?.orgId ?? null,
+      orgBilling,
+      body: payload,
+      fields: sanitizedFields,
+    })
+    if (filed.routing) {
       try {
-        // Org-scoped datasets (AGL-237): the form's dataset resolves
-        // against the org so every host shares it.
-        const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(
-          datasetsRef,
-          { datasetId: binding.datasetId, datasetName: binding.datasetName },
-          hostId,
-        )
-        if (datasetDoc?.exists && !datasetDoc.get('deletedAt')) {
-          const bound = {
-            model: datasetDoc.get('model'),
-            fields: Array.isArray(datasetDoc.get('fields'))
-              ? datasetDoc.get('fields')
-              : [],
-          }
-          const boundModel = Aglyn.effectiveDatasetModel(bound)
-          // `displayName` first, then the legacy `name`, then the name the
-          // form was bound by — the same precedence `findDatasetByName`
-          // resolves in. Reading only `name` would leave every modern
-          // dataset's chip unnamed.
-          const datasetLabel = String(
-            datasetDoc.get('displayName') ??
-              datasetDoc.get('name') ??
-              binding.datasetName ??
-              '',
-          ).slice(0, 60)
-          /*
-           * CHECKED AGAINST THE MODEL (AGL-2773, option B). Each value is
-           * coerced to its field's type and held to the field's rules, the
-           * same pair the console and `/v1` run, custom field types included
-           * — so a plugin's validator has to be registered first.
-           *
-           * A refused record is not written, and the submission is kept: the
-           * Inbox copy above is the visitor's, and a value the dataset cannot
-           * hold is no reason to lose it. The refusal is stamped on the
-           * submission, per field, so the Inbox can say why the row is
-           * missing instead of leaving the owner to guess.
-           */
-          await Aglyn.ensureDeclaredCustomFieldTypes(boundModel)
-          const write = Aglyn.prepareDatasetRecordWrite(bound, sanitizedFields, {
-            fieldMap: binding.fieldMap,
-          })
-          const values = write.values
-          if (Object.keys(write.errors).length) {
-            await submissionRef.update({
-              routing: {
-                datasetRefused: {
-                  id: datasetDoc.id,
-                  name: datasetLabel,
-                  errors: write.errors,
-                },
-              },
-            })
-          }
-          let allowed =
-            !Object.keys(write.errors).length && Object.keys(values).length > 0
-          if (allowed) {
-            const recordCount = (
-              await datasetDoc.ref.collection('records').count().get()
-            ).data().count
-            allowed = Aglyn.checkQuota(
-              orgBilling as any,
-              'recordsPerDataset',
-              recordCount,
-            ).allowed
-          }
-          /*
-           * BYTES, not just rows (AGL-2253). This leg checked
-           * `recordsPerDataset` and never `dataStorageMbPerOrg`, so a public
-           * form wired to a dataset wrote past a byte band the console route
-           * hard-blocks at — the one dataset-writing path a visitor can drive
-           * without an account, and therefore the one where the volume is not
-           * the customer's to control.
-           *
-           * Costs nothing on a metered plan: `dataStorageRefusal` answers
-           * `null` with no read whenever the plan carries an
-           * `extraDataGbMonthlyUsd` rate, which is every plan that sells the
-           * data store. The read is paid only on the two unmetered shapes.
-           *
-           * Swallowed like the row quota above — the submission still lands in
-           * the inbox, and `routing.dataset` is not stamped, exactly as when
-           * `recordsPerDataset` is full. A lost lead is the worse error here.
-           */
-          if (allowed && owningOrg?.orgId) {
-            allowed = !(await dataStorageRefusal(
-              orgBilling as any,
-              firestore.collection('orgs').doc(owningOrg.orgId),
-            ))
-          }
-          if (allowed) {
-            const recordRef = await datasetDoc.ref
-              .collection('records')
-              .add({
-                values,
-                // The integrity index the console's delete check queries.
-                // A submission can land in a reference field through a
-                // bound form, so this leg carries it like every other
-                // write that sets `values`.
-                ...Aglyn.datasetIntegrityFields(boundModel, values),
-                createdAt: FieldValue.serverTimestamp(),
-              })
-            /*
-             * Provenance (AGL-2168). `/product/forms`'s hero mockup shows
-             * the detail pane carrying `Added to "Leads" dataset` under
-             * the fields, and nothing here recorded WHERE a submission
-             * went — the record was appended and the link thrown away, so
-             * the Inbox could not have said it if it wanted to.
-             *
-             * Written only on the success path, and only when a record was
-             * really created. The two ways this block does nothing — a
-             * dataset that was deleted, and a full `recordsPerDataset`
-             * quota — are both swallowed on purpose so a submission is
-             * never lost to them; a chip that claimed a row in either case
-             * would be worse than the silence it replaced.
-             *
-             * One extra write per submission, on the submissions that
-             * actually route somewhere. A form with no dataset bound pays
-             * nothing, which is the same shape as `rateDegraded` above.
-             */
-            await submissionRef.update({
-              routing: {
-                dataset: {
-                  id: datasetDoc.id,
-                  name: datasetLabel,
-                  recordId: recordRef.id,
-                },
-              },
-            })
-            /*
-             * The pages repeating over the dataset are refreshed (AGL-3113).
-             *
-             * This is the path the Datasets page's own claim rests on — bind
-             * an element to a dataset, publish, and a record written later
-             * shows within seconds. Before this the record landed and the page
-             * kept serving the rows it was built from for the rest of the
-             * hour, which made the only visible difference between a working
-             * form and a broken one a wait nobody would sit through.
-             *
-             * Inside the swallow above, deliberately, and best effort inside
-             * that: a refusal from the cache must never turn a stored lead
-             * into a lost one.
-             */
-            if (owningOrg?.orgId) {
-              await announceDatasetRecordChange({
-                firestore,
-                orgId: owningOrg.orgId,
-                datasetId: datasetDoc.id,
-              })
-            }
-          }
-        }
+        await submissionRef.update({ routing: filed.routing })
       } catch (error) {
-        console.error('form dataset append failed', error)
+        console.error('form submission routing note failed', error)
       }
     }
     await counterRef.set({ [monthKey]: FieldValue.increment(1) }, { merge: true })

@@ -29,7 +29,12 @@ import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_OPENAPI_PATH,
 } from '../../../../utils/api-v1-openapi'
-import { dispatchResource, handleUsage } from '../../../../utils/api-v1-resources'
+import {
+  describePluginApiV1Resources,
+  dispatchResource,
+  handleUsage,
+  pluginApiV1ResourceNames,
+} from '../../../../utils/api-v1-resources'
 
 // lockdown-423: via apps/console/utils/api-v1.ts — every /v1 dispatch
 // authenticates there, and the verdict runs beside the org-doc read.
@@ -62,13 +67,17 @@ async function dispatch(
     }
     const origin = new URL(request.url).origin
     return apiJson(
-      buildCustomerApiOpenApi({
-        origin,
-        // The OPERATOR's docs and brand, not ours (AGL-2186): this is served
-        // from their public API.
-        documentationUrl: buildDocsUrl('/api'),
-        brandName: PLATFORM_BRAND_NAME,
-      }),
+      buildCustomerApiOpenApi(
+        {
+          origin,
+          // The OPERATOR's docs and brand, not ours (AGL-2186): this is served
+          // from their public API.
+          documentationUrl: buildDocsUrl('/api'),
+          brandName: PLATFORM_BRAND_NAME,
+        },
+        // What the build's plugins serve, as each describes it (AGL-3080).
+        await describePluginApiV1Resources(),
+      ),
       {
         headers: {
           /*
@@ -129,24 +138,11 @@ async function dispatch(
         // read this list (AGL-898). Orders and products (AGL-1928) are
         // site-scoped for the same reason and stay out for the same reason;
         // `media` earns its place because `/v1/media` — the ORGANIZATION
-        // library — really is a top-level path. The five CRM collections
-        // (AGL-2606) are org-level like contacts, and so are top-level here.
-        // Leads (AGL-2627) are a site's rows, but the path is `/v1/leads`
-        // with the site as a parameter, so the path is what is advertised.
-        // Email templates (AGL-2658) are org-level like the other CRM rows.
-        resources: [
-          'datasets',
-          'contacts',
-          'companies',
-          'pipelines',
-          'deals',
-          'tasks',
-          'activities',
-          'leads',
-          'email-templates',
-          'sites',
-          'media',
-        ],
+        // library — really is a top-level path. A resource a plugin serves
+        // (AGL-3080) is top-level by construction — it is registered under
+        // its first path segment — so every one the build serves is listed,
+        // and none it does not.
+        resources: ['datasets', 'sites', 'media', ...(await pluginApiV1ResourceNames())],
       },
       { headers },
     )

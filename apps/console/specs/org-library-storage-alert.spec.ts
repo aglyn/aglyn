@@ -433,8 +433,12 @@ describe('the org library is warnable on its own (AGL-1886)', () => {
       expect(library).toHaveLength(1)
       expect(library[0].title).toContain('reached')
       expect(library[0].title).not.toContain('billed')
-      expect(library[0].body).toContain('upgrade in Billing to raise the limit')
+      // What already exists keeps working and nothing is charged — the
+      // upgrade is only how to add more (AGL-3431).
+      expect(library[0].body).toContain('nothing is charged')
+      expect(library[0].body).toContain('upgrade in Billing')
       expect(library[0].body).not.toContain('invoice')
+      expect(library[0].body).not.toMatch(/\bbilled\b/)
     })()
   })
 

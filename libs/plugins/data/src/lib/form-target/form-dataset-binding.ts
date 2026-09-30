@@ -15,8 +15,11 @@
  * limitations under the License.
  */
 
-import type { AglynNodeSchema, NodeId } from '../foundation'
-import { collectFormFieldNodeIds, FORM_COMPONENT_ID } from './forms'
+import type { AglynNodeSchema, NodeId } from '@aglyn/aglyn'
+import {
+  collectFormFieldNodeIds,
+  FORM_COMPONENT_ID,
+} from '@aglyn/aglyn/app-utils/forms'
 
 /**
  * Where a form's submissions are also written as dataset records, read off

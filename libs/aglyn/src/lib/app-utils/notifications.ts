@@ -17,6 +17,10 @@
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import { buildRoute, Route } from './console-routes'
+import {
+  PLUGIN_NOTIFICATION_CATEGORIES_DECLARED,
+  PLUGIN_NOTIFICATION_DIGESTS_DECLARED,
+} from '../plugin-manager/first-party-plugins.generated'
 
 /**
  * In-app notifications (AGL-259): per-user docs at
@@ -75,9 +79,9 @@ export type AglynNotificationType =
   // overdue and due-today tasks, and the leads nobody has worked. `content.`
   // for the reason `taskAssigned` is: it is about work on the site, and the
   // person who muted the operational stream has asked not to be told about
-  // work. The digest EMAIL is governed separately, by
-  // `crmDailyDigestEnabled`: the mute is a fact about the console feed and
-  // the digest switch is a fact about the digest.
+  // work. The digest EMAIL is governed separately, by its switch in
+  // `digestPrefs` (see `digestEnabled`): the mute is a fact about the console
+  // feed and the digest switch is a fact about the digest.
   | 'content.crmDailyDigest'
   // The weekly insights (AGL-2915): what a site's figures showed that week,
   // for a person who asked for them. `content.` beside the CRM digest, for the
@@ -331,30 +335,101 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'staff.paymentFailed': 'Payment failed (workspace)',
 }
 
-/** Preference buckets (AGL-267): the prefix before the dot. */
-export type NotificationCategory =
+/**
+ * The preference buckets the platform owns (AGL-267): the prefix before the
+ * dot. A plugin adds its own through {@link NotificationCategoryDeclaration},
+ * so this union is the core's and nothing else's.
+ */
+export type CoreNotificationCategory =
   | 'billing'
   | 'team'
   | 'content'
-  | 'marketplace'
   | 'support'
   | 'system'
   // Staff-only, and shown only to staff (AGL-3225) — see
   // {@link STAFF_NOTIFICATION_CATEGORIES}.
   | 'staff'
 
-export const NOTIFICATION_CATEGORY_LABELS: Record<
-  NotificationCategory,
-  string
-> = {
+/**
+ * A preference bucket: one of the core's, or one a first-party plugin
+ * declares. The id is persisted — it keys every stored preference map — so a
+ * declared id keeps its meaning only while its declaration keeps its spelling.
+ */
+export type NotificationCategory = CoreNotificationCategory | (string & {})
+
+/**
+ * A notification category a plugin declares for the notifications it sends
+ * (AGL-3080), under `notificationCategories` in `plugins.config.json`.
+ *
+ * Compiled rather than registered: `notifyUsers` resolves a recipient's
+ * channels in server processes that load no plugin, and the settings page
+ * draws its rows before any plugin could register. A category that had to
+ * wait for its plugin would read as `system` until then — so a person who had
+ * muted it would be told, and a person who had asked for its email would not.
+ * The generator refuses an id the core owns or another plugin declares.
+ */
+export interface NotificationCategoryDeclaration {
+  /** The plugin whose notifications carry this prefix. */
+  pluginId: string
+  /** The type prefix, and the key every stored preference is written under. */
+  id: string
+  /** The row's name on the settings page. */
+  label: string
+  /** What arrives under it, in the reader's words — see {@link NOTIFICATION_CATEGORY_DESCRIPTIONS}. */
+  description: string
+  /** What each channel does before anybody says — see {@link NOTIFICATION_CHANNEL_DEFAULTS}. */
+  defaults: Record<NotificationChannel, boolean>
+}
+
+/**
+ * The declared categories, in the order the settings page lists them: after
+ * the workspace's own work and before the platform's notices, which is where
+ * a plugin's traffic sits in a reader's day.
+ */
+const DECLARED_CATEGORIES: readonly NotificationCategoryDeclaration[] =
+  PLUGIN_NOTIFICATION_CATEGORIES_DECLARED
+
+/**
+ * The core's rows listed before the declared ones. Every other core category
+ * follows them, in the order its `Record` spells it, so a new core category
+ * cannot be left off the page.
+ */
+const LEADING_CATEGORIES: readonly CoreNotificationCategory[] = [
+  'billing',
+  'team',
+  'content',
+]
+
+function inCategoryOrder<T>(
+  core: Record<CoreNotificationCategory, T>,
+  declared: (declaration: NotificationCategoryDeclaration) => T,
+): Readonly<Record<NotificationCategory, T>> {
+  // Every core id is written below, so the keys the type promises are there.
+  const out = {} as Record<NotificationCategory, T>
+  for (const id of LEADING_CATEGORIES) out[id] = core[id]
+  for (const declaration of DECLARED_CATEGORIES) {
+    out[declaration.id] = declared(declaration)
+  }
+  for (const id of Object.keys(core) as CoreNotificationCategory[]) {
+    if (!LEADING_CATEGORIES.includes(id)) out[id] = core[id]
+  }
+  return out
+}
+
+const CORE_CATEGORY_LABELS: Record<CoreNotificationCategory, string> = {
   billing: 'Billing',
   team: 'Team & access',
   content: 'Forms & bookings',
-  marketplace: 'Marketplace',
   support: 'Support',
   system: 'Product & system',
   staff: 'Platform growth',
 }
+
+/** Every category's row name, the core's and the declared, in page order. */
+export const NOTIFICATION_CATEGORY_LABELS = inCategoryOrder(
+  CORE_CATEGORY_LABELS,
+  (declaration) => declaration.label,
+)
 
 /**
  * The categories only staff can receive (AGL-3225).
@@ -377,20 +452,17 @@ export const STAFF_NOTIFICATION_CATEGORIES: ReadonlySet<NotificationCategory> =
  *
  * Written as what ARRIVES rather than as what the bucket is called: "someone
  * joins, a role changes" is checkable against your own feed in a way that
- * "team and access events" is not. Exhaustive `Record`, like the channel
- * defaults below — a new category cannot ship without somebody saying in
- * plain words what lands in it.
+ * "team and access events" is not. Exhaustive over the core's categories,
+ * like the channel defaults below, and required of every declaration — a new
+ * category cannot ship without somebody saying in plain words what lands in
+ * it.
  */
-export const NOTIFICATION_CATEGORY_DESCRIPTIONS: Record<
-  NotificationCategory,
-  string
-> = {
+const CORE_CATEGORY_DESCRIPTIONS: Record<CoreNotificationCategory, string> = {
   billing:
     'Invoices, failed payments, cancellations, and usage that crosses a plan limit.',
   team: 'Somebody joins or leaves, a role changes, or a site is shared with you.',
   content:
     'Work arriving on your sites: form submissions, bookings, orders, low stock, and the tasks and leads assigned to you.',
-  marketplace: 'Decisions on plugin listings you submitted for review.',
   support: 'New support tickets and replies on tickets you are following.',
   system:
     'Announcements, and the faults the platform finds in your account: sign-in methods removed, traffic limits reached, billing or sharing left in a broken state.',
@@ -398,23 +470,27 @@ export const NOTIFICATION_CATEGORY_DESCRIPTIONS: Record<
     'New accounts, new workspaces, and money moving — subscriptions starting, changing, failing and ending — across the whole platform. Only staff receive these.',
 }
 
+export const NOTIFICATION_CATEGORY_DESCRIPTIONS = inCategoryOrder(
+  CORE_CATEGORY_DESCRIPTIONS,
+  (declaration) => declaration.description,
+)
+
+/**
+ * The bucket a type falls in: its prefix, when a category of that id exists,
+ * and `system` otherwise — the bucket nobody mutes to reduce noise, so a type
+ * nothing claims still reaches the person rather than riding a mute they set
+ * for something else.
+ */
 export function notificationCategory(
   type: AglynNotificationType | string,
 ): NotificationCategory {
   const prefix = String(type).split('.')[0]
-  return (
-    [
-      'billing',
-      'team',
-      'content',
-      'marketplace',
-      'support',
-      'system',
-      'staff',
-    ].includes(prefix)
-      ? prefix
-      : 'system'
-  ) as NotificationCategory
+  return Object.prototype.hasOwnProperty.call(
+    NOTIFICATION_CATEGORY_LABELS,
+    prefix,
+  )
+    ? prefix
+    : 'system'
 }
 
 /**
@@ -430,31 +506,50 @@ export function notificationMuted(
 
 /**
  * The field on `users/{uid}` that holds a person's digest switches
- * (AGL-2619): `{ crmDaily: false }` turns the daily CRM digest off, and an
- * absent key leaves it on. Its own map rather than a key in
- * `notificationPrefs`, because that map is keyed by CATEGORY and read by
- * {@link notificationMuted} — a digest is a schedule a person keeps or
- * drops, not a bucket of types, and one switch governs both the console
- * notification and the email it travels with.
+ * (AGL-2619): `{ [digestKey]: false }` turns one digest off, and an absent key
+ * leaves it on. Its own map rather than a key in `notificationPrefs`, because
+ * that map is keyed by CATEGORY and read by {@link notificationMuted} — a
+ * digest is a schedule a person keeps or drops, not a bucket of types, and one
+ * switch governs both the console notification and the email it travels with.
  */
 export const DIGEST_PREFS_FIELD = 'digestPrefs'
 
 /**
- * The key the daily CRM digest keeps inside {@link DIGEST_PREFS_FIELD}.
+ * A digest a plugin sends on its own schedule (AGL-3080), declared under
+ * `notificationDigests` in `plugins.config.json` so the settings page can draw
+ * its switch without loading the plugin, and the plugin's sender and that
+ * switch read one key.
  *
- * Exported so the console writes the switch through a name rather than a
- * second copy of the string (AGL-3230). The reader below and the page that
- * flips it were spelling the same literal in two files, which is how a
- * preference comes to be written under one key and read under another — and
- * it kept the plugin's vocabulary in a console page, where
- * `check:plugin-domain-in-core` rightly refuses it.
+ * On until the person turns it off: the key is stored in
+ * {@link DIGEST_PREFS_FIELD} only once somebody has said no. The key is
+ * persisted, so it keeps its spelling for as long as anybody's switch is
+ * stored under it.
  */
-export const CRM_DAILY_DIGEST_KEY = 'crmDaily'
+export interface NotificationDigestDeclaration {
+  /** The plugin that composes and sends it. */
+  pluginId: string
+  /** The key its switch is stored under in {@link DIGEST_PREFS_FIELD}. */
+  key: string
+  /** The switch's name. */
+  label: string
+  /** When it arrives and what it holds, in the reader's words. */
+  description: string
+}
 
-export function crmDailyDigestEnabled(
+/** Every declared digest, in the order the settings page lists them. */
+export const NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] =
+  PLUGIN_NOTIFICATION_DIGESTS_DECLARED
+
+/**
+ * Whether a person keeps one digest: on unless its key is stored `false`. It
+ * reads only its own key — a category mute lives in a different map and does
+ * not reach it.
+ */
+export function digestEnabled(
   prefs: Record<string, boolean> | null | undefined,
+  key: string,
 ): boolean {
-  return prefs?.[CRM_DAILY_DIGEST_KEY] !== false
+  return prefs?.[key] !== false
 }
 
 /**
@@ -587,18 +682,19 @@ export const NOTIFICATION_SETTINGS_FIELD = 'notificationSettings'
  * Turning a busy site's form submissions into mail by default would put that
  * domain's reputation behind traffic the recipient never asked for.
  *
- * Exhaustive `Record` deliberately: a new {@link NotificationCategory} is a
- * compile error here until somebody decides what it does by default, which is
- * the one question a new category must not be able to ship without answering.
+ * Exhaustive over the core's categories deliberately: a new
+ * {@link CoreNotificationCategory} is a compile error here until somebody
+ * decides what it does by default, which is the one question a new category
+ * must not be able to ship without answering — and a declared category may not
+ * compile without its `defaults` for the same reason.
  */
-export const NOTIFICATION_CHANNEL_DEFAULTS: Record<
-  NotificationCategory,
+const CORE_CHANNEL_DEFAULTS: Record<
+  CoreNotificationCategory,
   Record<NotificationChannel, boolean>
 > = {
   billing: { console: true, email: false },
   team: { console: true, email: false },
   content: { console: true, email: false },
-  marketplace: { console: true, email: false },
   support: { console: true, email: false },
   system: { console: true, email: false },
   // Console ON, because the complaint this answers is that staff never heard
@@ -608,13 +704,18 @@ export const NOTIFICATION_CHANNEL_DEFAULTS: Record<
   staff: { console: true, email: false },
 }
 
+export const NOTIFICATION_CHANNEL_DEFAULTS = inCategoryOrder(
+  CORE_CHANNEL_DEFAULTS,
+  (declaration) => ({ ...declaration.defaults }),
+)
+
 /**
  * The types that send their OWN email and must never be mailed again by the
  * generic channel (AGL-3224).
  *
  * Both digests compose a message the fan-out could not reproduce — a day's
  * owed tasks, a week's figures — and send it from their own route under their
- * own switch (`digestPrefs.crmDaily`, `insightDigests.{orgId}`). A recipient
+ * own switch (a key in `digestPrefs`, `insightDigests.{orgId}`). A recipient
  * who switches the `content` email channel on would otherwise receive the
  * digest twice: once as the digest, once as a one-line "Daily CRM digest"
  * notification saying that the digest happened.

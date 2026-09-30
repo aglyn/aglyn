@@ -181,6 +181,7 @@ jest.mock('firebase-admin/firestore', () => {
 })
 
 import { GET, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import {
   checkApiRequestQuota,
   checkContactQuota,
@@ -207,6 +208,9 @@ const seedCollection = (name: string, n: number) => {
     mockDocs.set(`orgs/org-1/${name}/seed-${index}`, { seeded: true })
   }
 }
+
+// The console's boot, which registers the CRM's usage figures (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   mockDocs.clear()

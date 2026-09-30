@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import type { FormDatasetBinding } from '@aglyn/aglyn/app-utils/form-dataset-binding'
+import { tokenSigningSecret } from '@aglyn/tenant-data-admin/server/media-signing'
+import { safeEqual } from '@aglyn/tenant-data-admin/server/safe-equal'
 import { createHmac } from 'crypto'
-import { tokenSigningSecret } from './media-signing'
-import { safeEqual } from './safe-equal'
+import type { FormDatasetBinding } from './form-dataset-binding'
 
 /**
  * A form's dataset binding, signed into the page that renders the form.

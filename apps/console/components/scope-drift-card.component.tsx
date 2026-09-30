@@ -48,9 +48,8 @@ import { docsHelp } from '../constants/docs-links'
  * Ceiling on pages per run. `ORGS_PER_RUN` bounds one response, so a full
  * pass is a loop — and a loop driven by a server-supplied cursor needs a
  * bound that does not depend on the server ever saying stop. Reported when
- * it is hit rather than silently ending, for the same reason
- * `legacyScanTruncated` is reported: a partial answer that looks complete
- * is worse than no answer.
+ * it is hit rather than silently ending: a partial answer that looks
+ * complete is worse than no answer.
  */
 const MAX_PAGES = 40
 
@@ -65,12 +64,6 @@ interface DriftReport {
   pages: number
   /** True when {@link MAX_PAGES} stopped the loop before `done`. */
   bounded: boolean
-  /**
-   * `null` when no page reported on it. `true` means the legacy count is a
-   * FLOOR, not the answer — the migrate-or-delete call needs to know which
-   * of the two it is reading.
-   */
-  legacyScanTruncated: boolean | null
 }
 
 const EMPTY: DriftReport = {
@@ -79,7 +72,6 @@ const EMPTY: DriftReport = {
   members: 0,
   pages: 0,
   bounded: false,
-  legacyScanTruncated: null,
 }
 
 export function ScopeDriftCard() {
@@ -125,14 +117,6 @@ export function ScopeDriftCard() {
         )) {
           totals.byCollection[collection] =
             (totals.byCollection[collection] ?? 0) + Number(count ?? 0)
-        }
-        if (payload?.legacyScanTruncated === true) {
-          totals.legacyScanTruncated = true
-        } else if (
-          payload?.legacyScanTruncated === false &&
-          totals.legacyScanTruncated === null
-        ) {
-          totals.legacyScanTruncated = false
         }
         cursor = payload?.nextCursor ?? null
         if (payload?.done === true || !cursor) return totals
@@ -257,15 +241,6 @@ export function ScopeDriftCard() {
               ) : null}
             </Stack>
           )
-        ) : null}
-
-        {/* Surfaced, never swallowed: a truncated legacy scan makes the
-            count above a FLOOR rather than the answer. */}
-        {report?.legacyScanTruncated ? (
-          <Alert severity="info">
-            {'The legacy scan was truncated, so the counts above are a ' +
-              'lower bound rather than the total.'}
-          </Alert>
         ) : null}
 
         {report?.bounded ? (

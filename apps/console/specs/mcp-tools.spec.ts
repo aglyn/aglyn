@@ -18,6 +18,8 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+import { describeApiV1Resources } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import { buildCustomerApiOpenApi } from '../utils/api-v1-openapi'
 import {
   buildMcpTools,
@@ -31,14 +33,25 @@ import {
  * by construction. `buildCustomerApiOpenApi` is the same builder
  * `/api/v1/openapi.json` serves.
  */
-const DOCUMENT = buildCustomerApiOpenApi({
-  origin: 'https://app.example.com',
-  documentationUrl: 'https://docs.example.com/api',
-  brandName: PLATFORM_BRAND_NAME,
+let DOCUMENT: ReturnType<typeof buildCustomerApiOpenApi>
+let tools: ReturnType<typeof buildMcpTools>
+
+// The console's boot, which registers the plugins' resources and their
+// descriptions (AGL-3080) — the document the route serves.
+beforeAll(async () => {
+  await registerPluginServerDeclarations()
+  DOCUMENT = buildCustomerApiOpenApi(
+    {
+      origin: 'https://app.example.com',
+      documentationUrl: 'https://docs.example.com/api',
+      brandName: PLATFORM_BRAND_NAME,
+    },
+    await describeApiV1Resources(),
+  )
+  tools = buildMcpTools(DOCUMENT)
 })
 
 describe('MCP tools derived from the v1 document (AGL-3091)', () => {
-  const tools = buildMcpTools(DOCUMENT)
 
   it('turns every documented operation into exactly one tool', () => {
     const operations = Object.values(
@@ -88,7 +101,6 @@ describe('MCP tools derived from the v1 document (AGL-3091)', () => {
 })
 
 describe('turning a tool call back into a v1 request (AGL-3091)', () => {
-  const tools = buildMcpTools(DOCUMENT)
   const toolNamed = (name: string) => {
     const tool = tools.find((candidate) => candidate.name === name)
     if (!tool) throw new Error(`no tool ${name}`)

@@ -30,7 +30,7 @@ route refuses `dryRun: false` to that caller. It plans, counts, and reports:
     "members": 0,
     "total": 9
   },
-  "totals": { /* per-collection written/skipped, plus legacyHostDatasets */ },
+  "totals": { /* per-collection written/skipped */ },
   "done": true,
   "nextCursor": null
 }
@@ -66,9 +66,6 @@ An **empty** `visibleTo: []` is never counted. That is a stored "visible to
 nobody", and widening it to `['org']` is the one direction nothing may move a
 resource unasked. It is equally invisible, so the CDN names it separately —
 see below.
-
-`totals.legacyHostDatasets` counts documents still under the pre-AGL-237
-`hosts/{hostId}/datasets` fallback. It is reported, never touched.
 
 ## Between Mondays: the media CDN says it out loud
 
@@ -110,8 +107,7 @@ cannot compile.
 **Then stamp the documents.** Use the **Sharing-scope drift** card on
 `/admin/health` (AGL-2062). *Scan for drift* runs the dry run and follows the
 cursor to the end; *Stamp the missing scopes* performs the write, and is
-enabled only by a scan that actually planned some. The card reports
-`legacyScanTruncated`, so you can tell a total from a floor.
+enabled only by a scan that actually planned some.
 
 Until AGL-2062 the only way to run the repair was the curl below, which needs
 a staff ID token harvested out of a browser session. It still works, and it is

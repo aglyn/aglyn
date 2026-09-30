@@ -18,6 +18,10 @@
  */
 
 /**
+ * @jest-environment node
+ */
+
+/**
  * The binding a published page signs is the binding its form declares
  * (AGL-2773), read off the tree the page ships.
  *
@@ -28,7 +32,7 @@
  * form's records.
  */
 
-import { verifyFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
+import { verifyFormDatasetBinding } from './form-dataset-binding-token'
 import {
   FORM_DATASET_BINDING_PROP,
   stampFormDatasetBindings,

@@ -25,7 +25,7 @@ import {
   parseNodeInteractionId,
   removeNodeInteraction,
   upsertNodeInteraction,
-  validateHostAction,
+  validateInteraction,
   type NodeInteraction,
 } from '@aglyn/aglyn'
 import {
@@ -301,7 +301,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
             cooldownMinutes: 0,
             steps: draft.steps.map((step) => ({ ...step })),
           })
-          const problem = validateHostAction(candidate as any)
+          const problem = validateInteraction(candidate)
           if (problem) {
             console.error('Preset interaction rejected:', problem, draft)
             continue

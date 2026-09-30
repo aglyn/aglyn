@@ -392,10 +392,12 @@ A plugin can be used without the designer UI, which is what the map asks.
 finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the
 campaign domain model — `model/campaign-container.ts`,
 `campaign-conversions.ts`, `campaign-report.ts`, `campaign-revenue.ts`,
-`campaign-send-time.ts`, `email-record.ts`,
-`components/campaign-picker.component.tsx`, `components/report-figures.tsx` —
-and `campaign-container.ts` opens by naming the Firestore path a send is stored
-at. Five plugins read it, plus both apps. The guard cannot see it: `plugin` →
+`email-record.ts`, `components/campaign-picker.component.tsx` — and
+`campaign-container.ts` opens by naming the Firestore path a send is stored
+at. Five plugins read it, plus both apps. The send-time rule has left it
+(AGL-3080): it is the marketing plugin's, and the AI plugin asks for a list's
+send time through `plugin-record-facts` (`listSendTime`) instead of reading
+the sends. The guard cannot see it: `plugin` →
 `shared` is a legal edge on the map, so there is no allowlist row and this
 document is the only place the finding can live.
 

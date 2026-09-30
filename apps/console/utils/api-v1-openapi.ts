@@ -28,9 +28,11 @@
  *
  * The resource schemas below are transcribed from the RESPONSE EXAMPLES in
  * `apps/docs/api/resources/*.md`, which are the customer-facing contract. That
- * is deliberate: the handlers in `api-v1-resources.ts` are 3,800 lines and
- * project their output field by field, so reading them would describe the
- * implementation, while the docs describe the promise. Where the two ever
+ * is deliberate: the handlers project their output field by field, so reading
+ * them would describe the implementation, while the docs describe the
+ * promise. A plugin that serves a resource describes it the same way, in the
+ * data layer's terms (`api-v1-description.ts`), and hands the description to
+ * the builder through its registration. Where the two ever
  * disagree the server is right and the difference is a bug in its own right —
  * `api-v1-openapi.spec.ts` pins the documented paths against the dispatcher so
  * a resource cannot be added to one and forgotten in the other.
@@ -48,6 +50,22 @@
  */
 
 import { MEDIA_EMBEDDED_GROUP_ORDER } from '@aglyn/aglyn/app-utils/media-embedded-fields'
+// The description's shape and its field schemas are the data layer's, where a
+// plugin that serves a resource describes it in the same terms.
+import {
+  type ApiV1ResourceDescription as ResourceSpec,
+  booleanField as bool,
+  integerField as int,
+  isoField as ISO,
+  nullableField as nullable,
+  objectKindField as OBJECT_FIELD,
+  openObjectField as objectOf,
+  postalAddressField as ADDRESS,
+  queryParam as q,
+  RECORD_STAMPS as STAMPS,
+  stringField as str,
+  stringListField as strList,
+} from '@aglyn/tenant-data-admin/server/api-v1-description'
 
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
 type Schema = Record<string, unknown>
@@ -74,113 +92,6 @@ export const CUSTOMER_API_MOUNT = '/api'
 /** Where the description is served. */
 export const CUSTOMER_API_OPENAPI_PATH = `${CUSTOMER_API_MOUNT}/${CUSTOMER_API_VERSION}/openapi.json`
 
-const ISO = (description: string): Schema => ({
-  type: 'string',
-  format: 'date-time',
-  description,
-})
-
-const str = (description: string): Schema => ({ type: 'string', description })
-const int = (description: string): Schema => ({ type: 'integer', description })
-const bool = (description: string): Schema => ({ type: 'boolean', description })
-const strList = (description: string): Schema => ({
-  type: 'array',
-  items: { type: 'string' },
-  description,
-})
-/**
- * A field the API may answer with `null`.
- *
- * OpenAPI 3.1 is JSON Schema 2020-12, where nullability is a type UNION and
- * not the 3.0 `nullable: true` keyword — a generator reading `nullable` here
- * would silently produce a non-optional field, which is the whole class of bug
- * this document exists to remove.
- */
-const nullable = (base: Schema): Schema => ({
-  ...base,
-  type: [base['type'], 'null'],
-})
-
-const objectOf = (description: string): Schema => ({
-  type: 'object',
-  description,
-  additionalProperties: true,
-})
-
-interface ResourceOp {
-  /** Path relative to the server, e.g. `/v1/contacts/{contactId}`. */
-  readonly path: string
-  readonly method: 'get' | 'post' | 'patch' | 'delete'
-  readonly operationId: string
-  readonly summary: string
-  readonly description?: string
-  /** `true` when the response is the paginated list envelope. */
-  readonly list?: boolean
-  /** Schema name for the response body, when it is a single record. */
-  readonly returns?: string
-  /** Schema name for the request body. */
-  readonly accepts?: string
-  /** Extra query parameters beyond the pagination pair. */
-  readonly filters?: readonly Schema[]
-  /** Path parameters, in order. */
-  readonly pathParams?: readonly { name: string; description: string }[]
-  /**
-   * `true` for a create: a fresh one answers `201`, and a replay of the same
-   * `Idempotency-Key` answers `200` with the record the original create made.
-   */
-  readonly creates?: boolean
-  /** Entitlement the call needs, named in the 403. */
-  readonly entitlement?: string
-}
-
-interface ResourceSpec {
-  readonly tag: string
-  readonly description: string
-  readonly schemaName: string
-  readonly fields: Record<string, Schema>
-  readonly required: readonly string[]
-  readonly ops: readonly ResourceOp[]
-  /**
-   * The members a write body may carry: the handler's own writable set, in the
-   * order they are described. A record returns members nothing can write —
-   * `siteId`, `sources`, the stamps — and a closed body listing them would tell
-   * a generated client to send what the handler refuses.
-   */
-  readonly writable?: readonly string[]
-  /** Schemas for writable members the record does not return, or returns differently. */
-  readonly writeOnly?: Record<string, Schema>
-  /** What a create accepts that an update does not, in words. */
-  readonly writeNote?: string
-  /** Members a write must carry. Only for a body a single method takes. */
-  readonly writeRequired?: readonly string[]
-}
-
-/** Every record carries these two. */
-const STAMPS = {
-  created: ISO('When the record was created.'),
-  updated: ISO('When the record last changed. CRM lists can be walked by it.'),
-}
-
-const OBJECT_FIELD = (name: string): Schema => ({
-  type: 'string',
-  const: name,
-  description: `Always \`${name}\`. Lets a client discriminate a mixed array.`,
-})
-
-const ADDRESS = (): Schema => ({
-  type: 'object',
-  description: 'Postal address. Members are optional and free-form.',
-  properties: {
-    line1: { type: 'string' },
-    line2: { type: 'string' },
-    city: { type: 'string' },
-    region: { type: 'string' },
-    postalCode: { type: 'string' },
-    country: { type: 'string' },
-  },
-  additionalProperties: true,
-})
-
 /** The pagination pair, on every list. */
 const LIMIT_PARAM: Schema = {
   name: 'limit',
@@ -203,26 +114,11 @@ const CURSOR_PARAM: Schema = {
   schema: { type: 'string' },
 }
 
-const UPDATED_AFTER_PARAM: Schema = {
-  name: 'updatedAfter',
-  in: 'query',
-  required: false,
-  description:
-    'ISO 8601 instant WITH an offset (`2026-09-01T00:00:00Z`). A bare date ' +
-    'is a 400 — midnight in whose zone is not a question this API can ' +
-    'answer. Reorders the list by `updated` ascending, and moves every other ' +
-    'filter out of the query and onto the page, so pages can come back short.',
-  schema: { type: 'string', format: 'date-time' },
-}
-
-const q = (name: string, description: string, schema: Schema = { type: 'string' }): Schema => ({
-  name,
-  in: 'query',
-  required: false,
-  description,
-  schema,
-})
-
+/**
+ * The platform's own resources. A resource a plugin serves is described by
+ * the plugin, through its `/v1` registration, and handed to the builder
+ * (`served`) after these.
+ */
 const RESOURCES: readonly ResourceSpec[] = [
   {
     tag: 'Datasets',
@@ -276,322 +172,6 @@ const RESOURCES: readonly ResourceSpec[] = [
         description: 'Limited to 10 per site per hour, on top of — not instead of — the per-key limit. Sized to the work: one publish drops up to 250 cached pages, so minting extra keys does not raise it.',
         pathParams: [{ name: 'siteId', description: 'Site id.' }],
       },
-    ],
-  },
-  {
-    tag: 'Contacts',
-    description: 'People, organization-wide. Part of the CRM, which is included from Starter.',
-    schemaName: 'Contact',
-    required: ['id', 'object', 'email'],
-    writable: [
-      'email', 'name', 'tags', 'notes', 'marketingConsent', 'consentSiteId', 'consentGroupId', 'custom',
-      'phone', 'jobTitle', 'companyId', 'address', 'ownerUid', 'lifecycleStage', 'mediaIds',
-    ],
-    writeOnly: {
-      consentSiteId: str('The site this write is made on behalf of: where the person opted in, and whose profile the profile fields land on.'),
-      consentGroupId: str('With `marketingConsent: true`: the consent group the person was shown when they opted in. The opt-in then covers every site of that group; without it, or when the site is no longer in that group, it covers `consentSiteId` alone.'),
-      custom: objectOf('Contact custom fields, keyed by field key.'),
-      mediaIds: strList('Media library files attached by the named site, by id, at most 20. An empty array clears them.'),
-    },
-    writeNote: '`email` is accepted on create only — a `PATCH` that names it is a `400`, because a contact is identified by its email.',
-    fields: {
-      id: str('Contact id.'),
-      object: OBJECT_FIELD('contact'),
-      email: str('Primary email. Unique per organization.'),
-      name: str('Display name.'),
-      tags: strList('Free-form tags.'),
-      notes: str('Free-form notes.'),
-      marketingConsent: bool('Whether the contact accepted marketing email.'),
-      consentSites: strList('Site ids the consent was given on.'),
-      sources: strList('Where this contact came from.'),
-      phone: str('Telephone number.'),
-      jobTitle: str('Job title.'),
-      companyId: nullable(str('Primary company.')),
-      address: ADDRESS(),
-      ownerUid: nullable(str('Owning user. Checked on the page, not the query.')),
-      lifecycleStage: nullable(str('CRM lifecycle stage.')),
-      companyIds: strList('Every company this contact belongs to.'),
-      alternateEmails: strList('Other addresses that resolve to this contact.'),
-      ...STAMPS,
-    },
-    ops: [
-      {
-        path: '/v1/contacts', method: 'get', operationId: 'listContacts', summary: 'List contacts', list: true, returns: 'Contact', entitlement: 'crm',
-        description: 'Combining `email` with `tag` narrows on `email` and checks `tag` on the page, so pages can come back short. `lifecycleStage` and `ownerUid` live on a per-site profile and are ALWAYS checked on the page.',
-        filters: [
-          q('email', 'Exact match, normalized the way the write path normalizes it. An unusable value is a 400.'),
-          q('tag', 'Checked on the page when combined with `email`.'),
-          q('lifecycleStage', 'Always checked on the page.'),
-          q('ownerUid', 'Always checked on the page.'),
-        ],
-      },
-      { path: '/v1/contacts', method: 'post', operationId: 'createContact', summary: 'Create a contact', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', creates: true, description: 'A duplicate email is `409 conflict` (`code: "contact_exists"`), and the message names the existing id.' },
-      { path: '/v1/contacts/{contactId}', method: 'get', operationId: 'getContact', summary: 'Retrieve a contact', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}', method: 'patch', operationId: 'updateContact', summary: 'Update a contact', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}', method: 'delete', operationId: 'deleteContact', summary: 'Delete a contact', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}/merge', method: 'post', operationId: 'mergeContact', summary: 'Merge two contacts', accepts: 'ContactMerge', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'The contact that survives.' }] },
-    ],
-  },
-  {
-    tag: 'Companies',
-    description: 'Organizations in the CRM.',
-    schemaName: 'Company',
-    required: ['id', 'object', 'name'],
-    writable: ['name', 'domain', 'website', 'phone', 'address', 'industry', 'ownerUid', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
-    writeOnly: {
-      mediaIds: strList('Media library files attached to this company, by id, at most 20. An empty array clears them.'),
-      consentSiteId: str('The site the company is created on behalf of.'),
-    },
-    writeNote: 'A create needs `name` and `consentSiteId`; a `PATCH` that names `consentSiteId` is a `400`.',
-    fields: {
-      id: str('Company id.'),
-      object: OBJECT_FIELD('company'),
-      name: str('Company name.'),
-      domain: nullable(str('Primary domain. Unique per organization.')),
-      website: nullable(str('Website URL.')),
-      phone: nullable(str('Telephone number.')),
-      address: ADDRESS(),
-      industry: nullable(str('Industry label.')),
-      ownerUid: nullable(str('Owning user.')),
-      notes: nullable(str('Free-form notes.')),
-      custom: objectOf('Customer-defined fields.'),
-      nextTaskAt: nullable(ISO('When the next open task on this company is due.')),
-      siteId: nullable(str('Site the record originated on.')),
-      ...STAMPS,
-    },
-    ops: [
-      { path: '/v1/companies', method: 'get', operationId: 'listCompanies', summary: 'List companies', list: true, returns: 'Company', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('domain', 'Exact match.'), q('ownerUid', 'Owning user.')] },
-      { path: '/v1/companies', method: 'post', operationId: 'createCompany', summary: 'Create a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', creates: true, description: 'A duplicate domain is `409 conflict` (`code: "company_exists"`), naming the existing id.' },
-      { path: '/v1/companies/{companyId}', method: 'get', operationId: 'getCompany', summary: 'Retrieve a company', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
-      { path: '/v1/companies/{companyId}', method: 'patch', operationId: 'updateCompany', summary: 'Update a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
-      { path: '/v1/companies/{companyId}', method: 'delete', operationId: 'deleteCompany', summary: 'Delete a company', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
-    ],
-  },
-  {
-    tag: 'Pipelines',
-    description: 'Deal pipelines and their stages. Read-only over the API.',
-    schemaName: 'Pipeline',
-    required: ['id', 'object', 'name', 'stages'],
-    fields: {
-      id: str('Pipeline id.'),
-      object: OBJECT_FIELD('pipeline'),
-      name: str('Pipeline name.'),
-      isDefault: bool('Whether new deals land here when none is named.'),
-      archived: bool('Whether the pipeline is archived.'),
-      archivedAt: nullable(ISO('When it was archived.')),
-      stages: {
-        type: 'array',
-        description: 'Ordered stages. A deal’s `stageId` names one of these.',
-        items: {
-          type: 'object',
-          properties: { id: { type: 'string' }, name: { type: 'string' }, order: { type: 'integer' } },
-          additionalProperties: true,
-        },
-      },
-      siteId: nullable(str('Site the pipeline belongs to, when scoped.')),
-      ...STAMPS,
-    },
-    ops: [
-      { path: '/v1/pipelines', method: 'get', operationId: 'listPipelines', summary: 'List pipelines', list: true, returns: 'Pipeline', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM] },
-      { path: '/v1/pipelines/{pipelineId}', method: 'get', operationId: 'getPipeline', summary: 'Retrieve a pipeline', returns: 'Pipeline', entitlement: 'crm', pathParams: [{ name: 'pipelineId', description: 'Pipeline id.' }] },
-    ],
-  },
-  {
-    tag: 'Deals',
-    description: 'Opportunities moving through a pipeline.',
-    schemaName: 'Deal',
-    required: ['id', 'object', 'title', 'pipelineId', 'stageId'],
-    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
-    writeOnly: {
-      mediaIds: strList('Media library files attached to this deal, by id, at most 20. An empty array clears them.'),
-      consentSiteId: str('The site the deal is created on behalf of.'),
-    },
-    writeNote: '`pipelineId` and `consentSiteId` are accepted on create only; a `PATCH` that names either is a `400`.',
-    fields: {
-      id: str('Deal id.'),
-      object: OBJECT_FIELD('deal'),
-      title: str('Deal title.'),
-      pipelineId: str('Pipeline the deal sits in.'),
-      stageId: str('Stage within that pipeline.'),
-      status: str('`open`, `won` or `lost`.'),
-      amountCents: int('Value in the smallest unit of `currency`.'),
-      currency: str('ISO 4217 code.'),
-      lineItems: { type: 'array', description: 'Line items, when the deal carries them.', items: { type: 'object', additionalProperties: true } },
-      expectedCloseAt: nullable(ISO('Forecast close date.')),
-      closedAt: nullable(ISO('When it was actually closed.')),
-      stageChangedAt: nullable(ISO('When the stage last moved.')),
-      ownerUid: nullable(str('Owning user.')),
-      contactId: nullable(str('Associated contact.')),
-      companyId: nullable(str('Associated company.')),
-      lostReason: nullable(str('Why it was lost.')),
-      notes: nullable(str('Free-form notes.')),
-      custom: objectOf('Customer-defined fields.'),
-      nextTaskAt: nullable(ISO('When the next open task on this deal is due.')),
-      siteId: nullable(str('Site the record originated on.')),
-      ...STAMPS,
-    },
-    ops: [
-      { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('pipelineId', 'Pipeline.'), q('stageId', 'Stage.'), q('status', 'Deal status.'), q('ownerUid', 'Owning user.')] },
-      { path: '/v1/deals', method: 'post', operationId: 'createDeal', summary: 'Create a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', creates: true },
-      { path: '/v1/deals/{dealId}', method: 'get', operationId: 'getDeal', summary: 'Retrieve a deal', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
-      { path: '/v1/deals/{dealId}', method: 'patch', operationId: 'updateDeal', summary: 'Update a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
-      { path: '/v1/deals/{dealId}', method: 'delete', operationId: 'deleteDeal', summary: 'Delete a deal', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
-    ],
-  },
-  {
-    tag: 'Tasks',
-    description: 'Follow-ups attached to CRM records.',
-    schemaName: 'Task',
-    required: ['id', 'object', 'title'],
-    writable: ['title', 'notes', 'kind', 'priority', 'status', 'dueAt', 'remindAt', 'assigneeUid', 'contactId', 'companyId', 'dealId', 'consentSiteId'],
-    writeOnly: {
-      consentSiteId: str('The site the task is created on behalf of.'),
-    },
-    writeNote: 'A create needs `title` and `consentSiteId`; a `PATCH` that names `consentSiteId` is a `400`.',
-    fields: {
-      id: str('Task id.'),
-      object: OBJECT_FIELD('task'),
-      title: str('Task title.'),
-      notes: nullable(str('Free-form notes.')),
-      kind: str('Task kind, e.g. `call` or `email`.'),
-      priority: str('Priority label.'),
-      status: str('`open` or `done`.'),
-      dueAt: nullable(ISO('When the task is due.')),
-      remindAt: nullable(ISO('When a reminder is scheduled.')),
-      reminderSentAt: nullable(ISO('When the reminder was sent.')),
-      completedAt: nullable(ISO('When it was completed.')),
-      assigneeUid: nullable(str('Assigned user.')),
-      contactId: nullable(str('Associated contact.')),
-      companyId: nullable(str('Associated company.')),
-      dealId: nullable(str('Associated deal.')),
-      siteId: nullable(str('Site the record originated on.')),
-      ...STAMPS,
-    },
-    ops: [
-      { path: '/v1/tasks', method: 'get', operationId: 'listTasks', summary: 'List tasks', list: true, returns: 'Task', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('status', 'Task status.'), q('assigneeUid', 'Assigned user.'), q('contactId', 'Associated contact.'), q('dealId', 'Associated deal.')] },
-      { path: '/v1/tasks', method: 'post', operationId: 'createTask', summary: 'Create a task', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', creates: true },
-      { path: '/v1/tasks/{taskId}', method: 'get', operationId: 'getTask', summary: 'Retrieve a task', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
-      { path: '/v1/tasks/{taskId}', method: 'patch', operationId: 'updateTask', summary: 'Update a task', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
-      { path: '/v1/tasks/{taskId}', method: 'delete', operationId: 'deleteTask', summary: 'Delete a task', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
-    ],
-  },
-  {
-    tag: 'Activities',
-    description: 'Logged interactions. Append-only: no PATCH.',
-    schemaName: 'Activity',
-    required: ['id', 'object', 'kind', 'at'],
-    writable: ['kind', 'body', 'at', 'byUid', 'contactId', 'companyId', 'dealId', 'outcome', 'durationMinutes', 'consentSiteId'],
-    writeOnly: {
-      consentSiteId: str('The site the activity is logged on behalf of.'),
-    },
-    writeRequired: ['body', 'consentSiteId'],
-    fields: {
-      id: str('Activity id.'),
-      object: OBJECT_FIELD('activity'),
-      kind: str('What happened, e.g. `call`, `email`, `note`.'),
-      body: str('Free-form body.'),
-      at: ISO('When the interaction happened — not when it was logged.'),
-      byUid: nullable(str('User who logged it.')),
-      contactId: nullable(str('Associated contact.')),
-      companyId: nullable(str('Associated company.')),
-      dealId: nullable(str('Associated deal.')),
-      outcome: nullable(str('Outcome label.')),
-      durationMinutes: nullable(int('Duration, for calls and meetings.')),
-      siteId: nullable(str('Site the record originated on.')),
-      ...STAMPS,
-    },
-    ops: [
-      { path: '/v1/activities', method: 'get', operationId: 'listActivities', summary: 'List activities', list: true, returns: 'Activity', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('kind', 'Activity kind.'), q('contactId', 'Associated contact.'), q('dealId', 'Associated deal.')] },
-      { path: '/v1/activities', method: 'post', operationId: 'createActivity', summary: 'Log an activity', accepts: 'ActivityWrite', returns: 'Activity', entitlement: 'crm', creates: true },
-      { path: '/v1/activities/{activityId}', method: 'get', operationId: 'getActivity', summary: 'Retrieve an activity', returns: 'Activity', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
-      { path: '/v1/activities/{activityId}', method: 'delete', operationId: 'deleteActivity', summary: 'Delete an activity', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
-    ],
-  },
-  {
-    tag: 'Leads',
-    description: 'Unqualified interest, before it becomes a contact. A lead is a record of its own: the person and their company as text, until converting makes the contact and the company.',
-    schemaName: 'Lead',
-    required: ['id', 'object', 'siteId'],
-    writable: ['siteId', 'email', 'name', 'status', 'ownerUid', 'ownerEmail', 'notes', 'unqualifiedReason', 'company', 'jobTitle', 'phone', 'website', 'address', 'tags', 'leadSource'],
-    writeNote: '`email` and `name` are taken on a create only; a `PATCH` cannot change the address, which is the lead’s identity within its site.',
-    writeRequired: ['email'],
-    writeOnly: {
-      siteId: str('The site the lead belongs to, instead of the `siteId` query parameter.'),
-      status: str('`new`, `working` or `unqualified` (`unqualified` on a `PATCH` only). A lead becomes `qualified` by being converted.'),
-      ownerEmail: str('A member’s address, resolved against the organization’s roster. Not with `ownerUid` in the same request.'),
-    },
-    fields: {
-      id: str('Lead id.'),
-      object: OBJECT_FIELD('lead'),
-      siteId: str('Site the lead arrived on.'),
-      email: nullable(str('Email — the lead’s identity within its site.')),
-      name: nullable(str('Name, when supplied.')),
-      status: str('Lead status.'),
-      ownerUid: nullable(str('Owning user.')),
-      notes: nullable(str('Free-form notes.')),
-      unqualifiedReason: nullable(str('Why the lead was disqualified.')),
-      company: nullable(str('The company’s name, as text. Converting the lead is what links or creates the company record.')),
-      jobTitle: nullable(str('Job title.')),
-      phone: nullable(str('E.164 phone number.')),
-      website: nullable(str('An http(s) URL.')),
-      address: nullable(ADDRESS()),
-      tags: strList('Lower-cased tags.'),
-      leadSource: nullable(
-        str(
-          "Where the lead came from: one of the organization's active lead source values " +
-            '(CRM › Fields › Leads), matched without regard to case. Any other value is refused ' +
-            'with a 400 naming the values allowed; the value a lead already holds is kept even ' +
-            "after it is deactivated. A create that names none starts from the list's default.",
-        ),
-      ),
-      sources: strList('The surfaces that captured the lead: `signup`, `booking`, `form:{formId}`, `import`, `manual`, `api`.'),
-      submissionCount: int('How many form submissions this lead has made.'),
-      firstSeen: ISO('First interaction.'),
-      lastSeen: ISO('Most recent interaction.'),
-      marketingConsent: bool('Whether marketing consent was given.'),
-      marketingConsentAt: nullable(ISO('When consent was given.')),
-      convertedContactId: nullable(str('Contact created by conversion.')),
-      convertedAt: nullable(ISO('When it was converted.')),
-      companyId: nullable(str('Company created or matched by conversion.')),
-      dealId: nullable(str('Deal created by conversion.')),
-      ...STAMPS,
-    },
-    ops: [
-      { path: '/v1/leads', method: 'get', operationId: 'listLeads', summary: 'List leads', list: true, returns: 'Lead', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('siteId', 'Site the lead arrived on.'), q('status', 'Lead status.'), q('ownerUid', 'Owning user.')] },
-      { path: '/v1/leads', method: 'post', operationId: 'createLead', summary: 'Create a lead', accepts: 'LeadWrite', returns: 'Lead', entitlement: 'crm', creates: true, description: 'A lead sourced outside the site, entered before anyone has qualified it. One address is one lead per site: creating one the site already holds updates it and answers 200. No contact and no company are created — converting the lead does that — and no marketing consent is recorded.' },
-      { path: '/v1/leads/{leadId}', method: 'get', operationId: 'getLead', summary: 'Retrieve a lead', returns: 'Lead', entitlement: 'crm', pathParams: [{ name: 'leadId', description: 'Lead id.' }] },
-      { path: '/v1/leads/{leadId}', method: 'patch', operationId: 'updateLead', summary: 'Update a lead', accepts: 'LeadWrite', returns: 'Lead', entitlement: 'crm', pathParams: [{ name: 'leadId', description: 'Lead id.' }] },
-      { path: '/v1/leads/{leadId}/convert', method: 'post', operationId: 'convertLead', summary: 'Convert a lead', returns: 'LeadConversion', entitlement: 'crm', description: 'Creates a contact, and optionally a company and a deal. Idempotent on the lead: converting an already-converted lead returns the existing ids.', pathParams: [{ name: 'leadId', description: 'Lead id.' }] },
-    ],
-  },
-  {
-    tag: 'Email templates',
-    description: 'Reusable email bodies.',
-    schemaName: 'EmailTemplate',
-    required: ['id', 'object', 'name'],
-    writable: ['name', 'kind', 'visibility', 'ownerUid', 'subject', 'body', 'consentSiteId'],
-    writeOnly: {
-      consentSiteId: str('The site the template is created on behalf of.'),
-    },
-    writeNote: 'A create needs `name`, `body` and `consentSiteId`; a `PATCH` that names `consentSiteId` is a `400`.',
-    fields: {
-      id: str('Template id.'),
-      object: OBJECT_FIELD('email_template'),
-      name: str('Template name.'),
-      kind: str('Template kind.'),
-      visibility: str('`org` or `private`.'),
-      ownerUid: nullable(str('Owner, for a private template.')),
-      subject: str('Subject line.'),
-      body: str('Body. May contain merge tokens.'),
-      siteId: nullable(str('Site the template belongs to, when scoped.')),
-      ...STAMPS,
-    },
-    ops: [
-      { path: '/v1/email-templates', method: 'get', operationId: 'listEmailTemplates', summary: 'List email templates', list: true, returns: 'EmailTemplate', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('kind', 'Template kind.'), q('visibility', 'Visibility.')] },
-      { path: '/v1/email-templates', method: 'post', operationId: 'createEmailTemplate', summary: 'Create a template', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', creates: true },
-      { path: '/v1/email-templates/{templateId}', method: 'get', operationId: 'getEmailTemplate', summary: 'Retrieve a template', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
-      { path: '/v1/email-templates/{templateId}', method: 'patch', operationId: 'updateEmailTemplate', summary: 'Update a template', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
-      { path: '/v1/email-templates/{templateId}', method: 'delete', operationId: 'deleteEmailTemplate', summary: 'Delete a template', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
     ],
   },
   {
@@ -851,7 +431,9 @@ export interface CustomerApiOpenApiOptions {
 }
 
 /**
- * Build the OpenAPI 3.1 description of `/api/v1`.
+ * Build the OpenAPI 3.1 description of `/api/v1`: the platform's resources,
+ * then `served` — the descriptions of the resources the build's plugins serve
+ * (`describePluginApiV1Resources` in `api-v1-resources.ts`).
  *
  * Per-operation `security` is deliberately absent: every operation uses the
  * document-level requirement, and repeating it would be one more place for a
@@ -859,14 +441,16 @@ export interface CustomerApiOpenApiOptions {
  */
 export function buildCustomerApiOpenApi(
   options: CustomerApiOpenApiOptions,
+  served: readonly ResourceSpec[] = [],
 ): Schema {
   const origin = options.origin.replace(/\/+$/, '')
   const schemas: Record<string, Schema> = { Error: ERROR_SCHEMA }
   const paths: Record<string, Schema> = {}
   const tags: Schema[] = []
   const listItems = new Set<string>()
+  const resources = [...RESOURCES, ...served]
 
-  for (const resource of RESOURCES) {
+  for (const resource of resources) {
     tags.push({ name: resource.tag, description: resource.description })
     schemas[resource.schemaName] = {
       type: 'object',
@@ -965,6 +549,9 @@ export function buildCustomerApiOpenApi(
   }
 
   for (const item of listItems) schemas[`${item}List`] = listSchema(item)
+  // A resource's own named schemas replace what the loop derived under the
+  // same name — a body that is not the record's write shape.
+  for (const resource of resources) Object.assign(schemas, resource.components ?? {})
 
   // The service paths. Not resources: no ids, no collection, no scope.
   paths['/v1'] = {
@@ -1171,36 +758,6 @@ export function buildCustomerApiOpenApi(
         publishedAt: { type: 'string', format: 'date-time' },
       },
       additionalProperties: true,
-    },
-    LeadConversion: {
-      type: 'object',
-      description:
-        'What the conversion produced. Idempotent on the lead: converting an ' +
-        'already-converted lead returns the existing ids rather than creating ' +
-        'a second set.',
-      properties: {
-        object: { type: 'string', const: 'lead_conversion' },
-        contactId: { type: 'string' },
-        companyId: { type: ['string', 'null'] },
-        dealId: { type: ['string', 'null'] },
-      },
-      additionalProperties: true,
-    },
-    ContactMerge: {
-      type: 'object',
-      required: ['sourceContactId'],
-      description:
-        'Merge another contact into this one. The source is removed. Any other ' +
-        'member is a `400`.',
-      properties: {
-        sourceContactId: {
-          type: 'string',
-          description:
-            'The contact to merge FROM. It does not survive, and it must not be ' +
-            'the contact in the path.',
-        },
-      },
-      additionalProperties: false,
     },
     MediaUpload: {
       type: 'object',

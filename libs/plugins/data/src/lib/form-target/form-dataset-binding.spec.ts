@@ -16,6 +16,10 @@
  */
 
 /**
+ * @jest-environment node
+ */
+
+/**
  * The binding the server derives must be the binding the browser used to send
  * (AGL-2773), or moving the decision server-side moves existing forms'
  * records somewhere else. So each case states what the page's form submitted

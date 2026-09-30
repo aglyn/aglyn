@@ -16,11 +16,7 @@
  */
 
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
-import {
-  campaignSendTimeLabel,
-  suggestCampaignSendTime,
-  type CampaignSendTimeSuggestion,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-send-time'
+import { pluginRecordFactsReader } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
 import { orgDataCollectionForHost } from '@aglyn/tenant-data-admin/server/organizations'
 
 /**
@@ -40,12 +36,10 @@ import { orgDataCollectionForHost } from '@aglyn/tenant-data-admin/server/organi
  *  - THE LIST a campaign is for is suggested when the brief names one of the
  *    org's lists by name, and is set on nothing: the drafted email is aimed at
  *    nobody until a person chooses.
- *  - THE SEND TIME is the shared rule over that list's past sends on this
- *    site — when each went out, how many were delivered and how many people
- *    opened it — and is said only in the output's note.
+ *  - THE SEND TIME is asked of the plugin that keeps the list's past sends,
+ *    through the core's record-facts seam, which answers the slot and how
+ *    many sends it was chosen among — and is said only in the output's note.
  */
-
-type Firestore = FirebaseFirestore.Firestore
 
 /** The most products one email binds. */
 export const AI_EMAIL_MAX_PRODUCTS = 6
@@ -56,8 +50,19 @@ export const AI_EMAIL_PRODUCT_SCAN = 200
 /** How many of an org's lists are read: the composer's list picker window. */
 export const AI_CAMPAIGN_LIST_SCAN = 50
 
-/** How many of a list's past sends on the site the send time is taken from. */
-export const AI_CAMPAIGN_SEND_HISTORY_SCAN = 50
+/**
+ * The resource a list's send time is read as, by the list's id, through
+ * `plugin-record-facts`. Its owner answers `{ label, measured }`: the slot as
+ * a person reads it (or `null` with too little history) and the sends it was
+ * chosen among.
+ */
+export const AI_LIST_SEND_TIME_RESOURCE = 'listSendTime'
+
+/** A list's suggested send time, as the note says it. */
+export interface AiListSendTime {
+  label: string
+  measured: number
+}
 
 /** A record a brief may name, by its id and its name. */
 export interface AiNamedRecord {
@@ -169,45 +174,34 @@ export async function suggestAiCampaignList(input: {
   return aiRecordsNamedIn(input.brief, rows, 1)[0] ?? null
 }
 
-function millisOf(value: unknown): number {
-  if (value instanceof Date) return value.getTime()
-  if (typeof value === 'number') return value
-  const toMillis = (value as { toMillis?: () => number } | null)?.toMillis
-  return typeof toMillis === 'function' ? toMillis.call(value) : 0
-}
-
 /**
- * The send time a list's past sends on this site suggest, or `null` with too
- * little history.
- *
- * Sends are the organization's (`orgs/{orgId}/campaigns`), and a list is too,
- * so the org's sends to the list are narrowed to the ones sent AS this site
- * (`hostId`): another site's audience opening at another hour is not this
- * site's history. Three equality filters, which Firestore serves by merging
- * single-field indexes — no composite index.
+ * The send time a list's past sends on this site suggest, asked of the plugin
+ * that keeps the sends: `null` when nothing keeps them here, when the owner
+ * refuses, or when there is too little history to suggest one.
  */
-export async function readAiListSendTime(
-  firestore: Firestore,
-  input: { orgId: string; hostId: string; listId: string },
-): Promise<CampaignSendTimeSuggestion | null> {
-  if (!input.orgId || !input.hostId) return null
-  const snapshot = await firestore
-    .collection('orgs')
-    .doc(input.orgId)
-    .collection('campaigns')
-    .where('hostId', '==', input.hostId)
-    .where('listId', '==', input.listId)
-    .where('status', '==', 'sent')
-    .select('sentAt', 'stats.delivered', 'stats.uniqueOpens')
-    .limit(AI_CAMPAIGN_SEND_HISTORY_SCAN)
-    .get()
-  return suggestCampaignSendTime(
-    snapshot.docs.map((doc) => ({
-      sentAtMs: millisOf(doc.get('sentAt')),
-      delivered: Number(doc.get('stats.delivered') ?? 0),
-      uniqueOpens: Number(doc.get('stats.uniqueOpens') ?? 0),
-    })),
-  )
+export async function readAiListSendTime(input: {
+  orgId: string
+  hostId: string
+  listId: string
+  uid: string
+  org: Readonly<Record<string, unknown>> | null
+  now: Date
+}): Promise<AiListSendTime | null> {
+  if (!input.orgId || !input.hostId || !input.listId) return null
+  const owner = pluginRecordFactsReader(AI_LIST_SEND_TIME_RESOURCE)
+  if (!owner) return null
+  const read = await owner.reader.read({
+    orgId: input.orgId,
+    hostId: input.hostId,
+    id: input.listId,
+    uid: input.uid,
+    org: input.org,
+    now: input.now,
+  })
+  if (!read.ok) return null
+  const label = read.facts['label']
+  const measured = Number(read.facts['measured'] ?? 0)
+  return typeof label === 'string' && label && measured > 0 ? { label, measured } : null
 }
 
 /** What an email's output says about its products; `null` when it binds none and none were picked. */
@@ -233,15 +227,13 @@ export function aiEmailProductNote(binding: AiEmailProductBinding): string | nul
 /** What a campaign's output says about who it is for and when to send it. */
 export function aiCampaignAudienceNote(
   list: AiNamedRecord | null,
-  sendTime: CampaignSendTimeSuggestion | null,
+  sendTime: AiListSendTime | null,
 ): string {
   if (!list) {
     return 'The email is aimed at nobody yet: choose who receives it before you schedule it.'
   }
   const when = sendTime
-    ? ` Past campaigns to that list on this site were opened most when sent on ${campaignSendTimeLabel(
-        sendTime,
-      )}, across ${sendTime.measured} sends.`
+    ? ` Past campaigns to that list on this site were opened most when sent on ${sendTime.label}, across ${sendTime.measured} sends.`
     : ' That list has too little send history on this site to suggest a send time.'
   return `The brief names the list "${list.name}". The email is aimed at nobody yet: choose "${list.name}" as its audience before you schedule it.${when}`
 }
