@@ -301,6 +301,7 @@ describe('console extension registry', () => {
         'staffOrg',
         'staffOrgUsageColumn',
         'staffOrgsListColumn',
+        'staffOverview',
         'staffSite',
         'staffUser',
       ])
