@@ -71,6 +71,7 @@ describe('every organization list has the composites its query shapes need', () 
       'ownerUid:ASCENDING',
       'plan:ASCENDING',
       'slug:ASCENDING',
+      'suspended:ASCENDING',
     ]
     const orders = [
       'createdAt:DESCENDING',
@@ -191,6 +192,29 @@ describe('every clause and the search word land on one query', () => {
     })
     // An order the declaration does not offer is not taken.
     expect(ask({ path: 'plan', direction: 'asc' })).toEqual({ path: '__name__', direction: 'asc' })
+  })
+
+  it('Suspended is an equality on the stored flag, beside every other clause and any order', () => {
+    const only = plan(
+      ORG_LIST_QUERY,
+      [
+        { field: 'suspended', op: 'equals', value: 'true' },
+        { field: 'createdAt', op: 'onOrAfter', value: '2026-09-01' },
+        { field: 'plan', op: 'equals', value: 'pro' },
+      ],
+      ['acme'],
+    )
+    expect(only.refused).toEqual([])
+    expect(only.filters).toEqual(
+      expect.arrayContaining([{ path: 'suspended', op: '==', value: true }]),
+    )
+    expect(only.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
+    const excluded = plan(ORG_LIST_QUERY, [{ field: 'suspended', op: 'equals', value: 'false' }])
+    expect(excluded.filters).toEqual([{ path: 'suspended', op: '==', value: false }])
+    // Picked, never typed: anything but the two answers is refused.
+    expect(
+      plan(ORG_LIST_QUERY, [{ field: 'suspended', op: 'equals', value: 'yes' }]).refused,
+    ).toHaveLength(1)
   })
 
   it('an org id or several is the document id, and composes with the rest', () => {

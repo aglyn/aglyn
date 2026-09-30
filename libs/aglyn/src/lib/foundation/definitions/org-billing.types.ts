@@ -1339,6 +1339,15 @@ export interface AglynOrgBilling extends AglynDocument {
   suspendedAt?: ITimestamp | null
   suspendedReason?: string
   /**
+   * Whether the suspension above is IN FORCE, stored so the staff
+   * Organizations list can filter by it with an equality (AGL-3416). `false`
+   * on every unsuspended org; written beside the `suspended*` family by the
+   * lockdown core and cleared on a lapsed timed lock by
+   * `settleLapsedSuspensions`. Never an enforcement input: every enforcing
+   * reader asks the family itself.
+   */
+  suspended?: boolean
+  /**
    * GDPR erasure request (AGL-206): hard deletion happens ONLY via `eraseOrg`
    * after a 7-day hold from this stamp — reached by the
    * `/api/admin/run-erasures` cron, or by hand with

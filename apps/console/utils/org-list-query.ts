@@ -140,6 +140,23 @@ export const ORG_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: ['equals', 'isAnyOf'],
   },
   {
+    /*
+     * Suspended or not: an equality on the stored `suspended` flag, which
+     * every organization carries (`createOrganization` writes `false`, the
+     * lockdown core writes it beside the `suspended*` family, and
+     * `tools/scripts/backfill-suspended-flag.mjs` stamps the older ones).
+     * Not `suspendedAt`: `!= null` would be a second range, and a timed
+     * suspension lapses with no write at all. The route clears the flag on
+     * every lapsed lock before it runs a query that asks about it
+     * (`settleLapsedSuspensions`), so the answer is the one for this moment.
+     */
+    column: 'suspended',
+    kind: 'boolean',
+    path: 'suspended',
+    // Picked from two named answers, so the panel's select sends `equals`.
+    operators: ['equals'],
+  },
+  {
     // The one range, which orders the list by itself while it is in force.
     column: 'createdAt',
     kind: 'date',
@@ -158,11 +175,18 @@ export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   name: 'Organization',
   plan: 'Stored plan',
   subscription: 'Billing status',
+  suspended: 'Suspended',
   createdAt: 'Created',
   $id: 'Org ID',
   slug: 'Org slug',
   ownerUid: 'Owner UID',
 }
+
+/** The Suspended filter's two answers, by the word the row's chip uses. */
+export const ORG_SUSPENDED_FILTER_OPTIONS = [
+  { value: 'true', label: 'Suspended' },
+  { value: 'false', label: 'Not suspended' },
+] as const
 
 /** The order both organization lists keep while no order is asked for. */
 export const ORG_LIST_SORT: ListQuerySort = { path: LIST_QUERY_ID_PATH, direction: 'asc' }

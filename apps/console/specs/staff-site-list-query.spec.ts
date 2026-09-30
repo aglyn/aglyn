@@ -62,6 +62,7 @@ describe('the staff Sites list has the composites its query shapes need', () => 
       'orgId:ASCENDING,createdAt:DESCENDING',
       'searchTokens:CONTAINS,createdAt:DESCENDING',
       'subdomain:ASCENDING,createdAt:DESCENDING',
+      'suspended:ASCENDING,createdAt:DESCENDING',
     ])
   })
 
@@ -108,6 +109,22 @@ describe('every clause and the search word land on one query', () => {
         { path: 'subdomain', op: '==', value: 'harbor-bakery' },
       ]),
     )
+  })
+
+  it('Suspended and Custom domain are equalities, as the panel\'s select sends them', () => {
+    const answer = plan([
+      { field: 'suspended', op: 'equals', value: 'false' },
+      { field: 'hasCustomDomain', op: 'equals', value: 'true' },
+      { field: 'createdAt', op: 'before', value: '2026-09-01' },
+    ])
+    expect(answer.refused).toEqual([])
+    expect(answer.filters).toEqual(
+      expect.arrayContaining([
+        { path: 'suspended', op: '==', value: false },
+        { path: 'hasCustomDomain', op: '==', value: true },
+      ]),
+    )
+    expect(answer.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
   })
 
   it('a site id or several is the document id', () => {

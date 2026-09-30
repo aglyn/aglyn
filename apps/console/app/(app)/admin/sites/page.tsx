@@ -69,7 +69,9 @@ const SITE_FILTER_COLUMNS = ['displayName', 'hasCustomDomain', 'createdAt']
 const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const router = useRouter()
-  const gridFilter = useListGridFilter({ selectFields: ['hasCustomDomain'] })
+  const gridFilter = useListGridFilter({
+    selectFields: Object.keys(STAFF_SITE_LIST_FILTER_OPTIONS),
+  })
   const reportError = useCallback(() => {
     enqueueSnackbar('Could not load sites', { variant: 'error' })
   }, [enqueueSnackbar])

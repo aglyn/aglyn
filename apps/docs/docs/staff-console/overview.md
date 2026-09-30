@@ -94,10 +94,12 @@ the page on screen by this month's figures.
 The grid's toolbar filters and searches the whole directory, not the page on screen.
 **Filters** offers **Organization** (*contains* a word, or *is* the whole name),
 **Org slug** (*is*), **Org ID** (*is*, or *is any of*), **Owner UID** (*is*, or *is any
-of*), **Created** (on, after, or before a day), and two pickers: **Stored plan** (the
+of*), **Created** (on, after, or before a day), and three pickers: **Stored plan** (the
 plan written on the org, which is not always the plan it reads as — the Plan column
-shows both when they differ) and **Billing status** (the Stripe subscription status
-mirrored onto the org). **Search** matches the start of any word in the name, using the
+shows both when they differ), **Billing status** (the Stripe subscription status
+mirrored onto the org) and **Suspended** (*Suspended* shows only organizations whose
+suspension is in force, *Not suspended* leaves them out). A timed suspension counts
+until its end time and not after, the same as the red **suspended** chip. **Search** matches the start of any word in the name, using the
 first word you type, and says so when you type more than one.
 
 Every filter you set and the search apply together, each on its own field, and the
@@ -308,9 +310,12 @@ The row menu holds the ways out of the list:
 
 The grid's toolbar filters and searches every site, not the page on screen.
 **Filters** offers **Site** (*is* the whole name), **Subdomain** (*is*), **Custom
-domain** (connected or none), **Custom domain address** (*is*), **Org ID** (*is*,
-or *is any of*), **Site ID** (*is*, or *is any of*) and **Created** (on, after, or
-before a day). **Search** matches the start of any word of the site's name, its
+domain** (connected or none), **Custom domain address** (*is*), **Suspended**
+(*Suspended* shows only sites taken down by staff, *Not suspended* leaves them out;
+a timed takedown counts until its end time, as the **suspended** chip does), **Org
+ID** (*is*, or *is any of*), **Site ID** (*is*, or *is any of*) and **Created** (on,
+after, or before a day). A site whose organization is suspended is filtered by
+its own takedown only: filter the organizations list to find those. **Search** matches the start of any word of the site's name, its
 subdomain or its custom domain, so `bakery` finds `harbor-bakery.com`.
 
 The list is in site-id order, except while **Created** is filtered, when it runs
@@ -444,9 +449,11 @@ organization membership with roles and per-site access, and its recent audit tra
 
 The list's **Filters** look past the loaded page into every pool: **User** (the
 email), **Display name**, **UID**, **SSO pool** and **Sign-in providers** as typed
-text, matched anywhere in it; **Created** and **Last sign-in** as dates; **Disabled** and
-**Staff claim** as true or false; and **Staff role** picked from *support*, *billing* and
-*super*. A role picks the claim as stored, so a staff account granted no role (which
+text, matched anywhere in it; **Created** and **Last sign-in** as dates; **Suspended**
+picked as *Suspended (disabled)* or *Not suspended*, which reads the account's disabled
+flag (set by **Disable account** and by a user lockdown, and shown on the row as a
+**disabled** chip); **Staff claim** as true or false; and **Staff role** picked from
+*support*, *billing* and *super*. A role picks the claim as stored, so a staff account granted no role (which
 acts as *support*) is not matched by *support*. **Search** takes a whole email address
 as an exact lookup, and anything else as part of an email, display name or uid.
 

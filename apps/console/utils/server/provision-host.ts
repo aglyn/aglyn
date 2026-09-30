@@ -275,6 +275,10 @@ export async function claimHostForOrg(
        * somebody asks, and spreading the set here would ask on their behalf.
        */
       enabledPlugins: [ACCOUNTS_PLUGIN_ID],
+      // Stored `false`, never left out: the staff Sites list filters
+      // Suspended by equality on it, and a query cannot find a document by a
+      // field it lacks. The console's `suspended-flag.ts` names its other writers.
+      suspended: false,
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })

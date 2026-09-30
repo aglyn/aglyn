@@ -29,12 +29,12 @@ import {
 } from '../../../../utils/server/staff-list-query'
 import { STAFF_SITE_LIST_QUERY } from '../../../../utils/staff-site-list-query'
 import { homeScreenId } from '../../../../utils/staff-site-links'
-
-/** A site suspension in force at this moment (`suspendedAt` set, window open). */
-const isSuspendedNow = (suspendedAt: unknown, suspendedUntilMs: unknown): boolean =>
-  suspendedAt != null &&
-  suspendedAt !== false &&
-  !(typeof suspendedUntilMs === 'number' && suspendedUntilMs <= Date.now())
+import {
+  LAPSED_SUSPENSIONS_NOTICE,
+  asksAboutSuspension,
+  settleLapsedSuspensions,
+  suspensionInForce,
+} from '../../../../utils/server/suspended-flag'
 
 /**
  * The staff Sites list (AGL-3378): every site on the platform, one page at a
@@ -79,6 +79,12 @@ async function handler(request: Request): Promise<Response> {
     if (!listRequest) {
       return Response.json({ error: 'Unreadable filters' }, { status: 400 })
     }
+    // A lapsed timed takedown keeps its stored flag until something clears
+    // it, so a query that asks about the flag clears them first
+    // (`utils/server/suspended-flag.ts`).
+    const settled = asksAboutSuspension(listRequest.clauses)
+      ? await settleLapsedSuspensions(db.collection('hosts'))
+      : null
     const page = await runStaffListQuery({
       firestore: db,
       collection: db.collection('hosts'),
@@ -150,8 +156,9 @@ async function handler(request: Request): Promise<Response> {
         publishedPages: screens && typeof screens === 'object' ? Object.keys(screens).length : 0,
         homeScreenId: homeScreenId(screens),
         // Suspended NOW: a timed suspension lapses with no write at all, so
-        // the window is read against the clock here rather than stored.
-        suspended: isSuspendedNow(docSnap.get('suspendedAt'), docSnap.get('suspendedUntilMs')),
+        // the chip reads the window against the clock, as the stored flag
+        // the Suspended filter queries is settled against it.
+        suspended: suspensionInForce(docSnap.get('suspendedAt'), docSnap.get('suspendedUntilMs')),
         maintenance: Boolean(docSnap.get('maintenance')),
         createdAt: ts(docSnap.get('createdAt')),
       }
@@ -162,7 +169,9 @@ async function handler(request: Request): Promise<Response> {
         hasMore: page.hasMore,
         nextCursor: page.nextCursor,
         refused: page.refused,
-        notices: page.notices,
+        notices: settled?.bounded
+          ? [...page.notices, LAPSED_SUSPENSIONS_NOTICE]
+          : page.notices,
       },
       { status: 200 },
     )
