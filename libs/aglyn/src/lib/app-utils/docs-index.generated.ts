@@ -17,9 +17,9 @@
 // GENERATED FILE — do not edit. Regenerate with:
 //   node tools/scripts/generate-assist-docs-index.mjs
 // Source of truth: apps/docs/docs content sections (AGL-1860).
-// SERVER-ONLY: imported by the assist API route; never ship client-side.
+// SERVER-ONLY: imported by docs search on API routes; never ship client-side.
 
-export interface AssistDocsSection {
+export interface DocsSection {
   /** Docs-site path, e.g. `/building-sites/besigner/overview`. */
   path: string
   /** Docs page title. */
@@ -32,7 +32,7 @@ export interface AssistDocsSection {
   text: string
 }
 
-export const ASSIST_DOCS_INDEX: readonly AssistDocsSection[] = [
+export const DOCS_SECTION_INDEX: readonly DocsSection[] = [
   { path: '/ai/ab-tests-with-ai', title: 'A/B tests by AI: write variants, read the result', heading: '', anchor: '', text: 'A/B tests by AI\nThe test itself is yours. The experiment, its variants, the traffic split, the conversion goal and the counters all belong to the Experiments card on your site\'s Marketing page. Two AI cards sit inside that card: one writes variants while you are setting a test up, and one reads a finished test\'s figures back in plain words.\nNeither of them starts a test, pauses one, finishes one or moves a visitor.' },
   { path: '/ai/ab-tests-with-ai', title: 'A/B tests by AI: write variants, read the result', heading: 'It proposes; you write', anchor: '#it-proposes-you-write', text: 'Write variants with AI fills the experiment editor\'s own fields, unsaved. The dialog\'s Save is the only write — the same one a variant you typed yourself takes, and Cancel leaves the test exactly as it was.\nExplain this result with AI has nothing to apply at all. It is words about figures that were already counted.\nNothing either card returns sets a traffic weight, a goal or a schedule, and nothing it returns reaches a visitor.' },
   { path: '/ai/ab-tests-with-ai', title: 'A/B tests by AI: write variants, read the result', heading: 'Write variants', anchor: '#write-variants', text: 'The card sits in the experiment editor, beneath the list of variants it writes for.\n1. Give it the copy under test — the headline and copy as they stand on the page, or the subject line and message as they stand. For an email the control\'s subject and body are filled in from the first variant, so usually there is nothing to paste.\n2. Write variants. It writes between two and four: a test needs a first variant and at least one to compare against it, and the card stores no more than four. The first one it writes is your copy unchanged, so the test has something to measure against.\n3. Each variant comes back with a name, its copy, and one sentence saying what it changes and what that is testing.\nWhat a variant varies depends on what the test varies. An email variant varies its subject line, its preheader and its body; a screen or a section variant varies the copy on it. A variant that fills the other kind\'s fields has them dropped.\nPutting them in {#putting-them-in}\nPut into the variants places the proposal in the editor\'s own fields, unsaved:\n- For an email, each variant takes its name, subject and body.\n- For a screen or a section, each variant takes its name only. The copy itself is a screen version, so you make one per variant in the editor and pin it above — read the proposed copy on the card and build from it.\nThen review them and Save the experiment, or Cancel.\nThe editor\'s list is the test\'s shape, and the card does not change it: a proposal is mapped onto the variants you already have, in order, and anything past them is ignored. Add a variant row first if you want a fourth.\nTwo things are refused rather than pasted. The fields are plain text, so a variant carrying markup is dropped; and a variant whose copy repeats another\'s is dropped, since two identical arms a' },

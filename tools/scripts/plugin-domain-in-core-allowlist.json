@@ -1047,13 +1047,6 @@
       "lane": "data"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/docs-retrieval.ts",
-      "rules": [
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts",
       "rules": [
         "domain-name",

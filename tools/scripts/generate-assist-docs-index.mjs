@@ -17,13 +17,19 @@
  */
 
 /**
- * Generates the Aglyn Assist docs retrieval index (AGL-1860) from the docs
- * site content. Source of truth: apps/docs/docs — the SAME tree
+ * Generates the platform's docs section index (AGL-1860) from the docs site
+ * content. Source of truth: apps/docs/docs — the SAME tree
  * generate-docs-help.mjs reads, split one level finer: one index entry per
  * H2-section (plus one for the page intro before the first H2), each carrying
- * the page path, title, anchor, and the section's plain text. The assist API
- * route runs lexical retrieval over these entries server-side to ground
- * answers in the docs and deep-link `https://docs.aglyn.com{path}{anchor}`.
+ * the page path, title, anchor, and the section's plain text. Lexical docs
+ * search (`docs-retrieval.ts`) runs over these entries server-side and
+ * deep-links `https://docs.aglyn.com{path}{anchor}`: the console's issue
+ * reports deflect to it with no model involved, and the AI plugin grounds its
+ * answers in it. The index is the platform's; the assistant is one reader
+ * (AGL-3080), which is why nothing in it is named for the assistant.
+ *
+ * The script keeps its historical name because every generated file, guard
+ * and runbook that says how to regenerate the index names it.
  *
  * Emits ONE generated file (server-only import — never ship it client-side):
  *
@@ -237,7 +243,7 @@ const LICENSE = `/**
 const GENERATED_NOTE = `// GENERATED FILE — do not edit. Regenerate with:
 //   node tools/scripts/generate-assist-docs-index.mjs
 // Source of truth: apps/docs/docs content sections (AGL-1860).
-// SERVER-ONLY: imported by the assist API route; never ship client-side.`
+// SERVER-ONLY: imported by docs search on API routes; never ship client-side.`
 
 function tsString(value) {
   const escaped = value
@@ -261,7 +267,7 @@ function emit(sections) {
   return `${LICENSE}
 ${GENERATED_NOTE}
 
-export interface AssistDocsSection {
+export interface DocsSection {
   /** Docs-site path, e.g. \`/building-sites/besigner/overview\`. */
   path: string
   /** Docs page title. */
@@ -274,7 +280,7 @@ export interface AssistDocsSection {
   text: string
 }
 
-export const ASSIST_DOCS_INDEX: readonly AssistDocsSection[] = [
+export const DOCS_SECTION_INDEX: readonly DocsSection[] = [
 ${rows}
 ]
 `
@@ -292,10 +298,10 @@ const current = (() => {
 })()
 
 if (current === content) {
-  console.log(`assist docs index up to date (${sections.length} sections)`)
+  console.log(`docs section index up to date (${sections.length} sections)`)
 } else if (check) {
   console.error(
-    `STALE  ${OUT.slice(ROOT.length + 1)}\n\nThe assist docs index is out of date with apps/docs.\nRun: node tools/scripts/generate-assist-docs-index.mjs`,
+    `STALE  ${OUT.slice(ROOT.length + 1)}\n\nThe docs section index is out of date with apps/docs.\nRun: node tools/scripts/generate-assist-docs-index.mjs`,
   )
   process.exit(1)
 } else {
