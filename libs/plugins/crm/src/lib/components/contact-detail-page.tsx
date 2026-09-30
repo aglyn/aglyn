@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -54,7 +55,7 @@ import { useErasePersonAction } from './erase-person-action'
 import RecordFilesCard from './record-files-card'
 import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
 import { RecordTasksCard } from './record-tasks-card'
-import { useEmailsHubPath } from './use-emails-hub-path'
+import { useSiteRouteContext } from './use-site-route-context'
 import { useOrgMembers } from './use-org-members'
 
 const contactDocsHelp = pluginDocsHelp('contacts', {
@@ -224,18 +225,20 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
 
   /*
    * Where a campaign entry on the timeline links to: the email's own report
-   * on this site's Emails hub (AGL-2616). Only a campaign THIS site sent can
-   * be addressed — a sibling site in the same consent group has an Emails
-   * hub of its own under a subdomain this page does not know — so the
-   * builder answers `null` for those and the entry draws unlinked.
+   * (AGL-2616), at the address the plugin that keeps messages publishes as
+   * `emailMessage` (AGL-3080). Only a campaign THIS site sent can be
+   * addressed — a sibling site in the same consent group has pages of its
+   * own under a subdomain this page does not know — so the builder answers
+   * `null` for those, and where nothing publishes the kind, and the entry
+   * draws unlinked.
    */
-  const emailsHub = useEmailsHubPath()
+  const siteRoute = useSiteRouteContext()
   const campaignHref = useCallback(
     (email: Aglyn.ContactCampaignEmail) =>
-      emailsHub && email.hostId === hostId
-        ? `${emailsHub}/messages/${encodeURIComponent(email.campaignId)}`
+      siteRoute && email.hostId === hostId
+        ? pluginRecordHref('emailMessage', siteRoute, email.campaignId)
         : null,
-    [emailsHub, hostId],
+    [siteRoute, hostId],
   )
 
   const contactRemove = useContactRemove(hostId)

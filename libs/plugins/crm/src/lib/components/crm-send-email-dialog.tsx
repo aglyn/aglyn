@@ -32,6 +32,7 @@ import {
   resolveCrmMergeFields,
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { pluginRecordListHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import type { ConsoleRecordEmailDraft } from '@aglyn/aglyn/plugin-manager/record-zone-props'
 import { useSendingApi } from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -66,7 +67,7 @@ import { CrmSitePicker } from './crm-site-picker'
 import { CrmEmailCheckAlert, useCrmEmailCheck } from './crm-email-check'
 import { useCrmApi } from './use-crm-api'
 import { useCrmInboundAddress } from './use-crm-inbound-address'
-import { useEmailsHubPath } from './use-emails-hub-path'
+import { useSiteRouteContext } from './use-site-route-context'
 import {
   useCrmEmailTemplates,
   useCrmEmailTemplateScope,
@@ -186,15 +187,17 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
    */
   const sendHostId = hostId ?? mount?.createHostId ?? null
   const crmApi = useCrmApi(sendHostId)
-  const emailsHub = useEmailsHubPath(sendHostId)
+  const sendSite = useSiteRouteContext(sendHostId)
   // The capture address (AGL-2657), for the reply this send will get: the
   // console logs what IT sends, so the address is shown to be forwarded
   // to or copied from a mailbox, never put on this message.
   const capture = useCrmInboundAddress(sendHostId, { enabled: open })
-  // The Sending section of the Emails console — the page that fixes a
-  // missing identity. `null` on a surface that cannot name the site's hub,
-  // so the refusal prints the section's name instead of a link to nowhere.
-  const sendingPath = emailsHub ? `${emailsHub}/sending` : null
+  // Where the site's sending identities are kept — the page that fixes a
+  // missing one, at the address the plugin that keeps them publishes as
+  // `sendingIdentity` (AGL-3080). `null` on a surface that cannot name the
+  // site, or where nothing publishes the kind, so the refusal prints the
+  // section's name instead of a link to nowhere.
+  const sendingPath = sendSite ? pluginRecordListHref('sendingIdentity', sendSite) : null
 
   const [identity, setIdentity] = useState<IdentityState>({ status: 'loading' })
   const [recipient, setRecipient] = useState<string | null>(

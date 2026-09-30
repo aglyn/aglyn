@@ -16,15 +16,16 @@
  */
 
 /**
- * The Emails hub a CRM surface links to (AGL-2634): the site in the URL
- * under a site, and at the organization level — where the URL names none
- * — the mount's answer for the site it was asked about, or nothing.
+ * The site a CRM surface asks another plugin's addresses for (AGL-2634,
+ * AGL-3080): the site in the URL under a site, and at the organization level
+ * — where the URL names none — the mount's answer for the site it was asked
+ * about, or nothing.
  */
 
 import { renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
-import { useEmailsHubPath } from './use-emails-hub-path'
+import { useSiteRouteContext } from './use-site-route-context'
 
 let params: Record<string, string> = {}
 jest.mock('next/navigation', () => ({
@@ -50,28 +51,29 @@ function orgMount({ children }: { children: ReactNode }) {
   )
 }
 
-describe('useEmailsHubPath', () => {
+describe('useSiteRouteContext', () => {
   it('names the site in the URL under a site, whatever site it was asked about', () => {
     params = { orgSlug: 'acme', host: 'shop' }
-    expect(renderHook(() => useEmailsHubPath()).result.current).toBe('/acme/hosts/shop/emails')
-    expect(renderHook(() => useEmailsHubPath('host-a')).result.current).toBe(
-      '/acme/hosts/shop/emails',
-    )
+    expect(renderHook(() => useSiteRouteContext()).result.current).toEqual({ orgSlug: 'acme', host: 'shop' })
+    expect(renderHook(() => useSiteRouteContext('host-a')).result.current).toEqual({
+      orgSlug: 'acme',
+      host: 'shop',
+    })
   })
 
   it('answers the mount’s site at the organization level, and nothing for a site it cannot name', () => {
     params = { orgSlug: 'acme' }
     expect(
-      renderHook(() => useEmailsHubPath('host-a'), { wrapper: orgMount }).result.current,
-    ).toBe('/acme/hosts/a/emails')
+      renderHook(() => useSiteRouteContext('host-a'), { wrapper: orgMount }).result.current,
+    ).toEqual({ orgSlug: 'acme', host: 'a' })
     expect(
-      renderHook(() => useEmailsHubPath('host-b'), { wrapper: orgMount }).result.current,
+      renderHook(() => useSiteRouteContext('host-b'), { wrapper: orgMount }).result.current,
     ).toBeNull()
-    expect(renderHook(() => useEmailsHubPath(null), { wrapper: orgMount }).result.current).toBeNull()
+    expect(renderHook(() => useSiteRouteContext(null), { wrapper: orgMount }).result.current).toBeNull()
   })
 
   it('answers nothing on a surface mounted nowhere', () => {
     params = {}
-    expect(renderHook(() => useEmailsHubPath('host-a')).result.current).toBeNull()
+    expect(renderHook(() => useSiteRouteContext('host-a')).result.current).toBeNull()
   })
 })

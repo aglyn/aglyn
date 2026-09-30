@@ -16,6 +16,8 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { CrmSendEmailDialog } from './crm-send-email-dialog'
 
@@ -49,13 +51,14 @@ let templateRows: Array<Record<string, unknown>> = []
 jest.mock('@aglyn/tenant-feature-instance/hooks/use-sending-identity-api', () => ({
   useSendingApi: () => sendingApi,
 }))
-// The hub path and the API door, each recording the site they were asked
-// for: at the organization level that is the send-from site, not the page's.
+// The site the links are asked for and the API door, each recording the
+// site they were asked for: at the organization level that is the send-from
+// site, not the page's.
 let hubPathAskedFor: Array<string | null | undefined> = []
-jest.mock('./use-emails-hub-path', () => ({
-  useEmailsHubPath: (hostId?: string | null) => {
+jest.mock('./use-site-route-context', () => ({
+  useSiteRouteContext: (hostId?: string | null) => {
     hubPathAskedFor.push(hostId)
-    return hostId === null ? null : `/acme/hosts/${hostId === 'site-2' ? 'two' : 'site'}/emails`
+    return hostId === null ? null : { orgSlug: 'acme', host: hostId === 'site-2' ? 'two' : 'site' }
   },
 }))
 let crmApiHost: string | null | undefined
@@ -159,8 +162,26 @@ const draft = () => {
   fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'A note.' } })
 }
 
+/**
+ * Where a site's senders are set up, as the plugin that keeps them publishes
+ * it (AGL-3080) — stood in, because this plugin may not load that one. What
+ * it really publishes is held in its own spec.
+ */
+function standInSendingRoute(): void {
+  registerPluginRecordRoute(
+    'sendingIdentity',
+    {
+      list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/emails/sending`,
+      record: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/emails/sending`,
+    },
+    { pluginId: 'email' },
+  )
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
+  unregisterPluginServices('email')
+  standInSendingRoute()
   hubPathAskedFor = []
   bookingDoorProps = null
   crmApiHost = undefined
@@ -212,6 +233,15 @@ describe('CrmSendEmailDialog', () => {
     draft()
     expect(sendButton()).toHaveProperty('disabled', true)
     expect(crmApi).not.toHaveBeenCalledWith('email-send', expect.anything())
+  })
+
+  it('names the section in words where no plugin publishes where senders are kept', async () => {
+    unregisterPluginServices('email')
+    sendingApi.mockResolvedValue(REFUSED)
+    open()
+    await screen.findByText('Verify mail.acme.com before sending.')
+    expect(screen.queryByText('Set up sending')).toBeNull()
+    expect(screen.getByText('An admin sets this up under Emails › Sending.')).toBeTruthy()
   })
 
   it('posts the record and the draft, then closes with a toast', async () => {

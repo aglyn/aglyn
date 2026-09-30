@@ -129,7 +129,7 @@ jest.mock('./record-files-card', () => ({
 jest.mock('./record-tasks-card', () => ({
   RecordTasksCard: (props: Record<string, unknown>) => double('tasks')(props),
 }))
-jest.mock('./use-emails-hub-path', () => ({ useEmailsHubPath: () => null }))
+jest.mock('./use-site-route-context', () => ({ useSiteRouteContext: () => null }))
 jest.mock('./use-org-members', () => ({
   useOrgMembers: () => ({
     options: [],
