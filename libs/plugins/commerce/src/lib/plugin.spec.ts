@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
 import {
   COMMERCE_BUNDLE,
@@ -133,5 +134,20 @@ describe('the commerce console surfaces declare their own authorization', () => 
     expect(Aglyn.resolveRolePermissions('admin')[key]).toBe(true)
     expect(Aglyn.resolveRolePermissions('editor')[key]).toBe(true)
     expect(Aglyn.resolveRolePermissions('viewer')[key]).toBe(false)
+  })
+})
+
+describe('where a product is read (AGL-3080)', () => {
+  it('publishes the site catalog as a product’s address, and none at the org level', () => {
+    registerCommerceConsole()
+    const route = pluginRecordRoute('product')?.route
+    expect(route?.list({ orgSlug: 'acme', host: 'shop' })).toBe('/acme/hosts/shop/products')
+    // The catalog has no page per product, so a product's address is the
+    // catalog it is edited in.
+    expect(route?.record({ orgSlug: 'acme', host: 'shop' }, 'prod-1')).toBe(
+      '/acme/hosts/shop/products',
+    )
+    expect(route?.list({ orgSlug: 'acme', host: null })).toBeNull()
+    expect(route?.record({ orgSlug: 'acme', host: null }, 'prod-1')).toBeNull()
   })
 })
