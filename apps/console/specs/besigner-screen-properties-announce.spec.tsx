@@ -221,7 +221,7 @@ jest.mock('@aglyn/aglyn', () => ({
   screenRoutePathToUrl: () => '',
   wouldCreateScreenCycle: () => false,
 }))
-jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
+jest.mock('@aglyn/aglyn/app-utils/site-theme', () => ({
   resolveSiteTheme: () => undefined,
 }))
 jest.mock('@aglyn/besigner', () => ({

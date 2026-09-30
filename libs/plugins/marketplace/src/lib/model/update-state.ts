@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
-import { resolveProvenance } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
+import { resolveProvenance } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import {
   offeredPluginVersion,
   type PluginRevocation,

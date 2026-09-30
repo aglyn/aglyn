@@ -29,8 +29,8 @@ import {
   readArtifactOverride,
   resolveArtifactContent,
   resolveOverride,
-} from './marketplace-overrides'
-import type { ResolvedProvenance } from './marketplace-provenance'
+} from './artifact-overrides'
+import type { ResolvedProvenance } from './artifact-provenance'
 
 /** A theme, the first consumer (AGL-1020/1021). */
 const theme = () => ({

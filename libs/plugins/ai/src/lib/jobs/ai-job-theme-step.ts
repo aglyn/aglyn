@@ -20,7 +20,7 @@ import {
   resolveSiteTheme,
   type HostThemeSource,
   type ThemeHostDocument,
-} from '@aglyn/aglyn/app-utils/marketplace-theme'
+} from '@aglyn/aglyn/app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import {
   INHERITED_BORDER_RADIUS,

@@ -31,8 +31,8 @@ import {
   themeOverridePatch,
   themeUpdateConflicts,
   validateThemeForPublish,
-} from './marketplace-theme'
-import { overrideWriteValue } from './marketplace-overrides'
+} from './site-theme'
+import { overrideWriteValue } from './artifact-overrides'
 
 /** A complete, readable, publishable theme. */
 const goodTheme = (): HostTheme => ({

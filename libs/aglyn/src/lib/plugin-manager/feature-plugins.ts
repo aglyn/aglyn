@@ -48,7 +48,7 @@ import type {
   PresetSchema,
 } from '../types/nodes'
 import type { Plugin, PluginId } from './plugin-manager'
-import type { HostThemeSource } from '../app-utils/marketplace-theme'
+import type { HostThemeSource } from '../app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType } from 'react'
 // The commerce zones' props live in a type-only module (AGL-2916).

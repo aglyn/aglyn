@@ -34,7 +34,7 @@
  * code keeps importing them from one place.
  */
 
-import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
 
 /**
  * The listing's artifact type, tolerating the pre-AGL-654 shape.

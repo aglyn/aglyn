@@ -20,7 +20,7 @@ import {
   CONTRAST_AA_LARGE,
   contrastRatio,
   type HostThemeSource,
-} from '@aglyn/aglyn/app-utils/marketplace-theme'
+} from '@aglyn/aglyn/app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import { accessibleShade } from '@aglyn/shared-ui-theme/util/accessible-shade'
 import { inheritedThemeColor } from '@aglyn/shared-ui-theme/util/theme-editor-defaults'

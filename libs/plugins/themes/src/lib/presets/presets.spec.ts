@@ -16,7 +16,7 @@
  */
 
 import { listConsoleThemePresets } from '@aglyn/aglyn'
-import { validateThemeForPublish } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { validateThemeForPublish } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   createResponsiveTheme,
   hostThemeToThemeOptions,

@@ -17,7 +17,7 @@
 
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
-import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import type { HostThemeSource } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   aiAutomationDraft,
   emptyAiAutomationRecords,

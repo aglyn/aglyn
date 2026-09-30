@@ -16,15 +16,17 @@
  */
 
 /**
- * Everything an org can publish to the marketplace (AGL-654).
+ * The kinds of content a workspace can INSTALL rather than author (AGL-654).
  *
- * The union lives in core rather than the marketplace plugin because the
- * console reasons about installed artifacts too — a Plugins index that cannot
- * name an artifact type cannot render an update chip — and module boundaries
- * (rightly) forbid an app depending on an addon lib. The marketplace model
- * re-exports it, so publishing code still reads it from one place.
+ * Installed content is a platform concept with more readers than writers:
+ * whatever installs a component, a theme or an email template stamps where it
+ * came from (below), and the theme editor, a template's page, the site's theme
+ * resolution and the AI plugin all read that stamp without knowing who wrote
+ * it. So the contract is core's and names no installer (AGL-3080). The
+ * marketplace, which is today's only installer, re-exports the union under the
+ * name its publish routes use, `MarketplaceArtifactType`.
  */
-export type MarketplaceArtifactType =
+export type InstallableArtifactType =
   | 'component'
   | 'template'
   | 'plugin'
@@ -79,7 +81,7 @@ export interface InstalledFrom {
   version: string | null
   /** Content hash of the base snapshot — the key into {@link ARTIFACT_BASE_COLLECTION}. */
   sha256: string | null
-  artifactType: MarketplaceArtifactType
+  artifactType: InstallableArtifactType
   installedAt: unknown
   /** The publishing org (`listing.profileId`, org-owned since AGL-652). */
   publisherOrgId: string | null
@@ -114,7 +116,7 @@ export interface ResolvedProvenance {
   listingId: string | null
   version: string | null
   sha256: string | null
-  artifactType: MarketplaceArtifactType | null
+  artifactType: InstallableArtifactType | null
   publisherOrgId: string | null
   /**
    * A base snapshot exists, so this artifact can be diffed and safely updated.
@@ -164,7 +166,7 @@ export function resolveProvenance(
       }
     | null
     | undefined,
-  fallbackArtifactType?: MarketplaceArtifactType,
+  fallbackArtifactType?: InstallableArtifactType,
 ): ResolvedProvenance {
   if (!doc) return UNKNOWN_PROVENANCE
 
@@ -178,7 +180,7 @@ export function resolveProvenance(
       listingId: stamped.listingId,
       version: asVersion(stamped.version),
       sha256: stamped.sha256,
-      artifactType: stamped.artifactType as MarketplaceArtifactType,
+      artifactType: stamped.artifactType as InstallableArtifactType,
       publisherOrgId: stamped.publisherOrgId ?? null,
       updatable: true,
     }

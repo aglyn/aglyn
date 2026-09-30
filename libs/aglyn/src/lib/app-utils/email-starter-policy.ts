@@ -20,7 +20,7 @@
  * mailed.
  *
  * In core rather than beside the rest of the marketplace model for the reason
- * `marketplace-provenance` gives: three different projects have to ask these
+ * `artifact-provenance` gives: three different projects have to ask these
  * questions and a `scope:app` project may not depend on an `aglyn:addons` lib.
  * `marketplace-verification` used to be cited here too and no longer can be —
  * its console reader became the plugin's own surface, so the policy went with

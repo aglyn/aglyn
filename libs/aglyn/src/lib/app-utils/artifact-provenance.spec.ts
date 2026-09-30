@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveProvenance, stableStringify } from './marketplace-provenance'
+import { resolveProvenance, stableStringify } from './artifact-provenance'
 
 describe('stableStringify (AGL-1015)', () => {
   it('hashes the same content identically regardless of key order', () => {

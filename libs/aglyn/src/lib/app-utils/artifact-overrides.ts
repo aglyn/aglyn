@@ -18,12 +18,12 @@
 import {
   stableStringify,
   type ResolvedProvenance,
-} from './marketplace-provenance'
+} from './artifact-provenance'
 
 /**
  * The override layer (AGL-1019) — own the patch, never the copy.
  *
- * Customising a marketplace artifact and updating it are only compatible if
+ * Customising an installed artifact and updating it are only compatible if
  * they are two different documents. Today they are one: you change a theme's
  * primary colour and that edits the theme, so the publisher's v2 can be taken
  * only by discarding your colour, or refused only by missing their fix.
@@ -39,10 +39,13 @@ import {
  * * a conflict is narrow: only where the patch touches a path the update also
  *   changed, which the marketplace plugin's three-way update plan already names.
  *
- * Pure and content-shaped, exactly like the merge module it sits next to: it
- * knows nothing about Firestore or artifact types, so one resolver serves a
- * theme, a node tree and a plugin settings map, and every rule below is
- * testable without a database.
+ * Pure and content-shaped: it knows nothing about Firestore, artifact types
+ * or who installed the artifact, so one resolver serves a theme, a node tree
+ * and a plugin settings map, and every rule below is testable without a
+ * database. The platform's rather than the installer's (AGL-3080), because the
+ * readers are: the site's theme resolution, the theme editor and its library.
+ * The three-way update plan that writes a new base under a patch is the
+ * installer's own (the marketplace's `model/artifact-merge.ts`).
  *
  * ## Which "base" a reader resolves against
  *

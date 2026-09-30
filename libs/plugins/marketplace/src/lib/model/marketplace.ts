@@ -30,7 +30,7 @@ import {
   MEDIA_REF_PREFIX,
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { marketplaceMinPriceUsd } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import type { ListingVerificationRequest } from './listing-verification'
 import {
   offeredPluginVersion,
@@ -265,11 +265,12 @@ export interface MarketplaceListing {
 }
 
 /**
- * Everything an org can publish to the marketplace (AGL-654).
+ * Everything an org can publish to the marketplace (AGL-654): every kind of
+ * content the platform can install.
  *
- * Defined in core and re-exported here (AGL-1016): the console needs it to
- * render update state for installed artifacts, and an app may not depend on an
- * addon lib. Publishing code keeps importing it from this model unchanged.
+ * The union is core's `InstallableArtifactType` — installed content is read by
+ * surfaces that are not the marketplace, through the provenance stamp — and is
+ * re-exported here under the name publishing code has always used.
  */
 export type { MarketplaceArtifactType }
 

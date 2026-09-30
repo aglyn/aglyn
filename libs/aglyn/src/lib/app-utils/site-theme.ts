@@ -29,10 +29,21 @@ import {
   readArtifactOverride,
   resolveOverride,
   type ArtifactOverride,
-} from './marketplace-overrides'
+} from './artifact-overrides'
 
 /**
- * Publish-time validation for themes as a marketplace artifact (AGL-1020).
+ * A site's theme (AGL-1020, named for it in AGL-3080): whether one is complete
+ * and readable, what it resolves to once the site's own edits are applied over
+ * an installed theme, and where it came from.
+ *
+ * Every reader is a platform surface or a plugin that is not the installer —
+ * the published page and its manifest, every besigner canvas, the site's theme
+ * settings, the AI plugin's theme proposals, the themes plugin's presets — so
+ * it is core's. It was first written for the marketplace's publish route,
+ * which is why the validation below is phrased as a gate on publishing; it is
+ * the same gate for a theme a model proposes.
+ *
+ * ## Validating a theme
  *
  * A plugin bundle is validated because it is code and the risk is a
  * compromised site. A theme is data, so the risk is different in kind but not

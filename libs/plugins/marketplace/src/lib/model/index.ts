@@ -41,7 +41,7 @@ export {
   type InstalledFrom,
   type ProvenanceState,
   type ResolvedProvenance,
-} from '@aglyn/aglyn/app-utils/marketplace-provenance'
+} from '@aglyn/aglyn/app-utils/artifact-provenance'
 export {
   applyArtifactUpdate,
   describeChange,

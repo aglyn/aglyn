@@ -365,7 +365,7 @@ Six existing plugins are console shells whose domain models stayed in
 | `data` | `datasets.ts`, `dataset-models.ts`, `dataset-query.ts`, `dataset-record-view.ts`, `dataset-csv.ts` — while the plugin holds only `model/dataset-io.ts` |
 | `logic` | `functions.ts`, `variables.ts` |
 | `email` / `marketing` | `email-topics.ts`, `dynamic-list-rule.ts`, `campaign-attribution.ts`, `campaign-forwarding.ts`, `marketing-consent.ts` |
-| `marketplace` | `marketplace-overrides.ts`, `-provenance`, `-theme`, `-update-state` — four modules. `-merge`, `-verification`, `-listing-visibility` (with the listing half of the write-deny coverage guard), `publisher-attestation.ts` and `publisher-agreement.ts` (with its byte-pinned legal snapshots) went to the plugin in AGL-3080; the four that remain each have a reader that is neither core nor the marketplace (the tenant app, the ai and email plugins, the console's `/{org}/plugins` pages) |
+| `marketplace` | Nothing left. `-merge`, `-verification`, `-listing-visibility` (with the listing half of the write-deny coverage guard), `-update-state`, `publisher-attestation.ts` and `publisher-agreement.ts` (with its byte-pinned legal snapshots) went to the plugin in AGL-3080. `-provenance`, `-overrides` and `-theme` turned out to be the platform's installed-content model — the stamp, the patch over an installed base, and a site's theme — read by the tenant app, the besigner, the ai and email plugins and the theme editor; they stay as `artifact-provenance.ts`, `artifact-overrides.ts` and `site-theme.ts`, named for what they are rather than for today's one installer |
 
 Every one of these is a capability living in three or more homes. By the
 brief's own heuristic that is the loudest signal on the list.

@@ -63,7 +63,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { act, renderHook } from '@testing-library/react'
-import { ARTIFACT_BASE_MAX_BYTES } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import { ARTIFACT_BASE_MAX_BYTES } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import { recordInstallProvenance } from '../server/provenance'
 import { useMarketplaceActions } from './use-marketplace-actions'
 

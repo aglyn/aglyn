@@ -318,7 +318,7 @@ export * from './author-css'
 export * from './author-html'
 export * from './dataset-models'
 export * from './dataset-csv'
-export * from './marketplace-provenance'
+export * from './artifact-provenance'
 export * from './dataset-query'
 export * from './plugin-manifest'
 // After `plugin-manifest`, whose revocation predicates it asks the kill

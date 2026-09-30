@@ -22,8 +22,8 @@ import {
   parseLockdownRefusal,
   THEME_PRESETS_LOAD_POINT,
 } from '@aglyn/aglyn'
-import { resolveOverride, readArtifactOverride } from '@aglyn/aglyn/app-utils/marketplace-overrides'
-import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveOverride, readArtifactOverride } from '@aglyn/aglyn/app-utils/artifact-overrides'
+import { describeTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   DEFAULT_THEME_ENTRY_ID,
   hasThemeEdits,
