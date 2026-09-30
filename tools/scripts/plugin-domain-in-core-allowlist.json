@@ -1440,20 +1440,6 @@
       "why": "A generic data-driven-forms mapper component."
     },
     {
-      "path": "libs/shared/util/email/src/lib/email-delivery-events.ts",
-      "rules": [
-        "vendor:resend"
-      ],
-      "lane": "mail-provider"
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/email-health.ts",
-      "rules": [
-        "vendor:resend"
-      ],
-      "lane": "mail-provider"
-    },
-    {
       "path": "libs/shared/util/email/src/lib/marketing-send.ts",
       "rules": [
         "domain-declares:marketing"
@@ -1461,25 +1447,11 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/shared/util/email/src/lib/received-email.ts",
-      "rules": [
-        "vendor:resend"
-      ],
-      "lane": "mail-provider"
-    },
-    {
       "path": "libs/shared/util/email/src/lib/send-ceilings.ts",
       "rules": [
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/send-email.ts",
-      "rules": [
-        "vendor:resend"
-      ],
-      "lane": "mail-provider"
     },
     {
       "path": "libs/shared/util/email/src/lib/send-rate.ts",

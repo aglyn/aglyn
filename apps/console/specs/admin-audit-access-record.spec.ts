@@ -182,7 +182,10 @@ jest.mock('@aglyn/tenant-data-admin/server/account-addresses', () => ({
 
 jest.mock('@aglyn/shared-util-email', () => ({
   __esModule: true,
-  resendDeliveryMessageSource: () => (id: string) => mockMessage(id),
+  mailProviderReads: () => ({
+    unmet: () => null,
+    message: (id: string) => mockMessage(id),
+  }),
 }))
 
 /**
@@ -211,7 +214,6 @@ beforeEach(() => {
   rows = []
   nextId = 0
   transactionQueue = Promise.resolve()
-  process.env['RESEND_READ_API_KEY'] = 're_full_access'
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff_1',
     email_verified: true,

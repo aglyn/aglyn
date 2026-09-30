@@ -106,12 +106,23 @@ const DOMAIN_DIR = /^apps\/[^/]+\/.*\/(crm|contacts|marketplace|campaigns?|datas
  * Rule 2. `home` is where the literal may live. `everywhere` extends the
  * sweep past the guarded trees, which is the AI rule as AGL-2939 wrote it:
  * no other plugin may grow a model vendor of its own either.
+ *
+ * The mail vendor's home is its provider module behind the platform's
+ * mail-provider contract (`mail-providers.ts` picks it by configuration),
+ * not a plugin: the transactional rail sends password resets, receipts and
+ * operator alerts from every server process with no plugin loaded, and a
+ * provider a plugin registered is one that can be silently absent. The rest
+ * of the rail names no vendor, which is what this rule holds.
  */
 export const VENDOR_LITERALS = [
   { vendor: 'ai', pattern: /api\.anthropic\.com|anthropic-version|\bclaude-[a-z0-9-]+|api\.openai\.com/, home: 'libs/plugins/ai/src/lib/providers/', everywhere: true },
   { vendor: 'ga4', pattern: /googletagmanager\.com|google-analytics\.com|\bgtag\(/ },
   { vendor: 'wistia', pattern: /wistia/i },
-  { vendor: 'resend', pattern: /api\.resend\.com|from\s+['"]resend['"]/ },
+  {
+    vendor: 'resend',
+    pattern: /api\.resend\.com|from\s+['"]resend['"]/,
+    home: 'libs/shared/util/email/src/lib/mail-provider-resend',
+  },
 ]
 
 /**
@@ -332,6 +343,8 @@ function selfTest() {
     { path: 'libs/plugins/crm/src/lib/summary.ts', text: "fetch('https://api.anthropic.com/v1/messages')\n" },
     { path: 'libs/plugins/ai/src/lib/providers/anthropic.ts', text: "fetch('https://api.anthropic.com/v1/messages')\n" },
     { path: 'libs/tenant/runtime/src/lib/video.ts', text: "const host = 'fast.wistia.net'\n" },
+    { path: 'libs/shared/util/email/src/lib/send-email.ts', text: "fetch('https://api.resend.com/emails')\n" },
+    { path: 'libs/shared/util/email/src/lib/mail-provider-resend.ts', text: "fetch('https://api.resend.com/emails')\n" },
     { path: 'libs/plugins/mui/src/lib/video.ts', text: "const host = 'fast.wistia.net'\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/catalog.ts', text: "const requires = ['commerce']\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/words.ts', text: "const kind = 'data'\n" },
@@ -366,6 +379,8 @@ function selfTest() {
   ok('the adapter is not reported', !findings.has('libs/plugins/ai/src/lib/providers/anthropic.ts'))
   ok('a video vendor in the runtime is reported', has('libs/tenant/runtime/src/lib/video.ts', 'vendor:wistia'))
   ok('a video vendor inside a plugin is not', !findings.has('libs/plugins/mui/src/lib/video.ts'))
+  ok('a mail vendor on the rail is reported', has('libs/shared/util/email/src/lib/send-email.ts', 'vendor:resend'))
+  ok('the mail provider that is its home is not', !findings.has('libs/shared/util/email/src/lib/mail-provider-resend.ts'))
   ok('a plugin id in core is reported', has('libs/aglyn/src/lib/plugin-manager/catalog.ts', 'plugin-id'))
   ok('an id that is a plain word is not', !findings.has('libs/aglyn/src/lib/plugin-manager/words.ts'))
   ok('an id named in a comment is not', !findings.has('libs/aglyn/src/lib/plugin-manager/prose.ts'))

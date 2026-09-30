@@ -21,7 +21,7 @@ import {
   CRM_EMAIL_ORG_TAG,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
-import { normalizeResendDeliveryEvents } from '@aglyn/shared-util-email'
+import { normalizeDeliveryEvents } from '@aglyn/shared-util-email'
 // By its own path, not the barrel: the check holds a `crypto` HMAC, and the
 // barrel is reached from the browser through the campaign model (AGL-2657).
 import { verifySvixSignature } from '@aglyn/shared-util-email/svix-signature'
@@ -396,15 +396,16 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
      * question is mostly asked about `sent`, `delivered` and `bounced` —
      * none of which the campaign statistics below have any use for.
      *
-     * `normalizeResendDeliveryEvents` is the one place in the tree that reads
-     * Resend's wire format; everything downstream stores and renders our own
-     * vocabulary, so changing sender is a new adapter and nothing else.
+     * `normalizeDeliveryEvents` hands the payload to the deployment's mail
+     * provider, the one place that reads its wire format; everything
+     * downstream stores and renders our own vocabulary, so changing sender
+     * is a new provider and nothing else.
      *
      * Best-effort and awaited but never fatal: a log write that fails must
      * not turn into a non-2xx, which the provider would answer by retrying
      * the same event forever.
      *=========================================*/
-    const deliveryEvents = normalizeResendDeliveryEvents(event, Date.now())
+    const deliveryEvents = normalizeDeliveryEvents(event, Date.now())
     const outcomes = await recordEmailDeliveryEvents(deliveryEvents).catch(
       () => [],
     )
@@ -726,7 +727,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
        * LINK-LEVEL CLICKS — the aggregate `data.click.link` never had.
        *
        * The field IS present on Resend's `email.clicked` payload and has been
-       * read for a while: `normalizeResendDeliveryEvents` puts it on the
+       * read for a while: the provider's `deliveryEvents` puts it on the
        * event and the per-recipient delivery log stores it. What did not
        * exist was a per-campaign rollup, and it could not be produced at read
        * time — that would mean querying every recipient's delivery row for

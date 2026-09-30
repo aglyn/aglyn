@@ -238,8 +238,8 @@ beforeEach(() => {
   process.env['RESEND_WEBHOOK_SECRET'] = OTHER_SECRET
   process.env['RESEND_READ_API_KEY'] = 're_full'
   delete process.env['CRM_INBOUND_DOMAIN']
-  setInboundReaderForTesting((apiKey) => async (id) => {
-    reads.push(`${apiKey}:${id}`)
+  setInboundReaderForTesting(async (id) => {
+    reads.push(id)
     return messages.get(id) ?? null
   })
   mockStore.set(`orgs/${ORG}`, {
@@ -276,7 +276,7 @@ describe('POST /api/crm/inbound', () => {
       direction: 'inbound',
       kind: 'contact',
     })
-    expect(reads).toEqual(['re_full:em-1'])
+    expect(reads).toEqual(['em-1'])
     expect(rows()).toHaveLength(1)
     expect(rows()[0]).toMatchObject({
       kind: 'email',
@@ -304,7 +304,7 @@ describe('POST /api/crm/inbound', () => {
       secret: `whsec_${Buffer.from('somebody-else').toString('base64')}`,
     })
     expect(forged.status).toBe(401)
-    expect(reads).toEqual(['re_full:em-2'])
+    expect(reads).toEqual(['em-2'])
     expect(inboundWebhookSecrets({ RESEND_WEBHOOK_SECRET: 'a', CRM_INBOUND_WEBHOOK_SECRET: 'a' })).toEqual(['a'])
   })
 

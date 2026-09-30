@@ -28,9 +28,8 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   type ReceivedEmailSource,
-  resendReceivedEmailSource,
-  resendReceivedEventId,
-  resendReceivedEventRecipients,
+  mailProviderReads,
+  readInboundMailEvent,
 } from '@aglyn/shared-util-email'
 // By its own path, not the barrel: the check holds a `crypto` HMAC, and the
 // barrel is reached from the browser through the campaign model.
@@ -50,11 +49,13 @@ import {
 /**
  * THE CAPTURE WEBHOOK (AGL-2657): `POST /api/crm/inbound`.
  *
- * Resend receives mail for the capture domain and announces each message
- * as an `email.received` event, signed the Svix way. This route verifies
- * the signature, finds the capture token among the event's recipients,
- * resolves the workspace the token names, reads the message from the
- * receiving API, and files it on the record of whoever it was with — see
+ * The mail provider receives mail for the capture domain and announces each
+ * message with a notification, signed the Svix way. This route verifies the
+ * signature, asks the provider which message the notification announces and
+ * who it was for (`readInboundMailEvent`), finds the capture token among
+ * those recipients, resolves the workspace the token names, has the
+ * provider read the message, and files it on the record of whoever it was
+ * with — see
  * `fileCrmInboundEmail` for the matching and `crm-inbound.ts` for the
  * rules. A message nobody in the workspace knows is noted in the org's
  * feed by its sender's domain and dropped.
@@ -75,8 +76,9 @@ import {
  * a workspace whose CRM is off, a message that matched no record — each
  * is acknowledged, `200` or `202`, with a `reason` in the body for a
  * person reading the delivery log. Only a bad signature (`401`), a missing
- * secret or read key (`501`), and a failure of ours (`500`) are refused,
- * and a `500` is the one the provider SHOULD retry.
+ * secret or a provider that cannot read received mail (`501`), and a
+ * failure of ours (`500`) are refused, and a `500` is the one the provider
+ * SHOULD retry.
  *
  * ## The body never reaches a log
  *
@@ -87,11 +89,11 @@ import {
  *
  * ## Two secrets
  *
- * A Resend webhook endpoint carries its own signing secret. The capture
+ * A provider's webhook endpoint carries its own signing secret. The capture
  * endpoint is its own subscription, so `CRM_INBOUND_WEBHOOK_SECRET` is
  * tried first; `RESEND_WEBHOOK_SECRET` — the delivery-events endpoint's —
- * is accepted too, for a deployment that subscribed `email.received` on
- * the endpoint it already had. The check itself is the one the
+ * is accepted too, for a deployment that subscribed received mail on the
+ * endpoint it already had. The check itself is the one the
  * delivery-events webhook runs.
  */
 
@@ -105,23 +107,15 @@ export function inboundWebhookSecrets(
   return [...new Set(secrets)]
 }
 
-/** The full-access key received mail is read with; `''` when unset. */
-export function inboundReadApiKey(env: Record<string, string | undefined> = process.env): string {
-  return String(env['RESEND_READ_API_KEY'] ?? '').trim()
-}
-
 /**
- * The reader the route uses — Resend's, unless a spec hands one in through
- * the module's seam. A function of the key so no fetch is built until a
- * signed event needs one.
+ * A reader a spec hands in through the module's seam, in place of the
+ * provider's. `null` — always, outside a spec — reads through the provider.
  */
-let readerFactory: (apiKey: string) => ReceivedEmailSource = resendReceivedEmailSource
+let readerOverride: ReceivedEmailSource | null = null
 
 /** The spec's seam: reads without the provider. */
-export function setInboundReaderForTesting(
-  factory: ((apiKey: string) => ReceivedEmailSource) | null,
-): void {
-  readerFactory = factory ?? resendReceivedEmailSource
+export function setInboundReaderForTesting(reader: ReceivedEmailSource | null): void {
+  readerOverride = reader
 }
 
 const acknowledge = (status: number, body: Record<string, unknown>): Response =>
@@ -155,11 +149,11 @@ async function handler(request: Request): Promise<Response> {
   } catch {
     return acknowledge(200, { ignored: true, reason: 'not-json' })
   }
-  const emailId = resendReceivedEventId(event)
-  if (!emailId) return acknowledge(200, { ignored: true, reason: 'not-received-event' })
+  const inbound = readInboundMailEvent(event)
+  if (!inbound) return acknowledge(200, { ignored: true, reason: 'not-received-event' })
 
   const domain = crmInboundDomain()
-  const tokens = crmInboundTokensIn(resendReceivedEventRecipients(event), domain)
+  const tokens = crmInboundTokensIn(inbound.recipients, domain)
   if (!tokens.length) return acknowledge(202, { filed: false, reason: 'no-token' })
 
   try {
@@ -190,15 +184,16 @@ async function handler(request: Request): Promise<Response> {
     )
     if (!flagOn) return acknowledge(202, { filed: false, reason: 'release-flag' })
 
-    const apiKey = inboundReadApiKey()
-    if (!apiKey) {
-      console.warn('[crm] inbound: RESEND_READ_API_KEY is unset; received mail cannot be read')
+    const reads = mailProviderReads()
+    const unmet = reads.unmet()
+    if (unmet) {
+      console.warn(`[crm] inbound: received mail cannot be read — ${unmet}`)
       return Response.json(
-        { error: 'Email capture cannot read received mail (RESEND_READ_API_KEY).' },
+        { error: `Email capture cannot read received mail. ${unmet}` },
         { status: 501 },
       )
     }
-    const message = await readerFactory(apiKey)(emailId)
+    const message = await (readerOverride ?? reads.received)(inbound.id)
     if (!message) return acknowledge(202, { filed: false, reason: 'message-gone' })
 
     // The roster carries each member's confirmed aliases beside the address

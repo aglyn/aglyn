@@ -95,7 +95,7 @@ export async function writeCrmEmailActivity(
  * `null` for an event that moves nothing.
  *
  * Takes the log's own vocabulary (`EmailDeliveryEventType`) rather than the
- * provider's wire strings: `normalizeResendDeliveryEvents` is the one place
+ * provider's wire strings: the mail provider's `deliveryEvents` is the one place
  * that reads those, and this module must not become a second. The five
  * states the timeline shows share the log's names exactly, so the mapping
  * is membership; `delayed` and `failed` are the log's own and the row keeps

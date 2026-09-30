@@ -72,10 +72,12 @@
 
 import {
   normalizeSendingDomain,
-  RESEND_DOMAINS_ENDPOINT,
   safeProviderDetail,
   SENDING_TRACKING_SUBDOMAIN,
 } from '@aglyn/shared-util-email'
+// By its own path: the one Resend endpoint this driver shares with the mail
+// provider, which the library's barrel does not name.
+import { RESEND_DOMAINS_ENDPOINT } from '@aglyn/shared-util-email/mail-provider-resend'
 
 /*==========================================
   The contract

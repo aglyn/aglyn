@@ -16,8 +16,11 @@
  */
 
 /**
- * The Resend send endpoint. Every outbound application email in Aglyn goes
- * through here — invites, receipts, usage summaries, campaigns, staff alerts.
+ * The send seam. Every outbound application email in Aglyn goes through
+ * here — invites, receipts, usage summaries, campaigns, staff alerts — and
+ * everything that decides whether, as whom and to whom a message leaves is
+ * decided here. The provider that then carries it is chosen by
+ * `mail-providers.ts` and only carries it.
  *
  * Auth email (verification, password reset) is Firebase's job and does NOT
  * come through this module.
@@ -52,10 +55,13 @@ import {
 } from './email-deliverability'
 import { bareSenderAddress } from './email-delivery-events'
 import { screenTenantMessage } from './outbound-screen-gate'
+import { providerRetryAtMs, type MailProviderSendResult } from './mail-provider'
+import { mailProvider, mailProviderProblem } from './mail-providers'
 
-export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
-
-/** A Resend delivery tag, used for webhook attribution (AGL-268). */
+/**
+ * A delivery tag: attribution the provider hands back on every delivery
+ * event for the message, which is how a bounce finds its sender (AGL-268).
+ */
 export interface EmailTag {
   name: string
   value: string
@@ -72,7 +78,7 @@ export interface SendEmailOptions {
    *
    * Omitted, one is synthesized from `text` so the message always carries an
    * HTML part — a text-only message has no anchors, so its links are inert in
-   * the inbox and Resend's click tracking has nothing to rewrite. See
+   * the inbox and the provider's click tracking has nothing to rewrite. See
    * `text-email-html.ts`.
    */
   html?: string
@@ -150,8 +156,8 @@ export interface SendEmailOptions {
    * Short label for logs, e.g. `'invite'` or `'usage-summary'`. Makes a
    * failure in the runtime logs traceable to the feature that caused it.
    *
-   * Since AGL-2407 it is also stamped as a Resend `context` TAG on every
-   * send — see `contextTag` below.
+   * Since AGL-2407 it is also stamped as a `context` TAG on every send —
+   * see `contextTag` below.
    */
   context?: string
   /**
@@ -221,8 +227,8 @@ export interface SendEmailOptions {
  * and it is exactly the right value: it names the sender. So the tag is
  * derived here, once, and no caller changes.
  *
- * Resend tag values are restricted to ASCII letters, digits, `_` and `-`;
- * anything else is rejected and would fail the whole send. Every `context` in
+ * Providers restrict tag values — to ASCII letters, digits, `_` and `-` at
+ * the strictest — and one that rejects a value fails the whole send. Every `context` in
  * the tree is already a plain slug, but this is mail delivery — a value that
  * makes the send fail is far worse than a value that is sanitised — so the
  * label is normalised rather than trusted, and a context that sanitises to
@@ -239,7 +245,7 @@ export function contextTag(context: string | undefined): EmailTag[] {
 
 /**
  * Why a send did not happen. `unconfigured` and `no-recipient` mean nothing
- * was attempted; `rejected` and `network` mean Resend was called and failed;
+ * was attempted; `rejected` and `network` mean the provider was asked and failed;
  * `rate-limited` is either, and says so in `status`.
  *
  * `rate-limited` (AGL-2409) and `frequency-capped` are the two a caller may
@@ -250,7 +256,7 @@ export type SendEmailFailureReason =
   | 'unconfigured'
   | 'no-recipient'
   /**
-   * Resend answered and would not take this message.
+   * The provider answered and would not take this message.
    *
    * Per-message and terminal: a malformed payload, an address the provider
    * will not accept, a tag it rejected. A caller that retries it unchanged
@@ -266,9 +272,9 @@ export type SendEmailFailureReason =
    * is intact and a later attempt sends it.
    *
    * Two sources, which is why it is one value. The platform hourly governor
-   * refuses before the network and nothing is attempted (AGL-2409). Resend
-   * answers `429` on the wire when requests arrive faster than it accepts
-   * them, and `status` is 429 in that case.
+   * refuses before the network and nothing is attempted (AGL-2409). The
+   * provider asks for a slower pace when requests arrive faster than it
+   * accepts them, and `status` is its answer (429 over HTTP) in that case.
    *
    * The provider arm reports here rather than as `rejected` because of what
    * the two mean to a batch. A `rejected` recipient is settled and never
@@ -371,9 +377,9 @@ export type SendEmailResult =
   | {
       sent: false
       reason: SendEmailFailureReason
-      /** HTTP status, when Resend answered. */
+      /** HTTP status, when the provider answered over HTTP. */
       status?: number
-      /** Resend's error body or the thrown message, trimmed for logs. */
+      /** The provider's error text or the thrown message, trimmed for logs. */
       detail?: string
       /**
        * `rate-limited` only: the earliest instant a caller may try again —
@@ -402,59 +408,6 @@ export function rateLimitedRetryAtMs(
   if (!failure || failure.reason !== 'rate-limited') return null
   const retryAtMs = Number(failure.retryAtMs)
   return Number.isFinite(retryAtMs) ? retryAtMs : 0
-}
-
-/**
- * How long to wait when the provider names no interval of its own.
- *
- * One second, because Resend's rate limit is counted per second — so a wait
- * of a whole window is the shortest one that is certain to have cleared it.
- */
-const PROVIDER_RETRY_FALLBACK_MS = 1_000
-
-/**
- * The longest wait a provider header may ask for.
- *
- * A `retry-after` is read off the network and reaches a scheduler, so it is
- * clamped rather than trusted: a header of `86400` would park a campaign for
- * a day on one response nobody saw. An hour is past every documented window
- * and short enough that a wrong one costs a run rather than a day.
- */
-const PROVIDER_RETRY_MAX_MS = 3_600_000
-
-/** One header as whole seconds, or null when it is absent or unreadable. */
-function headerSeconds(
-  headers: { get?: (name: string) => string | null } | null | undefined,
-  name: string,
-): number | null {
-  const raw = headers?.get?.(name)
-  // `Number(null)` and `Number('')` are both 0, which would read as "retry
-  // immediately" for a header that is not there at all.
-  if (raw === null || raw === undefined || String(raw).trim() === '') return null
-  const seconds = Number(raw)
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
-}
-
-/**
- * When the provider says a refused request may be repeated.
- *
- * Read from the two headers Resend documents beside a 429, both in whole
- * seconds: `retry-after` first because it is the direct answer to this
- * question, then `ratelimit-reset`, which names when the window rolls. A
- * response carrying neither falls back to one window.
- */
-export function providerRetryAtMs(
-  headers: { get?: (name: string) => string | null } | null | undefined,
-  nowMs: number = Date.now(),
-): number {
-  const seconds =
-    headerSeconds(headers, 'retry-after') ??
-    headerSeconds(headers, 'ratelimit-reset')
-  const waitMs =
-    seconds === null
-      ? PROVIDER_RETRY_FALLBACK_MS
-      : Math.min(seconds * 1_000, PROVIDER_RETRY_MAX_MS)
-  return nowMs + waitMs
 }
 
 /**
@@ -590,7 +543,11 @@ export async function askOutboundScreen(
 }
 
 export interface EmailConfig {
-  apiKey: string | undefined
+  /** The id of the provider mail is handed to — see `mail-providers.ts`. */
+  provider: string
+  /** Settings that provider still needs before it can send; empty when it can. */
+  missingSettings: string[]
+  /** The platform's own sender, `USAGE_EMAIL_FROM`. */
   from: string | undefined
 }
 
@@ -602,22 +559,24 @@ export interface EmailConfig {
  * long before the runtime env exists.
  */
 export function getEmailConfig(): EmailConfig {
+  const provider = mailProvider()
   return {
-    apiKey: process.env.RESEND_API_KEY || undefined,
+    provider: provider.id,
+    missingSettings: provider.missingSettings(),
     from: process.env.USAGE_EMAIL_FROM || undefined,
   }
 }
 
 /**
- * True when both `RESEND_API_KEY` and `USAGE_EMAIL_FROM` are present.
+ * True when the provider has its settings and `USAGE_EMAIL_FROM` is present.
  *
  * Callers that answer an HTTP request (rather than firing best-effort mail)
  * use this to return a 501 with an actionable message instead of pretending
  * to have sent something.
  */
 export function isEmailConfigured(): boolean {
-  const { apiKey, from } = getEmailConfig()
-  return Boolean(apiKey && from)
+  const { missingSettings, from } = getEmailConfig()
+  return !missingSettings.length && Boolean(from)
 }
 
 /**
@@ -648,62 +607,8 @@ function normalizeRecipients(to: string | string[]): string[] {
     .filter((address) => address.includes('@'))
 }
 
-/** A Resend send payload in the provider's own wire shape. */
-export interface ResendSendPayload {
-  to?: unknown
-  from?: unknown
-  subject?: unknown
-  [field: string]: unknown
-}
-
 /**
- * The one place that POSTs to Resend's send endpoint, and the last thing
- * standing between a payload and the network.
- *
- * A payload carrying no recipient cannot become a message. Resend answers it
- * `422 missing_required_field`, which costs an API call and then shows up in
- * the vendor dashboard as a red line indistinguishable from mail that
- * genuinely failed to deliver — carrying no subject, no recipient and nothing
- * naming the code that produced it. Diagnosing that means reading a log
- * outside the deployment and guessing. So the refusal happens here, before
- * the fetch, and names the caller's `context`.
- *
- * It throws rather than returning a `SendEmailResult`: this is a programming
- * error, not a delivery outcome. `sendEmail` filters recipients well before
- * it reaches this call, so nothing on the ordinary path can trip it. The
- * guard exists because `RESEND_SEND_ENDPOINT` is exported and any module can
- * therefore reach the send endpoint on its own, bypassing every check
- * `sendEmail` owns.
- */
-export async function postResendEmail(
-  apiKey: string,
-  payload: ResendSendPayload,
-  context?: string,
-): Promise<Response> {
-  const raw = payload?.to
-  const recipients = (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
-    .map((address) => String(address ?? '').trim())
-    .filter(Boolean)
-  if (!recipients.length) {
-    throw new Error(
-      `${context ? `${context} ` : ''}send refused before the network — a ` +
-        'Resend payload with no `to` field cannot become a message, and the ' +
-        'attempt would surface only as a 422 in the Resend dashboard',
-    )
-  }
-
-  return fetch(RESEND_SEND_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-}
-
-/**
- * Sends one email through Resend.
+ * Sends one email through the deployment's mail provider.
  *
  * **Never throws and never rejects.** Outbound mail is best-effort across
  * every caller in this codebase — a checkout must not fail because a receipt
@@ -713,12 +618,13 @@ export async function postResendEmail(
  *
  * When the env vars are missing this warns once per call and returns
  * `{ sent: false, reason: 'unconfigured' }` rather than failing, so local and
- * preview environments keep working without a Resend account.
+ * preview environments keep working without a mail provider.
  */
 export async function sendEmail(
   options: SendEmailOptions,
 ): Promise<SendEmailResult> {
-  const { apiKey, from: configuredFrom } = getEmailConfig()
+  const provider = mailProvider()
+  const configuredFrom = process.env.USAGE_EMAIL_FROM || undefined
   const label = options.context ? `${options.context} email` : 'email'
 
   /*
@@ -730,7 +636,7 @@ export async function sendEmail(
    * A governor is injectable and a route is skippable, so neither may be the
    * only thing standing between an unverified domain and a send.
    *
-   * Placed above the `apiKey`/`from` gate so a refusal cannot be reported as
+   * Placed above the provider/`from` gate so a refusal cannot be reported as
    * `unconfigured` — the two have different owners and different fixes.
    */
   const identityRefusal = sendingIdentityRefusal(options.sendingIdentity)
@@ -792,11 +698,22 @@ export async function sendEmail(
     options.fromName,
   )
 
-  if (!apiKey || !from) {
-    console.warn(
-      `${label} skipped — set RESEND_API_KEY and USAGE_EMAIL_FROM to ` +
-        'deliver mail',
-    )
+  const missing = [
+    ...provider.missingSettings(),
+    ...(from ? [] : ['USAGE_EMAIL_FROM']),
+  ]
+  if (missing.length) {
+    /*
+     * An operator who chose a provider this process does not have is told
+     * so as an ERROR: that is not a deployment without mail, it is mail
+     * somebody set up going nowhere. See `mail-providers.ts`.
+     */
+    const problem = mailProviderProblem(provider)
+    if (problem) {
+      console.error(`${label} not sent — ${problem}`)
+      return { sent: false, reason: 'unconfigured', detail: problem }
+    }
+    console.warn(`${label} skipped — set ${missing.join(' and ')} to deliver mail`)
     return { sent: false, reason: 'unconfigured' }
   }
 
@@ -1105,55 +1022,54 @@ export async function sendEmail(
     : options.html
 
   try {
-    const response = await postResendEmail(
-      apiKey,
+    // The HTML part, from the caller when it has one and otherwise
+    // synthesized from `text`. A message with no HTML part carries no
+    // anchors, so its links are not links in the inbox AND the provider has
+    // nothing to rewrite for click tracking — see `text-email-html.ts`. The
+    // caller always wins: this can only fill a gap, never override a
+    // designed template.
+    const body = html || renderTextEmailHtml(text ?? '', options.subject)
+    // The caller's headers plus the RFC 8058 pair for a marketing send.
+    // Caller-first, so the campaign sender's own pair is the one that ships
+    // and a merchant-authored header is never silently replaced.
+    const headers = {
+      ...unsubscribeHeaders(oneClickUrl || unsubscribeUrl),
+      ...(options.headers ?? {}),
+    }
+    // The caller's tags plus the `context` tag (AGL-2407). Caller-first so a
+    // sender that stamps its own `context` keeps it: a tag list with two
+    // entries of one name is not a shape worth discovering in production,
+    // and the explicit one is the more specific.
+    const callerTags = options.tags ?? []
+    const tags = [
+      ...callerTags,
+      ...(callerTags.some((tag) => tag?.name === 'context')
+        ? []
+        : contextTag(options.context)),
+    ]
+
+    const outcome = await provider.send(
       {
         from,
         to,
         subject: options.subject,
         ...(text ? { text } : {}),
-        // The HTML part, from the caller when it has one and otherwise
-        // synthesized from `text`. A message with no HTML part carries no
-        // anchors, so its links are not links in the inbox AND Resend has
-        // nothing to rewrite for click tracking — see `text-email-html.ts`.
-        // The caller always wins: this can only fill a gap, never override a
-        // designed template.
-        ...(() => {
-          const body = html || renderTextEmailHtml(text ?? '', options.subject)
-          return body ? { html: body } : {}
-        })(),
-        // The caller's headers plus the RFC 8058 pair for a marketing send.
-        // Caller-first, so the campaign sender's own pair is the one that
-        // ships and a merchant-authored header is never silently replaced.
-        ...(() => {
-          const headers = {
-            ...unsubscribeHeaders(oneClickUrl || unsubscribeUrl),
-            ...(options.headers ?? {}),
-          }
-          return Object.keys(headers).length ? { headers } : {}
-        })(),
-        // The caller's tags plus the `context` tag (AGL-2407). Caller-first
-        // so a sender that stamps its own `context` keeps it: a tag list with
-        // two entries of one name is not a shape worth discovering in
-        // production, and the explicit one is the more specific.
-        ...(() => {
-          const caller = options.tags ?? []
-          const derived = caller.some((tag) => tag?.name === 'context')
-            ? []
-            : contextTag(options.context)
-          const tags = [...caller, ...derived]
-          return tags.length ? { tags } : {}
-        })(),
-        ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+        ...(body ? { html: body } : {}),
+        ...(Object.keys(headers).length ? { headers } : {}),
+        ...(tags.length ? { tags } : {}),
+        ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       },
       options.context,
     )
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '')
+    if (!outcome.accepted) {
+      // `strictNullChecks` is off repo-wide, so the union does not narrow on
+      // its boolean discriminant; the cast says what the branch already knows.
+      const refusal = outcome as Extract<MailProviderSendResult, { accepted: false }>
+      const detail = String(refusal.detail ?? '')
       /*
-       * A 429 IS NOT A STATEMENT ABOUT THIS RECIPIENT, so it does not report
-       * as one. See the `rate-limited` member of
+       * A REQUEST TO SLOW DOWN IS NOT A STATEMENT ABOUT THIS RECIPIENT, so it
+       * does not report as one. See the `rate-limited` member of
        * {@link SendEmailFailureReason} for why the distinction is load-bearing
        * rather than cosmetic — every caller in the tree already has a branch
        * for a deferral, and none of them has one for "rejected, but try this
@@ -1163,8 +1079,8 @@ export async function sendEmail(
        * is a normal thing to be told, and logging it at the level a failed
        * delivery uses is what teaches an operator to skim past both.
        */
-      if (response.status === 429) {
-        const retryAtMs = providerRetryAtMs(response.headers)
+      if (refusal.rateLimited) {
+        const retryAtMs = refusal.retryAtMs ?? providerRetryAtMs(null)
         console.warn(
           `${label} deferred — the provider is rate limiting; retry in ` +
             `${Math.max(0, Math.round((retryAtMs - Date.now()) / 1000))}s`,
@@ -1172,24 +1088,24 @@ export async function sendEmail(
         return {
           sent: false,
           reason: 'rate-limited',
-          status: response.status,
+          ...(refusal.status !== undefined ? { status: refusal.status } : {}),
           retryAtMs,
           detail: detail.slice(0, 500),
         }
       }
-      console.error(`${label} failed`, response.status, detail)
+      console.error(`${label} failed`, refusal.status, detail)
       return {
         sent: false,
         reason: 'rejected',
-        status: response.status,
+        ...(refusal.status !== undefined ? { status: refusal.status } : {}),
         detail: detail.slice(0, 500),
       }
     }
 
-    const body = (await response.json().catch(() => null)) as {
-      id?: string
-    } | null
-    return { sent: true, id: body?.id ?? null }
+    return {
+      sent: true,
+      id: (outcome as Extract<MailProviderSendResult, { accepted: true }>).id ?? null,
+    }
   } catch (error) {
     console.error(`${label} failed`, error)
     return {
