@@ -50,8 +50,9 @@ jest.mock('./auth-pools', () => ({
       : null,
 }))
 
+let mockOrgMembers: Array<{ $id: string; role: string; email?: string }> = []
 jest.mock('./organizations', () => ({
-  listOrgMembers: async () => [],
+  listOrgMembers: async () => mockOrgMembers,
 }))
 
 /**
@@ -160,7 +161,12 @@ function fakeFirestore(): any {
   }
 }
 
-import { notifyHostManagers, notifyStaff, notifyUsers } from './notifications'
+import {
+  notifyHostManagers,
+  notifyOrgAdmins,
+  notifyStaff,
+  notifyUsers,
+} from './notifications'
 
 /**
  * Host notifications carry their own org (AGL-1773).
@@ -548,5 +554,57 @@ describe('operator alerts (AGL-3375)', () => {
     directory.set('s1', 's1@example.com')
     await notifyStaff({ type: 'staff.orgCreated', title: 'New workspace', link: '/admin/orgs/o1' })
     expect(sends.map((send) => send['to'])).not.toContain('alerts@example.com')
+  })
+})
+
+/**
+ * A notice its caller emails itself is not emailed again (AGL-3431).
+ *
+ * The usage alerts write the console notice through `notifyOrgAdmins` and
+ * then email the same owners and admins themselves. An admin who switched
+ * billing email on was therefore sent every limit notice twice.
+ */
+describe('notifyOrgAdmins for a caller that sends its own email (AGL-3431)', () => {
+  const USAGE = {
+    type: 'billing.usage' as const,
+    title: "You've reached your pages on a site limit",
+    body: 'Your site Acme in the Acme workspace has 5 of the 5 pages your plan includes per site.',
+  }
+
+  beforeEach(() => {
+    written.length = 0
+    userDocs.clear()
+    sends.length = 0
+    suppressed.clear()
+    withheld.clear()
+    directory.clear()
+    emailConfigured = true
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.example.com'
+    mockOrgMembers = [
+      { $id: 'uid-owner', role: 'owner', email: 'owner@example.com' },
+      { $id: 'uid-editor', role: 'editor', email: 'editor@example.com' },
+    ]
+    userDocs.set('uid-owner', {
+      notificationSettings: { account: { billing: { email: true } } },
+    })
+  })
+
+  afterAll(() => {
+    mockOrgMembers = []
+  })
+
+  it('CONTROL: mails an admin who switched billing email on', async () => {
+    await notifyOrgAdmins('org-1', USAGE)
+    expect(sends).toHaveLength(1)
+    expect(sends[0]['to']).toEqual(['owner@example.com'])
+  })
+
+  it('with skipEmail, writes the admin’s console notice and mails nobody', async () => {
+    await notifyOrgAdmins('org-1', USAGE, { skipEmail: true })
+    expect(written.map((entry) => entry.path)).toEqual([
+      'users/uid-owner/notifications',
+    ])
+    expect(written[0].data).toMatchObject({ orgId: 'org-1', title: USAGE.title })
+    expect(sends).toHaveLength(0)
   })
 })
