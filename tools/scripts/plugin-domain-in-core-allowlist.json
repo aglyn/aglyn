@@ -1154,13 +1154,6 @@
       "lane": "ai"
     },
     {
-      "path": "libs/aglyn/src/lib/foundation/definitions/organization.types.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/foundation/definitions/platform.types.ts",
       "rules": [
         "plugin-id"
