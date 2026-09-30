@@ -234,14 +234,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/api/hosts/where-used/route.ts",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:workflows"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/orgs/datasets/export/route.ts",
       "rules": [
         "domain-name",

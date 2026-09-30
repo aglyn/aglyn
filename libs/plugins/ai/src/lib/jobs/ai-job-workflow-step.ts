@@ -461,7 +461,7 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
       }
     }
 
-    const target = await readTarget(firestore, { hostId, type: inputs.targetType, id: inputs.targetId })
+    const target = await readTarget({ hostId, type: inputs.targetType, id: inputs.targetId })
     if (!target) return unspent(AI_WORKFLOW_GONE_COPY)
     let run: AiRunRecord | null = null
     if (inputs.mode === 'diagnose') {
@@ -590,7 +590,7 @@ export function createAiWorkflowJobAdmission(deps: AiWorkflowJobAdmissionDeps = 
     if (!owner || owner !== context.orgId) return { status: 404, error: 'Unknown site' }
     const plugin = await workflowsPluginRefusal(context, hostId)
     if (plugin) return plugin
-    const target = await readTarget(context.firestore, { hostId, type: inputs.targetType, id: inputs.targetId })
+    const target = await readTarget({ hostId, type: inputs.targetType, id: inputs.targetId })
     if (!target) return { status: 404, error: AI_WORKFLOW_GONE_COPY }
     if (inputs.mode === 'diagnose') {
       const run = await readRun(context.firestore, { hostId, targetId: inputs.targetId, runId: inputs.runId })

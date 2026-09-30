@@ -463,7 +463,9 @@ const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { reco
 | `index.list({ orgId?, hostId?, limit })` / `index.get({ orgId?, hostId?, id })` | Live, named records only — the owner decides what "deleted" is — each `{ id, name, facts }`, with `facts` in the shape the owner documents. `truncated` says the scope holds more. |
 
 Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
-Commerce publishes `product` and `productCategory`.
+Commerce publishes `product` and `productCategory`; Workflows publishes a site's
+`workflow`, `webhook` and `action` records (a webhook's facts never carry its URL
+or secret).
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 

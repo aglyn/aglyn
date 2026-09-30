@@ -20,7 +20,10 @@ import { actionRunResult } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { isFormArchived } from '@aglyn/aglyn/app-utils/forms'
 import type { HostWorkflow } from '@aglyn/aglyn/app-utils/workflows'
-import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import {
+  pluginRecordIndex,
+  type PluginIndexedRecord,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
 import type {
@@ -32,12 +35,17 @@ import type { AiRunRecord } from '../model/ai-automation-outline'
 import type { AiWorkflowTargetType } from '../model/ai-workflow-job'
 
 /**
- * What a `workflow` job reads (AGL-2919), through the Admin SDK and scoped to
- * the job's own site and org: the records a drafted automation's words are
- * looked up among, the automation an explanation reads, and the run it
- * explains. Every read is a projection of the fields named here, windowed the
- * way the Actions editor's pickers are, so a lookup never reads more than the
- * editor would offer.
+ * What a `workflow` job reads (AGL-2919), scoped to the job's own site and
+ * org: the records a drafted automation's words are looked up among, the
+ * automation an explanation reads, and the run it explains. Every read is
+ * windowed the way the Actions editor's pickers are, so a lookup never reads
+ * more than the editor would offer.
+ *
+ * The site's workflows, webhooks and saved actions are the workflows plugin's
+ * records, so they are read through the indexes that plugin publishes
+ * (`workflow`, `webhook`, `action` — AGL-3080), never from its collections:
+ * where no plugin keeps a kind, there are none to name. The rest are read
+ * through the Admin SDK as projections of the fields named here.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -71,6 +79,21 @@ async function named(
 }
 
 const live = (data: Data) => data['deletedAt'] == null
+
+/**
+ * The live records of a kind another plugin keeps, through its index, in the
+ * editor's window; none where no plugin keeps the kind here.
+ */
+async function indexed(
+  kind: string,
+  hostId: string,
+  keep: (record: PluginIndexedRecord) => boolean = () => true,
+): Promise<AiAutomationNamedRecord[]> {
+  const owner = pluginRecordIndex(kind)
+  if (!owner) return []
+  const { records } = await owner.index.list({ hostId, limit: AI_WORKFLOW_RECORDS_WINDOW })
+  return records.filter(keep).map(({ id, name }) => ({ id, name }))
+}
 
 /** The site's forms that are not archived, with the field names their submissions carry. */
 async function readForms(host: FirebaseFirestore.DocumentReference): Promise<AiAutomationForm[]> {
@@ -130,17 +153,12 @@ export async function readAiAutomationRecords(
             campaignPlacedOnHost({ visibleTo: data['visibleTo'] as string[] | undefined }, input.hostId),
           (data) => text(data['name']),
         ),
-    !wanted('workflows')
-      ? none
-      : named(host.collection('workflows'), ['name', 'deletedAt'], live, (data) => text(data['name'])),
+    !wanted('workflows') ? none : indexed('workflow', input.hostId),
+    // Only a webhook that posts OUT is a step's target; an inbound one is an
+    // endpoint that runs a workflow.
     !wanted('webhooks')
       ? none
-      : named(
-          host.collection('webhooks'),
-          ['name', 'direction', 'deletedAt'],
-          (data) => live(data) && data['direction'] === 'outbound',
-          (data) => text(data['name']),
-        ),
+      : indexed('webhook', input.hostId, (record) => record.facts['direction'] === 'outbound'),
     input.crm && wanted('stages') ? readStages(input.orgId, input.hostId) : none,
   ])
   return { forms, datasets, lists, campaigns, workflows, webhooks, stages }
@@ -178,19 +196,21 @@ export type AiWorkflowTarget =
   | { type: 'action'; id: string; name: string; action: HostAction }
   | { type: 'workflow'; id: string; name: string; workflow: HostWorkflow }
 
-/** A saved automation of the site, or `null` for one that does not exist or was deleted. */
+/**
+ * A saved automation of the site, read through the index of the plugin that
+ * keeps it, or `null` for one that does not exist, was deleted, or that no
+ * plugin here keeps.
+ */
 export async function readAiWorkflowTarget(
-  firestore: Firestore,
   input: { hostId: string; type: AiWorkflowTargetType; id: string },
 ): Promise<AiWorkflowTarget | null> {
-  const collection = input.type === 'action' ? 'actions' : 'workflows'
-  const snapshot = await firestore.collection('hosts').doc(input.hostId).collection(collection).doc(input.id).get()
-  const data = snapshot.exists ? ((snapshot.data() ?? {}) as Data) : null
-  if (!data || data['deletedAt'] != null) return null
-  const name = text(data['name']) || input.id
+  const owner = pluginRecordIndex(input.type)
+  const record = owner ? await owner.index.get({ hostId: input.hostId, id: input.id }) : null
+  if (!record) return null
+  const stored = { name: record.name, ...record.facts }
   return input.type === 'action'
-    ? { type: 'action', id: snapshot.id, name, action: data as unknown as HostAction }
-    : { type: 'workflow', id: snapshot.id, name, workflow: data as unknown as HostWorkflow }
+    ? { type: 'action', id: record.id, name: record.name, action: stored as unknown as HostAction }
+    : { type: 'workflow', id: record.id, name: record.name, workflow: stored as unknown as HostWorkflow }
 }
 
 export type AiWorkflowRunRead =
