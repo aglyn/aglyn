@@ -203,7 +203,7 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 The single source mapping plugin ids to packages, register entry points
 per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
 declaration surfaces `declarations`, `serverDeclarations` and
-`consoleServerDeclarations`, and `subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
+`consoleServerDeclarations`, `subprocessors` and `videoEmbedProviders`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
 modules that create, transfer or destroy a durable customer object, which
 `check-activity-coverage.mjs` holds to writing an activity entry.
 
@@ -263,6 +263,19 @@ inventory or another plugin already declares that the plugin's code reaches
 as well: the host keeps its one declaration, and the plugin's reason and
 data are appended to that entry. A use of a host nothing declares is
 refused — declare the host instead.
+
+A **videoEmbedProviders** entry names a function in
+`@aglyn/plugins-x/video-embed-providers` that returns the video hosts whose
+own player the plugin's Video element frames: the domains a host's links live
+on, the path patterns that carry the media id, the one origin the player is
+framed from, its path and the query it reads. The generator calls it,
+validates the answer and compiles it into core's
+`first-party-plugins.generated.ts`, because its readers — the published
+page, its `VideoObject` and the tenant middleware's `frame-src` — load no
+plugin code. Core's `video-embed-provider.ts` resolves a link from the
+compiled list alone and rebuilds every player address from the media id, so
+a frame is only ever on a declared origin. Regenerate after changing a
+declaration; `--check` refuses a stale copy.
 
 A **staff** entry names the registrar the console's staff area loads,
 usually the same function as `console`. The org routes load each

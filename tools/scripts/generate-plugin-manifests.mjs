@@ -425,6 +425,126 @@ async function pluginSubprocessors() {
   return entries
 }
 
+/**
+ * The video hosts whose own player the Video element frames (AGL-3080), each
+ * declared by the plugin that plays them: a plugin names a function under
+ * `videoEmbedProviders`, and this loads `${package}/video-embed-providers`
+ * through jiti, calls it, and compiles the answer into the catalog file as
+ * data. The readers are the published page and the tenant middleware's
+ * `frame-src`, neither of which loads plugin code, so a runtime registry
+ * would be one they had not filled (core `video-embed-provider.ts`).
+ *
+ * Checked here, because a declaration widens every published page's
+ * `frame-src`:
+ *
+ *  - ONE HOST, ONE DECLARATION: an id or a domain claimed twice would leave a
+ *    link's player to config order.
+ *  - A CLOSED PLAYER: an https origin with no path, and a player path with
+ *    exactly one `{id}` and no query or fragment, so every frame is on the
+ *    declared origin.
+ *  - PATTERNS THAT COMPILE, anchored at both ends, each path pattern with a
+ *    capture group for the id.
+ *  - A QUERY core can build: each parameter is a constant `value`, or an
+ *    `option` core knows with an `on` or `off` spelling.
+ */
+const VIDEO_EMBED_OPTIONS = ['autoPlay', 'doNotTrack', 'muted', 'loop']
+const PLAIN_DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
+
+function anchoredPattern(source, what) {
+  if (typeof source !== 'string' || !source.startsWith('^') || !source.endsWith('$')) {
+    throw new Error(`${what} is a regular expression anchored with ^ and $`)
+  }
+  try {
+    return new RegExp(source)
+  } catch (error) {
+    throw new Error(`${what} does not compile: ${error.message}`, { cause: error })
+  }
+}
+
+async function pluginVideoEmbedProviders() {
+  const declaring = config.plugins.filter((plugin) => plugin.register?.videoEmbedProviders)
+  if (!declaring.length) return []
+  const jiti = jitiForWorkspace()
+  const rows = []
+  const ids = new Map()
+  const domains = new Map()
+  for (const plugin of declaring) {
+    const specifier = `${plugin.package}/video-embed-providers`
+    const fnName = plugin.register.videoEmbedProviders
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') {
+      throw new Error(`${specifier} exports no function named ${fnName}`)
+    }
+    const answer = await fn()
+    const where = `${specifier}: ${fnName}()`
+    if (!Array.isArray(answer) || !answer.length) {
+      throw new Error(`${where} declares no host — drop the entry, or declare one`)
+    }
+    for (const declaration of answer) {
+      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdPattern, playerOrigin, playerPath, playerQuery = [] } =
+        declaration ?? {}
+      const what = `${where} "${id ?? ''}"`
+      if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) throw new Error(`${where}: a host needs an "id" of lowercase letters, digits and dashes`)
+      const heldId = ids.get(id)
+      if (heldId) throw new Error(`${what} is already declared by "${heldId}"`)
+      ids.set(id, plugin.id)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label"`)
+      if (!Array.isArray(declaredDomains) || !declaredDomains.length) throw new Error(`${what} needs "domains"`)
+      for (const domain of declaredDomains) {
+        if (typeof domain !== 'string' || !PLAIN_DOMAIN.test(domain)) {
+          throw new Error(`${what}: "${domain}" is not a plain lowercase domain`)
+        }
+        const heldDomain = domains.get(domain)
+        if (heldDomain) throw new Error(`${what}: domain "${domain}" is already declared by "${heldDomain}"`)
+        domains.set(domain, id)
+      }
+      if (!Array.isArray(mediaIdPaths) || !mediaIdPaths.length) throw new Error(`${what} needs "mediaIdPaths"`)
+      for (const source of mediaIdPaths) {
+        const pattern = anchoredPattern(source, `${what} mediaIdPaths "${source}"`)
+        if (new RegExp(`${pattern.source}|`).exec('').length < 2) {
+          throw new Error(`${what} mediaIdPaths "${source}" has no capture group for the media id`)
+        }
+      }
+      anchoredPattern(mediaIdPattern, `${what} mediaIdPattern`)
+      let origin
+      try {
+        origin = new URL(playerOrigin).origin
+      } catch {
+        origin = undefined
+      }
+      if (origin !== playerOrigin || !playerOrigin.startsWith('https://')) {
+        throw new Error(`${what}: "playerOrigin" is an https origin with no path, e.g. https://player.example.net`)
+      }
+      if (
+        typeof playerPath !== 'string' ||
+        !playerPath.startsWith('/') ||
+        /[?#]/.test(playerPath) ||
+        playerPath.split('{id}').length !== 2
+      ) {
+        throw new Error(`${what}: "playerPath" begins with "/", names "{id}" once, and carries no query or fragment`)
+      }
+      if (!Array.isArray(playerQuery)) throw new Error(`${what}: "playerQuery" is a list`)
+      for (const entry of playerQuery) {
+        const param = `${what} playerQuery "${entry?.param ?? ''}"`
+        if (typeof entry?.param !== 'string' || !entry.param) throw new Error(`${what}: a playerQuery entry needs a "param"`)
+        if ('value' in entry) {
+          if (typeof entry.value !== 'string' || 'option' in entry) throw new Error(`${param}: a constant is one string "value" and no "option"`)
+          continue
+        }
+        if (!VIDEO_EMBED_OPTIONS.includes(entry.option)) {
+          throw new Error(`${param}: "option" is one of ${VIDEO_EMBED_OPTIONS.join(', ')}`)
+        }
+        const spellings = ['on', 'off'].filter((state) => entry[state] !== undefined)
+        if (!spellings.length || spellings.some((state) => typeof entry[state] !== 'string')) {
+          throw new Error(`${param}: an option spells "on", "off" or both as strings`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows.sort((a, b) => a.id.localeCompare(b.id))
+}
+
 /** One list of declarations as the manifest writes it, or '' for an empty optional one. */
 function declarationList(name, list, fields, { always = false } = {}) {
   if (!list.length) return always ? `    ${name}: [],\n` : ''
@@ -894,7 +1014,7 @@ function requiredOrgEraserIds() {
     .map((plugin) => plugin.id)
 }
 
-function catalogContent() {
+function catalogContent(videoEmbedRows) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
   const editBarRows = rows
@@ -917,7 +1037,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -986,6 +1106,14 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(p
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
 export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries(functionBindingRows()).map(([id, prop]) => `\n  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('')}${Object.keys(functionBindingRows()).length ? '\n' : ''}}
+
+/**
+ * Every video host whose own player the Video element frames, declared by
+ * the plugin that plays it (AGL-3080). Core names no host.
+ */
+export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [
+${videoEmbedRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
 `
   )
 }
@@ -1004,7 +1132,7 @@ const ALL = [
     ...manifest,
     content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
   })),
-  { file: CATALOG_FILE, content: catalogContent() },
+  { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
   {
     file: SUBPROCESSORS_MANIFEST,
     content: subprocessorsContent(await pluginSubprocessors()),

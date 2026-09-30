@@ -356,20 +356,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/components/content/entry-cover-video-field.component.tsx",
-      "rules": [
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
-    },
-    {
-      "path": "apps/console/components/content/entry-detail-page.component.tsx",
-      "rules": [
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
-    },
-    {
       "path": "apps/console/components/entity-picker-provider.component.tsx",
       "rules": [
         "domain-declares:data"
@@ -468,13 +454,6 @@
         "plugin-collection:commerce"
       ],
       "lane": "commerce"
-    },
-    {
-      "path": "apps/console/components/site-security-cards.component.tsx",
-      "rules": [
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
     },
     {
       "path": "apps/console/components/staff-org-actions.component.tsx",
@@ -849,10 +828,9 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/binding-token-catalog.ts",
       "rules": [
-        "vendor:wistia",
         "domain-declares:data"
       ],
-      "lane": "video-embed-provider"
+      "lane": "data"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/campaign-attribution.ts",
@@ -887,13 +865,6 @@
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/collection-entries.ts",
-      "rules": [
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/console-record-links.ts",
@@ -1274,13 +1245,6 @@
       "lane": "workflows"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/video-object.ts",
-      "rules": [
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/visitor-consent.ts",
       "rules": [
         "vendor:ga4"
@@ -1293,14 +1257,6 @@
         "vendor:ga4"
       ],
       "lane": "analytics-provider"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/wistia-embed.ts",
-      "rules": [
-        "domain-name",
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/workflows.ts",
@@ -1848,13 +1804,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/runtime/src/lib/collection-fallback-nodes.ts",
-      "rules": [
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
-    },
-    {
       "path": "libs/tenant/runtime/src/lib/compose-screen-nodes.ts",
       "rules": [
         "domain-declares:data"
@@ -1868,13 +1817,6 @@
         "domain-declares:crm"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/get-collection-content.ts",
-      "rules": [
-        "vendor:wistia"
-      ],
-      "lane": "video-embed-provider"
     },
     {
       "path": "libs/tenant/runtime/src/lib/get-datasets.ts",

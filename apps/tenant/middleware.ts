@@ -39,6 +39,9 @@ import {
   ENTRY_PREVIEW_ROUTE_SEGMENT,
 } from '@aglyn/aglyn/app-utils/entry-preview-link'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
+// Deep import for the same reason: the declared video hosts' player origins,
+// compiled data with no plugin behind it, which `frame-src` must admit.
+import { videoEmbedPlayerOrigins } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import {
   parseThemeModeCookie,
   THEME_MODE_COOKIE,
@@ -1244,6 +1247,7 @@ export const middleware: NextMiddleware = async (req, event) => {
       process.env.NODE_ENV === 'production',
       verdict.approvedFrameHosts,
       verdict.siteOrigins,
+      videoEmbedPlayerOrigins(),
     )}; ${reportingDirectives(secureTransport)}`,
   )
   // A REPORT-ONLY `img-src`, and its reporting endpoint (AGL-1703). What the

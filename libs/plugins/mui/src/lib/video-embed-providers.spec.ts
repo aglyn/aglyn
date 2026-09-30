@@ -1,4 +1,7 @@
 /**
+ * @jest-environment node
+ */
+/**
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -15,16 +18,54 @@
  * limitations under the License.
  */
 
+import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
 import {
-  WISTIA_PLAYER_ORIGIN,
-  wistiaEmbedUrl,
-  wistiaMediaId,
-  wistiaPlayerSrc,
-} from './wistia-embed'
+  type VideoEmbedPlayerOptions,
+  videoEmbedOf,
+  videoEmbedPlayerOrigins,
+  videoEmbedPlayerSrc,
+  videoEmbedUrl,
+} from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import { muiVideoEmbedProviders } from './video-embed-providers'
+
+/**
+ * The Wistia declaration, read through core's resolvers over the COMPILED
+ * list — the one the published page, its `VideoObject` and the tenant's
+ * `frame-src` actually read. Every case below is a link an author has
+ * already saved somewhere, so a declaration that stopped reading one would
+ * turn a customer's film into a dead link.
+ */
 
 const ID = 'e4a27b971d'
+const WISTIA_PLAYER_ORIGIN = 'https://fast.wistia.net'
 
-describe('wistiaMediaId reads the links Wistia hands an author (AGL-2826)', () => {
+const wistiaMediaId = (value: unknown) => {
+  const embed = videoEmbedOf(value)
+  return embed?.provider.id === 'wistia' ? embed.mediaId : undefined
+}
+const wistiaEmbedUrl = (value: unknown) => videoEmbedUrl(value)
+const wistiaPlayerSrc = (value: unknown, options?: VideoEmbedPlayerOptions) =>
+  videoEmbedPlayerSrc(value, options)
+
+describe('the compiled declaration is this module\'s (AGL-3080)', () => {
+  it('matches what the plugin declares, so a regeneration was not skipped', () => {
+    const compiled = FIRST_PARTY_VIDEO_EMBED_PROVIDERS.filter(
+      (provider) => provider.pluginId === 'mui',
+    )
+    expect(compiled).toEqual(
+      muiVideoEmbedProviders().map((declaration) => ({
+        pluginId: 'mui',
+        ...declaration,
+      })),
+    )
+  })
+
+  it("frames Wistia's player from its one origin", () => {
+    expect(videoEmbedPlayerOrigins()).toContain(WISTIA_PLAYER_ORIGIN)
+  })
+})
+
+describe('the declaration reads the links Wistia hands an author (AGL-2826)', () => {
   for (const link of [
     `https://aglyn.wistia.com/medias/${ID}`,
     `https://aglyn.wistia.com/medias/${ID}/manage`,
