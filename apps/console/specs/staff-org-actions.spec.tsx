@@ -247,7 +247,7 @@ describe('StaffOrgActions (AGL-939)', () => {
     ) as HTMLInputElement
     expect(notice.value).toBe('Account compromised')
     // The MUI select renders its current value as text.
-    expect(within(dialog).getByText('security')).toBeTruthy()
+    expect(within(dialog).getByText('Security — investigating a concern')).toBeTruthy()
   })
 
   it('a lockdown route failure surfaces the server error and writes nothing', async () => {

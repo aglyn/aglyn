@@ -71,6 +71,8 @@ const mockQuery = (read = { wheres: [], orderBy: [], limit: null, startAfter: nu
   },
 })
 const mockReleased: Array<Record<string, unknown>> = []
+/** Addresses held by a banned account's row (AGL-3420). */
+const mockBanned = new Set<string>()
 const mockAudits: Array<Record<string, unknown>> = []
 let mockReleaseAnswer = true
 let mockDecoded: Record<string, unknown> = {
@@ -116,6 +118,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockReleased.push(input)
     return mockReleaseAnswer
   },
+  isAccountBanSuppression: async (email: string) => mockBanned.has(email),
 }))
 
 jest.mock('@aglyn/tenant-data-admin/server/admin-audit', () => ({
@@ -157,6 +160,7 @@ beforeEach(() => {
     suppressedAt: { seconds: 1_700_000_000 - index, nanoseconds: index },
   }))
   mockReleased.length = 0
+  mockBanned.clear()
   mockAudits.length = 0
   mockReleaseAnswer = true
   mockDecoded = {
@@ -328,6 +332,18 @@ describe('POST /api/admin/emails/suppressions', () => {
       note: 'a good reason',
     })
     expect(response.status).toBe(403)
+    expect(mockReleased).toHaveLength(0)
+    expect(mockAudits).toHaveLength(0)
+  })
+
+  it('refuses a banned account’s row, which only lifting the ban releases (AGL-3420)', async () => {
+    mockBanned.add('dana@example.com')
+    const response = await release({
+      email: 'dana@example.com',
+      note: 'a good reason',
+    })
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toMatch(/Lift the ban/)
     expect(mockReleased).toHaveLength(0)
     expect(mockAudits).toHaveLength(0)
   })

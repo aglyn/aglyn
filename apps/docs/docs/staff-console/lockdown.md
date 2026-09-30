@@ -54,12 +54,20 @@ A lockdown is enforced **server-side at the chokepoints**, not hidden in the UI:
 
 ## Reasons and the notice
 
-Every lock carries a reason — `security`, `billing`, `maintenance`, or `manual` —
-which picks the notice the locked-out person sees. An optional custom message
-replaces the notice body (**it is shown to customers — keep internal rationale in
-the audit note, not here**). `billing` notices point at billing settings;
-`security`/`manual` notices point at support@aglyn.com; `maintenance` shows the
-window when one is set.
+Every lock carries a reason — `security`, `abuse`, `billing`, `maintenance`, or
+`manual` — which picks the notice the locked-out person sees. An optional custom
+message replaces the notice body (**it is shown to customers — keep internal
+rationale in the audit note, not here**). `billing` notices point at billing
+settings; `security`/`abuse`/`manual` notices point at support@aglyn.com;
+`maintenance` shows the window when one is set.
+
+**`abuse` is for phishing, fraud or malicious content, and it is at least as strict
+as `security` everywhere.** Sessions are revoked, media stops serving, download
+tokens rotate, and billing cancellation and paused site money are ticked by
+default. On an **account** it is a **permanent ban**. The account is kept only so
+its address can never sign up again, and after the lock notice it is sent nothing
+at all — see [A ban stops all mail](#ban-mail). Its notice says the account is
+closed for a Terms of Service violation, and never says which one.
 
 ## Modes: full, or read-only {#read-only-mode}
 
@@ -1088,10 +1096,42 @@ is disabled, and a suspended workspace's usage alerts and summaries stop too.
 Console notifications are still recorded, so the history is there after the
 lock lifts.
 
+Aglyn's own marketing stops too. Every address the account holds is put on
+the suppression list of each of Aglyn's own sites, with the reason **Account
+locked**. That stops campaigns, product updates and sequences. The rows are
+written only where the address wasn't already listed, so a real unsubscribe or
+bounce is never replaced. Unlocking the account removes exactly the rows the
+lock wrote.
+
 Still sent: the lock and lift notices themselves, security alerts, password
 reset and verification mail, erasure confirmations, and Stripe's receipts.
 Mail a customer's own site sends is unaffected. A locked person who is a
-contact on someone else's site still gets that site's mail.
+contact on someone else's site still gets that site's mail. **Unless the lock
+is a ban.**
+
+### A ban stops all mail {#ban-mail}
+
+An account locked with the reason **`abuse`** is banned. Its lock notice is the
+last mail it receives. Every address the account holds goes on the platform
+suppression list as **Banned account**, and the check that runs before every
+message the platform sends refuses those addresses:
+
+- transactional mail — password resets, verification, security alerts, receipts;
+- Aglyn's own mail — workspace notices, usage alerts, digests, marketing;
+- every other site's mail, campaigns and one-to-one alike.
+
+Only a lock or lift notice gets through, so **Resend owner notice** still
+reaches a banned account.
+
+A **Banned account** row can't be released from the Emails page. An opt-in
+doesn't lift it, and a later bounce or complaint doesn't overwrite it. It is
+lifted only by lifting the ban: unlock the account, or re-place the lock with
+another reason. If the address was already suppressed for another reason when
+the ban was filed, lifting the ban restores that reason rather than releasing
+it.
+
+An account banned under `security` before `abuse` existed is not a ban. Re-place
+its lock with the reason `abuse`.
 
 ### Email the owners {#email-the-owners}
 

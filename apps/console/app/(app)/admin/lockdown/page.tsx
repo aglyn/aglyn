@@ -20,6 +20,7 @@ import {
   listLockdownFeatureKeys,
   lockdownFeatureLabel,
   LOCKDOWN_REASON_CODES,
+  LOCKDOWN_REASON_LABELS,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
@@ -927,7 +928,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
     >
       {LOCKDOWN_REASON_CODES.map((code) => (
         <MenuItem key={code} value={code}>
-          {code}
+          {LOCKDOWN_REASON_LABELS[code]}
         </MenuItem>
       ))}
     </TextField>
@@ -1399,6 +1400,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     }
                   </Typography>
                 </Stack>
+                {scope === 'user' && reason === 'abuse' ? (
+                  <Alert severity="error">
+                    {'A permanent ban. After the lock notice this account is sent nothing, by any sender: no security or password mail, no workspace notices, and no mail from any site on the platform. Its addresses stay on the platform suppression list until the ban is lifted here. Use it only for phishing, fraud or malicious content.'}
+                  </Alert>
+                ) : null}
                 {scope === 'user' ? (
                   <Stack spacing={0.5}>
                     <FormControlLabel

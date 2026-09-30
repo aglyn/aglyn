@@ -97,7 +97,7 @@ import {
 import { promises as dns } from 'dns'
 import { isConclusiveDnsCode, lookupAddress, lookupMx } from './dns-probe'
 import type { EmailDeliveryEventOutcome } from './email-delivery-log'
-import { suppressEmail } from './email-suppression'
+import { accountBannedRecipients, suppressEmail } from './email-suppression'
 import { firebaseAdmin } from './firebase-admin'
 
 type Firestore = FirebaseFirestore.Firestore
@@ -571,16 +571,34 @@ export async function runEmailDeliverabilityPreflight(
   request: EmailDeliverabilityPreflightRequest,
   deps: MailDeliverabilityDeps = {},
 ): Promise<EmailDeliverabilityPreflightVerdict> {
+  const answer: EmailDeliverabilityPreflightVerdict = { refused: [], held: [] }
+  /*
+   * A BANNED ACCOUNT FIRST (AGL-3420), and for every purpose: after its ban
+   * notice it is sent nothing — no receipt, no reset, no site's mail —
+   * which is the one refusal on this path that transactional mail does not
+   * get past. Only a lock or lift notice says it is exempt.
+   */
+  const banned = request.accountBanExempt
+    ? new Set<string>()
+    : await accountBannedRecipients(request.recipients, deps.firestore)
+  for (const email of banned) {
+    answer.refused.push({
+      email,
+      code: 'account_banned',
+      reason: 'This address belongs to a closed account and is not sent mail.',
+    })
+  }
+  const recipients = request.recipients.filter((email) => !banned.has(email))
+  if (!recipients.length) return answer
   const verdicts = await readMailDeliverability(
     {
-      emails: request.recipients,
+      emails: recipients,
       purpose: request.purpose,
       sendingDomain: request.sendingDomain,
       scope: null,
     },
     deps,
   )
-  const answer: EmailDeliverabilityPreflightVerdict = { refused: [], held: [] }
   for (const [email, verdict] of verdicts) {
     const deciding = decidingDeliverabilityFinding(verdict)
     if (!deciding) continue
