@@ -11,6 +11,7 @@ import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from '.
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { FunctionBindings } from './plugin-contributions'
+import type { PluginDistribution } from './plugin-distribution'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -472,6 +473,18 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
     }
   },
 ]
+
+/**
+ * Where published plugin versions and their kill switches are stored, declared
+ * by the plugin that distributes them (AGL-3080). `null` when none does, and
+ * the realm loader then resolves nothing.
+ */
+export const PLUGIN_DISTRIBUTION: PluginDistribution | null = {
+  "pluginId": "marketplace",
+  "listings": "marketplaceListings",
+  "versions": "pluginVersions",
+  "revocations": "revocations"
+}
 
 /**
  * Every first-party element that runs a site function, and the prop naming

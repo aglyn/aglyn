@@ -819,6 +819,36 @@ function orgCapacityRows() {
   return rows.sort((a, b) => a.order - b.order)
 }
 
+/**
+ * Where published plugin versions and their kill switches live (AGL-3080),
+ * declared by the one plugin that distributes them. The realm loader reads
+ * this and names no collection of its own; with none declared it resolves
+ * nothing, which is the only safe answer for a store nobody named.
+ *
+ * Checked here: one declarer at most, and three plain collection names.
+ */
+function pluginDistributionRow() {
+  const declared = config.plugins.filter((plugin) => plugin.pluginDistribution)
+  if (declared.length > 1) {
+    throw new Error(
+      `plugins.config.json: "${declared.map((plugin) => plugin.id).join('", "')}" each declare a pluginDistribution — ` +
+        'the realm loader joins against ONE store, and two would leave it choosing whose kill switch to honor',
+    )
+  }
+  const plugin = declared[0]
+  if (!plugin) return null
+  const where = `plugins.config.json: "${plugin.id}" pluginDistribution`
+  const row = { pluginId: plugin.id }
+  for (const field of ['listings', 'versions', 'revocations']) {
+    const value = plugin.pluginDistribution[field]
+    if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(value)) {
+      throw new Error(`${where}: "${field}" is the plain name of a collection`)
+    }
+    row[field] = value
+  }
+  return row
+}
+
 function catalogContent() {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -842,7 +872,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -884,6 +914,13 @@ ${orgCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`)
 export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
 ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
+
+/**
+ * Where published plugin versions and their kill switches are stored, declared
+ * by the plugin that distributes them (AGL-3080). \`null\` when none does, and
+ * the realm loader then resolves nothing.
+ */
+export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(pluginDistributionRow(), null, 2)}
 
 /**
  * Every first-party element that runs a site function, and the prop naming

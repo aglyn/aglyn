@@ -103,6 +103,12 @@ Every link must hold before a byte executes:
    the revocation only if the takedown wrote it (`source: 'takedown'`), so
    a hand-written revocation survives.
 
+   The loader names no collection for any of this (AGL-3080): the store
+   holding version docs and kill switches is DECLARED by the plugin that
+   distributes plugins — `pluginDistribution` in `plugins.config.json`,
+   compiled into `PLUGIN_DISTRIBUTION` — and with no declaration the join
+   resolves nothing and every sandboxed pin renders revoked.
+
    Publisher **unpublish (`deletedAt`) is deliberately NOT a kill
    switch** — it blocks new installs and hides the listing, but existing
    installs keep loading. A publisher retiring a listing must not break

@@ -406,6 +406,11 @@
           "name": "installs"
         }
       ],
+      "pluginDistribution": {
+        "listings": "marketplaceListings",
+        "versions": "pluginVersions",
+        "revocations": "revocations"
+      },
       "contributes": {
         "console": {
           "shell": true,

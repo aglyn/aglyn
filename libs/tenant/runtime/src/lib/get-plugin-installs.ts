@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { PLUGIN_DISTRIBUTION } from '@aglyn/aglyn/plugin-manager/plugin-distribution'
 import {
   resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
@@ -25,7 +26,7 @@ import {
 } from '@aglyn/tenant-data-admin/render-cache'
 
 /**
- * SECURITY-RELEVANT TTL (AGL-1302): the kill switch (`revocations/{id}`) is
+ * SECURITY-RELEVANT TTL (AGL-1302): the kill switch (keyed by listing id) is
  * folded into each resolved install, so this cache bounds how long a revoked
  * plugin keeps rendering — 60s, on par with the page ISR window that already
  * bounded it. Do not raise it.
@@ -95,18 +96,24 @@ async function readPluginInstalls(options: {
         const version = String(docSnapshot.get('version') ?? '')
         const sha256 = String(docSnapshot.get('sha256') ?? '')
         if (!version || !sha256) return
-        const revocation = (
-          await firestore
-            .collection('revocations')
-            .doc(docSnapshot.id)
-            .get()
-        ).data() as Aglyn.PluginRevocation | undefined
+        // The kill switch lives in the store the distributing plugin
+        // declares (AGL-3080). With none declared a pin cannot be checked,
+        // so it renders as revoked rather than as vouched for.
+        const distribution = PLUGIN_DISTRIBUTION
+        const revocation = distribution
+          ? ((
+              await firestore
+                .collection(distribution.revocations)
+                .doc(docSnapshot.id)
+                .get()
+            ).data() as Aglyn.PluginRevocation | undefined)
+          : undefined
         installs[docSnapshot.id] = {
           listingId: docSnapshot.id,
           version,
           sha256,
           capabilities: docSnapshot.get('manifest')?.capabilities,
-          revoked: Aglyn.isPluginRevoked(revocation, version),
+          revoked: distribution ? Aglyn.isPluginRevoked(revocation, version) : true,
         }
       }),
     )

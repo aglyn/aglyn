@@ -1805,13 +1805,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/realm-plugins.ts",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/stripe-account-mode.ts",
       "rules": [
         "domain-name"
@@ -1898,13 +1891,6 @@
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/get-plugin-installs.ts",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "libs/tenant/runtime/src/lib/get-variables.ts",
