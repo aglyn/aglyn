@@ -76,6 +76,13 @@ export interface SessionReauthIdentity {
   hasPassword: boolean
   /** First federated provider id (`google.com`, `saml.*`, `oidc.*`), if any. */
   providerId: string | null
+  /**
+   * The account the prompt is FOR (AGL-3425). A provider ceremony picks an
+   * identity in a chooser, so the dialog checks that the one that came back
+   * is this one before it stands down. Optional because a prompt restored
+   * from an older build's redirect breadcrumb has none.
+   */
+  uid?: string | null
 }
 
 export interface SessionReauthState {
@@ -91,6 +98,12 @@ export interface SessionReauthState {
   /** "Not now": the dialog is closed, the degraded state persists. */
   dismissed: boolean
   identity: SessionReauthIdentity
+  /**
+   * True when this prompt was re-raised from a redirect ceremony's
+   * breadcrumb: the user that appears next is the ceremony's result, and
+   * the dialog verifies it the way it verifies a popup's.
+   */
+  resumedFromRedirect?: boolean
 }
 
 const EMPTY_IDENTITY: SessionReauthIdentity = {
@@ -124,6 +137,7 @@ export function getSessionReauth(): SessionReauthState {
  */
 export function captureReauthIdentity(
   user?: {
+    uid?: string | null
     email?: string | null
     providerData?: Array<
       { providerId?: string | null; email?: string | null } | null
@@ -142,7 +156,7 @@ export function captureReauthIdentity(
     user?.email ??
     providers.find((entry) => entry?.email)?.email ??
     null
-  return { email, hasPassword, providerId: federated }
+  return { email, hasPassword, providerId: federated, uid: user?.uid ?? null }
 }
 
 /**
@@ -163,6 +177,7 @@ export function captureReauthIdentity(
 export function requestSessionReauth(
   reason: SessionReauthReason,
   identity?: SessionReauthIdentity,
+  options: { resumedFromRedirect?: boolean } = {},
 ): void {
   if (state.reason === null) {
     state = {
@@ -172,6 +187,7 @@ export function requestSessionReauth(
       requiresSignIn: reason !== 'stale',
       dismissed: false,
       identity: identity ?? EMPTY_IDENTITY,
+      ...(options.resumedFromRedirect ? { resumedFromRedirect: true } : {}),
     }
   } else {
     state = { ...state, dismissed: false }
@@ -292,7 +308,9 @@ export function restoreSessionReauthRedirect(): boolean {
       clearSessionReauthRedirect()
       return false
     }
-    requestSessionReauth(parsed.reason, parsed.identity)
+    requestSessionReauth(parsed.reason, parsed.identity, {
+      resumedFromRedirect: true,
+    })
     return true
   } catch {
     clearSessionReauthRedirect()

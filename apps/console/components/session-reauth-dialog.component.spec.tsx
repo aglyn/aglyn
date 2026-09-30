@@ -42,6 +42,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 const mockSignIn = jest.fn()
 const mockSignOut = jest.fn()
 const mockPopup = jest.fn()
+const mockDeleteUser = jest.fn()
+const mockRedirectResult = jest.fn()
 jest.mock('firebase/auth', () => {
   // The provider stubs carry `setCustomParameters` because the real ones do:
   // every provider is built through `createAuthProvider`, which sets the
@@ -70,6 +72,12 @@ jest.mock('firebase/auth', () => {
     signInWithPopup: (...args: unknown[]) => mockPopup(...args),
     signInWithRedirect: jest.fn(),
     signOut: (...args: unknown[]) => mockSignOut(...args),
+    deleteUser: (...args: unknown[]) => mockDeleteUser(...args),
+    getRedirectResult: (...args: unknown[]) => mockRedirectResult(...args),
+    // The real one reads a private field of the credential; the stubs carry
+    // the answer where a test can set it.
+    getAdditionalUserInfo: (credential: { additionalUserInfo?: unknown }) =>
+      credential?.additionalUserInfo ?? null,
   }
 })
 
@@ -99,6 +107,8 @@ describe('SessionReauthDialog (AGL-664)', () => {
     mockSignIn.mockReset().mockResolvedValue({})
     mockSignOut.mockReset().mockResolvedValue(undefined)
     mockPopup.mockReset().mockResolvedValue({})
+    mockDeleteUser.mockReset().mockResolvedValue(undefined)
+    mockRedirectResult.mockReset().mockResolvedValue(null)
     mockMarkSignIn.mockReset()
     mockMarkSignOut.mockReset()
   })
@@ -200,5 +210,116 @@ describe('SessionReauthDialog (AGL-664)', () => {
     mockUser.data = { uid: 'u1' }
     act(() => requestSessionReauth('idle', identity)) // re-render trigger
     await waitFor(() => expect(getSessionReauth().reason).toBeNull())
+  })
+
+  describe('re-auth never creates or swaps an account (AGL-3425)', () => {
+    const googleIdentity = {
+      email: 'ada@acme.com',
+      hasPassword: false,
+      providerId: 'google.com',
+      uid: 'u-ada',
+    }
+    const clickGoogle = () =>
+      fireEvent.click(
+        screen.getByRole('button', { name: /continue with google/i }),
+      )
+
+    it('deletes an account the Google chooser created, and keeps the prompt up', async () => {
+      // A Google identity nobody registered: `signInWithPopup` is a sign-UP
+      // for it, with no Terms shown and nobody meaning to sign up.
+      const created = { uid: 'u-stranger', email: 'stranger@gmail.com' }
+      mockPopup.mockResolvedValue({
+        user: created,
+        additionalUserInfo: { isNewUser: true },
+      })
+      render(<SessionReauthDialog />)
+      act(() => requestSessionReauth('revoked', googleIdentity))
+      clickGoogle()
+
+      expect(await screen.findByText(/isn.t registered/i)).toBeTruthy()
+      expect(mockDeleteUser).toHaveBeenCalledWith(created)
+      // The session hook clears whatever cookie the brief sign-in minted.
+      expect(mockMarkSignOut).toHaveBeenCalled()
+      expect(getSessionReauth().reason).toBe('revoked')
+      expect(screen.getByText(title)).toBeTruthy()
+    })
+
+    it('signs out of a different registered account, deleting nothing', async () => {
+      mockPopup.mockResolvedValue({
+        user: { uid: 'u-grace', email: 'grace@acme.com' },
+        additionalUserInfo: { isNewUser: false },
+      })
+      render(<SessionReauthDialog />)
+      act(() => requestSessionReauth('revoked', googleIdentity))
+      clickGoogle()
+
+      expect(await screen.findByText(/different account/i)).toBeTruthy()
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockDeleteUser).not.toHaveBeenCalled()
+      expect(getSessionReauth().reason).toBe('revoked')
+    })
+
+    it('falls back to signing out when the new account cannot be deleted', async () => {
+      mockDeleteUser.mockRejectedValue({ code: 'auth/network-request-failed' })
+      mockPopup.mockResolvedValue({
+        user: { uid: 'u-stranger' },
+        additionalUserInfo: { isNewUser: true },
+      })
+      render(<SessionReauthDialog />)
+      act(() => requestSessionReauth('revoked', googleIdentity))
+      clickGoogle()
+
+      expect(await screen.findByText(/isn.t registered/i)).toBeTruthy()
+      expect(mockSignOut).toHaveBeenCalled()
+    })
+
+    it('stands down for the same account', async () => {
+      mockPopup.mockResolvedValue({
+        user: { uid: 'u-ada', email: 'ada@acme.com' },
+        additionalUserInfo: { isNewUser: false },
+      })
+      render(<SessionReauthDialog />)
+      act(() => requestSessionReauth('revoked', googleIdentity))
+      clickGoogle()
+
+      await waitFor(() => expect(getSessionReauth().reason).toBeNull())
+      expect(mockDeleteUser).not.toHaveBeenCalled()
+      expect(mockSignOut).not.toHaveBeenCalled()
+    })
+
+    it('checks the account a mobile redirect brings back, and deletes one it created', async () => {
+      const created = { uid: 'u-stranger' }
+      mockRedirectResult.mockResolvedValue({
+        user: created,
+        additionalUserInfo: { isNewUser: true },
+      })
+      render(<SessionReauthDialog />)
+      act(() =>
+        requestSessionReauth('revoked', googleIdentity, {
+          resumedFromRedirect: true,
+        }),
+      )
+      mockUser.data = created
+      act(() => requestSessionReauth('revoked', googleIdentity)) // re-render
+
+      expect(await screen.findByText(/isn.t registered/i)).toBeTruthy()
+      expect(mockDeleteUser).toHaveBeenCalledWith(created)
+      expect(getSessionReauth().reason).toBe('revoked')
+    })
+
+    it('stands a redirect-resumed prompt down when the right account comes back', async () => {
+      render(<SessionReauthDialog />)
+      act(() =>
+        requestSessionReauth('revoked', googleIdentity, {
+          resumedFromRedirect: true,
+        }),
+      )
+      mockUser.data = { uid: 'u-ada' }
+      act(() => requestSessionReauth('revoked', googleIdentity)) // re-render
+
+      await waitFor(() => expect(getSessionReauth().reason).toBeNull())
+      expect(mockSignOut).not.toHaveBeenCalled()
+      expect(mockDeleteUser).not.toHaveBeenCalled()
+    })
   })
 })

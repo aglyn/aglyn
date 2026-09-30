@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 import {
   browserLocalPersistence,
+  getRedirectResult,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -37,7 +38,7 @@ import {
   signOut,
   type AuthProvider,
 } from 'firebase/auth'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AuthErrorMessage } from '@aglyn/shared-data-enums'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -51,6 +52,11 @@ import {
   signInWithPasskey,
   usePasskeysSupported,
 } from '../utils/passkeys'
+import {
+  reauthRefusal,
+  reauthRefusalText,
+  standDownRefusedReauth,
+} from '../utils/reauth-identity-guard'
 import { clearSignInBounces } from '../utils/signin-bounce'
 import {
   clearSessionReauth,
@@ -178,8 +184,46 @@ export function SessionReauthDialog() {
   // restore delivering a fresh user. Only for triggers that signed the
   // local user out: the `stale` flow keeps its user until submit, and is
   // resolved explicitly by the submit handlers instead.
+  //
+  // A prompt resumed from a redirect ceremony is NOT that case: the user
+  // arriving is the ceremony's result, picked in a chooser, and is checked
+  // like a popup's before anything stands down (AGL-3425).
+  const verifyingRedirect = useRef(false)
+  // The account a refused ceremony signed in, until its sign-out reaches this
+  // render: the effect below must not read it as a session that came back.
+  const refusedUid = useRef<string | null>(null)
   useEffect(() => {
-    if (active && state.requiresSignIn && user && !busy) {
+    if (!active || !state.resumedFromRedirect || !user || busy) return
+    if (verifyingRedirect.current) return
+    if ((user as { uid?: string }).uid === refusedUid.current) return
+    verifyingRedirect.current = true
+    void (async () => {
+      // The redirect's credential is the only thing that can say the
+      // account was created just now; a read that fails or was already
+      // consumed leaves the uid comparison to decide.
+      const credential = await getRedirectResult(auth).catch(() => null)
+      const refusal = reauthRefusal(state.identity, credential, user as any)
+      if (refusal) {
+        refusedUid.current = (user as { uid?: string }).uid ?? null
+        await standDownRefusedReauth(auth, refusal, (credential?.user ?? user) as any)
+        setError(reauthRefusalText(refusal, state.identity.email))
+      } else {
+        clearSessionReauth()
+        clearSignInBounces()
+      }
+      verifyingRedirect.current = false
+    })()
+  }, [active, state.resumedFromRedirect, state.identity, user, busy, auth])
+
+  useEffect(() => {
+    if (
+      active &&
+      state.requiresSignIn &&
+      !state.resumedFromRedirect &&
+      user &&
+      !busy &&
+      (user as { uid?: string }).uid !== refusedUid.current
+    ) {
       clearSessionReauth()
       // The round trip settled, so the loop breaker's evidence is spent
       // (AGL-2486). Cleared HERE and at the sign-in success below — never
@@ -187,7 +231,7 @@ export function SessionReauthDialog() {
       // reaches on every cycle and would reset the counter forever.
       clearSignInBounces()
     }
-  }, [active, state.requiresSignIn, user, busy])
+  }, [active, state.requiresSignIn, state.resumedFromRedirect, user, busy])
 
   // A fresh request must not inherit the previous attempt's leftovers.
   useEffect(() => {
@@ -221,7 +265,22 @@ export function SessionReauthDialog() {
         // stale cookie on return (AGL-463).
         markInteractiveSignIn()
         await setPersistence(auth, browserLocalPersistence)
-        await credentialSignIn()
+        const credential = await credentialSignIn()
+        // The account that came back must be the one this prompt is for,
+        // and must not be one the ceremony just created (AGL-3425).
+        const refusal = reauthRefusal(state.identity, credential)
+        if (refusal) {
+          refusedUid.current =
+            (credential as { user?: { uid?: string } } | undefined)?.user?.uid ??
+            null
+          await standDownRefusedReauth(
+            auth,
+            refusal,
+            (credential as { user?: unknown } | undefined)?.user as any,
+          )
+          setError(reauthRefusalText(refusal, state.identity.email))
+          return
+        }
         clearSessionReauth()
         clearSignInBounces()
       } catch (caught) {
@@ -239,7 +298,7 @@ export function SessionReauthDialog() {
         setBusy(false)
       }
     },
-    [auth, user],
+    [auth, user, state.identity],
   )
 
   const handlePasswordSubmit = useCallback(() => {
