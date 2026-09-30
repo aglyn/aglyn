@@ -49,11 +49,6 @@ const REGISTRY = new Set(Object.keys(AI_PALETTE))
 /** Elements a model must never be offered, whatever list they sit on. */
 const NEVER_OFFERED = [
   'custom-html',
-  'functionWidget',
-  'functionScope',
-  'functionInput',
-  'functionOutput',
-  'functionShow',
   'div',
   'reusableInstance',
   'marketplacePlugin',

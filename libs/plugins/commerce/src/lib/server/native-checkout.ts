@@ -40,7 +40,8 @@ import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
  * subscriptions — would need a parallel implementation reading a different
  * object shape.
  *
- * `ui_mode: 'custom'` is the Payment Element backed by a Checkout Session. The
+ * `ui_mode: 'elements'` is the Payment Element backed by a Checkout Session
+ * (`'custom'` before the 2026-03-25.dahlia API renamed it). The
  * shopper sees `<PaymentElement/>` inside the merchant's own layout — no Stripe
  * chrome, which is the thing AGL-1944 objected to about embedded Checkout — and
  * the server keeps the session builder it already has. So:
@@ -53,7 +54,7 @@ import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
  *
  * ## The API version, and why it is pinned per-request
  *
- * Measured against live Stripe in test mode: `ui_mode: 'custom'` is refused at
+ * Measured against live Stripe in test mode: `ui_mode: 'custom'` was refused at
  * the platform account's default API version with
  *
  *     Invalid Stripe API version: 2020-08-27. In order to use `ui_mode:
@@ -67,6 +68,20 @@ import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
  * arriving in exactly the shape it already reads. The only thing read off the
  * pinned response is `client_secret` and `id`, neither of which the version
  * affects.
+ *
+ * ### Dahlia (AGL-3410)
+ *
+ * The pin moved from `2025-03-31.basil` to `2026-03-25.dahlia` with the
+ * Stripe.js 9 / react-stripe-js 6 upgrade, because the browser half now boots
+ * Stripe.js's Dahlia release train, and Dahlia renamed the mode this module
+ * sets: `custom` is refused outright and `elements` replaces it. Across the two
+ * releases crossed (Clover, Dahlia) the only other Checkout-session break that
+ * reaches a param built here is Clover's switch of new subscriptions to
+ * FLEXIBLE billing mode — so a subscription session pins
+ * `billing_mode[type]=classic` below, and the subscription it creates bills
+ * exactly as the hosted path's does. The measurement below was taken at
+ * basil; re-take it in test mode before `release_native_checkout` is turned
+ * on anywhere.
  *
  * Same probe, same params (line items, a manual tax line,
  * `shipping_address_collection`, a `fixed_amount` shipping option, Connect
@@ -86,10 +101,10 @@ import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
  */
 
 /**
- * The API version `ui_mode: 'custom'` needs, pinned on the session-create
+ * The API version `ui_mode: 'elements'` needs, pinned on the session-create
  * request only. Stated once so the header and the doc comment cannot drift.
  */
-export const NATIVE_CHECKOUT_STRIPE_VERSION = '2025-03-31.basil'
+export const NATIVE_CHECKOUT_STRIPE_VERSION = '2026-03-25.dahlia'
 
 /** The flag both halves of native checkout share (AGL-1132, AGL-1944). */
 export const NATIVE_CHECKOUT_FLAG = 'release_native_checkout' as const
@@ -158,7 +173,7 @@ export async function resolveNativeCheckoutMode(
  * changing what the shopper is charged.
  *
  * `returnUrl` is the caller's OWN `success_url` string, `{CHECKOUT_SESSION_ID}`
- * placeholder and all. Stripe substitutes it on a `ui_mode: 'custom'` return
+ * placeholder and all. Stripe substitutes it on an embedded-components return
  * exactly as it does on a hosted redirect (measured), so the storefront's
  * post-purchase reporting — which reads `session_id` off the query to name the
  * order it just completed (AGL-1641) — keeps working unchanged.
@@ -169,8 +184,14 @@ export function applyNativeCheckoutParams(
 ): void {
   params.delete('success_url')
   params.delete('cancel_url')
-  params.set('ui_mode', 'custom')
+  params.set('ui_mode', 'elements')
   params.set('return_url', returnUrl)
+  // The pinned version defaults a NEW subscription to flexible billing mode
+  // (Clover); the hosted path, on the account default, creates classic ones.
+  // Stated so both paths bill a subscription the same way.
+  if (params.get('mode') === 'subscription') {
+    params.set('subscription_data[billing_mode][type]', 'classic')
+  }
 }
 
 /**

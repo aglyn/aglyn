@@ -74,18 +74,6 @@ updates:
       # name rather than the target and would propose a bump to the wrong
       # package. Remove this entry when the pin becomes a plain version.
       - dependency-name: typescript
-      # @base-ui/react >= 1.7.0 cannot pass the console suite. 1.7.0 added
-      # utils/dispatchClickWithModifiers.js (absent in 1.6.0), which on keydown
-      # synthesises the click via `new (ownerWindow(el).PointerEvent)(...)`.
-      # jest does not run in the repo's jsdom 29 — jest-environment-jsdom pins
-      # its own nested jsdom 26.1.0, which has NO PointerEvent — so every
-      # keyboard-activated base-ui button throws "PointerEvent is not a
-      # constructor". Browser and production builds are unaffected; it is the
-      # test environment alone. Patch releases of the 1.6 line still arrive.
-      # Remove this together with the jest PointerEvent polyfill. (AGL-2470)
-      - dependency-name: '@base-ui/react'
-        versions:
-          - '>=1.7.0'
       # Babel 8 cannot land while nx is on Babel 7. @nx/js depends on
       # `@babel/core: ^7.23.2`, and @nx/next/babel — the preset
       # apps/console/jest.config.ts runs every spec through — resolves through
@@ -97,6 +85,21 @@ updates:
       # Patch and minor bumps of the 7 line still arrive. Remove this once nx
       # ships a Babel 8 toolchain. (AGL-2478)
       - dependency-name: '@babel/*'
+        update-types:
+          - version-update:semver-major
+      # Vitest 5 and Cypress 16 are held by nx's own peer ranges, the same
+      # shape as Babel above: @nx/vitest 23.2 peers on `vitest: ^3 || ^4` and
+      # @nx/cypress 23.2 on `cypress: >= 13 < 16`. `legacy-peer-deps` would
+      # install either one silently and leave the executors on an API they
+      # were not written against. Minor and patch bumps still arrive. Remove
+      # each entry when an nx release widens its peer range. (AGL-3410)
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
+      - dependency-name: '@vitest/*'
+        update-types:
+          - version-update:semver-major
+      - dependency-name: cypress
         update-types:
           - version-update:semver-major
     groups:

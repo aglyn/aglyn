@@ -2,7 +2,7 @@
  * GENERATED FILE — do not edit. Regenerate with:
  *   node tools/scripts/generate-realm-host-exports.mjs
  *
- * The realm plugin surface of `@mui/material` 9.3.1 (AGL-3392): what a
+ * The realm plugin surface of `@mui/material` 9.4.0 (AGL-3392): what a
  * signed bundle reads from MUI. Imported only by the lazily loaded host module.
  */
 /* eslint-disable */

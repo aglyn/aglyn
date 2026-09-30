@@ -889,9 +889,7 @@ ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).j
  * Every first-party element that runs a site function, and the prop naming
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
-export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {
-${Object.entries(functionBindingRows()).map(([id, prop]) => `  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('\n')}
-}
+export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries(functionBindingRows()).map(([id, prop]) => `\n  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('')}${Object.keys(functionBindingRows()).length ? '\n' : ''}}
 `
   )
 }

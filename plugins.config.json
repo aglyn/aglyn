@@ -54,11 +54,6 @@
             "muiMegaMenu",
             "muiDrawer",
             "muiDrawerToggle",
-            "functionWidget",
-            "functionScope",
-            "functionInput",
-            "functionOutput",
-            "functionShow",
             "product",
             "marketplacePlugin",
             "custom-html",
@@ -85,11 +80,7 @@
             "muiPagination",
             "muiBreadcrumbs",
             "themeModeSwitcher"
-          ],
-          "functionBindings": {
-            "functionScope": "functionName",
-            "functionWidget": "functionName"
-          }
+          ]
         }
       }
     },

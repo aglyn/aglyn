@@ -22,6 +22,7 @@
 //   npm run release:prepare -- --write   # write package.json + CHANGELOG.md
 //   npm run release:prepare -- --write --set 1.0.0
 //   npm run release:prepare -- --write --prerelease-tag beta
+//   npm run release:prepare -- --write --hotfix   # past the daily cap
 //
 // REPORT-ONLY IS THE DEFAULT, DELIBERATELY. Cutting a version is a decision,
 // not a build step. Running this without --write is how you find out what the
@@ -46,6 +47,11 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { versionedLibPackages } from './lib/lib-boundaries.mjs'
+import {
+  describeCadence,
+  evaluateCadence,
+  readProductionMerges,
+} from './lib/promotion-cadence.mjs'
 import {
   lockfileVersionVerdict,
   readManifestPairs,
@@ -98,10 +104,12 @@ function parseArgs(argv) {
     prereleaseTag: null,
     baseRef: null,
     headRef: 'HEAD',
+    hotfix: false,
   }
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--write') options.write = true
+    else if (arg === '--hotfix') options.hotfix = true
     else if (arg === '--set') options.set = argv[++i]
     else if (arg.startsWith('--set=')) options.set = arg.slice(6)
     else if (arg === '--prerelease-tag') options.prereleaseTag = argv[++i]
@@ -176,8 +184,45 @@ function readCommits(baseRef, headRef) {
     })
 }
 
+/**
+ * The daily promotion cap (AGL-3413), checked before a version is cut because
+ * cutting one is the first step of every promotion. `production` is fetched
+ * first: a stale remote-tracking ref undercounts, and undercounting is the
+ * direction that spends builds.
+ */
+function checkCadence(options) {
+  let fetched = true
+  try {
+    git('fetch', '--quiet', 'origin', 'production')
+  } catch {
+    fetched = false
+  }
+  const verdict = evaluateCadence({
+    merges: readProductionMerges(git),
+    hotfix: options.hotfix,
+  })
+  const lines = describeCadence(verdict)
+  if (!fetched) {
+    lines.push(
+      'Could not fetch origin/production, so this counts from the local ref and may be low.',
+    )
+  }
+  return { verdict, lines }
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2))
+  const cadence = checkCadence(options)
+  if (options.write && !cadence.verdict.allowed) {
+    console.log(
+      ['', '  Aglyn release — prepare', '  ' + '-'.repeat(60)]
+        .concat(cadence.lines.map((line) => `  ${line}`))
+        .concat(['', '  Nothing was written.', ''])
+        .join('\n'),
+    )
+    process.exitCode = 1
+    return
+  }
   const pkg = JSON.parse(read(packagePath, 'utf8'))
   const current = parseVersion(pkg.version)
 
@@ -209,6 +254,7 @@ function main() {
       .join('  ')}`,
   )
   out.push(`  Linear issues   ${summary.linearIds.length}`)
+  for (const line of cadence.lines) out.push(`  ${line}`)
   out.push(`  aggregate bump  ${summary.bump}`)
   if (summary.breaking.length > 0) {
     out.push(`  BREAKING        ${summary.breaking.length}`)

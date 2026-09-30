@@ -77,11 +77,33 @@ and triggers on `pull_request`, so PRs are built. The release steps below
 simply have no workflow that invokes them, and that is deliberate — the bump
 is a step in the promotion, run by hand when a batch is called.
 
+### At most three promotions a day
+
+`production` takes **three promotions per Central calendar day** (AGL-3413).
+Each promotion rebuilds tenant, console and docs, and Vercel Pro bills each
+build by the CPU-minute. That makes the build bill promotions × about $0.12,
+and how often we promote is the only thing that moves it: the build cache, the
+ignore step and the machine size were each measured and none of them does.
+The cycle that prompted the cap averaged 7.8 promotions a day.
+
+- `npm run release:prepare` prints the day's count on every run, and `--write`
+  refuses to cut a fourth version. Keep landing on `main`; the batch goes out in
+  tomorrow's first promotion.
+- The `Promotion cadence` check on the PR into `production` reads the same count.
+- **Hotfix:** when production is broken for users and the fix cannot wait for
+  tomorrow, pass `--hotfix` to `release:prepare` and put the `hotfix` label on
+  the PR. Nothing else qualifies.
+
+A promotion is any first-parent merge commit on `production`, dated by when
+GitHub merged it. The day starts at 00:00 America/Chicago, not UTC midnight,
+which falls at 7 PM Central.
+
 ### 1 — On `main`, when a batch is called
 
 ```bash
 npm run release:prepare                      # report only, changes nothing
 npm run release:prepare -- --write           # writes package.json + CHANGELOG.md
+npm run release:prepare -- --write --hotfix  # past the daily cap, production-down only
 ```
 
 Report-only is the default. Run it bare first to see what the batch contains

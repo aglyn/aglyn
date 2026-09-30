@@ -32,8 +32,8 @@
     "@aglyn/shared-ui-theme": "1.0.0-beta.218",
     "@aglyn/shared-util-vendor": "1.0.0-beta.218",
     "@swc/helpers": "0.5.23",
-    "mobx": "^6.16.1",
-    "mobx-react-lite": "^4.1.1"
+    "mobx": "^7.0.5",
+    "mobx-react-lite": "^5.1.0"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",

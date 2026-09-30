@@ -177,7 +177,9 @@ to see.
 A Function Widget draws a whole calculator for you: the inputs in a row, a button, the
 result. When the design is yours — a number box with quick picks beside it, two questions
 asked as lists, a table whose rows a filter removes, one row highlighted, a sentence under
-it — build it from four elements instead, all under **Input** in the Elements panel:
+it — build it from four elements instead, all under **Input** in the Elements panel. They,
+and the Function Widget, come from the **Calculators** plugin, installed from the
+marketplace:
 
 1. Place a **Calculator** and give it the function's name. It is an ordinary container.
 2. Inside it, place a **Calculator Input** for each question and name the parameter it

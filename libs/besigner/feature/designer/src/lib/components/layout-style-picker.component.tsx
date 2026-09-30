@@ -25,7 +25,7 @@ import {
 } from '@aglyn/aglyn'
 import { BesignerPanelTabFlag } from '@aglyn/besigner'
 import { Button, ListSubheader, Menu, MenuItem } from '@mui/material'
-import { comparer, reaction, toJS } from 'mobx'
+import { compareStructural, reaction, toJS } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { type MouseEvent, useCallback, useEffect, useState } from 'react'
 import { useLayoutChromeContext } from '../contexts/layout-chrome-context'
@@ -91,7 +91,7 @@ export function useCanvasLayoutStyleOverrides(
   useEffect(
     () =>
       reaction(read, (next) => setValue(next), {
-        equals: comparer.structural,
+        equals: compareStructural,
         fireImmediately: true,
       }),
     [read],

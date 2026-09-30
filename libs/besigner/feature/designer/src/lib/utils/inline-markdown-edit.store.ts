@@ -17,7 +17,7 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import { FieldComponentType } from '@aglyn/aglyn'
-import { makeAutoObservable, observable } from 'mobx'
+import { makeAutoObservable, observableRef } from 'mobx'
 
 export interface InlineMarkdownEditRect {
   left: number
@@ -63,7 +63,7 @@ export function findMarkdownAttributeName(
  * still carried and still used: it is the value the first paint positions on,
  * before any layout effect has run, and the fallback when there is no anchor.
  *
- * It is an `observable.ref` — a DOM node is a foreign object graph and mobx has
+ * It is an `observableRef` — a DOM node is a foreign object graph and mobx has
  * no business walking into it.
  *
  * `initialValue` is captured at open and never re-read. The editor re-parses
@@ -80,7 +80,7 @@ class InlineMarkdownEditStore {
   initialValue = ''
 
   constructor() {
-    makeAutoObservable(this, { anchor: observable.ref })
+    makeAutoObservable(this, { anchor: observableRef })
   }
 
   open(

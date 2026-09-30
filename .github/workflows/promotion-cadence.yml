@@ -1,0 +1,61 @@
+# Caps promotions at three per Central day (AGL-3413).
+#
+# Every promotion rebuilds tenant, console and docs on Vercel, and Pro bills
+# each build by the CPU-minute, so the build line is promotions × a fixed price.
+# `release:prepare --write` refuses a fourth version cut; this is the same
+# count read at the PR, where a promotion that skipped the cut still shows up.
+#
+# The `hotfix` label passes it. That is for production broken for users with a
+# fix that cannot wait for tomorrow's allowance, and nothing else.
+name: Promotion cadence
+
+on:
+  pull_request:
+    branches:
+      - production
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promotion-cadence-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cadence:
+    name: Promotions today
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Count today's promotions
+        env:
+          HOTFIX: ${{ contains(github.event.pull_request.labels.*.name, 'hotfix') }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet --shallow-since="3 days ago" origin production:refs/remotes/origin/production
+          args=(--ref origin/production)
+          if [ "$HOTFIX" = "true" ]; then args+=(--hotfix); fi
+          # `|| code=$?` so a refusal still reaches the job summary below
+          # before the step fails.
+          code=0
+          node tools/scripts/check-promotion-cadence.mjs "${args[@]}" \
+            > "$RUNNER_TEMP/cadence.txt" 2>&1 || code=$?
+          cat "$RUNNER_TEMP/cadence.txt"
+          {
+            echo "### Promotion cadence"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/cadence.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then
+            echo "::error::Today's promotions are used. Keep landing on main, or label this PR hotfix if production cannot wait."
+          fi
+          exit "$code"

@@ -396,7 +396,8 @@ see [Forms](../../content-and-data/forms/overview.md),
 [Commerce](../../commerce-and-bookings/commerce/overview.md) and
 [Member accounts](../../guides/member-accounts.md).
 
-One element in this group belongs to neither:
+The calculator elements belong to none of these. They come from **Calculators**, a plugin you
+install from the marketplace, and appear under **Input** once it is installed:
 
 | Element | What it's for |
 | --- | --- |

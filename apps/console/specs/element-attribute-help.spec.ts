@@ -71,16 +71,7 @@ const SHARED_TEXT_EXCEPTIONS: ReadonlyMap<string, string> = new Map()
  * elements live on in a successor, with the reason. The entry goes with the
  * file.
  */
-const RETIRING_COPIES: ReadonlyMap<string, string> = new Map([
-  [
-    'libs/plugins/mui/src/lib/components/function-widget.tsx',
-    "AGL-3394: the Function Widget moved to the Calculators marketplace plugin with the rest of the family, and mui's copy goes with function-scope.tsx below.",
-  ],
-  [
-    'libs/plugins/mui/src/lib/components/function-scope.tsx',
-    "AGL-3394: the calculator family moved to the Calculators marketplace plugin (libs/plugins/calculator). mui keeps its copy only until aglyn.com's calculators are moved onto the plugin, and then this file is deleted.",
-  ],
-])
+const RETIRING_COPIES: ReadonlyMap<string, string> = new Map()
 
 interface Attribute {
   file: string

@@ -23,11 +23,12 @@
 // `monaco-editor` vendors DOMPurify into its own source tree and inlines it
 // into the prebuilt AMD bundle that `tools/scripts/lib/sync-monaco-assets.js`
 // copies into `apps/console/public/_static/monaco/vs`. That bundle — not
-// `node_modules/dompurify`, which is our own patched 3.4.13 — is what the
+// `node_modules/dompurify`, which is our own patched 3.4.16 — is what the
 // browser executes when someone opens the besigner's Edit -> Raw JSON.
 //
-// The vendored copy is 3.4.8 and no released monaco carries a newer one, so
-// there is nowhere to upgrade to. It is NOT true, and never was, that the
+// Through monaco 0.56 the vendored copy was 3.4.8 and no released monaco
+// carried a newer one, so there was nowhere to upgrade to. It is NOT true, and
+// never was, that the
 // vendored copy is unused: `esm/vs/base/browser/domSanitize.js` imports it and
 // every markdown render inside the editor runs through it. The dismissals rest
 // on something narrower and checkable — that monaco never turns on the four
@@ -47,6 +48,19 @@
 // reviews on a Dependabot bump. A precondition-based dismissal whose
 // preconditions nobody re-measures silently stops being true.
 //
+// ONCE THE VENDORED COPY IS PATCHED, THE PRECONDITION STOPS MATTERING
+//
+// Each advisory below carries the first DOMPurify release that fixes it. A
+// precondition is only a reason to keep an alert dismissed while the copy
+// monaco inlines is still vulnerable; once that copy is at or past the fix,
+// passing the option is ordinary use of a patched library. monaco 0.57.0
+// inlines DOMPurify 3.4.15 — past all four fixes — and is also the first
+// release to pass `TRUSTED_TYPES_POLICY:` (domSanitize.js retries with a fresh
+// policy when DOMPurify's cached one is "no longer runnable"; it still never
+// calls `clearConfig()`, the other half of GHSA-vxr8-fq34-vvx9). Reviewed for
+// AGL-3410. The version pins below still force a re-read on every bump, and a
+// downgrade below any fix re-arms its precondition check automatically.
+//
 // HOW THE DETECTOR TELLS "PASSED" FROM "READ"
 //
 // The bundle contains the DOMPurify library itself, so every option name
@@ -59,19 +73,19 @@
 // MARK – GLOBALS
 
 /** The monaco release whose DOMPurify posture has actually been read. */
-export const REVIEWED_MONACO_VERSION = '0.56.0'
+export const REVIEWED_MONACO_VERSION = '0.57.0'
 
 /** The DOMPurify version that release inlines into `min/vs`. */
-export const REVIEWED_DOMPURIFY_VERSION = '3.4.8'
+export const REVIEWED_DOMPURIFY_VERSION = '3.4.15'
 
 /**
  * Options whose PRESENCE in a passed config re-opens an advisory. Matched in
  * the `TOKEN:` object-literal form — see the detector note above.
  */
 export const FORBIDDEN_OPTIONS = [
-  { token: 'IN_PLACE', advisory: 'GHSA-55q2-fjhq-7xh7' },
-  { token: 'CUSTOM_ELEMENT_HANDLING', advisory: 'GHSA-c2j3-45gr-mqc4' },
-  { token: 'TRUSTED_TYPES_POLICY', advisory: 'GHSA-vxr8-fq34-vvx9' },
+  { token: 'IN_PLACE', advisory: 'GHSA-55q2-fjhq-7xh7', patchedIn: '3.4.13' },
+  { token: 'CUSTOM_ELEMENT_HANDLING', advisory: 'GHSA-c2j3-45gr-mqc4', patchedIn: '3.4.12' },
+  { token: 'TRUSTED_TYPES_POLICY', advisory: 'GHSA-vxr8-fq34-vvx9', patchedIn: '3.4.9' },
 ]
 
 /**
@@ -80,8 +94,8 @@ export const FORBIDDEN_OPTIONS = [
  * is not evidence of anything — only a `.setConfig(` CALL is.
  */
 export const FORBIDDEN_CALLS = [
-  { token: 'setConfig', advisory: 'GHSA-cmwh-pvxp-8882' },
-  { token: 'clearConfig', advisory: 'GHSA-vxr8-fq34-vvx9' },
+  { token: 'setConfig', advisory: 'GHSA-cmwh-pvxp-8882', patchedIn: '3.4.11' },
+  { token: 'clearConfig', advisory: 'GHSA-vxr8-fq34-vvx9', patchedIn: '3.4.9' },
 ]
 
 /** An option monaco really does pass — the detector's positive control. */
@@ -92,6 +106,25 @@ const DOMPURIFY_MARKER = /dompurify/i
 
 /** DOMPurify stamps its own version onto the export. */
 const VERSION_PATTERN = /\.version="([\d.]+)"/g
+
+/**
+ * True when `version` is at or past `patchedIn`. An unreadable version is
+ * never "patched", so the precondition checks stay armed when the stamp is
+ * lost.
+ *
+ * @param {string | undefined} version
+ * @param {string} patchedIn
+ */
+export function isPatched(version, patchedIn) {
+  if (!version) return false
+  const a = version.split('.').map(Number)
+  const b = patchedIn.split('.').map(Number)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0)
+    if (diff) return diff > 0
+  }
+  return true
+}
 
 // MARK – MAIN
 
@@ -170,7 +203,8 @@ export function evaluateMonacoDompurify({ monacoVersion, files }) {
     })
   }
 
-  for (const { token, advisory } of FORBIDDEN_OPTIONS) {
+  for (const { token, advisory, patchedIn } of FORBIDDEN_OPTIONS) {
+    if (isPatched(dompurifyVersion, patchedIn)) continue
     const hits = matched.filter((file) => file.source.includes(`${token}:`))
     if (hits.length) {
       failures.push({
@@ -183,7 +217,8 @@ export function evaluateMonacoDompurify({ monacoVersion, files }) {
     }
   }
 
-  for (const { token, advisory } of FORBIDDEN_CALLS) {
+  for (const { token, advisory, patchedIn } of FORBIDDEN_CALLS) {
+    if (isPatched(dompurifyVersion, patchedIn)) continue
     const hits = matched.filter((file) => file.source.includes(`.${token}(`))
     if (hits.length) {
       failures.push({

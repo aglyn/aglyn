@@ -37,8 +37,8 @@
     "@aglyn/tenant-data-admin": "1.0.0-beta.218",
     "@aglyn/tenant-feature-instance": "1.0.0-beta.218",
     "@aglyn/tenant-runtime": "1.0.0-beta.218",
-    "@stripe/react-stripe-js": "^3.10.0",
-    "@stripe/stripe-js": "^5.10.0",
+    "@stripe/react-stripe-js": "^6.12.0",
+    "@stripe/stripe-js": "^9.17.0",
     "@swc/helpers": "0.5.23",
     "qrcode.react": "^4.2.0"
   },
