@@ -94,6 +94,7 @@ export interface ProviderAnswer {
     | 'origin-not-authorized'
     | 'api-key-rejected'
     | 'appcheck-rejected'
+    | 'throttled'
     | 'refused'
 }
 
@@ -115,6 +116,10 @@ export interface ProviderAnswer {
  *  - App Check — the precondition the browser handshake also has to satisfy.
  *  - an invalid API key — the public key the client bundle ships was rotated
  *    or restricted.
+ *  - `TOO_MANY_ATTEMPTS_TRY_LATER` — the provider's abuse defense refusing
+ *    the CALLER, keyed on its address. It says the endpoint is up and says
+ *    nothing about the door, so it gets a member of its own rather than
+ *    reading as any of the four above (AGL-3419).
  *
  * `message` is read only to CHOOSE a member of the set; it is never returned,
  * and the default is the anonymous `refused` rather than anything derived
@@ -131,6 +136,7 @@ export function classifyIdentityToolkitFailure(
   if (text.includes('API KEY') || text.includes('API_KEY')) {
     return 'api-key-rejected'
   }
+  if (text.includes('TOO_MANY_ATTEMPTS_TRY_LATER')) return 'throttled'
   if (text.includes('OPERATION_NOT_ALLOWED')) return 'provider-not-configured'
   if (
     text.includes('INVALID_CONTINUE_URI') ||
@@ -727,6 +733,14 @@ export function passwordSignInDoorHealth(
   }
   if (facts.unexpectedAcceptance) {
     return { ...base, ok: false, code: 'admitted-absent-account' }
+  }
+  if (facts.answer.verdict === 'throttled') {
+    // Identity Platform blocked the PROBE's egress address, a Vercel IP no
+    // customer signs in from — customers reach it from their own browsers.
+    // The provider answered, so it is reachable; what the block hides is
+    // whether the password provider is still on, and that is said in the
+    // code rather than reported as an outage nobody is having (AGL-3419).
+    return { ...base, ok: true, code: 'probe-throttled' }
   }
   if (facts.answer.verdict !== 'accepted') {
     return { ...base, ok: false, code: facts.answer.verdict }
