@@ -61,8 +61,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => ({
         collection: (name: string) => ({
           doc: (id: string) => ({
-            get: async () => docSnapshot(id, revocations.get(id) ?? {}),
-            data: () => revocations.get(id),
+            // Only the declared kill-switch store answers with a revocation,
+            // so a read of any other collection finds none.
+            get: async () =>
+              docSnapshot(id, (name === 'revocations' && revocations.get(id)) || {}),
             collection: () =>
               collectionOf(name === 'orgs' ? orgInstalls : hostInstalls),
           }),
@@ -78,6 +80,21 @@ jest.mock('@aglyn/aglyn/server', () => {
   return { ...actual }
 })
 
+/**
+ * The kill switch's store is DECLARED by the distributing plugin (AGL-3080).
+ * The real compiled declaration by default; `null` to prove a pin nobody can
+ * check renders as revoked.
+ */
+const mockDeclared = jest.requireActual(
+  '@aglyn/aglyn/plugin-manager/plugin-distribution',
+).PLUGIN_DISTRIBUTION
+let mockDistribution: unknown = mockDeclared
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-distribution', () => ({
+  get PLUGIN_DISTRIBUTION() {
+    return mockDistribution
+  },
+}))
+
 import { getPluginInstalls } from './get-plugin-installs'
 
 const LISTING = 'listing-1'
@@ -88,6 +105,7 @@ const pin = (version: string) => ({
 })
 
 beforeEach(() => {
+  mockDistribution = mockDeclared
   orgInstalls.clear()
   hostInstalls.clear()
   revocations.clear()
@@ -135,5 +153,18 @@ describe('getPluginInstalls — what a takedown has to reach', () => {
     orgInstalls.set(LISTING, { version: '', sha256: '' })
     const installs = await getPluginInstalls({ hostId: 'host-1' })
     expect(installs[LISTING]).toBeUndefined()
+  })
+})
+
+describe('getPluginInstalls — the kill switch it reads is declared (AGL-3080)', () => {
+  it('reads the revocations the marketplace declares', () => {
+    expect(mockDeclared).toMatchObject({ revocations: 'revocations' })
+  })
+
+  it('renders every pin revoked when no plugin declares a store to check it against', async () => {
+    orgInstalls.set(LISTING, pin('1.0.0'))
+    mockDistribution = null
+    const installs = await getPluginInstalls({ hostId: 'host-1' })
+    expect(installs[LISTING]).toMatchObject({ version: '1.0.0', revoked: true })
   })
 })

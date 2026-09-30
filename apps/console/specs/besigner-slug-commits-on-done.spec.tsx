@@ -206,7 +206,7 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   isFirstPublishedRoute: () => false,
   trackEvent: () => undefined,
 }))
-jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
+jest.mock('@aglyn/aglyn/app-utils/site-theme', () => ({
   resolveSiteTheme: () => undefined,
 }))
 jest.mock('@aglyn/besigner', () => ({

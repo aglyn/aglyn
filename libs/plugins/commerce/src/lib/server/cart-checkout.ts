@@ -27,7 +27,7 @@ import {
   getOrgForHost,
   isYoungWorkspace,
 } from '@aglyn/tenant-data-admin'
-import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { readCartId } from './cart-cookie'
 import { resolveManualTaxRateId } from './manual-tax-rate'
@@ -139,7 +139,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       .get()
     const accountId = ownerProfile.get('stripeAccountId')
     if (
-      !connectLinkageIsReady(
+      !merchantAccountIsReady(
         {
           accountId,
           chargesEnabled: ownerProfile.get('stripeChargesEnabled'),

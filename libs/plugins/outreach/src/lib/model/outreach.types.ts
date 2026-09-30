@@ -933,6 +933,19 @@ export interface OutreachEnrollment extends OutreachTimestamps {
   mailboxId: string
   /** The index into `steps` of the NEXT step to run. */
   stepIndex: number
+  /**
+   * The step the enrollment began at (AGL-3228), when it was not the first:
+   * the member enrolled someone who already had the earlier steps by hand.
+   * Absent on an enrollment that began at step 1. The first email sent from
+   * here starts the enrollment's thread, whatever `replyInThread` says —
+   * there is no earlier email of ours for it to answer.
+   */
+  startStepIndex?: number
+  /**
+   * The steps before {@link startStepIndex}, marked skipped at enrollment
+   * and never run (AGL-3228). Absent when none were.
+   */
+  skippedSteps?: OutreachSkippedStep[]
   /** When that step comes due, or `null` when nothing is waiting. */
   nextDueAtMs: number | null
   status: OutreachEnrollmentStatus
@@ -1057,6 +1070,19 @@ export interface OutreachSendClaim {
    * than by sending it again. `null` for a task step.
    */
   messageId: string | null
+}
+
+/**
+ * One step an enrollment skipped because it began past it (AGL-3228): the
+ * person already had it by hand, so the runtime never runs it. Kept apart
+ * from {@link OutreachStepRecord}, which every reader counts as a send.
+ */
+export interface OutreachSkippedStep {
+  stepIndex: number
+  stepId: string
+  kind: 'email' | 'task'
+  /** When it was marked skipped: the enrollment. */
+  atMs: number
 }
 
 /** One step the runtime ran for an enrollment (AGL-2981). */

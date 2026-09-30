@@ -155,6 +155,10 @@ The page raises a banner when a figure cannot be trusted as a total:
 - **Lower bound** — a sweep hit its row cap. Narrow the period; do not quote the numbers.
 - **Storefront orders could not be read** — the query failed, so a $0 storefront commission
   means "not counted", not "no sales". Usually a missing collection-group index.
+- **Earnings from a plugin could not be read** — a plugin that earns through the platform
+  (the storefront, the marketplace) did not answer for this period, or is not installed on
+  this deployment's server. None of its earnings are in any figure, so the settled total
+  is a lower bound.
 - **Invoices with no payment date** — a date-range query cannot match a row whose timestamp
   is empty, so those invoices are invisible to every period and settled revenue is short
   by them.

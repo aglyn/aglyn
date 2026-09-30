@@ -138,6 +138,7 @@ import {
 } from '../../../../../../../../../../constants/screen-publishing'
 import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
+import SeoPageCheck from '../../../../../../../../../../components/seo-page-check.component'
 import {
   CONTENT_MAX_WIDTH,
   TABLE_PAGE_SIZE_DEFAULT,
@@ -1863,6 +1864,12 @@ function ScreenDetails() {
                         value={seoImage}
                         onChange={setSeoImage}
                       />
+                      {/* The platform's SEO check, for this page: what a
+                          search result and a crawler would find wrong with it
+                          as published. For every site owner; a widget in the
+                          zone below may propose values, never list these
+                          findings again. */}
+                      <SeoPageCheck hostId={hostId} screenId={screenId} />
                       {/* Plugin zone (AGL-2910): a widget here proposes values
                           for the fields above and never writes them — what it
                           proposes is staged like typing, and Save SEO below is

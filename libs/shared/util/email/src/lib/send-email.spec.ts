@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
+import { postResendEmail, RESEND_SEND_ENDPOINT } from './mail-provider-resend'
 import {
-  RESEND_SEND_ENDPOINT,
   applyFromName,
   contextTag,
   isEmailConfigured,
-  postResendEmail,
   sendEmail,
 } from './send-email'
 

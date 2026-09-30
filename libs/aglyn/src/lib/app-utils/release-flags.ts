@@ -28,22 +28,17 @@
 import type { OrgPlan } from '../foundation'
 import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
+import {
+  PLUGIN_RELEASE_FLAGS,
+  type PluginReleaseFlagKey,
+} from './plugin-release-flags.generated'
 
+/**
+ * Every release flag: the ones plugins declare (compiled from
+ * plugins.config.json, AGL-3080) and the platform's own below.
+ */
 export type ReleaseFlagKey =
-  | 'release_crm'
-  | 'release_outreach'
-  | 'release_bookings'
-  | 'release_events'
-  | 'release_data_store'
-  | 'release_workflows'
-  | 'release_redirects'
-  | 'release_commerce_v2'
-  | 'release_member_accounts'
-  | 'release_marketplace'
-  | 'release_marketing'
-  | 'release_email'
-  | 'release_inbox'
-  | 'release_logic'
+  | PluginReleaseFlagKey
   | 'release_addon_store'
   | 'release_native_checkout'
   | 'release_edit_bar'
@@ -67,145 +62,23 @@ export interface ReleaseFlagDefinition {
   navTabId?: string
 }
 
+/** A release flag a plugin declares, as the generator compiles it. */
+export type PluginReleaseFlagDefinition = ReleaseFlagDefinition & {
+  key: PluginReleaseFlagKey
+}
+
 /**
- * The registry: one entry per gated feature. Adding a flag = add it here,
- * seed it in the Remote Config template, and (optionally) wrap the page in
- * `<FeatureGate>` — the staff admin editor and nav filtering pick it up
- * from this list.
+ * The platform's own release flags: features no plugin owns.
+ *
+ * Every first-party plugin is release-flagged too (AGL-422) — the flag feeds
+ * the plugin LOADER (console, published sites, API dispatch), not just nav
+ * visibility, so staff can kill-switch a whole plugin platform-wide from the
+ * Feature Flags page. Those flags are the plugins' own: each is defined by
+ * its catalog row's `releaseFlagDefinition` in plugins.config.json and
+ * compiled into `PLUGIN_RELEASE_FLAGS`, so adding a plugin edits nothing
+ * here.
  */
-export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
-  {
-    key: 'release_crm',
-    label: 'CRM',
-    description:
-      'The CRM: contacts, leads, companies, deals, tasks, reports and fields.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-contacts',
-  },
-  // Sequences (AGL-2974): the plugin's kill switch as well as its launch
-  // gate, like every first-party plugin's flag since AGL-422 — off, it is
-  // subtracted from the console loader and the API dispatcher for everyone
-  // but staff. OFF by default, because nothing behind it sends mail yet and
-  // no plan carries the `outreach` entitlement it also needs. The KEY stays
-  // `release_outreach`: it is persisted in Remote Config (AGL-3199).
-  {
-    key: 'release_outreach',
-    label: 'Sequences',
-    description:
-      'One-to-one, multi-step email sequences sent from a rep’s own ' +
-      'connected mailbox and logged in the CRM (AGL-2974). OFF by default ' +
-      'and staff preview only. An organization also needs the `outreach` ' +
-      'entitlement, which no plan carries, so a customer reaches it only ' +
-      'through a per-org entitlement override.',
-    defaultEnabled: false,
-    navTabId: 'nav-tab-org-outreach',
-  },
-  {
-    key: 'release_bookings',
-    label: 'Bookings',
-    description: 'Bookings & scheduling for host sites.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-bookings',
-  },
-  {
-    key: 'release_events',
-    label: 'Events',
-    description: 'Event calendar management (AGL-145 add-on surface).',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-events',
-  },
-  {
-    key: 'release_data_store',
-    label: 'Data store',
-    description: 'Datasets, models and dynamic data bindings.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-data',
-  },
-  {
-    key: 'release_workflows',
-    label: 'Automation',
-    description: 'Workflows, actions, webhooks and their run history.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-workflows',
-  },
-  {
-    key: 'release_redirects',
-    label: 'Redirects',
-    description: 'Redirect manager with usage analytics.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-redirects',
-  },
-  {
-    key: 'release_commerce_v2',
-    label: 'Commerce v2',
-    description:
-      'Full ecommerce wave: catalog/variants, cart + checkout, digital ' +
-      'goods, reservations, POS, and the repriced commerce tiers ' +
-      '(AGL-276..331).',
-    defaultEnabled: true,
-  },
-  {
-    key: 'release_member_accounts',
-    label: 'User Accounts',
-    description:
-      'Visitor accounts on published sites: the /signin, /signup and ' +
-      '/recover pages and the Members blocks (AGL-2486). Platform-wide ' +
-      'kill switch only — whether a given SITE serves those pages is the ' +
-      'per-site User Accounts toggle, which is off until a site opts in.',
-    defaultEnabled: true,
-  },
-  {
-    key: 'release_marketplace',
-    label: 'Marketplace',
-    description: 'Marketplace browsing, publishing and plugin installs.',
-    defaultEnabled: true,
-    // AGL-1654: was 'nav-tab-marketplace', which matched no nav item, so
-    // `gateNavTabItems` never hid the tab. The id is still held to a real
-    // declaration by `release-flag-nav-tab-ids.spec.ts` — but it is no longer
-    // held there BY HAND: AGL-3080 made the org Marketplace tab the
-    // marketplace plugin's own `orgNavItems` entry, so the tab and the
-    // surface behind it are one declaration that names this id once.
-    //
-    // The second half of that comment — "the page behind it carries no
-    // `<FeatureGate>`" — was still true until AGL-2019 and is no longer.
-    // Flipping this flag off used to subtract the marketplace plugin from
-    // the loader and both API dispatchers while the page went on rendering
-    // in full, so the OFF state was itself broken and "just turn the flag
-    // off" was not an available answer for an operator who does not want a
-    // marketplace. The page is gated now, so off means off.
-    navTabId: 'nav-tab-org-marketplace',
-  },
-  // AGL-422: every first-party plugin is release-flagged — the flag now
-  // feeds the plugin LOADER (console, published sites, API dispatch), not
-  // just nav visibility, so staff can kill-switch a whole plugin platform-
-  // wide from the Feature Flags page.
-  {
-    key: 'release_marketing',
-    label: 'Marketing',
-    description: 'Overlays, campaigns at-a-glance, and A/B experiments.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-marketing',
-  },
-  {
-    key: 'release_email',
-    label: 'Email',
-    description: 'Designed emails, campaigns, and audience sending.',
-    defaultEnabled: true,
-  },
-  {
-    key: 'release_inbox',
-    label: 'Inbox',
-    description: 'Form submissions, site members, and the lead inbox.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-inbox',
-  },
-  {
-    key: 'release_logic',
-    label: 'Logic',
-    description: 'Variables, no-code functions, and reference health.',
-    defaultEnabled: true,
-    navTabId: 'nav-tab-logic',
-  },
+const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   {
     key: 'release_addon_store',
     label: 'Add-on store',
@@ -319,6 +192,17 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'disclosure as Assist (AGL-1909).',
     defaultEnabled: false,
   },
+]
+
+/**
+ * The registry: one entry per gated feature, the plugins' first. Adding a
+ * platform flag = add it above, seed it in the Remote Config template, and
+ * (optionally) wrap the page in `<FeatureGate>` — the staff admin editor and
+ * nav filtering pick it up from this list.
+ */
+export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
+  ...PLUGIN_RELEASE_FLAGS,
+  ...PLATFORM_RELEASE_FLAGS,
 ]
 
 export const RELEASE_FLAG_KEYS = RELEASE_FLAGS.map(

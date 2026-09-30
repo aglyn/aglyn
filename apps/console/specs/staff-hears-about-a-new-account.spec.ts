@@ -22,23 +22,50 @@
  */
 
 /**
- * AGL-3225: staff hears that somebody signed up.
+ * AGL-3225: staff hears that somebody signed up — once per account, on every
+ * sign-up path.
  *
- * Nothing announced a new account. The announcement hangs off
- * `seedUserProfile`'s `created` flag rather than off a signup form, because
- * that flag is the one fact in the product that means "this person did not
- * exist before" — and it lives on the path every interactive sign-in takes,
- * so it covers password, Google, passkey and SSO without a hook per provider.
+ * The notice first hung off `seedUserProfile` reporting that it CREATED
+ * `users/{uid}`. That document has other writers that reach it first: the
+ * sign-up page writes the profile, plan intent and campaign there, the
+ * acquisition record lands there, and since AGL-3355 the /signin consent
+ * bounce records acquisition there before the person has ever minted a
+ * session. So the notice went out only for the sign-ups that won the race —
+ * never for a password account, and never for a bounced Google one.
  *
- * The load-bearing test is the second one: a returning user must raise
- * nothing. Announcing on every mint would turn one staff member's feed into
- * a log of every sign-in on the platform.
+ * Newness now comes from the auth record's creation time, and "once" from a
+ * marker only the first claim can create. The Firestore below is a fake with
+ * the one behaviour that matters: `create()` refuses a document that exists.
  */
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const mockVerifyIdToken = jest.fn()
 const mockCreateSessionCookie = jest.fn()
 const mockSeedUserProfile = jest.fn()
 const mockNotifyStaff = jest.fn()
+const mockFindUser = jest.fn()
+
+/** Documents the fake has created, by path. */
+const mockCreated = new Map<string, unknown>()
+const mockFirestore = {
+  collection: (name: string) => ({
+    doc: (id: string) => ({
+      create: async (data: unknown) => {
+        const path = `${name}/${id}`
+        if (mockCreated.has(path)) {
+          throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 })
+        }
+        mockCreated.set(path, data)
+      },
+    }),
+  }),
+}
+
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  __esModule: true,
+  default: { app: () => ({ firestore: () => mockFirestore }) },
+}))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -66,7 +93,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'locked' }, { status: 423 }),
   seedUserProfile: (...args: unknown[]) => mockSeedUserProfile(...args),
   notifyStaff: (...args: unknown[]) => mockNotifyStaff(...args),
-  findUserByUidAcrossPools: async () => null,
+  findUserByUidAcrossPools: (...args: unknown[]) => mockFindUser(...args),
   backfillMemberIdentityEverywhere: async () => undefined,
   consoleSessionEpochRefuses: async () => null,
   resolveConsoleDomain: async () => null,
@@ -149,9 +176,22 @@ const post = () =>
 /** `after` resolves on a later tick than the response does. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+/** The auth record, created `ageMs` ago. */
+function authRecordAged(ageMs: number) {
+  mockFindUser.mockResolvedValue({
+    tenantId: null,
+    record: {
+      uid: 'uid-new',
+      providerData: [],
+      metadata: { creationTime: new Date(Date.now() - ageMs).toUTCString() },
+    },
+  })
+}
+
 describe('a new account is announced to staff (AGL-3225)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockCreated.clear()
     mockCreateSessionCookie.mockResolvedValue('minted-cookie')
     mockVerifyIdToken.mockResolvedValue({
       uid: 'uid-new',
@@ -159,10 +199,11 @@ describe('a new account is announced to staff (AGL-3225)', () => {
       email_verified: true,
     })
     mockNotifyStaff.mockResolvedValue(undefined)
+    mockSeedUserProfile.mockResolvedValue({ created: true, fields: [] })
+    authRecordAged(5_000)
   })
 
-  it('announces the account the seed had to create', async () => {
-    mockSeedUserProfile.mockResolvedValue({ created: true, fields: [] })
+  it('announces an account on its first session', async () => {
     await post()
     await settle()
     expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
@@ -171,13 +212,65 @@ describe('a new account is announced to staff (AGL-3225)', () => {
     expect(payload.body).toContain('new@example.com')
     // The link opens the account, not the list.
     expect(payload.link).toContain('uid-new')
+    expect(mockCreated.has('accountAnnouncements/uid-new')).toBe(true)
   })
 
-  it('says nothing when the account already existed', async () => {
-    // The whole restraint of the feature. `seedUserProfile` runs on EVERY
-    // interactive sign-in and fills absent fields as it goes, so announcing
-    // on anything but `created` would announce every sign-in on the platform.
+  it('announces a /signup account whose page wrote users/{uid} before the mint', async () => {
+    // The race the old key lost: the sign-up page's profile, campaign and
+    // acquisition writes all land on `users/{uid}` while the session mint is
+    // still in flight, so the seed finds the document already there.
     mockSeedUserProfile.mockResolvedValue({ created: false, fields: ['photoUrl'] })
+    await post()
+    await settle()
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces an account /signin bounced for consent, when it comes back hours later', async () => {
+    // Created by "Sign in with Google" on /signin, recorded there (AGL-3355)
+    // and signed straight back out, so `users/{uid}` has existed since
+    // before this account ever held a session. Its first mint is on
+    // /signup, after the person consents.
+    authRecordAged(3 * 60 * 60 * 1000)
+    mockSeedUserProfile.mockResolvedValue({ created: false, fields: [] })
+    await post()
+    await settle()
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces a password account on its first verified session, days after it was created', async () => {
+    authRecordAged(2 * DAY_MS)
+    mockSeedUserProfile.mockResolvedValue({ created: false, fields: [] })
+    await post()
+    await settle()
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+  })
+
+  it('never announces the same account twice', async () => {
+    // A second tab, a retry, the next sign-in the same afternoon — the
+    // account is still inside the window every time, and only the first
+    // claim may win.
+    await post()
+    await settle()
+    await post()
+    await settle()
+    await Promise.all([post(), post()])
+    await settle()
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+  })
+
+  it('says nothing about an account older than the window', async () => {
+    // Every account created before the marker existed has none, so without
+    // the window each one's next sign-in would read as a sign-up.
+    authRecordAged(30 * DAY_MS)
+    mockSeedUserProfile.mockResolvedValue({ created: true, fields: [] })
+    await post()
+    await settle()
+    expect(mockNotifyStaff).not.toHaveBeenCalled()
+    expect(mockCreated.size).toBe(0)
+  })
+
+  it('says nothing when the auth record cannot be read', async () => {
+    mockFindUser.mockResolvedValue(null)
     await post()
     await settle()
     expect(mockNotifyStaff).not.toHaveBeenCalled()
@@ -187,12 +280,9 @@ describe('a new account is announced to staff (AGL-3225)', () => {
     /*
      * The hourly walk signs up for real through this path and then deletes
      * the account, so an announcement here is a person who no longer exists
-     * behind a link to an admin page that 404s.
-     *
-     * `created` is deliberately true: the walk genuinely is a first sighting,
-     * which is why nothing in AGL-3225's own restraint catches it.
+     * behind a link to an admin page that 404s. It genuinely is a brand-new
+     * account, which is why nothing in the newness check catches it.
      */
-    mockSeedUserProfile.mockResolvedValue({ created: true, fields: [] })
     mockVerifyIdToken.mockResolvedValue({
       uid: 'uid-canary',
       email: 'ops+signup-canary-m2rso9ab12@example.com',
@@ -204,10 +294,10 @@ describe('a new account is announced to staff (AGL-3225)', () => {
     // takes or it proves nothing about signup.
     expect(response.status).toBe(200)
     expect(mockNotifyStaff).not.toHaveBeenCalled()
+    expect(mockCreated.size).toBe(0)
   })
 
   it('still mints the session when the announcement throws', async () => {
-    mockSeedUserProfile.mockResolvedValue({ created: true, fields: [] })
     mockNotifyStaff.mockRejectedValue(new Error('boom'))
     const response = await post()
     await settle()

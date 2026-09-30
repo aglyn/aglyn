@@ -50,7 +50,7 @@
  * scoped: the invalidating input is a root-level plugins.config.json that is
  * no app's source, and the outputs land in two different apps at once.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -425,6 +425,126 @@ async function pluginSubprocessors() {
   return entries
 }
 
+/**
+ * The video hosts whose own player the Video element frames (AGL-3080), each
+ * declared by the plugin that plays them: a plugin names a function under
+ * `videoEmbedProviders`, and this loads `${package}/video-embed-providers`
+ * through jiti, calls it, and compiles the answer into the catalog file as
+ * data. The readers are the published page and the tenant middleware's
+ * `frame-src`, neither of which loads plugin code, so a runtime registry
+ * would be one they had not filled (core `video-embed-provider.ts`).
+ *
+ * Checked here, because a declaration widens every published page's
+ * `frame-src`:
+ *
+ *  - ONE HOST, ONE DECLARATION: an id or a domain claimed twice would leave a
+ *    link's player to config order.
+ *  - A CLOSED PLAYER: an https origin with no path, and a player path with
+ *    exactly one `{id}` and no query or fragment, so every frame is on the
+ *    declared origin.
+ *  - PATTERNS THAT COMPILE, anchored at both ends, each path pattern with a
+ *    capture group for the id.
+ *  - A QUERY core can build: each parameter is a constant `value`, or an
+ *    `option` core knows with an `on` or `off` spelling.
+ */
+const VIDEO_EMBED_OPTIONS = ['autoPlay', 'doNotTrack', 'muted', 'loop']
+const PLAIN_DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
+
+function anchoredPattern(source, what) {
+  if (typeof source !== 'string' || !source.startsWith('^') || !source.endsWith('$')) {
+    throw new Error(`${what} is a regular expression anchored with ^ and $`)
+  }
+  try {
+    return new RegExp(source)
+  } catch (error) {
+    throw new Error(`${what} does not compile: ${error.message}`, { cause: error })
+  }
+}
+
+async function pluginVideoEmbedProviders() {
+  const declaring = config.plugins.filter((plugin) => plugin.register?.videoEmbedProviders)
+  if (!declaring.length) return []
+  const jiti = jitiForWorkspace()
+  const rows = []
+  const ids = new Map()
+  const domains = new Map()
+  for (const plugin of declaring) {
+    const specifier = `${plugin.package}/video-embed-providers`
+    const fnName = plugin.register.videoEmbedProviders
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') {
+      throw new Error(`${specifier} exports no function named ${fnName}`)
+    }
+    const answer = await fn()
+    const where = `${specifier}: ${fnName}()`
+    if (!Array.isArray(answer) || !answer.length) {
+      throw new Error(`${where} declares no host — drop the entry, or declare one`)
+    }
+    for (const declaration of answer) {
+      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdPattern, playerOrigin, playerPath, playerQuery = [] } =
+        declaration ?? {}
+      const what = `${where} "${id ?? ''}"`
+      if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) throw new Error(`${where}: a host needs an "id" of lowercase letters, digits and dashes`)
+      const heldId = ids.get(id)
+      if (heldId) throw new Error(`${what} is already declared by "${heldId}"`)
+      ids.set(id, plugin.id)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label"`)
+      if (!Array.isArray(declaredDomains) || !declaredDomains.length) throw new Error(`${what} needs "domains"`)
+      for (const domain of declaredDomains) {
+        if (typeof domain !== 'string' || !PLAIN_DOMAIN.test(domain)) {
+          throw new Error(`${what}: "${domain}" is not a plain lowercase domain`)
+        }
+        const heldDomain = domains.get(domain)
+        if (heldDomain) throw new Error(`${what}: domain "${domain}" is already declared by "${heldDomain}"`)
+        domains.set(domain, id)
+      }
+      if (!Array.isArray(mediaIdPaths) || !mediaIdPaths.length) throw new Error(`${what} needs "mediaIdPaths"`)
+      for (const source of mediaIdPaths) {
+        const pattern = anchoredPattern(source, `${what} mediaIdPaths "${source}"`)
+        if (new RegExp(`${pattern.source}|`).exec('').length < 2) {
+          throw new Error(`${what} mediaIdPaths "${source}" has no capture group for the media id`)
+        }
+      }
+      anchoredPattern(mediaIdPattern, `${what} mediaIdPattern`)
+      let origin
+      try {
+        origin = new URL(playerOrigin).origin
+      } catch {
+        origin = undefined
+      }
+      if (origin !== playerOrigin || !playerOrigin.startsWith('https://')) {
+        throw new Error(`${what}: "playerOrigin" is an https origin with no path, e.g. https://player.example.net`)
+      }
+      if (
+        typeof playerPath !== 'string' ||
+        !playerPath.startsWith('/') ||
+        /[?#]/.test(playerPath) ||
+        playerPath.split('{id}').length !== 2
+      ) {
+        throw new Error(`${what}: "playerPath" begins with "/", names "{id}" once, and carries no query or fragment`)
+      }
+      if (!Array.isArray(playerQuery)) throw new Error(`${what}: "playerQuery" is a list`)
+      for (const entry of playerQuery) {
+        const param = `${what} playerQuery "${entry?.param ?? ''}"`
+        if (typeof entry?.param !== 'string' || !entry.param) throw new Error(`${what}: a playerQuery entry needs a "param"`)
+        if ('value' in entry) {
+          if (typeof entry.value !== 'string' || 'option' in entry) throw new Error(`${param}: a constant is one string "value" and no "option"`)
+          continue
+        }
+        if (!VIDEO_EMBED_OPTIONS.includes(entry.option)) {
+          throw new Error(`${param}: "option" is one of ${VIDEO_EMBED_OPTIONS.join(', ')}`)
+        }
+        const spellings = ['on', 'off'].filter((state) => entry[state] !== undefined)
+        if (!spellings.length || spellings.some((state) => typeof entry[state] !== 'string')) {
+          throw new Error(`${param}: an option spells "on", "off" or both as strings`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows.sort((a, b) => a.id.localeCompare(b.id))
+}
+
 /** One list of declarations as the manifest writes it, or '' for an empty optional one. */
 function declarationList(name, list, fields, { always = false } = {}) {
   if (!list.length) return always ? `    ${name}: [],\n` : ''
@@ -487,6 +607,108 @@ function describeSubprocessorDrift(expected, actual) {
       "  the same hosts are declared; a declaration's wording, its plugin or the formatting differs",
     )
   return lines
+}
+
+/**
+ * The console's tab titles for plugin surfaces (AGL-2184, compiled since
+ * AGL-3080): each surface's name and the names of the sections on its rail,
+ * as the plugins that draw them declare them.
+ *
+ * The reader is a SERVER layout, and reaching the console registry there
+ * drags every nav item's client component into the server compile, so the
+ * layout reads this data file instead of the registry. It is read from the
+ * plugins' source rather than their runtime registration for the same reason
+ * `plugin-page-title.spec.ts` reads it that way: nothing here can load a
+ * console registrar.
+ *
+ *  - A nav item's `label` and `href` (`plugin.ts`) name a surface.
+ *  - A nav item's `sections` const names its rail, and the
+ *    `*-console-sections.ts` that exports it is plain data, loaded as such.
+ *
+ * A surface or a section named two different ways is refused: the tab could
+ * follow only one of them.
+ */
+const TITLES_MANIFEST = 'apps/console/constants/plugins.titles.generated.ts'
+const NAV_LABEL = /label:\s*'([^']+)',[\s\S]{0,200}?href:\s*'\/([a-z0-9-]+)'/g
+const NAV_SECTIONS = /href:\s*'\/([a-z0-9-]+)',[\s\S]{0,600}?sections:\s*([A-Z_]+)/g
+
+/** Every file beneath `dir` whose name `keep` accepts. */
+function filesBeneath(dir, keep) {
+  const found = []
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry)
+    if (statSync(abs).isDirectory()) {
+      if (entry !== 'node_modules') found.push(...filesBeneath(abs, keep))
+    } else if (keep(entry)) found.push(abs)
+  }
+  return found
+}
+
+async function pluginSurfaceTitles() {
+  const aliases = workspaceAliases()
+  const jiti = jitiForWorkspace()
+  const titles = new Map()
+  const sections = new Map()
+  const claim = (map, key, value, where) => {
+    const held = map.get(key)
+    if (held !== undefined && held !== value) {
+      throw new Error(`${where}: "${key}" is named both "${held}" and "${value}"`)
+    }
+    map.set(key, value)
+  }
+  for (const plugin of config.plugins) {
+    const entry = aliases[plugin.package]
+    if (!entry || !plugin.register?.console) continue
+    const root = entry.slice(0, entry.lastIndexOf('/src/') + '/src'.length)
+    const lists = new Map()
+    for (const file of filesBeneath(root, (name) => name.endsWith('-console-sections.ts'))) {
+      for (const [name, value] of Object.entries(await jiti.import(file))) {
+        if (Array.isArray(value)) lists.set(name, value)
+      }
+    }
+    for (const file of filesBeneath(root, (name) => name === 'plugin.ts')) {
+      const source = readFileSync(file, 'utf8')
+      const where = file.slice(ROOT.length + 1)
+      for (const [, label, slug] of source.matchAll(NAV_LABEL)) {
+        claim(titles, slug, label, where)
+      }
+      for (const [, slug, constName] of source.matchAll(NAV_SECTIONS)) {
+        const list = lists.get(constName)
+        if (!list) throw new Error(`${where}: /${slug} names sections ${constName}, which no *-console-sections.ts beside it exports`)
+        if (!sections.has(slug)) sections.set(slug, new Map())
+        for (const { id, label } of list) claim(sections.get(slug), id, label, `${where} /${slug}`)
+      }
+    }
+  }
+  return { titles, sections }
+}
+
+/** The titles manifest, byte for byte. */
+function titlesContent({ titles, sections }) {
+  const key = (name) => (/^[a-z][a-z0-9]*$/i.test(name) ? name : `'${name}'`)
+  const quote = (text) => `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  const sorted = (map) => [...map.entries()].sort(([a], [b]) => a.localeCompare(b))
+  const titleRows = sorted(titles).map(([slug, label]) => `  ${key(slug)}: ${quote(label)},\n`).join('')
+  const sectionRows = sorted(sections)
+    .map(
+      ([slug, list]) =>
+        `  ${key(slug)}: {\n` +
+        [...list.entries()].map(([id, label]) => `    ${key(id)}: ${quote(label)},\n`).join('') +
+        `  },\n`,
+    )
+    .join('')
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The plugin surfaces' tab titles (AGL-2184): each surface's name, and the\n` +
+    ` * sections on its rail, as the plugins' nav items and section lists name\n` +
+    ` * them. Data for the console's server layouts, which cannot load the\n` +
+    ` * console registry. Source of truth: the plugins in plugins.config.json.\n */\n\n` +
+    `/** A surface's display name, by its URL slug. */\n` +
+    `export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {\n${titleRows}}\n\n` +
+    `/** The sections a surface's rail declares, id to display name, by the surface's URL slug. */\n` +
+    `export const PLUGIN_SURFACE_SECTIONS: Readonly<\n  Record<string, Readonly<Record<string, string>>>\n> = {\n${sectionRows}}\n`
+  )
 }
 
 /**
@@ -561,7 +783,7 @@ function catalogRows() {
   for (const plugin of config.plugins) {
     for (const source of [plugin, ...(plugin.capabilities ?? [])]) {
       if (!source.catalog) continue
-      const { order, publishedSiteImpact, editBarLink, $comment: _note, ...fields } = source.catalog
+      const { order, publishedSiteImpact, editBarLink, releaseFlagDefinition: _flag, $comment: _note, ...fields } = source.catalog
       const where = `plugins.config.json: "${source.id}" catalog`
       if (!Number.isInteger(order)) throw new Error(`${where} needs an integer "order"`)
       if (typeof fields.label !== 'string' || !fields.label) throw new Error(`${where} needs a "label"`)
@@ -605,6 +827,67 @@ function catalogRows() {
     }
   }
   return rows
+}
+
+/**
+ * The release flags plugins declare (AGL-422, compiled since AGL-3080). A
+ * catalog row that names a `releaseFlag` defines it beside the name — the
+ * label and description the staff Feature Flags page shows, the fallback
+ * verdict, the nav tab it hides — and core's `RELEASE_FLAGS` folds the
+ * compiled rows in ahead of the platform's own flags, so adding a plugin
+ * edits no core file. Compiled rather than registered: the flag gates the
+ * plugin LOADER itself, so a registry could only be filled by the code it
+ * decides whether to load.
+ *
+ * Written to a file of its own, beside the one module that reads it: the
+ * descriptions are staff copy, and the catalog rides on every published page.
+ */
+const RELEASE_FLAGS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-release-flags.generated.ts'
+const RELEASE_FLAG_KEY = /^release_[a-z0-9_]+$/
+
+function releaseFlagRows() {
+  const rows = []
+  for (const plugin of config.plugins) {
+    for (const source of [plugin, ...(plugin.capabilities ?? [])]) {
+      const key = source.catalog?.releaseFlag
+      const definition = source.catalog?.releaseFlagDefinition
+      const where = `plugins.config.json: "${source.id}" catalog`
+      if (!key) {
+        if (definition) throw new Error(`${where} defines a release flag without naming one in "releaseFlag"`)
+        continue
+      }
+      if (!RELEASE_FLAG_KEY.test(key)) throw new Error(`${where}: "releaseFlag" ${key} is not a release_* key`)
+      if (!definition) throw new Error(`${where} names ${key} but no "releaseFlagDefinition" defines it`)
+      const { label, description, defaultEnabled, navTabId } = definition
+      if (typeof label !== 'string' || !label) throw new Error(`${where} releaseFlagDefinition needs a "label"`)
+      if (typeof description !== 'string' || !description) throw new Error(`${where} releaseFlagDefinition needs a "description"`)
+      if (typeof defaultEnabled !== 'boolean') throw new Error(`${where} releaseFlagDefinition needs a boolean "defaultEnabled"`)
+      if (navTabId !== undefined && (typeof navTabId !== 'string' || !navTabId)) {
+        throw new Error(`${where} releaseFlagDefinition: "navTabId" is a nav tab id`)
+      }
+      rows.push({ order: source.catalog.order, flag: { key, label, description, defaultEnabled, ...(navTabId ? { navTabId } : {}) } })
+    }
+  }
+  rows.sort((a, b) => a.order - b.order)
+  const keys = rows.map((row) => row.flag.key)
+  if (new Set(keys).size !== keys.length) throw new Error('plugins.config.json: a release flag is named by two catalog rows')
+  return rows.map((row) => row.flag)
+}
+
+function releaseFlagsContent(flags) {
+  const keys = flags.map((flag) => `  | '${flag.key}'`).join('\n')
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The release flags plugins declare (AGL-3080): each catalog row's\n` +
+    ` * \`releaseFlagDefinition\` in plugins.config.json, in catalog order. Core's\n` +
+    ` * \`release-flags.ts\` folds them into \`RELEASE_FLAGS\`.\n */\n\n` +
+    `import type { PluginReleaseFlagDefinition } from './release-flags'\n\n` +
+    `/** Every release flag a plugin declares. */\n` +
+    `export type PluginReleaseFlagKey =\n${keys || "  never"}\n\n` +
+    `export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = ` +
+    `${JSON.stringify(flags, null, 2)}\n`
+  )
 }
 
 /**
@@ -819,7 +1102,226 @@ function orgCapacityRows() {
   return rows.sort((a, b) => a.order - b.order)
 }
 
-function catalogContent() {
+/**
+ * Where published plugin versions and their kill switches live (AGL-3080),
+ * declared by the one plugin that distributes them. The realm loader reads
+ * this and names no collection of its own; with none declared it resolves
+ * nothing, which is the only safe answer for a store nobody named.
+ *
+ * Checked here: one declarer at most, and three plain collection names.
+ */
+function pluginDistributionRow() {
+  const declared = config.plugins.filter((plugin) => plugin.pluginDistribution)
+  if (declared.length > 1) {
+    throw new Error(
+      `plugins.config.json: "${declared.map((plugin) => plugin.id).join('", "')}" each declare a pluginDistribution — ` +
+        'the realm loader joins against ONE store, and two would leave it choosing whose kill switch to honor',
+    )
+  }
+  const plugin = declared[0]
+  if (!plugin) return null
+  const where = `plugins.config.json: "${plugin.id}" pluginDistribution`
+  const row = { pluginId: plugin.id }
+  for (const field of ['listings', 'versions', 'revocations']) {
+    const value = plugin.pluginDistribution[field]
+    if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(value)) {
+      throw new Error(`${where}: "${field}" is the plain name of a collection`)
+    }
+    row[field] = value
+  }
+  return row
+}
+
+/**
+ * The plugin that answers a published page's repeats (AGL-3080): whose rows an
+ * element repeats over, read by the server composition through
+ * `plugin-manager/repeat-rows.ts`. Declared here as well as registered at boot,
+ * so a boot that failed to register the reader is refused rather than read as
+ * "no rows"; with none declared, a repeat renders its element once.
+ *
+ * Checked here: one declarer at most — the expansion reads one key per node,
+ * so two sources would each answer for the other's keys — a plain `id`, and
+ * the `serverDeclarations` entry the reader is registered from.
+ */
+function repeatSourceRow() {
+  const declared = config.plugins.filter((plugin) => plugin.repeatSource)
+  if (declared.length > 1) {
+    throw new Error(
+      `plugins.config.json: "${declared.map((plugin) => plugin.id).join('", "')}" each declare a repeatSource — ` +
+        'a repeat names one key, and two sources would each answer for the other\'s rows',
+    )
+  }
+  const plugin = declared[0]
+  if (!plugin) return null
+  const where = `plugins.config.json: "${plugin.id}" repeatSource`
+  const { id } = plugin.repeatSource
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) {
+    throw new Error(`${where}: "id" is the source's plain lowercase id`)
+  }
+  if (!plugin.register?.serverDeclarations) {
+    throw new Error(
+      `${where}: the reader is registered from a "serverDeclarations" entry, and this plugin names none — ` +
+        'a declared source nothing registers refuses every page that repeats',
+    )
+  }
+  return { pluginId: plugin.id, id }
+}
+
+/**
+ * A plugin's top-level collections whose documents name an organization in a
+ * field (AGL-3080), which a workspace erasure sweeps by that field in every
+ * process. One owner per collection; plain names only.
+ */
+function orgKeyedCollectionRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.orgKeyedCollections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" orgKeyedCollections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name what the erasure must sweep`)
+    }
+    for (const { name, orgField } of declared) {
+      const what = `${where} "${name ?? ''}"`
+      if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(name)) {
+        throw new Error(`${where}: a collection needs a plain "name"`)
+      }
+      if (typeof orgField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(orgField)) {
+        throw new Error(`${what}: "orgField" is the plain name of the field naming a document's organization`)
+      }
+      const held = owners.get(name)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one collection has one owner`)
+      owners.set(name, plugin.id)
+      rows.push({ pluginId: plugin.id, name, orgField })
+    }
+  }
+  return rows
+}
+
+/**
+ * The analytics providers (AGL-3080): each plugin that adapts a vendor's
+ * measurement tag declares it under `analyticsProvider` — the module its
+ * adapter lives in, and which of a site's analytics settings configure a tag
+ * it mounts. Core compiles the settings into the catalog, because the consent
+ * gate asks "does this site run a tag?" synchronously during render, where a
+ * registry nothing had filled yet would answer "no" and leave a tag with no
+ * banner in front of it. The module is written into each app's
+ * `plugins.analytics.generated.ts` as an `import()`, fetched only by a
+ * document that uses it.
+ *
+ * Checked here: a plain module path, at least one setting, plain setting
+ * names, and no setting claimed by two providers — two adapters mounting a tag
+ * for one id would load the vendor twice.
+ */
+function analyticsProviderRows() {
+  const claimed = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.analyticsProvider
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" analyticsProvider`
+    if (typeof declared.module !== 'string' || !/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/.test(declared.module)) {
+      throw new Error(`${where}: "module" is a subpath of the plugin's package`)
+    }
+    if (!Array.isArray(declared.settings) || !declared.settings.length) {
+      throw new Error(`${where}: "settings" names at least one analytics setting`)
+    }
+    for (const field of declared.settings) {
+      if (typeof field !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(field)) {
+        throw new Error(`${where}: "${field}" is not the plain name of an analytics setting`)
+      }
+      if (claimed.has(field)) {
+        throw new Error(`${where}: "${field}" is already mounted by "${claimed.get(field)}"`)
+      }
+      claimed.set(field, plugin.id)
+    }
+    rows.push({ plugin, module: declared.module, settings: [...declared.settings] })
+  }
+  return rows
+}
+
+/** The plugins whose org eraser an erasure may not run without (AGL-3080). */
+function requiredOrgEraserIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.requiredOrgEraser === undefined) return false
+      if (plugin.requiredOrgEraser !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" requiredOrgEraser is true, or is left out`)
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
+const ANALYTICS_MANIFESTS = [
+  'apps/console/constants/plugins.analytics.generated.ts',
+  'apps/tenant/utils/plugins.analytics.generated.ts',
+]
+
+function analyticsManifestContent() {
+  const rows = analyticsProviderRows()
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The plugins' ANALYTICS PROVIDERS (AGL-3080): the adapter each declares\n` +
+    ` * under \`analyticsProvider\`, loaded with \`import()\` by a document that\n` +
+    ` * uses it and registered with core's \`analytics-provider.ts\`. One of the\n` +
+    ` * sanctioned @aglyn/plugins-* references outside libs/plugins (AGL-417).\n` +
+    ` * Source of truth: plugins.config.json.\n */\n` +
+    `/* eslint-disable @nx/enforce-module-boundaries */\n\n` +
+    `import type { AnalyticsProviderLoader } from '@aglyn/aglyn/app-utils/analytics-provider'\n\n` +
+    `export const ANALYTICS_PROVIDER_LOADERS: readonly AnalyticsProviderLoader[] = [\n` +
+    rows
+      .map(
+        (row) =>
+          `  {\n` +
+          `    pluginId: '${row.plugin.id}',\n` +
+          `    load: () => import('${row.plugin.package}/${row.module}'),\n` +
+          `  },\n`,
+      )
+      .join('') +
+    `]\n`
+  )
+}
+
+/**
+ * The plugins whose sales belong on the operator's sales tax return
+ * (AGL-3080): each sells through the platform's own account and registers a
+ * tax return source. The return refuses a declared source that registered
+ * nothing, which a runtime registry alone could not tell from nothing sold.
+ */
+function taxReturnSourceIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.taxReturnSource === undefined) return false
+      if (plugin.taxReturnSource !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" taxReturnSource is true, or is left out`)
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
+/**
+ * The plugins whose earnings belong on the operator's revenue report
+ * (AGL-3080): each earns a take through the platform's own account and
+ * registers a revenue source. The report refuses a declared source that
+ * registered nothing rather than read it as nothing earned.
+ */
+function revenueSourceIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.revenueSource === undefined) return false
+      if (plugin.revenueSource !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" revenueSource is true, or is left out`)
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
+function catalogContent(videoEmbedRows) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
   const editBarRows = rows
@@ -842,7 +1344,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -886,10 +1388,69 @@ ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).j
 ]
 
 /**
+ * Every top-level plugin collection a workspace erasure sweeps by the field
+ * naming the organization, declared by the plugin that owns it (AGL-3080).
+ */
+export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] = [
+${orgKeyedCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * The plugins whose org eraser a workspace erasure may not run without
+ * (AGL-3080): each holds a record the erasure promises to destroy.
+ */
+export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ${JSON.stringify(requiredOrgEraserIds())}
+
+/**
+ * The plugins whose sales the operator's sales tax return may not be filed
+ * without (AGL-3080): each registers a tax return source, and one that did
+ * not is refused rather than read as nothing sold.
+ */
+export const PLUGIN_TAX_RETURN_SOURCES: readonly string[] = ${JSON.stringify(taxReturnSourceIds())}
+
+/**
+ * The plugins whose earnings the operator's revenue report may not be read
+ * without (AGL-3080): each registers a revenue source, and one that did not
+ * is refused rather than read as nothing earned.
+ */
+export const PLUGIN_REVENUE_SOURCES: readonly string[] = ${JSON.stringify(revenueSourceIds())}
+
+/**
+ * Where published plugin versions and their kill switches are stored, declared
+ * by the plugin that distributes them (AGL-3080). \`null\` when none does, and
+ * the realm loader then resolves nothing.
+ */
+export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(pluginDistributionRow(), null, 2)}
+
+/**
+ * The plugin that answers a published page's repeats, declared by that plugin
+ * (AGL-3080). \`null\` when none does, and a repeat then renders its element
+ * once, as written.
+ */
+export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(repeatSourceRow(), null, 2)}
+
+/**
+ * The analytics settings each provider mounts a tag for, declared by the
+ * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
+ * setting configures a tag.
+ */
+export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
+${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: row.plugin.id, settings: row.settings }, null, 2))},`).join('\n')}
+]
+
+/**
  * Every first-party element that runs a site function, and the prop naming
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
 export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries(functionBindingRows()).map(([id, prop]) => `\n  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('')}${Object.keys(functionBindingRows()).length ? '\n' : ''}}
+
+/**
+ * Every video host whose own player the Video element frames, declared by
+ * the plugin that plays it (AGL-3080). Core names no host.
+ */
+export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [
+${videoEmbedRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
 `
   )
 }
@@ -908,7 +1469,10 @@ const ALL = [
     ...manifest,
     content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
   })),
-  { file: CATALOG_FILE, content: catalogContent() },
+  { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
+  { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
+  ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
+  { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {
     file: SUBPROCESSORS_MANIFEST,
     content: subprocessorsContent(await pluginSubprocessors()),

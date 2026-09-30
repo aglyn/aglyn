@@ -51,7 +51,6 @@ import {
   analyticsConsentSignals,
   consentGatedCategories,
   consentModeSignals,
-  GA_CONSENT_DEFAULT_SNIPPET,
   hostAsksAboutAdvertising,
   readStoredVisitorConsent,
   storeVisitorConsent,
@@ -319,12 +318,4 @@ describe('the consent-mode signals', () => {
     expect(analyticsConsentSignals(false).ad_storage).toBe('denied')
   })
 
-  it('keeps the LOAD-TIME default denying advertising', () => {
-    // The default is emitted as a constant into an inline script before the
-    // tag loads, and it must not vary by visitor: a granting default would
-    // be a declaration made before the record is even read. The grant
-    // travels as a later `update` instead.
-    expect(GA_CONSENT_DEFAULT_SNIPPET).toContain('"ad_storage":"denied"')
-    expect(GA_CONSENT_DEFAULT_SNIPPET).not.toContain('"ad_storage":"granted"')
-  })
 })

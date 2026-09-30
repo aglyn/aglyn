@@ -68,6 +68,7 @@ import {
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
 import { LostReasonDialog } from './lost-reason-dialog'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 export interface DealsBulkBarProps {
   /**
@@ -115,6 +116,7 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
     props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
+  const followUpSharing = useCrmSharingFollowUp(hostId ?? null, scope?.[1] ?? null)
   const logActivity = useHostActivityLogger(hostId ?? undefined)
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'deal' })
 
@@ -159,10 +161,18 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
       apply({
         attempted: plan.writes.length,
         skipped: plan.skipped,
-        job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.label),
+        job: async () => {
+          const outcome = await runCrmBulkWrites(writers, plan.writes, (write) => write.label)
+          // A client-direct write owes the sharing rules a re-evaluation (AGL-3336).
+          followUpSharing(
+            'deals',
+            plan.writes.filter((write) => write.kind === 'update').map((write) => write.id),
+          )
+          return outcome
+        },
         done,
       }),
-    [apply, writers],
+    [apply, writers, followUpSharing],
   )
 
   /** One route request per deal, in order, named by title. */

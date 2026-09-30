@@ -183,7 +183,7 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
     })
     const response = await authorizedFetch(
       user,
-      `/api/hosts/tax-summary?${search.toString()}`,
+      `/api/commerce/tax-summary?${search.toString()}`,
     )
     if (!response.ok) throw new Error('tax summary failed')
     return (await response.json()) as Payload

@@ -22,12 +22,12 @@ import {
   overrideWriteValue,
   readArtifactOverride,
   resolveOverride,
-} from './marketplace-overrides'
+} from './artifact-overrides'
 import {
   resolveSiteTheme,
   themeArtifactContent,
   type ThemeHostDocument,
-} from './marketplace-theme'
+} from './site-theme'
 
 /**
  * A site's theme library (AGL-3404): the themes a site can switch between,

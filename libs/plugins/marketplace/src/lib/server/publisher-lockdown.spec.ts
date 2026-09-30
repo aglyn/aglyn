@@ -47,7 +47,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-import { isListingBrowsable } from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
+import { isListingBrowsable } from '../model/listing-visibility'
 import { publisherPayoutAccounts, setPublisherListingsLocked } from './publisher-lockdown'
 import { applyPublisherPayoutPolicy } from './sale-risk'
 

@@ -23,7 +23,7 @@
  * `libs/plugins/marketplace/src/lib/model/listing-query.ts` derives them for
  * every server writer; the seeds and the backfill cannot import it, so this
  * restates it — and the three visibility predicates it reads, from
- * `libs/aglyn/src/lib/app-utils/marketplace-listing-visibility.ts`. The name
+ * `libs/plugins/marketplace/src/lib/model/listing-visibility.ts`. The name
  * keys are NOT restated here: they come from `name-search-tokens.mjs`, the
  * one script-side copy of those.
  *

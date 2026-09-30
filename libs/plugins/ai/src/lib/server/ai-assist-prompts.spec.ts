@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { MARKETPLACE_COMPONENT_ID_ALLOWLIST } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
+import { PORTABLE_COMPONENT_ID_ALLOWLIST } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import type { AiCompletion, AiUsage } from '../providers/contract'
 import { AI_ACCEPTABLE_USE_BLOCK, validateAiSystemBlocks } from '../runtime/ai-runtime'
 import {
@@ -93,7 +93,7 @@ describe('the section tool', () => {
     expect(node.required).toEqual(['id', 'componentId', 'parentId', 'children', 'props'])
     // The schema refuses an unpublishable component before the sanitizer has
     // to, which saves the re-ask rather than the rejection.
-    expect(node.properties.componentId.enum).toEqual([...MARKETPLACE_COMPONENT_ID_ALLOWLIST])
+    expect(node.properties.componentId.enum).toEqual([...PORTABLE_COMPONENT_ID_ALLOWLIST])
   })
 })
 

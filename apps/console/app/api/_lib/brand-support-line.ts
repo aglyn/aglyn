@@ -15,29 +15,9 @@
  * limitations under the License.
  */
 
-import type { ResolvedBrandingProfile } from '@aglyn/aglyn'
-
 /**
- * The "Need help?" footer of a built-in transactional email — **or nothing**
- * (AGL-2428).
- *
- * A white-label organization that left its Support URL blank resolves
- * `supportUrl` to null, and this returns the empty string rather than a line
- * pointing at Aglyn. The recipient of that mail is the organization's own
- * customer: our desk cannot help them, and the link would name their vendor
- * to somebody who was never told one exists.
- *
- * It returns the SEPARATOR too, not just the sentence. A caller that
- * concatenated `\n\n` itself would leave two blank lines at the end of the
- * message for exactly the orgs this exists for — the "gap where something
- * should be" that `emailLogoUrl` already avoids one field over.
- *
- * Every org WITHOUT the concealment entitlement resolves to the platform
- * profile, whose support URL is real, so those emails are unchanged.
+ * The "Need help?" footer of a built-in transactional email (AGL-2428), from
+ * core, where a plugin's scheduled email reaches it too (AGL-3080).
+ * Re-exported so the console's routes keep the path they import.
  */
-export function brandSupportLine(
-  branding: Pick<ResolvedBrandingProfile, 'supportUrl'>,
-): string {
-  const url = typeof branding.supportUrl === 'string' ? branding.supportUrl.trim() : ''
-  return url ? `\n\nNeed help? ${url}` : ''
-}
+export { brandSupportLine } from '@aglyn/aglyn/app-utils/brand-support-line'

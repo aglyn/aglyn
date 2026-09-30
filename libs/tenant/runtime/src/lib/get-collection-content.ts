@@ -112,8 +112,8 @@ export interface CollectionEntrySummary {
   /** `og:image:alt` for the cover (AGL-2417); travels WITH `coverImage`. */
   coverImageAlt?: string
   /**
-   * The featured video (AGL-2956): a media reference or a URL, a Wistia link
-   * included, in the shape `coverImage` is. See
+   * The featured video (AGL-2956): a media reference or a URL, a hosted
+   * player's link included, in the shape `coverImage` is. See
    * `CollectionEntryRecord.coverVideo`.
    */
   coverVideo?: string

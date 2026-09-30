@@ -51,7 +51,7 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
   },
 }))
 
-import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { describeTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_PER_KIND,

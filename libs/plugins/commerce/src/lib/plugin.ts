@@ -28,6 +28,7 @@ const NewestSiteUsersCard = lazy(
 import { COMMERCE_CONSOLE_SECTIONS } from './components/commerce-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
+import { registerCommerceRecordRoutes } from './model/commerce-record-routes'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
 
 /** Code-split: the Products console page only loads when opened. */
@@ -44,6 +45,8 @@ const CommerceConsolePage = lazy(() => import('./components/commerce-console-pag
  * nav renders the link and the existing named route serves the page.
  */
 export function registerCommerceConsole(): void {
+  // Where a product is read, for surfaces outside this plugin (AGL-3080).
+  registerCommerceRecordRoutes()
   // Plugin-declared permissions (AGL-435): tier defaults ride every
   // resolved role set; custom roles override key-by-key.
   Aglyn.registerPluginPermissions(COMMERCE_PERMISSIONS)

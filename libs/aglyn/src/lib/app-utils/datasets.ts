@@ -22,8 +22,10 @@
  */
 
 import {
+  coerceDocumentValues,
   type DatasetModel,
   effectiveDatasetModel,
+  validateDocument,
 } from './dataset-models'
 
 /** Dataset field name: starts with a letter; letters/digits/underscores. */
@@ -47,8 +49,12 @@ export interface HostDataset {
 
 export interface HostDatasetRecord {
   $id?: string
-  /** Field → display value. */
-  values?: Record<string, string>
+  /**
+   * Field → value, in storage form per the field's type (see
+   * `dataset-models`). Rows written by a form or an automation step before
+   * AGL-2773 hold every value as text; readers accept both.
+   */
+  values?: Record<string, unknown>
   /** Row position in the editor and in repeated output. */
   order?: number
 }
@@ -181,22 +187,22 @@ export function sanitizeRecordValues(
 }
 
 /**
- * Record values for a dataset write (AGL-556). With a `fieldMap`
- * (submitted key → stable model fieldId), mapped values are stored under
- * the mapped fieldId — so renamed schema fields keep receiving data — and
- * entries whose fieldId isn't in the model are dropped (the map is
- * client-supplied and never trusted). Submitted keys without a mapping
- * (and calls without a map) fall back to the legacy name-intersection
- * against the model's field ids, matching `sanitizeRecordValues`.
+ * The submitted values a dataset write would store, picked by field id and
+ * left as they arrived (AGL-556). With a `fieldMap` (submitted key → stable
+ * model fieldId), mapped values land under the mapped fieldId — so renamed
+ * schema fields keep receiving data — and entries whose fieldId isn't in the
+ * model are dropped. Submitted keys without a mapping (and calls without a
+ * map) fall back to the legacy name-intersection against the model's field
+ * ids, matching `sanitizeRecordValues`.
  */
-export function buildDatasetRecordValues(
+export function pickDatasetRecordInput(
   dataset: { model?: DatasetModel; fields?: string[] },
   input: Record<string, unknown> | null | undefined,
   fieldMap?: Record<string, string> | null,
-): Record<string, string> {
+): Record<string, unknown> {
   const model = effectiveDatasetModel(dataset)
   const map = fieldMap ?? {}
-  const values: Record<string, string> = {}
+  const values: Record<string, unknown> = {}
   for (const fieldId of model.order) {
     if (!model.fields[fieldId]) continue
     // A submitted key with an explicit mapping never doubles as a
@@ -204,15 +210,113 @@ export function buildDatasetRecordValues(
     if (fieldId in map) continue
     const value = input?.[fieldId]
     if (value == null) continue
-    values[fieldId] = String(value)
+    values[fieldId] = value
   }
   for (const [submittedKey, fieldId] of Object.entries(map)) {
     if (typeof fieldId !== 'string' || !model.fields[fieldId]) continue
     const value = input?.[submittedKey]
     if (value == null) continue
-    values[fieldId] = String(value)
+    values[fieldId] = value
   }
   return values
+}
+
+/** A dataset record write, checked against the dataset's model. */
+export interface DatasetRecordWrite {
+  /**
+   * The model fields this write supplied a value for, before coercion. Empty
+   * means nothing submitted matched a field of the dataset.
+   */
+  matched: string[]
+  /**
+   * The values to store, in storage form (see `dataset-models`): numbers,
+   * booleans, epoch millis and so on per the field's type. For a merge, the
+   * existing values with this write's laid over them.
+   */
+  values: Record<string, unknown>
+  /** fieldId → the reason it was refused. Empty when the write may land. */
+  errors: Record<string, string>
+}
+
+/**
+ * A text field takes what an event payload carries as a number or a boolean
+ * as the text it reads as, which is what these writes always stored.
+ */
+function asTextInput(
+  model: DatasetModel,
+  picked: Record<string, unknown>,
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {}
+  for (const [fieldId, value] of Object.entries(picked)) {
+    const type = model.fields[fieldId]?.type
+    values[fieldId] =
+      (type === 'text' || type === 'reference') &&
+      (typeof value === 'number' || typeof value === 'boolean')
+        ? String(value)
+        : value
+  }
+  return values
+}
+
+/**
+ * A record write from a form submission or an automation step, coerced and
+ * validated against the dataset's model (AGL-2773, option B).
+ *
+ * These writes used to store `String(value)` for every field and check
+ * nothing, so a form could put `abc` in a number column and skip a required
+ * one. They now run the same `coerceDocumentValues` + `validateDocument` pair
+ * the console and `/v1` do: a value is stored in its field's type, and a
+ * record with any refused field is not written at all. The caller decides
+ * what a refusal costs — a form keeps the Inbox submission, a run records a
+ * failed step.
+ *
+ * `existing` makes it a merge (update-or-append's update leg): this write's
+ * values are laid over the stored ones, and only the fields THIS write
+ * supplied are held to the model. A stored row written as text before this
+ * change keeps its text values and is not refused for them — the reads have
+ * always rendered them, and a merge that touched `email` must not fail over a
+ * legacy `price` of `"12"` it never sent.
+ *
+ * Custom field types validate only once registered: call
+ * `ensureDeclaredCustomFieldTypes(model)` before this on a server path.
+ */
+export function prepareDatasetRecordWrite(
+  dataset: { model?: DatasetModel; fields?: string[] },
+  input: Record<string, unknown> | null | undefined,
+  options: {
+    fieldMap?: Record<string, string> | null
+    existing?: Record<string, unknown> | null
+  } = {},
+): DatasetRecordWrite {
+  const model = effectiveDatasetModel(dataset)
+  const picked = pickDatasetRecordInput(dataset, input, options.fieldMap)
+  const matched = Object.keys(picked)
+  const coerced = coerceDocumentValues(model, asTextInput(model, picked))
+  if (!options.existing) {
+    return {
+      matched,
+      values: coerced,
+      errors: validateDocument(model, coerced),
+    }
+  }
+  const values = { ...options.existing, ...coerced }
+  const errors: Record<string, string> = {}
+  for (const [fieldId, error] of Object.entries(
+    validateDocument(model, values),
+  )) {
+    if (fieldId in coerced) errors[fieldId] = error
+  }
+  return { matched, values, errors }
+}
+
+/**
+ * A refused write's errors as one line, in the model's field order:
+ * `Stars must be a whole number; Email is required`.
+ */
+export function describeDatasetRecordErrors(
+  errors: Record<string, string>,
+): string {
+  return Object.values(errors).join('; ')
 }
 
 /**

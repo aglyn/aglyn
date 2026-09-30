@@ -70,7 +70,7 @@
 import {
   resolveProvenance,
   type ResolvedProvenance,
-} from '@aglyn/aglyn/app-utils/marketplace-provenance'
+} from '@aglyn/aglyn/app-utils/artifact-provenance'
 
 /** Where a template's content comes from. */
 export type TemplateOrigin = 'local' | 'installed'

@@ -159,11 +159,11 @@ jest.mock('@aglyn/aglyn', () => ({
   */
   resolveMediaSrc: jest.requireActual('@aglyn/aglyn').resolveMediaSrc,
 }))
-jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
+jest.mock('@aglyn/aglyn/app-utils/site-theme', () => ({
   resolveSiteTheme: (host: { theme?: unknown }) => host?.theme ?? {},
   themeOverridePatch: () => ({ palette: { primary: '#222222' } }),
 }))
-jest.mock('@aglyn/aglyn/app-utils/marketplace-overrides', () => ({
+jest.mock('@aglyn/aglyn/app-utils/artifact-overrides', () => ({
   overrideWriteValue: (patch: unknown) => ({ patch }),
 }))
 

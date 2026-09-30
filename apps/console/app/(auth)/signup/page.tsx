@@ -19,10 +19,10 @@
 
 import {
   PLAN_LABELS,
-  campaignEventParams,
+  utmEventParams,
   generateOrgSlug,
   onboardingDestination,
-  parseCampaignAttribution,
+  parseUtmAttribution,
   parseOnboardingPlanIntent,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
@@ -97,7 +97,7 @@ import {
   clearMarketingOptIn,
   consumeMarketingOptIn,
   markMarketingOptIn,
-  postMarketingConsent,
+  postPlatformMarketingConsent,
 } from '../../../utils/marketing-opt-in'
 import {
   createSignUpWorkspace,
@@ -106,6 +106,7 @@ import {
 import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
 import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
+import { consumeConsentBounce } from '../../../utils/consent-bounce'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
@@ -370,16 +371,16 @@ function SignUp() {
   // Which campaign produced this signup (AGL-1731) — the same hop, the same
   // defensive posture. Parsed once, from an ALLOWLIST of three `utm_` keys,
   // so the rest of whatever a marketing link carries never reaches either
-  // exit. See `campaign-attribution.ts` for why the allowlist is the privacy
+  // exit. See `utm-attribution.ts` for why the allowlist is the privacy
   // mechanism rather than a convenience.
   const campaign = useMemo(
-    () => parseCampaignAttribution(searchParams),
+    () => parseUtmAttribution(searchParams),
     [searchParams],
   )
   // The GA4 params, memoised so the redirect hook below is not handed a new
   // object every render.
-  const campaignParams = useMemo(
-    () => campaignEventParams(campaign),
+  const utmParams = useMemo(
+    () => utmEventParams(campaign),
     [campaign],
   )
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
@@ -415,7 +416,7 @@ function SignUp() {
       // for a returning account too: the person ticked the box, and the
       // record is about that act, not about whether the account is new.
       if (optedIn) {
-        await postMarketingConsent(credential.user, 'granted', 'console-signup')
+        await postPlatformMarketingConsent(credential.user, 'granted', 'console-signup')
       }
       // Where the visit that became this account began (AGL-3289), before
       // the workspace below is created: it copies its creator's record at
@@ -432,8 +433,15 @@ function SignUp() {
       //
       // `isNewAccount` because "sign in with Google" and "sign up with
       // Google" are the same call: an existing customer returning through
-      // this page must not be handed a surprise second workspace.
-      if (!isNewAccount(credential)) return
+      // this page must not be handed a surprise second workspace. An account
+      // /signin created and bounced here for consent is not new to Firebase
+      // any more, and is still signing up — /signin marked it (AGL-3424).
+      if (
+        !consumeConsentBounce(credential.user.uid) &&
+        !isNewAccount(credential)
+      ) {
+        return
+      }
       // Same reason the popup path remembers it (AGL-1535): the intent has to
       // outlive this page, and awaiting matters because the provision below
       // can end in a hard navigation that tears the write down mid-flight.
@@ -464,7 +472,7 @@ function SignUp() {
     // The redirect door fires its own `sign_up` inside the hook — the page
     // that started the flow is gone by then — so the campaign has to be
     // handed across rather than read there (AGL-1731).
-    campaignParams,
+    utmParams,
   )
   // Hold the loading splash during the post-auth redirect window instead of
   // flashing the form back at the user (AGL-476).
@@ -555,7 +563,7 @@ function SignUp() {
             // Which campaign produced this account (AGL-1731). Spread rather
             // than assigned, so an organic signup carries no campaign keys at
             // all instead of three empty ones.
-            ...campaignParams,
+            ...utmParams,
           })
           /*
            * The Google Ads conversion, beside the GA4 event and never instead
@@ -644,7 +652,7 @@ function SignUp() {
           // the tick is still here even where storage refused the marker.
           const carriedOptIn = consumeMarketingOptIn()
           if (carriedOptIn || marketingOptIn) {
-            await postMarketingConsent(credential.user, 'granted', 'console-signup')
+            await postPlatformMarketingConsent(credential.user, 'granted', 'console-signup')
           }
           // Settle the workspace — from EVERY door (AGL-1942), through the
           // one routine. A verified account (Google, SSO) gets it created and
@@ -664,10 +672,17 @@ function SignUp() {
           // existing customer clicking Google here must not be handed a
           // second workspace. `createUserWithEmailAndPassword` can only ever
           // have created one.
+          //
+          // The /signin consent bounce is the one Google sign-up the flag
+          // misses: Firebase has known that account since /signin, so it is
+          // not "new" here, and it is still this person's sign-up. /signin
+          // marked it for its uid (AGL-3424).
           const typedName = values
             ? String(values[FIELD_SCHEMA_ORGANIZATION_NAME.name] ?? '').trim()
             : ''
-          if (values || isNewAccount(credential)) {
+          const bouncedForConsent =
+            !values && consumeConsentBounce(credential.user.uid)
+          if (values || bouncedForConsent || isNewAccount(credential)) {
             await provisionAndLandSignUp(
               firestore,
               credential,

@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
+import { isPluginMachineRoute } from './api-plugins'
+
 /**
  * Policy for the tenant plugin-API dispatcher's visitor-write rate limit
- * (AGL-1770). Pure and dependency-free so it is unit-testable without a route
+ * (AGL-1770). Pure but for one read of the route registry, for a route its
+ * plugin registered as a machine's, so it is unit-testable without a route
  * harness — the durable half lives in `@aglyn/tenant-data-admin` beside
  * `visitorWriteRefusal`, exactly like the lockdown split.
  *
@@ -162,11 +165,17 @@ function normalize(path: string): string {
 /**
  * Is this dispatcher path a credentialed machine surface (exempt), rather
  * than a visitor one (limited)? Unknown paths are visitor by default.
+ *
+ * A path is a machine's when it is on the list above, or when the plugin
+ * that registered it declared it one (`machine: true`, AGL-3080) — the same
+ * polarity as the list: a route is exempt only by saying so, and one that
+ * forgot is limited, which fails loudly as a 429 its scheduler retries.
  */
 export function isMachinePluginApiPath(path: string): boolean {
   const normalized = normalize(path)
   if (MACHINE_API_PATHS.has(normalized)) return true
-  return MACHINE_API_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+  if (MACHINE_API_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return true
+  return isPluginMachineRoute(normalized)
 }
 
 /**

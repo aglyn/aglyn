@@ -48,6 +48,8 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: (...args: unknown[]) => updateDoc(...(args as [])),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The sharing follow-up a client-direct write owes (AGL-3336) signs its request.
+  useUser: () => ({ data: null }),
   useFirestore: () => ({}),
   writeGuardedBySeed: async (_seed: unknown, run: () => Promise<unknown>) => {
     await run()

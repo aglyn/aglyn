@@ -660,7 +660,7 @@ export interface LegalDocumentManifestEntry {
  *
  * ⚠️ The slice boundary is NOT uniform across the codebase. This manifest
  * EXCLUDES the closing `©` line; the parallel publisher-agreement pin in
- * `libs/aglyn/src/lib/app-utils/publisher-agreement.ts` INCLUDES it, as its
+ * `libs/plugins/marketplace/src/lib/model/publisher-agreement.ts` INCLUDES it, as its
  * own docstring says. Two conventions, both load-bearing, both verified
  * against their live pages — read the target's docstring before capturing,
  * because either method produces a plausible file under the other's rule.

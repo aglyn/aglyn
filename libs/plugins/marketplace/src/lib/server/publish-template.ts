@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   CANVAS_ROOT_ELEMENT_ID,

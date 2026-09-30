@@ -32,7 +32,7 @@
  */
 
 import { compress } from '@aglyn/aglyn/app-utils/compress'
-import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { sanitizeMarketplaceDefinition } from '../model/marketplace'
 

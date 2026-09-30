@@ -18,6 +18,10 @@
 // The seam from its own module, not the plugin-manager barrel: boot needs the
 // registry and nothing else, and the barrel reaches the client contexts.
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import {
+  registerPluginRecordIndex,
+  type PluginRecordIndex,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 
@@ -26,8 +30,26 @@ import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
  * reads at boot, before any surface loads.
  *
  * Its operator alerts (AGL-3377), so Staff → Operator alerts lists them and
- * staff can switch them before the first one is ever raised.
+ * staff can switch them before the first one is ever raised; and the indexes
+ * of its products and categories, so another plugin reads them without
+ * reaching for this plugin's collections.
  */
 export function registerCommerceServerDeclarations(): void {
   registerOperatorAlerts(COMMERCE_OPERATOR_ALERTS, { pluginId: BUNDLE_ID })
+  // Products and categories, as another plugin reads them (AGL-3080). The
+  // readers and the Admin SDK arrive with the first read, not with the boot.
+  registerPluginRecordIndex('product', lazyIndex('productRecordIndex'), { pluginId: BUNDLE_ID })
+  registerPluginRecordIndex('productCategory', lazyIndex('productCategoryRecordIndex'), {
+    pluginId: BUNDLE_ID,
+  })
+}
+
+type IndexName = 'productRecordIndex' | 'productCategoryRecordIndex'
+
+function lazyIndex(name: IndexName): PluginRecordIndex {
+  const load = async () => (await import('./server/product-record-index'))[name]
+  return {
+    list: async (request) => (await load()).list(request),
+    get: async (request) => (await load()).get(request),
+  }
 }

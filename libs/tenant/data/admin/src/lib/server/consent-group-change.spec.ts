@@ -85,6 +85,15 @@ function world(extra: Record<string, Record<string, unknown>> = {}) {
         topics: { newsletter: { optedOutAt: at(clock - 2_000), resubscribedAt: null } },
         updatedAt: at(clock - 2_000),
       },
+      // A refusal the Shop's CRM held for somebody whose contact was since
+      // deleted (AGL-3338): the org-level store the list gate reads.
+      [`orgs/${ORG}/retainedRefusals/k-gone`]: {
+        marketingConsentByHost: {
+          [X]: { marketingConsent: false, marketingConsentAtMs: clock - 3_000, retainedAtMs: clock - 2_500 },
+        },
+        retainedAtMs: clock - 2_500,
+        updatedAt: at(clock - 2_500),
+      },
       ...extra,
     },
     { nowMs: clock },
@@ -269,6 +278,13 @@ describe('running a change', () => {
     expect(firestore.read(`hosts/${X}/topicOptOuts/k-r`)?.['topics']).toMatchObject({
       newsletter: { resubscribedAt: null, carriedFromHostId: R },
     })
+    // And the refusal kept after its contact was deleted, which the list
+    // gate reads across the Blog's group once the Shop has left it.
+    expect(firestore.read(`orgs/${ORG}/retainedRefusals/k-gone`)?.['marketingConsentByHost'][R]).toMatchObject({
+      marketingConsent: false,
+      carriedFromHostId: X,
+      carriedByChangeId: changeId,
+    })
 
     // Waiting for the sweep: the marker says so, and nothing is leased.
     expect(result).toMatchObject({
@@ -282,7 +298,7 @@ describe('running a change', () => {
           declaredAtMs: clock,
           sweepAtMs: clock + CONSENT_GROUP_SWEEP_DELAY_MS,
           leaseUntilMs: null,
-          counts: { siteSuppressions: 1, topicOptOuts: 1, paces: 0 },
+          counts: { siteSuppressions: 1, topicOptOuts: 1, paces: 0, retainedRefusals: 1 },
           sitesReceiving: 2,
           plugins: { records: { combined: 8 } },
         },
@@ -332,9 +348,14 @@ describe('running a change', () => {
     expect(firestore.read(`orgs/${ORG}`)?.[CONSENT_GROUPS_CHANGE_FIELD]).toBeUndefined()
     expect(firestore.read(`orgs/${ORG}`)?.['consentGroups']).toBeUndefined()
     // The sweep's full pass found everything already carried.
-    expect(job(firestore, changeId).counts).toEqual({ siteSuppressions: 1, topicOptOuts: 1, paces: 0 })
+    expect(job(firestore, changeId).counts).toEqual({
+      siteSuppressions: 1,
+      topicOptOuts: 1,
+      paces: 0,
+      retainedRefusals: 1,
+    })
     expect(logged[logged.length - 1]).toBe(
-      'Finished a consent group change: 2 opt-outs copied to 2 sites; 10 records combined',
+      'Finished a consent group change: 3 opt-outs copied to 2 sites; 10 records combined',
     )
   })
 
@@ -736,8 +757,8 @@ describe('the preview', () => {
       preview: {
         discarded: ['broken'],
         carries: [
-          { toHostId: R, fromHostId: X, siteSuppressions: 1, topicOptOuts: 1, paces: 0 },
-          { toHostId: X, fromHostId: R, siteSuppressions: 0, topicOptOuts: 1, paces: 0 },
+          { toHostId: R, fromHostId: X, siteSuppressions: 1, topicOptOuts: 1, paces: 0, retainedRefusals: 1 },
+          { toHostId: X, fromHostId: R, siteSuppressions: 0, topicOptOuts: 1, paces: 0, retainedRefusals: 0 },
         ],
         pendingHolds: [{ hostId: X, topicId: 'newsletter', count: 1, releasedHostIds: [R] }],
         // Nobody joins a group, so the forward policy grandfathers nobody new.

@@ -21,6 +21,10 @@ import {
   type HostEventListener,
   registerHostEventListener,
 } from '@aglyn/tenant-runtime/host-event-listeners'
+import {
+  registerPluginRecordIndex,
+  type PluginRecordIndex,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -64,10 +68,28 @@ export const workflowsHostEventListener: HostEventListener = {
  * first of them arrives — which is what running this from both apps'
  * `instrumentation.ts` gives.
  *
+ * The indexes of the site's workflows, webhooks and actions, so another
+ * surface — an AI job, the "Used by" scan — reads them without reaching for
+ * this plugin's collections.
+ *
  * Also called from the plugin's own API register functions, so a process
  * whose boot did not run it still registers the listener the first time a
  * plugin door loads. Registering twice replaces in place.
  */
 export function registerWorkflowsServerDeclarations(): void {
   registerHostEventListener(BUNDLE_ID, workflowsHostEventListener)
+  // The readers and the Admin SDK arrive with the first read, not with the boot.
+  registerPluginRecordIndex('workflow', lazyIndex('workflowRecordIndex'), { pluginId: BUNDLE_ID })
+  registerPluginRecordIndex('webhook', lazyIndex('webhookRecordIndex'), { pluginId: BUNDLE_ID })
+  registerPluginRecordIndex('action', lazyIndex('actionRecordIndex'), { pluginId: BUNDLE_ID })
+}
+
+type IndexName = 'workflowRecordIndex' | 'webhookRecordIndex' | 'actionRecordIndex'
+
+function lazyIndex(name: IndexName): PluginRecordIndex {
+  const load = async () => (await import('./server/automation-record-index'))[name]
+  return {
+    list: async (request) => (await load()).list(request),
+    get: async (request) => (await load()).get(request),
+  }
 }

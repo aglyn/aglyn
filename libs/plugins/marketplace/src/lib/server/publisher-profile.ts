@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { type PublisherAgreementAcceptance } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { type PublisherAgreementAcceptance } from '../model/publisher-agreement'
 import { isValidPublisherHandle } from '../model/marketplace'
 
 /** `publisherProfiles/{orgId}` — the org's marketplace identity (AGL-652). */

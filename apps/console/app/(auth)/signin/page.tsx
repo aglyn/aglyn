@@ -68,6 +68,7 @@ import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-si
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
 import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
 import { authSignInHost } from '../../../utils/auth-delegation'
+import { markConsentBounce } from '../../../utils/consent-bounce'
 import { isNewAccount, sendToConsentGate } from '../../../utils/legal-consent'
 import {
   markInteractiveSignIn,
@@ -185,6 +186,10 @@ function SignIn() {
       // an account too old to be new, and one who never comes back leaves an
       // account with no record at all.
       await rememberAccountAcquisition(credential.user)
+      // /signup cannot tell this account is new once it comes back — Firebase
+      // has known it since this click — so this page says so, for this uid
+      // (AGL-3424). That is what gets it the workspace a sign-up lands in.
+      markConsentBounce(credential.user.uid)
       markInteractiveSignOut()
       await signOut(firebaseAuth).catch((error) => {
         console.error('could not stand down unconsented new account', error)

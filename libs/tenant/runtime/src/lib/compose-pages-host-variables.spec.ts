@@ -55,9 +55,9 @@ jest.mock('./get-forms', () => ({
   __esModule: true,
   default: jest.fn(async () => ({ forms: {} })),
 }))
-jest.mock('./get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: jest.fn(async () => ({})),
+  readRepeatRows: jest.fn(async () => ({})),
 }))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,

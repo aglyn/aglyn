@@ -37,9 +37,9 @@ import type { AiJobAdmissionContext, AiJobAdmissionRefusal } from './ai-job-admi
  * caller, so a caller establishes, before it asks for anything:
  *
  *  1. a site is named, and it is the job's own org's;
- *  2. the owning plugin runs on that site — switched on for the workspace,
- *    not switched off for the site, and past its release flag — and has
- *    actually registered its writer in this process;
+ *  2. the owning plugin — whichever registered the writer; this plugin names
+ *    none — runs on that site, switched on for the workspace, not switched
+ *    off for the site, and past its release flag;
  *  3. whatever the kind checks of its own, such as the plan a campaign needs;
  *  4. that the member the drafts are for may create one of each, which only
  *    the owner can answer, and does, through `refusal`.
@@ -58,12 +58,21 @@ export type AiPluginDraftWriterLookup = (resource: string) => PluginResourceDraf
 export const aiPluginDraftWriter: AiPluginDraftWriterLookup = (resource) =>
   pluginResourceDraftWriter(resource)?.writer ?? null
 
-/** One draft a job kind needs written, and who owns it. */
+/**
+ * The plugin that registered the writer for a resource, or `null` when none
+ * did in this process. The owner is whoever writes the resource — the
+ * registry knows it, so this plugin names none (AGL-3080).
+ */
+export type AiPluginDraftOwnerLookup = (resource: string) => string | null
+
+/** The registered writer's plugin, from the core's registry. */
+export const aiPluginDraftOwner: AiPluginDraftOwnerLookup = (resource) =>
+  pluginResourceDraftWriter(resource)?.pluginId ?? null
+
+/** One draft a job kind needs written. */
 export interface AiPluginDraftNeed {
   /** The resource name the owner registered its writer under. */
   resource: string
-  /** The owning plugin, as `plugins.config.json` names it. */
-  pluginId: string
   /** What the site's plugin list calls it, for the sentence a person reads. */
   label: string
 }
@@ -77,6 +86,8 @@ export interface AiPluginDraftAdmissionInput {
   ownCheck?: (hostId: string) => Promise<AiJobAdmissionRefusal | null>
   /** How a writer is found; the registry otherwise. */
   writerFor?: AiPluginDraftWriterLookup
+  /** Which plugin owns a resource's writer; the registry otherwise. */
+  ownerFor?: AiPluginDraftOwnerLookup
   /** The instant the owner's allowance is read against; now otherwise. */
   now?: Date
 }
@@ -102,23 +113,27 @@ export async function aiPluginDraftAdmissionRefusal(
   if (!owner || owner !== context.orgId) return { status: 404, error: 'Unknown site' }
 
   const writerFor = input.writerFor ?? aiPluginDraftWriter
+  const ownerFor = input.ownerFor ?? aiPluginDraftOwner
   const host = (await context.firestore.collection('hosts').doc(hostId).get()).data() ?? null
   const org = context.org as { enabledPlugins?: string[] } | null
+  const owners = input.drafts.map((draft) => ownerFor(draft.resource))
   // One release-flag read for every owner at once: the answer is per org, and
   // a plugin subtracted here is one the site cannot reach at all.
   const released = new Set(
     await filterEnabledPluginsByReleaseFlags(
-      input.drafts.map((draft) => draft.pluginId),
+      owners.filter((owner): owner is string => Boolean(owner)),
       { orgId: context.orgId, authorization: null },
     ),
   )
   const writers: PluginResourceDraftWriter[] = []
-  for (const draft of input.drafts) {
+  for (const [index, draft] of input.drafts.entries()) {
     const writer = writerFor(draft.resource)
+    const owner = owners[index]
     if (
       !writer ||
-      !released.has(draft.pluginId) ||
-      !isHostPluginEnabled(org, host, draft.pluginId)
+      !owner ||
+      !released.has(owner) ||
+      !isHostPluginEnabled(org, host, owner)
     ) {
       return { status: 403, error: aiPluginDraftUnavailable(draft.label) }
     }

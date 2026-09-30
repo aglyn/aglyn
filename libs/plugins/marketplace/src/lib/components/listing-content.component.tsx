@@ -50,9 +50,7 @@ import {
   pluginDocsHelp,
   resolveMarkdownLink,
   resolveMediaSrc,
-  resolveUpdateState,
   Route,
-  updateStateLabel,
 } from '@aglyn/aglyn'
 import {
   mdiCheckCircle,
@@ -135,6 +133,7 @@ import { MenuItem, TextField } from '@mui/material'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
 import { useArtifactUpdate } from '../hooks/use-artifact-update'
 import ArtifactUpdateDialog from './artifact-update-dialog.component'
+import { resolveUpdateState, updateStateLabel } from '../model/update-state'
 
 /**
  * How many of the site's components the page reads to answer one question.

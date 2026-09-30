@@ -119,6 +119,39 @@ describe('createStallRecovery (AGL-3373)', () => {
     await expect(recovery.recover()).resolves.toBe('failed')
     expect(calls).toEqual(['disable', 'enable'])
   })
+
+  it('bounds a cycle whose calls queue behind a locked cache, so later recoveries are not pinned to it (AGL-3428)', async () => {
+    const { calls, recovery, advance } = setup({
+      disable: () => {
+        calls.push('disable')
+        return new Promise<void>(() => undefined)
+      },
+      enable: () => {
+        calls.push('enable')
+        return new Promise<void>(() => undefined)
+      },
+      stepTimeoutMs: 10,
+    })
+    await expect(recovery.recover()).resolves.toBe('failed')
+    expect(calls).toEqual(['disable', 'enable'])
+
+    advance(STALL_RECOVERY_COOLDOWN_MS)
+    await expect(recovery.recover()).resolves.toBe('failed')
+    expect(calls).toEqual(['disable', 'enable', 'disable', 'enable'])
+  })
+
+  it('runs the escalation after the cycle and reports a fallback (AGL-3428)', async () => {
+    const afterCycle = jest.fn(async () => true)
+    const { calls, recovery } = setup({ afterCycle })
+    await expect(recovery.recover()).resolves.toBe('fell-back')
+    expect(calls).toEqual(['disable', 'enable'])
+    expect(afterCycle).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the cycle outcome when the escalation finds nothing', async () => {
+    const { recovery } = setup({ afterCycle: async () => false })
+    await expect(recovery.recover()).resolves.toBe('recovered')
+  })
 })
 
 describe('recoverStalledFirestore (AGL-3373)', () => {

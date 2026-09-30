@@ -24,7 +24,7 @@ import {
   isListingBrowsable,
   isListingDeleted,
   isPrivateListing,
-} from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
+} from './listing-visibility'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {

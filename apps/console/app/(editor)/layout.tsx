@@ -17,7 +17,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import AssistDockSlot from '../../components/assist-dock-slot.component'
+import ConsoleDockSlot from '../../components/console-dock-slot.component'
 import BesignerPluginZones from '../../components/besigner-plugin-zones.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 
@@ -31,19 +31,17 @@ export default function EditorLayout({ children }: { children: ReactNode }) {
     <AuthenticatedLayout>
       {/* The besigner's plugin zones (AGL-2984), for every editor below. */}
       <BesignerPluginZones>{children}</BesignerPluginZones>
-      {/* Aglyn Assist (AGL-2486). The launcher was mounted in the `(app)`
-          layout only, so every editor surface — the besigner above all,
-          which is where an author has the most questions and the least
-          room to go looking for answers — simply had no assistant. This is
-          the SAME gated component the rest of the console mounts, not a
-          copy: `release_assist`, the staff-preview verdict and the
-          "does this URL name a workspace" scope check all still decide
-          whether it renders, and the org-less editor routes (the platform
-          email templates under `/admin`) still get nothing, because that
-          check answers false for them exactly as it did before. Every
+      {/* The console dock (AGL-2486, AGL-2940), here as well as in the
+          `(app)` layout: every editor surface — the besigner above all — is
+          somewhere a floating panel such as the assistant is needed, and this
+          is the SAME slot the rest of the console mounts, not a copy. Whether
+          a widget renders stays the widget's and the shell's to decide (its
+          own release flag, the staff-preview verdict and the "does this URL
+          name a workspace" scope check), and the org-less editor routes (the
+          platform email templates under `/admin`) still get no scope. Every
           provider it needs is above the route groups, in `app/providers.tsx`
-          and `firebase-app.layout.tsx`, so it needs nothing added here. */}
-      <AssistDockSlot />
+          and `firebase-app.layout.tsx`. */}
+      <ConsoleDockSlot />
     </AuthenticatedLayout>
   )
 }

@@ -39,7 +39,7 @@ import {
   type ArtifactChange,
   type ArtifactUpdatePlan,
 } from '../model/artifact-merge'
-import { ARTIFACT_BASE_COLLECTION } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import { ARTIFACT_BASE_COLLECTION } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'

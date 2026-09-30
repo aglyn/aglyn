@@ -40,6 +40,7 @@
 
 import { runInAction } from 'mobx'
 import type { OrgPermissions } from '../app-utils/org-permissions'
+import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
@@ -48,7 +49,7 @@ import type {
   PresetSchema,
 } from '../types/nodes'
 import type { Plugin, PluginId } from './plugin-manager'
-import type { HostThemeSource } from '../app-utils/marketplace-theme'
+import type { HostThemeSource } from '../app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType } from 'react'
 // The commerce zones' props live in a type-only module (AGL-2916).
@@ -697,6 +698,36 @@ export const CONSOLE_WIDGET_SLOTS = {
    * the installation detail page and a site's layouts list — offering a
    * marketplace action in passing.
    */
+  /**
+   * The org Plugins page, above the built-in plugins (AGL-3080): the code a
+   * plugin has INSTALLED into this workspace, one row per installation.
+   * Props: {@link ConsoleOrgPluginInstallsZoneProps}.
+   *
+   * The Plugins page is the workspace's inventory — what it runs, wherever it
+   * came from. The built-in half is the shell's own: the switchboard catalog
+   * says what ships. The installed half is not: where an installation is
+   * pinned, what version it runs, whether a newer one may be installed and
+   * whether its publisher's kill switch is thrown are all facts held by the
+   * plugin that installed it, in collections that are its own. So the page
+   * hands over the sites it can see and the plugin draws its installations.
+   *
+   * Every row links to `/[orgSlug]/plugins/[pluginRef]`, the shell's
+   * installation page, keyed by whatever id the installing plugin pins by —
+   * that page is the one place an installation is managed, whoever drew the
+   * row.
+   */
+  orgPluginInstalls: 'orgPluginInstalls',
+  /**
+   * The installation page of a plugin some plugin INSTALLED, above where it
+   * runs (AGL-3080): what the installer says about the version this
+   * workspace runs. Props: {@link ConsolePluginInstallStatusZoneProps}.
+   *
+   * Drawn only for an installation that exists — a first-party plugin has no
+   * version to be behind, and a page for code installed nowhere says so
+   * itself. A widget here reports; it never installs. Applying an update is
+   * the installing plugin's own surface, which the widget may link to.
+   */
+  pluginInstallStatus: 'pluginInstallStatus',
   /** Bottom of the host dashboard. Props: hostId, org. (AGL-433) */
   dashboardFooter: 'dashboardFooter',
   /** Org settings page, below the tabbed cards. Props: orgId, org. */
@@ -751,6 +782,13 @@ export const CONSOLE_WIDGET_SLOTS = {
    * widget.
    */
   hostTheme: 'hostTheme',
+  /**
+   * The staff overview, among its platform-wide cards (AGL-3080). No props:
+   * the overview is about the platform, not one org, so a widget here reads
+   * what its plugin holds across every workspace through its own staff
+   * route. A staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffOverview: 'staffOverview',
   /**
    * Staff admin org detail (staff-only surfaces). Props: orgId. A staff
    * zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
@@ -832,12 +870,13 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostMembers: 'hostMembers',
   /**
-   * The console shell's assistant dock (AGL-2940): the one position above
-   * every route boundary in both the `(app)` and `(editor)` shells, where a
-   * floating helper survives a navigation. Props: none — a widget here
-   * resolves its own scope from the URL, as the shell's own chrome does.
+   * The console dock (AGL-2940): the one position above every route boundary
+   * in both the `(app)` and `(editor)` shells, where a floating panel — an
+   * assistant, a helper — survives a navigation. Props:
+   * {@link ConsoleDockZoneProps}. Named for the position, not for what a
+   * plugin puts there (AGL-3080: it was `assistPanel`).
    */
-  assistPanel: 'assistPanel',
+  consoleDock: 'consoleDock',
   /**
    * A section at the bottom of the besigner's Attributes panel (AGL-2940),
    * under the selected element's own fields. Props: `hostId` (`null` on an
@@ -860,11 +899,11 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   seoFields: 'seoFields',
   /**
-   * The host setup SEO section, above the site SEO form (AGL-2910). Props:
-   * {@link ConsoleHostSeoZoneProps} — the site, its stored SEO settings, and
-   * `proposeDraft`, which puts values in the form as unsaved edits. The
-   * form's Update stores them; nothing a widget proposes reaches the
-   * published site before that.
+   * The host setup SEO section, under the site's SEO check and above the site
+   * SEO form (AGL-2910). Props: {@link ConsoleHostSeoZoneProps} — the site,
+   * its stored SEO settings, the check's last report, and `proposeDraft`,
+   * which puts values in the form as unsaved edits. The form's Update stores
+   * them; nothing a widget proposes reaches the published site before that.
    */
   hostSeo: 'hostSeo',
   /** {@link ConsoleRecordInsightsZoneProps} */
@@ -1097,6 +1136,76 @@ export interface ConsolePublishableArtifact {
   description?: string
 }
 
+/** One site of the workspace, as the console names it. */
+export interface ConsoleZoneSite {
+  id: string
+  label: string
+}
+
+/** What the `orgPluginInstalls` zone hands each widget (AGL-3080). */
+export interface ConsoleOrgPluginInstallsZoneProps {
+  /** The organization whose inventory the page is. */
+  orgId: string
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /**
+   * The sites of the organization the reader can see. An installation may be
+   * pinned to some of them rather than to the whole organization, so a widget
+   * reads each site's pins through this list rather than listing sites
+   * itself.
+   */
+  hosts: ReadonlyArray<ConsoleZoneSite>
+}
+
+/** What the `pluginInstallStatus` zone hands each widget (AGL-3080). */
+export interface ConsolePluginInstallStatusZoneProps {
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The installation's id: the segment of the page, which is the pin's key. */
+  pluginRef: string
+  /**
+   * One pin of the installation — org-wide if there is one, else any site's.
+   * Every pin carries the same version and manifest, which is what a status
+   * is about.
+   */
+  pin: Readonly<Record<string, unknown>>
+}
+
+/** A release flag's verdict as the console applies it: the staff bypass included. */
+export interface ConsoleReleaseVerdict {
+  /** Released, or the reader is staff. */
+  visible: boolean
+  /** Visible ONLY because the reader is staff. */
+  staffPreview: boolean
+}
+
+/** What the `consoleDock` zone hands each widget (AGL-2940, AGL-3080). */
+export interface ConsoleDockZoneProps {
+  orgId?: string
+  org?: unknown
+  orgReady: boolean
+  /**
+   * The org a widget may speak for, act as, and be METERED against — or
+   * `undefined` where the page named none, or where the membership positively
+   * contradicts the URL (AGL-1130, AGL-1916, AGL-1934).
+   */
+  scopedOrgId?: string
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site in view, or null off a host route. */
+  hostId: string | null
+  /** The product's name as this org reads it (AGL-2319). */
+  productName: string
+  /**
+   * The verdict for any release flag the widget names, staff bypass applied.
+   * The shell names no plugin's flag; a widget asks for its own.
+   */
+  releaseVerdict: (key: string) => ConsoleReleaseVerdict
+  isStaff: boolean
+  /** The reader's verdict for every declared permission key on the site in view. */
+  permissionsOnHost?: { loaded: boolean; granted: Readonly<Record<string, boolean>> }
+}
+
 /** What the `hostArtifactPublish` zone hands each widget (AGL-3080). */
 export interface ConsoleArtifactPublishZoneProps {
   /**
@@ -1133,8 +1242,8 @@ export interface ConsoleHostThemeZoneProps {
 }
 
 /**
- * The zones on the STAFF pages (AGL-2939): the staff org page, its detail
- * zone, and the staff user page.
+ * The zones on the STAFF pages (AGL-2939): the staff overview, the staff org
+ * page, its detail zone, and the staff user page.
  *
  * No workspace names the plugin set there. A staff page is ABOUT an org or
  * an account, and the reader's own memberships have nothing to do with what
@@ -1145,6 +1254,7 @@ export interface ConsoleHostThemeZoneProps {
  * reader.
  */
 export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.staffOverview,
   CONSOLE_WIDGET_SLOTS.adminOrgDetail,
   CONSOLE_WIDGET_SLOTS.staffOrg,
   CONSOLE_WIDGET_SLOTS.staffUser,
@@ -1210,6 +1320,17 @@ export interface ConsoleSeoFieldsZoneProps {
   proposeValues: (values: ConsoleSeoFieldValues, key: string) => void
 }
 
+/**
+ * The site's SEO check as the SEO section last ran it: the platform's
+ * findings (`app-utils/seo-audit`), which the section draws for every site
+ * owner, and the target keyword lines the check was run with.
+ */
+export interface ConsoleSeoCheck {
+  report: SeoAuditReport
+  /** The keyword lines as typed, one page a line: `/pricing: plans, pricing`. */
+  keywords: string
+}
+
 /** What the `hostSeo` zone hands each widget (AGL-2910). */
 export interface ConsoleHostSeoZoneProps {
   hostId: string
@@ -1228,6 +1349,12 @@ export interface ConsoleHostSeoZoneProps {
    * applies once, and the form's Update is what stores them.
    */
   proposeDraft: (values: Record<string, string>, key: string) => void
+  /**
+   * The SEO check the section drew above the zone, once somebody has run it
+   * this visit; `null` before. The section lists the findings: a widget adds
+   * what it has for them — a proposed fix, say — and never lists them again.
+   */
+  check: ConsoleSeoCheck | null
 }
 
 /**

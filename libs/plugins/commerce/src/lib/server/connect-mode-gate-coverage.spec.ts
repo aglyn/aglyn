@@ -69,8 +69,8 @@ const read = (relative: string) =>
   readFileSync(join(PLUGINS, relative), 'utf8')
 
 describe('AGL-2471 connect-mode gate coverage', () => {
-  it.each(DOORS)('%s consults connectLinkageIsReady', (door) => {
-    expect(read(door)).toContain('connectLinkageIsReady(')
+  it.each(DOORS)('%s consults merchantAccountIsReady', (door) => {
+    expect(read(door)).toContain('merchantAccountIsReady(')
   })
 
   it.each(DOORS)('%s no longer decides on stripeChargesEnabled alone', (door) => {
@@ -89,14 +89,13 @@ describe('AGL-2471 connect-mode gate coverage', () => {
   it('names every door that reads stripeChargesEnabled at all', () => {
     // Re-derived, not asserted from memory: any NEW non-spec server file that
     // touches the readiness flag has to be triaged into DOORS or explained
-    // here. The two connect routes and the status sync WRITE the flag rather
-    // than gating on it, so they are named as the known non-doors.
+    // here. The two connect routes WRITE the flag rather than gating on it,
+    // so they are named as the known non-doors. The account-event sync that
+    // also writes it belongs to the payment provider, outside the plugins.
     const NON_DOORS = [
       // Write the flag rather than gate on it.
       'commerce/src/lib/server/connect.ts',
       'marketplace/src/lib/server/connect.ts',
-      'commerce/src/lib/server/billing-webhook.ts',
-      'marketplace/src/lib/server/billing-webhook.ts',
       // The PROJECTION the marketplace doors read. It must carry
       // `stripeAccountLivemode` or the predicate downstream is starved into a
       // constant — asserted directly below.

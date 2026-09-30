@@ -249,9 +249,13 @@ describe('letting go of a shared contact', () => {
   it('deletes the document once nobody else holds it', () => {
     expect(planContactDetach({ visibleTo: ['host:site-a'] }, A)).toEqual({
       action: 'delete',
+      retained: null,
     })
-    expect(planContactDetach({ visibleTo: [] }, A)).toEqual({ action: 'delete' })
-    expect(planContactDetach(null, A)).toEqual({ action: 'delete' })
+    expect(planContactDetach({ visibleTo: [] }, A)).toEqual({
+      action: 'delete',
+      retained: null,
+    })
+    expect(planContactDetach(null, A)).toEqual({ action: 'delete', retained: null })
   })
 
   /**
@@ -265,6 +269,23 @@ describe('letting go of a shared contact', () => {
     expect(planContactDetach({ visibleTo: ['host:site-b'] }, B).action).toBe(
       'delete',
     )
+  })
+
+  /**
+   * A site the contact was only SHARED with (AGL-3336) sees it and holds
+   * nothing: the last real holder's delete destroys the row, the share
+   * notwithstanding — including a share with every site.
+   */
+  it('does not count a site the contact was shared with as a holder', () => {
+    const sharedOut = {
+      visibleTo: ['host:site-a', 'host:site-b'],
+      sharing: { added: ['host:site-b'] },
+    }
+    expect(planContactDetach(sharedOut, A).action).toBe('delete')
+    const sharedWithAll = { visibleTo: ['host:site-a', 'org'], sharing: { added: ['org'] } }
+    expect(planContactDetach(sharedWithAll, A).action).toBe('delete')
+    // The control: the same tokens HELD are a second holder.
+    expect(planContactDetach({ visibleTo: ['host:site-a', 'host:site-b'] }, A).action).toBe('detach')
   })
 
   /**
@@ -297,5 +318,92 @@ describe('letting go of a shared contact', () => {
   it('counts holders by what can still read the row', () => {
     const noFacets = { visibleTo: ['host:site-a', 'host:site-b'], facets: {} }
     expect(planContactDetach(noFacets, A).action).toBe('detach')
+  })
+})
+
+/**
+ * A REFUSAL IS NOT LET GO (AGL-3338).
+ *
+ * The list gate reads a stored refusal as the one fact an operator's
+ * attestation cannot overrule. A holder letting go leaves its refusals on the
+ * document for the holders that remain, and the last holder's delete names
+ * every refusal the document holds so the caller can keep them.
+ */
+describe('letting go keeps a person’s refusals', () => {
+  const A = { groupId: 'group-a', hostIds: ['site-a'] }
+  const NW = { groupId: 'nw', hostIds: ['site-a', 'site-b'] }
+  const refused = { marketingConsent: false, marketingConsentAtMs: 100 }
+  const granted = { marketingConsent: true, marketingConsentAtMs: 50 }
+
+  it('a detach keeps the leaving group’s refusals and removes its grants', () => {
+    const plan = planContactDetach(
+      {
+        visibleTo: ['host:site-a', 'host:site-b', 'host:site-c'],
+        marketingConsentByHost: { 'site-a': refused, 'site-b': granted },
+      },
+      NW,
+    )
+    if (plan.action !== 'detach') throw new Error('unreachable')
+    expect(plan.remove).toEqual(['facets.nw', 'marketingConsentByHost.site-b'])
+    expect(plan.removeTokens.sort()).toEqual(['host:site-a', 'host:site-b'])
+    expect(plan.removeHostIds).toEqual(['site-a', 'site-b'])
+  })
+
+  it('a detach of a contact holding no refusal is what it always was', () => {
+    const plan = planContactDetach(
+      {
+        visibleTo: ['host:site-a', 'host:site-b', 'host:site-c'],
+        marketingConsentByHost: { 'site-b': granted },
+      },
+      NW,
+    )
+    expect(plan).toEqual({
+      action: 'detach',
+      remove: ['facets.nw', 'marketingConsentByHost.site-a', 'marketingConsentByHost.site-b'],
+      removeTokens: ['host:site-a', 'host:site-b'],
+      removeHostIds: ['site-a', 'site-b'],
+    })
+  })
+
+  it('a delete names every refusal on the document, every site’s and the unscoped one', () => {
+    const plan = planContactDetach(
+      {
+        visibleTo: ['host:site-a'],
+        marketingConsent: false,
+        marketingConsentByHost: {
+          'site-a': refused,
+          // A site that let the person go earlier, and a carried refusal:
+          // neither is the deleting group's, and both are still a "no".
+          'site-x': { marketingConsent: false, marketingConsentAtMs: 7 },
+          'site-y': { marketingConsent: false, carriedFromHostId: 'site-x' },
+          'site-b': granted,
+        },
+      },
+      A,
+    )
+    expect(plan).toEqual({
+      action: 'delete',
+      retained: {
+        byHost: {
+          'site-a': refused,
+          'site-x': { marketingConsent: false, marketingConsentAtMs: 7 },
+          'site-y': { marketingConsent: false, carriedFromHostId: 'site-x' },
+        },
+        unscoped: true,
+      },
+    })
+  })
+
+  it('a delete with no refusal on the document retains nothing', () => {
+    expect(
+      planContactDetach(
+        {
+          visibleTo: ['host:site-a'],
+          marketingConsent: true,
+          marketingConsentByHost: { 'site-a': granted },
+        },
+        A,
+      ),
+    ).toEqual({ action: 'delete', retained: null })
   })
 })

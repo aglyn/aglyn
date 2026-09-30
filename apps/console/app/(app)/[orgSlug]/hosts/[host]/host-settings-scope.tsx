@@ -20,8 +20,8 @@
 import {
   resolveSiteTheme,
   themeOverridePatch,
-} from '@aglyn/aglyn/app-utils/marketplace-theme'
-import { overrideWriteValue } from '@aglyn/aglyn/app-utils/marketplace-overrides'
+} from '@aglyn/aglyn/app-utils/site-theme'
+import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
 import * as Aglyn from '@aglyn/aglyn'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'

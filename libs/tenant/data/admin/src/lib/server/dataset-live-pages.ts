@@ -33,7 +33,7 @@
  *
  * A record changed one dataset, so this drops the pages that repeat over that
  * dataset and nothing else. The set is derived from the SAME binding the
- * published page expands — `repeatDatasetKeys`, the generic
+ * published page expands — `repeatKeys`, the generic
  * `props.repeatDataset` any node can now carry (AGL-3111) — rather than from a
  * list of components that may repeat. A component allowlist was already wrong
  * the day repeat stopped being the Stack's: a heading bound to a dataset
@@ -63,7 +63,7 @@
 import {
   ORG_SCOPE_TOKEN,
   hostIdsFromScope,
-  repeatDatasetKeys,
+  repeatKeys,
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/server'
 import type { Firestore } from 'firebase-admin/firestore'
@@ -173,7 +173,7 @@ export interface DatasetLivePageScope {
 /**
  * Whether a node tree repeats over any of `keys`.
  *
- * Asks `repeatDatasetKeys` — literally the function the tenant composer calls
+ * Asks `repeatKeys` — literally the function the tenant composer calls
  * to decide which datasets to load for a page — so this cannot come to
  * disagree with what actually renders. A predicate even slightly narrower than
  * the expansion's is a page that renders rows and never refreshes them.
@@ -182,7 +182,7 @@ function nodesRepeatDataset(
   nodes: UsageCandidate['nodes'],
   keys: ReadonlySet<string>,
 ): boolean {
-  return repeatDatasetKeys(nodes).some((key) => keys.has(key))
+  return repeatKeys(nodes).some((key) => keys.has(key))
 }
 
 /**
@@ -238,8 +238,8 @@ export function screenIdsRepeatingDataset(
  * The keys a page can be bound to this dataset by: its id, and the display
  * name editors type into the Repeat attribute.
  *
- * Both, because the expansion looks a key up either way (`getDatasets`
- * resolves an id first and then a display name). Matching only the id would
+ * Both, because the expansion looks a key up either way (the data plugin's
+ * repeat rows resolve an id first and then a display name). Matching only the id would
  * miss every binding written by name, which is the older and still-supported
  * half of them.
  */

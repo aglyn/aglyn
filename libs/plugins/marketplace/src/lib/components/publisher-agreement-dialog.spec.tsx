@@ -28,7 +28,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
-import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import PublisherAgreementDialog from './publisher-agreement-dialog.component'
 import usePublisherAgreementGate, {

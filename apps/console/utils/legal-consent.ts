@@ -31,8 +31,8 @@
  * silently consents to a LATER attempt.
  */
 import {
-  campaignAttributionQuery,
-  parseCampaignAttribution,
+  utmAttributionQuery,
+  parseUtmAttribution,
 } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { getAdditionalUserInfo, type UserCredential } from 'firebase/auth'
@@ -77,12 +77,12 @@ export const CONSENT_REQUIRED_SEARCH = 'consent=required'
  * observed in a spec — and an unasserted URL is how the bare version survived.
  */
 export function sendToConsentGate(): void {
-  const campaign = parseCampaignAttribution(
+  const campaign = parseUtmAttribution(
     new URLSearchParams(
       typeof window === 'undefined' ? '' : window.location.search,
     ),
   )
-  const carried = campaignAttributionQuery(campaign)
+  const carried = utmAttributionQuery(campaign)
   hardNavigate(
     `/signup?${CONSENT_REQUIRED_SEARCH}${carried ? `&${carried}` : ''}`,
   )

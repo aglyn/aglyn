@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
-import { resolvePlatformStripeMode } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { orgAgeDays } from '@aglyn/tenant-data-admin/server/org-age'
 import { canActAsPublisher } from './publisher-profile'
@@ -125,9 +125,9 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     // Which Stripe world this account lives in (AGL-2471) — two of the three
     // poisoned production linkages were publisherProfiles, written by this
     // very route from a localhost session holding the test key. See the
-    // commerce twin and `stripe-account-mode.ts` for why the retrieve above
+    // commerce twin and `payment-provider-stripe-connect.ts` for why the retrieve above
     // is the proof and the `acct_…` string is not.
-    const platformMode = await resolvePlatformStripeMode()
+    const platformMode = await paymentProvider().resolvePlatformMode()
     // Payout readiness rides along (AGL-1547): the gate stays on
     // charges_enabled, but the profile records whether the money can
     // actually LEAVE Stripe — the live drill (AGL-1548) reads it, and a

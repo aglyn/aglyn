@@ -54,6 +54,8 @@ import {
   contactRecordFromDoc,
 } from '../model/contact-record'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { useCrmSharingRules } from '../hooks/use-crm-sharing'
+import { crmShareChipLabel } from '../model/crm-sharing'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
@@ -626,17 +628,20 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   )
 
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
+  // The org's sharing rules, to name the rule behind a shared row (AGL-3336).
+  const sharingRules = useCrmSharingRules(org)
   const contactColumns = useMemo(
     () => [
       ...contactListColumns({
         memberName: members.memberName,
         // "Known by", at the organization level only (AGL-2630).
         siteName: mount ? mount.siteName : undefined,
+        shareChipLabel: (chip) => crmShareChipLabel(chip, sharingRules),
       }),
       // The org's custom fields as optional columns (AGL-2601).
       ...customFieldColumns(customFields.active),
     ],
-    [members.memberName, mount, customFields.active],
+    [members.memberName, mount, customFields.active, sharingRules],
   )
   /*
    * The grid's column and sort models are the VIEW'S (AGL-2617). The

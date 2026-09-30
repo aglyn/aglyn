@@ -874,8 +874,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
               // panel the launcher knows nothing about — one that is
               // resizable and collapsible — without this component growing
               // a dependency on the editor.
-              right: 'var(--aglyn-assist-inset-right, 20px)',
-              bottom: 'var(--aglyn-assist-inset-bottom, 20px)',
+              right: 'var(--aglyn-dock-inset-right, 20px)',
+              bottom: 'var(--aglyn-dock-inset-bottom, 20px)',
               zIndex: (theme) => theme.zIndex.drawer - 1,
             }}
           >

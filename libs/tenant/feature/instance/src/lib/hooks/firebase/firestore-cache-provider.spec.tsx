@@ -43,6 +43,10 @@ import { render } from '@testing-library/react'
 
 import { FirebaseServicesProvider } from './firebase-services'
 import type { AuthPersistenceClass } from './auth-persistence'
+import {
+  MEMORY_CACHE_FALLBACK_KEY,
+  MEMORY_CACHE_FALLBACK_TTL_MS,
+} from './firestore-multitab-wedge'
 import type { FirestoreSettings } from 'firebase/firestore'
 
 const mockInitializeFirestore = jest.fn(
@@ -191,5 +195,34 @@ describe('the multi-tab record prune the provider starts, per host class (AGL-28
     firestoreSettingsFor('ephemeral')
 
     expect(mockPruneBrowserSharedClientState).not.toHaveBeenCalled()
+  })
+})
+
+describe('a tab that fell back from a locked multi-tab cache (AGL-3428)', () => {
+  beforeEach(() => {
+    mockPruneBrowserSharedClientState.mockClear()
+    window.sessionStorage.clear()
+  })
+  afterEach(() => {
+    window.sessionStorage.clear()
+  })
+
+  it('reloads onto the memory cache on a durable origin, and leaves the shared records alone', () => {
+    window.sessionStorage.setItem(
+      MEMORY_CACHE_FALLBACK_KEY,
+      JSON.stringify({ reason: 'lease-locked', at: Date.now() }),
+    )
+
+    expect(firestoreSettingsFor('durable').localCache?.kind).toBe('memory')
+    expect(mockPruneBrowserSharedClientState).not.toHaveBeenCalled()
+  })
+
+  it('goes back to the durable cache once the fallback has expired', () => {
+    window.sessionStorage.setItem(
+      MEMORY_CACHE_FALLBACK_KEY,
+      JSON.stringify({ reason: 'lease-locked', at: Date.now() - MEMORY_CACHE_FALLBACK_TTL_MS }),
+    )
+
+    expect(firestoreSettingsFor('durable').localCache?.kind).toBe('persistent')
   })
 })

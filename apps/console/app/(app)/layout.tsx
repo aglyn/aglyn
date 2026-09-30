@@ -17,7 +17,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import AssistDockSlot from '../../components/assist-dock-slot.component'
+import ConsoleDockSlot from '../../components/console-dock-slot.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import LegalReacceptanceBanner from '../../components/legal-reacceptance-banner.component'
@@ -64,12 +64,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 from inside the one the person is working in. */}
             <OrgInvitesBanner placement="shell" />
             {children}
-            {/* The assistant dock (AGL-1860, AGL-2940): the floating helper
-                on every console page — this is the one slot above every route
-                boundary, same reason the secondary app bar lives here. The AI
-                plugin owns the panel; the shell resolves the scope and the
-                release verdicts and hands them down. */}
-            <AssistDockSlot />
+            {/* The console dock (AGL-1860, AGL-2940): a floating panel on
+                every console page — this is the one slot above every route
+                boundary, same reason the secondary app bar lives here. A
+                plugin owns what it draws there (the AI plugin's assistant);
+                the shell resolves the scope and a verdict for any release
+                flag the widget asks about, and hands them down. */}
+            <ConsoleDockSlot />
           </MainLayout>
         </PendingInvitesProvider>
       </PlatformLockdownGate>

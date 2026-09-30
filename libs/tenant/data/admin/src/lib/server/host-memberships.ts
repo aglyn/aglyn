@@ -121,7 +121,7 @@ const readHostMeta = async (
   )
 }
 
-const listMembers = async (
+const readOrgMembers = async (
   db: FirebaseFirestore.Firestore,
   orgId: string,
 ): Promise<AglynOrgMember[]> => {
@@ -343,7 +343,7 @@ export async function syncHostProjectionForMembers(
 ): Promise<void> {
   const db = firestore()
   const [members, meta] = await Promise.all([
-    listMembers(db, orgId),
+    readOrgMembers(db, orgId),
     readHostMeta(db, [hostId]),
   ])
   const hostMeta = meta.get(hostId)
@@ -388,7 +388,7 @@ export async function deleteHostProjectionForAllMembers(
   hostId: string,
 ): Promise<void> {
   const db = firestore()
-  const members = await listMembers(db, orgId)
+  const members = await readOrgMembers(db, orgId)
   await commitChunked(
     db,
     members.map((member) => (batch: FirebaseFirestore.WriteBatch) => {

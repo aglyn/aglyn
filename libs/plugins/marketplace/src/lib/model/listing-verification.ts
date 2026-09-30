@@ -19,7 +19,7 @@
  * Who may ask for the Verified badge, and when (AGL-1217).
  *
  * In core rather than beside the rest of the marketplace model for the same
- * reason `marketplace-provenance` is (AGL-1016): the console's staff review
+ * reason `artifact-provenance` is (AGL-1016): the console's staff review
  * route needs this policy, and `scope:app` may not depend on `aglyn:addons`.
  * The marketplace model re-exports everything here, so publishing code keeps
  * importing it from one place.

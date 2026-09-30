@@ -65,7 +65,7 @@ jest.mock('../app/[host]/host-data', () => ({
   getHostCached: (...args: unknown[]) => mockGetHostCached(...args),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
+jest.mock('@aglyn/aglyn/app-utils/site-theme', () => ({
   __esModule: true,
   resolveSiteTheme: () => undefined,
 }))
