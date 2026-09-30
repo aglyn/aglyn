@@ -88,6 +88,11 @@ jest.mock('@aglyn/shared-util-email', () => ({
   },
 }))
 
+const withheld = new Set<string>()
+jest.mock('./account-mail', () => ({
+  withoutMailWithheldAccounts: async (uids: readonly string[]) =>
+    uids.filter((uid) => !withheld.has(uid)),
+}))
 jest.mock('./email-suppression', () => ({
   filterSuppressedEmails: async (addresses: readonly string[]) =>
     addresses.filter((address) => !suppressed.has(address)),
@@ -263,6 +268,7 @@ describe('the notification email channel (AGL-3224)', () => {
     sends.length = 0
     metered.length = 0
     suppressed.clear()
+    withheld.clear()
     directory.clear()
     emailConfigured = true
     process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.example.com'
@@ -331,6 +337,17 @@ describe('the notification email channel (AGL-3224)', () => {
     })
     directory.set('uid-a', 'bounced@example.com')
     suppressed.add('bounced@example.com')
+    await notifyUsers(['uid-a'], FORM)
+    expect(written).toHaveLength(1)
+    expect(sends).toHaveLength(0)
+  })
+
+  it('never mails a locked or disabled account, and still records the event (AGL-3418)', async () => {
+    userDocs.set('uid-a', {
+      notificationSettings: { account: { content: { email: true } } },
+    })
+    directory.set('uid-a', 'a@example.com')
+    withheld.add('uid-a')
     await notifyUsers(['uid-a'], FORM)
     expect(written).toHaveLength(1)
     expect(sends).toHaveLength(0)

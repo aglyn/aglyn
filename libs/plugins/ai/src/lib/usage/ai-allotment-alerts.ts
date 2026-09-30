@@ -17,6 +17,7 @@
 
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { sendEmail } from '@aglyn/shared-util-email'
+import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin/server/email-metering'
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
 import { notifyUsers } from '@aglyn/tenant-data-admin/server/notifications'
@@ -69,6 +70,8 @@ export interface AiAllotmentAlertChannels {
   send: typeof sendEmail
   filter: typeof filterSuppressedEmails
   meter: typeof meterPlatformEmail
+  /** The uids given, minus locked or disabled accounts (AGL-3418). */
+  reachable: typeof withoutMailWithheldAccounts
 }
 
 const DEFAULT_CHANNELS: AiAllotmentAlertChannels = {
@@ -76,6 +79,7 @@ const DEFAULT_CHANNELS: AiAllotmentAlertChannels = {
   send: sendEmail,
   filter: filterSuppressedEmails,
   meter: meterPlatformEmail,
+  reachable: withoutMailWithheldAccounts,
 }
 
 /** The console's absolute origin for an email link, or `''` when unset. */
@@ -114,9 +118,13 @@ async function recipientsFor(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
   standing: AiAllotmentStanding,
+  reachable: AiAllotmentAlertChannels['reachable'],
 ): Promise<Recipients> {
   const orgRef = firestore.collection('orgs').doc(orgId)
   const members = await orgRef.collection('members').get()
+  // A locked or disabled account is told nothing, by either channel; it is
+  // still named when the alert is about it.
+  const open = new Set(await reachable(members.docs.map((member) => member.id)))
   const managerUids: string[] = []
   const managerEmails: string[] = []
   let subjectEmail: string | null = null
@@ -124,12 +132,12 @@ async function recipientsFor(
   for (const member of members.docs) {
     const role = member.get('role')
     const email = String(member.get('email') ?? '').trim()
-    if (role === 'owner' || role === 'admin') {
+    if ((role === 'owner' || role === 'admin') && open.has(member.id)) {
       managerUids.push(member.id)
       if (email.includes('@')) managerEmails.push(email)
     }
     if (standing.uid && member.id === standing.uid) {
-      subjectEmail = email.includes('@') ? email : null
+      subjectEmail = email.includes('@') && open.has(member.id) ? email : null
       subjectName = String(member.get('displayName') ?? '').trim() || email
     }
   }
@@ -142,7 +150,10 @@ async function recipientsFor(
   return {
     managerUids,
     managerEmails,
-    subjectUid: standing.scope === 'host' ? null : standing.uid,
+    subjectUid:
+      standing.scope === 'host' || !standing.uid || !open.has(standing.uid)
+        ? null
+        : standing.uid,
     subjectEmail: standing.scope === 'host' ? null : subjectEmail,
     subjectName: subjectName || (standing.scope === 'host' ? 'this' : 'A member'),
   }
@@ -157,7 +168,7 @@ export async function announceAiAllotmentAlerts(
   input: AiAllotmentAlertInput,
   channels: Partial<AiAllotmentAlertChannels> = {},
 ): Promise<number> {
-  const { notify, send, filter, meter } = { ...DEFAULT_CHANNELS, ...channels }
+  const { notify, send, filter, meter, reachable } = { ...DEFAULT_CHANNELS, ...channels }
   let announced = 0
   for (const { standing, threshold } of input.alerts) {
     try {
@@ -169,7 +180,7 @@ export async function announceAiAllotmentAlerts(
         threshold,
       )
       if (!claimed) continue
-      const recipients = await recipientsFor(firestore, input.orgId, standing)
+      const recipients = await recipientsFor(firestore, input.orgId, standing, reachable)
       const copy = aiAllotmentAlertCopy({
         scope: standing.scope,
         threshold,

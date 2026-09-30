@@ -27,6 +27,8 @@ import {
 // lists. A suppression check that is not actually running is the exact defect
 // this issue is about, one level up. Same reasoning as `email-events.ts`.
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
+import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
+import { isLockdownActive, normalizeOrgLockdown } from '@aglyn/aglyn/server'
 import {
   renderSystemEmailContent,
   systemEmailBrand,
@@ -121,12 +123,20 @@ export async function orgAdminEmails(
     .doc(orgId)
     .collection('members')
     .get()
+  const admins = members.docs.filter((member) => {
+    const role = member.get('role')
+    return role === 'owner' || role === 'admin'
+  })
+  // A locked or disabled account is not mailed (AGL-3418): it cannot sign
+  // in to act on the alert, and a risk-locked one must not be kept informed.
+  const reachable = new Set(
+    await withoutMailWithheldAccounts(admins.map((member) => member.id)),
+  )
   const addresses = new Set<string>()
   /** Owners/admins whose member document carries no usable email. */
   const unresolved: string[] = []
-  for (const member of members.docs) {
-    const role = member.get('role')
-    if (role !== 'owner' && role !== 'admin') continue
+  for (const member of admins) {
+    if (!reachable.has(member.id)) continue
     const email = String(member.get('email') ?? '').trim()
     if (email.includes('@')) addresses.add(email.toLowerCase())
     else unresolved.push(member.id)
@@ -216,13 +226,17 @@ export async function emailStaffAlert(input: {
 async function orgBrand(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
-): Promise<SystemEmailBrand> {
+): Promise<{ brand: SystemEmailBrand; suspended: boolean }> {
   try {
     const org = await firestore.collection('orgs').doc(orgId).get()
-    return systemEmailBrand(org.exists ? (org.data() ?? null) : null)
+    const data = org.exists ? (org.data() ?? null) : null
+    return {
+      brand: systemEmailBrand(data),
+      suspended: isLockdownActive(normalizeOrgLockdown(data as never), Date.now()),
+    }
   } catch (error) {
     console.error('[usage-alert-email] org brand read failed', orgId, error)
-    return systemEmailBrand(null)
+    return { brand: systemEmailBrand(null), suspended: false }
   }
 }
 
@@ -259,8 +273,10 @@ export async function emailOrgAdmins(
     if (!to.length) return { sent: false, reason: 'no-recipient' }
     // In the org's own brand, as the `workspace-notice` system email
     // (AGL-3367): a white-label agency's clients are warned about their bill
-    // under the agency's name, never the platform's.
-    const brand = await orgBrand(input.firestore, input.orgId)
+    // under the agency's name, never the platform's. A suspended workspace
+    // is sent nothing (AGL-3418) — its people cannot act on the notice.
+    const { brand, suspended } = await orgBrand(input.firestore, input.orgId)
+    if (suspended) return { sent: false, reason: 'no-recipient' }
     const content = await renderSystemEmailContent(
       'workspace-notice',
       {

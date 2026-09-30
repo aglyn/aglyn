@@ -1078,6 +1078,21 @@ A lift sends the matching "restored" notice to the same people, saying what
 happens now (renewals resumed, payouts restored, a canceled subscription stays
 canceled).
 
+### Nothing else is sent while the lock stands {#no-other-mail}
+
+After the notice, a locked person gets no automated platform mail: no usage or
+budget alerts, notification emails, CRM digests or task reminders, AI insight
+digests or allotment alerts, monthly usage summaries, and no workspace notices
+such as a paused outreach mailbox. The same holds for an account whose sign-in
+is disabled, and a suspended workspace's usage alerts and summaries stop too.
+Console notifications are still recorded, so the history is there after the
+lock lifts.
+
+Still sent: the lock and lift notices themselves, security alerts, password
+reset and verification mail, erasure confirmations, and Stripe's receipts.
+Mail a customer's own site sends is unaffected. A locked person who is a
+contact on someone else's site still gets that site's mail.
+
 ### Email the owners {#email-the-owners}
 
 The checkbox is on for every reason and resets to on when you change the
