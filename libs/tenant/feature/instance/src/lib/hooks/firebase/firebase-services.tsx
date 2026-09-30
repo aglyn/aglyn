@@ -72,7 +72,13 @@ import {
   type AuthPersistenceClass,
   createAuthInstance,
 } from './auth-persistence'
-import { localCacheFor, pruneSharedClientStateFor } from './firestore-cache'
+import {
+  firestoreCacheClassFor,
+  localCacheFor,
+  pruneSharedClientStateFor,
+} from './firestore-cache'
+import { markMultiTabFirestore } from './firestore-multitab-wedge'
+import { firestorePersistencePrefix } from './firestore-shared-client-state'
 
 /**
  * Drop-in replacement for reactfire's `ObservableStatus<T>` — reactfire is
@@ -394,6 +400,10 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // `durable` resolves to the same `getAuth(app)` this always called.
     const auth = createAuthInstance(app, authPersistence)
 
+    // The origin's class, unless this tab fell back to the memory cache
+    // because another tab locked the shared one (AGL-3428). Firestore only:
+    // `auth` above keeps the origin's class.
+    const firestoreCacheClass = firestoreCacheClassFor(authPersistence)
     if (!firestoreInitialized.has(appName)) {
       try {
         // Under the emulator (dev/e2e only): force long-polling and skip
@@ -430,7 +440,7 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
                 // console domain it is the same exposure D6 removed from the
                 // refresh token — see `firestore-cache.ts` for why one
                 // declaration governs both.
-                localCache: localCacheFor(authPersistence),
+                localCache: localCacheFor(firestoreCacheClass),
                 // The real-backend half of the AGL-217 mitigation above: force
                 // long-polling for a WebDriver-controlled Chrome even when it
                 // is NOT talking to the emulator, because the WebChannel wedge
@@ -456,7 +466,15 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
           // The SDK never sweeps the multi-tab records the durable cache
           // strands in localStorage, and a full localStorage fails the whole
           // Firestore client — see `firestore-shared-client-state.ts`.
-          void pruneSharedClientStateFor(authPersistence, app)
+          void pruneSharedClientStateFor(firestoreCacheClass, app)
+          // Only the durable multi-tab cache can be locked by another tab,
+          // so only it gets the lease check after a stalled recovery.
+          if (firestoreCacheClass === 'durable' && app.options?.projectId) {
+            markMultiTabFirestore(
+              getFirestore(app),
+              `${firestorePersistencePrefix(app.name, app.options.projectId)}main`,
+            )
+          }
         }
       } catch {
         // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance
