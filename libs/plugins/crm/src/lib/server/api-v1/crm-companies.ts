@@ -39,7 +39,12 @@ import {
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors, restampCrmListFieldsAt } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { type ApiV1Context, requireScope } from '../api-v1'
+import {
+  type ApiV1Context,
+  claimWrite,
+  readJsonBody,
+  requireScope,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import {
   type Clearable,
   CRM_LABEL_MAX,
@@ -63,7 +68,6 @@ import {
   refuseUnknownKeys,
   updatePayload,
 } from './crm-shared'
-import { claimWrite, readJsonBody } from './shared'
 
 /** The company object as published. Every writable field appears here. */
 function companyView(doc: FirebaseFirestore.DocumentSnapshot) {

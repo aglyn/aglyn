@@ -1566,13 +1566,19 @@ export interface TemplatePlaceholder {
 /**
  * Where a template came from.
  *
- * SERVER-MANAGED. A client that could write this would be able to stamp
- * `marketplace` provenance on something it authored, and the library shows
+ * SERVER-MANAGED. A client that could write this would be able to stamp an
+ * installer's provenance on something it authored, and the library shows
  * this to the user as a trust signal.
  */
 export interface TemplateSource {
-  type: 'authored' | 'marketplace' | 'starter'
-  /** Marketplace listing this was installed from. */
+  /**
+   * `authored` (saved on this site) and `starter` are the platform's own. Any
+   * other value is the stamp of the plugin that installed the template, as
+   * it declares it (`templateSource` in `plugins.config.json`, read through
+   * `plugin-manager/plugin-template-sources`).
+   */
+  type: 'authored' | 'starter' | (string & {})
+  /** The listing an installing plugin installed this from. */
   listingId?: string
   /** Listing version installed — compared against `latestVersion` to
    *  surface "update available" without storing anything extra. */
@@ -1581,7 +1587,7 @@ export interface TemplateSource {
   starterId?: string
   /**
    * Bundle-level identity for a seeded starter (AGL-687). A multi-page
-   * starter seeds one page template per screen, exactly as a marketplace
+   * starter seeds one page template per screen, exactly as a template
    * install does; these carry the name/description/order of the bundle the
    * screens belong to so the gallery can present them as the single starter
    * they were authored as, without a second, code-side template source.

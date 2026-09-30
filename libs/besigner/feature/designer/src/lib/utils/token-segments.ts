@@ -180,7 +180,8 @@ export type TokenGroup =
   | 'function'
   | 'entry'
   | 'collection'
-  | 'dataset'
+  /** `{{item.*}}` — a field of the record a repeat is rendering. */
+  | 'item'
   | 'property'
   | 'host'
   | 'unknown'
@@ -188,14 +189,14 @@ export type TokenGroup =
 /**
  * Display-name inputs for {@link resolveTokenLabel}: the picker options
  * (which already carry friendly labels for every insertable token), the
- * host's variable/function docs keyed by id (AGL-194), and the ancestor
- * repeatable's dataset model fields (id → current display name).
+ * host's variable/function docs keyed by id (AGL-194), and the fields of
+ * the entity the nearest ancestor repeat names (id → current display name).
  */
 export interface TokenLabelContext {
   options?: BindingOption[]
   variables?: Record<string, { name?: string } | undefined>
   functions?: Record<string, { name?: string } | undefined>
-  datasetFields?: Array<{ id: string; label: string }>
+  itemFields?: Array<{ id: string; label: string }>
 }
 
 export interface ResolvedTokenLabel {
@@ -309,7 +310,7 @@ export function resolveTokenLabel(
   if (itemMatch) {
     const fieldId = itemMatch[1] as string
     const hopId = itemMatch[2]
-    const field = (context.datasetFields ?? []).find(
+    const field = (context.itemFields ?? []).find(
       (candidate) => candidate.id === fieldId,
     )
     const label = field
@@ -317,7 +318,7 @@ export function resolveTokenLabel(
         ? `${field.label} → ${humanizeDatasetFieldId(hopId)}`
         : field.label
       : inner
-    return { label, group: 'dataset', known: Boolean(field) }
+    return { label, group: 'item', known: Boolean(field) }
   }
 
   return { label: inner || token, group: 'unknown', known: false }

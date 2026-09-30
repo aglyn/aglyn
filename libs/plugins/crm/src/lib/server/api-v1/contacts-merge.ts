@@ -42,8 +42,11 @@
 
 import { ApiErrors, apiJson, mergeContacts } from '@aglyn/tenant-data-admin'
 import { apiKeyActorLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
-import type { ApiV1Context } from '../api-v1'
-import { claimWrite, readJsonBody } from './shared'
+import {
+  type ApiV1Context,
+  claimWrite,
+  readJsonBody,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 
 /** The key an integration names the record to fold in by. */
 export const MERGE_SOURCE_FIELD = 'sourceContactId'

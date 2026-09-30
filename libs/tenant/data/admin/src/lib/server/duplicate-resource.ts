@@ -19,9 +19,10 @@
  * Duplicating a site resource whole, as a draft (AGL-2936).
  *
  * One module for every kind that lives under a site — screens and email
- * designs, reusable components, layouts, templates, forms and workflows —
- * so the console route, the AI runtime's `duplicate_resource` tool and any
- * later door make the same copy: the same fields, the same uniqueness
+ * designs, reusable components, layouts, templates and forms, and the kinds
+ * a plugin declares a copy for (a workflow) — so the console route, the AI
+ * runtime's `duplicate_resource` tool and any later door make the same copy:
+ * the same fields, the same uniqueness
  * rules, the same band arithmetic, the same activity rows. A caller that
  * has verified who is asking and that they may write the site hands over
  * the ids and gets back the copy's id, or a refusal it can answer with.
@@ -36,8 +37,8 @@
  *     points at it, and nothing points at the copy;
  *   - a layout, component or form is served only where a page places it,
  *     and nothing places the copy;
- *   - a workflow runs only when its trigger fires, and the copy's trigger
- *     is cleared;
+ *   - a declared kind drops what its plugin says a copy must not carry —
+ *     a workflow's trigger is cleared, so the copy runs nothing;
  *   - a template is inert until it is used.
  *
  * COUNTED LIKE A CREATE. The copy is one more document in a collection the
@@ -97,6 +98,7 @@ import {
   type DuplicableHostResourceKind,
 } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { formDesignReboundTo } from '@aglyn/aglyn/app-utils/forms'
+import { pluginHostResource } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 import { Timestamp } from 'firebase-admin/firestore'
 import { logResourceDuplicated } from './duplicate-activity'
 import firebaseAdmin from './firebase-admin'
@@ -104,8 +106,8 @@ import firebaseAdmin from './firebase-admin'
 /** How the copy of each kind is made. */
 interface KindRecipe {
   collection: string
-  /** The field the name lives in — `name` on a workflow, `displayName` elsewhere. */
-  nameField: 'displayName' | 'name'
+  /** The field the name lives in — `displayName` on core's kinds; a declared kind names its own. */
+  nameField: string
   /** The source fields carried onto the copy; everything else stays behind. */
   fields: readonly string[]
   /** The back-pointer a copied version carries, when the kind versions at all. */
@@ -117,18 +119,23 @@ interface KindRecipe {
   /** Whether a `slug` on the source becomes a unique `-copy` slug. */
   slug?: boolean
   /** What the copy carries beyond the source's fields. */
-  stamps?: Record<string, unknown>
+  stamps?: Readonly<Record<string, unknown>>
 }
 
 /**
  * Per kind, the same fields the create route's allow-list admits, less the
  * ones a copy must not inherit: a screen's `versionId` (the copy mints its
  * own), a template's `source` (stamped `authored` below — a copy of a
- * marketplace template is the customer's own), a workflow's `trigger`
- * (cleared, so the copy runs nothing until armed), and anything the server
+ * marketplace template is the customer's own), and anything the server
  * stamps on every create.
+ *
+ * The platform's own kinds only. A kind a plugin owns — a workflow, whose
+ * copy clears its trigger so it runs nothing until armed — is declared by
+ * that plugin beside its collection in `plugins.config.json` and read by
+ * {@link recipeFor} (AGL-3080), compiled so a copy never depends on this
+ * process having loaded the plugin.
  */
-const RECIPES: Record<DuplicableHostResourceKind, KindRecipe> = {
+const RECIPES: Partial<Record<DuplicableHostResourceKind, KindRecipe>> = {
   screen: {
     collection: 'screens',
     nameField: 'displayName',
@@ -209,14 +216,31 @@ const RECIPES: Record<DuplicableHostResourceKind, KindRecipe> = {
     entitlement: 'reusableComponents',
     slug: true,
   },
-  workflow: {
-    collection: 'workflows',
-    nameField: 'name',
-    fields: ['steps', 'returnValue'],
-    quotaKey: 'workflowsPerHost',
-    entitlement: 'workflows',
-    stamps: { trigger: null },
-  },
+}
+
+/**
+ * The recipe for a kind: core's own, else the one its plugin declared, else
+ * `null` — which is refused, never guessed at. A declared copy is met against
+ * the same plan counter and feature as the kind's create.
+ */
+export function recipeFor(kind: string): KindRecipe | null {
+  if (Object.prototype.hasOwnProperty.call(RECIPES, kind)) {
+    return RECIPES[kind as DuplicableHostResourceKind] ?? null
+  }
+  const declared = pluginHostResource(kind)
+  if (!declared?.duplicate) return null
+  return {
+    collection: declared.collection,
+    nameField: declared.duplicate.nameField,
+    fields: declared.duplicate.fields,
+    ...(declared.quotaKey
+      ? { quotaKey: declared.quotaKey as keyof OrgEntitlements & string }
+      : {}),
+    ...(declared.entitlement
+      ? { entitlement: declared.entitlement as keyof OrgFeatureFlags }
+      : {}),
+    ...(declared.duplicate.stamps ? { stamps: declared.duplicate.stamps } : {}),
+  }
 }
 
 export interface DuplicateResourceOptions {
@@ -275,8 +299,9 @@ export async function duplicateResource(
   kind: DuplicableHostResourceKind,
   options: DuplicateResourceOptions,
 ): Promise<DuplicateResourceResult> {
-  const recipe = RECIPES[kind]
+  const recipe = recipeFor(kind)
   const noun = DUPLICABLE_RESOURCE_NOUNS[kind]
+  if (!recipe) return { ok: false, status: 400, error: 'That resource cannot be duplicated' }
   const sourceId = String(options.sourceId ?? '').trim().slice(0, 64)
   if (!sourceId) return { ok: false, status: 400, error: `Missing the ${noun} to copy` }
   const firestore = firebaseAdmin.app().firestore()

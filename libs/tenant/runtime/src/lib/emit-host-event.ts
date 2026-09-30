@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostActionAlert, HostEventType } from '@aglyn/aglyn/server'
+import type { HostEventType, SiteAlert } from '@aglyn/aglyn/server'
 import {
   type HostEventContext,
   type HostEventPayload,
@@ -37,7 +37,7 @@ export async function emitHostEvent(
   event: HostEventType,
   payload: HostEventPayload = {},
   context: HostEventContext = {},
-): Promise<{ alerts: HostActionAlert[] }> {
+): Promise<{ alerts: SiteAlert[] }> {
   return { alerts: await runHostEventListeners(hostId, event, payload, context) }
 }
 

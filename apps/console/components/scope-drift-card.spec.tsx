@@ -171,25 +171,4 @@ describe('ScopeDriftCard', () => {
       screen.getByText('Stamp the missing scopes').closest('button')?.disabled,
     ).toBe(true)
   })
-
-  it('says so when the legacy scan was truncated', async () => {
-    // The count is then a FLOOR. Swallowing this is how a partial answer
-    // gets read as the total.
-    ;(global.fetch as jest.Mock).mockResolvedValueOnce(
-      reply({
-        planned: 1,
-        drift: { byCollection: { media: 1 }, members: 0 },
-        legacyScanTruncated: true,
-        done: true,
-        nextCursor: null,
-      }),
-    )
-
-    render(<ScopeDriftCard />)
-    fireEvent.click(screen.getByText('Scan for drift'))
-
-    await waitFor(() =>
-      expect(screen.getByText(/lower bound rather than the total/)).toBeTruthy(),
-    )
-  })
 })

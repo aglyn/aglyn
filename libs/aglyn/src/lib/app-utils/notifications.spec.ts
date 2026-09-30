@@ -15,9 +15,13 @@
  * limitations under the License.
  */
 
+import { PLUGIN_NOTIFICATION_CATEGORIES_DECLARED } from '../plugin-manager/first-party-plugins.generated'
 import {
-  crmDailyDigestEnabled,
+  digestEnabled,
   NOTIFICATION_CATEGORY_DESCRIPTIONS,
+  NOTIFICATION_CATEGORY_LABELS,
+  NOTIFICATION_CHANNEL_DEFAULTS,
+  NOTIFICATION_DIGESTS,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_TYPE_LABELS,
   STAFF_NOTIFICATION_CATEGORIES,
@@ -63,12 +67,24 @@ describe('notification categories (AGL-267)', () => {
 
 describe('the daily CRM digest switch (AGL-2619)', () => {
   it('is on until somebody turns it off, and reads only its own key', () => {
-    expect(crmDailyDigestEnabled(undefined)).toBe(true)
-    expect(crmDailyDigestEnabled({})).toBe(true)
-    expect(crmDailyDigestEnabled({ crmDaily: true })).toBe(true)
-    expect(crmDailyDigestEnabled({ crmDaily: false })).toBe(false)
+    expect(digestEnabled(undefined, 'crmDaily')).toBe(true)
+    expect(digestEnabled({}, 'crmDaily')).toBe(true)
+    expect(digestEnabled({ crmDaily: true }, 'crmDaily')).toBe(true)
+    expect(digestEnabled({ crmDaily: false }, 'crmDaily')).toBe(false)
     // A category mute lives in a different map and does not reach it.
-    expect(crmDailyDigestEnabled({ content: false })).toBe(true)
+    expect(digestEnabled({ content: false }, 'crmDaily')).toBe(true)
+  })
+
+  it('is declared by the plugin that sends it, under the key stored switches use', () => {
+    // `digestPrefs.crmDaily` is on live user documents: the declaration keeps
+    // that spelling, and the settings page writes what it declares.
+    expect(NOTIFICATION_DIGESTS).toContainEqual(
+      expect.objectContaining({ pluginId: 'crm', key: 'crmDaily' }),
+    )
+    for (const digest of NOTIFICATION_DIGESTS) {
+      expect(digest.label.trim()).not.toBe('')
+      expect(digest.description.length).toBeGreaterThan(20)
+    }
   })
 
   it('files the digest notification under the operational category', () => {
@@ -559,5 +575,58 @@ describe('a type can answer for itself at any scope', () => {
   it('an emptied scope is not listed', () => {
     const empty = { orgTypes: { 'org-a': { 'content.booking': {} } }, orgs: {} }
     expect(notificationOverriddenScopes(empty).orgIds).toEqual([])
+  })
+})
+
+/**
+ * A plugin's category is declared by the plugin and compiled into core
+ * (AGL-3080), because the fan-out resolves channels in processes that load no
+ * plugin. What core owns is the order and the fallback; what the stored
+ * preferences mean must not move.
+ */
+describe('categories a plugin declares', () => {
+  it('keeps the stored id of the marketplace category', () => {
+    // Every preference anybody set for listing reviews is stored under
+    // `marketplace`; the declaration is what keeps that key meaning it.
+    expect(PLUGIN_NOTIFICATION_CATEGORIES_DECLARED).toContainEqual(
+      expect.objectContaining({ pluginId: 'marketplace', id: 'marketplace' }),
+    )
+    expect(NOTIFICATION_CATEGORY_LABELS['marketplace']).toBe('Marketplace')
+    expect(NOTIFICATION_CHANNEL_DEFAULTS['marketplace']).toEqual({
+      console: true,
+      email: false,
+    })
+  })
+
+  it('lists declared rows after the workspace’s own work and before the platform’s notices', () => {
+    const declared = PLUGIN_NOTIFICATION_CATEGORIES_DECLARED.map((row) => row.id)
+    expect(Object.keys(NOTIFICATION_CATEGORY_LABELS)).toEqual([
+      'billing',
+      'team',
+      'content',
+      ...declared,
+      'support',
+      'system',
+      'staff',
+    ])
+    expect(Object.keys(NOTIFICATION_CATEGORY_DESCRIPTIONS)).toEqual(
+      Object.keys(NOTIFICATION_CATEGORY_LABELS),
+    )
+    expect(Object.keys(NOTIFICATION_CHANNEL_DEFAULTS)).toEqual(
+      Object.keys(NOTIFICATION_CATEGORY_LABELS),
+    )
+  })
+
+  it('never lets a declaration take a core category', () => {
+    for (const row of PLUGIN_NOTIFICATION_CATEGORIES_DECLARED) {
+      expect(['billing', 'team', 'content', 'support', 'system', 'staff']).not.toContain(row.id)
+    }
+  })
+
+  it('files a type whose prefix nothing declares under system', () => {
+    expect(notificationCategory('unclaimed.thing')).toBe('system')
+    expect(notificationChannelEnabled(undefined, 'console', 'unclaimed.thing')).toBe(true)
+    // Not an inherited property either: a prefix is looked up as the map's own.
+    expect(notificationCategory('constructor.thing')).toBe('system')
   })
 })

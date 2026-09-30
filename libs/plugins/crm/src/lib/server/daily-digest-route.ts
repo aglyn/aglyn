@@ -20,8 +20,8 @@ import {
   type AglynOrgMember,
   buildRoute,
   CRM_COLLECTIONS,
-  crmDailyDigestEnabled,
   DIGEST_PREFS_FIELD,
+  digestEnabled,
   hostRoleFor,
   isReleaseFlagOnForOrg,
   notificationMuted,
@@ -166,6 +166,15 @@ const CRM_DIGEST_HOST_PAGE = 100
  * stops and SAYS SO in the response rather than reading without bound.
  */
 export const CRM_DIGEST_HOST_CEILING = 200
+
+/**
+ * The key a person's switch for this digest is stored under in
+ * `users/{uid}.digestPrefs` — the one the CRM declares under
+ * `notificationDigests` in `plugins.config.json`, which is the one the
+ * settings page writes. `daily-digest-route.spec.ts` holds the two to one
+ * spelling.
+ */
+export const CRM_DAILY_DIGEST_KEY = 'crmDaily'
 
 /** `orgs/{orgId}/crmDigests/{day}` — server-written, matched by no rule. */
 export const CRM_DIGEST_MARKER_COLLECTION = 'crmDigests'
@@ -438,7 +447,7 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
       continue
     }
     const userDoc = userById.get(uid)
-    if (!crmDailyDigestEnabled(userDoc?.get(DIGEST_PREFS_FIELD))) {
+    if (!digestEnabled(userDoc?.get(DIGEST_PREFS_FIELD), CRM_DAILY_DIGEST_KEY)) {
       rows[uid] = { skipped: 'digest-off' }
       continue
     }

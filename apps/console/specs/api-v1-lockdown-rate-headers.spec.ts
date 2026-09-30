@@ -154,6 +154,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 import { lockdownJsonResponse } from '@aglyn/tenant-data-admin'
 import { GET } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import { resetPreAuthLookupBudgetForTests } from '../utils/api-v1'
 
 /** Every key gets its own bucket so `remaining` is deterministic. */
@@ -189,6 +190,10 @@ beforeEach(() => {
   mockGetOrgDoc.mockResolvedValue(ORG)
   mockLockdownRefusal.mockResolvedValue(null)
 })
+
+// The console's boot, which registers the plugins' resources and their
+// descriptions (AGL-3080): the document is the whole one the route serves.
+beforeAll(() => registerPluginServerDeclarations())
 
 describe('AGL-2733 · the description is served without a key', () => {
   it('answers /v1/openapi.json with NO Authorization header at all', async () => {
