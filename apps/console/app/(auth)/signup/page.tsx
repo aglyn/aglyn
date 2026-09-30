@@ -106,6 +106,7 @@ import {
 import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
 import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
+import { consumeConsentBounce } from '../../../utils/consent-bounce'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
@@ -432,8 +433,15 @@ function SignUp() {
       //
       // `isNewAccount` because "sign in with Google" and "sign up with
       // Google" are the same call: an existing customer returning through
-      // this page must not be handed a surprise second workspace.
-      if (!isNewAccount(credential)) return
+      // this page must not be handed a surprise second workspace. An account
+      // /signin created and bounced here for consent is not new to Firebase
+      // any more, and is still signing up — /signin marked it (AGL-3424).
+      if (
+        !consumeConsentBounce(credential.user.uid) &&
+        !isNewAccount(credential)
+      ) {
+        return
+      }
       // Same reason the popup path remembers it (AGL-1535): the intent has to
       // outlive this page, and awaiting matters because the provision below
       // can end in a hard navigation that tears the write down mid-flight.
@@ -664,10 +672,17 @@ function SignUp() {
           // existing customer clicking Google here must not be handed a
           // second workspace. `createUserWithEmailAndPassword` can only ever
           // have created one.
+          //
+          // The /signin consent bounce is the one Google sign-up the flag
+          // misses: Firebase has known that account since /signin, so it is
+          // not "new" here, and it is still this person's sign-up. /signin
+          // marked it for its uid (AGL-3424).
           const typedName = values
             ? String(values[FIELD_SCHEMA_ORGANIZATION_NAME.name] ?? '').trim()
             : ''
-          if (values || isNewAccount(credential)) {
+          const bouncedForConsent =
+            !values && consumeConsentBounce(credential.user.uid)
+          if (values || bouncedForConsent || isNewAccount(credential)) {
             await provisionAndLandSignUp(
               firestore,
               credential,
