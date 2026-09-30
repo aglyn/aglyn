@@ -42,7 +42,7 @@ import {
   startOfNextZonedDay,
   startOfZonedDay,
 } from '@aglyn/shared-util-timestamp/zoned-time'
-import { type CrmLeadFields, type CrmTask, crmLeadStatus } from './crm'
+import { type CrmLeadFields, type CrmTask, crmLeadStatus } from '@aglyn/aglyn/app-utils/crm'
 
 /**
  * The zone the digest's "today" is read in when nothing else names one.

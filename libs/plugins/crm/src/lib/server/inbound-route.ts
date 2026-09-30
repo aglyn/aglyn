@@ -60,14 +60,16 @@ import {
  * rules. A message nobody in the workspace knows is noted in the org's
  * feed by its sender's domain and dropped.
  *
- * ## Why a route of its own, and not a plugin API path
+ * ## A machine's route
  *
- * The plugin dispatcher gates every path on the org's release flag, and
+ * The plugin dispatcher gates a path on the org's release flag, and
  * resolves the org from a `hostId` the caller names. A webhook names no
- * site — the workspace is inside the address — so under the dispatcher
- * every delivery would be a subject-less request, which a partial rollout
- * refuses. Here the org is resolved from the token first and the flag is
- * judged for THAT org, which is the gate the CRM actually ships behind.
+ * site — the workspace is inside the address — so gated that way every
+ * delivery would be a subject-less request, which a partial rollout
+ * refuses. So the CRM registers it as a MACHINE's route (`machine: true`,
+ * AGL-3080): the dispatcher leaves those gates to it, the org is resolved
+ * from the token first, and the plan and the flag are judged for THAT org,
+ * which is the gate the CRM actually ships behind.
  *
  * ## What the provider is told
  *
@@ -121,7 +123,7 @@ export function setInboundReaderForTesting(reader: ReceivedEmailSource | null): 
 const acknowledge = (status: number, body: Record<string, unknown>): Response =>
   Response.json(body, { status })
 
-async function handler(request: Request): Promise<Response> {
+export async function crmInboundRoute(request: Request): Promise<Response> {
   const req = await pluginRequestFromWeb(request)
   if (req.method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -247,6 +249,3 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'The message could not be filed' }, { status: 500 })
   }
 }
-
-export const dynamic = 'force-dynamic'
-export { handler as POST }

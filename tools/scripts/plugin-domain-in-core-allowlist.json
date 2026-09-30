@@ -165,39 +165,11 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/app/api/crm/daily-digest/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:crm",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/app/api/crm/export/route.ts",
       "rules": [
         "domain-name",
         "plugin-id",
         "plugin-collection:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/app/api/crm/inbound/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/app/api/crm/task-reminders/route.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:crm",
         "domain-declares:crm"
       ],
       "lane": "crm"
@@ -766,16 +738,6 @@
       "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
       "rules": [
         "domain-name",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-digest.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-exports:crm",
         "domain-declares:crm"
       ],
       "lane": "crm"

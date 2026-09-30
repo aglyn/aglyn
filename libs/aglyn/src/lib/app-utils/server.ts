@@ -105,18 +105,14 @@ export * from './crm-csv'
 // beside the files that write it: the org-level list and the server's
 // export both flatten a contact this way.
 export * from './contact-holder'
-// What one member is owed this morning — the day's window in a named zone,
-// the task and lead bucketing, and the words the notification and the mail
-// say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
-export * from './crm-digest'
 // A task's reminder at its own time (AGL-2659): which reminder a save
 // leaves, whether one is owed, and the words the notification and the mail
-// say. Pure like `crm-digest`, read by the hourly route and by every
+// say. Pure like `crm-reports`, read by the hourly route and by every
 // writer of the field.
 export * from './crm-task-reminders'
 // Email capture (AGL-2657): the address's shape and token, which of a
 // message's addresses is the correspondent, the excerpt, and the row a
-// captured message becomes. Pure like `crm-digest`; the webhook route and
+// captured message becomes. Pure like `crm-reports`; the webhook route and
 // the address route are the readers with Firestore.
 export * from './crm-inbound'
 // A member's own addresses in a workspace (AGL-2975): the ones they have

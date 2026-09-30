@@ -18,27 +18,12 @@
 import {
   type AglynOrgBilling,
   type AglynOrgMember,
-  buildMemberDigests,
   buildRoute,
-  composeCrmDigestEmailText,
-  composeCrmDigestSubject,
-  composeCrmDigestSummary,
   CRM_COLLECTIONS,
-  CRM_DIGEST_DEFAULT_TIME_ZONE,
-  CRM_DIGEST_LEAD_AGE_MS,
-  CRM_DIGEST_LEAD_WINDOW,
-  CRM_DIGEST_TASK_CEILING,
   crmDailyDigestEnabled,
-  crmDigestCounts,
-  crmDigestEntitled,
-  type CrmDigestLead,
-  type CrmDigestTask,
-  crmDigestWindow,
-  type CrmMemberDigest,
   DIGEST_PREFS_FIELD,
   hostRoleFor,
   isReleaseFlagOnForOrg,
-  isUnworkedLead,
   notificationMuted,
   parseOrgReleaseFlagOverrides,
   pluginRequestFromWeb,
@@ -46,8 +31,25 @@ import {
   resolveEffectivePlan,
   resolveOrgEntitlements,
   Route,
-  utcDayKey,
 } from '@aglyn/aglyn/server'
+import {
+  buildMemberDigests,
+  composeCrmDigestEmailText,
+  composeCrmDigestSubject,
+  composeCrmDigestSummary,
+  CRM_DIGEST_DEFAULT_TIME_ZONE,
+  CRM_DIGEST_LEAD_AGE_MS,
+  CRM_DIGEST_LEAD_WINDOW,
+  CRM_DIGEST_TASK_CEILING,
+  crmDigestCounts,
+  crmDigestEntitled,
+  type CrmDigestLead,
+  type CrmDigestTask,
+  crmDigestWindow,
+  type CrmMemberDigest,
+  isUnworkedLead,
+  utcDayKey,
+} from '../model/crm-digest'
 import { rateLimitedRetryAtMs, sendEmail } from '@aglyn/shared-util-email'
 import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
 import {
@@ -71,11 +73,25 @@ import {
   systemEmailContent,
   type LoadedSystemEmail,
 } from '@aglyn/tenant-data-admin/server/render-system-email'
-import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
-import { recordCronBeat } from '../../../../utils/cron-beat'
-import { brandSupportLine } from '../../_lib/brand-support-line'
-import { consoleOrigin } from '../../_lib/usage-alert-email'
+import { isCronAuthorized, isCronDryRun } from '@aglyn/tenant-data-admin/server/cron-auth'
+import { writeCronBeat } from '@aglyn/aglyn/app-utils/health-report'
+import { brandSupportLine } from '@aglyn/aglyn/app-utils/brand-support-line'
+import { platformConsoleOrigin as consoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+
+/**
+ * The mark a scheduled run leaves for `/api/health/crons` (AGL-1955), on the
+ * INVOCATION and before the work — the console's rule for every cron. Never
+ * throws: reaching the admin app is inside the try, because a monitor that
+ * can take down the job it describes is worse than the failure it watches.
+ */
+async function recordCronBeat(jobId: string): Promise<void> {
+  try {
+    await writeCronBeat(firebaseAdmin.app().firestore(), jobId)
+  } catch {
+    // Deliberately swallowed: a job that stops stamping reds its own row.
+  }
+}
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller; it reads an org's CRM to remind its members and writes nothing a locked org could lose.
 
@@ -552,7 +568,7 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   return report
 }
 
-async function handler(request: Request): Promise<Response> {
+export async function crmDailyDigestRoute(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders, query } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
@@ -659,9 +675,3 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'CRM digest run failed' }, { status: 500 })
   }
 }
-
-export const dynamic = 'force-dynamic'
-export { handler as GET, handler as POST }
-
-/** Cron routes run long: this one sweeps every org (AGL-1141). */
-export const maxDuration = 60

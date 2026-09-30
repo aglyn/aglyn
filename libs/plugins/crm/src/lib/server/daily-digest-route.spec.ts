@@ -259,9 +259,9 @@ import {
   CRM_DIGEST_JOB_ID,
   CRM_DIGEST_MARKER_COLLECTION,
   digestTimeZone,
-  GET as digestGet,
-  POST as digestPost,
-} from './route'
+  crmDailyDigestRoute as digestGet,
+  crmDailyDigestRoute as digestPost,
+} from './daily-digest-route'
 
 const SECRET = 'digest-test-secret'
 const NOW = Date.parse('2026-09-05T13:00:00.000Z')

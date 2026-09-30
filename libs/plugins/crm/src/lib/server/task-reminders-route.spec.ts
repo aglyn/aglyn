@@ -268,9 +268,9 @@ jest.mock('@aglyn/tenant-data-admin/server/email-suppression', () => ({
 
 import {
   CRM_TASK_REMINDERS_JOB_ID,
-  GET as remindersGet,
-  POST as remindersPost,
-} from './route'
+  crmTaskRemindersRoute as remindersGet,
+  crmTaskRemindersRoute as remindersPost,
+} from './task-reminders-route'
 
 const SECRET = 'reminders-test-secret'
 /** 13:00 UTC, 08:00 America/Chicago — the zone the words are said in. */
