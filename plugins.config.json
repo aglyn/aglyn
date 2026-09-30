@@ -567,6 +567,9 @@
       "repeatSource": {
         "id": "dataset"
       },
+      "formRecordTarget": {
+        "id": "dataset"
+      },
       "catalog": {
         "order": 10,
         "label": "Data",

@@ -553,7 +553,6 @@
       "rules": [
         "domain-name",
         "plugin-collection:forms",
-        "domain-declares:data",
         "domain-declares:forms",
         "domain-declares:marketing"
       ],
@@ -883,14 +882,6 @@
         "domain-declares:forms"
       ],
       "lane": "forms"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/form-dataset-binding.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/forms.ts",
@@ -1373,14 +1364,6 @@
         "domain-declares:email"
       ],
       "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/form-dataset-binding-token.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts",

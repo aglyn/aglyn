@@ -344,9 +344,10 @@ describe('no field on a dataset record is written by every writer', () => {
   it('the form-submit leg writes `createdAt` and no `order`', () => {
     // A public form wired to a dataset. `order` is a count of the rows the
     // console route has created and this leg does not compute one.
+    // The leg is this plugin's form record target (AGL-3080).
     const block = writeBlock(
-      readRepo('apps/tenant/app/api/forms/submit/route.ts'),
-      `.collection('records')\n              .add({`,
+      readRepo('libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts'),
+      `.collection('records').add({`,
     )
     expect(block).toContain('createdAt')
     expect(block).not.toMatch(/\border:/)

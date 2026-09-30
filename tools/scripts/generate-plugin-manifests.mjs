@@ -1168,6 +1168,39 @@ function repeatSourceRow() {
 }
 
 /**
+ * The plugin whose records a form's submission may also be filed as
+ * (AGL-3080), through `plugin-manager/submission-record-target.ts`. Declared
+ * as well as registered for the reason `repeatSourceRow` gives: a boot that
+ * did not register it must be refused, not read as "forms write nowhere".
+ *
+ * Checked here: one declarer at most — a form node carries one destination —
+ * a plain `id`, and the `serverDeclarations` entry it registers from.
+ */
+function formRecordTargetRow() {
+  const declared = config.plugins.filter((plugin) => plugin.formRecordTarget)
+  if (declared.length > 1) {
+    throw new Error(
+      `plugins.config.json: "${declared.map((plugin) => plugin.id).join('", "')}" each declare a formRecordTarget — ` +
+        'a submission is filed in one place, and two targets would each read the other\'s binding',
+    )
+  }
+  const plugin = declared[0]
+  if (!plugin) return null
+  const where = `plugins.config.json: "${plugin.id}" formRecordTarget`
+  const { id } = plugin.formRecordTarget
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) {
+    throw new Error(`${where}: "id" is the target's plain lowercase id`)
+  }
+  if (!plugin.register?.serverDeclarations) {
+    throw new Error(
+      `${where}: the target is registered from a "serverDeclarations" entry, and this plugin names none — ` +
+        'a declared target nothing registers refuses every page that carries a form',
+    )
+  }
+  return { pluginId: plugin.id, id }
+}
+
+/**
  * A plugin's top-level collections whose documents name an organization in a
  * field (AGL-3080), which a workspace erasure sweeps by that field in every
  * process. One owner per collection; plain names only.
@@ -1344,7 +1377,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1428,6 +1461,12 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(p
  * once, as written.
  */
 export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(repeatSourceRow(), null, 2)}
+
+/**
+ * The plugin whose records a form's submission may also be filed as, declared
+ * by that plugin (AGL-3080). \`null\` when none does, and no form writes one.
+ */
+export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = ${JSON.stringify(formRecordTargetRow(), null, 2)}
 
 /**
  * The analytics settings each provider mounts a tag for, declared by the
