@@ -580,7 +580,7 @@ choose which one:
 | `AGLYN_MAIL_PROVIDER` | What carries the mail |
 | --- | --- |
 | `resend` | Resend, with `RESEND_API_KEY`. The only provider with a delivery feed, a credential probe and a read API, so it is the only one under which open and click statistics, automatic bounce and complaint suppression, the staff delivery history, the shared-pool health check and CRM email capture work. |
-| `webhook` | **Your own sender.** Each message is POSTed as JSON to `AGLYN_MAIL_WEBHOOK_URL` — put a relay there into your SMTP server, Amazon SES, Postmark or anything else. Needs no rebuild and works from the published image. |
+| `webhook` | **Your own sender.** Each message is POSTed as JSON to `AGLYN_MAIL_WEBHOOK_URL` — put a relay there into your SMTP server, Amazon SES, Postmark or anything else. Needs no rebuild: it is read at request time, not built into a bundle. |
 | any other value | A provider a plugin or your own fork registered under that name with `registerMailProvider` from `@aglyn/shared-util-email`. |
 
 Unset, the deployment picks the first provider that has its settings, in the
