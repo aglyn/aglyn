@@ -37,13 +37,17 @@ import {
   sitemapSectionPath,
   sitemapUrlsetXml,
   SITEMAP_SECTION_AUTHORS,
-  SITEMAP_SECTION_CATALOG,
   SITEMAP_SECTION_PAGES,
-  SITEMAP_SECTION_PRODUCTS,
   SITEMAP_URLS_PER_FILE,
   type AglynHost,
   type SitemapLocation,
 } from '@aglyn/aglyn/server'
+import {
+  listPluginSitemapSections,
+  pluginSitemapSection,
+  pluginSitemapSectionPath,
+  type ResolvedPluginSitemapSection,
+} from '@aglyn/aglyn/plugin-manager/plugin-sitemap-sections'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   tenantDataTag,
@@ -99,7 +103,8 @@ function xmlResponse(xml: string): Response {
  * here with the resolved tenant host.
  *
  * `/sitemap.xml` is a sitemap INDEX (AGL-2520); every URL lives in a child
- * sitemap addressed by section — pages, products, catalog, and one per content
+ * sitemap addressed by section — pages, the sections plugins declare for their
+ * own pages (products, the catalog), and one per content
  * collection — each paging at `SITEMAP_URLS_PER_FILE`. A flat file had no
  * answer for a site outgrowing the protocol's 50,000-URL cap, and the
  * per-section reads it forced were the whole cost of this route: one crawler
@@ -277,38 +282,23 @@ async function buildSitemapIndex(
       newestSitemapLastmod(pageOf(pages.urls, page).map(sitemapLocationLastmod)),
   })
 
-  try {
-    const storeSettings = await hostRef.collection('settings').doc('store').get()
-    if (storeSettings.get('pdpScreenId')) {
-      const count = (
-        await hostRef
-          .collection('products')
-          .where('status', '==', 'active')
-          .count()
-          .get()
-      ).data().count
+  // The sections plugins declare for their own pages (AGL-3080), each counted
+  // with the filter it declared. The settings documents that switch them on
+  // are read once however many sections share one.
+  const enabled = enabledByReader(hostRef)
+  for (const declared of listPluginSitemapSections()) {
+    try {
+      if (!(await enabled(declared))) continue
+      const count = (await declaredSectionQuery(hostRef, declared).count().get()).data().count
       sections.push({
-        section: SITEMAP_SECTION_PRODUCTS,
+        section: declared.section,
         pages: sitemapPageCount(count),
       })
+    } catch {
+      // A section whose reads fail is left out of this index and the others
+      // stay, matching the fail-open the flat sweep had.
+      degraded = true
     }
-    if (storeSettings.get('collectionScreenId')) {
-      const count = (
-        await hostRef
-          .collection('collections')
-          .where('kind', '==', 'catalog')
-          .count()
-          .get()
-      ).data().count
-      sections.push({
-        section: SITEMAP_SECTION_CATALOG,
-        pages: sitemapPageCount(count),
-      })
-    }
-  } catch {
-    // The index stays screens-only if commerce reads fail, matching the
-    // fail-open the flat sweep had.
-    degraded = true
   }
 
   try {
@@ -319,8 +309,8 @@ async function buildSitemapIndex(
     const counted = await Promise.all(
       collections.docs
         .filter((docSnapshot) => {
-          // Commerce's product collections have no `entries` and serve under
-          // /collections/{slug} instead (AGL-954).
+          // A catalog collection has no `entries`; it serves under the
+          // section its plugin declares instead (AGL-954).
           if (hostCollectionKind(docSnapshot.data() as any) !== 'content') {
             return false
           }
@@ -365,7 +355,7 @@ async function buildSitemapIndex(
       })
     }
   } catch {
-    // The index stays screens-and-commerce if content reads fail.
+    // The index keeps screens and declared sections if content reads fail.
     degraded = true
   }
 
@@ -419,12 +409,8 @@ async function buildSectionUrls(
     const sweep = await buildPageUrls(host, base)
     return { urls: pageOf(sweep.urls, page), degraded: sweep.degraded }
   }
-  if (section === SITEMAP_SECTION_PRODUCTS) {
-    return buildProductUrls(host.$id, base, page)
-  }
-  if (section === SITEMAP_SECTION_CATALOG) {
-    return buildCatalogUrls(host.$id, base, page)
-  }
+  const declared = pluginSitemapSection(section)
+  if (declared) return buildDeclaredSectionUrls(host.$id, base, declared, page)
   if (section === SITEMAP_SECTION_AUTHORS) {
     return buildAuthorUrls(host.$id, base, page)
   }
@@ -582,75 +568,73 @@ async function buildPageUrls(
 }
 
 /**
- * Commerce product pages (AGL-299), ordered by document id so a page number
- * addresses the same slice on every fetch. `offset` bills the documents it
- * skips, which is the price of addressable pages over a query that has no
- * stable cursor to hand a crawler; it is bounded by the page number the index
- * advertised, and the whole response is cached.
+ * Whether a declared section exists for this site: its `enabledBy` setting is
+ * set — the template its pages render through — or it declared none. Each
+ * settings document is read once per sweep, however many sections name it.
  */
-async function buildProductUrls(
-  hostId: string,
-  base: string,
-  page: number,
-): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
-  const urls: SitemapLocation[] = []
-  try {
-    const hostRef = hostRefOf(hostId)
-    const storeSettings = await hostRef.collection('settings').doc('store').get()
-    if (!storeSettings.get('pdpScreenId')) return { urls, degraded: false }
-    const products = await hostRef
-      .collection('products')
-      .where('status', '==', 'active')
-      .orderBy('__name__')
-      .offset((page - 1) * SITEMAP_URLS_PER_FILE)
-      .limit(SITEMAP_URLS_PER_FILE)
-      .get()
-    for (const docSnapshot of products.docs) {
-      const raw = docSnapshot.data() as any
-      // Soft deletes keep `status: 'active'` (see the commerce catalog reader),
-      // so this half of the filter has to happen in memory.
-      if (raw.deletedAt || !raw.slug) continue
-      // Commerce stamps epoch milliseconds, not Timestamps; a product never
-      // edited since it was created last changed when it was created.
-      urls.push({
-        loc: `${base}/products/${raw.slug}`,
-        lastmod:
-          sitemapLastmod(raw.updatedAtMs) ?? sitemapLastmod(raw.createdAtMs),
-      })
+function enabledByReader(hostRef: ReturnType<typeof hostRefOf>) {
+  const reads = new Map<string, Promise<FirebaseFirestore.DocumentSnapshot>>()
+  return async (declared: ResolvedPluginSitemapSection): Promise<boolean> => {
+    if (!declared.enabledBy) return true
+    const { doc, field } = declared.enabledBy
+    let read = reads.get(doc)
+    if (!read) {
+      const [collection, id] = doc.split('/')
+      read = hostRef.collection(collection).doc(id).get()
+      reads.set(doc, read)
     }
-  } catch {
-    return { urls, degraded: true }
+    return Boolean((await read).get(field))
   }
-  return { urls, degraded: false }
 }
 
-/** Commerce catalog collection pages — `/collections/{slug}` (AGL-954). */
-async function buildCatalogUrls(
+/** A declared section's documents, filtered as it declared. */
+function declaredSectionQuery(
+  hostRef: ReturnType<typeof hostRefOf>,
+  declared: ResolvedPluginSitemapSection,
+): FirebaseFirestore.Query {
+  const collection = hostRef.collection(declared.collection)
+  return declared.where
+    ? collection.where(declared.where.field, '==', declared.where.equals)
+    : collection
+}
+
+/**
+ * One page of a section a plugin declared (AGL-3080) — a product page per
+ * active product (AGL-299), a catalog collection's `/collections/{slug}`
+ * (AGL-954) — ordered by document id so a page number addresses the same
+ * slice on every fetch. `offset` bills the documents it skips, which is the
+ * price of addressable pages over a query that has no stable cursor to hand a
+ * crawler; it is bounded by the page number the index advertised, and the
+ * whole response is cached.
+ */
+async function buildDeclaredSectionUrls(
   hostId: string,
   base: string,
+  declared: ResolvedPluginSitemapSection,
   page: number,
 ): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
   const urls: SitemapLocation[] = []
   try {
     const hostRef = hostRefOf(hostId)
-    const storeSettings = await hostRef.collection('settings').doc('store').get()
-    if (!storeSettings.get('collectionScreenId')) {
-      return { urls, degraded: false }
-    }
-    const collections = await hostRef
-      .collection('collections')
-      .where('kind', '==', 'catalog')
+    if (!(await enabledByReader(hostRef)(declared))) return { urls, degraded: false }
+    const rows = await declaredSectionQuery(hostRef, declared)
       .orderBy('__name__')
       .offset((page - 1) * SITEMAP_URLS_PER_FILE)
       .limit(SITEMAP_URLS_PER_FILE)
       .get()
-    for (const docSnapshot of collections.docs) {
-      const raw = docSnapshot.data() as any
-      if (!raw.slug) continue
-      urls.push({
-        loc: `${base}/collections/${raw.slug}`,
-        lastmod: sitemapLastmod(raw.updatedAt) ?? sitemapLastmod(raw.createdAt),
-      })
+    for (const docSnapshot of rows.docs) {
+      const raw = docSnapshot.data() as Record<string, unknown>
+      // A soft delete the filter cannot see — a product keeps
+      // `status: 'active'` when it is deleted — is left out in memory.
+      if (declared.skipWhen && raw[declared.skipWhen]) continue
+      const path = pluginSitemapSectionPath(declared, raw[declared.slugField ?? 'slug'])
+      if (!path) continue
+      let lastmod: string | undefined
+      for (const field of declared.lastmod ?? []) {
+        lastmod = sitemapLastmod(raw[field])
+        if (lastmod) break
+      }
+      urls.push({ loc: `${base}${path}`, lastmod })
     }
   } catch {
     return { urls, degraded: true }

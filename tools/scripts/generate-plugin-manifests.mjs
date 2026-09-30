@@ -1146,6 +1146,64 @@ function stampRecord(stamps, what, writable) {
 }
 
 /**
+ * The child sitemaps each plugin's documents fill (AGL-3080).
+ *
+ * Compiled because the reader is the tenant's `/sitemap.xml`: a section a
+ * process had not registered would drop the plugin's pages from a live
+ * site's index, and a crawler reads that as pages that no longer exist.
+ *
+ * Checked here: one owner per section and none of the platform's own
+ * (`pages`, `authors`, or a `content-` collection's), plain field names, a
+ * two-segment settings document, and a path with exactly one `{slug}`.
+ */
+const CORE_SITEMAP_SECTIONS = ['pages', 'authors']
+
+function sitemapSectionRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.sitemapSections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" sitemapSections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the section`)
+    }
+    for (const entry of declared) {
+      const { $comment: _note, ...declaration } = entry
+      const { section, collection, where: filter, enabledBy, path, slugField, skipWhen, lastmod } = declaration
+      const what = `${where} "${section ?? ''}"`
+      if (typeof section !== 'string' || !/^[a-z][a-z0-9-]*$/.test(section)) throw new Error(`${where}: a section is a lowercase path segment`)
+      if (CORE_SITEMAP_SECTIONS.includes(section) || section.startsWith('content-')) {
+        throw new Error(`${what} is a section the platform builds itself`)
+      }
+      const held = owners.get(section)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one section has one owner`)
+      owners.set(section, plugin.id)
+      if (typeof collection !== 'string' || !PLAIN_FIELD.test(collection)) throw new Error(`${what} needs a "collection"`)
+      if (filter !== undefined) {
+        if (!PLAIN_FIELD.test(filter?.field ?? '')) throw new Error(`${what}: "where.field" is a plain field name`)
+        if (!['string', 'number', 'boolean'].includes(typeof filter.equals)) throw new Error(`${what}: "where.equals" is a string, number or boolean`)
+      }
+      if (enabledBy !== undefined) {
+        if (!/^[A-Za-z][A-Za-z0-9]*\/[A-Za-z0-9_-]+$/.test(enabledBy?.doc ?? '')) {
+          throw new Error(`${what}: "enabledBy.doc" is a collection/doc path under the host`)
+        }
+        if (!PLAIN_FIELD.test(enabledBy.field ?? '')) throw new Error(`${what}: "enabledBy.field" is a plain field name`)
+      }
+      if (typeof path !== 'string' || !path.startsWith('/') || path.split('{slug}').length !== 2) {
+        throw new Error(`${what}: "path" is a site path with exactly one {slug}`)
+      }
+      for (const [key, value] of [['slugField', slugField], ['skipWhen', skipWhen]]) {
+        if (value !== undefined && !PLAIN_FIELD.test(value)) throw new Error(`${what}: "${key}" is a plain field name`)
+      }
+      if (lastmod !== undefined) plainFieldList(lastmod, `${what} lastmod`)
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows
+}
+
+/**
  * The ORG collections each plugin owns, for the media-usage scan (AGL-3273).
  *
  * The same checks as the host rows, minus the ones that only mean something
@@ -1717,7 +1775,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1741,6 +1799,14 @@ ${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\
  */
 export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollection[] = [
 ${hostCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every child sitemap a first-party plugin's documents fill, declared by that
+ * plugin (AGL-3080), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSection[] = [
+${sitemapSectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

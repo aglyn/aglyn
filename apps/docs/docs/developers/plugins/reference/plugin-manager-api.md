@@ -417,6 +417,41 @@ every rule above; `registerPluginHostCollections` refuses a declaration that
 carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
 (`@aglyn/aglyn/plugin-manager/plugin-host-resources`) read them.
 
+## Sitemap sections — `plugin-sitemap-sections`
+
+A site's `/sitemap.xml` is an index over one child per section. The pages,
+content collections and authors are the platform's; a plugin whose documents
+are pages of their own declares the section they fill, in a
+`sitemapSections` block of `plugins.config.json`:
+
+```json
+"sitemapSections": [
+  {
+    "section": "bottles",
+    "collection": "bottles",
+    "where": { "field": "status", "equals": "listed" },
+    "enabledBy": { "doc": "settings/cellar", "field": "bottleScreenId" },
+    "path": "/cellar/{slug}",
+    "skipWhen": "deletedAt",
+    "lastmod": ["updatedAtMs", "createdAtMs"]
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `section` | The child's path segment, `/sitemaps/{section}/{page}.xml`. One owner per section, and never `pages`, `authors` or a `content-` collection's. |
+| `collection` / `where` | The host subcollection whose documents are the pages, and the one equality they must meet. |
+| `enabledBy` | A `collection/doc` under the site and a field that must be set — the template the pages render through. Unset, the section is left out rather than listing addresses that 404. |
+| `path` / `slugField` | The page's address with one `{slug}`, and the field holding it (`slug` by default). A row with no slug addresses nothing and is left out. |
+| `skipWhen` | A field whose truthy value leaves the row out — a soft delete the filter cannot see. |
+| `lastmod` | The fields a row's date is read from, first present wins. |
+
+The sections are COMPILED, not registered: the sitemap is what a search engine
+is told the site holds, and a section missing from a process that had not
+loaded the plugin would read to a crawler as pages that no longer exist.
+`listPluginSitemapSections()` / `pluginSitemapSection(section)` read them.
+
 ## Record addresses — `plugin-record-routes`
 
 Where a plugin's records are read, published by the plugin that owns them, so

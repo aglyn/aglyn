@@ -9,6 +9,7 @@
 
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
+import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
@@ -619,6 +620,50 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "screenId"
       ]
     }
+  },
+]
+
+/**
+ * Every child sitemap a first-party plugin's documents fill, declared by that
+ * plugin (AGL-3080), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSection[] = [
+  {
+    "pluginId": "commerce",
+    "section": "products",
+    "collection": "products",
+    "where": {
+      "field": "status",
+      "equals": "active"
+    },
+    "enabledBy": {
+      "doc": "settings/store",
+      "field": "pdpScreenId"
+    },
+    "path": "/products/{slug}",
+    "skipWhen": "deletedAt",
+    "lastmod": [
+      "updatedAtMs",
+      "createdAtMs"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "section": "catalog",
+    "collection": "collections",
+    "where": {
+      "field": "kind",
+      "equals": "catalog"
+    },
+    "enabledBy": {
+      "doc": "settings/store",
+      "field": "collectionScreenId"
+    },
+    "path": "/collections/{slug}",
+    "lastmod": [
+      "updatedAt",
+      "createdAt"
+    ]
   },
 ]
 

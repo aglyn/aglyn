@@ -485,13 +485,6 @@
       "lane": "marketing"
     },
     {
-      "path": "apps/tenant/app/api/sitemap/route.ts",
-      "rules": [
-        "plugin-collection:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "apps/tenant/utils/search-content.ts",
       "rules": [
         "domain-declares:data"
