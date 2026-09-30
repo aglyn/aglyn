@@ -532,7 +532,7 @@ export async function upsertHostContact(
       options.batch?.hostId === options.hostId ? options.batch : undefined
     // Contacts are org-scoped (AGL-237): every host in the org feeds one
     // shared list.
-    const contactsRef =
+    const contactsRef: FirebaseFirestore.CollectionReference =
       batch?.contactsRef ??
       (await orgDataCollectionForHost(options.hostId, 'contacts'))
     /*

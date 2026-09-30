@@ -38,7 +38,7 @@
       "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
     },
     {
-      "site": "libs/plugins/crm/src/lib/server/contacts-import.ts: companies.add(…)",
+      "site": "libs/plugins/crm/src/lib/server/contacts-import.ts: collection.doc()",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
