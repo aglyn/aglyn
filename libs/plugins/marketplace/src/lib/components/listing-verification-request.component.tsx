@@ -147,6 +147,8 @@ export function ListingVerificationRequest(
           'When you can ask, what happens while it waits, and what a decline ' +
           'does and does not mean.',
       })}
+      contentGutterX
+      contentGutterY
     >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
