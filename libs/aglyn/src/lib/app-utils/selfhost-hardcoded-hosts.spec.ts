@@ -550,7 +550,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Renders Aglyn own marketing blog covers. Internal tool.',
   },
   {
-    file: 'tools/scripts/lib/contact-addresses.mjs',
+    file: 'tools/scripts/lib/provisioned-mailboxes.mjs',
     count: 22,
     reason:
       'AGL-2400. The registry of which @aglyn.com addresses are provisioned ' +

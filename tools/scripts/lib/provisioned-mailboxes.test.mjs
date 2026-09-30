@@ -28,7 +28,7 @@ import {
   PROVISIONED_CONTACT_ADDRESSES,
   STATUTORY_INTAKE_ADDRESSES,
   UNVERIFIED_PROVISIONING,
-} from './contact-addresses.mjs'
+} from './provisioned-mailboxes.mjs'
 
 test('the six statutory intakes are all provisioned', () => {
   assert.equal(STATUTORY_INTAKE_ADDRESSES.length, 6)

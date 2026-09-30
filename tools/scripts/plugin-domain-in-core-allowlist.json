@@ -1658,13 +1658,6 @@
       "lane": "data"
     },
     {
-      "path": "tools/scripts/lib/contact-addresses.mjs",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "tools/scripts/lib/crm-fixtures.mjs",
       "rules": [
         "domain-name"

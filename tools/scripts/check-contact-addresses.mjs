@@ -24,7 +24,7 @@
 //   npm run check:contact-addresses -- --json
 //
 // The registry, and the long form of why it is a hand-kept list rather than a
-// probe, live in `lib/contact-addresses.mjs`. This file walks tracked files and
+// probe, live in `lib/provisioned-mailboxes.mjs`. This file walks tracked files and
 // compares.
 //
 // ## WHY THIS EXISTS
@@ -70,7 +70,7 @@ import {
   PROVISIONED_CONTACT_ADDRESSES,
   STATUTORY_INTAKE_ADDRESSES,
   UNVERIFIED_PROVISIONING,
-} from './lib/contact-addresses.mjs'
+} from './lib/provisioned-mailboxes.mjs'
 import { inScope, scopeFromArgv, scopeNote } from './lib/guard-scope.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -92,7 +92,7 @@ const EXEMPT_PATH = [
   /(?:^|\/)tools\/scripts\/seed-[^/]+\.mjs$/,
   // This guard and its registry have to spell what they detect.
   /^tools\/scripts\/check-contact-addresses\.mjs$/,
-  /^tools\/scripts\/lib\/contact-addresses(?:\.test)?\.mjs$/,
+  /^tools\/scripts\/lib\/provisioned-mailboxes(?:\.test)?\.mjs$/,
 ]
 
 const args = process.argv.slice(2)
@@ -188,7 +188,7 @@ console.error(
   '\nAn address that does not exist ACCEPTS mail and suppresses the bounce'
   + '\n(AGL-1577), so this cannot be verified by sending to it. Either:'
   + '\n  • create the Group and add it to PROVISIONED_CONTACT_ADDRESSES in'
-  + '\n    tools/scripts/lib/contact-addresses.mjs — verify FIRST, at'
+  + '\n    tools/scripts/lib/provisioned-mailboxes.mjs — verify FIRST, at'
   + '\n    https://groups.google.com/a/aglyn.com/g/<name>/members (a real group'
   + '\n    renders its members; a missing one 404s), or'
   + '\n  • stop publishing it.\n',

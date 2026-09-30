@@ -206,7 +206,7 @@
     "test:docs-screenshots": "node --test tools/scripts/lib/docs-screenshots.test.mjs",
     "test:docs-self-host": "node --test tools/scripts/lib/docs-self-host.test.mjs",
     "check:contact-addresses": "node tools/scripts/check-contact-addresses.mjs",
-    "test:contact-addresses": "node --test tools/scripts/lib/contact-addresses.test.mjs",
+    "test:contact-addresses": "node --test tools/scripts/lib/provisioned-mailboxes.test.mjs",
     "check:monaco-dompurify": "node tools/scripts/check-monaco-dompurify.mjs",
     "test:monaco-dompurify": "node --test tools/scripts/lib/monaco-dompurify.test.mjs",
     "test:manifest-versions": "node --test tools/scripts/lib/manifest-versions.test.mjs",
