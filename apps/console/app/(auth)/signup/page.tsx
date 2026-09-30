@@ -97,7 +97,7 @@ import {
   clearMarketingOptIn,
   consumeMarketingOptIn,
   markMarketingOptIn,
-  postMarketingConsent,
+  postPlatformMarketingConsent,
 } from '../../../utils/marketing-opt-in'
 import {
   createSignUpWorkspace,
@@ -416,7 +416,7 @@ function SignUp() {
       // for a returning account too: the person ticked the box, and the
       // record is about that act, not about whether the account is new.
       if (optedIn) {
-        await postMarketingConsent(credential.user, 'granted', 'console-signup')
+        await postPlatformMarketingConsent(credential.user, 'granted', 'console-signup')
       }
       // Where the visit that became this account began (AGL-3289), before
       // the workspace below is created: it copies its creator's record at
@@ -652,7 +652,7 @@ function SignUp() {
           // the tick is still here even where storage refused the marker.
           const carriedOptIn = consumeMarketingOptIn()
           if (carriedOptIn || marketingOptIn) {
-            await postMarketingConsent(credential.user, 'granted', 'console-signup')
+            await postPlatformMarketingConsent(credential.user, 'granted', 'console-signup')
           }
           // Settle the workspace — from EVERY door (AGL-1942), through the
           // one routine. A verified account (Google, SSO) gets it created and

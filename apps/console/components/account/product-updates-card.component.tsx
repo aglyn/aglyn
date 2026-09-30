@@ -27,9 +27,9 @@ import { Alert, Button, FormControlLabel, Stack, Switch, Typography } from '@mui
 import { useCallback, useEffect, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import {
-  fetchMarketingConsentStatus,
-  type MarketingConsentStatus,
-  postMarketingConsent,
+  fetchPlatformMarketingConsentStatus,
+  type PlatformMarketingConsentStatus,
+  postPlatformMarketingConsent,
 } from '../../utils/marketing-opt-in'
 
 /**
@@ -55,7 +55,7 @@ function formatDecidedOn(atMs: number | null): string | null {
  * (AGL-3305), so a switch the person never touched does not read as a
  * mistake.
  */
-export function describe(status: MarketingConsentStatus): string {
+export function describe(status: PlatformMarketingConsentStatus): string {
   const day = formatDecidedOn(status.atMs)
   const on = (sentence: string) => (day ? `${sentence} on ${day}.` : `${sentence}.`)
   if (status.decision === 'granted') {
@@ -139,15 +139,15 @@ export function describeHold(
 export function ProductUpdatesCard() {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [status, setStatus] = useState<MarketingConsentStatus | null | undefined>(
+  const [status, setStatus] = useState<PlatformMarketingConsentStatus | null | undefined>(
     undefined,
   )
   const [busy, setBusy] = useState(false)
 
-  const refresh = useCallback(async (): Promise<MarketingConsentStatus | null> => {
+  const refresh = useCallback(async (): Promise<PlatformMarketingConsentStatus | null> => {
     const tokenUser = user as { getIdToken?: () => Promise<string> } | null
     if (!tokenUser?.getIdToken) return null
-    const next = await fetchMarketingConsentStatus(
+    const next = await fetchPlatformMarketingConsentStatus(
       tokenUser as { getIdToken: () => Promise<string> },
       { detail: 'hold' },
     )
@@ -162,7 +162,7 @@ export function ProductUpdatesCard() {
   const toggle = useCallback(
     async (next: boolean) => {
       setBusy(true)
-      const recorded = await postMarketingConsent(
+      const recorded = await postPlatformMarketingConsent(
         user as { getIdToken: () => Promise<string> },
         next ? 'granted' : 'declined',
         'console-preferences',
