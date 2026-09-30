@@ -18,6 +18,7 @@ content on the marketing site and is written separately.
 - **themes:** four more built-in themes, the platform type styles and tertiary in every theme ([AGL-3411](https://linear.app/aglyn/issue/AGL-3411))
 - **release:** production promotions are capped at three per Central day ([AGL-3413](https://linear.app/aglyn/issue/AGL-3413))
 - **console:** the staff Organizations, Sites and Users lists filter by Suspended, as a Firestore equality on a stored `suspended` flag for orgs and sites ([AGL-3416](https://linear.app/aglyn/issue/AGL-3416))
+- **lockdown:** a new `abuse` lock reason (phishing, fraud, malicious content) makes an account lock a permanent ban: after its notice the account is sent no mail at all by any sender, and every account lock now stops Aglyn's own marketing to it ([AGL-3420](https://linear.app/aglyn/issue/AGL-3420))
 
 ### Fixed
 
