@@ -75,7 +75,7 @@ export const PLUGIN_DOCS = {
   aiSeo: {
     path: '/building-sites/seo/seo-by-ai',
     title: 'AI SEO for your website',
-    excerpt: 'AI SEO for websites, on the pages you already have: have AI write a page or product\'s search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt.',
+    excerpt: 'AI SEO for websites, on the pages you already have: have AI write a page or product\'s search listing, propose a fix for each finding of the SEO check, and draft your structured data and /llms.txt.',
   },
   aiThemes: {
     path: '/ai/theme-assist',
@@ -305,7 +305,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
-  aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#audit-the-whole-site', '#target-keywords', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
+  aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   aiThemes: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#tokens-by-kind', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
   billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#billing-email', '#payment-methods', '#billing-address', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],

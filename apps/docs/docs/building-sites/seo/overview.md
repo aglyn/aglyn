@@ -141,6 +141,57 @@ names the site it belongs to.
 See [Multilingual](../multilingual/overview.md) for adding a language and a
 language switcher.
 
+## SEO check
+
+**Setup → SEO** starts with an **SEO check** card. Press **Run the check** and it reads
+every page your [sitemap](#sitemap--robots) lists — every published page whose
+visibility is **Public**, without template screens or error pages — and lists what a
+search result or a crawler would find wrong. The check is part of every plan and needs no
+add-on. It changes nothing on your site: fix what it finds in each page's **SEO** card or
+in the designer, publish, and run it again.
+
+A very large site is checked on its first 150 pages, and the card says how many it left
+out. For each page it checks:
+
+| Check | What counts as a finding |
+| --- | --- |
+| **Search title** | Missing, over 60 characters, or the same as another page's. A title with [variables](#variables-so-a-title-is-not-a-copy-of-your-site-name) is checked as it renders. |
+| **Search description** | Missing, over 155 characters, or the same as another page's. |
+| **Main heading** | No `h1`, more than one, or one that says little (`Home`, `Welcome`, a single short word). |
+| **Images** | An image with no description. |
+| **Links** | No other page or shared layout links to the page. The home page never counts. |
+| **Target keywords** | A keyword you named that the page never says. |
+
+It also checks the site as a whole: whether search engines are asked to stay away,
+whether your [structured data](#structured-data) names and describes who publishes the
+site, and whether your [`/llms.txt`](#llmstxt) carries guidance of your own.
+
+Each page gets a score out of 100 — a finding takes off more the more it matters — and
+the site's score is the average. Each page in the list links to its detail page, where
+you fix it.
+
+### Target keywords
+
+The optional **Target keywords by page** box takes one line per page:
+
+```text
+/pricing: pricing, plans
+/lamps: brass desk lamps, dimmable
+```
+
+The check reports where each page already says its keywords, and names a keyword a page
+never says. Use a keyword only where the page is about it. A line for an address the
+check did not cover is reported, not silently dropped.
+
+### Check one page
+
+A screen's **SEO** card has a **Check this page** button. It runs the same check and
+lists that page's findings, as the page is published. It checks the whole site to answer,
+because a title another page also uses, or a page nothing links to, shows only from the
+site as a whole.
+
+With the AI add-on, [AI SEO](./seo-by-ai.md) proposes a fix for each finding.
+
 ## Search engine visibility
 
 You decide what search engines are allowed to index, at two levels.
@@ -481,5 +532,6 @@ Add your **Google Analytics** ID to track traffic alongside Aglyn's built-in
 
 ## Related
 
+- [AI SEO](./seo-by-ai.md)
 - [Analytics](../../marketing-and-automation/analytics/overview.md)
 - [Content collections & blog](../site-templates/overview.md)

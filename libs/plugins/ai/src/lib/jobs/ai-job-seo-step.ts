@@ -22,23 +22,24 @@ import {
   type LlmsTxtCollection,
   type LlmsTxtPage,
 } from '@aglyn/aglyn/app-utils/llms-txt'
-import { nodesReferenceScreen } from '@aglyn/aglyn/app-utils/screen-link-value'
 import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
-import {
-  isScreenIndexable,
-  isSearchDiscouraged,
-  statusPageScreenIds,
-} from '@aglyn/aglyn/app-utils/search-indexing'
+import { SEO_FINDING_LABELS } from '@aglyn/aglyn/app-utils/seo-audit'
+import { seoKeywordCoverage, seoKeywordList } from '@aglyn/aglyn/app-utils/seo-keywords'
 import {
   SCREEN_SEO_LISTING_FIELDS,
   isSeoListingFieldKey,
   type SeoListingFieldKey,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
+import {
+  SEO_PAGE_TEXT_MAX_CHARS,
+  seoPageFacts,
+  type SeoPageFacts,
+} from '@aglyn/aglyn/app-utils/seo-page-facts'
+import { scanSeoSite, seoAuditSiteOf, type SeoSiteScan } from '@aglyn/aglyn/app-utils/seo-site-scan'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { getTemplateScreenIds } from '@aglyn/tenant-runtime/template-screens'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import {
-  AI_SEO_FINDING_LABELS,
   AI_SEO_OUTPUT_IDS,
   aiSeoAuditView,
   aiSeoJobTarget,
@@ -52,15 +53,7 @@ import {
 } from '../model/ai-seo'
 import { aiModelForStep } from '../providers/routing'
 import type { AiSystemBlock, AiUsage } from '../runtime/ai-runtime'
-import {
-  AI_SEO_AUDIT_MAX_PAGES,
-  aiSeoAudit,
-  aiSeoAuditBatches,
-  aiSeoHeadingDemotions,
-  aiSeoNormalizePath,
-  parseAiSeoKeywordLines,
-  type AiSeoAuditPage,
-} from '../runtime/seo-audit'
+import { aiSeoAudit, aiSeoAuditBatches, aiSeoHeadingDemotions } from '../runtime/seo-audit'
 import {
   runValidatedGeneration,
   type AiGenerationSpend,
@@ -68,17 +61,10 @@ import {
 } from '../runtime/ai-doctrine'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import {
-  AI_SEO_PAGE_TEXT_MAX_CHARS,
-  aiSeoPageFacts,
-  type AiSeoPageFacts,
-} from '../runtime/seo-page-facts'
-import {
   AI_SEO_FIXES_TOOL_NAME,
   AI_SEO_SITE_TOOL_NAME,
   aiSeoFixImages,
   aiSeoFixesTool,
-  aiSeoKeywordCoverage,
-  aiSeoKeywordList,
   aiSeoSiteTool,
   checkAiSeoFixes,
   checkAiSeoSite,
@@ -117,8 +103,9 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  * ## An audit, a unit at a time
  *
  * The first pass reads the site — every published page's version and the
- * shared layouts, for the links between them — scores it without a model,
- * records the report, and runs the first unit of generated work. Each later
+ * shared layouts, for the links between them — and scores it without a
+ * model, through the platform's SEO check (the same findings the site's SEO
+ * section lists to every owner); it records the report, and runs the first unit of generated work. Each later
  * pass runs one more unit: the site-wide proposal, then the page fixes in
  * batches. Every pass is one reservation and one provider exchange, and it
  * asks the machine to continue until nothing is left, so a large site is a
@@ -130,9 +117,6 @@ export const AI_SEO_NO_PAGE_COPY = 'This page is no longer on the site.'
 export const AI_SEO_NO_TARGET_COPY = 'This SEO job does not say what to write about.'
 export const AI_SEO_NO_PRODUCT_COPY = 'Give the product a name before writing its listing.'
 
-/** Shared layouts an audit reads for the links in a site's navigation. */
-export const AI_SEO_LAYOUT_SCAN_LIMIT = 20
-
 /** How much of each page a batch of fixes carries. */
 export const AI_SEO_BATCH_PAGE_TEXT_CHARS = 700
 
@@ -143,9 +127,6 @@ export const AI_SEO_BATCH_PAGE_TEXT_CHARS = 700
  * measured in `ai-job-seo-step.spec.ts`.
  */
 export { AI_SEO_FIXES_MAX_TOKENS, AI_SEO_SITE_MAX_TOKENS }
-
-/** Documents read at once. */
-const READ_CHUNK = 10
 
 /** Pages the site prompt and the llms.txt preview list. */
 const SITE_PAGES_LISTED = 25
@@ -319,7 +300,7 @@ function listingOutcome(
   subject: AiSeoFieldsProposal['subject'],
   context: {
     keywords: readonly string[]
-    facts: AiSeoPageFacts | null
+    facts: SeoPageFacts | null
     fields: readonly SeoListingFieldKey[]
     hasImage: boolean
   },
@@ -336,7 +317,7 @@ function listingOutcome(
     kind: 'fields',
     subject,
     values,
-    keywords: aiSeoKeywordCoverage(context.keywords, {
+    keywords: seoKeywordCoverage(context.keywords, {
       title: values.title,
       description: values.description,
       h1: context.facts?.h1s[0]?.text,
@@ -370,7 +351,7 @@ async function runScreenListing(
 
   const versionId = str(job.inputs?.['versionId']) || str(screen.versionId)
   const version = await readVersionNodes(hostRef, screenId, versionId)
-  const facts = aiSeoPageFacts(version?.nodes as never, { rootId: version?.rootId })
+  const facts = seoPageFacts(version?.nodes as never, { rootId: version?.rootId })
   const fields = aiSeoRequestedFields(job.inputs?.['fields'], SCREEN_SEO_LISTING_FIELDS)
   const seo = screen.seo ?? {}
   const hasImage = Boolean(str(seo.image))
@@ -380,7 +361,7 @@ async function runScreenListing(
   const route = host.screens?.[screenId]
   const path = typeof route === 'string' ? screenRoutePathToUrl(route) : null
   const name = str(screen.displayName) || path || 'Untitled page'
-  const keywords = aiSeoKeywordList(job.inputs?.['keywords'])
+  const keywords = seoKeywordList(job.inputs?.['keywords'])
   const generation = await generateSeoFields({
     subject: { kind: 'screen', name, path },
     brand: brandOf(host),
@@ -416,14 +397,14 @@ async function runProductListing(
   const name = str(job.inputs?.['name']).slice(0, 200)
   if (!name) return { outputs: [], ...spentNothing(model), failure: AI_SEO_NO_PRODUCT_COPY }
   const fields = aiSeoRequestedFields(job.inputs?.['fields'], PRODUCT_LISTING_FIELDS)
-  const keywords = aiSeoKeywordList(job.inputs?.['keywords'])
+  const keywords = seoKeywordList(job.inputs?.['keywords'])
   const productId = str(job.inputs?.['productId']) || null
   const generation = await generateSeoFields({
     subject: { kind: 'product', name },
     brand: brandOf(host),
     // The product's own words, as its editor handed them over: the product
     // document is the commerce plugin's, and this step never reads it.
-    text: str(job.inputs?.['text']).slice(0, AI_SEO_PAGE_TEXT_MAX_CHARS),
+    text: str(job.inputs?.['text']).slice(0, SEO_PAGE_TEXT_MAX_CHARS),
     fields,
     current: {
       title: str(job.inputs?.['currentTitle']),
@@ -447,109 +428,21 @@ async function runProductListing(
  * The site audit
  * ------------------------------------------------------------------------ */
 
-export interface AiSeoScannedPage extends AiSeoAuditPage {
-  /** The page's node map as audited. */
-  nodes: Record<string, unknown> | null
-}
-
-export interface AiSeoSiteScan {
-  pages: AiSeoScannedPage[]
-  skipped: number
-  notes: string[]
-}
-
 /**
- * Read the site the way its sitemap lists it: every screen the routing map
- * publishes, less the template screens, the status pages and every screen
- * that is not public — through the same shared predicates the tenant's
- * `sitemap.xml` and `/llms.txt` apply, so the audit covers exactly the pages
- * a crawler is handed. Then each page's published version, and the shared
- * layouts, for the links that decide which pages nothing points to.
+ * Read the site for an audit: the platform SEO check's scan
+ * (`@aglyn/aglyn/app-utils/seo-site-scan`), which the site's SEO section
+ * reads through too, so a job audits exactly the pages the check lists.
  */
-export async function scanAiSeoSite(
+async function scanSite(
   firestore: Firestore,
   hostId: string,
   host: SeoHostDocument,
-  rawKeywords: unknown,
-): Promise<AiSeoSiteScan> {
-  const hostRef = firestore.collection('hosts').doc(hostId)
-  const routing = host.screens ?? {}
-  const [screenDocs, templateScreenIds, layoutDocs] = await Promise.all([
-    hostRef
-      .collection('screens')
-      .select('visibility', 'seo', 'description', 'displayName', 'versionId', 'deletedAt')
-      .limit(1000)
-      .get(),
-    getTemplateScreenIds({ hostId }),
-    hostRef.collection('layouts').select('versionId').limit(AI_SEO_LAYOUT_SCAN_LIMIT).get(),
-  ])
-  const screens = new Map(screenDocs.docs.map((doc) => [doc.id, doc.data() as SeoScreenDocument]))
-  const excluded = new Set<string>([...statusPageScreenIds(host as never), ...templateScreenIds])
-  const published = Object.entries(routing)
-    .filter(([screenId]) => !excluded.has(screenId))
-    .filter(([screenId]) => {
-      const screen = screens.get(screenId)
-      return Boolean(screen) && !screen?.deletedAt && isScreenIndexable(screen as never)
-    })
-    .map(([screenId, route]) => ({ screenId, path: screenRoutePathToUrl(String(route)) }))
-    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-  const audited = published.slice(0, AI_SEO_AUDIT_MAX_PAGES)
-
-  const versions = new Map<string, { nodes: Record<string, unknown>; rootId?: string } | null>()
-  for (let start = 0; start < audited.length; start += READ_CHUNK) {
-    await Promise.all(
-      audited.slice(start, start + READ_CHUNK).map(async ({ screenId }) => {
-        versions.set(
-          screenId,
-          await readVersionNodes(hostRef, screenId, str(screens.get(screenId)?.versionId)),
-        )
-      }),
-    )
-  }
-  const layoutNodes: Record<string, unknown>[] = []
-  const layouts = layoutDocs.docs.filter((doc) => str(doc.get('versionId')))
-  for (let start = 0; start < layouts.length; start += READ_CHUNK) {
-    await Promise.all(
-      layouts.slice(start, start + READ_CHUNK).map(async (doc) => {
-        const snapshot = await doc.ref.collection('versions').doc(str(doc.get('versionId'))).get()
-        const nodes = snapshot.exists
-          ? decodeStoredNodes<Record<string, unknown>>(snapshot.get('nodes'))
-          : null
-        if (nodes) layoutNodes.push(nodes)
-      }),
-    )
-  }
-
-  const keywordsByPath = parseAiSeoKeywordLines(rawKeywords)
-  const auditedPaths = new Set(audited.map((page) => aiSeoNormalizePath(page.path)))
-  const notes = Object.keys(keywordsByPath)
-    .filter((path) => !auditedPaths.has(path))
-    .map((path) => `Keywords for ${path} were not used: no audited page is published at that address.`)
-
-  const pages: AiSeoScannedPage[] = audited.map(({ screenId, path }) => {
-    const screen = screens.get(screenId) ?? {}
-    const version = versions.get(screenId) ?? null
-    const linkedFrom =
-      layoutNodes.some((nodes) => nodesReferenceScreen(nodes, screenId)) ||
-      audited.some(
-        (other) =>
-          other.screenId !== screenId &&
-          nodesReferenceScreen(versions.get(other.screenId)?.nodes ?? null, screenId),
-      )
-    return {
-      screenId,
-      path,
-      name: str(screen.displayName) || path,
-      versionId: str(screen.versionId) || null,
-      seo: screen.seo ?? {},
-      description: str(screen.description),
-      facts: aiSeoPageFacts(version?.nodes as never, { rootId: version?.rootId }),
-      linkedFrom,
-      keywords: keywordsByPath[aiSeoNormalizePath(path)] ?? [],
-      nodes: version?.nodes ?? null,
-    }
+  keywords: unknown,
+): Promise<SeoSiteScan> {
+  return scanSeoSite(firestore, hostId, host, {
+    keywords,
+    templateScreenIds: await getTemplateScreenIds({ hostId }),
   })
-  return { pages, skipped: Math.max(0, published.length - audited.length), notes }
 }
 
 /** One unit of generated work an audit still owes. */
@@ -654,7 +547,7 @@ export function aiSeoLlmsPreview(
 async function proposeSite(
   context: AiJobStepContext & { firestore: Firestore },
   host: SeoHostDocument,
-  scan: AiSeoSiteScan,
+  scan: SeoSiteScan,
 ): Promise<UnitResult> {
   const { job, firestore, signal } = context
   const model = modelOf(context)
@@ -781,7 +674,7 @@ export function aiSeoFixesPrompt(pages: readonly AiSeoBatchPage[], titlesElsewhe
   const blocks = pages.map((page) => {
     const lines = [
       `### Page ${page.screenId}: ${page.name} (${page.path})`,
-      `Found: ${[...page.codes].map((code) => AI_SEO_FINDING_LABELS[code]).join('; ')}`,
+      `Found: ${[...page.codes].map((code) => SEO_FINDING_LABELS[code]).join('; ')}`,
       `Title now: ${str(page.seo?.title) || '(none)'}`,
       `Description now: ${str(page.seo?.description) || '(none)'}`,
       `Main heading now: ${page.facts.h1s[0]?.text || '(none)'}`,
@@ -825,7 +718,7 @@ async function proposeFixes(
         codes: new Set(pageReport.findings.map((entry) => entry.code)),
         keywords: pageReport.keywords.map((entry) => entry.keyword),
         seo: screen.seo ?? {},
-        facts: aiSeoPageFacts(version?.nodes as never, { rootId: version?.rootId }),
+        facts: seoPageFacts(version?.nodes as never, { rootId: version?.rootId }),
       }
     }),
   )
@@ -886,21 +779,12 @@ async function runSiteAuditPass(
   const outputs: AiJobOutput[] = []
   let spent = spentNothing(model)
   let report: AiSeoAuditReport
-  let scan: AiSeoSiteScan | null = null
+  let scan: SeoSiteScan | null = null
   if (recorded) {
     report = recorded.report
   } else {
-    scan = await scanAiSeoSite(firestore, job.hostId as string, host, job.inputs?.['keywords'])
-    report = aiSeoAudit(
-      scan.pages,
-      {
-        discouraged: isSearchDiscouraged(host as never),
-        entity: host.seo?.entity ?? {},
-        agent: host.seo?.agent ?? {},
-      },
-      { skipped: scan.skipped },
-    )
-    report.notes.push(...scan.notes)
+    scan = await scanSite(firestore, job.hostId as string, host, job.inputs?.['keywords'])
+    report = aiSeoAudit(scan.pages, seoAuditSiteOf(host), { skipped: scan.skipped, notes: scan.notes })
     const findings = report.pages.reduce((sum, page) => sum + page.findings.length, report.site.length)
     outputs.push({
       resource: 'seo',
@@ -918,7 +802,7 @@ async function runSiteAuditPass(
       ? await proposeSite(
           context,
           host,
-          scan ?? (await scanAiSeoSite(firestore, job.hostId as string, host, job.inputs?.['keywords'])),
+          scan ?? (await scanSite(firestore, job.hostId as string, host, job.inputs?.['keywords'])),
         )
       : await proposeFixes(context, report, unit)
   outputs.push(result.output)

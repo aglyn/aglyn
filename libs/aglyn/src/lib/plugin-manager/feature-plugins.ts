@@ -40,6 +40,7 @@
 
 import { runInAction } from 'mobx'
 import type { OrgPermissions } from '../app-utils/org-permissions'
+import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
@@ -898,11 +899,11 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   seoFields: 'seoFields',
   /**
-   * The host setup SEO section, above the site SEO form (AGL-2910). Props:
-   * {@link ConsoleHostSeoZoneProps} — the site, its stored SEO settings, and
-   * `proposeDraft`, which puts values in the form as unsaved edits. The
-   * form's Update stores them; nothing a widget proposes reaches the
-   * published site before that.
+   * The host setup SEO section, under the site's SEO check and above the site
+   * SEO form (AGL-2910). Props: {@link ConsoleHostSeoZoneProps} — the site,
+   * its stored SEO settings, the check's last report, and `proposeDraft`,
+   * which puts values in the form as unsaved edits. The form's Update stores
+   * them; nothing a widget proposes reaches the published site before that.
    */
   hostSeo: 'hostSeo',
   /** {@link ConsoleRecordInsightsZoneProps} */
@@ -1319,6 +1320,17 @@ export interface ConsoleSeoFieldsZoneProps {
   proposeValues: (values: ConsoleSeoFieldValues, key: string) => void
 }
 
+/**
+ * The site's SEO check as the SEO section last ran it: the platform's
+ * findings (`app-utils/seo-audit`), which the section draws for every site
+ * owner, and the target keyword lines the check was run with.
+ */
+export interface ConsoleSeoCheck {
+  report: SeoAuditReport
+  /** The keyword lines as typed, one page a line: `/pricing: plans, pricing`. */
+  keywords: string
+}
+
 /** What the `hostSeo` zone hands each widget (AGL-2910). */
 export interface ConsoleHostSeoZoneProps {
   hostId: string
@@ -1337,6 +1349,12 @@ export interface ConsoleHostSeoZoneProps {
    * applies once, and the form's Update is what stores them.
    */
   proposeDraft: (values: Record<string, string>, key: string) => void
+  /**
+   * The SEO check the section drew above the zone, once somebody has run it
+   * this visit; `null` before. The section lists the findings: a widget adds
+   * what it has for them — a proposed fix, say — and never lists them again.
+   */
+  check: ConsoleSeoCheck | null
 }
 
 /**

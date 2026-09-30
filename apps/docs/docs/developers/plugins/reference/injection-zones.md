@@ -25,6 +25,8 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `dashboardFooter` | Bottom of the host dashboard | `hostId` |
 | `orgSettings` | Organization → Settings, below the tabs | `orgId`, `org` |
 | `hostSettings` | Host setup page, below the built-in cards | `hostId` |
+| `hostSeo` | A site's **Setup → SEO**, under the SEO check and above the SEO cards: fixes for what the check found, and values proposed for the cards, which each card's **Update** writes | `hostId`, `orgId`, `orgSlug`, `host`, `seo` (the stored settings), `check` (the SEO check's last report and the keyword lines it ran with; `null` until someone runs it — add to its findings, never list them again), `proposeDraft(values, key)` — puts values in the SEO cards as unsaved edits |
+| `seoFields` | Inside a search listing editor, under its fields: a screen's **SEO** card, and the commerce product editor's search engine listing | `hostId`, `orgId`, `orgSlug`, `subject` (the screen or the product), `fields`, `values`, `hasImage`, `proposeValues(values, key)` — stages values in the editor as unsaved edits |
 | `adminOrgDetail` | Staff admin org detail page (staff-only) | `orgId` |
 | `orgBillingUsage` | Billing → Usage, below the meters | `orgId`, `org` (the billing-merged org doc), `canManage` |
 | `orgBillingOverview` | Billing → Overview, among the plan and add-on cards | `orgId`, `org`, `plan`, `canManage` |

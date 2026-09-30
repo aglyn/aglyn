@@ -21,9 +21,11 @@
  * its navigation — with each heading marked as one a fix can rewrite or not.
  */
 
-import { AI_SEO_PAGE_TEXT_MAX_CHARS, aiSeoPageFacts } from './seo-page-facts'
+import { SEO_PAGE_TEXT_MAX_CHARS, seoPageFacts } from './seo-page-facts'
 
-const nodes = {
+type NodeMap = Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }>
+
+const nodes: NodeMap = {
   root: { componentId: 'div', nodes: ['header', 'main', 'footer'] },
   header: { componentId: 'section', props: { component: 'header' }, nodes: ['brand'] },
   brand: { componentId: 'muiTypography', props: { variant: 'h1', children: 'Acme' }, nodes: [] },
@@ -40,8 +42,8 @@ const nodes = {
   footImage: { componentId: 'image', props: { src: 'media:host-1/logo' }, nodes: [] },
 }
 
-describe('aiSeoPageFacts', () => {
-  const facts = aiSeoPageFacts(nodes, { rootId: 'root' })
+describe('seoPageFacts', () => {
+  const facts = seoPageFacts(nodes, { rootId: 'root' })
 
   it('reads headings from the content region only, by element over style', () => {
     expect(facts.contentRootId).toBe('main')
@@ -65,14 +67,14 @@ describe('aiSeoPageFacts', () => {
     expect(facts.text).toContain('Every lamp is finished by hand.')
     expect(facts.text).not.toContain('Acme')
     expect(facts.wordCount).toBeGreaterThan(5)
-    const long = aiSeoPageFacts(
-      { root: { componentId: 'div', nodes: ['p'] }, p: { componentId: 'muiTypography', props: { children: 'word '.repeat(2_000) } } },
+    const long = seoPageFacts(
+      { root: { componentId: 'div', nodes: ['p'] }, p: { componentId: 'muiTypography', props: { children: 'word '.repeat(2_000) } } } as NodeMap,
       { rootId: 'root' },
     )
-    expect(long.text.length).toBe(AI_SEO_PAGE_TEXT_MAX_CHARS)
+    expect(long.text.length).toBe(SEO_PAGE_TEXT_MAX_CHARS)
   })
 
   it('answers empty for a page with no nodes', () => {
-    expect(aiSeoPageFacts(null)).toMatchObject({ text: '', headings: [], images: [], contentRootId: null })
+    expect(seoPageFacts(null)).toMatchObject({ text: '', headings: [], images: [], contentRootId: null })
   })
 })

@@ -22,12 +22,17 @@ import {
   pageContentRootId,
   type PageMarkdownNode,
   type PageMarkdownNodes,
-} from '@aglyn/aglyn/app-utils/page-markdown'
+} from './page-markdown'
 
 /**
  * What a page SAYS, read off its node tree (AGL-2910): the text a search
- * listing is written from, the headings, and the images — each heading and
- * image by node id, because a content fix addresses the element it changes.
+ * listing summarizes, the headings, and the images — each heading and image
+ * by node id, so a finding can name the element it is about and a fix can
+ * address the element it changes.
+ *
+ * Pure, and the platform's: the SEO check (`seo-audit.ts`) judges a page by
+ * these facts, and anything that proposes a listing or a content fix reads
+ * the same ones rather than walking the tree its own way.
  *
  * The text is the page's Markdown representation, the one an agent is
  * served, so what the listing summarizes is what a reader of the page gets.
@@ -36,8 +41,8 @@ import {
  * site's navigation is not the page's heading.
  */
 
-/** How much of a page's text a prompt carries. A listing summarizes; it does not need the page. */
-export const AI_SEO_PAGE_TEXT_MAX_CHARS = 2_000
+/** How much of a page's text the facts carry. A listing summarizes; it does not need the page. */
+export const SEO_PAGE_TEXT_MAX_CHARS = 2_000
 
 /** How much text around an image describes it. */
 const IMAGE_CONTEXT_MAX_CHARS = 160
@@ -48,7 +53,7 @@ const MAX_DEPTH = 64
 /** The text components whose heading level `headingLevelOf` reads. */
 const TEXT_COMPONENTS: ReadonlySet<string> = new Set(['muiTypography', 'muiInlineText', 'muiListItemText'])
 
-export interface AiSeoHeading {
+export interface SeoHeading {
   /** The element, or `null` for a heading inside rich text a fix cannot address. */
   nodeId: string | null
   level: number
@@ -57,7 +62,7 @@ export interface AiSeoHeading {
   editable: boolean
 }
 
-export interface AiSeoImage {
+export interface SeoImage {
   nodeId: string
   src: string
   alt: string
@@ -65,14 +70,14 @@ export interface AiSeoImage {
   context: string
 }
 
-export interface AiSeoPageFacts {
+export interface SeoPageFacts {
   /** The page's Markdown body, capped. */
   text: string
   wordCount: number
-  headings: AiSeoHeading[]
-  h1s: AiSeoHeading[]
-  images: AiSeoImage[]
-  imagesMissingAlt: AiSeoImage[]
+  headings: SeoHeading[]
+  h1s: SeoHeading[]
+  images: SeoImage[]
+  imagesMissingAlt: SeoImage[]
   /** The node the content region starts at; a new heading goes first inside it. */
   contentRootId: string | null
 }
@@ -95,12 +100,12 @@ function textOf(props: Record<string, unknown>): { text: string; plain: boolean 
 const childIdsOf = (node: PageMarkdownNode | undefined): string[] =>
   Array.isArray(node?.nodes) ? (node?.nodes as unknown[]).filter((id): id is string => typeof id === 'string') : []
 
-/** Read the facts a listing and an audit need from one page's node map. */
-export function aiSeoPageFacts(
+/** Read the facts a listing and the SEO check need from one page's node map. */
+export function seoPageFacts(
   nodes: PageMarkdownNodes | null | undefined,
   options: { rootId?: string; maxChars?: number } = {},
-): AiSeoPageFacts {
-  const empty: AiSeoPageFacts = {
+): SeoPageFacts {
+  const empty: SeoPageFacts = {
     text: '',
     wordCount: 0,
     headings: [],
@@ -114,9 +119,9 @@ export function aiSeoPageFacts(
   if (!contentRootId) return empty
 
   const markdown = buildPageMarkdown({ nodes, rootId: options.rootId })
-  const text = markdown.trim().slice(0, options.maxChars ?? AI_SEO_PAGE_TEXT_MAX_CHARS)
-  const headings: AiSeoHeading[] = []
-  const images: AiSeoImage[] = []
+  const text = markdown.trim().slice(0, options.maxChars ?? SEO_PAGE_TEXT_MAX_CHARS)
+  const headings: SeoHeading[] = []
+  const images: SeoImage[] = []
   let lastText = ''
 
   const seen = new Set<string>()

@@ -1002,6 +1002,7 @@ describe('the SEO zones (AGL-2910)', () => {
       host: 'shop',
       seo: { title: 'Acme Widgets' },
       proposeDraft: (values, key) => drafts.push({ key, values }),
+      check: null,
     }
     const SchemaImporter = (zone: ConsoleHostSeoZoneProps): null => {
       zone.proposeDraft({ 'seo.entity.name': String(zone.seo?.['title'] ?? '') }, `schema:${zone.hostId}`)
