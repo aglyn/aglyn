@@ -52,6 +52,19 @@ describe('outreachEnrolledEntry', () => {
       'Enrolled in a sequence',
     )
   })
+
+  it('says on a line of its own where an enrollment began past step 1, and which steps it skipped (AGL-3228)', () => {
+    expect(
+      outreachEnrolledEntry({ enrollmentId: 'e-1', sequenceName: 'Founder', campaignNames: ['Spring'], startStepIndex: 1 })
+        .body,
+    ).toBe('Enrolled in Founder\nFiled under Spring\nBegan at step 2 — step 1 skipped, already done by hand')
+    expect(
+      outreachEnrolledEntry({ enrollmentId: 'e-1', sequenceName: 'Founder', campaignNames: [], startStepIndex: 3 }).body,
+    ).toBe('Enrolled in Founder\nBegan at step 4 — steps 1–3 skipped, already done by hand')
+    expect(
+      outreachEnrolledEntry({ enrollmentId: 'e-1', sequenceName: 'Founder', campaignNames: [], startStepIndex: 0 }).body,
+    ).toBe('Enrolled in Founder')
+  })
 })
 
 describe('outreachStoppedEntry', () => {

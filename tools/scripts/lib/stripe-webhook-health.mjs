@@ -116,10 +116,11 @@ export const WEBHOOK_EVENTS = [
  */
 export const CONNECT_WEBHOOK_EVENTS = [
   // Connect readiness (AGL-1997) — `libs/tenant/data/admin/src/lib/server/
-  // connect-account-status.ts`, via the commerce and marketplace handlers.
+  // payment-provider-stripe-connect-status.ts`, via the payment provider the
+  // commerce and marketplace handlers hand account events to.
   'account.updated',
   // A payout failing to reach the merchant bank account, and the next one landing —
-  // `connect-payout-failure.ts` records the failure, raises the
+  // `payment-provider-stripe-connect-payouts.ts` records the failure, raises the
   // `billing.connectPayoutFailed` operator alert and retires the warning.
   // Both fire on the CONNECTED account, so only this destination sees them.
   // (No apostrophes in this list: the drift spec reads it by quote.)

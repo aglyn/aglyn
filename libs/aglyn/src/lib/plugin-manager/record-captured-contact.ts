@@ -78,40 +78,17 @@ import {
   type PluginContactCaptureWriter,
   type PluginContactCaptured,
 } from './plugin-contact-capture'
+import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
 
-/**
- * The app's boot-time declarations step, when it has offered one.
- *
- * Held on `globalThis` rather than in a module `let` (AGL-3412): the app
- * offers it from `instrumentation.ts`, which Next compiles into a different
- * module graph from the routes that capture, so a module-scoped slot is set
- * in one copy and read as empty in the other.
+/*
+ * The boot step's slot lives in its own leaf (AGL-2773), because the custom
+ * field registry reads it too and that registry is client-safe. Re-exported
+ * so the apps' instrumentation keeps importing it from here.
  */
-const REPAIR_KEY = Symbol.for('@aglyn/aglyn:plugin-declarations-repair')
-
-const globalScope = globalThis as typeof globalThis & {
-  [REPAIR_KEY]?: (() => Promise<void>) | null
-}
-
-/**
- * The app offers its boot step, so a capture that finds nobody can run it.
- *
- * Called at boot from the app's own instrumentation, beside the declarations
- * themselves and BEFORE them — this is a plain assignment that cannot fail,
- * and the failure it exists to repair is the one immediately after it. The
- * app passes a function rather than core importing the generated manifest,
- * which core may not do: the manifest names every plugin.
- *
- * Idempotent and last-one-wins; an app registers exactly once per process.
- */
-export function registerPluginDeclarationsRepair(run: () => Promise<void>): void {
-  globalScope[REPAIR_KEY] = run
-}
-
-/** Only for specs: forgets the registered boot step. */
-export function resetPluginDeclarationsRepairForTests(): void {
-  globalScope[REPAIR_KEY] = null
-}
+export {
+  registerPluginDeclarationsRepair,
+  resetPluginDeclarationsRepairForTests,
+} from './plugin-declarations-repair'
 
 export async function recordCapturedContact(
   request: PluginContactCaptureRequest,
@@ -124,13 +101,10 @@ export async function recordCapturedContact(
   // that registers the writer failed and every capture in this process has
   // been going nowhere. Run it and ask again — the registration memoizes its
   // own promise, so this is one attempt per process and not one per capture.
-  const repair = globalScope[REPAIR_KEY]
-  if (repair) {
-    try {
-      await repair()
-    } catch (error) {
-      console.error(`[capture] plugin declarations failed before ${where}`, error)
-    }
+  try {
+    await runPluginDeclarationsRepair()
+  } catch (error) {
+    console.error(`[capture] plugin declarations failed before ${where}`, error)
   }
   const late = pluginContactCaptureWriter()
   if (!late) {

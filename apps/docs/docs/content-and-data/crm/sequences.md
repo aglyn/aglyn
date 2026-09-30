@@ -506,6 +506,28 @@ get with your personal line in it, and **Send me this as a test** sends that
 email to your own inbox first — see
 [Send yourself a test of a step](#send-a-test).
 
+### Start at a later step {#start-at-step}
+
+When someone already had the first email — you wrote it by hand, before the
+sequence existed — pick the step they begin at in **Start at**, above the
+people. Everyone you enroll in that batch begins there:
+
+- The steps before it are marked **skipped** on the enrollment and never sent.
+  The person's record and the enrollment's history both say which ones.
+- The step you picked waits its own delay, counted from the moment you
+  enroll — a step set to 3 business days goes out 3 business days from now.
+- The first email sent from there starts its own email thread, under your
+  first email's subject when the step was written as a reply, since there is
+  no earlier email of the sequence's for it to answer. The emails after it
+  reply in that thread as usual.
+- A reply, a bounce or an opt-out stops the enrollment from the moment you
+  enroll, as it does after a send, and the unsubscribe link works the same.
+
+**Preview the first email** and **Send me this as a test** show the first
+email sent from the step you picked. A curated copy of a skipped step is left
+out. Leave **Start at** on step 1 to start from the beginning, which is the
+default; a step past the sequence's last is refused.
+
 ### Before you enroll: mail gateways {#mail-gateways}
 
 Some companies put a security gateway — Barracuda, Proofpoint, Mimecast —

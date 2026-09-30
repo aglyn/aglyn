@@ -70,6 +70,8 @@ export type OutreachRouteRefusalReason =
   | 'curation-unavailable'
   | 'curation-refused'
   | 'invalid-override'
+  /** The step to begin enrolling at is not one the sequence has (AGL-3228). */
+  | 'invalid-start-step'
 
 /** A refusal, in the one shape every route answers with. */
 export interface OutreachRouteRefusal {
@@ -274,6 +276,13 @@ export interface OutreachEnrollRequest {
   orgId: string
   sequenceId: string
   people: OutreachEnrollPersonRequest[]
+  /**
+   * The step everyone begins at (AGL-3228), zero-based; the first when
+   * absent. For people who already had the earlier steps by hand: those are
+   * marked skipped, and this step goes out after its own delay, counted from
+   * the enrollment. A step the sequence does not have refuses the request.
+   */
+  startStepIndex?: number
 }
 
 interface OutreachEnrollOutcomePerson {
@@ -421,6 +430,11 @@ export interface OutreachPreviewRequest {
   stepIndex?: number
   /** The person's copies of steps as the dialog holds them (AGL-3324), so the preview shows the curated version. */
   stepOverrides?: OutreachStepOverrideRequest[]
+  /**
+   * The step the enrollment would begin at (AGL-3228), zero-based: the
+   * first email written is the first one sent from there.
+   */
+  startStepIndex?: number
 }
 
 export interface OutreachPreviewResponse {

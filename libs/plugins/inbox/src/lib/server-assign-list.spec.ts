@@ -378,6 +378,54 @@ describe('a stored refusal', () => {
   })
 })
 
+/*
+ * A refusal outlives the contact it was written on (AGL-3338): the retained
+ * store, keyed by person and holding no address, is read beside the contact.
+ */
+describe('a refusal retained after its contact was deleted', () => {
+  const RETAINED = () => `orgs/${ORG_ID}/retainedRefusals/${personKey(SENDER)}`
+  const retain = (atMs: number) => {
+    store[RETAINED()] = {
+      marketingConsentByHost: {
+        [HOST_ID]: { marketingConsent: false, marketingConsentAtMs: atMs, retainedAtMs: atMs },
+      },
+      retainedAtMs: atMs,
+    }
+  }
+
+  it('refuses an attested enrollment when no contact is left', async () => {
+    retain(1_000)
+    const out = await assign({ attestConsent: true })
+    expect(out.code).toBe(409)
+    expect(out.body.reason).toBe('declined')
+    expect(memberRows()).toHaveLength(0)
+  })
+
+  it('refuses when a re-created contact has recorded nothing', async () => {
+    retain(1_000)
+    seedContact({})
+    const out = await assign({ attestConsent: true })
+    expect(out.code).toBe(409)
+    expect(out.body.reason).toBe('declined')
+  })
+
+  it('yields to a grant the person gave after the refusal', async () => {
+    retain(1_000)
+    seedContact(grantedHere(2_000))
+    const out = await assign()
+    expect(out.code).toBe(200)
+    expect(memberRows()).toHaveLength(1)
+  })
+
+  it('does not yield to a grant older than the refusal', async () => {
+    retain(2_000)
+    seedContact(grantedHere(1_000))
+    const out = await assign({ attestConsent: true })
+    expect(out.code).toBe(409)
+    expect(out.body.reason).toBe('declined')
+  })
+})
+
 describe('no consent record', () => {
   it('refuses without an assertion, and writes nothing', async () => {
     const out = await assign()

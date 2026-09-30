@@ -25,6 +25,7 @@ import {
   type PluginRevocation,
   type RealmPluginInstall,
 } from '@aglyn/aglyn/server'
+import { PLUGIN_DISTRIBUTION } from '@aglyn/aglyn/plugin-manager/plugin-distribution'
 import { firebaseAdmin } from './firebase-admin'
 import { resolveOrgIdForHost } from './organizations'
 import { tenantDataTag, withRenderCache } from '../render-cache'
@@ -106,9 +107,11 @@ export async function getPluginConfig(
  * the install — so this join is the single source the loaders consume:
  *
  * 1. Read the org's installs (and the host's, when a host is in scope).
- * 2. Join each pin with its `marketplaceListings/{id}/pluginVersions/{v}`
- *    doc; only versions carrying `trust: 'realm'` survive.
- * 3. Drop revoked versions (`revocations/{listingId}` kill switch) — a
+ * 2. Join each pin with its version document, in the store the
+ *    distributing plugin declares (`PLUGIN_DISTRIBUTION`, AGL-3080 — the
+ *    marketplace's listings today); only versions carrying `trust: 'realm'`
+ *    survive.
+ * 3. Drop revoked versions (the kill switch keyed by the listing id) — a
  *    revocation beats a still-present trust grant.
  * 4. Drop hidden listings (AGL-948) — `resolveMarketplacePluginVersion`
  *    returns null for a listing under staff takedown. `deletedAt` is not
@@ -152,8 +155,12 @@ export async function resolveMarketplacePluginVersion(
   identity?: string
   contributes?: PluginContributions
 } | null> {
+  // No distributing plugin declared a store: nothing can be vouched for, so
+  // nothing resolves (see `plugin-distribution.ts` — absent is closed).
+  const distribution = PLUGIN_DISTRIBUTION
+  if (!distribution) return null
   const firestore = firebaseAdmin.app().firestore()
-  const listingRef = firestore.collection('marketplaceListings').doc(listingId)
+  const listingRef = firestore.collection(distribution.listings).doc(listingId)
   // THE REVOCATION READ IS IN THIS `Promise.all`, NOT AFTER IT (2026-08-26).
   //
   // It is keyed on `listingId` alone, so it never depended on the two reads
@@ -171,8 +178,8 @@ export async function resolveMarketplacePluginVersion(
   // live — this moves when the read is issued, never whether it is honored.
   const [listing, snapshot, revocationSnapshot] = await Promise.all([
     listingRef.get(),
-    listingRef.collection('pluginVersions').doc(version).get(),
-    firestore.collection('revocations').doc(listingId).get(),
+    listingRef.collection(distribution.versions).doc(version).get(),
+    firestore.collection(distribution.revocations).doc(listingId).get(),
   ])
   // A missing listing doc is NOT a blocker: Firestore does not cascade to
   // subcollections, so a hard-deleted listing leaves working installs

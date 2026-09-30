@@ -42,7 +42,6 @@ import {
   readContactFacet,
 } from '@aglyn/aglyn/server'
 import { MEMBER_EMAIL_ALIASES_COLLECTION } from '@aglyn/aglyn/app-utils/member-email-aliases'
-import type { OrgCrmInbound } from '@aglyn/aglyn/foundation'
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { findContactByEmail } from './contact-email-index'
@@ -69,6 +68,30 @@ import { countCrmActivitiesForRecord } from './crm-records'
  * `loadCrmInboundRoster`, and the caller writes the org's feed line, so a
  * spec of this module needs a store and nothing else.
  */
+
+/**
+ * The workspace's email capture address, as the org document carries it
+ * under `crmInbound` (AGL-2657): `crm+<token>@<capture domain>`.
+ *
+ * One token per organization, minted lazily by `crm/inbound-address` the
+ * first time a member asks for the address, and replaced by the same route
+ * on a rotation. Every site of the organization shares it: a captured
+ * message is filed on the record that matches its correspondent, and the
+ * record says which site it belongs to, so the address need not.
+ *
+ * The CRM's field, not the platform's: the organization type does not name
+ * it, and this module is its only reader and writer. Server-owned and
+ * member-readable: the token IS the address, so a client that could write
+ * it could point another workspace's mail here.
+ */
+export interface OrgCrmInbound {
+  /** The url-safe secret in the local part; `crm+<token>@…`. */
+  token: string
+  /** When the first token was minted, epoch ms. */
+  createdAtMs: number
+  /** When the token was last replaced, epoch ms; absent until it has been. */
+  rotatedAtMs?: number
+}
 
 /** The most candidate addresses one message is matched by. */
 export const CRM_INBOUND_CANDIDATE_MAX = 6

@@ -233,8 +233,8 @@ jest.mock('@aglyn/tenant-data-admin/server/tenant-write-lockdown', () => ({
   siteLockdownJobGate: () => gate,
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/stripe-account-mode', () => ({
-  connectLinkageIsReady: () => true,
+jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({
+  merchantAccountIsReady: () => true,
 }))
 
 // `require`, not `import`. A static import is hoisted above the module-scope

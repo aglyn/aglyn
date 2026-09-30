@@ -193,6 +193,13 @@ with its runbook:
   it beside the `suspended*` family. `docs/SELF_HOSTING.md` names the tag to
   restore it from for an install upgrading across that release.
 
+- `backfill-bounced-account-acquisition` (AGL-3426) stamped
+  `acquisition: { source: 'unknown' }` on the two Google accounts the /signin
+  consent bounce left unattributed (AGL-3355), `mSzttXqhnPaAu6VOMVVj6PqHmQU2`
+  and `h2IZUsP7SSfRXtIUiaEnMmbzn4m2`, on 2026-09-30; the second had no user
+  document and the write created it. Its re-run planned 0 of 2. /signin
+  records acquisition at the stand-down now, before it signs the account out.
+
 A module whose only caller was one of those went with it —
 `lib/plugin-id-rename.mjs`, `lib/media-content-sha256-backfill.mjs`,
 `backfill-intrinsic-media-size.ts` and their tests — because a decision half

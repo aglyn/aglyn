@@ -63,7 +63,7 @@ import { registerAiConsole } from './plugin'
 const SITE_ZONES: readonly string[] = [
   // The dock is mounted on every page; on a site's pages it is listed from
   // the site's set, so a switched-off site draws none.
-  CONSOLE_WIDGET_SLOTS.assistPanel,
+  CONSOLE_WIDGET_SLOTS.consoleDock,
   // The guided start on a newly created site (AGL-2918). A site is the one
   // thing it acts on, so a site that switched AI off is offered no start and
   // keeps the blank page — which is what that site asked for.

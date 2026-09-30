@@ -18,10 +18,7 @@
 'use client'
 
 import { useDeploymentCapabilities } from '@aglyn/aglyn'
-import {
-  operatorMarketplaceNotConfiguredText,
-  operatorPaymentsNotConfiguredText,
-} from '@aglyn/aglyn/app-utils/payments-configured'
+import { operatorPaymentsNotConfiguredText } from '@aglyn/aglyn/app-utils/payments-configured'
 import Alert from '@mui/material/Alert'
 import AlertTitle from '@mui/material/AlertTitle'
 
@@ -47,6 +44,19 @@ import AlertTitle from '@mui/material/AlertTitle'
  * for. Hiding the tab would remove working functionality to avoid explaining
  * one that is off — so the text leads with what still works.
  */
+/**
+ * The marketplace's own sentence, ahead of the deployment's. Browsing works
+ * without Stripe; only the money doors do not — so this says what still
+ * works, rather than presenting a whole feature as broken.
+ */
+export function operatorMarketplaceNotConfiguredText() {
+  return (
+    'Browsing and free installs work as normal. Paid listings, purchases and ' +
+    'publisher payouts need a Stripe platform account, which this deployment ' +
+    'does not have configured.'
+  )
+}
+
 export default function MarketplacePaymentsNotice() {
   /*
    * The deployment's own answer (AGL-3080), not this plugin's. The key is a

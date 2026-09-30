@@ -60,13 +60,13 @@
  */
 import {
   analyticsConsentSignals,
-  GA_CONSENT_DEFAULT_SNIPPET,
   PRIOR_CONSENT_COUNTRY_CODES,
   setResidentAnalyticsTags,
   storeVisitorConsent,
 } from '@aglyn/aglyn'
+import { loadAnalyticsProviders } from '@aglyn/aglyn/app-utils/analytics-provider'
 import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
-import { GA_CLICK_ID_PASSTHROUGH_SNIPPET } from '@aglyn/aglyn/app-utils/visitor-consent'
+import { ANALYTICS_PROVIDER_LOADERS } from '../utils/plugins.analytics.generated'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
 
@@ -80,6 +80,10 @@ jest.mock('next/script', () => ({
     </script>
   ),
 }))
+
+// The adapter a page loads when its site configures a tag, registered up
+// front for the cases that call the consent writer without rendering one.
+beforeAll(() => loadAnalyticsProviders(ANALYTICS_PROVIDER_LOADERS))
 
 const HOST_ID = 'consent-default-host'
 const GA_ID = 'G-TEST1234'
@@ -262,7 +266,6 @@ describe('the consent-mode default (AGL-1622)', () => {
       // Denied `ad_storage` is the state the passthrough exists for, so the
       // two travel together: same block, default first.
       expect(declaredDefault()?.ad_storage).toBe('denied')
-      expect(text).toContain(GA_CLICK_ID_PASSTHROUGH_SNIPPET)
       expect(text).toContain("gtag('set', 'url_passthrough', true)")
       expect(text).toContain("gtag('set', 'ads_data_redaction', true)")
       const passthroughAt = text.indexOf("'url_passthrough'")
@@ -337,16 +340,19 @@ describe('the consent-mode default (AGL-1622)', () => {
       expect(document.body.innerHTML).not.toContain('gtag(')
     })
 
-    it('the snippet carries no interpolated input (AGL-138)', async () => {
+    it('the declaration carries no interpolated input (AGL-138)', async () => {
       // It lands inside an inline script, so it must be a literal built from
       // the closed signal set — never anything host-configured.
-      expect(GA_CONSENT_DEFAULT_SNIPPET).toBe(
-        `gtag('consent', 'default', ${JSON.stringify(
-          analyticsConsentSignals(true),
-        )});`,
-      )
-      expect(GA_CONSENT_DEFAULT_SNIPPET).not.toContain('<')
-      expect(GA_CONSENT_DEFAULT_SNIPPET).not.toContain(GA_ID)
+      plantRegion('US')
+      await renderPage(GA_HOST)
+      await waitFor(() => expect(gaInit()).toBeTruthy())
+      const text = gaInit()?.textContent ?? ''
+      const declaration = `gtag('consent', 'default', ${JSON.stringify(
+        analyticsConsentSignals(true),
+      )});`
+      expect(text).toContain(declaration)
+      expect(declaration).not.toContain('<')
+      expect(declaration).not.toContain(GA_ID)
     })
   })
 

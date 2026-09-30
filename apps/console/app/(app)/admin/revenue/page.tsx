@@ -90,6 +90,7 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import {
+  answeredRevenueSources,
   defaultRevenuePeriod,
   dollars,
   earnedLines,
@@ -265,17 +266,21 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
   const earned = useMemo(() => earnedLines(payload), [payload])
   const causes = useMemo(() => gapCauses(payload), [payload])
   const subscriptions = settled?.subscriptions ?? {}
-  const marketplace = settled?.marketplace ?? {}
-  const commerce = settled?.commerce ?? {}
-  // TRUNCATION ONLY. `commerceQueryFailed` is deliberately NOT folded in
-  // here: a query that could not run is not a sweep that hit a ceiling, and
-  // reporting the failure as a row cap is what sent this page's own diagnosis
-  // to the wrong half of the system (AGL-2486).
+  // Every plugin that earns through the platform, as it answered (AGL-3080).
+  // A refused one is named below and is in no figure.
+  const sources = useMemo(() => answeredRevenueSources(payload), [payload])
+  const refusedSources = (payload?.sources ?? []).filter(
+    (section) => section?.outcome === 'refused',
+  )
+  // TRUNCATION ONLY. A source whose read could not run at all says so on its
+  // own (`failure`) and is deliberately NOT folded in here: a query that could
+  // not run is not a sweep that hit a ceiling, and reporting the failure as a
+  // row cap is what sent this page's own diagnosis to the wrong half of the
+  // system (AGL-2486).
   const truncated =
     payload?.subscriptionsTruncated === true ||
-    payload?.marketplaceTruncated === true ||
     payload?.contractedTruncated === true ||
-    payload?.attention?.commerceTruncated === true
+    sources.some((section) => section.truncated === true)
   const truncatedSources = payload?.truncatedSources ?? []
   // A CLOSED period cannot be compared like for like: contracted is a
   // run-rate measured today, settled is cash collected then. See the route's
@@ -376,16 +381,24 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                 overstated by however much usage went unbilled.
               </Alert>
             ) : null}
-            {payload?.commerceQueryFailed === true ? (
-              <Alert severity="warning">
-                <AlertTitle>Storefront orders could not be read</AlertTitle>
-                The storefront commission below reads $0 because the query
-                failed, not because there were no sales. The sweep needs the
-                COLLECTION_GROUP index on <code>orders.createdAtMs</code> —
-                check it is still declared in the Firestore index config and
-                actually deployed, since indexes ship separately from the app.
-              </Alert>
-            ) : null}
+            {sources
+              .filter((section) => section.failure)
+              .map((section) => (
+                <Alert key={`failure:${section.id}`} severity="warning">
+                  <AlertTitle>{section.failure?.title}</AlertTitle>
+                  {section.failure?.detail}
+                </Alert>
+              ))}
+            {refusedSources.map((section) =>
+              section.outcome === 'refused' ? (
+                <Alert key={`refused:${section.pluginId}`} severity="error">
+                  <AlertTitle>
+                    {`Earnings from the “${section.pluginId}” plugin could not be read`}
+                  </AlertTitle>
+                  {`${section.reason} They are in no figure on this page, so the settled total is a lower bound — not a measured figure.`}
+                </Alert>
+              ) : null,
+            )}
             {Number(payload?.attention?.rowsOutsideEveryPeriod ?? 0) > 0 ? (
               <Alert severity="warning">
                 <AlertTitle>
@@ -781,52 +794,17 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       back rather than refunded voluntarily.
                     </TableCell>
                   </TableRow>
-                  <TableRow>
-                    <TableCell>Marketplace sales (buyer gross)</TableCell>
-                    <TableCell align="right">
-                      ${dollars(marketplace.grossCents)}
-                    </TableCell>
-                    <TableCell>
-                      {`Mostly the publisher’s. ${PLATFORM_BRAND_NAME} keeps only the commission.`}
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>— less publisher payouts</TableCell>
-                    <TableCell align="right">
-                      −${dollars(marketplace.sellerTransferCents)}
-                    </TableCell>
-                    <TableCell>The publisher’s. Transferred out.</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Storefront sales (shopper gross)</TableCell>
-                    <TableCell align="right">
-                      ${dollars(commerce.grossCents)}
-                    </TableCell>
-                    <TableCell>
-                      The merchant’s. It transfers straight to their connected
-                      account and is shown only for scale.
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Storefront platform fee collected</TableCell>
-                    <TableCell align="right">
-                      ${dollars(commerce.applicationFeeCents)}
-                    </TableCell>
-                    <TableCell>
-                      {`Not all ${PLATFORM_BRAND_NAME}’s — see the next line.`}
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>
-                      — less card processing passed through at cost
-                    </TableCell>
-                    <TableCell align="right">
-                      −${dollars(commerce.processingPassThroughCents)}
-                    </TableCell>
-                    <TableCell>
-                      {`Stripe’s. On a destination charge Stripe debits ${PLATFORM_BRAND_NAME}’s balance for processing, and this half of the fee recovers exactly that. It is a recovery, not earnings, and reporting it as revenue would overstate every storefront sale.`}
-                    </TableCell>
-                  </TableRow>
+                  {sources.flatMap((section) =>
+                    section.grossToNet.map((line, index) => (
+                      <TableRow key={`${section.id}:${index}`}>
+                        <TableCell>{line.label}</TableCell>
+                        <TableCell align="right">
+                          {line.deduction ? '−' : ''}${dollars(line.cents)}
+                        </TableCell>
+                        <TableCell>{line.note}</TableCell>
+                      </TableRow>
+                    )),
+                  )}
                 </TableBody>
               </ScrollTable>
               <Box sx={{ mt: 2 }}>
@@ -845,24 +823,17 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       )} of this is ${PLATFORM_BRAND_NAME}’s own tagged purchases — real cash, excluded from GA`}
                     />
                   ) : null}
-                  {Number(marketplace.estimatedProcessingCostCents ?? 0) > 0 ? (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color="warning"
-                      label={`~$${dollars(
-                        marketplace.estimatedProcessingCostCents,
-                      )} of card processing on marketplace sales is NOT recovered — the commission above is gross of it`}
-                    />
-                  ) : null}
-                  {Number(commerce.subscriptionOrders ?? 0) > 0 ? (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color="warning"
-                      label={`${commerce.subscriptionOrders} storefront subscription cycles — one billed before its re-price reports no take`}
-                    />
-                  ) : null}
+                  {sources.flatMap((section) =>
+                    section.notes.map((note, index) => (
+                      <Chip
+                        key={`${section.id}:${index}`}
+                        size="small"
+                        variant="outlined"
+                        {...(note.tone === 'warning' ? { color: 'warning' as const } : {})}
+                        label={note.label}
+                      />
+                    )),
+                  )}
                 </Stack>
               </Box>
             </CardDisplay>
@@ -999,92 +970,69 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               ) : null}
             </CardDisplay>
 
-            {/* ---- Marketplace and storefront attribution ---- */}
-            <CardDisplay
-              header="Which plugin, and which storefront"
-              help={docsHelp('revenue', {
-                anchor: '#where-the-money-came-from',
-                excerpt:
-                  'Marketplace commission attributed by listing and by publisher; storefront take attributed by host. Each table sums to its line in "Where the money came from".',
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Each source is attributed on the dimension it is actually
-                measured in — commission by the plugin that earned it, take by
-                the storefront that generated it. Every table sums to its own
-                line in “Where the money came from”; a plugin table that did
-                not would be worse than no plugin table.
-              </Typography>
-
-              <Typography variant="overline" color="text.secondary">
-                Marketplace commission by listing
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <RankedBars
-                  rows={(payload?.attributionByListing?.rows ?? []).map(
-                    (row) => ({
-                      key: String(row.key),
-                      label: String(row.name),
-                      sublabel: row.detail ? String(row.detail) : undefined,
-                      cents: Number(row.gainCents ?? 0),
-                    }),
-                  )}
-                  emptyMessage="No plugin earned a commission in this period — nothing to plot yet."
-                />
-              </Box>
-              <SourceTable
-                table={payload?.attributionByListing}
-                unit="Listing"
-                countLabel="Sales"
-                empty={`No marketplace sale settled in this period. ${PLATFORM_BRAND_NAME}'s commission is a share of each sale, so no sales means no commission — not a failed read.`}
-              />
-
-              <Divider sx={{ my: 3 }} />
-              <Typography variant="overline" color="text.secondary">
-                Marketplace commission by publisher
-              </Typography>
-              <SourceTable
-                table={payload?.attributionByPublisher}
-                unit="Publisher"
-                countLabel="Sales"
-                empty={`No publisher earned ${PLATFORM_BRAND_NAME} a commission in this period.`}
-              />
-
-              <Divider sx={{ my: 3 }} />
-              <Typography variant="overline" color="text.secondary">
-                Storefront take by host
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <RankedBars
-                  rows={(payload?.attributionByHost?.rows ?? []).map((row) => ({
-                    key: String(row.key),
-                    label: String(row.name),
-                    sublabel: row.detail ? String(row.detail) : undefined,
-                    cents: Number(row.gainCents ?? 0),
-                  }))}
-                  emptyMessage="No storefront earned a take in this period — nothing to plot yet."
-                />
-              </Box>
-              <SourceTable
-                table={payload?.attributionByHost}
-                unit="Storefront"
-                countLabel="Orders"
-                empty={`No storefront order settled in this period. Note this is ${PLATFORM_BRAND_NAME}'s take only — the shopper's spend is the merchant's money and is never counted here.`}
-              />
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 2 }}
+            {/* ---- Each source's attribution ---- */}
+            {sources.some((section) => section.attribution.length > 0) ? (
+              <CardDisplay
+                header="Which plugin, and which storefront"
+                help={docsHelp('revenue', {
+                  anchor: '#where-the-money-came-from',
+                  excerpt:
+                    'Each plugin’s earnings attributed on the dimension it is measured in. Each table sums to its line in "Where the money came from".',
+                })}
+                contentGutterX
+                contentGutterY
               >
-                Storefront figures above are the advertised take with
-                Stripe&apos;s processing cost already subtracted, on the basis
-                stated in “Gross versus net” below. Attribution is by host
-                rather than by org because one org can run several storefronts,
-                and rolling them up destroys the question.
-              </Typography>
-            </CardDisplay>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Each source is attributed on the dimension it is actually
+                  measured in — commission by the plugin that earned it, take by
+                  the storefront that generated it. Every table sums to its own
+                  line in “Where the money came from”; a plugin table that did
+                  not would be worse than no plugin table.
+                </Typography>
+                {sources.map((section, sectionIndex) => (
+                  <Box key={section.id}>
+                    {section.attribution.map((table, tableIndex) => (
+                      <Box key={table.id}>
+                        {sectionIndex > 0 || tableIndex > 0 ? (
+                          <Divider sx={{ my: 3 }} />
+                        ) : null}
+                        <Typography variant="overline" color="text.secondary">
+                          {table.heading}
+                        </Typography>
+                        {table.chartEmpty ? (
+                          <Box sx={{ mb: 2 }}>
+                            <RankedBars
+                              rows={(table.rows ?? []).map((row) => ({
+                                key: String(row.key),
+                                label: String(row.name),
+                                sublabel: row.detail ? String(row.detail) : undefined,
+                                cents: Number(row.gainCents ?? 0),
+                              }))}
+                              emptyMessage={table.chartEmpty}
+                            />
+                          </Box>
+                        ) : null}
+                        <SourceTable
+                          table={table}
+                          unit={table.unit}
+                          countLabel={table.countLabel}
+                          empty={table.empty}
+                        />
+                      </Box>
+                    ))}
+                    {section.attributionNote ? (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mt: 2 }}
+                      >
+                        {section.attributionNote}
+                      </Typography>
+                    ) : null}
+                  </Box>
+                ))}
+              </CardDisplay>
+            ) : null}
 
           </Stack>
         </StaffOnly>

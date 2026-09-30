@@ -77,8 +77,10 @@ import {
   countNoun,
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
+import { CrmBulkShareButton } from './record-sharing-card'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { UNQUALIFY_REASON_MAX } from './lead-unqualify-dialog'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 /**
  * One row of the Leads list as the bar needs it: the document's fields,
@@ -138,6 +140,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
   const { rows, selected, onSelectedChange, roster, csv } = props
   const orgId = props.orgId ?? null
   const hostId = props.hostId ?? null
+  const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
   const firestore = useFirestore()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'lead' })
 
@@ -186,10 +189,18 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       apply({
         attempted: plan.writes.length,
         skipped: plan.skipped,
-        job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.label),
+        job: async () => {
+          const outcome = await runCrmBulkWrites(writers, plan.writes, (write) => write.label)
+          // A client-direct write owes the sharing rules a re-evaluation (AGL-3336).
+          followUpSharing(
+            'leads',
+            plan.writes.filter((write) => write.kind === 'update').map((write) => rows.find((row) => row.$id === write.id)?.leadId ?? write.id),
+          )
+          return outcome
+        },
         done,
       }),
-    [apply, writers],
+    [apply, writers, rows, followUpSharing],
   )
 
   const handleApply = useCallback(async () => {
@@ -405,6 +416,13 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       <Button size="small" disabled={busy} onClick={() => openAction('campaign')}>
         {'Add to campaign'}
       </Button>
+      <CrmBulkShareButton
+        object="leads"
+        ids={selectedRows.map((row) => row.leadId ?? row.$id)}
+        hostId={hostId}
+        orgId={orgId}
+        disabled={busy}
+      />
       <Button size="small" disabled={busy} onClick={handleExport}>
         {'Export CSV'}
       </Button>

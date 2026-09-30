@@ -21,6 +21,7 @@ import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
+import { readOutreachStartStepIndex } from '../engine/enrollment-state'
 import { firstEmailStepIndex } from '../engine/sequence-validation'
 import { leadAsContact } from '../enrollment/enroll-people'
 import { outreachStepOverridesRefused, readOutreachStepOverrideRequests } from '../enrollment/step-overrides'
@@ -114,19 +115,33 @@ export async function readOutreachStepRender(
   const sequence = readStoredOutreachSequence(sequenceId, snapshot.exists ? snapshot.data() : undefined)
   if (!sequence) return outreachRefusal(404, 'sequence-not-found', 'That sequence no longer exists.')
 
+  // Where the enrollment would begin (AGL-3228): the email written is the
+  // first one sent from there, and it starts the thread.
+  const start = readOutreachStartStepIndex(body['startStepIndex'], sequence.steps)
+  if (start.refusal !== null) return outreachRefusal(400, 'invalid-start-step', start.refusal)
+  const startStepIndex = start.startStepIndex
   const requested = body['stepIndex']
-  const stepIndex = typeof requested === 'number' ? requested : firstEmailStepIndex(sequence.steps)
+  const stepIndex =
+    typeof requested === 'number' ? requested : firstEmailStepIndex(sequence.steps, startStepIndex)
   const step = sequence.steps[stepIndex]
   if (step?.kind !== 'email') {
-    return outreachRefusal(400, 'invalid-request', 'That step does not send an email.')
+    return outreachRefusal(
+      400,
+      'invalid-request',
+      stepIndex < 0 && startStepIndex > 0
+        ? `No email is sent from step ${startStepIndex + 1} on.`
+        : 'That step does not send an email.',
+    )
   }
   // The person's copies of steps as the dialog holds them (AGL-3324): the
   // preview shows the curated version, held to the rules a stored one is —
   // and a test send (AGL-3325) sends it.
-  const overrides = readOutreachStepOverrideRequests(body['stepOverrides'], sequence.steps, {
-    uid: caller.uid,
-    nowMs: deps.now(),
-  })
+  const overrides = readOutreachStepOverrideRequests(
+    body['stepOverrides'],
+    sequence.steps,
+    { uid: caller.uid, nowMs: deps.now() },
+    startStepIndex,
+  )
   if (outreachStepOverridesRefused(overrides)) {
     return outreachRefusal(
       400,
@@ -200,6 +215,7 @@ export async function readOutreachStepRender(
         ? normalizeCrmEmailTemplate(template.data() as Record<string, unknown>).body
         : null,
       stepOverrides: overrides.overrides,
+      ...(startStepIndex > 0 ? { startStepIndex } : {}),
     },
   }
 }

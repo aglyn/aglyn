@@ -299,8 +299,8 @@ describe('the canary is excluded from the drought it would otherwise trip', () =
  *
  * Two different exclusions, because the two emit sites know different things.
  * `/api/orgs/create` holds the requested slug and reuses the check above.
- * `/api/auth/session` fires the moment `seedUserProfile` reports a first
- * sighting — before any org exists — so the ADDRESS is the only signal there
+ * `/api/auth/session` fires on an account's first session while the account
+ * is new — before any org exists — so the ADDRESS is the only signal there
  * is, and the tag on it is a convention that only the script's own refusal
  * makes true. That refusal is the load-bearing assertion in this block: drop
  * it and the exclusion goes quiet the first time the operator's mailbox
@@ -319,7 +319,7 @@ describe('the canary does not announce itself to staff', () => {
       'utf8',
     )
     expect(SESSION_ROUTE).toMatch(
-      /if \(created && !isSignupCanaryEmail\(decoded\.email\)\) \{\s*await notifyStaff\(\{\s*type: 'staff\.userSignedUp'/,
+      /!isSignupCanaryEmail\(decoded\.email\) &&\s*\(await claimNewAccountAnnouncement\([\s\S]{0,200}?\)\)\s*\) \{\s*await notifyStaff\(\{\s*type: 'staff\.userSignedUp'/,
     )
   })
 

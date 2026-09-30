@@ -34,7 +34,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: mockUser }),
 }))
 
-const { MarketingConsentPrompt } = require('../components/marketing-consent-prompt.component')
+const { PlatformMarketingConsentPrompt } = require('../components/marketing-consent-prompt.component')
 
 /** What the status route answers; swapped per test. */
 let mockStatus: Record<string, unknown> | null = null
@@ -66,11 +66,11 @@ beforeEach(() => {
 
 const renderPrompt = async () => {
   await act(async () => {
-    render(<MarketingConsentPrompt />)
+    render(<PlatformMarketingConsentPrompt />)
   })
 }
 
-describe('MarketingConsentPrompt', () => {
+describe('PlatformMarketingConsentPrompt', () => {
   it('asks when the server says the prompt is due', async () => {
     await renderPrompt()
     expect(await screen.findByText(/Want product updates from/)).toBeTruthy()

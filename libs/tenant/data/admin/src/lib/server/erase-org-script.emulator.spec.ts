@@ -77,6 +77,7 @@ import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { standInRequiredOrgErasersForTests } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
@@ -131,6 +132,14 @@ jest.mock('firebase-admin/storage', () => ({
 
 const describeEmulated = EMULATED ? describe : describe.skip
 const run = promisify(execFile)
+
+/**
+ * The marketplace's org eraser is REQUIRED (AGL-3080): an erasure refuses to
+ * run without it. The script registers the real one at boot through the
+ * console's manifest; the in-process calls here stand a no-op in for it,
+ * because this library may not load a plugin.
+ */
+beforeAll(() => standInRequiredOrgErasersForTests())
 
 describeEmulated('the manual erasure tool IS the served erasure (AGL-1481)', () => {
   let db: Firestore

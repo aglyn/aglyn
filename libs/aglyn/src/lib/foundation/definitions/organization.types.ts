@@ -26,7 +26,6 @@
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type { AccountAcquisition } from '../../app-utils/account-acquisition'
 import type {
-  OrgCrmInbound,
   OrgCrmSettings,
   OrgEntitlements,
   OrgPlan,
@@ -190,8 +189,6 @@ export interface AglynOrganization extends AglynDocument {
   defaultResourceScope?: 'org' | 'host'
   /** The CRM's organization-wide settings (AGL-2613) — see `OrgCrmSettings`. */
   crm?: OrgCrmSettings
-  /** The workspace's email capture address (AGL-2657) — see `OrgCrmInbound`. */
-  crmInbound?: OrgCrmInbound
 }
 
 /**

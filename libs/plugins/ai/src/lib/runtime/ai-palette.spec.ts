@@ -33,8 +33,8 @@ import {
 } from './ai-palette.generated'
 import { NODE_CAPABILITIES } from '@aglyn/aglyn/app-utils/node-capabilities'
 import {
-  MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
+  PORTABLE_COMPONENT_ID_ALLOWLIST,
+  PORTABLE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
 } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
 /**
@@ -70,7 +70,7 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
   })
 
   it('builds the page palette over the marketplace allowlist', () => {
-    for (const id of MARKETPLACE_COMPONENT_ID_ALLOWLIST) {
+    for (const id of PORTABLE_COMPONENT_ID_ALLOWLIST) {
       expect(AI_SURFACES.screen.allow).toContain(id)
     }
     // A component may also place an Icon, bound to an icon the site owner picks (AGL-3054).
@@ -85,7 +85,7 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
 
   it('builds the email palette over the starter allowlist', () => {
     expect([...AI_SURFACES.email.allow]).toEqual(
-      [...MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST].sort(),
+      [...PORTABLE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST].sort(),
     )
   })
 

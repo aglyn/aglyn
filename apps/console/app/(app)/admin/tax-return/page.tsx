@@ -49,24 +49,24 @@
  *
  * **Never let one taxpayer's table answer for another's** (AGL-1956). That
  * table used to call itself the economic-nexus early warning, and it reads
- * `platformRevenue` — Aglyn's own invoices. Nexus from MERCHANTS' sales is a
- * different taxpayer's money and is answered by "Facilitated sales by buyer
- * state" in the storefront card. Two adjacent tables, never one: the rule that
- * `platformRevenue` and `storefrontTaxCollected` are never summed is what
- * keeps both figures meaning something.
+ * `platformRevenue` — Aglyn's own invoices. Nexus from sales the platform
+ * facilitated for others is a different taxpayer's money and is answered by
+ * the facilitated-sales tables in each source's card. Adjacent tables, never
+ * one: the rule that the operator's own invoices and a facilitated sale are
+ * never summed is what keeps both figures meaning something.
  *
  * **Never claim a figure it did not compute.** Taxable purchases (use tax on
  * Aglyn's own purchases) is not in `platformRevenue`; the line says NOT
  * COMPUTED rather than printing a zero that would pass for a derived one.
  *
- * **Never leave a bucket in the JSON.** The route computes THREE sets of
- * figures and this page showed one (AGL-2163). Storefront (AGL-1904) reached
- * the screen only as an attention count and two Webfile footnotes; marketplace
- * (AGL-2137) did not reach it at all — two of the three buckets a human files
- * from existed only in a response nobody sees, which is the same failure this
- * page was raised to fix. Both are rendered below, each as its own card, each
- * with its own liability sentence, and with NO grand total anywhere: adding
- * them is the mistake the three-way split exists to prevent.
+ * **Never leave a bucket in the JSON.** The route computes a set of figures
+ * for the operator's own sales and one more for every plugin that sells
+ * through the platform's account (AGL-2163, AGL-3080), and a bucket that
+ * exists only in a response nobody sees is the failure this page was raised
+ * to fix. Each source is rendered as its own card, worded by the plugin that
+ * sold it, each with its own liability sentences, and with NO grand total
+ * anywhere: adding them is the mistake the split exists to prevent. A source
+ * the route could not read gets a card saying so, and blocks the verdict.
  *
  * Read-only, like the route: this page files nothing and writes nothing. The
  * filing happens at the authority's own keyboard — the Comptroller's Webfile,
@@ -74,6 +74,11 @@
  * the credentials ride along.
  */
 
+import type {
+  TaxReturnSection,
+  TaxReturnSectionCell,
+  TaxReturnSectionTable,
+} from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
@@ -114,15 +119,215 @@ import {
   taxReturnAttention,
   taxReturnCsv,
   taxReturnCsvFilename,
-  taxReturnFacilitatedJurisdictionRows,
   taxReturnFilingLines,
   taxReturnJurisdictionRows,
-  taxReturnMarketplaceLines,
   taxReturnPeriodOptions,
   taxReturnRegistration,
-  taxReturnStorefrontRows,
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
+
+/**
+ * ONE FACILITATED-SALES SOURCE on the return (AGL-2163, AGL-3080).
+ *
+ * The sales the operator facilitated for others are each a plugin's to read,
+ * classify and word — the route asks every declared source through
+ * `plugin-tax-return-sources`, and this card draws whatever a source
+ * answered: its introduction, its tables, its label/value figures and the
+ * note a truncated read owes the reader. It names no plugin and holds no
+ * sentence about any plugin's sales; every word about them is the source's.
+ *
+ * A REFUSED source draws a card too, in error. Its sales are in no figure on
+ * the page and the verdict above blocks on it; a card that simply went
+ * missing would look exactly like a source with nothing to report.
+ */
+interface TaxReturnSourceCardProps {
+  section: TaxReturnSection
+}
+
+/** The first cell of a source's row: its text, its tag and its caption. */
+function LeadCell({ cell }: { cell: TaxReturnSectionCell }) {
+  const line = (
+    <Stack
+      direction="row"
+      spacing={1}
+      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+    >
+      <Typography variant="body2">{cell.text}</Typography>
+      {cell.tag ? (
+        <Chip
+          size="small"
+          {...(cell.tag.tone === 'attention'
+            ? { color: 'warning' as const }
+            : { variant: 'outlined' as const })}
+          label={cell.tag.label}
+        />
+      ) : null}
+    </Stack>
+  )
+  if (!cell.caption) return line
+  return (
+    <Stack spacing={0.5}>
+      {line}
+      <Typography variant="caption" color="text.secondary">
+        {cell.caption}
+      </Typography>
+    </Stack>
+  )
+}
+
+function SourceTable({
+  table,
+  first,
+}: {
+  table: TaxReturnSectionTable
+  first: boolean
+}) {
+  return (
+    <>
+      {table.heading ? (
+        <Typography variant="subtitle2" sx={{ mt: first ? 0 : 3 }}>
+          {table.heading}
+        </Typography>
+      ) : null}
+      {table.description ? (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mt: 0.5, mb: 1.5 }}
+        >
+          {table.description}
+        </Typography>
+      ) : null}
+      <ScrollTable size="small">
+        <TableHead>
+          <TableRow>
+            {table.columns.map((column, index) => (
+              <TableCell
+                key={`${index}:${column.label}`}
+                {...(column.numeric ? { align: 'right' as const } : {})}
+              >
+                {column.label}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {table.rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={Math.max(1, table.columns.length)}>
+                <Typography variant="body2" color="text.secondary">
+                  {table.empty}
+                </Typography>
+              </TableCell>
+            </TableRow>
+          ) : (
+            table.rows.map((row) => (
+              <TableRow key={row.key}>
+                {row.cells.map((cell, index) => {
+                  const column = table.columns[index]
+                  return (
+                    <TableCell
+                      key={index}
+                      {...(column?.numeric ? { align: 'right' as const } : {})}
+                      sx={{
+                        ...(column?.money ? { fontFamily: 'monospace' } : {}),
+                        ...(cell.strong ? { fontWeight: 600 } : {}),
+                      }}
+                    >
+                      {index === 0 ? <LeadCell cell={cell} /> : cell.text}
+                    </TableCell>
+                  )
+                })}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </ScrollTable>
+      {table.footnote ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: 1.5 }}
+        >
+          {table.footnote}
+        </Typography>
+      ) : null}
+    </>
+  )
+}
+
+function TaxReturnSourceCard({ section }: TaxReturnSourceCardProps) {
+  if (section.outcome !== 'answered') {
+    return (
+      <CardDisplay
+        header={`Sales from the “${section.pluginId}” plugin`}
+        help={docsHelp('salesTaxReturn', {
+          anchor: '#the-figures',
+          excerpt:
+            'Sales a plugin made through the platform that could not be read for this period. They are in no figure on this page, and the return is not to be filed until they are.',
+        })}
+        contentGutterX
+        contentGutterY
+      >
+        <Alert severity="error">
+          {`${section.reason} None of its sales are in any figure on this ` +
+            'page. Do not file from this.'}
+        </Alert>
+      </CardDisplay>
+    )
+  }
+  return (
+    <CardDisplay
+      header={section.title}
+      help={docsHelp('salesTaxReturn', {
+        anchor: '#the-figures',
+        excerpt: section.help,
+      })}
+      contentGutterX
+      contentGutterY
+    >
+      {section.intro ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          {section.intro}
+        </Typography>
+      ) : null}
+      {section.tables.map((table, index) => (
+        <SourceTable
+          key={`${index}:${table.heading ?? ''}`}
+          table={table}
+          first={index === 0}
+        />
+      ))}
+      {section.figures.length ? (
+        <Stack spacing={1} sx={{ mt: section.tables.length ? 3 : 0 }}>
+          {section.figures.map((line) => (
+            <Stack key={line.label} spacing={0.25}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ justifyContent: 'space-between' }}
+              >
+                <Typography variant="body2">{line.label}</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                  {line.value}
+                </Typography>
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                {line.note}
+              </Typography>
+            </Stack>
+          ))}
+        </Stack>
+      ) : null}
+      {section.truncated ? (
+        <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+          {`${section.name} rows exceeded the row cap — these figures are ` +
+            'a lower bound.'}
+        </Typography>
+      ) : null}
+    </CardDisplay>
+  )
+}
 
 const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
@@ -245,20 +450,11 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     () => taxReturnJurisdictionRows(payload),
     [payload],
   )
-  // The other two of the three buckets the route computes (AGL-2163).
-  // Facilitated sales BY STATE (AGL-1956) — already computed server-side and
-  // already in this payload; nothing rendered it, so the nexus question had no
-  // answer on any screen. See `taxReturnFacilitatedJurisdictionRows`.
-  const facilitatedByState = useMemo(
-    () => taxReturnFacilitatedJurisdictionRows(payload),
-    [payload],
-  )
-  const storefrontBuckets = useMemo(
-    () => taxReturnStorefrontRows(payload),
-    [payload],
-  )
-  const marketplaceLines = useMemo(
-    () => taxReturnMarketplaceLines(payload),
+  // Every facilitated-sales source the route read, answered or refused
+  // (AGL-2163/3080). Nothing is rendered for them until the response has
+  // said which sources there are.
+  const sources = useMemo(
+    () => (Array.isArray(payload?.sources) ? payload.sources : []),
     [payload],
   )
 
@@ -752,326 +948,29 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
             />
 
             {/*
-              THE SECOND BUCKET (AGL-1904/2163): tax on MERCHANTS' storefront
-              sales. Split by who owes it, never summed — `aglynLiable` is
-              money in Aglyn's balance under Aglyn's own registrations, and
-              `merchantManual` never touched them. One "storefront tax" total
-              would merge those two facts into a number that is true of
-              neither.
+              THE SALES THE OPERATOR FACILITATED FOR OTHERS (AGL-2163/3080).
+              One card per source, each read and worded by the plugin that
+              sold it and each with its own liability sentences — and NO grand
+              total anywhere: adding them is the mistake the split exists to
+              prevent. A source that could not be read gets a card saying so,
+              beside the blocking finding above.
             */}
-            <CardDisplay
-              header={'Storefront commerce tax — merchants’ sales'}
-              help={docsHelp('salesTaxReturn', {
-                anchor: '#the-figures',
-                excerpt:
-                  'Tax charged to shoppers on merchants’ storefronts, split by who owes it. None of it is in the filing figures above.',
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mb: 1.5 }}
-              >
-                {`None of this is in the ${
-                  filing.form === 'tx-webfile' ? 'Webfile' : 'breakdown'
-                } figures above, which sum ` +
-                  'Aglyn’s OWN sales only. The first row is the one that ' +
-                  'needs a decision: those sessions are created on Aglyn’s ' +
-                  'platform account, so Stripe computed that tax against ' +
-                  'Aglyn’s registrations and it settled into Aglyn’s balance.'}
-              </Typography>
-              <ScrollTable size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'Bucket'}</TableCell>
-                    <TableCell align="right">{'Sales'}</TableCell>
-                    <TableCell align="right">{'Gross'}</TableCell>
-                    <TableCell align="right">{'Taxable sales'}</TableCell>
-                    <TableCell align="right">{'Tax collected'}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {storefrontBuckets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5}>
-                        <Typography variant="body2" color="text.secondary">
-                          {payload
-                            ? 'This period’s response carries no storefront figures.'
-                            : loading
-                              ? 'Loading…'
-                              : '—'}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    storefrontBuckets.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell>
-                          <Stack spacing={0.5}>
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                            >
-                              <Typography variant="body2">
-                                {row.label}
-                              </Typography>
-                              {row.aglynLiable ? (
-                                <Chip
-                                  size="small"
-                                  color="warning"
-                                  label="Aglyn holds this"
-                                />
-                              ) : null}
-                            </Stack>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {row.liability}
-                            </Typography>
-                          </Stack>
-                        </TableCell>
-                        <TableCell align="right">
-                          {row.transactionCount}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ fontFamily: 'monospace' }}
-                        >
-                          {`$${row.grossDollars}`}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ fontFamily: 'monospace' }}
-                        >
-                          {`$${row.taxableSalesDollars}`}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            fontFamily: 'monospace',
-                            fontWeight: row.aglynLiable ? 600 : 400,
-                          }}
-                        >
-                          {`$${row.taxCollectedDollars}`}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </ScrollTable>
-              {payload?.storefront?.truncated ? (
-                <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-                  {'Storefront rows exceeded the row cap — these figures are ' +
-                    'a lower bound.'}
-                </Typography>
-              ) : null}
-
-              {/*
-                WHERE THE SHOPPERS WERE (AGL-1956). Aglyn is a marketplace
-                facilitator, so every state asks the same question — how much
-                did you facilitate into me, in how many transactions — and
-                nothing on any screen could answer it. The figures were already
-                being computed by `storefrontTaxSummary` and already arriving in
-                this payload; only the rendering was missing.
-
-                The three liability buckets are SUMMED here, deliberately: a
-                threshold counts the sale whoever remits the tax. Who remits is
-                still carried per row, so the nexus question and the "what do we
-                owe" question stay separable.
-              */}
-              <Typography variant="subtitle2" sx={{ mt: 3 }}>
-                {'Facilitated sales by buyer state'}
-              </Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 0.5, mb: 1.5 }}
-              >
-                {'What Aglyn facilitated into each state, whoever remits the ' +
-                  'tax — the figure an economic-nexus threshold is measured ' +
-                  `against. ${filingName} needs no threshold: the filer is ` +
-                  'established there, so the obligation is unconditional. A ' +
-                  'region showing sales and no tax is the one to watch.'}
-              </Typography>
-              <ScrollTable size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'Buyer state'}</TableCell>
-                    <TableCell align="right">{'Sales'}</TableCell>
-                    <TableCell align="right">{'Total sales'}</TableCell>
-                    <TableCell align="right">{'Tax collected'}</TableCell>
-                    <TableCell align="right">{'Of which Aglyn owes'}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {facilitatedByState.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5}>
-                        <Typography variant="body2" color="text.secondary">
-                          {payload
-                            ? 'No storefront sales recorded in this period.'
-                            : loading
-                              ? 'Loading…'
-                              : '—'}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    facilitatedByState.map((row) => (
-                      <TableRow key={row.jurisdiction}>
-                        <TableCell>
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                          >
-                            <Typography variant="body2">
-                              {row.jurisdiction === 'unknown'
-                                ? 'Not stated'
-                                : row.jurisdiction}
-                            </Typography>
-                            {row.isFilingJurisdiction ? (
-                              <Chip
-                                size="small"
-                                color="warning"
-                                label="Registered"
-                              />
-                            ) : row.untaxed ? (
-                              <Chip
-                                size="small"
-                                variant="outlined"
-                                label="No tax collected"
-                              />
-                            ) : null}
-                          </Stack>
-                        </TableCell>
-                        <TableCell align="right">
-                          {row.transactionCount}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ fontFamily: 'monospace' }}
-                        >
-                          {`$${row.totalSalesDollars}`}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ fontFamily: 'monospace' }}
-                        >
-                          {`$${row.taxCollectedDollars}`}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{
-                            fontFamily: 'monospace',
-                            fontWeight:
-                              Number(row.aglynLiableTaxDollars) > 0 ? 600 : 400,
-                          }}
-                        >
-                          {`$${row.aglynLiableTaxDollars}`}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </ScrollTable>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: 'block', mt: 1.5 }}
-              >
-                {'A LOWER BOUND. A storefront sale that collected no tax at ' +
-                  'all files no row, so it is missing here — which is exactly ' +
-                  'the population a nexus check wants. Recorded on AGL-1956.'}
-              </Typography>
-            </CardDisplay>
-
-            {/*
-              THE THIRD BUCKET (AGL-2137/2163). One liability arm, not three:
-              marketplace checkout adds the tax EXCLUSIVE on the platform's own
-              charge and pays the publisher from the pre-tax price, so all of
-              it is Aglyn's. The platform total leads and the per-state split
-              follows it, including the part that has no state: purchases
-              recorded before the webhook stored a jurisdiction have none and
-              are not given one, so a "Texas" slice presented as the whole
-              answer would be a guess printed as a total.
-            */}
-            <CardDisplay
-              header={'Marketplace tax — plugin and theme purchases'}
-              help={docsHelp('salesTaxReturn', {
-                anchor: '#the-figures',
-                excerpt:
-                  'Tax on marketplace purchases. Charged on the platform’s own charge, kept platform-side, and in no filing line above.',
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mb: 1.5 }}
-              >
-                {'All of this tax is Aglyn’s: it is added on top of the ' +
-                  'listing price on Aglyn’s own charge, and the publisher’s ' +
-                  'transfer is computed from the pre-tax price. Each purchase ' +
-                  'records the jurisdiction Stripe computed its tax for, so ' +
-                  'the total below breaks down by state. Purchases recorded ' +
-                  'before that carry no jurisdiction and are counted as ' +
-                  'such rather than placed — read those in Stripe.'}
-              </Typography>
-              <Stack spacing={1}>
-                {marketplaceLines.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {payload
-                      ? 'This period’s response carries no marketplace figures.'
-                      : loading
-                        ? 'Loading…'
-                        : '—'}
-                  </Typography>
-                ) : (
-                  marketplaceLines.map((line) => (
-                    <Stack key={line.label} spacing={0.25}>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ justifyContent: 'space-between' }}
-                      >
-                        <Typography variant="body2">{line.label}</Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontFamily: 'monospace' }}
-                        >
-                          {line.value}
-                        </Typography>
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {line.note}
-                      </Typography>
-                    </Stack>
-                  ))
-                )}
-              </Stack>
-              {payload?.marketplace?.truncated ? (
-                <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-                  {'Marketplace rows exceeded the row cap — these figures are ' +
-                    'a lower bound.'}
-                </Typography>
-              ) : null}
-            </CardDisplay>
+            {sources.map((section) => (
+              <TaxReturnSourceCard
+                key={`${section.pluginId}:${section.id}`}
+                section={section}
+              />
+            ))}
 
             {/*
               THE LABEL WAS WRITING A CHEQUE THE SOURCE COULD NOT CASH
               (AGL-1956). This card reads `payload.summary`, which is
               `platformRevenue` — AGLYN'S OWN SaaS invoices. It nonetheless
               called itself "the early-warning list for economic nexus in
-              another state", which is a question about FACILITATED storefront
-              sales and is answered by the by-state table in the storefront card
-              above. A staff reader checking nexus would have read Aglyn's
-              subscription revenue and believed it was merchant sales.
+              another state", which is a question about FACILITATED sales and
+              is answered by the by-state tables in the source cards above. A
+              staff reader checking nexus would have read Aglyn's subscription
+              revenue and believed it was merchant sales.
 
               Relabelled rather than resourced: the two collections describe two
               different taxpayers' money and must never be summed, so the fix is

@@ -125,7 +125,7 @@ export function registerAiConsole(): void {
     ],
     widgets: [
       {
-        slot: 'assistPanel',
+        slot: 'consoleDock',
         widgetId: 'ai-assist-dock',
         title: 'Assistant',
         Component: AssistPanelOnHost,

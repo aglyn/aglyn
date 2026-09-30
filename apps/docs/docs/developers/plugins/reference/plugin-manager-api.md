@@ -121,6 +121,7 @@ a component the first did not still reaches the plugin.
 | `registerPluginApiRoute(path, handler, options?)` | Registers a path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. `path` may carry `:name` segments (`ai/jobs/:jobId/cancel`); an exact registration wins over a pattern. `options.subject` names the organization (and, for a signed tokenless redirect, the account) a request is for when it names no site — see [Naming the subject](../guides/server-apis.md#route-subject). |
 | `resolvePluginApiRequestSubject(path, request)` | What a dispatcher asks before its release gate when no `hostId` was named: the declared resolver's answer, read from a clone, or `null` for an undeclared route, a resolver that threw, or ids that are not plain path segments. |
 | `options.recipientLink` / `isPluginRecipientLinkRoute(path)` | A route that answers a link the platform mailed to somebody — an unsubscribe in a `List-Unsubscribe` header. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown and the rate limit still apply. An opt-out has to keep working after its plugin is paused for the workspace (CAN-SPAM holds it open for thirty days after the send), so the route authenticates the link itself, by a signature it verifies. |
+| `options.machine` / `isPluginMachineRoute(path)` | A route a machine calls — a scheduler's sweep on the cron secret, a provider's signed webhook — that names no site and no member. Both dispatchers skip their per-site enablement and release gates for it, and exempt it from their write limit and cross-origin check (`isMachinePluginApiPath` answers `true` for it); lockdown still applies. The flag grants nothing by itself: the route authenticates its caller, and judges the plugin's release and plan for each organization it resolves. |
 | `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
 | `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
@@ -133,6 +134,7 @@ a component the first did not still reaches the plugin.
 | `registerSiteRedirectResolver(fn)` | Runs before route resolution; first non-null redirect wins. |
 | `registerSitePageResolver(fn)` | Composes plugin-owned pages (commerce PDP/PLP). |
 | `registerSitePageEnricher(fn)` | Contributes page-prop slices to every page that renders nodes — published screens, collection routes, designed auth screens and a resolver's own page alike; a resolver's keys win, and `pageData` merges per plugin. Gated screens (password-protected, members-only) enrich behind the gate and deliver the slice with their nodes. The designed 404 body sets `pathUnknown` — it is cached per host, so contribute only what does not depend on a path and never substitute one. Maintenance, lockdown and bandwidth-containment notices are not enriched. **Enricher errors are isolated** — a broken plugin drops its slice, never the page. |
+| `registerRepeatRowReader(sourceId, reader, { pluginId })` (`plugin-manager/repeat-rows`) | Answers the rows a published page repeats an element over: the composition calls `readRepeatRows({ hostId, keys })` with the keys its tree repeats over and renders what comes back, naming no collection itself. Register from your `serverDeclarations` entry, loading the reader with `import()` inside the function, and declare the same source in `plugins.config.json` (`"repeatSource": { "id": … }`, one plugin at most). A declared source with no registered reader is **refused, not emptied**: the app's declarations step runs once more and the render then throws, so a broken boot keeps the last good page instead of turning every list into one row. A key your reader cannot answer is left out, and that element renders once, as written. The editor's canvas preview is the separate `registerRepeatSource` (`app-utils/repeat-sources`). |
 
 ## Stylesheets — `plugin-styles`
 
@@ -425,6 +427,47 @@ every plugin's server entry before a plugin handler runs, so a reader
 registered from a server registrar is there wherever a handler asks. Import it
 by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-cards`).
 
+## Record indexes — `plugin-record-index` (`/server`)
+
+The records a plugin keeps, LISTED and READ for another plugin that works over
+them — an AI job enriching a catalog, a composer binding the products an email
+names — without that plugin reaching for the owner's collection. Keyed by
+record kind, like the card, the facts reader and the route; a card says how a
+record LOOKS, an index finds records and reads what the owner shares about
+them.
+
+```ts
+// the owner, from its serverDeclarations (so every server process has it)
+registerPluginRecordIndex('bottle', {
+  async list({ hostId, limit }) {
+    const rows = await readBottles(hostId, limit + 1)
+    return {
+      records: rows.slice(0, limit).map((b) => ({ id: b.id, name: b.name, facts: { vintage: b.vintage } })),
+      truncated: rows.length > limit,
+    }
+  },
+  async get({ hostId, id }) {
+    const b = await readBottle(hostId, id)
+    return b ? { id: b.id, name: b.name, facts: { vintage: b.vintage } } : null
+  },
+})
+
+// any other plugin's server code
+const bottles = pluginRecordIndex('bottle')?.index
+const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { records: [] }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordIndex(kind, index, { pluginId? })` | A kind another plugin keeps throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `pluginRecordIndex(kind)` | `{ pluginId, index }`, or **`null` when no plugin keeps the kind here** — a reader treats that as "none here", never as a reason to read the collection itself. The `pluginId` is also how a reader asks whether the keeper is switched on for a site. |
+| `index.list({ orgId?, hostId?, limit })` / `index.get({ orgId?, hostId?, id })` | Live, named records only — the owner decides what "deleted" is — each `{ id, name, facts }`, with `facts` in the shape the owner documents. `truncated` says the scope holds more. |
+
+Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
+Commerce publishes `product` and `productCategory`; Workflows publishes a site's
+`workflow`, `webhook` and `action` records (a webhook's facts never carry its URL
+or secret).
+
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The
@@ -460,6 +503,96 @@ working build — both apps load every plugin's server entry before a plugin
 handler, a cron or the billing webhook runs — and
 `tax-profile-is-registered.spec.ts` in each app runs the real registrars and
 holds the real rule, because a plugin's own spec may not import the owner.
+
+## Sales on the operator's tax return — `plugin-tax-return-sources`
+
+The operator of a deployment files a sales tax return for the sales it
+FACILITATED, not only its own. If your plugin sells through the platform's own
+account — tax Stripe computes against the operator's registrations lands in the
+operator's balance — your sales belong on that return. The return is the
+platform's: the period, the jurisdiction and registration, the verdict and the
+export. What you sold, how each row classifies and who is liable for it, and
+the words a preparer reads about it, are yours.
+
+```ts
+import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+
+// from your consoleApi registrar
+registerTaxReturnSource({
+  // One period, worded for request.filing (the jurisdiction being filed),
+  // read under request.rowCap.
+  read: async (request) => ({
+    id: 'tickets', name: 'Ticket', title: 'Ticket sales tax', help: '…', intro: '…',
+    truncated: false,      // true when you stopped at request.rowCap
+    undatedRows: 0,        // rows no date range can reach
+    findings: [{ id: 'ticketTaxHeld', severity: 'blocking', count: 825, label: '…', detail: '…' }],
+    filingLines: [],       // lines beneath the filing figures, for request.filing.form
+    tables: [], figures: [],
+    exports: [{ placement: 'sections', rows: [['Ticket tax'], ['Held', '8.25']] }],
+    summary, rows,         // your own figures and rows, carried whole for the audit
+  }),
+}, { pluginId: 'tickets' })
+```
+
+And declare it, in `plugins.config.json`:
+
+```json
+{ "id": "tickets", "taxReturnSource": true }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readTaxReturnSources(request)` | Every source's answer, declared sources first. **Never throws, never drops a declared source.** |
+| `PLUGIN_TAX_RETURN_SOURCES` | The plugins that declared `taxReturnSource`, compiled from the config. |
+
+**An unread source refuses the return.** A declared plugin that registered no
+source, a source that threw, and an answer with a malformed finding each come
+back `outcome: 'refused'`, and the return raises a blocking "do not file"
+finding. So do a read that stopped at the cap and rows no period can reach,
+whatever the source's own findings say. The declaration is what makes a
+missing registration a refusal: a registry alone cannot tell "nothing
+registered" from "nothing sold". `sales-sources-are-registered.spec.ts`
+runs the real registrars through the console's manifest.
+
+## Earnings on the operator's revenue report — `plugin-revenue-sources`
+
+The staff revenue report states what the deployment actually kept. If your
+plugin earns the operator a take — a commission, an application fee — on
+sales through the platform's account, it answers for that take here: what it
+earned net of everything that is not the operator's, the gross-to-net lines
+that show why, and who produced it.
+
+```ts
+import {
+  groupRevenueAttribution,
+  registerRevenueSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
+
+registerRevenueSource({
+  read: async (request) => {
+    // Page your own period query under the report's ceiling…
+    const { docs, truncated } = await request.sweep(query, 'createdAt')
+    // …group by who earned it, capped at the report's own limit…
+    const byTicket = groupRevenueAttribution(entries, request.attributionLimit, 'Ticket not recorded')
+    // …and name only the rows that will be shown.
+    await request.nameRows(byTicket.rows, { collection: 'tickets', nameField: 'title', detailField: 'venue' })
+    return {
+      id: 'tickets', name: 'ticket sales',
+      earned: { label: 'Ticket commission', cents, note: '…' },
+      grossToNet: [/* { label, cents, deduction, note } */],
+      notes: [], attribution: [{ id: 'byTicket', heading: '…', unit: 'Ticket', countLabel: 'Sales', empty: '…', ...byTicket }],
+      truncated, failure: null, summary,
+    }
+  },
+}, { pluginId: 'tickets' })
+```
+
+Declare it with `"revenueSource": true` in `plugins.config.json`. A declared
+source that registered nothing, threw or answered a malformed report comes back
+`outcome: 'refused'`; the report counts none of its earnings and says whose
+are missing. A read that could not run at all answers `failure` rather than a
+cap — "we read none of it" and "we read part of it" have different remedies.
 
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 
@@ -631,6 +764,45 @@ carry the org, site, scope and media id a URL was minted for, and grant nothing.
 A video is served from the provider only when the `release_video_delivery` flag,
 off by default, is on for its org and a copy of its current bytes exists;
 everything else serves from the platform exactly as before.
+
+## Site analytics tags — `analytics-provider`
+
+A site can send its visitors' measurement to an analytics vendor it chose, by
+saving an id in its analytics settings. The platform owns everything around
+that tag — whether the visitor may be measured, the consent banner, the
+first-party pageview beacon that meters the site — and names no vendor. A
+plugin's adapter knows the vendor: what its tag looks like on the page, how a
+resident tag is told the visitor's answer changed, and how an event reaches it.
+
+The adapter is declared in `plugins.config.json`, not registered from code:
+
+```json
+"analyticsProvider": {
+  "module": "analytics-provider",
+  "settings": ["gaMeasurementId", "gtmContainerId"]
+}
+```
+
+- `settings` are the site analytics settings the adapter mounts a tag for. They
+  are compiled into core (`ANALYTICS_PROVIDERS_DECLARED`), because the consent
+  gate asks "does this site run a tag?" during render, before any adapter has
+  loaded. A setting no provider declares configures nothing, and a site with no
+  tag asks its visitors nothing. Two providers may not declare one setting.
+- `module` is the adapter's subpath. The generator writes it into each app's
+  `plugins.analytics.generated.ts` as an `import()`: a published page fetches it
+  only when its site configures a tag, and the console fetches it for the tag
+  its own analytics SDK injects. The module exports `analyticsProvider`.
+
+| API | Semantics |
+| --- | --- |
+| `provider.mounts(host, { consentRequired, advertising })` | The tags a granted pageview mounts, in order: `{ id, boot, src, library? }`. The page renders each as an inline `${id}-init` and a library `${id}-src`, under the consent gate, with the request's nonce. `boot` is inline script, built from constants and format-checked ids only. |
+| `provider.applyConsent({ analytics, advertising })` | Make every resident tag of the vendor agree with the answer; returns the ids it acted on. Called when a visitor's answer changes, and on registration with the last answer given in the document. |
+| `provider.resident()` / `provider.sendEvent(name, params, { measurementOnly? })` | Whether a tag is resident, and one event to it. `measurementOnly` addresses the measurement property only, not an advertising destination sharing the library. |
+| `hostConfiguresAnalyticsTag(host)` (`visitor-consent`) | Whether a declared setting is present and well formed. |
+| `applyAnalyticsConsent(grants)`, `sendAnalyticsProviderEvent(...)`, `analyticsTagResident()` | Core's side: what the consent writer and the Core Web Vitals reporter call. |
+
+The pageview beacon (`/api/analytics/collect`) is not a tag and never goes
+through this contract: it is the platform's metered door.
 
 ## Platform events — `plugin-events` (`/server`)
 

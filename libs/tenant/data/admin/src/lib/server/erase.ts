@@ -38,6 +38,7 @@ import {
   type PluginUserErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import {
+  PLUGIN_ORG_KEYED_COLLECTIONS,
   runPluginOrgErasers,
   type PluginOrgErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
@@ -83,35 +84,6 @@ function storageBucket() {
  * so a rename fails a test rather than silently un-wiring this sweep.
  */
 const SUPPLIER_DELIVERY_COLLECTION = 'supplierDeliveries'
-
-/**
- * `outreachMailboxCredentials` — the OAuth grant behind each mailbox a rep
- * connects to Outreach, keyed by the mailbox id and carrying `orgId` as a
- * FIELD.
- *
- * The literal rather than an import, for `SUPPLIER_DELIVERY_COLLECTION`'s
- * reason: the collection belongs to `libs/plugins/outreach`
- * (`OUTREACH_COLLECTIONS.mailboxCredentials` in
- * `src/lib/model/outreach.types.ts`), and this `scope:data` library may not
- * import a plugin. The plugin's own spec asserts the two spellings agree, so
- * a rename fails a test rather than silently un-wiring the sweep.
- *
- * A static sweep here, not a hook the plugin registers, because an erasure
- * cannot rely on the plugin being present. An org that switched Outreach off
- * still holds the tokens its reps granted, and the process running the
- * erasure — the cron, the operator script, a replay — may never have loaded
- * the plugin's bundle at all. A credential's lifetime cannot depend on which
- * bundles an erasing process happened to load.
- */
-const OUTREACH_MAILBOX_CREDENTIALS_COLLECTION = 'outreachMailboxCredentials'
-
-/**
- * `outreachLinks` — Outreach's short tracking links (AGL-3297), one document
- * per link in a sent sequence email, keyed by the link's random id and
- * carrying `orgId` as a FIELD. A literal for the reason above, held to the
- * plugin's spelling by the same spec.
- */
-const OUTREACH_LINKS_COLLECTION = 'outreachLinks'
 
 /**
  * Destroy the site's DEAD-LETTERED supplier deliveries (AGL-1448).
@@ -452,35 +424,25 @@ async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
 }
 
 /**
- * Delete every Outreach mailbox credential the org holds (AGL-2974).
+ * Sweep every top-level plugin collection keyed by this org (AGL-3080).
  *
- * `outreachMailboxCredentials` is a TOP-LEVEL collection keyed by the mailbox
- * id and carrying `orgId` as a FIELD, so `recursiveDelete(orgRef)` cannot see
- * it — the blindness `eraseOrgApiKeys` answers, on a more dangerous document.
- * Left standing, the OAuth grant a rep gave for their own mailbox would
- * outlive the workspace it was given to: tokens that can still send as that
- * person, held for an organization that no longer exists and that nobody can
- * ask to disconnect them.
+ * The collections are the plugins' own, DECLARED by each owner in
+ * `plugins.config.json` (`orgKeyedCollections`) and compiled into core, so the
+ * sweep names none of them and runs in every process whether or not the
+ * owner is loaded. Sequential and field-bounded like every other org-keyed
+ * sweep: each of these collections holds every other workspace's rows too.
  *
- * This destroys the platform's copy of the grant; it does not call the
- * provider's revocation endpoint, which needs the plugin's provider adapter.
- * With the tokens gone the grant has nothing left to act through.
- *
- * Bounded by the `orgId` field, never a collection sweep: this collection
- * holds every other workspace's connected mailboxes too.
- *
- * Returns the number destroyed, for the audit row — an erasure trail that
- * understates what it removed is the one record that has to be right.
+ * Returns the count destroyed per collection, for the audit row.
  */
-async function eraseOrgOutreachMailboxCredentials(
+async function erasePluginOrgKeyedCollections(
   orgId: string,
   dryRun = false,
-): Promise<number> {
-  return deleteDocsByOrgId(
-    OUTREACH_MAILBOX_CREDENTIALS_COLLECTION,
-    orgId,
-    dryRun,
-  )
+): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {}
+  for (const { name, orgField } of PLUGIN_ORG_KEYED_COLLECTIONS) {
+    counts[name] = await deleteDocsByOrgId(name, orgId, dryRun, orgField)
+  }
+  return counts
 }
 
 /**
@@ -525,12 +487,13 @@ async function deleteDocsByOrgId(
   collection: string,
   orgId: string,
   dryRun = false,
+  orgField = 'orgId',
 ): Promise<number> {
   if (!orgId) return 0
   const firestore = firebaseAdmin.app().firestore()
   const rows = await firestore
     .collection(collection)
-    .where('orgId', '==', orgId)
+    .where(orgField, '==', orgId)
     .get()
   if (dryRun) return rows.size
   for (let index = 0; index < rows.docs.length; index += 400) {
@@ -836,103 +799,6 @@ async function eraseOrgHostMemberships(
 }
 
 /**
- * What an erasure did with `publisherProfiles/{orgId}` (AGL-1970).
- *
- * Three outcomes rather than a boolean, because the third one is a decision
- * the audit row has to be able to state: a listing the erased org published
- * can outlive it, and a listing whose publisher document is simply gone is
- * unattributable in a way nobody chose.
- */
-export type PublisherProfileDisposition = 'absent' | 'deleted' | 'tombstoned'
-
-/**
- * Drop the org's PUBLIC marketplace identity — the profile and every handle
- * it reserved (AGL-1970).
- *
- * Both survived every erasure until now, and both are `allow read: if true`
- * (`cloud/firebase-firestore.rules`, `match /publisherProfiles/{orgId}`). This
- * is the AGL-1448 shape with one twist that is the whole reason it was missed:
- * `publisherProfiles` is keyed by the org id **as the document id**, so it is
- * invisible to `deleteDocsByOrgId` *and* to a reader scanning this file for
- * the field-keyed sweep list. Nothing prompts you to notice it.
- *
- * What survived is not cosmetic. `stripeAccountId` is a **payout
- * destination** — written server-side only after Connect onboarding/KYC and
- * trusted by every checkout path — so an erased org stayed world-readable with
- * a live payment-account identifier attached to a dead identity. That is the
- * `stripeCustomers` correlation AGL-1448 removed, pointing the other way.
- *
- * `publisherHandles` is the easy half and goes unconditionally: it carries
- * `orgId` as a FIELD, so `deleteDocsByOrgId` fits exactly, and it is a **live
- * reservation** — `claimPublisherHandle` refuses a handle another org's row
- * names, so a ghost holds a marketplace name against a real customer with no
- * way to appeal. That is the `ssoDomains` argument verbatim, and absence is
- * again the only state that both stops the read and releases the name. Rename
- * tombstones (`{ orgId, movedTo }`) carry the same `orgId` and go with it, and
- * the field bound is what makes that safe: re-claiming a tombstone FULL-
- * REPLACES it with the new owner's `{ orgId }`, so a handle this org renamed
- * away from and somebody else has since taken does not match the query.
- *
- * **The profile is the half with a genuine tension, and it is resolved here
- * rather than deferred.** `marketplaceListings` outlives an erasure — that is
- * AGL-1448's parked Tier 3 product decision, an erased org's listing being
- * something buyers paid for — so deleting the publisher document outright can
- * leave a listing attributed to nothing. So:
- *
- *   - **No surviving listing** → `recursiveDelete` the profile. `deleted`.
- *     `recursiveDelete` and not `delete`: `publish-plugin` keeps its daily
- *     publish-rate window at `publisherProfiles/{orgId}/meta/publishWindow`,
- *     and a document delete would orphan it under a path with no owner.
- *   - **A listing survives** → the same `recursiveDelete`, then a minimal
- *     `{ erased: true, erasedAt }` in its place. `tombstoned`. The tombstone
- *     carries no `handle`, no `displayName`, no `bio`/`avatarUrl`/`website`,
- *     no `publisherAgreement` and — the point — no `stripeAccountId`. It is
- *     "an internal record that the erasure happened", which is exactly what
- *     the Privacy Policy §5 sentence reserves; every byte the sentence calls
- *     content is gone either way. Readers already handle it: with no `handle`,
- *     `resolvePublisherProfile` returns `null`, which is the pre-existing
- *     "this org has no profile" path.
- *
- * The count of surviving listings is returned either way, so an erasure that
- * left something standing SAYS SO in its audit row instead of reporting a
- * clean success — the Tier 3 decision is still open, and an erasure is the
- * one place its cost is measurable.
- */
-async function eraseOrgPublisherIdentity(
-  orgId: string,
-  dryRun = false,
-): Promise<{
-  handles: number
-  profile: PublisherProfileDisposition
-  listingsRetained: number
-}> {
-  const firestore = firebaseAdmin.app().firestore()
-  const handles = await deleteDocsByOrgId('publisherHandles', orgId, dryRun)
-  const profileRef = firestore.collection('publisherProfiles').doc(orgId)
-  const [profileSnapshot, listings] = await Promise.all([
-    profileRef.get(),
-    // `profileId` is the listing's publishing-org id (AGL-652) — the same
-    // value as this profile's document id, under the older field name.
-    firestore.collection('marketplaceListings').where('profileId', '==', orgId).get(),
-  ])
-  const listingsRetained = listings.size
-  if (!profileSnapshot.exists) {
-    return { handles, profile: 'absent', listingsRetained }
-  }
-  if (dryRun) {
-    return {
-      handles,
-      profile: listingsRetained ? 'tombstoned' : 'deleted',
-      listingsRetained,
-    }
-  }
-  await firestore.recursiveDelete(profileRef)
-  if (!listingsRetained) return { handles, profile: 'deleted', listingsRetained }
-  await profileRef.set({ erased: true, erasedAt: FieldValue.serverTimestamp() })
-  return { handles, profile: 'tombstoned', listingsRetained }
-}
-
-/**
  * Destroy every support ticket the org opened, and the messages under each
  * (AGL-1971).
  *
@@ -1086,10 +952,13 @@ export interface EraseOrgResult {
    * each eraser's count of what it would do.
    */
   plugins?: Record<string, PluginOrgErasureReport | null>
-  /** Outreach mailbox grants destroyed (AGL-2974) — outside the org path. */
-  outreachMailboxCredentials?: number
-  /** Outreach short tracking links destroyed (AGL-3297). */
-  outreachLinks?: number
+  /**
+   * Rows destroyed from each plugin's top-level collection keyed by the org
+   * (AGL-3080), keyed by collection: a connected mailbox's grant (AGL-2974),
+   * a sequence email's tracking links (AGL-3297). Outside the org path, and
+   * declared by their owners rather than named here.
+   */
+  pluginCollections?: Record<string, number>
   /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
   ssoDomains?: number
   /** Custom console domains released (AGL-1448) — outside the org path. */
@@ -1115,17 +984,6 @@ export interface EraseOrgResult {
    * same number as one that reached it and found nothing.
    */
   hostMemberships?: number | null
-  /** Marketplace handle reservations released (AGL-1970) — id-keyed, public. */
-  publisherHandles?: number
-  /** What became of the org's public publisher profile (AGL-1970). */
-  publisherProfile?: PublisherProfileDisposition
-  /**
-   * Marketplace listings that OUTLIVE this erasure and still name the org
-   * (AGL-1970/AGL-1448 Tier 3). Reported rather than deleted: an erasure that
-   * leaves something standing has to say so, and this is the number that makes
-   * the parked listing-survival decision cost something measurable.
-   */
-  listingsRetained?: number
   /**
    * Support threads destroyed, each with its `messages` subtree (AGL-1971) —
    * the highest-PII-density collection outside the org path.
@@ -1259,15 +1117,18 @@ async function recordErasureFailure(entry: {
  *   2. Nothing is written. This step used to persist a final JSON export of
  *      the org and host trees to `erasures/{orgId}/…` and abort if it could
  *      not — see the note below for why it is gone (AGL-1443).
- *   3. Revoke the org's API credentials (AGL-1444), its public routing — SSO
- *      domains and custom console domains (AGL-1448) — and its public
- *      marketplace identity: the publisher profile and every handle it
- *      reserved (AGL-1970); and destroy the OAuth grants behind its reps'
- *      Outreach mailboxes (AGL-2974). All of them are top-level collections
- *      keyed by something other than a path under the org, so the org-tree
- *      delete cannot reach them; doing them before the content delete also
- *      closes the mid-erasure window, in which a credential, a domain or a
- *      public publisher page still resolves to a half-deleted workspace.
+ *   3. The plugins' erasers first (AGL-2978), while everything they may need
+ *      to act through still exists — a REQUIRED one (the marketplace's, which
+ *      erases the org's public publisher identity, AGL-1970) fails the step
+ *      rather than recording its share as undone. Then revoke the org's API
+ *      credentials (AGL-1444), its public routing — SSO domains and custom
+ *      console domains (AGL-1448) — and sweep every plugin collection keyed
+ *      by the org that its owner declared (a connected mailbox's OAuth grant,
+ *      AGL-2974). All of them are top-level collections keyed by something
+ *      other than a path under the org, so the org-tree delete cannot reach
+ *      them; doing them before the content delete also closes the mid-erasure
+ *      window, in which a credential, a domain or a public publisher page
+ *      still resolves to a half-deleted workspace.
  *   4. Delete each host (eraseHost), org-level Storage, the Stripe customer
  *      AND its local reverse index, member back-references, then the org tree
  *      and every slug the org ever held — tombstones included (AGL-1448).
@@ -1384,28 +1245,17 @@ export async function eraseOrg(
     // pass the org gate and reach a half-deleted workspace. Revoking first
     // closes that window as well as the permanent one.
     progress.apiKeys = await eraseOrgApiKeys(orgId, dryRun)
-    progress.outreachMailboxCredentials = await eraseOrgOutreachMailboxCredentials(
-      orgId,
-      dryRun,
-    )
-    progress.outreachLinks = await deleteDocsByOrgId(
-      OUTREACH_LINKS_COLLECTION,
-      orgId,
-      dryRun,
-    )
+    // The plugins' top-level collections keyed by this org (AGL-3080) — a
+    // connected mailbox's OAuth grant, a sequence email's tracking links.
+    // Declared by the owning plugin and swept HERE, statically, not by its
+    // eraser: an erasure cannot rely on a plugin being loaded, and a grant
+    // that can still send as a person must not outlive the workspace it was
+    // given to because an erasing process never loaded that plugin's bundle.
+    progress.pluginCollections = await erasePluginOrgKeyedCollections(orgId, dryRun)
     progress.ssoDomains = await eraseOrgSsoDomains(orgId, dryRun)
     progress.consoleDomains = await releaseOrgConsoleDomains(orgId, dryRun)
     progress.apiIdempotency = await eraseOrgIdempotencyKeys(orgId, dryRun)
 
-    // The org's PUBLIC marketplace identity (AGL-1970). Here rather than with
-    // the Stripe step, though it carries a payout id, because `publisherHandles`
-    // is a live name reservation and belongs with the other reservations this
-    // step releases — and because the profile is world-readable, so the sooner
-    // it stops resolving the smaller the mid-erasure window.
-    const publisher = await eraseOrgPublisherIdentity(orgId, dryRun)
-    progress.publisherHandles = publisher.handles
-    progress.publisherProfile = publisher.profile
-    progress.listingsRetained = publisher.listingsRetained
 
     // Support threads (AGL-1971). Its own step because it is the only sweep
     // here that walks a subtree per row, so it is the one most likely to be

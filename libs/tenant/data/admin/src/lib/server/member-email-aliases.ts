@@ -133,7 +133,7 @@ function memberRef(firestore: FirebaseFirestore.Firestore, orgId: string, uid: s
 }
 
 /** The addresses one member has added in one workspace, confirmed or not. */
-export async function listMemberEmailAliases(
+export async function loadMemberEmailAliases(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
   uid: string,

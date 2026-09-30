@@ -41,14 +41,16 @@ import {
   type HostVariable,
   type HostWorkflow,
   type HostWorkflowStep,
-  buildDatasetRecordValues,
   datasetDisplayName,
+  describeDatasetRecordErrors,
   contactCampaignFieldPath,
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   describeStepOutcome,
   effectiveDatasetModel,
+  ensureDeclaredCustomFieldTypes,
   normalizeTriggerConditions,
+  prepareDatasetRecordWrite,
   type PluginJobHostGate,
   resolveOrgEntitlements,
   runWorkflow,
@@ -693,7 +695,11 @@ async function runServerStep(
           ? datasetDoc.get('fields')
           : [],
       }
-      const values = buildDatasetRecordValues(appendDataset, payload)
+      const appendModel = effectiveDatasetModel(appendDataset)
+      // A plugin's field validator runs only once its plugin registered it.
+      await ensureDeclaredCustomFieldTypes(appendModel)
+      const write = prepareDatasetRecordWrite(appendDataset, payload)
+      const values = write.values
       // Same name precedence `findDatasetByName` resolves in.
       const appendLabel = (
         datasetDisplayName({
@@ -707,9 +713,22 @@ async function runServerStep(
       // to write. An error rather than a quiet success: a run history that
       // says `saved to Leads` while nothing saves is how a mismatched field
       // name goes unnoticed.
-      if (!Object.keys(values).length) {
+      if (!write.matched.length) {
         return failed(
           `no event field matches a field in dataset "${appendLabel || step.datasetId}"`,
+        )
+      }
+      // Held to the model like every other record write (AGL-2773): a value
+      // its field cannot hold refuses the whole record, and the run says
+      // which field and why instead of `saved to Leads`.
+      if (Object.keys(write.errors).length) {
+        return failed(
+          `record failed validation for dataset "${appendLabel || step.datasetId}": ${describeDatasetRecordErrors(write.errors)}`,
+        )
+      }
+      if (!Object.keys(values).length) {
+        return failed(
+          `every event field matching dataset "${appendLabel || step.datasetId}" is empty`,
         )
       }
       const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
@@ -719,10 +738,7 @@ async function runServerStep(
         // The integrity index the console's delete check queries —
         // carried by every write that sets `values`, or the index
         // describes rows this one never held.
-        ...datasetIntegrityFields(
-          effectiveDatasetModel(appendDataset),
-          values,
-        ),
+        ...datasetIntegrityFields(appendModel, values),
         createdAt: FieldValue.serverTimestamp(),
       })
       await announceDatasetStepWrite(env, datasetDoc.id)
@@ -743,19 +759,30 @@ async function runServerStep(
           : [],
       }
       const updateModel = effectiveDatasetModel(updateDataset)
-      const values = buildDatasetRecordValues(updateDataset, payload)
+      await ensureDeclaredCustomFieldTypes(updateModel)
+      const updateLabel = String(
+        datasetDisplayName({
+          displayName: datasetDoc.get('displayName'),
+          name: datasetDoc.get('name'),
+        }) ||
+          step.datasetName ||
+          step.datasetId ||
+          '',
+      ).slice(0, 60)
+      // Checked before the lookup, as an append: the fields this write
+      // supplies are held to the model whichever leg runs below, and a
+      // refusal costs no read.
+      const incoming = prepareDatasetRecordWrite(updateDataset, payload)
       // Nothing to merge or append — an error, for the reason the append
       // branch above gives.
-      if (!Object.keys(values).length) {
-        const updateLabel =
-          datasetDisplayName({
-            displayName: datasetDoc.get('displayName'),
-            name: datasetDoc.get('name'),
-          }) ||
-          step.datasetName ||
-          step.datasetId
+      if (!incoming.matched.length) {
         return failed(
-          `no event field matches a field in dataset "${String(updateLabel ?? '').slice(0, 60)}"`,
+          `no event field matches a field in dataset "${updateLabel}"`,
+        )
+      }
+      if (!Object.keys(incoming.values).length) {
+        return failed(
+          `every event field matching dataset "${updateLabel}" is empty`,
         )
       }
       const email = String((payload as any).email ?? '').trim()
@@ -771,10 +798,18 @@ async function runServerStep(
             .get()
         : null
       if (existing && !existing.empty) {
-        const merged = {
-          ...(existing.docs[0].get('values') ?? {}),
-          ...values,
+        // A merge holds only the fields this write sent to the model: a row
+        // stored as text before AGL-2773 is not refused for a legacy value
+        // this run never touched.
+        const write = prepareDatasetRecordWrite(updateDataset, payload, {
+          existing: existing.docs[0].get('values') ?? {},
+        })
+        if (Object.keys(write.errors).length) {
+          return failed(
+            `record failed validation for dataset "${updateLabel}": ${describeDatasetRecordErrors(write.errors)}`,
+          )
         }
+        const merged = write.values
         await existing.docs[0].ref.set(
           {
             values: merged,
@@ -799,12 +834,18 @@ async function runServerStep(
       } else {
         // The APPEND leg of update-or-append, and the only one of the two
         // that adds a row — the merge above rewrites a record that already
-        // counts against the band.
+        // counts against the band. A new row is held to the whole model,
+        // required fields included, like any other append.
+        if (Object.keys(incoming.errors).length) {
+          return failed(
+            `record failed validation for dataset "${updateLabel}": ${describeDatasetRecordErrors(incoming.errors)}`,
+          )
+        }
         const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
         if (refusal) return failed(refusal)
         await datasetDoc.ref.collection('records').add({
-          values,
-          ...datasetIntegrityFields(updateModel, values),
+          values: incoming.values,
+          ...datasetIntegrityFields(updateModel, incoming.values),
           createdAt: FieldValue.serverTimestamp(),
         })
       }

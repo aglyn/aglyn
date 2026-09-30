@@ -16,8 +16,8 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
-import { diffOverride, overrideWriteValue } from './marketplace-overrides'
-import { resolveSiteTheme } from './marketplace-theme'
+import { diffOverride, overrideWriteValue } from './artifact-overrides'
+import { resolveSiteTheme } from './site-theme'
 import {
   hasThemeEdits,
   planThemeLibraryAction,

@@ -24,9 +24,9 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, AlertTitle, Button, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import {
-  fetchMarketingConsentStatus,
-  type MarketingConsentAnswer,
-  postMarketingConsent,
+  fetchPlatformMarketingConsentStatus,
+  type PlatformMarketingConsentAnswer,
+  postPlatformMarketingConsent,
 } from '../utils/marketing-opt-in'
 
 /**
@@ -44,7 +44,7 @@ import {
  * marketing ask on top of the designer canvas is not what somebody opening
  * the designer came for.
  */
-export function MarketingConsentPrompt() {
+export function PlatformMarketingConsentPrompt() {
   const { data: user } = useUser()
   // A bare context read, `null` outside its provider. The console shell
   // always mounts one; the page specs that render the workspace chooser and
@@ -52,14 +52,14 @@ export function MarketingConsentPrompt() {
   // the two pages every signed-in person lands on.
   const snackbar = useSnackbar()
   const [due, setDue] = useState(false)
-  const [busy, setBusy] = useState<MarketingConsentAnswer | null>(null)
+  const [busy, setBusy] = useState<PlatformMarketingConsentAnswer | null>(null)
 
   useEffect(() => {
     let cancelled = false
     const tokenUser = user as { getIdToken?: () => Promise<string> } | null
     if (!tokenUser?.getIdToken) return undefined
     void (async () => {
-      const status = await fetchMarketingConsentStatus(
+      const status = await fetchPlatformMarketingConsentStatus(
         tokenUser as { getIdToken: () => Promise<string> },
       )
       if (!cancelled) setDue(status?.promptDue === true)
@@ -70,9 +70,9 @@ export function MarketingConsentPrompt() {
   }, [user])
 
   const answer = useCallback(
-    async (decision: MarketingConsentAnswer) => {
+    async (decision: PlatformMarketingConsentAnswer) => {
       setBusy(decision)
-      const recorded = await postMarketingConsent(
+      const recorded = await postPlatformMarketingConsent(
         user as { getIdToken: () => Promise<string> },
         decision,
         'console-prompt',
@@ -132,7 +132,7 @@ export function MarketingConsentPrompt() {
   )
 }
 
-MarketingConsentPrompt.displayName = 'MarketingConsentPrompt'
-MarketingConsentPrompt.aglyn = true
+PlatformMarketingConsentPrompt.displayName = 'PlatformMarketingConsentPrompt'
+PlatformMarketingConsentPrompt.aglyn = true
 
-export default MarketingConsentPrompt
+export default PlatformMarketingConsentPrompt

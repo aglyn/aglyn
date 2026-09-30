@@ -35,8 +35,9 @@
  * ONLY by API routes, so the org guard's blind spot is this document's entire
  * surface — and no guard in this directory looked at media at all.
  * `host-subcollection-write-deny-coverage.spec.ts` asks about COLLECTIONS the
- * billing rollup reads, `host-listing-write-deny-coverage.spec.ts` about a
- * marketplace listing's fields, and neither has a reason to notice `media`.
+ * billing rollup reads, `host-write-deny-coverage.spec.ts` and the marketplace
+ * plugin's `listing-write-deny-coverage.spec.ts` about a host's and a listing's
+ * fields, and neither has a reason to notice `media`.
  * So `storagePath` and `private` shipped client-writable with three green
  * coverage guards standing beside them.
  *

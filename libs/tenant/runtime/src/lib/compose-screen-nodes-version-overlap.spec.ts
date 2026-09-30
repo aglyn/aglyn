@@ -84,7 +84,7 @@ const mockGetPublishedLayoutVersion = jest.fn()
 const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
-const mockGetDatasets = jest.fn()
+const mockReadRepeatRows = jest.fn()
 const mockGetWorkflows = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetScreenVersion = jest.fn()
@@ -98,9 +98,9 @@ jest.mock('./get-components', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetComponents(...a),
 }))
-jest.mock('./get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: (...a: unknown[]) => mockGetDatasets(...a),
+  readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
 }))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
@@ -141,7 +141,7 @@ const SCREEN_NODES = {
   },
 }
 
-/** The common page: nothing repeats, so `getDatasets` is never issued. */
+/** The common page: nothing repeats, so `readRepeatRows` is never issued. */
 const PLAIN_SCREEN_NODES = {
   [ROOT]: { $id: ROOT, componentId: 'div', nodes: [] },
 }
@@ -172,7 +172,7 @@ const setup = (
   )
   mockGetVariables.mockImplementation(tracked('variables', []))
   mockGetFunctions.mockImplementation(tracked('functions', []))
-  mockGetDatasets.mockImplementation(tracked('datasets', []))
+  mockReadRepeatRows.mockImplementation(tracked('datasets', []))
   mockGetWorkflows.mockImplementation(tracked('workflows', []))
   mockGetPluginInstalls.mockImplementation(tracked('installs', []))
   // The version read is the one this change exists to hide. The default is
@@ -261,13 +261,13 @@ describe('composeScreenNodes overlaps the version read (AGL-1428)', () => {
   })
 
   it('CONTROL — the datasets read still waits for the nodes, then overlaps', async () => {
-    // `getDatasets` is the one read that genuinely depends on the version:
+    // `readRepeatRows` is the one read that genuinely depends on the version:
     // it is gated on the screen actually repeating. So it must start AFTER
     // the version resolves — asserting otherwise would be asserting a bug —
     // but it must not be serialised behind the rest of the bundle either.
     //
     // Timed like production: the version lands while the layout walk is still
-    // going. Under the old code `getDatasets` rode inside the bundle; the
+    // going. Under the old code `readRepeatRows` rode inside the bundle; the
     // risk this guards is that pulling it out turned it into an extra serial
     // round trip after the bundle drains.
     setup(SCREEN_NODES, 2)
@@ -294,7 +294,7 @@ describe('composeScreenNodes overlaps the version read (AGL-1428)', () => {
       screenId: 's1',
       screen: screenDoc,
     })
-    expect(mockGetDatasets).not.toHaveBeenCalled()
+    expect(mockReadRepeatRows).not.toHaveBeenCalled()
     expect(mockGetComponents).toHaveBeenCalledWith({ hostId: 'h1' })
   })
 

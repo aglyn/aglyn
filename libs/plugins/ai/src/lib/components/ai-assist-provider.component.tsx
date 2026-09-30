@@ -22,7 +22,7 @@ import {
   lockdownRefusalText,
   parseLockdownRefusal,
 } from '@aglyn/aglyn'
-import { marketplaceDefinitionToNested } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
+import { portableDefinitionToNested } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import { AiAssistActionsContext } from './ai-assist-actions-context'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -338,7 +338,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           allowDuplicate: true,
         })
       }
-      const nested = marketplaceDefinitionToNested(
+      const nested = portableDefinitionToNested(
         payload.section.rootId,
         payload.section.nodes,
       )

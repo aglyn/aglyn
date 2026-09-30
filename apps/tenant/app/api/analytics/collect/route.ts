@@ -279,7 +279,7 @@ async function beaconFreeze(hostId: string): Promise<BeaconFreeze> {
 // ---------------------------------------------------------------------------
 
 /**
- * The three campaign-attribution params the beacon reports. Deliberately not
+ * The three utm-attribution params the beacon reports. Deliberately not
  * `utm_term`/`utm_content`: keyword- and variant-level labels multiply
  * cardinality for detail the console has no surface for, and terms are the
  * one UTM field that routinely carries user-typed search strings.

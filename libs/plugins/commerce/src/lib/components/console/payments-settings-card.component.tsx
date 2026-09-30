@@ -86,7 +86,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
    * production profile carrying it named a TEST-mode account: this card said
    * "Charges enabled" about three storefronts that could not take a single
    * payment. Only a literal boolean counts as recorded — the same
-   * three-valued reading `connectLinkageIsReady` uses on the server, so the
+   * three-valued reading `merchantAccountIsReady` uses on the server, so the
    * chip and the checkout cannot disagree.
    */
   const modeVerified = typeof profile?.stripeAccountLivemode === 'boolean'

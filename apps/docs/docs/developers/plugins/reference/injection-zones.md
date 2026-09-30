@@ -19,11 +19,14 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |
-| `marketplaceListing` | Marketplace listing detail body | `hostId`, `listingId`, `permissions` |
-| `orgAddons` | Plugins & add-ons hub, installs section | `hostId` (the acting site) |
+| `hostArtifactPublish` | Wherever a console page offers to publish something it holds (a site's layouts, the organization's publish panel): the dialog that publishes it. The page keeps the control that opens it, and leaves that control out when no widget is registered here | `artifact` (`{ kind, hostId?, orgId?, artifactId?, displayName?, description? }`, or `null` while nothing is open), `onClose()` |
+| `orgPluginInstalls` | Organization → Plugins, above the built-in plugins: the plugins your plugin installed into the workspace, one row per installation, each linking to `/[orgSlug]/plugins/[pluginRef]` | `orgId`, `orgSlug`, `hosts` (`{ id, label }` for each site the reader can see) |
+| `pluginInstallStatus` | An installation's own page, above where it runs: what the installing plugin says about the version the workspace runs. Drawn only for an installation that exists | `orgSlug`, `pluginRef` (the installation's id), `pin` (one pin of it) |
 | `dashboardFooter` | Bottom of the host dashboard | `hostId` |
 | `orgSettings` | Organization → Settings, below the tabs | `orgId`, `org` |
 | `hostSettings` | Host setup page, below the built-in cards | `hostId` |
+| `hostSeo` | A site's **Setup → SEO**, under the SEO check and above the SEO cards: fixes for what the check found, and values proposed for the cards, which each card's **Update** writes | `hostId`, `orgId`, `orgSlug`, `host`, `seo` (the stored settings), `check` (the SEO check's last report and the keyword lines it ran with; `null` until someone runs it — add to its findings, never list them again), `proposeDraft(values, key)` — puts values in the SEO cards as unsaved edits |
+| `seoFields` | Inside a search listing editor, under its fields: a screen's **SEO** card, and the commerce product editor's search engine listing | `hostId`, `orgId`, `orgSlug`, `subject` (the screen or the product), `fields`, `values`, `hasImage`, `proposeValues(values, key)` — stages values in the editor as unsaved edits |
 | `adminOrgDetail` | Staff admin org detail page (staff-only) | `orgId` |
 | `orgBillingUsage` | Billing → Usage, below the meters | `orgId`, `org` (the billing-merged org doc), `canManage` |
 | `orgBillingOverview` | Billing → Overview, among the plan and add-on cards | `orgId`, `org`, `plan`, `canManage` |
@@ -35,7 +38,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `orgMember` | Team → member detail, below the member's activity | `orgId`, `uid`, `member`, `canManage` |
 | `orgMembersListColumn` | A **column** of the org Team table — see [Column zones](#column-zones) | per row: `member`, `orgId`, `canManage` |
 | `hostMembers` | The site collaborators card: a column of its table when the widget declares `column`, a card beneath it otherwise | per row: `member`, `hostId`, `canManage`; as a card: `hostId`, `canManage` |
-| `assistPanel` | The console shell's assistant dock, above every route boundary in both the app and editor shells | none — resolve your own scope from the URL |
+| `consoleDock` | The console dock: a floating panel above every route boundary in both the app and editor shells (it was `assistPanel` until AGL-3080) | `orgId`, `org`, `orgReady`, `scopedOrgId` (the org a widget may act and be metered for, `undefined` where the page names none), `orgSlug`, `hostId`, `productName`, `releaseVerdict(key)` (`{ visible, staffPreview }` for any release flag, staff bypass applied), `isStaff`, `permissionsOnHost` |
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
 | `hostScreens` | A site's Screens page, beside Templates and Create New Screen: another way to start a screen | `hostId`, `orgId` (`undefined` while the page resolves it) |
@@ -104,7 +107,7 @@ page spaces it there:
   one-to-one composer's message and under an import drawer's column matching.
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
-- `assistPanel`: a floating dock.
+- `consoleDock`: a floating dock.
 - `orgMembersListColumn`, `staffOrgsListColumn` and `staffOrgUsageColumn`: a
   column of a table, or, on `staffOrgUsageColumn`, a line above it.
 

@@ -1,12 +1,13 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. `catalog` is the plugin's row on the workspace and site switchboards (label, description, release flag, what switching it off for a site stops, and what a published site loses); the generator compiles every row, in `order`, into libs/aglyn plugin-manager/first-party-plugins.generated.ts, so a new plugin is declared here and nowhere in core (AGL-3080). An entry with no `catalog` is not on the switchboard. `capabilities` are further switchboard ids the same bundle serves. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register.",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. `catalog` is the plugin's row on the workspace and site switchboards (label, description, release flag, what switching it off for a site stops, and what a published site loses); the generator compiles every row, in `order`, into libs/aglyn plugin-manager/first-party-plugins.generated.ts, so a new plugin is declared here and nowhere in core (AGL-3080). An entry with no `catalog` is not on the switchboard. `capabilities` are further switchboard ids the same bundle serves. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory), videoEmbedProviders = the video hosts whose own player the plugin's Video element frames (`/video-embed-providers`, called by the generator and compiled into the catalog file as data, which the published page and the tenant's frame-src read without loading the plugin). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register. `taxReturnSource: true` (AGL-3080) = the plugin sells through the platform's own account and registers a tax return source (core `plugin-tax-return-sources.ts`); the operator's sales tax return refuses to be filed while a declared source is unregistered. `revenueSource: true` (AGL-3080) = the plugin earns the operator a take through the platform's account and registers a revenue source (core `plugin-revenue-sources.ts`); the staff revenue report names a declared source it could not read rather than counting it as zero.",
   "plugins": [
     {
       "id": "mui",
       "package": "@aglyn/plugins-mui",
       "alwaysOn": true,
       "register": {
-        "site": "registerMuiPlugin"
+        "site": "registerMuiPlugin",
+        "videoEmbedProviders": "muiVideoEmbedProviders"
       },
       "modules": {
         "site": "plugin"
@@ -157,6 +158,12 @@
         "label": "Bookings",
         "description": "Services, open slots, and paid bookings.",
         "releaseFlag": "release_bookings",
+        "releaseFlagDefinition": {
+          "label": "Bookings",
+          "description": "Bookings & scheduling for host sites.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-bookings"
+        },
         "publishedSiteImpact": "elements"
       },
       "hostCollections": [
@@ -213,6 +220,11 @@
             "label": "User Accounts",
             "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
             "releaseFlag": "release_member_accounts",
+            "releaseFlagDefinition": {
+              "label": "User Accounts",
+              "description": "Visitor accounts on published sites: the /signin, /signup and /recover pages and the Members blocks (AGL-2486). Platform-wide kill switch only — whether a given SITE serves those pages is the per-site User Accounts toggle, which is off until a site opts in.",
+              "defaultEnabled": true
+            },
             "defaultOffPerSite": true,
             "requires": [
               "commerce"
@@ -226,6 +238,11 @@
         "label": "Commerce",
         "description": "Products, carts, checkout, orders, POS.",
         "releaseFlag": "release_commerce_v2",
+        "releaseFlagDefinition": {
+          "label": "Commerce v2",
+          "description": "Full ecommerce wave: catalog/variants, cart + checkout, digital goods, reservations, POS, and the repriced commerce tiers (AGL-276..331).",
+          "defaultEnabled": true
+        },
         "publishedSiteImpact": "elements",
         "editBarLink": {
           "order": 30,
@@ -233,6 +250,8 @@
           "path": "/products/orders"
         }
       },
+      "taxReturnSource": true,
+      "revenueSource": true,
       "hostCollections": [
         {
           "name": "products",
@@ -388,7 +407,8 @@
       "register": {
         "console": "registerMarketplaceConsole",
         "staff": "registerMarketplaceConsole",
-        "consoleApi": "registerMarketplaceConsoleApi"
+        "consoleApi": "registerMarketplaceConsoleApi",
+        "serverDeclarations": "registerMarketplaceServerDeclarations"
       },
       "apiPrefixes": [
         "marketplace"
@@ -398,6 +418,13 @@
         "label": "Marketplace",
         "description": "Marketplace listings, templates, and installs.",
         "releaseFlag": "release_marketplace",
+        "releaseFlagDefinition": {
+          "$comment": "navTabId (AGL-1654) is the marketplace plugin's own `orgNavItems` entry, held to a real declaration by `release-flag-nav-tab-ids.spec.ts`; the page behind it is gated (AGL-2019), so off means off.",
+          "label": "Marketplace",
+          "description": "Marketplace browsing, publishing and plugin installs.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-org-marketplace"
+        },
         "publishedSiteImpact": "console-only"
       },
       "hostCollections": [
@@ -405,12 +432,23 @@
           "name": "installs"
         }
       ],
+      "pluginDistribution": {
+        "listings": "marketplaceListings",
+        "versions": "pluginVersions",
+        "revocations": "revocations"
+      },
+      "taxReturnSource": true,
+      "revenueSource": true,
+      "requiredOrgEraser": true,
       "contributes": {
         "console": {
           "shell": true,
           "slots": [
             "hostArtifactPublish",
-            "pluginSiteSet"
+            "orgPluginInstalls",
+            "pluginInstallStatus",
+            "pluginSiteSet",
+            "staffOverview"
           ],
           "orgRoutes": [
             "/marketplace"
@@ -438,6 +476,12 @@
         "label": "CRM",
         "description": "Leads, contacts, companies, deals, tasks and reports.",
         "releaseFlag": "release_crm",
+        "releaseFlagDefinition": {
+          "label": "CRM",
+          "description": "The CRM: contacts, leads, companies, deals, tasks, reports and fields.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-contacts"
+        },
         "publishedSiteImpact": "console-only"
       },
       "hostCollections": [
@@ -485,8 +529,25 @@
         "label": "Sequences",
         "description": "One-to-one email sequences sent from connected mailboxes.",
         "releaseFlag": "release_outreach",
+        "releaseFlagDefinition": {
+          "$comment": "The plugin's kill switch as well as its launch gate (AGL-2974). OFF by default, because nothing behind it sent mail at launch and no plan carries the `outreach` entitlement it also needs. The KEY stays `release_outreach`: it is persisted in Remote Config (AGL-3199).",
+          "label": "Sequences",
+          "description": "One-to-one, multi-step email sequences sent from a rep’s own connected mailbox and logged in the CRM (AGL-2974). OFF by default and staff preview only. An organization also needs the `outreach` entitlement, which no plan carries, so a customer reaches it only through a per-org entitlement override.",
+          "defaultEnabled": false,
+          "navTabId": "nav-tab-org-outreach"
+        },
         "publishedSiteImpact": "console-only"
       },
+      "orgKeyedCollections": [
+        {
+          "name": "outreachMailboxCredentials",
+          "orgField": "orgId"
+        },
+        {
+          "name": "outreachLinks",
+          "orgField": "orgId"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -500,13 +561,23 @@
       "id": "data",
       "package": "@aglyn/plugins-data",
       "register": {
-        "console": "registerDataConsole"
+        "console": "registerDataConsole",
+        "serverDeclarations": "registerDataServerDeclarations"
+      },
+      "repeatSource": {
+        "id": "dataset"
       },
       "catalog": {
         "order": 10,
         "label": "Data",
         "description": "Datasets, records, and CSV import/export.",
         "releaseFlag": "release_data_store",
+        "releaseFlagDefinition": {
+          "label": "Data store",
+          "description": "Datasets, models and dynamic data bindings.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-data"
+        },
         "publishedSiteImpact": "console-only"
       },
       "orgCapacities": [
@@ -557,6 +628,11 @@
         "label": "Email",
         "description": "Designed emails and campaign sending.",
         "releaseFlag": "release_email",
+        "releaseFlagDefinition": {
+          "label": "Email",
+          "description": "Designed emails, campaigns, and audience sending.",
+          "defaultEnabled": true
+        },
         "publishedSiteImpact": "elements"
       },
       "hostCollections": [
@@ -617,6 +693,12 @@
         "label": "Events Calendar",
         "description": "Event lists and calendars.",
         "releaseFlag": "release_events",
+        "releaseFlagDefinition": {
+          "label": "Events",
+          "description": "Event calendar management (AGL-145 add-on surface).",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-events"
+        },
         "publishedSiteImpact": "elements"
       },
       "hostCollections": [
@@ -654,6 +736,12 @@
         "label": "Inbox",
         "description": "Form submissions and lead inbox.",
         "releaseFlag": "release_inbox",
+        "releaseFlagDefinition": {
+          "label": "Inbox",
+          "description": "Form submissions, site members, and the lead inbox.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-inbox"
+        },
         "publishedSiteImpact": "console-only",
         "editBarLink": {
           "order": 20,
@@ -695,6 +783,12 @@
         "label": "Logic",
         "description": "Variables, functions, and reference health.",
         "releaseFlag": "release_logic",
+        "releaseFlagDefinition": {
+          "label": "Logic",
+          "description": "Variables, no-code functions, and reference health.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-logic"
+        },
         "publishedSiteImpact": "console-only"
       },
       "hostCollections": [
@@ -738,11 +832,24 @@
         "campaigns",
         "experiments"
       ],
+      "analyticsProvider": {
+        "module": "analytics-provider",
+        "settings": [
+          "gaMeasurementId",
+          "gtmContainerId"
+        ]
+      },
       "catalog": {
         "order": 15,
         "label": "Marketing",
         "description": "Overlays, campaigns, and experiments.",
         "releaseFlag": "release_marketing",
+        "releaseFlagDefinition": {
+          "label": "Marketing",
+          "description": "Overlays, campaigns at-a-glance, and A/B experiments.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-marketing"
+        },
         "publishedSiteImpact": "elements"
       },
       "hostCollections": [
@@ -814,6 +921,12 @@
         "label": "Redirects",
         "description": "URL redirect rules.",
         "releaseFlag": "release_redirects",
+        "releaseFlagDefinition": {
+          "label": "Redirects",
+          "description": "Redirect manager with usage analytics.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-redirects"
+        },
         "publishedSiteImpact": "routes"
       },
       "hostCollections": [
@@ -851,6 +964,12 @@
         "label": "Automation",
         "description": "Workflows, actions, webhooks, and run logs.",
         "releaseFlag": "release_workflows",
+        "releaseFlagDefinition": {
+          "label": "Automation",
+          "description": "Workflows, actions, webhooks and their run history.",
+          "defaultEnabled": true,
+          "navTabId": "nav-tab-workflows"
+        },
         "publishedSiteImpact": "routes"
       },
       "hostCollections": [
@@ -925,7 +1044,7 @@
         "console": {
           "shell": true,
           "slots": [
-            "assistPanel",
+            "consoleDock",
             "automationEditor",
             "automationRun",
             "besignerInspector",

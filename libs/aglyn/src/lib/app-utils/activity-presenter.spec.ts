@@ -39,6 +39,8 @@ registerPluginActivityActions({
     { key: 'ai.overage.cap', label: 'AI overage ceiling', scope: 'org' },
     { key: 'ai.addon.purchased', label: 'Added the AI add-on', scope: 'org' },
   ],
+  // The plugin's un-namespaced target type, with its noun (AGL-3080).
+  targetTypes: { aiJob: 'AI generation' },
 })
 
 describe('activityTypeLabel', () => {
@@ -128,7 +130,8 @@ describe('activityActionLabel and activityEntryGroupId (AGL-2929)', () => {
     expect(activityEntryGroupId({})).toBeUndefined()
   })
 
-  it('labels the AI target types the org feed now carries', () => {
+  it('labels a target type a plugin declared, and core’s own', () => {
+    // Core names no plugin's type; the noun comes from the registration.
     expect(activityTypeLabel('aiJob')).toBe('AI generation')
     expect(activityTypeLabel('subscription')).toBe('Subscription')
     expect(activityTypeLabel('role')).toBe('Role')

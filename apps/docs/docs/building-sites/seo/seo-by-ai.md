@@ -1,13 +1,14 @@
 ---
 sidebar_position: 2
 title: AI SEO for your website
-description: "AI SEO for websites, on the pages you already have: have AI write a page or product's search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt."
+description: "AI SEO for websites, on the pages you already have: have AI write a page or product's search listing, propose a fix for each finding of the SEO check, and draft your structured data and /llms.txt."
 ---
 
 # AI SEO for your website
 
-AI can write the search listing for a page or a product, audit your whole site, and
-draft the structured data and agent guidance your site publishes. Everything it does is
+AI can write the search listing for a page or a product, propose a fix for everything
+the [SEO check](./overview.md#seo-check) finds on your site, and draft the structured data
+and agent guidance your site publishes. Everything it does is
 a **proposal**: it lands in the editor or the form as unsaved changes, or in a new draft
 version, and your live site changes only when you save or publish.
 
@@ -43,48 +44,30 @@ AI** control. It proposes an **SEO title** and an **SEO description** from the
 product's name and description. Put them in the fields, then press **Save product**.
 Give the product a name first.
 
-## Audit the whole site
+## Fix what the SEO check finds
 
-**Setup → SEO** has an **SEO audit** card. Press **Run audit**; it runs in the
-background, and you can leave the page while it works.
+The [SEO check](./overview.md#seo-check) on **Setup → SEO** lists what is wrong with each
+page; it is free and needs no AI. With AI, the **SEO fixes** card under it proposes a
+fix for each finding. Press **Propose fixes**; it runs in the background, and you can
+leave the page while it works.
 
-The audit covers the pages your [sitemap](./overview.md#sitemap--robots) lists: every
-published page whose visibility is **Public**, without template screens or error pages.
-A very large site is audited on its first 150 pages, and the card says how many it left
-out. For each page it checks:
+The fixes answer the same findings the check lists, on the same pages. They use the
+**Target keywords by page** you typed in the check: a proposed title or description uses a
+keyword only where the page is about it — at most once in a title and once in a
+description — and never lists keywords or repeats a word to rank.
 
-| Check | What counts as a finding |
+| Finding | Proposed fix |
 | --- | --- |
-| **Search title** | Missing, over 60 characters, or the same as another page's. |
-| **Search description** | Missing, over 155 characters, or the same as another page's. |
-| **Main heading** | No `h1`, more than one, or one that says little (`Home`, `Welcome`, a single short word). |
-| **Images** | An image with no description. |
-| **Links** | No other page or shared layout links to the page. The home page never counts. |
-| **Target keywords** | A keyword you named that the page never says. |
-
-It also checks the site as a whole: whether search engines are asked to stay away,
-whether your structured data names and describes who publishes the site, and whether
-your `/llms.txt` carries guidance of your own.
-
-Each page gets a score, and each finding gets a proposed fix. A page nothing links to
-gets advice instead of a fix, because only you can choose where the link belongs.
-
-### Target keywords
-
-The optional **Target keywords by page** box takes one line per page:
-
-```text
-/pricing: pricing, plans
-/lamps: brass desk lamps, dimmable
-```
-
-The audit reports where each page already says its keywords. A proposed title or
-description uses a keyword only where the page is about it — at most once in a title and
-once in a description — and never lists keywords or repeats a word to rank.
+| **Search title** or **description** missing, too long, or shared | A new title or description, written from the page. |
+| **Main heading** missing or saying little | One clear main heading. |
+| **More than one main heading** | The extra headings become subheadings. |
+| **Images** without a description | A description for up to three images a page, from the text around each; the rest on the next run. |
+| **Target keyword** not covered | A title or description that uses it, where the page is about it. |
+| **No page links here** | Advice instead of a fix, because only you can choose where the link belongs. |
 
 ## Apply all as drafts
 
-When the audit finishes, **Apply all as drafts** does three things, and none of them
+When the fixes are ready, **Apply all as drafts** does three things, and none of them
 changes your live site:
 
 - **Content fixes open a new draft version** of each page that has one: a description
@@ -95,11 +78,11 @@ changes your live site:
 - **Structured data and agent guidance go into the SEO form** below the card as unsaved
   changes. Review them and press **Update**.
 
-Applying the same audit again opens no second draft of a page.
+Applying the same fixes again opens no second draft of a page.
 
 ## Structured data and /llms.txt
 
-The audit proposes the parts of **Setup → SEO → Entity** and **AI agents** that are
+The fixes propose the parts of **Setup → SEO → Entity** and **AI agents** that are
 still empty: whether an organization or a person publishes the site, a one-sentence
 description of the publisher, and guidance on when an AI agent should use your site. A
 contact email or phone number is proposed only when one of your pages shows it.

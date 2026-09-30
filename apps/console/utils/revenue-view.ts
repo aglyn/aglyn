@@ -25,6 +25,7 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import type { RevenueSection } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 
 /** The shape `/api/admin/revenue` answers with, as the page receives it. */
 export interface RevenuePayload {
@@ -41,13 +42,13 @@ export interface RevenuePayload {
   }
   settled?: {
     subscriptions?: Record<string, number>
-    marketplace?: Record<string, number>
-    // `truncated` is a boolean beside numeric fields, so the index signature
-    // has to admit both — `Record<string, number> & { truncated?: boolean }`
-    // is unsatisfiable and no object can be assigned to it.
-    commerce?: Record<string, number | boolean> & { truncated?: boolean }
     totalEarnedCents?: number
   }
+  /**
+   * Every plugin that earns through the platform, as it answered — or why it
+   * did not (AGL-3080). A refused source is in no figure on the page.
+   */
+  sources?: RevenueSection[]
   gap?: {
     collectingMrrCents?: number
     settledSubscriptionCents?: number
@@ -55,12 +56,10 @@ export interface RevenuePayload {
     causes?: Record<string, number>
     unexplainedCents?: number
   }
-  attention?: { rowsOutsideEveryPeriod?: number; commerceTruncated?: boolean }
+  attention?: { rowsOutsideEveryPeriod?: number }
   unbilledMeteredApplies?: boolean
   unbilledMeteredFailed?: boolean
-  commerceQueryFailed?: boolean
   subscriptionsTruncated?: boolean
-  marketplaceTruncated?: boolean
   contractedTruncated?: boolean
   /** Which sources hit the sweep ceiling, by name — never an anonymous flag. */
   truncatedSources?: string[]
@@ -90,9 +89,16 @@ export interface RevenuePayload {
     omittedSettledCents?: number
     totalOrgs?: number
   }
-  attributionByListing?: SourceAttributionView
-  attributionByPublisher?: SourceAttributionView
-  attributionByHost?: SourceAttributionView
+}
+
+/** The sources that answered, in the order the report reads them. */
+export function answeredRevenueSources(
+  payload: RevenuePayload | null,
+): Array<Extract<RevenueSection, { outcome: 'answered' }>> {
+  return (Array.isArray(payload?.sources) ? payload.sources : []).filter(
+    (section): section is Extract<RevenueSection, { outcome: 'answered' }> =>
+      section?.outcome === 'answered',
+  )
 }
 
 /** One attributed source table, as the page receives it. */
@@ -212,18 +218,17 @@ export interface EarnedLine {
 }
 
 /**
- * The earned breakdown: what Aglyn actually kept, by source.
+ * The earned breakdown: what the operator actually kept, by source.
  *
  * Every line is stated NET of the thing that would overstate it, and the note
  * says which thing. A reader must never have to know which of these figures
- * already had tax removed and which did not.
+ * already had tax removed and which did not. Each plugin's line is its own
+ * source's, worded by that plugin.
  */
 export function earnedLines(payload: RevenuePayload | null): EarnedLine[] {
   const settled = payload?.settled
   if (!settled) return []
   const subscriptions = settled.subscriptions ?? {}
-  const marketplace = settled.marketplace ?? {}
-  const commerce = settled.commerce ?? {}
   return [
     {
       id: 'subscriptions',
@@ -236,26 +241,12 @@ export function earnedLines(payload: RevenuePayload | null): EarnedLine[] {
         'these same invoices, so they are already inside this figure — counting ' +
         'the usage rollup beside it would double them.',
     },
-    {
-      id: 'marketplace',
-      label: 'Marketplace commission',
-      cents: Number(marketplace.commissionNetCents ?? 0),
-      note:
-        'The platform’s cut of plugin sales, at the rate resolved from the ' +
-        'seller’s entitlements when each sale settled, net of refunds. The ' +
-        'buyer’s gross and the publisher’s transfer are excluded — that money ' +
-        `is the publisher’s, not ${PLATFORM_BRAND_NAME}’s.`,
-    },
-    {
-      id: 'commerce',
-      label: 'Storefront commission',
-      cents: Number(commerce.commissionNetCents ?? 0),
-      note:
-        'The advertised take on merchant storefront sales, net of refunds — ' +
-        'with Stripe’s card processing removed. The platform fee charged on a ' +
-        'storefront sale bundles that processing cost and passes it through at ' +
-        'cost; it is a recovery, not earnings.',
-    },
+    ...answeredRevenueSources(payload).map((section) => ({
+      id: section.id,
+      label: section.earned.label,
+      cents: Number(section.earned.cents ?? 0),
+      note: section.earned.note,
+    })),
   ]
 }
 

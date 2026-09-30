@@ -35,7 +35,9 @@
  *  - `update()` needs the document to exist, replaces the value at each
  *    (dotted) path whole, and fails its `lastUpdateTime` precondition when
  *    the document was written since; `create()` fails on an existing one.
- *    The error codes are gRPC's: 5, 6, 9.
+ *    The error codes are gRPC's: 5, 6, 9. A `set()` with `mergeFields`
+ *    replaces the value at each named path whole, and creates the document
+ *    when it is missing.
  *  - `FieldValue` sentinels are applied, not stored: `delete`,
  *    `serverTimestamp` (the fake clock), `increment`, `arrayUnion`,
  *    `arrayRemove`.
@@ -291,8 +293,10 @@ export function queryFakeFirestore(
     }
   }
 
+  type SetOptions = { merge?: boolean; mergeFields?: Array<string | FieldPath> }
+
   type Write =
-    | { type: 'set'; path: string; data: Data; merge: boolean }
+    | { type: 'set'; path: string; data: Data; merge: boolean; fields?: string[] }
     | { type: 'update'; path: string; data: Data; precondition?: { lastUpdateTime?: Timestamp } }
     | { type: 'create'; path: string; data: Data }
     | { type: 'delete'; path: string; precondition?: { lastUpdateTime?: Timestamp } }
@@ -332,6 +336,14 @@ export function queryFakeFirestore(
       store.set(write.path, { data, createTime: existing?.createTime ?? at, updateTime: at })
       return at
     }
+    if (write.type === 'set' && write.fields) {
+      const data = clone(existing?.data ?? {})
+      for (const path of write.fields) {
+        put(data, path.split('.'), clone(valueAt(write.data, path)), valueAt(existing?.data, path))
+      }
+      store.set(write.path, { data, createTime: existing?.createTime ?? at, updateTime: at })
+      return at
+    }
     if (write.type === 'set' && write.merge) {
       const data = clone(existing?.data ?? {})
       mergeInto(data, write.data)
@@ -342,6 +354,16 @@ export function queryFakeFirestore(
     mergeInto(data, write.data)
     store.set(write.path, { data, createTime: existing?.createTime ?? at, updateTime: at })
     return at
+  }
+
+  function setWrite(path: string, data: Data, setOptions?: SetOptions): Write {
+    return {
+      type: 'set',
+      path,
+      data,
+      merge: setOptions?.merge === true,
+      ...(setOptions?.mergeFields ? { fields: setOptions.mergeFields.map(fieldName) } : {}),
+    }
   }
 
   function snapshot(path: string): any {
@@ -366,8 +388,7 @@ export function queryFakeFirestore(
       path,
       collection: (name: string) => collectionRef(`${path}/${name}`),
       get: async () => snapshot(path),
-      set: async (data: Data, setOptions?: { merge?: boolean }) =>
-        run({ type: 'set', path, data, merge: setOptions?.merge === true }),
+      set: async (data: Data, setOptions?: SetOptions) => run(setWrite(path, data, setOptions)),
       update: async (data: Data, precondition?: { lastUpdateTime?: Timestamp }) =>
         run({ type: 'update', path, data, precondition }),
       create: async (data: Data) => run({ type: 'create', path, data }),
@@ -378,6 +399,7 @@ export function queryFakeFirestore(
     Object.defineProperty(ref, 'parent', {
       get: () => collectionRef(segments.slice(0, -1).join('/')),
     })
+    Object.defineProperty(ref, 'firestore', { get: () => firestore })
     return ref
   }
 
@@ -457,7 +479,14 @@ export function queryFakeFirestore(
 
   function collectionRef(path: string): any {
     const base = query({ path, filters: [], orders: [], after: null, limit: null })
+    const segments = path.split('/')
     return {
+      get parent() {
+        return segments.length > 1 ? docRef(segments.slice(0, -1).join('/')) : null
+      },
+      get firestore() {
+        return firestore
+      },
       ...base,
       id: path.split('/').pop(),
       path,
@@ -483,8 +512,8 @@ export function queryFakeFirestore(
           ? read(target.path)
           : target.get(),
       getAll: async (...refs: any[]) => refs.map((ref) => read(ref.path)),
-      set: (ref: any, data: Data, setOptions?: { merge?: boolean }) => {
-        writes.push({ type: 'set', path: ref.path, data, merge: setOptions?.merge === true })
+      set: (ref: any, data: Data, setOptions?: SetOptions) => {
+        writes.push(setWrite(ref.path, data, setOptions))
         return api
       },
       update: (ref: any, data: Data, precondition?: { lastUpdateTime?: Timestamp }) => {
@@ -560,8 +589,7 @@ export function queryFakeFirestore(
       }
       return {
         create: (ref: any, data: Data) => enqueue({ type: 'create', path: ref.path, data }),
-        set: (ref: any, data: Data, setOptions?: { merge?: boolean }) =>
-          enqueue({ type: 'set', path: ref.path, data, merge: setOptions?.merge === true }),
+        set: (ref: any, data: Data, setOptions?: SetOptions) => enqueue(setWrite(ref.path, data, setOptions)),
         update: (ref: any, data: Data, precondition?: { lastUpdateTime?: Timestamp }) =>
           enqueue({ type: 'update', path: ref.path, data, precondition }),
         delete: (ref: any, precondition?: { lastUpdateTime?: Timestamp }) =>

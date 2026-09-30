@@ -20,7 +20,7 @@ import {
   isFirstPublishedRoute,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   SCREEN_SEO_TEXT_FIELDS,
   SCREEN_SEO_TEXT_GUIDANCE,

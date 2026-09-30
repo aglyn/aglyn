@@ -34,6 +34,7 @@ import {
   CONTACT_LIST_FILTER_HEADERS,
 } from '../constants/contact-filters'
 import type { ContactRecord } from '../model/contact-record'
+import type { CrmShareChip } from '../model/crm-sharing'
 import { CrmEmailStateChip } from './crm-email-state-chip'
 import { nextActivityColumn } from './crm-next-activity-column'
 
@@ -79,6 +80,8 @@ export interface ContactListColumnOptions {
    * is known by the site and the column would say so on every line.
    */
   siteName?: (hostId: string) => string
+  /** The words of a row's "Shared by…" chip (AGL-3336); absent draws none. */
+  shareChipLabel?: (chip: CrmShareChip) => string
   /**
    * One clock for every row of one paint, so two contacts engaged a second
    * apart cannot read "just now" and "1 min ago". Defaults to the paint's
@@ -101,7 +104,7 @@ export interface ContactListColumnOptions {
 export function contactListColumns(
   options: ContactListColumnOptions,
 ): GridColDef[] {
-  const { memberName, siteName } = options
+  const { memberName, siteName, shareChipLabel } = options
   const nowMs = options.nowMs ?? Date.now()
   return [
     {
@@ -114,9 +117,15 @@ export function contactListColumns(
         String(row.name || row.email || ''),
       renderCell: ({ row }: { row: ContactRecord }) => (
         <Stack sx={{ justifyContent: 'center', height: '100%', lineHeight: 1.25 }}>
-          <Typography variant="body2" sx={{ lineHeight: 1.25 }}>
-            {row.name || row.email}
-          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+            <Typography variant="body2" sx={{ lineHeight: 1.25 }}>
+              {row.name || row.email}
+            </Typography>
+            {/* Seen on this site only through a share (AGL-3336). */}
+            {row.shareChip && shareChipLabel ? (
+              <Chip size="small" variant="outlined" color="info" label={shareChipLabel(row.shareChip)} />
+            ) : null}
+          </Stack>
           {row.name ? (
             <Typography
               variant="caption"

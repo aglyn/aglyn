@@ -326,7 +326,8 @@ Work this list, not the tree.
   erasure destroys the thread; a **person** erasure redacts their `authorId`
   and `authorEmail` and leaves the org's thread standing, body included
   (AGL-1971). On an access request the body is still theirs to see.
-- `publisherProfiles`, `publisherHandles` — swept by `eraseOrg` (AGL-1970), but
+- `publisherProfiles`, `publisherHandles` — erased with the org by the
+  marketplace's required org eraser (AGL-1970, AGL-3080), but
   still list them on an **access** request: an erasure reaching them says
   nothing about a tree walk finding them.
 - `marketplacePurchases`, `marketplaceListings/{id}/reviews/{authorUid}`,

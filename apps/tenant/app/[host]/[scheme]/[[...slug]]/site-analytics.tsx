@@ -20,38 +20,34 @@
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
 import dynamic from 'next/dynamic'
 import {
-  installCampaignForwarding,
-  setCampaignForwardingConsent,
-} from '@aglyn/aglyn/app-utils/campaign-forwarding'
+  installUtmForwarding,
+  setUtmForwardingConsent,
+} from '@aglyn/aglyn/app-utils/utm-forwarding'
 import { setCampaignTouchConsent } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { setPageFirstTouchStorage } from '@aglyn/shared-util-first-touch/first-touch-page'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
+import { analyticsMayEmit } from '@aglyn/aglyn/app-utils/analytics-environment'
 import {
-  INTERNAL_TRAFFIC_FORCED_SNIPPET,
-  INTERNAL_TRAFFIC_GTAG_SNIPPET,
-} from '@aglyn/aglyn/app-utils/internal-traffic'
-import {
-  analyticsEnvironmentForcesInternal,
-  analyticsMayEmit,
-} from '@aglyn/aglyn/app-utils/analytics-environment'
+  analyticsProviders,
+  loadAnalyticsProviders,
+  subscribeAnalyticsProviders,
+  type AnalyticsProvider,
+  type AnalyticsTagMount,
+} from '@aglyn/aglyn/app-utils/analytics-provider'
 import {
   analyticsBeaconMaySend,
   sendAnalyticsBeacon,
 } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import {
   advertisingGrantedByRecord,
-  GA_CLICK_ID_PASSTHROUGH_SNIPPET,
-  GA_CONSENT_DEFAULT_SNIPPET,
-  GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET,
   hostAsksAboutAdvertising,
+  hostConfiguresAnalyticsTag,
   hostConsentRequired,
   isAnalyticsAllowed,
-  resolveGaMeasurementId,
-  resolveGtmContainerId,
   type VisitorConsentHost,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
-import { GOOGLE_ADS_VENDOR } from '@aglyn/aglyn/app-utils/advertising-tags'
 import AdvertisingTags from './advertising-tags'
+import { ANALYTICS_PROVIDER_LOADERS } from '../../../../utils/plugins.analytics.generated'
 
 /**
  * The consent surfaces, in a chunk of their own.
@@ -77,31 +73,32 @@ const ConsentBannerUi = dynamic(() => import('./consent-banner-chunk'), {
   ssr: false,
 })
 
-/**
- * The library the GA pair below brings to the page, named the way the Google
- * Ads vendor declares the one it shares (AGL-2681). Handed to the advertising
- * tags whenever the pair renders, so they ride the GA loader instead of
- * fetching `gtag.js` a second time — the document alone cannot tell them,
- * because both first render in the same pass.
- */
-const GTAG_SHARED_LIBRARIES: readonly string[] = Object.freeze(
-  [GOOGLE_ADS_VENDOR.sharesLibrary].filter(
-    (needle): needle is string => typeof needle === 'string' && needle !== '',
-  ),
-)
-// The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
-// pointed at this id, and it is the ONE host whose pageviews should carry
-// `content_group: 'marketing'` — the GA4 axis that separates marketing from
-// `console` and `docs` without reaching for the Hostname dimension. A
-// customer's site configures their own id, which is why the discriminator is
-// the id itself: same-property IS the definition of "this is our surface".
-// Hoisted to `platform-marketing-host.ts` so the advertising gate
-// shares this definition rather than retyping the literal beside it.
-import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import Script from 'next/script'
-import type { ReactElement } from 'react'
+import {
+  Fragment,
+  useMemo,
+  useSyncExternalStore,
+  type ReactElement,
+} from 'react'
 import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
 import { claimDailyVisit } from './visit-claim'
+
+/** What the server renders, and a page with no adapter loaded yet. */
+const NO_PROVIDERS: readonly AnalyticsProvider[] = Object.freeze([])
+const NO_MOUNTS: readonly AnalyticsTagMount[] = Object.freeze([])
+const noProviders = () => NO_PROVIDERS
+
+/** A provider's tags, or none if it throws — analytics never breaks the page. */
+function mountsOf(
+  provider: AnalyticsProvider,
+  ...args: Parameters<AnalyticsProvider['mounts']>
+): readonly AnalyticsTagMount[] {
+  try {
+    return provider.mounts(...args)
+  } catch {
+    return NO_MOUNTS
+  }
+}
 
 /**
  * Pageviews this page load has already DECIDED, keyed by host and path.
@@ -246,8 +243,9 @@ function armDwellBeacon(hostId: string | undefined, screenId?: string) {
 
 /**
  * Every measurement and consent surface a published tenant page owns: the
- * first-party pageview beacon (AGL-82/138/151), the Google Analytics gtag
- * mounts (AGL-138/661) and the visitor-consent machinery that gates them
+ * first-party pageview beacon (AGL-82/138/151), the analytics tags the site
+ * configures (AGL-138/661, mounted through their vendor's adapter — see
+ * `analytics-provider.ts`) and the visitor-consent machinery that gates them
  * (AGL-1498).
  *
  * ## Why this is its own component (AGL-1550)
@@ -278,10 +276,10 @@ function armDwellBeacon(hostId: string | undefined, screenId?: string) {
  *
  * ## What has NOT changed
  *
- * - **Consent still gates GA at the source (AGL-1498).** `analyticsAllowed`
- *   is the render condition on the `<Script>` elements, so without a
- *   granting recorded state the gtag script never LOADS — it is not loaded
- *   and then suppressed. Hoisting moved where the gate is evaluated, never
+ * - **Consent still gates the tag at the source (AGL-1498).**
+ *   `analyticsAllowed` is the render condition on the `<Script>` elements, so
+ *   without a granting recorded state the vendor's script never LOADS — it is
+ *   not loaded and then suppressed. Hoisting moved where the gate is evaluated, never
  *   when: an ungranted visitor gets no script from a sibling exactly as they
  *   got none from a descendant.
  * - **The posture is host-configured and read per host.** `resolveConsentPosture`
@@ -299,7 +297,7 @@ function armDwellBeacon(hostId: string | undefined, screenId?: string) {
  */
 export interface SiteAnalyticsProps {
   /**
-   * The resolved tenant host. Carries the GA measurement id, the consent
+   * The resolved tenant host. Carries the analytics settings, the consent
    * posture configuration and `$id`, which is what the beacon and the
    * per-host consent record are keyed on.
    */
@@ -308,8 +306,8 @@ export interface SiteAnalyticsProps {
   screenId?: string
   /**
    * The request's CSP nonce, stamped onto every inline boot and library this
-   * component mounts — the GA pair, the container pair and the advertising
-   * pairs (AGL-2640).
+   * component mounts — each analytics tag's pair and the advertising pairs
+   * (AGL-2640).
    *
    * A prop rather than a read, because a client component has no request to
    * read and because Next's automatic stamping never reaches these elements:
@@ -332,12 +330,11 @@ export default function SiteAnalytics({
   nonce,
 }: SiteAnalyticsProps): ReactElement {
   const hostId = host?.$id
-  // Strict format check — the id lands inside an inline script (AGL-138).
-  // The shared resolver applies GA_MEASUREMENT_ID_PATTERN.
-  const gaMeasurementId = resolveGaMeasurementId(host)
-  // Same strict format check, same reason (AGL-138/AGL-2486): the container id
-  // lands inside an inline script.
-  const gtmContainerId = resolveGtmContainerId(host)
+  // Whether the site configures a tag any declared provider mounts — read from
+  // the compiled declarations, so it is known during render, before any
+  // adapter has loaded. Each setting is format-checked (AGL-138): an id lands
+  // inside an inline script.
+  const tagConfigured = hostConfiguresAnalyticsTag(host)
   // Visitor consent (AGL-1498). Evaluated CLIENT-SIDE only — these pages are
   // ISR-cached, so the HTML must never vary by region or consent state; the
   // server and first client render agree on "nothing yet", and the visitor's
@@ -378,27 +375,32 @@ export default function SiteAnalytics({
   // measurement reports docs outbound clicks unclassified and unsurfaced.
   installLinkClickTracking({ surface: 'site' })
   // Real-user Core Web Vitals (AGL-1642), same shape as the click listener:
-  // installed during render, once per page load, delivery through
-  // `window.gtag` so the consent gate above stays structural — a visitor
-  // whose tag never loads produces nothing. The module holds early metrics
-  // briefly because BOTH tag mounts load late by design (`afterInteractive`
-  // here); see `web-vitals-rum.ts` for why that hold is not the forbidden
+  // installed during render, once per page load, delivered to the resident
+  // tag through its adapter so the consent gate above stays structural — a
+  // visitor whose tag never loads produces nothing. The module holds early
+  // metrics briefly because the tags load late by design (`afterInteractive`
+  // here, after the adapter's chunk); see `web-vitals-rum.ts` for why that hold is not the forbidden
   // pre-consent queue. The library itself arrives as a lazy chunk, so the
   // surface being measured pays nothing on its critical path.
   installWebVitalsReporting({ surface: 'site' })
+  // The vendor adapters, fetched only by a page whose site configures a tag,
+  // and started here during render like the calls above. The fetch never
+  // holds the render: until it lands the page simply has no tag to mount,
+  // which is what a visitor who has not granted sees anyway. It is also not
+  // the site-plugin gate — a chunk of its own, with nothing to wait on.
+  if (tagConfigured && typeof window !== 'undefined' && analyticsMayEmit()) {
+    void loadAnalyticsProviders(ANALYTICS_PROVIDER_LOADERS)
+  }
+  const providers = useSyncExternalStore(
+    subscribeAnalyticsProviders,
+    analyticsProviders,
+    noProviders,
+  )
 
   const consent = useVisitorConsent(hostId, host, consentRequired)
   const analyticsAllowed = consentRequired
     ? consent.ready && isAnalyticsAllowed(host, consent.stored)
     : true
-  // The GA pair renders on exactly this condition, and the first render that
-  // satisfies it is also the first render in which the advertising tags may
-  // mount — so the pair is not in the document yet when they look for a
-  // loader to share (AGL-2681). Named once and handed to both, so the JSX
-  // below and the declaration passed to `AdvertisingTags` cannot disagree.
-  const gaLoaderRendered = Boolean(
-    gaMeasurementId && analyticsAllowed && analyticsMayEmit(),
-  )
   // Advertising storage (AGL-1649). Off unless the host turned the question
   // on AND this visitor explicitly answered yes to that category; every
   // other path — no record yet, a visitor merely defaulted into analytics by
@@ -408,6 +410,32 @@ export default function SiteAnalytics({
   // of the gate, so the ISR-cached HTML carries neither snippet.
   const advertisingAllowed =
     consentRequired && advertisingGrantedByRecord(host, consent.stored)
+  // The tags render on exactly this condition. `analyticsMayEmit()` is the
+  // half that needs nobody's click (AGL-2067): `next dev` and Vercel preview
+  // builds resolve a site's settings exactly as production does, and without
+  // it they reported as real visits.
+  const mounts: readonly AnalyticsTagMount[] =
+    tagConfigured && analyticsAllowed && analyticsMayEmit()
+      ? providers.flatMap((provider) =>
+          mountsOf(provider, host, {
+            consentRequired,
+            advertising: advertisingAllowed,
+          }),
+        )
+      : NO_MOUNTS
+  // The first render that mounts a tag is also the first render in which the
+  // advertising tags may mount — so the tag is not in the document yet when
+  // they look for a loader to share (AGL-2681). The libraries the mounted
+  // pairs bring are handed to them, derived from the same list the JSX below
+  // renders so the two cannot disagree.
+  const libraryKey = mounts
+    .map((mount) => mount.library ?? '')
+    .filter(Boolean)
+    .join('\n')
+  const sharedLibraries = useMemo(
+    () => (libraryKey ? Object.freeze(libraryKey.split('\n')) : undefined),
+    [libraryKey],
+  )
 
   // Carry the campaign across the domain hop (AGL-1731). The capture on
   // `app.aglyn.com` shipped correct and was fed nothing: no code anywhere put
@@ -431,8 +459,8 @@ export default function SiteAnalytics({
       ? isAnalyticsAllowed(host, consent.stored)
       : null
     : true
-  setCampaignForwardingConsent(analyticsStorageAllowed)
-  installCampaignForwarding({ consoleOrigin: CONSOLE_ORIGIN })
+  setUtmForwardingConsent(analyticsStorageAllowed)
+  installUtmForwarding({ consoleOrigin: CONSOLE_ORIGIN })
 
   // Carry the campaign to the moment the visitor identifies themselves. The
   // UTM labels on the beacon above are a page-view label and go no further,
@@ -459,186 +487,57 @@ export default function SiteAnalytics({
 
   return (
     <>
-      {/* Google Analytics (AGL-138/661): tenant-configured measurement id.
-          This used to live inside an inert `next/head` <Head> block — so
-          every site that configured GA collected nothing. `next/script`
-          renders for real, and Next stamps it with the CSP nonce from the
-          request header that middleware sets, so it keeps working when
-          AGL-523 flips the policy from report-only to enforcing.
+      {/* The site's analytics tags (AGL-138/661/2486), each an inline boot
+          and then its library, as the vendor's adapter builds them.
 
           THE CONSENT GATE (AGL-1498): `analyticsAllowed` is enforcement at
-          the source — without an explicit stored yes the gtag script never
-          loads, rather than loading and being suppressed. The banner below
-          is UI over this condition, not the condition. This deliberately
-          also silences the `window.gtag?.()` mirrors in the marketing
-          runtime (overlay/experiment events) until consent: no gtag, no
-          events, which is the honest behavior.
+          the source — without a granting recorded state no tag LOADS, rather
+          than loading and being suppressed. The banner below is UI over this
+          condition, not the condition. This deliberately also silences the
+          event mirrors in the marketing runtime (overlay/experiment events)
+          until consent: no tag, no events, which is the honest behavior.
 
           What the gate CANNOT do is unload a tag (AGL-1608). Dropping these
-          elements on a mid-pageview withdrawal does not unload `gtag.js`, so
-          `storeVisitorConsent` silences the resident tag as well as sweeping
-          the cookies — otherwise GA4 enhanced measurement re-creates `_ga`
-          for the rest of the pageview. That runs on the tag that is ALREADY
-          loaded; the render condition here is unchanged.
+          elements on a mid-pageview withdrawal does not unload the vendor's
+          library, so `storeVisitorConsent` tells the resident tag through its
+          adapter as well as sweeping the cookies. That runs on the tag that is
+          ALREADY loaded; the render condition here is unchanged.
 
-          THE CONSENT-MODE DEFAULT (AGL-1622) is declared INSIDE this block,
-          which is the whole of its safety argument. the decision of
-          2026-08-14 approves load-then-restrict for the UNITED STATES, where
-          the implied-consent posture already permits the load; EU and UK are
-          unchanged, because loading an analytics tag before consent is the
-          specific act prior-consent law prohibits. Emitting the default here
-          rather than in the document head keeps that true by construction:
-          `analyticsAllowed` still decides whether ANY of this exists, so a
-          gated visitor gets no default, no config and no request to
-          googletagmanager.com. It is additive to the gate, never a
-          replacement — `consent-mode-default.spec.tsx` goes red if a change
-          ever hoists it out of this condition.
+          Anything an adapter declares in front of its tag — a consent-mode
+          default, the platform's own-traffic stamp on the platform's own
+          property — is inside the boot it returns, and so inside this
+          condition: a gated visitor gets no boot, no library and no request
+          to the vendor. `consent-mode-default.spec.tsx` goes red if a change
+          ever hoists any of it out.
 
-          Order is load-bearing twice over. The inline block precedes the
-          library, and inside it the `default` precedes `config`, so no hit is
-          ever sent before the tag has been told what it may store. Google's
-          canonical snippet shape, and the reason `ga-init` sits first here.
-
-          NOT declared when the host runs their own CMP (`consent.disabled`):
-          their solution owns the default, and a second one racing it would
-          overwrite their visitor's answer with ours.
-
-          THE INTERNAL-TRAFFIC STAMP (AGL-2064) sits between the shim and
-          `gtag('js')` for two independent reasons, and both have to hold.
-
-          It is a CONSTANT string, evaluated in the browser. These pages are
-          ISR-cached — one document is served to every visitor — so a
-          server-side branch on "is this us" would bake one browser's answer
-          into the cache for everyone, and a first-client-render branch would
-          break hydration. Emitting identical bytes and letting the browser
-          decide at runtime is the only shape that is both correct and
-          cacheable. `readInternalTrafficOverride` is the same decision in
-          TypeScript for the console, which is client-only and needs no such
-          care.
-
-          It runs BEFORE `gtag('config', …)`, and that ordering is the point.
-          The hits that leak on this surface are the ones no call site writes
-          — `session_start`, `first_visit`, `user_engagement`, and the
-          automatic `page_view` — and a `gtag('set', …)` applies to every hit
-          processed after it in queue order. After the config call it would
-          miss the session's first pageview, which for a marketing visit is
-          usually the entire session.
-
-          ONLY on our own measurement id. A customer's site configures its own,
-          and their property gets no opinion of ours stamped on it: wrongly
-          flagging a real visitor erases them from every report and a GA4 data
-          filter is not retroactive, so the id equality is the guard that keeps
-          the expensive direction unreachable.
-
-          `analyticsMayEmit()` on the render condition (AGL-2067) is the OTHER
-          half, and it is the half that needs nobody's click: a stamp only
-          separates our traffic once the GA4 data filter exists, while a tag
-          that was never mounted sends nothing today. `next dev` and Vercel
-          preview builds resolve `aglyn.com`'s host document and its platform
-          measurement id exactly as production does, so without this they
-          reported as real visits. When the escape hatch deliberately re-enables
-          a non-production build, the stamp becomes UNCONDITIONAL rather than
-          opt-in — a build that emits because someone asked it to is ours by
-          definition, and the hatch must not reopen the hole it stands beside.
-      */}
-      {gaLoaderRendered ? (
-        <>
-          <Script id="ga-init" strategy="afterInteractive" nonce={nonce}>
-            {'window.dataLayer=window.dataLayer||[];' +
-              'function gtag(){dataLayer.push(arguments);}' +
-              (consentRequired
-                ? advertisingAllowed
-                  ? GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET
-                  : GA_CONSENT_DEFAULT_SNIPPET
-                : '') +
-              // Internal-traffic stamp (AGL-2064), OUR property only. See the
-              // block comment below the JSX for why this is a constant string
-              // evaluated in the browser and why its position in the snippet
-              // is the whole of its correctness.
-              (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
-                ? analyticsEnvironmentForcesInternal()
-                  ? INTERNAL_TRAFFIC_FORCED_SNIPPET
-                  : INTERNAL_TRAFFIC_GTAG_SNIPPET
-                : '') +
-              // Ad click ids cross to the console by URL, not cookie
-              // (AGL-2548): the default above denies `ad_storage`, so this is
-              // the only way the `gclid` an ad click lands with reaches the
-              // surface where the conversion fires. OUR property only, and a
-              // `set`, so it sits before `config` like the stamp above.
-              (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
-                ? GA_CLICK_ID_PASSTHROUGH_SNIPPET
-                : '') +
-              "gtag('js', new Date());" +
-              // `content_group: 'marketing'` on OUR property only (AGL-1857):
-              // the one-click marketing/docs/console split in GA4 standard
-              // reports. A customer's id passes through untouched.
-              (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
-                ? `gtag('config', '${gaMeasurementId}', {'content_group':'marketing'});`
-                : `gtag('config', '${gaMeasurementId}');`)}
-          </Script>
+          `next/script` renders for real, and Next stamps it with the CSP nonce
+          from the request header that middleware sets, so it keeps working
+          when AGL-523 flips the policy from report-only to enforcing. */}
+      {mounts.map((mount) => (
+        <Fragment key={mount.id}>
           <Script
-            id="ga-src"
+            id={`${mount.id}-init`}
             strategy="afterInteractive"
             nonce={nonce}
-            src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
-          />
-        </>
-      ) : null}
-      {/* GOOGLE TAG MANAGER (AGL-2486), under the same gate as the pair
-          above and never a looser one.
-
-          A container is not a tag — it is a LOADER, and what it loads is
-          decided in Google's UI by whoever owns it, not here. That is exactly
-          why it cannot have a weaker gate than GA: this codebase's position is
-          that analytics may run on implied consent outside the EU/EEA/UK while
-          ADVERTISING is opt-in everywhere, and a container is the likeliest
-          thing on a page to carry an advertising tag. So it loads only from a
-          granting analytics state, and `consentGatedCategories` counts a
-          container as a gated feature so a container-only site still gets the
-          banner rather than none.
-
-          CONSENT MODE V2 comes first, in the same script, before `gtm.js` is
-          requested. Order is the whole of its correctness: defaults set after
-          the container has loaded are defaults its tags have already run past.
-          `ad_storage`/`ad_user_data`/`ad_personalization` stay denied unless
-          the visitor granted advertising, which is what makes a container
-          holding ad tags safe to load at all.
-
-          NO `<noscript>` IFRAME, deliberately, and it is the one piece of
-          Google's standard snippet omitted. That iframe fires the container
-          with no JavaScript — so no consent defaults, no gate, nothing to
-          suppress it — and these pages are ISR-cached, so it would sit in
-          shared HTML identical for every visitor and every region. It is a
-          consent bypass with a fallback's reputation. A visitor with
-          JavaScript off gets no container, which is the correct answer.
-      */}
-      {gtmContainerId && analyticsAllowed && analyticsMayEmit() ? (
-        <>
-          <Script id="gtm-init" strategy="afterInteractive" nonce={nonce}>
-            {'window.dataLayer=window.dataLayer||[];' +
-              'function gtag(){dataLayer.push(arguments);}' +
-              (consentRequired
-                ? advertisingAllowed
-                  ? GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET
-                  : GA_CONSENT_DEFAULT_SNIPPET
-                : '') +
-              "dataLayer.push({'gtm.start':new Date().getTime(),event:'gtm.js'});"}
+          >
+            {mount.boot}
           </Script>
           <Script
-            id="gtm-src"
+            id={`${mount.id}-src`}
             strategy="afterInteractive"
             nonce={nonce}
-            src={`https://www.googletagmanager.com/gtm.js?id=${gtmContainerId}`}
+            src={mount.src}
           />
-        </>
-      ) : null}
+        </Fragment>
+      ))}
       {/* Consent-gated ADVERTISING tags — Aglyn's own marketing
           site only, and nowhere else.
 
-          The same structural enforcement as the GA pair above, extended to a
-          channel that is not Google's. Until this existed the `advertising`
-          category could only ever be expressed as four strings handed to
-          `gtag`, so a non-Google tag could not be consent-gated at all.
+          The same structural enforcement as the analytics tags above,
+          extended to channels no analytics tag covers. Until this existed the
+          `advertising` category could only ever be expressed as consent
+          signals handed to the analytics tag, so any other tag could not be
+          consent-gated at all.
 
           Mounted UNCONDITIONALLY and gated inside, which is not the shape of
           the block above it and is deliberate: the component also owns the
@@ -665,7 +564,7 @@ export default function SiteAnalytics({
         stored={consent.stored}
         ready={consent.ready}
         nonce={nonce}
-        sharedLibraries={gaLoaderRendered ? GTAG_SHARED_LIBRARIES : undefined}
+        sharedLibraries={sharedLibraries}
       />
       {/* Visitor consent surfaces (AGL-1498): only when the machinery is
           live — the tool is active AND the site uses a gated feature. A

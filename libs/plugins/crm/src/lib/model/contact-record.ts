@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { type CrmShareChip, crmShareChipFor } from './crm-sharing'
 import type {
   AglynPostalAddress,
   ConsentGroup,
@@ -114,6 +115,11 @@ export interface ContactRecord {
    * like the address it is about.
    */
   emailState: Aglyn.EmailState | null
+  /**
+   * Why the viewing group sees this person when the answer is a share
+   * (AGL-3336) — `null` when it holds them, and at the organization level.
+   */
+  shareChip?: CrmShareChip | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -174,6 +180,7 @@ export function contactRecordFromDoc(
         : null,
     nextTaskAtMs: Aglyn.readNextTaskAtMs(row as { nextTaskAtMs?: unknown }),
     emailState: Aglyn.readEmailState(row),
+    shareChip: crmShareChipFor(row, group.hostIds),
     createdAt: row['createdAt'],
     updatedAt: row['updatedAt'],
   }

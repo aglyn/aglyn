@@ -32,6 +32,7 @@ The surface matrix: what a plugin can extend, from which entry
 | Service contracts (`definePluginServiceContract` / `registerPluginService`) | both | Another plugin's seam — an AI provider, a tool, a generator kind | Resolved lazily by the plugin that declared the contract |
 | Record addresses (`registerPluginRecordRoute`) | both | Where the plugin's own records are read, by record KIND — every other surface, the console app included, asks instead of spelling the URL | Resolved when a card draws a link; `null` where the owner has no address at that scope |
 | Record cards (`registerPluginRecordCardReader`) | server | What one of the plugin's records looks like in a line and an image, by record KIND — another plugin's server code draws it without reading the owner's collection or importing its model | Resolved when a handler asks; `null` where no plugin publishes the kind or the record is gone |
+| Record indexes (`registerPluginRecordIndex`) | server | The live records of one KIND the plugin keeps, listed and read by id with the facts it chooses to share — another plugin's server code finds and reads them without reading the owner's collection | Resolved when a handler asks; `null` where no plugin keeps the kind here, which a reader treats as none |
 | Tax profile (`registerPluginTaxProfile`) | server | The tenant's tax rule, owned by one plugin — what a flat rate adds to a charge and which regime a settled payment was taxed under — so every plugin that takes money prices it one way | Resolved when a charge is priced or confirmed; **throws** where no plugin owns the rule, rather than answering zero |
 | Host subcollections (`registerPluginHostCollections`) | both | The media-usage scan, a reference row's deep link, and the site's artifact counters | Declared at module scope; read by each of the three when it runs |
 | Contact capture (`registerPluginContactCaptureWriter`, `registerPluginContactSource`) | `/server` (`serverDeclarations`) | The person a capture silo met — the owner keys, merges, bands and stages them; the silo reports what it saw | Per capture; a refusal is RETURNED, so the silo keeps the submission or the order it already took |
@@ -40,6 +41,7 @@ The surface matrix: what a plugin can extend, from which entry
 | Billing and access keys (`registerPluginEntitlements`) | both | `resolveOrgEntitlements` (a seat add-on's quota and features), the plan tables' feature defaults, the staff lockdown checklist, the visitor notice, the dispatcher's path→lever map, the permission registry, the org permission catalog and a collaborator's per-site keys | Declared at module scope |
 | Usage alert rules (`registerUsageAlertContributor`) | `/server` (`serverDeclarations`) | The usage-alerts sweep: staff alerts on a cost or ceiling core does not meter, through the sweep's own senders and guards | Once per org per sweep, after core's budget alert; a throw is isolated to the contributor |
 | Subprocessor declarations (`subprocessors` entry) | generation time | The console's subprocessor inventory, which the published subprocessor list is derived from — recipients, the plugin's other hosts (`not-a-subprocessor`, `no-request`) and its uses of hosts declared elsewhere | When the manifest generator runs; a host declared twice, or a use of a host nothing declares, refuses |
+| Video hosts (`videoEmbedProviders` entry) | generation time | The Video element, the page's `VideoObject`, the built-in entry page and the published page's `frame-src` — which links play in a host's own player, where the media id sits in them, and the one origin that player is framed from | When the manifest generator runs; a domain or id declared twice, a player path that is not closed, or an origin that is not https refuses. First-party only: a declaration widens every site's `frame-src` |
 | Scheduled jobs (`registerPluginJob`) | `/server` | The platform job beat | When due, via `/api/plugins/run-jobs` |
 | Install preset mappers | barrel | Besigner drawer presets | On install-doc render |
 | Realm bundles (`register(host)` / `registerApi()`) | remote artifact | Everything above via the host ABI | After the trust chain verifies |
@@ -54,7 +56,7 @@ register function your manifest entry names, or list the file in
 `sideEffects`.
 
 **Which app area does each reach?** Console = nav/pages/widgets/providers
-and the `assistPanel` dock; org = `orgData`/`orgSettings`/`orgAddons`/
+and the `consoleDock` dock; org = `orgData`/`orgSettings`/`orgAddons`/
 `orgBillingUsage`/`orgBillingOverview`/`orgMember`/`orgMembersListColumn`
 zones + org-scoped config, permissions and entitlement keys; hosts =
 host-area pages/widgets + the `hostMembers` zone + the `hostTheme` zone,

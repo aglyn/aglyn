@@ -102,16 +102,16 @@ jest.mock('@aglyn/aglyn', () => {
   // The REAL campaign contract — the allowlist and the scrub are the thing
   // under test, so a stub here would assert nothing.
   const campaign = jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
   )
   return {
     PLAN_LABELS: {},
     generateOrgSlug: (value: string) => value.toLowerCase(),
     onboardingDestination: (slug: string) => `/${slug}`,
     parseOnboardingPlanIntent: () => null,
-    campaignEventParams: campaign.campaignEventParams,
-    parseCampaignAttribution: campaign.parseCampaignAttribution,
-    campaignAttributionQuery: campaign.campaignAttributionQuery,
+    utmEventParams: campaign.utmEventParams,
+    parseUtmAttribution: campaign.parseUtmAttribution,
+    utmAttributionQuery: campaign.utmAttributionQuery,
   }
 })
 jest.mock('@aglyn/shared-data-forms', () => ({

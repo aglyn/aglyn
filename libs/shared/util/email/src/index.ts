@@ -16,6 +16,13 @@
  */
 
 export * from './lib/send-email'
+// Who carries the mail (AGL-3080): the provider contract, and the selection
+// of the deployment's provider from the built-ins and any a plugin
+// registered. The providers themselves are imported by their own paths —
+// `@aglyn/shared-util-email/mail-provider-resend`, `…/mail-provider-webhook`
+// — because nothing outside the seam should name one.
+export * from './lib/mail-provider'
+export * from './lib/mail-providers'
 export * from './lib/send-rate'
 export * from './lib/sender-reputation'
 export * from './lib/send-ceilings'
@@ -34,7 +41,8 @@ export * from './lib/marketing-send'
 // The List-Unsubscribe setting sequences and campaigns share (AGL-3307).
 export * from './lib/list-unsubscribe'
 export * from './lib/email-delivery-events'
-// The received-mail reader the CRM's capture route files from (AGL-2657).
+// Received mail in the platform's vocabulary, which the CRM's capture route
+// files from (AGL-2657); the provider reads it.
 // Its neighbor `./lib/svix-signature` is deliberately NOT re-exported here:
 // it holds a `crypto` HMAC, and this barrel is reached from the browser
 // through `@aglyn/shared-ui-email-campaigns`, so a webhook imports it by its

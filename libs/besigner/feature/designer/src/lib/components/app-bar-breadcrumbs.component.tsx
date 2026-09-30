@@ -267,7 +267,7 @@ export const AppBarBreadcrumbsComponent = forwardRef<
 
   // This strip is the canvas column's bottom chrome, so it is what a
   // viewport-fixed affordance in that corner would clip (AGL-2486). It
-  // publishes its own height as the stand-off the Assist launcher reads;
+  // publishes its own height as the stand-off a dock launcher reads;
   // measured rather than assumed, because "24px dense toolbar plus a
   // border" is exactly the kind of constant that stops being true the
   // first time a chip wraps.
@@ -284,7 +284,7 @@ export const AppBarBreadcrumbsComponent = forwardRef<
     const node = stripRef.current
     if (!node) return undefined
     const root = document.documentElement
-    const property = '--aglyn-assist-inset-bottom'
+    const property = '--aglyn-dock-inset-bottom'
     const publish = () => {
       const { height } = node.getBoundingClientRect()
       root.style.setProperty(property, `${Math.round(height) + 20}px`)

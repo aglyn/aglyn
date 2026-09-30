@@ -50,13 +50,14 @@
  * `storeVisitorConsent` and every case in "the resident tag is silenced" goes
  * red while the gate and cookie-cleanup specs next door stay green.
  */
+import { setResidentAnalyticsTags, storeVisitorConsent } from '@aglyn/aglyn'
 import {
-  residentGaMeasurementIds,
-  setResidentAnalyticsTags,
-  storeVisitorConsent,
-} from '@aglyn/aglyn'
+  loadAnalyticsProviders,
+  resetAnalyticsProviders,
+} from '@aglyn/aglyn/app-utils/analytics-provider'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
+import { ANALYTICS_PROVIDER_LOADERS } from '../utils/plugins.analytics.generated'
 
 jest.mock('next/script', () => ({
   __esModule: true,
@@ -141,6 +142,7 @@ async function renderPage(host: Record<string, any>) {
 const pill = () => document.querySelector('[data-aglyn-consent-pill]')
 
 describe('a withdrawal silences the already-loaded tag (AGL-1608)', () => {
+  beforeEach(() => loadAnalyticsProviders(ANALYTICS_PROVIDER_LOADERS))
   afterEach(() => {
     clearAllCookies()
     window.localStorage.clear()
@@ -153,35 +155,26 @@ describe('a withdrawal silences the already-loaded tag (AGL-1608)', () => {
     document.head.innerHTML = ''
   })
 
-  describe('which tags are resident', () => {
-    it('reads the measurement id off a loaded gtag.js script', () => {
-      const script = document.createElement('script')
-      script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`
-      document.head.appendChild(script)
+  describe('who speaks to the resident tag', () => {
+    it('is the adapter the generated manifest loads — without it, nothing is silenced', async () => {
+      // The control for every case below. Which tags are resident, and how a
+      // Google tag is told, is the adapter's (its own spec pins both); what
+      // this file proves is that the consent writer reaches it. Forced red:
+      // drop the marketing plugin's `analyticsProvider` and regenerate, and
+      // every case below fails the way this one's first half passes.
+      resetAnalyticsProviders()
+      const unheard = residentTagHonoring('ga-disable')
+      storeVisitorConsent(HOST_ID, { status: 'opted-out' })
+      unheard.fire()
+      expect(cookieNames()).toContain('_ga')
 
-      expect(residentGaMeasurementIds()).toEqual([GA_ID])
-    })
-
-    it('also reads it off a dataLayer config, which is what GTM leaves', () => {
-      // The script element is not the only way a tag arrives, and it is the
-      // dataLayer that says which properties the resident tag is configured
-      // for — a page can carry an id no <script src> mentions.
-      scope().dataLayer = [['js', new Date()], ['config', 'G-FROMLAYER']]
-
-      expect(residentGaMeasurementIds()).toEqual(['G-FROMLAYER'])
-    })
-
-    it('refuses a malformed id rather than writing a junk window flag', () => {
-      const script = document.createElement('script')
-      script.src = 'https://www.googletagmanager.com/gtag/js?id=not-an-id'
-      document.head.appendChild(script)
-      scope().dataLayer = [['config', 'javascript:evil']]
-
-      expect(residentGaMeasurementIds()).toEqual([])
-    })
-
-    it('is empty on the common pageview where the gate held the script out', () => {
-      expect(residentGaMeasurementIds()).toEqual([])
+      clearAllCookies()
+      delete scope()[`ga-disable-${GA_ID}`]
+      await loadAnalyticsProviders(ANALYTICS_PROVIDER_LOADERS)
+      const heard = residentTagHonoring('ga-disable')
+      storeVisitorConsent(HOST_ID, { status: 'opted-out' })
+      heard.fire()
+      expect(cookieNames()).toEqual([])
     })
   })
 

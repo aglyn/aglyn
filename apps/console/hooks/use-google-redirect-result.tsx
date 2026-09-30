@@ -51,7 +51,7 @@ export function useGoogleRedirectResult(
   // bounced the account, which this hook has no use for but must not reject.
   onCredential?: (credential: UserCredential) => void | Promise<unknown>,
   // The campaign that produced the signup (AGL-1731), already reduced to GA4
-  // params by `campaignEventParams`. Handed in rather than read here because
+  // params by `utmEventParams`. Handed in rather than read here because
   // this hook is the ONLY place a mobile OAuth signup is counted — the page
   // that carried the marketing URL is gone by the time the redirect lands, so
   // a lookup here would find nothing and every phone signup, which is most of

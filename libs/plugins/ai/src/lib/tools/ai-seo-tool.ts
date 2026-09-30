@@ -16,21 +16,18 @@
  */
 
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
+import type { SeoFindingCode } from '@aglyn/aglyn/app-utils/seo-audit'
+import { seoKeywordCount } from '@aglyn/aglyn/app-utils/seo-keywords'
 import {
   SEO_LISTING_FIELDS,
   type SeoListingFieldKey,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
+import type { SeoPageFacts } from '@aglyn/aglyn/app-utils/seo-page-facts'
 import { HostEntityType } from '@aglyn/aglyn/foundation/definitions/platform.types'
-import type {
-  AiSeoFieldValues,
-  AiSeoFindingCode,
-  AiSeoKeywordCoverage,
-  AiSeoSiteFormField,
-} from '../model/ai-seo'
+import type { AiSeoFieldValues, AiSeoSiteFormField } from '../model/ai-seo'
 import type { AiTool } from '../providers/contract'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
 import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
-import type { AiSeoPageFacts } from '../runtime/seo-page-facts'
 
 /**
  * The strict tools SEO by AI answers through (AGL-2910), and the checks that
@@ -52,60 +49,15 @@ import type { AiSeoPageFacts } from '../runtime/seo-page-facts'
  */
 
 /* ------------------------------------------------------------------------ *
- * Keywords: coverage, and what stuffing looks like
+ * Keywords: what stuffing looks like. Coverage — whether a page says a
+ * keyword at all — is the platform's (`app-utils/seo-keywords`).
  * ------------------------------------------------------------------------ */
-
-/** Target keywords one listing may be asked to cover. */
-export const AI_SEO_MAX_KEYWORDS = 5
 
 /** The most times one keyword may appear, per field, before it reads as stuffing. */
 export const AI_SEO_KEYWORD_LIMITS: Readonly<Partial<Record<SeoListingFieldKey, number>>> = {
   title: 1,
   description: 2,
   breadcrumb: 1,
-}
-
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-/** How many times `keyword` appears in `text` as whole words, any case. */
-export function aiSeoKeywordCount(text: string | null | undefined, keyword: string): number {
-  const needle = keyword.trim().toLowerCase()
-  if (!needle || !text) return 0
-  const pattern = new RegExp(
-    `(^|[^\\p{L}\\p{N}])${escapeRegExp(needle).replace(/\s+/g, '\\s+')}(?=$|[^\\p{L}\\p{N}])`,
-    'giu',
-  )
-  return [...text.toLowerCase().matchAll(pattern)].length
-}
-
-/** Keywords as a person typed them: trimmed, deduplicated, capped. */
-export function aiSeoKeywordList(raw: unknown): string[] {
-  const parts = Array.isArray(raw) ? raw.map(String) : String(raw ?? '').split(/[,\n]/)
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const part of parts) {
-    const keyword = part.replace(/\s+/g, ' ').trim().slice(0, 60)
-    const key = keyword.toLowerCase()
-    if (!keyword || seen.has(key)) continue
-    seen.add(key)
-    out.push(keyword)
-    if (out.length >= AI_SEO_MAX_KEYWORDS) break
-  }
-  return out
-}
-
-/** Where a page already says each target keyword. */
-export function aiSeoKeywordCoverage(
-  keywords: readonly string[],
-  sources: { title?: string | null; description?: string | null; h1?: string | null; body?: string | null },
-): AiSeoKeywordCoverage[] {
-  return keywords.map((keyword) => ({
-    keyword,
-    inTitle: aiSeoKeywordCount(sources.title, keyword) > 0,
-    inDescription: aiSeoKeywordCount(sources.description, keyword) > 0,
-    inH1: aiSeoKeywordCount(sources.h1, keyword) > 0,
-    inBody: aiSeoKeywordCount(sources.body, keyword) > 0,
-  }))
 }
 
 /** A word of four letters or more used three times in one short field reads as stuffing. */
@@ -222,7 +174,7 @@ export function checkAiSeoFields(
     }
     const limit = AI_SEO_KEYWORD_LIMITS[key]
     const stuffed = limit
-      ? (context.keywords ?? []).find((keyword) => aiSeoKeywordCount(value, keyword) > limit)
+      ? (context.keywords ?? []).find((keyword) => seoKeywordCount(value, keyword) > limit)
       : undefined
     if (stuffed) {
       violations.push({
@@ -270,7 +222,7 @@ export const AI_SEO_FIX_ALT_MAX_CHARS = Math.min(150, MEDIA_ALT_MAX_LENGTH)
 export const AI_SEO_FIX_IMAGES_PER_PAGE = 3
 
 /** The undescribed images a batch asks about for a page, in page order. */
-export function aiSeoFixImages(page: Pick<AiSeoBatchPage, 'facts'>): AiSeoPageFacts['imagesMissingAlt'] {
+export function aiSeoFixImages(page: Pick<AiSeoBatchPage, 'facts'>): SeoPageFacts['imagesMissingAlt'] {
   return page.facts.imagesMissingAlt.slice(0, AI_SEO_FIX_IMAGES_PER_PAGE)
 }
 
@@ -327,10 +279,10 @@ export interface AiSeoBatchPage {
   screenId: string
   path: string
   name: string
-  codes: ReadonlySet<AiSeoFindingCode>
+  codes: ReadonlySet<SeoFindingCode>
   keywords: readonly string[]
   seo: { title?: string; description?: string; breadcrumb?: string; image?: string; imageAlt?: string } | undefined
-  facts: AiSeoPageFacts
+  facts: SeoPageFacts
 }
 
 /** The findings that let a batch answer propose each value. */
@@ -338,7 +290,7 @@ export const AI_SEO_FIX_CODES = {
   title: ['title-missing', 'title-too-long', 'title-duplicate', 'keyword-missing'],
   description: ['description-missing', 'description-too-long', 'description-duplicate', 'keyword-missing'],
   h1: ['h1-missing', 'h1-thin'],
-} as const satisfies Record<string, readonly AiSeoFindingCode[]>
+} as const satisfies Record<string, readonly SeoFindingCode[]>
 
 export interface AiSeoBatchAnswer {
   title: string | null
@@ -367,7 +319,7 @@ export function checkAiSeoFixes(
   if (!entries) {
     return { value: null, violations: [{ rule: null, code: 'shape', message: 'The answer must list the pages.' }] }
   }
-  const asks = (page: AiSeoBatchPage, codes: readonly AiSeoFindingCode[]) =>
+  const asks = (page: AiSeoBatchPage, codes: readonly SeoFindingCode[]) =>
     codes.some((code) => page.codes.has(code))
   for (const raw of entries) {
     const entry = (raw ?? {}) as Record<string, unknown>
@@ -380,7 +332,7 @@ export function checkAiSeoFixes(
     if (title && asks(page, AI_SEO_FIX_CODES.title)) {
       if (title.length > SEO_LISTING_FIELDS.title.maxLength) {
         broken.push(`title is ${title.length} characters; the limit is ${SEO_LISTING_FIELDS.title.maxLength}`)
-      } else if (page.keywords.some((keyword) => aiSeoKeywordCount(title, keyword) > (AI_SEO_KEYWORD_LIMITS.title ?? 1))) {
+      } else if (page.keywords.some((keyword) => seoKeywordCount(title, keyword) > (AI_SEO_KEYWORD_LIMITS.title ?? 1))) {
         broken.push('title repeats a keyword')
       } else if (taken.has(normalizeTitle(title))) {
         broken.push(`title "${title}" is another page's title`)
@@ -396,7 +348,7 @@ export function checkAiSeoFixes(
           `description is ${description.length} characters; the limit is ${SEO_LISTING_FIELDS.description.maxLength}`,
         )
       } else if (
-        page.keywords.some((keyword) => aiSeoKeywordCount(description, keyword) > (AI_SEO_KEYWORD_LIMITS.description ?? 2))
+        page.keywords.some((keyword) => seoKeywordCount(description, keyword) > (AI_SEO_KEYWORD_LIMITS.description ?? 2))
       ) {
         broken.push('description repeats a keyword')
       } else {

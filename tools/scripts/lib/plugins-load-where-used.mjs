@@ -43,7 +43,10 @@
  *    routes and panels are console contributions, and a published page that
  *    downloads them pays for a screen it will never show.
  * 3. **A site-surface plugin contributes what that surface reaches, and only
- *    that** — statically. A module the surface reaches only through
+ *    that** — statically. A site surface is the module the `site` registrar
+ *    loads from, and the analytics-tag adapter the plugin declares under
+ *    `analyticsProvider` (AGL-3080), which a page fetches when its site
+ *    configures a tag — a site feature, run where the site switched it on. A module the surface reaches only through
  *    `import()` is code the plugin itself defers (the editor-preview slice, a
  *    dialog nobody opened), and before settle is where it must not be.
  * 4. **The console registrar's own module never appears.** Rule 3 reads the
@@ -89,6 +92,15 @@ export function surfaceSpecifier(plugin, surface) {
 }
 
 /**
+ * The analytics-tag adapter a plugin declares (AGL-3080), which a published
+ * page loads when its site configures a tag; null when it declares none.
+ */
+export function analyticsProviderSpecifier(plugin) {
+  const own = plugin?.analyticsProvider?.module
+  return own ? `${plugin.package}/${own}` : null
+}
+
+/**
  * Rule 1, read from `plugins.config.json` alone: a plugin that registers both
  * a site surface and a console one must give the site surface a module of its
  * own. Sharing one module means the loader hands a published page the console
@@ -117,25 +129,29 @@ export function undeclaredSiteModules(plugins) {
 export function siteClosures({ plugins, root, read, resolve }) {
   const closures = new Map()
   for (const plugin of plugins) {
-    const specifier = siteEntrySpecifier(plugin)
-    if (!specifier) continue
-    const entry = resolve(specifier, `${root}/tools/scripts/.resolve.mjs`)
-    if (!entry) {
-      closures.set(plugin.id, { error: `cannot resolve ${specifier}` })
-      continue
-    }
-    const graph = collectBarrelGraph({ entry, read, resolve, staticOnly: true })
+    const specifiers = [siteEntrySpecifier(plugin), analyticsProviderSpecifier(plugin)].filter(Boolean)
+    if (!specifiers.length) continue
     const modules = new Set()
     let directory = null
-    for (const file of graph.modules) {
-      const relative = file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file
-      modules.add(relative)
-      const owner = pluginOf(relative)
-      // The directory the ENTRY sits in owns the closure; a module of another
-      // plugin inside it is AGL-3080's concern, not this guard's.
-      if (owner && file === entry) directory = owner
+    let error = null
+    for (const specifier of specifiers) {
+      const entry = resolve(specifier, `${root}/tools/scripts/.resolve.mjs`)
+      if (!entry) {
+        error = `cannot resolve ${specifier}`
+        continue
+      }
+      const graph = collectBarrelGraph({ entry, read, resolve, staticOnly: true })
+      for (const file of graph.modules) {
+        const relative = file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file
+        modules.add(relative)
+        const owner = pluginOf(relative)
+        // The directory the ENTRY sits in owns the closure; a module of another
+        // plugin inside it is AGL-3080's concern, not this guard's.
+        if (owner && file === entry) directory = owner
+      }
     }
-    if (directory) closures.set(directory, { modules, specifier })
+    if (error) closures.set(directory ?? plugin.id, { error })
+    else if (directory) closures.set(directory, { modules, specifier: specifiers.join(' or ') })
   }
   return closures
 }

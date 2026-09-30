@@ -20,7 +20,7 @@ import {
   publisherAgreementIsPublished,
   publisherAgreementState,
   type PublisherAgreementAcceptance,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
 import {

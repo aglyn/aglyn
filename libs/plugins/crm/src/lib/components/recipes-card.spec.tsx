@@ -83,6 +83,9 @@ jest.mock('./sending-addresses-card', () => ({
   SendingAddressesCard: () => null,
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The Sharing rules card beside it (AGL-3336) offers campaigns as a condition.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useOrgCampaigns: () => ({ options: [], truncated: false, ready: true }),
   // The viewer's reach, which `useCrmScope` reads only for a site in a
   // declared consent group (AGL-3320); an org-wide member here.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),

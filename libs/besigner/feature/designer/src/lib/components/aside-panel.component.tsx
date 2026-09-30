@@ -509,7 +509,7 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
 
     // The bottom-right corner belongs to this panel while it is open
     // (AGL-2486), so publish how far a viewport-fixed affordance has to
-    // stand off to clear it. The Assist launcher reads this; the console's
+    // stand off to clear it. A console-dock launcher reads this; the console's
     // own chrome leaves the corner free and never sets it, which is why the
     // variable carries the offset rather than the panel width — an unset
     // variable then means "the corner is yours" everywhere else.
@@ -529,7 +529,7 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
     useEffect(() => {
       if (panelKey !== 'panelRight') return undefined
       const root = document.documentElement
-      const property = '--aglyn-assist-inset-right'
+      const property = '--aglyn-dock-inset-right'
       if (rightInset === null) {
         root.style.removeProperty(property)
       } else {

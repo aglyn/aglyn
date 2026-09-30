@@ -63,7 +63,7 @@ import { resolveSocialImage } from '@aglyn/aglyn/app-utils/social-image'
 import {
   isListingBrowsable,
   isListingDeleted,
-} from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
+} from './listing-visibility'
 import type { PluginRouteHead } from '@aglyn/aglyn/plugin-manager/plugin-route-metadata'
 
 /**

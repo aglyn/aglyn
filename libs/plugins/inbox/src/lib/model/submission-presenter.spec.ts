@@ -180,4 +180,30 @@ describe('routingChips', () => {
     const chips = routingChips({ dataset: { id: 'd1', recordId: 'r1' } })
     expect(chips[1].label).toBe('Added to a dataset')
   })
+
+  it('says why a record the model refused was not added (AGL-2773)', () => {
+    const chips = routingChips({
+      datasetRefused: {
+        id: 'd1',
+        name: 'Leads',
+        errors: {
+          seats: 'Seats must be a whole number',
+          email: 'Email is required',
+        },
+      },
+    })
+    expect(chips).toEqual([
+      { label: 'Saved to Inbox', color: 'success' },
+      {
+        label:
+          'Not added to “Leads” dataset: Seats must be a whole number; Email is required',
+        color: 'warning',
+      },
+    ])
+  })
+
+  it('still reports a refusal with no dataset name or reasons', () => {
+    const chips = routingChips({ datasetRefused: { id: 'd1' } })
+    expect(chips[1].label).toBe('Not added to the dataset')
+  })
 })

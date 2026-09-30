@@ -240,8 +240,15 @@ has a sweep in `eraseOrg` or is a defect.
 | `contactSuppressions` | **never, deliberately** | do-not-contact list — see below |
 | `supportTickets` + `messages` | yes (AGL-1971), by `eraseOrg` — `eraseUser` redacts instead | subject, body (≤5000 chars), `authorEmail` |
 | `profiles/{uid}` | yes (AGL-1970), by `eraseUser` | handle, display name, `stripeAccountId` |
-| `publisherHandles` | yes (AGL-1970) | handle reservations **and every rename tombstone** |
-| `publisherProfiles` | yes (AGL-1970) — deleted, or reduced to a content-free tombstone | handle, display name, `stripeAccountId`, `publisherAgreement` |
+| `publisherHandles` | yes (AGL-1970), by the marketplace's **required** org eraser (AGL-3080) | handle reservations **and every rename tombstone** |
+| `publisherProfiles` | yes (AGL-1970) — deleted, or reduced to a content-free tombstone — by the same eraser | handle, display name, `stripeAccountId`, `publisherAgreement` |
+| `outreachMailboxCredentials`, `outreachLinks` | yes (AGL-2974/AGL-3297), by `orgId`, as collections the Outreach plugin DECLARES (`orgKeyedCollections`, AGL-3080) and `eraseOrg` sweeps in every process | a rep's sealed mailbox grant; a sequence email's link targets |
+
+The marketplace's eraser is REQUIRED (`"requiredOrgEraser": true` in
+`plugins.config.json`): an erasure refuses to start while it is not registered,
+and fails its `plugins` step — to be retried — if it throws, rather than
+recording the public profile as undone and reporting the workspace erased. Its
+counts are the `marketplace` entry of the erasure's `plugins` report.
 | `adminAudit` | n/a — it *is* the erasure record | ids and counts; some rows carry `email` |
 
 `marketplaceListings`, `marketplacePurchases`, `marketplaceReports` and
@@ -251,7 +258,8 @@ decision, not an oversight. It still needs making.
 
 **AGL-1970 made that decision cost something measurable rather than making it.**
 `eraseOrg` now reports `listingsRetained` — how many listings still name the
-erased org — in its result and in the `org.erased` audit row, so an erasure that
+erased org — in its result and in the `org.erased` audit row (under
+`plugins.marketplace` since AGL-3080), so an erasure that
 leaves something standing says so instead of reporting a clean success. It also
 decides the one case that could not wait: an org with a surviving listing keeps
 a `publisherProfiles/{orgId}` document, but only as `{ erased: true, erasedAt }`.

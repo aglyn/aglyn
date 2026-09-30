@@ -523,6 +523,87 @@ describe('a consent read that throws', () => {
   })
 })
 
+/**
+ * A REFUSAL OUTLIVES THE CONTACT IT WAS WRITTEN ON (AGL-3338).
+ *
+ * Deleting a contact keeps its refusals in the org's retained store. Without
+ * that, the address would read as having no record at all, and an operator's
+ * attestation would enroll somebody who had said no.
+ */
+describe('a refusal whose contact was deleted', () => {
+  const { personKey } = jest.requireActual('@aglyn/aglyn/app-utils/person-key')
+  const GONE = 'lee@lumen.co'
+  const REFUSED_AT = Date.UTC(2026, 5, 1)
+  const retain = (fields: Record<string, unknown>) => {
+    store[`orgs/${ORG_ID}/retainedRefusals/${personKey(GONE)}`] = { retainedAtMs: REFUSED_AT + 1, ...fields }
+  }
+  const retainForThisSite = () =>
+    retain({
+      marketingConsentByHost: {
+        [HOST_ID]: { marketingConsent: false, marketingConsentAtMs: REFUSED_AT, retainedAtMs: REFUSED_AT + 1 },
+      },
+    })
+
+  it('still refuses with no contact left, whatever the operator attests', async () => {
+    retainForThisSite()
+    const out = await add({ emails: [GONE, UNKNOWN], attestConsent: true })
+    expect(out.body.added).toBe(1)
+    expect(out.body.results.find((result: any) => result.email === GONE)).toMatchObject({ reason: 'declined' })
+    expect(memberFor(GONE)).toBeUndefined()
+    expect(memberFor(UNKNOWN)).toBeDefined()
+  })
+
+  it('is reported as unenrollable by the preview, with no attestation offered', async () => {
+    retainForThisSite()
+    const out = await preview({ email: GONE })
+    expect(out.body.refused).toBe(1)
+    expect(out.body.needAttestation).toBe(0)
+  })
+
+  it('refuses a re-created contact whose grant is not newer than the refusal', async () => {
+    retainForThisSite()
+    seedContact(GONE, grantedHere(REFUSED_AT - 1))
+    const out = await add({ email: GONE, attestConsent: true })
+    expect(out.body.added).toBe(0)
+    expect(out.body.results[0].reason).toBe('declined')
+  })
+
+  it('lets a grant the person gave since stand — they signed up again', async () => {
+    retainForThisSite()
+    seedContact(GONE, grantedHere(REFUSED_AT + 10))
+    const out = await add({ email: GONE })
+    expect(out.body.added).toBe(1)
+    expect(entryOf(memberFor(GONE))).toMatchObject({
+      marketingConsent: true,
+      marketingConsentBasis: 'contact-opt-in',
+      marketingConsentAtMs: REFUSED_AT + 10,
+    })
+  })
+
+  it('refuses on a retained refusal that named no site', async () => {
+    retain({ marketingConsentByHost: {}, marketingConsent: false })
+    const out = await add({ email: GONE, attestConsent: true })
+    expect(out.body.results[0].reason).toBe('declined')
+  })
+
+  it('refuses the batch when the retained read throws, as a contact read that throws does', async () => {
+    const getAll = jest.spyOn(firestoreHandle, 'getAll').mockRejectedValueOnce(new Error('unavailable'))
+    try {
+      const out = await add({ emails: [OPTED_IN, UNKNOWN], attestConsent: true })
+      expect(out.body.added).toBe(0)
+      expect(memberRows()).toHaveLength(0)
+    } finally {
+      getAll.mockRestore()
+    }
+  })
+
+  it('THE CONTROL: with nothing retained the address is what it always was', async () => {
+    const out = await add({ email: GONE, attestConsent: true })
+    expect(out.body.added).toBe(1)
+    expect(entryOf(memberFor(GONE))['marketingConsentBasis']).toBe('operator-attested')
+  })
+})
+
 describe('a suppressed address', () => {
   it('is refused at enrollment by the platform list, and named', async () => {
     platformSuppressed.add(OPTED_IN)

@@ -86,7 +86,7 @@ export interface PluginSiteContributions {
 export interface PluginConsoleContributions {
   /**
    * The widget slots its widgets fill: the `CONSOLE_WIDGET_SLOTS` zones, the
-   * panels the shell draws as slots (the assistant dock `assistPanel`, the
+   * panels the shell draws as slots (the console dock `consoleDock`, the
    * besigner's `besignerInspector`), and zones another plugin hosts. A screen
    * that renders one of them loads the plugin.
    */

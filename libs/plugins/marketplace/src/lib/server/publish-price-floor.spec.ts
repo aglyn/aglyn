@@ -52,7 +52,7 @@ import {
   marketplaceSaleEconomics,
   bindingMarketplaceFeePct,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
 import {
   MARKETPLACE_MAX_PRICE_USD,
   MARKETPLACE_MIN_PRICE_USD,

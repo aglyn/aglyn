@@ -33,10 +33,8 @@ import {
   notifyRiskEvent,
   sendGa4Purchase,
   sendGa4Refund,
-  clearConnectPayoutFailure,
-  recordConnectPayoutFailure,
-  syncConnectAccountStatus,
 } from '@aglyn/tenant-data-admin'
+import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { screenMarketplaceSale } from './sale-risk'
 
 /** Stripe failures a redelivery can actually fix. */
@@ -896,38 +894,25 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   object,
   event,
 }) => {
-  // Connect readiness, kept fresh (AGL-1997) — the publisher twin of the
-  // commerce sync. The seller panel reads `stripeChargesEnabled` /
-  // `stripePayoutsEnabled` off this document, and before this nothing but the
-  // publisher reopening the connect route ever refreshed either. Same early
-  // return: `account.updated` shares nothing with the purchase sections below.
-  // `event.livemode`, not `object.livemode` (AGL-2471) — the Account object
-  // has no such field. Two of the three poisoned production linkages were
-  // publisherProfiles, and this is the path that heals them.
-  if (type === 'account.updated') {
-    await syncConnectAccountStatus(
-      'publisherProfiles',
+  // THE PUBLISHER'S PAYMENT ACCOUNT CHANGED — the publisher twin of the
+  // commerce section. The seller panel reads the readiness this mirrors
+  // (AGL-1997), and before it nothing but the publisher reopening the
+  // connect route ever refreshed it; two of the three poisoned production
+  // linkages of AGL-2471 were publisher profiles, and an account event is
+  // what heals them. A payout or transfer to the publisher that never landed
+  // is recorded against the same profile, and a later one that did retires
+  // the warning. Same early return: these events share nothing with the
+  // purchase sections below.
+  if (
+    await paymentProvider().applyAccountEvent('publisherProfiles', {
+      type,
       object,
-      event?.livemode,
-    )
+      event,
+    })
+  ) {
     return
   }
 
-  // A PAYOUT OR TRANSFER THAT NEVER LANDED.
-  //
-  // Placed beside `account.updated` because it is the same kind of event —
-  // account-level, nothing to do with the `metadata.type` order sections
-  // below — and returns for the same reason.
-  //
-  // `payout.failed` is the CONNECTED account's balance failing to reach its
-  // bank, so the account id is `event.account`: the Payout object's own
-  // `destination` names the bank, not the Connect account. `transfer.failed`
-  // is the platform's balance failing to reach the connected account, a
-  // platform event whose `destination` IS the account.
-  //
-  // Recorded and surfaced, never retried: Stripe runs its own retry schedule
-  // and a second transfer against an account that just refused one is how a
-  // duplicate lands.
   // A CARD FRAUD SIGNAL ON A MARKETPLACE SALE (AGL-3365).
   //
   // An issuer's early fraud warning or a Radar review, landing on a charge
@@ -969,28 +954,6 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       { firestore, notifyRisk: notifyRiskEvent },
     )
     return { claimed: true, ...(sellerOrgId ? { orgId: sellerOrgId } : {}) }
-  }
-
-  if (type === 'payout.failed' || type === 'transfer.failed') {
-    const failedAccountId =
-      type === 'payout.failed'
-        ? String(event?.account ?? '')
-        : String(object?.destination?.id ?? object?.destination ?? '')
-    await recordConnectPayoutFailure('publisherProfiles', {
-      kind: type === 'payout.failed' ? 'payout' : 'transfer',
-      object,
-      accountId: failedAccountId,
-      livemode: event?.livemode,
-    })
-    return
-  }
-  // A later success retires the warning the card shows. The history in
-  // `connectPayoutFailures` is kept — "has this account failed before" is what
-  // that record exists to answer — but a stale warning on a resolved problem
-  // trains people to ignore the surface.
-  if (type === 'payout.paid') {
-    await clearConnectPayoutFailure('publisherProfiles', String(event?.account ?? ''))
-    return
   }
 
   // Marketplace purchases (AGL-46): keyed by session id (idempotent on

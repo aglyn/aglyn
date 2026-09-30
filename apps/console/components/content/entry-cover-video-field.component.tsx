@@ -17,7 +17,7 @@
 'use client'
 
 // By path: the facts rules stay out of every `@aglyn/aglyn` barrel, and the
-// Wistia parser is not on one.
+// video-host resolver is not on one.
 import {
   type MediaAssetDocument,
   mediaAssetDocumentPath,
@@ -28,7 +28,10 @@ import {
   mediaPosterSrc,
   parseMediaRef,
 } from '@aglyn/aglyn/app-utils/media-ref'
-import { wistiaEmbedUrl } from '@aglyn/aglyn/app-utils/wistia-embed'
+import {
+  videoEmbedOf,
+  videoEmbedProviderLabels,
+} from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { mdiVideoOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -110,10 +113,22 @@ export function featuredVideoPick(options: {
   }
 }
 
+/**
+ * The video hosts the link field's help names, as they are declared: " or a
+ * video on {label}", or nothing when no plugin declares a host.
+ */
+const VIDEO_HOST_LINKS = (() => {
+  const labels = videoEmbedProviderLabels()
+  if (!labels.length) return ''
+  const hosts = new Intl.ListFormat('en', { type: 'disjunction' })
+  return ` or a video on ${hosts.format(labels)}`
+})()
+
 /** What the stored value names, in words, for the placeholder. */
 function sourceLabel(value: string): string {
   if (parseMediaRef(value)) return 'Video from your media library'
-  if (wistiaEmbedUrl(value)) return 'Wistia video'
+  const embed = videoEmbedOf(value)
+  if (embed) return `${embed.provider.label} video`
   return 'Linked video'
 }
 
@@ -123,8 +138,10 @@ function sourceLabel(value: string): string {
  *
  * Modeled on {@link EntryCoverImageField}, and it keeps that field's two
  * decisions for the same reasons: the link input stays beside the picker, so
- * a video hosted elsewhere or on Wistia can be pasted, and the picker dialog
- * stays the page's, so there is one pick handler to store a reference.
+ * a video file hosted elsewhere, or a link to a video host whose player the
+ * Video element plays (`video-embed-provider.ts`), can be pasted, and the
+ * picker dialog stays the page's, so there is one pick handler to store a
+ * reference.
  *
  * ## The preview
  *
@@ -229,9 +246,10 @@ export function EntryCoverVideoField(props: EntryCoverVideoFieldProps) {
         onChange={(event) => onValueChange(event.target.value)}
         size="small"
         helperText={
-          'Picked from the media library, or paste a link to a video file or ' +
-          'a Wistia media page. A library video with a captured frame also ' +
-          'fills an empty cover image with that frame.'
+          'Picked from the media library, or paste a link to a video file' +
+          VIDEO_HOST_LINKS +
+          '. A library video with a captured frame also fills an empty cover ' +
+          'image with that frame.'
         }
       />
     </Stack>

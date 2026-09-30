@@ -121,8 +121,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-jest.mock('@aglyn/tenant-data-admin/server/stripe-account-mode', () => ({
-  connectLinkageIsReady: () => false,
+jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({
+  merchantAccountIsReady: () => false,
 }))
 jest.mock('@aglyn/tenant-runtime', () => ({ emitHostEvent: async () => undefined }))
 jest.mock('@aglyn/shared-util-email', () => ({

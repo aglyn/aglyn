@@ -39,7 +39,6 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import {
-  compareArtifactVersions,
   isPluginRevoked,
   lockdownRefusalText,
   offeredPluginVersion,
@@ -53,6 +52,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { compareArtifactVersions } from '../model/update-state'
 
 export interface HostPluginsCardProps {
   hostId: string

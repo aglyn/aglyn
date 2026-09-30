@@ -16,7 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { resendDeliveryMessageSource } from '@aglyn/shared-util-email'
+import { mailProviderReads } from '@aglyn/shared-util-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -88,19 +88,11 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
 
-    const apiKey = String(process.env.RESEND_READ_API_KEY ?? '').trim()
-    if (!apiKey) {
-      return Response.json(
-        {
-          error:
-            'Set RESEND_READ_API_KEY to a full-access key. The sending key ' +
-            'cannot read message content.',
-        },
-        { status: 501 },
-      )
-    }
+    const reads = mailProviderReads()
+    const unmet = reads.unmet()
+    if (unmet) return Response.json({ error: unmet }, { status: 501 })
 
-    const message = await resendDeliveryMessageSource(apiKey)(messageId)
+    const message = await reads.message(messageId)
     if (!message) {
       return Response.json(
         { error: 'The provider no longer holds this message.' },

@@ -21,8 +21,6 @@ import {
   isLockedOnForWorkspace,
   listConsoleExtensions,
   planLabelGrantingFeature,
-  resolveUpdateState,
-  updateStateLabel,
 } from '@aglyn/aglyn'
 import { mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -45,18 +43,6 @@ import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { useOrgPluginSwitchboard } from '../../../../../hooks/use-plugin-switchboard'
 import { resolveExtensionEntitlement } from '../../../../../utils/extension-entitlement'
-
-/**
- * How loudly each update state reads (AGL-1016). `unknown` and `ahead` are
- * warnings rather than neutral text: both mean the workspace is running
- * something the marketplace cannot vouch for right now.
- */
-const UPDATE_SEVERITY = {
-  current: 'success',
-  'update-available': 'info',
-  ahead: 'warning',
-  unknown: 'warning',
-} as const
 
 /**
  * A plugin installation, as its own page (AGL-1007).
@@ -179,26 +165,6 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
       ? pin.manifest.networkHosts
       : []
 
-  // The listing behind the pin, for the update line (AGL-1016). A public
-  // read, and absent for first-party plugins — which have no listing and no
-  // version, so there is nothing to be behind.
-  const { data: listing } = useFirestoreDoc<any>(
-    () => doc(firestore, 'marketplaceListings', listingId || '-missing-'),
-    [firestore, listingId],
-  )
-  // The kill switch behind that listing (AGL-2368). A revoked version stays
-  // `approved` — revocation does not clear a review verdict — so without this
-  // the update line offered bytes `install-plugin` answers 409 to. Public
-  // read, listing-scoped, one document.
-  const { data: revocation } = useFirestoreDoc<any>(
-    () => (listingId ? doc(firestore, 'revocations', listingId) : null),
-    [firestore, listingId],
-  )
-  const updateStatus = useMemo(
-    () => resolveUpdateState(pin as never, listing ?? null, 'plugin', revocation),
-    [pin, listing, revocation],
-  )
-
   const onChanged = useCallback(
     () => setPinsNonce((current) => current + 1),
     [],
@@ -283,30 +249,17 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
             </Alert>
           ) : null}
 
-          {/* Version, said plainly (AGL-1016). Read-only for now: this
-              page could show v1 while the listing page showed v2 and
-              nothing reconciled them. Applying the update is AGL-1017. */}
-          {!firstParty && installedAnywhere ? (
-            <Alert
-              severity={UPDATE_SEVERITY[updateStatus.state]}
-              variant="outlined"
-              action={
-                updateStatus.state === 'update-available' ? (
-                  <AppLink
-                    href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
-                      orgSlug,
-                      listingId,
-                    })}
-                  >
-                    <Button size="small" color="inherit" component="span">
-                      {'View listing'}
-                    </Button>
-                  </AppLink>
-                ) : undefined
-              }
-            >
-              {updateStateLabel(updateStatus)}
-            </Alert>
+          {/* Version, said plainly (AGL-1016) — by the plugin that
+              installed it (AGL-3080). Whether the pinned version is still
+              what its publisher ships is a question about that plugin's
+              listing and kill switch, so it answers in this zone. */}
+          {!firstParty && installedAnywhere && pin ? (
+            <PluginWidgetSlot
+              slot="pluginInstallStatus"
+              orgSlug={orgSlug}
+              pluginRef={pluginRef}
+              pin={pin}
+            />
           ) : null}
 
           {/* Where it runs. A marketplace install is a set of pins, so it
