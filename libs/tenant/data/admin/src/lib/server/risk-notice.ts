@@ -816,7 +816,9 @@ export async function notifyRiskEvent(
           merge,
           await riskNoticeEmailBrand(input.kind, orgId),
         )
-        const delivery = await emailPeople(deps, recipients, rendered, supportEmail)
+        const delivery = await emailPeople(deps, recipients, rendered, supportEmail, {
+          lockNotice: LOCK_NOTICE_KINDS.has(input.kind),
+        })
         result.owners.emailed = delivery.sent
         result.owners.emailFailed = delivery.failed
         if (!delivery.sent && !delivery.failed) {
@@ -919,6 +921,22 @@ function emailMerge(input: {
 }
 
 /**
+ * The notices a banned account still receives (AGL-3420): the lock and lift
+ * notices, the only mail that tells it what happened. Everything else —
+ * digests, reviews, sale warnings — is refused like any other sender's.
+ */
+const LOCK_NOTICE_KINDS: ReadonlySet<string> = new Set<RiskEventKind>([
+  'workspace-locked',
+  'workspace-unlocked',
+  'site-locked',
+  'site-unlocked',
+  'domain-locked',
+  'domain-unlocked',
+  'account-locked',
+  'account-unlocked',
+])
+
+/**
  * One email per person — two owners have not agreed to see each other's
  * addresses. Platform sender, transactional, owed for the account.
  */
@@ -927,6 +945,7 @@ async function emailPeople(
   recipients: { uids: string[]; emails: Record<string, string | null> },
   rendered: RenderedRiskNoticeEmail,
   supportEmail: string,
+  options: { lockNotice?: boolean } = {},
 ): Promise<{ sent: number; failed: number }> {
   let sent = 0
   let failed = 0
@@ -949,6 +968,7 @@ async function emailPeople(
         ...(supportEmail ? { replyTo: supportEmail } : {}),
         context: 'risk-notice',
         owedFor: 'account',
+        ...(options.lockNotice ? { accountBanExempt: true } : {}),
       })
       .catch((error: unknown) => ({ sent: false as const, reason: 'provider-error' as const, detail: String(error) }))
     if (outcome.sent) {

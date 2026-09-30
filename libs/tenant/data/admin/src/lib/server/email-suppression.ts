@@ -148,6 +148,16 @@ export type EmailSuppressionReason =
    * again only if the domain still takes no mail.
    */
   | 'no_mail_server'
+  /**
+   * The account holding this address is BANNED — locked for phishing, fraud
+   * or malicious content (AGL-3420). Not a mailing preference and not a
+   * deliverability fact: the platform's own decision that this address is
+   * sent nothing, by any sender, for any purpose, once the ban notice has
+   * gone. Unlike every other reason it is also read on TRANSACTIONAL mail,
+   * by the deliverability preflight on `sendEmail`. Only lifting the ban
+   * releases it — see {@link ACCOUNT_BAN_SUPPRESSION_REASON}.
+   */
+  | 'account_ban'
 
 /**
  * The reasons that may be filed PLATFORM-WIDE, as a runtime set.
@@ -182,7 +192,17 @@ export const PLATFORM_SUPPRESSION_REASONS: readonly EmailSuppressionReason[] = [
   'complaint',
   'staff',
   'no_mail_server',
+  'account_ban',
 ]
+
+/**
+ * The ban reason, named because four rules hang on it: a later failure never
+ * rewrites it ({@link suppressEmail}), no staff release or opt-in lifts it
+ * ({@link releaseEmail}, {@link releaseEmailForConfirmedOptIn}), only
+ * {@link releaseAccountBanSuppressions} does, and the preflight refuses it on
+ * every send ({@link accountBannedRecipients}).
+ */
+export const ACCOUNT_BAN_SUPPRESSION_REASON = 'account_ban' satisfies EmailSuppressionReason
 
 /**
  * The reason a self-service opt-out is filed under, on the PER-SITE list.
@@ -274,9 +294,20 @@ export interface SuppressEmailInput {
    * A sender that stamps a richer verdict of its own passes `false`.
    */
   stampRecord?: boolean
+  /**
+   * The account the address belongs to, on a ban row, so lifting that
+   * account's ban releases exactly its rows.
+   */
+  subjectUid?: string | null
   /** Injectable for tests; defaults to the admin app's Firestore. */
   firestore?: any
 }
+
+/** A live ban row: nothing but lifting the ban may change or release it. */
+const isLiveBanRow = (snapshot: any): boolean =>
+  Boolean(snapshot?.exists) &&
+  !snapshot.get('releasedAt') &&
+  snapshot.get('reason') === ACCOUNT_BAN_SUPPRESSION_REASON
 
 /**
  * Record a platform-wide suppression. Idempotent by document id.
@@ -308,7 +339,22 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
   const db = input.firestore ?? defaultFirestore()
   const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
   const snapshot = await ref.get()
+  // A bounce or complaint arriving for a banned address must not rewrite the
+  // ban as a reason an opt-in or a staff release could lift.
+  if (input.reason !== ACCOUNT_BAN_SUPPRESSION_REASON && isLiveBanRow(snapshot)) {
+    return { key, created: false }
+  }
   const email = String(input.email).trim().toLowerCase()
+  // A ban filed over a live suppression of another kind keeps that reason,
+  // so lifting the ban puts the complaint or bounce back rather than
+  // releasing it with the ban.
+  const priorReason =
+    input.reason === ACCOUNT_BAN_SUPPRESSION_REASON &&
+    snapshot.exists &&
+    !snapshot.get('releasedAt') &&
+    snapshot.get('reason') !== ACCOUNT_BAN_SUPPRESSION_REASON
+      ? (snapshot.get('reason') as EmailSuppressionReason)
+      : null
   await ref.set(
     {
       email,
@@ -316,6 +362,8 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
       reason: input.reason,
       context: input.context ?? null,
       hostId: input.hostId ?? null,
+      ...(input.subjectUid ? { subjectUid: input.subjectUid } : {}),
+      ...(priorReason ? { priorReason } : {}),
       releasedAt: null,
       released: false,
       suppressedAt: FieldValue.serverTimestamp(),
@@ -365,6 +413,8 @@ export type EmailReleaseChannel =
   | 'staff'
   /** A recipient completed a double opt-in from this address. */
   | 'double-opt-in'
+  /** Staff lifted the ban on the account holding it (AGL-3420). */
+  | 'ban-lifted'
 
 /**
  * Put an address back in circulation (a staff correction, or the person asking
@@ -378,7 +428,13 @@ export type EmailReleaseChannel =
  * a report filed against the wrong message, an address entered by mistake.
  * Nothing automatic gets that latitude.
  *
- * @returns false when there was no live record to release.
+ * Except a ban (AGL-3420): an `account_ban` row belongs to the account's
+ * lock, and is lifted by lifting the ban, never from this list — releasing
+ * one here would put a banned account back on every sender while the
+ * account itself stays locked.
+ *
+ * @returns false when there was no live record to release, or the record is
+ *          a ban.
  */
 export async function releaseEmail(input: {
   email: string
@@ -392,6 +448,7 @@ export async function releaseEmail(input: {
   const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
   const snapshot = await ref.get()
   if (!snapshot.exists || snapshot.get('releasedAt')) return false
+  if (isLiveBanRow(snapshot)) return false
   await ref.set(
     {
       releasedAt: FieldValue.serverTimestamp(),
@@ -403,6 +460,131 @@ export async function releaseEmail(input: {
     { merge: true },
   )
   return true
+}
+
+/** Whether a live ban row holds this address. Fails open, logging. */
+export async function isAccountBanSuppression(
+  email: string | null | undefined,
+  injectedFirestore?: any,
+): Promise<boolean> {
+  const key = emailSuppressionKey(email)
+  if (!key) return false
+  try {
+    const db = injectedFirestore ?? defaultFirestore()
+    return isLiveBanRow(
+      await db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key).get(),
+    )
+  } catch (error) {
+    console.error('[email-suppression] ban lookup failed', error)
+    return false
+  }
+}
+
+/**
+ * Lift a ban's rows: every live `account_ban` row filed for `uid`, and only
+ * those. Kept and marked released, like every other release. Answers how
+ * many it released.
+ */
+export async function releaseAccountBanSuppressions(input: {
+  uid: string
+  releasedByUid?: string | null
+  firestore?: any
+}): Promise<number> {
+  if (!input.uid) return 0
+  const db = input.firestore ?? defaultFirestore()
+  const snapshot = await db
+    .collection(EMAIL_SUPPRESSIONS_COLLECTION)
+    .where('subjectUid', '==', input.uid)
+    .get()
+  let released = 0
+  for (const doc of snapshot.docs) {
+    if (!isLiveBanRow(doc)) continue
+    const priorReason = doc.get('priorReason')
+    await doc.ref.set(
+      PLATFORM_SUPPRESSION_REASONS.includes(priorReason)
+        ? // The suppression the ban was filed over stands again.
+          {
+            reason: priorReason,
+            priorReason: FieldValue.delete(),
+            subjectUid: FieldValue.delete(),
+          }
+        : {
+            releasedAt: FieldValue.serverTimestamp(),
+            released: true,
+            releasedByUid: input.releasedByUid ?? null,
+            releasedNote: null,
+            releasedVia: 'ban-lifted' satisfies EmailReleaseChannel,
+          },
+      { merge: true },
+    )
+    released += 1
+  }
+  forgetAccountBans()
+  return released
+}
+
+/*==========================================
+ * THE BAN LIST, AS THE PREFLIGHT READS IT (AGL-3420)
+ *
+ * Every message `sendEmail` sends asks whether a recipient is banned, so the
+ * answer cannot cost a read per recipient per send. Bans are few and rarely
+ * change, so the live set is read whole — one equality query — and held for
+ * a minute. A failed read keeps the last set it had (a ban is not lifted by
+ * an outage) and, with none, answers "nobody": transactional mail must not
+ * stop because the list is unreadable.
+ *=========================================*/
+
+const ACCOUNT_BAN_CACHE_MS = 60_000
+let accountBanCache: { at: number; keys: Set<string> } | null = null
+let accountBanPending: Promise<Set<string>> | null = null
+
+/** Drop the held set, so the next send reads the list again. */
+export function forgetAccountBans(): void {
+  accountBanCache = null
+  accountBanPending = null
+}
+
+async function accountBanKeys(injectedFirestore?: any): Promise<Set<string>> {
+  if (accountBanCache && Date.now() - accountBanCache.at < ACCOUNT_BAN_CACHE_MS) {
+    return accountBanCache.keys
+  }
+  accountBanPending ??= (async () => {
+    try {
+      const db = injectedFirestore ?? defaultFirestore()
+      const snapshot = await db
+        .collection(EMAIL_SUPPRESSIONS_COLLECTION)
+        .where('reason', '==', ACCOUNT_BAN_SUPPRESSION_REASON)
+        .get()
+      const keys = new Set<string>()
+      for (const doc of snapshot.docs) {
+        if (!doc.get('releasedAt')) keys.add(doc.id)
+      }
+      accountBanCache = { at: Date.now(), keys }
+      return keys
+    } catch (error) {
+      console.error('[email-suppression] ban list read failed', error)
+      return accountBanCache?.keys ?? new Set<string>()
+    } finally {
+      accountBanPending = null
+    }
+  })()
+  return accountBanPending
+}
+
+/** The addresses among `emails` whose account is banned, lowercased. */
+export async function accountBannedRecipients(
+  emails: readonly string[],
+  injectedFirestore?: any,
+): Promise<Set<string>> {
+  const banned = new Set<string>()
+  if (!emails.length) return banned
+  const keys = await accountBanKeys(injectedFirestore)
+  if (!keys.size) return banned
+  for (const email of emails) {
+    const key = emailSuppressionKey(email)
+    if (key && keys.has(key)) banned.add(String(email).trim().toLowerCase())
+  }
+  return banned
 }
 
 /**
@@ -1058,4 +1240,92 @@ export async function hostRefusesCaptureForErasure(
     )
     return false
   }
+}
+
+/*==========================================
+ * A LOCKED ACCOUNT, ON THE HOUSE WORKSPACE'S SITES (AGL-3420)
+ *
+ * Aglyn's own campaigns and sequences go to the house workspace's contacts,
+ * which are keyed by address and know nothing about accounts. A locked
+ * account's addresses are therefore suppressed on each of the house sites
+ * for as long as the lock stands, so every sender that honors a site's list
+ * — campaigns, sequences, workflow and CRM mail — leaves them alone.
+ *
+ * Per SITE and only on the house workspace's: the lock is our relationship
+ * with the person, and another workspace that knows the same address has one
+ * of its own that the lock has no claim on. A ban reaches everyone through
+ * the platform list instead.
+ *
+ * Written only where no row exists, and lifted only where this row still
+ * stands for this account. So an unsubscribe, bounce or erasure already on
+ * the list is never rewritten or deleted by a lock or its lift.
+ *=========================================*/
+
+/** The `reason` a lock's per-site row carries. */
+export const HOST_ACCOUNT_LOCK_SUPPRESSION_REASON = 'account_lock'
+
+/**
+ * Suppress an address on one site because the account holding it is
+ * locked. Answers whether it wrote a row: false when one already stood.
+ */
+export async function suppressEmailForAccountLock(input: {
+  hostId: string
+  email: string
+  uid: string
+  firestore?: any
+}): Promise<boolean> {
+  const key = emailSuppressionKey(input.email)
+  if (!key) return false
+  const db = input.firestore ?? defaultFirestore()
+  const ref = db
+    .collection('hosts')
+    .doc(input.hostId)
+    .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+    .doc(key)
+  const email = String(input.email).trim().toLowerCase()
+  let created = false
+  await db.runTransaction(async (transaction: any) => {
+    const existing = await transaction.get(ref)
+    created = !existing.exists
+    if (!created) return
+    transaction.set(ref, {
+      email,
+      emailTokens: emailSearchTokens(email),
+      reason: HOST_ACCOUNT_LOCK_SUPPRESSION_REASON,
+      subjectUid: input.uid,
+      suppressedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    })
+  })
+  return created
+}
+
+/**
+ * Lift a lock's row on one site: deleted only while it is still this
+ * account's lock row. Answers whether it deleted one.
+ */
+export async function releaseAccountLockSuppression(input: {
+  hostId: string
+  email: string
+  uid: string
+  firestore?: any
+}): Promise<boolean> {
+  const key = emailSuppressionKey(input.email)
+  if (!key) return false
+  const db = input.firestore ?? defaultFirestore()
+  const ref = db
+    .collection('hosts')
+    .doc(input.hostId)
+    .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+    .doc(key)
+  let deleted = false
+  await db.runTransaction(async (transaction: any) => {
+    const existing = await transaction.get(ref)
+    deleted =
+      Boolean(existing.exists) &&
+      existing.get('reason') === HOST_ACCOUNT_LOCK_SUPPRESSION_REASON &&
+      existing.get('subjectUid') === input.uid
+    if (deleted) transaction.delete(ref)
+  })
+  return deleted
 }

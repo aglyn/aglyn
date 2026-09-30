@@ -20,6 +20,7 @@ import {
   describeOrgPlan,
   isLockdownReasonCode,
   LOCKDOWN_REASON_CODES,
+  LOCKDOWN_REASON_LABELS,
   normalizeOrgOverrideReason,
   ORG_OVERRIDE_NOTE_MAX,
   ORG_OVERRIDE_REASON_CODES,
@@ -1579,7 +1580,7 @@ const StaffOrgActions = ({
               >
                 {LOCKDOWN_REASON_CODES.map((code) => (
                   <MenuItem key={code} value={code}>
-                    {code}
+                    {LOCKDOWN_REASON_LABELS[code]}
                   </MenuItem>
                 ))}
               </TextField>
@@ -1651,7 +1652,7 @@ const StaffOrgActions = ({
               >
                 {LOCKDOWN_REASON_CODES.map((code) => (
                   <MenuItem key={code} value={code}>
-                    {code}
+                    {LOCKDOWN_REASON_LABELS[code]}
                   </MenuItem>
                 ))}
               </TextField>

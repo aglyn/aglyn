@@ -24,6 +24,7 @@ import {
   MEDIA_CDN_RENDITION_PARAM,
   MEDIA_CDN_ROUTE,
   MEDIA_POSTER_OBJECT_SUFFIX,
+  isSecurityClassLockdownReason,
   mediaPosterObjectPath,
   mediaRenditionObjectPath,
   type MediaVideoRendition,
@@ -373,7 +374,7 @@ export function lockdownStopsMediaDelivery(
   nowMs: number,
 ): boolean {
   if (!state || !isLockdownActive(state, nowMs)) return false
-  return state.reason === 'security' || state.reason === 'manual'
+  return isSecurityClassLockdownReason(state.reason) || state.reason === 'manual'
 }
 
 /**

@@ -406,12 +406,21 @@ export function lockdownBlocks(
 
 export type LockdownReasonCode =
   | 'security'
+  /**
+   * Phishing, fraud or malicious content (AGL-3420). On an ACCOUNT it is a
+   * permanent ban: the account is kept only so its address can never sign up
+   * again, and after the lock notice it is sent no mail at all — see
+   * {@link isAccountBanLockdownReason}. Everywhere a lock's strictness is
+   * read from its reason it is at least as strict as `security`.
+   */
+  | 'abuse'
   | 'billing'
   | 'maintenance'
   | 'manual'
 
 const LOCKDOWN_REASON_CODE_KEYS: Record<LockdownReasonCode, true> = {
   security: true,
+  abuse: true,
   billing: true,
   maintenance: true,
   manual: true,
@@ -426,6 +435,33 @@ export function isLockdownReasonCode(
   return (
     typeof value === 'string' && value in LOCKDOWN_REASON_CODE_KEYS
   )
+}
+
+/** Staff-surface labels; the key stays the wire/API identity. */
+export const LOCKDOWN_REASON_LABELS: Record<LockdownReasonCode, string> = {
+  security: 'Security — investigating a concern',
+  abuse: 'Abuse — phishing, fraud or malicious content (permanent ban)',
+  billing: 'Billing — unresolved payment',
+  maintenance: 'Maintenance',
+  manual: 'Manual',
+}
+
+/**
+ * The reasons that mean "a threat, act now": `security`, and `abuse`, which
+ * is a confirmed one. Every rule that is stricter for a security lock — who
+ * is signed out, which bytes stop serving, which tokens rotate — reads it
+ * through here, so a ban is never the milder of the two.
+ */
+export function isSecurityClassLockdownReason(reason: unknown): boolean {
+  return reason === 'security' || reason === 'abuse'
+}
+
+/**
+ * A lock with this reason, on an account, is a permanent ban (AGL-3420):
+ * after its notice the account is sent nothing, by any sender.
+ */
+export function isAccountBanLockdownReason(reason: unknown): boolean {
+  return reason === 'abuse'
 }
 
 /** The one shape every enforcement point consumes. */
@@ -1126,6 +1162,15 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
             'concern.',
         contact: lockdownSupportEmail() ?? undefined,
       }
+    case 'abuse':
+      return {
+        title: 'Unavailable',
+        body:
+          custom ??
+          'This account has been closed for a violation of our Terms of ' +
+            'Service.',
+        contact: lockdownSupportEmail() ?? undefined,
+      }
     case 'manual':
     default:
       return {
@@ -1188,6 +1233,15 @@ function domainLockdownNotice(
           custom ??
           'This web address is not currently serving while we investigate ' +
             'a report about it.',
+        contact,
+      }
+    case 'abuse':
+      return {
+        title,
+        body:
+          custom ??
+          'This web address is not serving because of a violation of our ' +
+            'Terms of Service.',
         contact,
       }
     case 'manual':

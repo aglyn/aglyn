@@ -20,6 +20,7 @@ import {
   EMAIL_SUPPRESSIONS_COLLECTION,
   emailUnverifiedResponse,
   firebaseAdmin,
+  isAccountBanSuppression,
   isImpersonationSession,
   releaseEmail,
 } from '@aglyn/tenant-data-admin'
@@ -186,6 +187,18 @@ async function releaseHandler(request: Request): Promise<Response> {
       )
     }
 
+    // A ban's row is the account's, lifted with the ban on Lockdown and
+    // never from this list (AGL-3420).
+    if (await isAccountBanSuppression(email)) {
+      return Response.json(
+        {
+          error:
+            'This address belongs to a banned account. Lift the ban on the ' +
+            'account from Lockdown; that releases it.',
+        },
+        { status: 409 },
+      )
+    }
     const released = await releaseEmail({
       email,
       releasedByUid: staff.uid,

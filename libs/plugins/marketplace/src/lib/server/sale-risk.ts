@@ -40,7 +40,7 @@
 
 import { createHash } from 'crypto'
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
-import { normalizeOrgLockdown } from '@aglyn/aglyn/app-utils/lockdown'
+import { isSecurityClassLockdownReason, normalizeOrgLockdown } from '@aglyn/aglyn/app-utils/lockdown'
 import {
   LOCKDOWN_BILLING_PAUSES_COLLECTION,
   lockdownPayoutPauseRecordId,
@@ -97,7 +97,9 @@ export async function isPublisherSecurityLocked(
   const orgId = typeof publisherOrgId === 'string' ? publisherOrgId : ''
   if (!orgId) return false
   const org = (await firestore.collection('orgs').doc(orgId).get()).data()
-  return normalizeOrgLockdown(org as Parameters<typeof normalizeOrgLockdown>[0])?.reason === 'security'
+  return isSecurityClassLockdownReason(
+    normalizeOrgLockdown(org as Parameters<typeof normalizeOrgLockdown>[0])?.reason,
+  )
 }
 
 async function memberUids(

@@ -162,9 +162,10 @@ describe('the billing recovery path survives a billing lock', () => {
       staff.indexOf('revokeMemberTokens:') + 220,
     )
     // Whatever else it gates on, `billing` must not be one of the reasons
-    // that revokes — the staff route names the two that do.
+    // that revokes — the staff route names the ones that do: the security
+    // class (`security`, and `abuse`, AGL-3420) and `manual`.
     expect({
-      security: clause.includes("'security'"),
+      security: clause.includes('isSecurityClassLockdownReason(lock.reason)'),
       manual: clause.includes("'manual'"),
       billing: clause.includes("'billing'"),
     }).toEqual({ security: true, manual: true, billing: false })

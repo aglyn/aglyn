@@ -50,6 +50,9 @@ export const SUPPRESSION_REASONS: Record<
    * honored has to be able to show.
    */
   manual: { label: 'Added by hand', color: 'default' },
+  // Aglyn's own sites only: the account holding the address is locked, and
+  // lifting the lock removes the row (AGL-3420).
+  account_lock: { label: 'Account locked', color: 'error' },
 }
 
 /** One stored reason, as {@link SUPPRESSION_REASONS} describes it. */

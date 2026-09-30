@@ -109,6 +109,7 @@ export const SUPPRESSION_REASON_LABELS: Readonly<
   complaint: { label: 'Marked as spam', color: 'error' },
   staff: { label: 'Recorded by staff', color: 'default' },
   no_mail_server: { label: 'No mail server', color: 'warning' },
+  account_ban: { label: 'Banned account', color: 'error' },
 }
 
 export const SUPPRESSION_FILTER_OPTIONS: Readonly<

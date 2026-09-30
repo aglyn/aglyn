@@ -94,7 +94,7 @@ export function normalizeSubscriptionCancelReason(
 
 /**
  * Should a lock with this reason cancel billing unless the operator says
- * otherwise? Only `security`.
+ * otherwise? Only `security`, and `abuse`, the confirmed kind (AGL-3420).
  *
  * `billing` locks exist so a customer can fix their card and come back, a
  * `maintenance` lock is ours, and a `manual` lock can mean anything — none of
@@ -104,18 +104,18 @@ export function normalizeSubscriptionCancelReason(
  * and the runbook's matrix have one source.
  */
 export function lockdownCancelsBillingByDefault(reason: unknown): boolean {
-  return reason === 'security'
+  return reason === 'security' || reason === 'abuse'
 }
 
 /**
  * Should a tenant lock with this reason pause the money its sites take —
- * membership renewals and the seller's payouts (AGL-3364)? Only `security`,
- * for the reasons above: a billing, maintenance or manual lock must never
+ * membership renewals and the seller's payouts (AGL-3364)? Only `security`
+ * and `abuse`, for the reasons above: a billing, maintenance or manual lock must never
  * stop a merchant's income unless someone ticks the box. The console's
  * initial checkbox state; the route applies no default.
  */
 export function lockdownPausesSiteMoneyByDefault(reason: unknown): boolean {
-  return reason === 'security'
+  return reason === 'security' || reason === 'abuse'
 }
 
 /**

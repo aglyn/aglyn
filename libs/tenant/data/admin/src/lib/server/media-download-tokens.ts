@@ -87,6 +87,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { isSecurityClassLockdownReason } from '@aglyn/aglyn/app-utils/lockdown'
 import { firebaseAdmin } from './firebase-admin'
 
 /** The custom-metadata key Firebase reads the raw download token from. */
@@ -143,7 +144,7 @@ export function lockRotatesDownloadTokens(lock: {
 }): boolean {
   if (!lock) return false
   if (lock.mode === 'read-only') return false
-  return lock.reason === 'security'
+  return isSecurityClassLockdownReason(lock.reason)
 }
 
 /**

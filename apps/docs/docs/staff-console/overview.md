@@ -775,10 +775,13 @@ reported spam on any send from any site. Nothing in the product mails one
 until it is released with **Release**, which asks for a reason in its **Why**
 box and writes an audit row. A released entry stays on the list, marked
 **Released** with its date, as the record that the suppression was honored
-while it stood.
+while it stood. A **Banned account** entry can't be released here: it belongs to
+a banned account, and lifting the ban on [Lockdown](lockdown.md#ban-mail)
+releases it.
 
 The list's **Filters** narrows it by **Status** (*Active* or *Released*),
-**Reason** (*Bounced*, *Marked as spam* or *Recorded by staff*, one or several),
+**Reason** (*Bounced*, *Marked as spam*, *Recorded by staff*, *No mail server* or
+*Banned account*, one or several),
 **Learned from** (the tag of the send that failed, such as `invite`), **Site ID**
 (typed exactly), and **Last reported** (*is*, *is after*, *is on or after*, *is
 before* or *is on or before* a day). Last reported is the latest failure, so it can
