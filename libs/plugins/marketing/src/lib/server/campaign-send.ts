@@ -2601,7 +2601,7 @@ export async function performCampaignSend(
         siteBase,
         hostId,
         email,
-        campaignId,
+        sendId: campaignId,
         topicId,
         secret: unsubscribeSecret,
       }
