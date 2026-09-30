@@ -54,8 +54,8 @@
  * `operator-attested` and the declared source rides along as the reason.
  */
 
-import { parseCsv } from './dataset-csv'
-import { normalizeContactEmail } from './contacts'
+import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import { parseCsv } from '@aglyn/aglyn/app-utils/dataset-csv'
 
 /**
  * The most addresses one uploaded file may name.
@@ -72,16 +72,6 @@ import { normalizeContactEmail } from './contacts'
  * request.
  */
 export const LIST_IMPORT_MAX_ADDRESSES = 50_000
-
-/**
- * The most characters one uploaded file may carry.
- *
- * Checked before the parse rather than after, because the parse is what the
- * ceiling is protecting: a 400 answered on the byte count costs nothing,
- * where discovering the file was too big by materializing all of its cells
- * has already spent the memory the limit exists to bound.
- */
-export const LIST_IMPORT_MAX_CHARACTERS = 8_000_000
 
 /**
  * Local parts that make an address a ROLE account.

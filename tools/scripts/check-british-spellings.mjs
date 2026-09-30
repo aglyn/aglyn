@@ -119,7 +119,13 @@ const MARKDOWN_ROOTS = [
  * is a CHECKLIST ITEM ID, stored against every review a staff member has
  * ticked. Renaming it orphans those ticks.
  *
- * None of the seven is read by a customer. If one ever becomes prose, fix
+ * `email/list-import.ts` — `enquiries` is a ROLE-ACCOUNT LOCAL PART, beside
+ * `contact` and `help`: the mailbox name real businesses use, which the
+ * import screening has to recognize as spelled. It came with the module from
+ * the core, where the same row was one of the reasons `libs/aglyn` is not
+ * swept.
+ *
+ * None of these is read by a customer. If one ever becomes prose, fix
  * the prose and drop the row — the list only shrinks.
  */
 /*
@@ -144,8 +150,9 @@ const MARKDOWN_ROOTS = [
  *   - `libs/besigner/.../style-field-search.ts` — style-field search
  *     aliases, a list whose own header says it "only ever ADDS reach";
  *     Americanizing them deletes the feature for the people it is for;
- *   - `libs/aglyn/.../list-import.ts` — `enquiries` beside `contact` and
- *     `help`, matching real generic mailboxes.
+ *   - `list-import.ts`, then in `libs/aglyn` — `enquiries` beside `contact`
+ *     and `help`, matching real generic mailboxes (the email plugin's now,
+ *     with a baseline row of its own).
  * That is ~100 permanent rows on a ratchet allowed only to shrink, which is
  * the opposite of what the baseline is for. A root belongs here when a red
  * in it would mean somebody should change the words.

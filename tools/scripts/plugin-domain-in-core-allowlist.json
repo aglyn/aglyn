@@ -965,14 +965,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/list-import.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/margin-utilization.ts",
       "rules": [
         "domain-declares:ai",

@@ -167,7 +167,6 @@ export * from './list-assignment-policy'
 // mechanical screening only, so that an import asks the enrollment question
 // through the same module the one-address add path asks it through rather
 // than answering it a second way.
-export * from './list-import'
 // The dynamic-list rule (§3b/§3c), beside it for the same reasons: pure, and
 // it composes `contacts` for the segment vocabulary rather than restating it.
 export * from './dynamic-list-rule'
@@ -318,6 +317,7 @@ export * from './author-css'
 export * from './author-html'
 export * from './dataset-models'
 export * from './dataset-csv'
+export * from './csv-upload'
 export * from './artifact-provenance'
 export * from './dataset-query'
 export * from './plugin-manifest'
