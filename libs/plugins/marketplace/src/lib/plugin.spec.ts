@@ -64,7 +64,7 @@ describe('marketplace plugin', () => {
      * UI without importing this plugin, and the hub is this plugin. These
      * are drawn by console pages that are not the marketplace: the
      * workspace's Plugins page, an installation's own page, a site's layouts
-     * list, and the staff overview.
+     * list, the staff overview, and a site's template gallery and library.
      */
     const slots = (extension?.widgets ?? []).map((widget) => widget.slot)
     expect(slots.sort()).toEqual([
@@ -73,6 +73,8 @@ describe('marketplace plugin', () => {
       'pluginInstallStatus',
       'pluginSiteSet',
       'staffOverview',
+      'templateGallery',
+      'templateInstallStatus',
     ])
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
   })

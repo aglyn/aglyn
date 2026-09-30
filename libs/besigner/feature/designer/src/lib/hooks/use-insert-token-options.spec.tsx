@@ -20,6 +20,10 @@ import { renderHook } from '@testing-library/react'
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  registerRepeatSource,
+  type RepeatSource,
+} from '@aglyn/aglyn/app-utils/repeat-sources'
+import {
   BindingPickerContext,
   type BindingPickerContextValue,
 } from '../contexts/binding-picker-context'
@@ -43,6 +47,20 @@ const datasetWrapper =
       </Aglyn.EntityPickerContext.Provider>
     </BindingPickerContext.Provider>
   )
+
+/**
+ * A repeat source standing in for the one a plugin registers: its key lives
+ * in `repeatDataset` and names an entity of the `datasets` picker kind. The
+ * hook finds a repeat only through a registered source, never by prop name.
+ */
+const ENTITY_REPEAT_SOURCE: RepeatSource = {
+  id: 'test-entities',
+  label: 'Dataset',
+  keyProp: 'repeatDataset',
+  entityKind: 'datasets',
+  keyAttribute: { component: Aglyn.FieldComponentType.DATASET_SELECT },
+  useRows: () => ({ status: 'missing' }),
+}
 
 /** A field inside a repeat bound to `datasetId`. */
 const seedRepeat = (datasetId: string) =>
@@ -122,7 +140,14 @@ describe('useInsertTokenOptions — component properties (AGL-1335)', () => {
  * Dataset group looks the same as a node that is not in a repeat.
  */
 describe('useInsertTokenOptions — a dataset outside the browse window', () => {
-  afterEach(() => jest.restoreAllMocks())
+  let unregister: () => void = () => undefined
+  beforeEach(() => {
+    unregister = registerRepeatSource(ENTITY_REPEAT_SOURCE)
+  })
+  afterEach(() => {
+    unregister()
+    jest.restoreAllMocks()
+  })
 
   it('asks for a keyed read when the settled list does not hold it', () => {
     seedRepeat('ds-900')
@@ -149,8 +174,8 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
         resolved: {
           datasets: { 'ds-900': { id: 'ds-900', label: 'Newsletter' } },
         },
-        datasetFields: {
-          'ds-900': [{ id: 'email', label: 'Email address' }],
+        entityFields: {
+          datasets: { 'ds-900': [{ id: 'email', label: 'Email address' }] },
         },
       }),
     })
@@ -160,7 +185,7 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
     expect(items.map((option) => option.label)).toEqual(['Email address'])
     // The group says WHICH dataset, which is the half that needed the name.
     expect(items[0].groupHint).toBe('From dataset "Newsletter"')
-    expect(result.current.labelContext.datasetFields).toEqual([
+    expect(result.current.labelContext.itemFields).toEqual([
       { id: 'email', label: 'Email address' },
     ])
   })
@@ -195,6 +220,32 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
       }),
     })
     expect(asked).toEqual([])
+  })
+
+  it('offers no item tokens when no registered source claims the prop', () => {
+    // The control for the lookup being the seam's: the same stored prop, with
+    // no source registered to say what it means, is not a repeat at all.
+    unregister()
+    seedRepeat('ds-900')
+    const askedFor: string[] = []
+    const { result } = renderHook(() => useInsertTokenOptions(FIELD_NODE), {
+      wrapper: datasetWrapper({
+        request: (kind) => askedFor.push(kind),
+        resolve: () => undefined,
+        datasets: [],
+        status: { datasets: 'ready' },
+        resolved: {
+          datasets: { 'ds-900': { id: 'ds-900', label: 'Newsletter' } },
+        },
+        entityFields: {
+          datasets: { 'ds-900': [{ id: 'email', label: 'Email address' }] },
+        },
+      }),
+    })
+    expect(askedFor).toEqual([])
+    expect(
+      result.current.options.some((option) => option.group === 'Dataset item'),
+    ).toBe(false)
   })
 
   it('spends nothing at all outside a repeat', () => {

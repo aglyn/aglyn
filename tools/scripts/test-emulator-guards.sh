@@ -141,6 +141,8 @@ PROJECTS=(
   # index check, beside the engine in the Workflows plugin.
   libs/plugins/outreach
   libs/plugins/workflows
+  # The Data plugin proves a repeat's scoped sharing against the real rules.
+  libs/plugins/data
 )
 
 # Projects whose specs exercise a cross-workspace job run their suites one at

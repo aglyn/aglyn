@@ -18,13 +18,11 @@
 import {
   AUTHOR_TOKEN_CATALOG,
   COLLECTION_TOKEN_CATALOG,
-  datasetItemToken,
-  datasetItemTokens,
   ENTRY_TOKEN_CATALOG,
+  repeatItemToken,
 } from './binding-token-catalog'
 import { collectionEntryTokens } from './collection-entries'
 import { contentAuthorTokens } from './content-author-profile'
-import type { DatasetModel } from './dataset-models'
 
 /** `{{entry.title}}` → `entry.title` (the resolver map key). */
 const tokenKey = (token: string) => token.replace(/^\{\{|\}\}$/g, '')
@@ -168,91 +166,13 @@ describe('binding token catalog (AGL-583)', () => {
     })
   })
 
-  describe('datasetItemToken', () => {
+  describe('repeatItemToken', () => {
     it('formats the plain field token from the stable id', () => {
-      expect(datasetItemToken('price')).toBe('{{item.price}}')
+      expect(repeatItemToken('price')).toBe('{{item.price}}')
     })
 
     it('formats the one-hop reference token', () => {
-      expect(datasetItemToken('author', 'name')).toBe('{{item.author.name}}')
-    })
-  })
-
-  describe('datasetItemTokens', () => {
-    const model: DatasetModel = {
-      order: ['title', 'author', 'price'],
-      fields: {
-        title: { name: 'Post title', type: 'text' },
-        author: {
-          name: 'Author',
-          type: 'reference',
-          reference: { datasetId: 'authors', displayFieldId: 'full_name' },
-        },
-        price: { name: 'Price', type: 'float' },
-      },
-    }
-
-    it('labels tokens with display names while inserting reference ids', () => {
-      const entries = datasetItemTokens(model)
-      expect(entries).toContainEqual(
-        expect.objectContaining({
-          token: '{{item.title}}',
-          label: 'Post title',
-        }),
-      )
-      // The token always carries the stable id, never the display name.
-      expect(
-        entries.some((entry) => entry.token.includes('Post title')),
-      ).toBe(false)
-    })
-
-    it('keeps model order', () => {
-      const tokens = datasetItemTokens(model).map((entry) => entry.token)
-      expect(tokens.indexOf('{{item.title}}')).toBeLessThan(
-        tokens.indexOf('{{item.author}}'),
-      )
-      expect(tokens.indexOf('{{item.author}}')).toBeLessThan(
-        tokens.indexOf('{{item.price}}'),
-      )
-    })
-
-    it('adds a one-hop token for reference fields with a display field', () => {
-      const entries = datasetItemTokens(model)
-      expect(entries).toContainEqual(
-        expect.objectContaining({
-          token: '{{item.author.full_name}}',
-          label: 'Author → Full name',
-        }),
-      )
-    })
-
-    it('describes fields by their type label', () => {
-      const price = datasetItemTokens(model).find(
-        (entry) => entry.token === '{{item.price}}',
-      )
-      expect(price?.description).toBe('Number')
-    })
-
-    it('falls back to a humanized id when the display name is blank', () => {
-      const entries = datasetItemTokens({
-        order: ['roast_preference'],
-        fields: { roast_preference: { name: '  ', type: 'text' } },
-      })
-      expect(entries[0]).toEqual(
-        expect.objectContaining({
-          token: '{{item.roast_preference}}',
-          label: 'Roast preference',
-        }),
-      )
-    })
-
-    it('skips order entries with no field definition', () => {
-      const entries = datasetItemTokens({
-        order: ['ghost', 'title'],
-        fields: { title: { name: 'Title', type: 'text' } },
-      })
-      expect(entries).toHaveLength(1)
-      expect(entries[0].token).toBe('{{item.title}}')
+      expect(repeatItemToken('author', 'name')).toBe('{{item.author.name}}')
     })
   })
 })

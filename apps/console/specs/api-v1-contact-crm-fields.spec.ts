@@ -111,6 +111,7 @@ jest.mock('firebase-admin/firestore', () => {
 })
 
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import { lastFilters, mockDocs, resetMockFirestore } from './api-v1-crm-double'
 
 const CONTACTS = 'orgs/org-1/contacts'
@@ -145,6 +146,9 @@ const PROFILE = {
   ownerUid: 'u-owner',
   lifecycleStage: 'customer',
 }
+
+// The console's boot, which registers the CRM's `/v1` resources (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   resetMockFirestore()

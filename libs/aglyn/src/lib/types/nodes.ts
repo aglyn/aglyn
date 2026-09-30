@@ -418,8 +418,8 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    *
    * ## Shape
    *
-   * Deliberately the same `HostAction` the automations engine already takes,
-   * so nothing about the runtime changes: the selector is stamped from this
+   * Deliberately the same `SiteInteraction` a site-wide interaction is, so
+   * nothing about the runtime changes: the selector is stamped from this
    * node's own id when the page is composed, and the compiled result is the
    * shape the client engine has always consumed. `trigger.selector` is
    * therefore ignored here — the node IS the selector.

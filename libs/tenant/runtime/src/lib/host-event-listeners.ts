@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostActionAlert } from '@aglyn/aglyn/server'
+import type { SiteAlert } from '@aglyn/aglyn/server'
 
 /**
  * WHO HEARS A HOST EVENT.
@@ -86,7 +86,7 @@ export interface HostEventListener {
     event: string,
     payload: HostEventPayload,
     context?: HostEventContext,
-  ): Promise<readonly HostActionAlert[] | void>
+  ): Promise<readonly SiteAlert[] | void>
   /**
    * Runs the server half of ONE page interaction, by id, that a published
    * page fired for a site event it evaluated itself — a scroll depth, a
@@ -101,7 +101,7 @@ export interface HostEventListener {
     event: string,
     payload: HostEventPayload,
     context?: HostEventContext,
-  ): Promise<readonly HostActionAlert[] | void>
+  ): Promise<readonly SiteAlert[] | void>
 }
 
 interface Registration {
@@ -115,7 +115,7 @@ const registrations: Registration[] = []
 let warnedEmpty = false
 
 /** A listener's answer as a list: nothing it said counts as no alerts. */
-function alertsOf(answer: readonly HostActionAlert[] | void): HostActionAlert[] {
+function alertsOf(answer: readonly SiteAlert[] | void): SiteAlert[] {
   return Array.isArray(answer) ? [...answer] : []
 }
 
@@ -157,7 +157,7 @@ export async function runHostEventListeners(
   event: string,
   payload: HostEventPayload = {},
   context: HostEventContext = {},
-): Promise<HostActionAlert[]> {
+): Promise<SiteAlert[]> {
   if (!registrations.length) {
     /*
      * Said once per process rather than per event. No listener means the
@@ -198,8 +198,8 @@ export async function dispatchHostAutomation(
   event: string,
   payload: HostEventPayload = {},
   context: HostEventContext = {},
-): Promise<HostActionAlert[]> {
-  const alerts: HostActionAlert[] = []
+): Promise<SiteAlert[]> {
+  const alerts: SiteAlert[] = []
   for (const { pluginId, listener } of registrations) {
     if (!listener.onDispatch) continue
     try {
