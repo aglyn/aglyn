@@ -101,6 +101,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // own cards as any other card on it would be.
   hostFirstRun: 'stack',
   hostTheme: 'stack',
+  // The marketplace's cards among the overview's own, as one block.
+  staffOverview: 'stack',
   adminOrgDetail: 'stack',
   orgBillingUsage: 'stack',
   orgBillingOverview: 'stack',

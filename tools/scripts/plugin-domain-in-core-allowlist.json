@@ -133,7 +133,6 @@
     {
       "path": "apps/console/app/api/admin/overview/route.ts",
       "rules": [
-        "plugin-collection:marketplace",
         "domain-declares:forms"
       ],
       "lane": "marketplace"

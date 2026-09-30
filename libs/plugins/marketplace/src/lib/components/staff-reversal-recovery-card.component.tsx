@@ -17,29 +17,12 @@
 
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Stack, Typography } from '@mui/material'
-import { docsHelp } from '../constants/docs-links'
+import type { ReversalRecoveryRow } from '../model/staff-overview'
 
-/** One refused reversal, as `/api/admin/overview` projects it. */
-export interface ReversalRecoveryRow {
-  $id: string
-  listingId: string | null
-  sellerOrgId: string | null
-  /**
-   * The seller's workspace by NAME, resolved by `/api/admin/overview` from
-   * the org snapshot it already holds. Null when the route could not name it
-   * — an org outside the capped snapshot, or one since deleted — and the row
-   * then falls back to the id, which is still a lead somebody can search.
-   */
-  sellerOrgLabel?: string | null
-  buyerUid: string | null
-  /** What the webhook failed to pull back. 0 when it never learned the amount. */
-  owedCents: number
-  reason: string | null
-  cause: string | null
-  failedAt: number | null
-}
+export type { ReversalRecoveryRow }
 
 /**
  * The refund-reversal recovery queue (AGL-2309) — money owed to Aglyn.
@@ -61,9 +44,9 @@ export interface ReversalRecoveryRow {
  * reading there), so the publisher panel could not surface it as a side
  * effect.
  *
- * Presentational on purpose: the overview route already holds the purchase
- * documents, so a second fetch would be a second, disagreeing read of the
- * same money. The header carries the TOTAL because the first staff question
+ * Presentational on purpose: the staff overview widget fetches the purchase
+ * documents once for both of its cards, so a second fetch would be a second,
+ * disagreeing read of the same money. The header carries the TOTAL because the first staff question
  * is "how much", and the per-row amount is what makes any of it chaseable.
  */
 export default function StaffReversalRecoveryCard({
@@ -81,12 +64,12 @@ export default function StaffReversalRecoveryCard({
         'Refund reversals to recover' +
         (total > 0 ? ` — $${(total / 100).toFixed(2)}` : '')
       }
-      help={docsHelp('publisherHandbook', {
+      help={pluginDocsHelp('publisherHandbook', {
         anchor: '#getting-paid',
         excerpt:
           'Refunded sales where Stripe refused to pull the publisher’s ' +
-          'share back — the publisher kept it and Aglyn absorbed the gross ' +
-          'until it is recovered.',
+          'share back — the publisher kept it and the platform absorbed the ' +
+          'gross until it is recovered.',
       })}
       contentGutterX
       contentGutterY

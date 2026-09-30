@@ -782,6 +782,13 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostTheme: 'hostTheme',
   /**
+   * The staff overview, among its platform-wide cards (AGL-3080). No props:
+   * the overview is about the platform, not one org, so a widget here reads
+   * what its plugin holds across every workspace through its own staff
+   * route. A staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffOverview: 'staffOverview',
+  /**
    * Staff admin org detail (staff-only surfaces). Props: orgId. A staff
    * zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
    */
@@ -1198,8 +1205,8 @@ export interface ConsoleHostThemeZoneProps {
 }
 
 /**
- * The zones on the STAFF pages (AGL-2939): the staff org page, its detail
- * zone, and the staff user page.
+ * The zones on the STAFF pages (AGL-2939): the staff overview, the staff org
+ * page, its detail zone, and the staff user page.
  *
  * No workspace names the plugin set there. A staff page is ABOUT an org or
  * an account, and the reader's own memberships have nothing to do with what
@@ -1210,6 +1217,7 @@ export interface ConsoleHostThemeZoneProps {
  * reader.
  */
 export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.staffOverview,
   CONSOLE_WIDGET_SLOTS.adminOrgDetail,
   CONSOLE_WIDGET_SLOTS.staffOrg,
   CONSOLE_WIDGET_SLOTS.staffUser,

@@ -27,6 +27,7 @@ import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
 import PluginInstallStatus from './components/plugin-install-status.component'
+import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
 import PublishArtifactDialog from './components/publish-artifact-dialog.component'
 import { MarketplaceListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -91,6 +92,13 @@ export function registerMarketplaceConsole(): void {
         slot: 'pluginInstallStatus',
         widgetId: 'marketplace-plugin-install-status',
         Component: PluginInstallStatus,
+      },
+      // The staff overview (AGL-3080): recent purchases and the
+      // refund-reversal recovery queue, from this plugin's own purchases.
+      {
+        slot: 'staffOverview',
+        widgetId: 'marketplace-staff-overview',
+        Component: StaffMarketplaceOverview,
       },
     ],
     /**

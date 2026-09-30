@@ -46,6 +46,7 @@ import { publishHandler } from './server/publish'
 import { marketplaceArtifactInventory } from './server/artifact-inventory'
 import { marketplaceAdminReports } from './server/admin-reports'
 import { marketplaceAdminReviews } from './server/admin-reviews'
+import { marketplaceAdminOverview } from './server/admin-overview'
 import { marketplaceAdminTrust } from './server/admin-trust'
 import { reportHandler } from './server/report'
 import { reviewsHandler } from './server/reviews'
@@ -167,6 +168,11 @@ export function registerMarketplaceConsoleApi(): void {
   // there. See `server/admin-trust.ts`.
   registerPluginApiRoute('marketplace/admin/trust', {
     web: marketplaceAdminTrust,
+  })
+  // The staff overview's marketplace cards (AGL-3080): purchases and the
+  // refund-reversal recovery queue. Staff-gated like the queues above.
+  registerPluginApiRoute('marketplace/admin/overview', {
+    web: marketplaceAdminOverview,
   })
   registerPluginApiRoute('marketplace/reviews', reviewsHandler)
   registerPluginApiRoute(

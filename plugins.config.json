@@ -420,7 +420,8 @@
             "hostArtifactPublish",
             "orgPluginInstalls",
             "pluginInstallStatus",
-            "pluginSiteSet"
+            "pluginSiteSet",
+            "staffOverview"
           ],
           "orgRoutes": [
             "/marketplace"

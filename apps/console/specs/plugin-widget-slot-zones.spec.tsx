@@ -407,6 +407,13 @@ Object.assign(MOUNTS, {
     how: 'slot',
     props: { orgSlug: 'acme', pluginRef: 'listing-1', pin: { version: '1.0.0' } },
   },
+  // AGL-3080: what a plugin holds across every workspace, on the staff
+  // overview. No props — the overview is about the platform, not one org.
+  staffOverview: {
+    file: 'apps/console/app/(app)/admin/overview/page.tsx',
+    how: 'slot',
+    props: {},
+  },
 })
 
 const NEW_ZONES = Object.keys(MOUNTS)

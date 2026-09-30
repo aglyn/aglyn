@@ -27,7 +27,8 @@
  * nothing read it, and a route nobody renders is the same condition with an
  * extra file in it — the AGL-1900 rule: a capability is not a feature
  * until the console exposes it. So the first assertion here is not a
- * behaviour, it is that the card is MOUNTED, read off the page source.
+ * behaviour, it is that the card is MOUNTED, read off the widget that draws it
+ * on the staff overview.
  *
  * After that, every assertion is about a DOLLAR FIGURE reaching the screen.
  * "A row rendered" is precisely the check this whole class of defect passes.
@@ -37,9 +38,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render, screen } from '@testing-library/react'
 
-jest.mock('../constants/docs-links', () => ({
+jest.mock('@aglyn/aglyn', () => ({
   __esModule: true,
-  docsHelp: () => undefined,
+  pluginDocsHelp: () => undefined,
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
@@ -84,16 +85,21 @@ const rows: ReversalRecoveryRow[] = [
 ]
 
 describe('the card is on the staff overview at all', () => {
-  it('is mounted by the overview page, fed from the overview payload', () => {
-    const page = readFileSync(
-      join(__dirname, '../app/(app)/admin/overview/page.tsx'),
+  it('is drawn by the marketplace’s staff overview widget, from one read of its route', () => {
+    const widget = readFileSync(
+      join(__dirname, 'staff-marketplace-overview.component.tsx'),
       'utf8',
     )
-    expect(page).toContain('StaffReversalRecoveryCard')
-    // Fed from the route's own projection rather than a second fetch — two
-    // reads of the same money is how a total and its rows start disagreeing.
-    expect(page).toContain('data?.reversalRecovery')
-    expect(page).toContain('metrics?.reversalOwedCents')
+    expect(widget).toContain('<StaffReversalRecoveryCard')
+    // Fed from the same payload as the purchases card rather than a second
+    // fetch — two reads of the same money is how a total and its rows start
+    // disagreeing.
+    expect(widget).toContain("'/api/marketplace/admin/overview'")
+    expect(widget).toContain('rows={data.reversalRecovery}')
+    expect(widget).toContain('owedCents={data.reversalOwedCents}')
+    // And the widget is registered on the overview's zone (AGL-3080).
+    const plugin = readFileSync(join(__dirname, '../plugin.ts'), 'utf8')
+    expect(plugin).toMatch(/slot: 'staffOverview',\s*widgetId: 'marketplace-staff-overview'/)
   })
 })
 
