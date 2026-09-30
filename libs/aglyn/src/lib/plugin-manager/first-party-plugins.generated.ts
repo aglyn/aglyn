@@ -17,6 +17,7 @@ import type { FormRecordTargetDeclaration } from './submission-record-target'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
 import type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
@@ -560,6 +561,39 @@ export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration
       "gaMeasurementId",
       "gtmContainerId"
     ]
+  },
+]
+
+/**
+ * Every interaction step a first-party plugin offers in the interaction
+ * builder, declared by that plugin (AGL-3080). Core names no plugin step.
+ */
+export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
+  {
+    "pluginId": "marketing",
+    "type": "showOverlay",
+    "label": "Open an overlay",
+    "picks": {
+      "collection": "overlays",
+      "limit": 50,
+      "idField": "overlayId",
+      "nameField": "overlayName",
+      "label": "Overlay",
+      "missing": "pick an overlay"
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "type": "runWorkflow",
+    "label": "Run a workflow",
+    "picks": {
+      "collection": "workflows",
+      "limit": 100,
+      "idField": "workflowId",
+      "nameField": "workflowName",
+      "label": "Workflow",
+      "missing": "pick a workflow"
+    }
   },
 ]
 

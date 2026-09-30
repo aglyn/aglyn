@@ -1428,6 +1428,72 @@ function notificationDigestRows() {
   return rows
 }
 
+/**
+ * The interaction steps (AGL-3080): each plugin whose step the interaction
+ * builder offers declares it under `interactionSteps` — the `type` it is
+ * stored under, how the builder names it, and, for a step that PICKS one of
+ * the plugin's records, the site collection the records are listed from and
+ * the step fields that hold the pick. Core compiles them into the catalog,
+ * because the builder and every validator read them with no plugin loaded,
+ * and a step whose pick nothing checked would save naming nothing.
+ *
+ * Checked here: a plain type no other plugin declares, a label, only the
+ * known keys, and a pick listed from a collection the SAME plugin declares
+ * under `hostCollections` — a plugin offers its own records, never another's —
+ * with plain, distinct field names, a limit from 1 to 200, and the words the
+ * builder shows.
+ */
+function interactionStepRows() {
+  const claimed = new Map()
+  const rows = []
+  const plain = /^[a-z][A-Za-z0-9]*$/
+  const words = (value) => typeof value === 'string' && value.trim().length > 0
+  for (const plugin of config.plugins) {
+    const declared = plugin.interactionSteps
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" interactionSteps`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the steps the plugin offers`)
+    }
+    const owned = new Set((plugin.hostCollections ?? []).map((collection) => collection.name))
+    for (const step of declared) {
+      const { type, label, picks, ...rest } = step ?? {}
+      if (typeof type !== 'string' || !plain.test(type)) {
+        throw new Error(`${where}: "type" is the plain name a step is stored under`)
+      }
+      const what = `${where} "${type}"`
+      if (Object.keys(rest).length) throw new Error(`${what}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+      if (claimed.has(type)) throw new Error(`${what} is already declared by "${claimed.get(type)}"`)
+      claimed.set(type, plugin.id)
+      if (!words(label)) throw new Error(`${what}: "label" is how the builder names the step`)
+      const row = { pluginId: plugin.id, type, label }
+      if (picks !== undefined) {
+        const { collection, limit, idField, nameField, label: pickLabel, missing, ...extra } = picks ?? {}
+        if (Object.keys(extra).length) throw new Error(`${what}: unknown "picks" key(s) ${Object.keys(extra).join(', ')}`)
+        if (!owned.has(collection)) {
+          throw new Error(
+            `${what}: "picks.collection" "${collection}" is not one of "${plugin.id}"'s own hostCollections ` +
+              `(${owned.size ? [...owned].join(', ') : 'it declares none'}) — a step picks its own plugin's records`,
+          )
+        }
+        if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+          throw new Error(`${what}: "picks.limit" is a whole number from 1 to 200`)
+        }
+        if (typeof idField !== 'string' || !plain.test(idField) || typeof nameField !== 'string' || !plain.test(nameField)) {
+          throw new Error(`${what}: "picks.idField" and "picks.nameField" are the plain names of the step's fields`)
+        }
+        if (idField === nameField) throw new Error(`${what}: the id and the name are two fields`)
+        if (!words(pickLabel) || !words(missing)) {
+          throw new Error(`${what}: "picks.label" names the picker and "picks.missing" tells a step with no pick what to do`)
+        }
+        row.picks = { collection, limit, idField, nameField, label: pickLabel, missing }
+      }
+      rows.push(row)
+    }
+  }
+  return rows
+}
+
 /** The plugins whose org eraser an erasure may not run without (AGL-3080). */
 function requiredOrgEraserIds() {
   return config.plugins
@@ -1531,7 +1597,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1629,6 +1695,14 @@ export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | n
  */
 export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
 ${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: row.plugin.id, settings: row.settings }, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every interaction step a first-party plugin offers in the interaction
+ * builder, declared by that plugin (AGL-3080). Core names no plugin step.
+ */
+export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
+${interactionStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

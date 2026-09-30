@@ -876,6 +876,52 @@ The switch is stored under `key` in `users/{uid}.digestPrefs` and is on until
 the person turns it off. The sender reads it with
 `digestEnabled(prefs, key)`; the settings page writes it under the same key.
 
+## Interaction steps — `site-interactions`
+
+An interaction is what a published page does when a visitor does something: a
+trigger (a click, a hover, an element scrolled into view, a server event) and
+an ordered list of steps. The platform owns the shape and its own client steps
+— showing and hiding elements, menus and drawers, classes and ARIA attributes,
+scrolling, a video, an alert, a redirect, an analytics event — and treats every
+step it does not know as the server's, handed to whichever host-event listener
+owns it.
+
+A plugin whose step the besigner's interaction builder should offer declares it
+in `plugins.config.json`, not from code:
+
+```json
+"interactionSteps": [
+  {
+    "type": "runWorkflow",
+    "label": "Run a workflow",
+    "picks": {
+      "collection": "workflows",
+      "limit": 100,
+      "idField": "workflowId",
+      "nameField": "workflowName",
+      "label": "Workflow",
+      "missing": "pick a workflow"
+    }
+  }
+]
+```
+
+- `type` is the name the step is stored under; one plugin declares each type.
+- `picks`, for a step that acts on one of the plugin's records: the builder
+  lists them from `collection` (one the SAME plugin declares under
+  `hostCollections`), stores the pick's id in `idField` and its name, as a
+  display hint, in `nameField`. `validateInteraction` refuses a step that names
+  neither, with `Step N: <missing>`.
+- The declarations are compiled into core (`declaredInteractionSteps()`),
+  because the builder and every validator read them with no plugin loaded.
+
+| API | Semantics |
+| --- | --- |
+| `SiteInteraction<Step>` / `InteractionTrigger` / `InteractionStepBase` | The stored shape. `Step` is the platform's client vocabulary (`ClientInteractionStep`) unless a reader names more. |
+| `validateInteraction(interaction, { validateStep? })` | The name, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
+| `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
+| `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
+
 ## Platform events — `plugin-events` (`/server`)
 
 Core raises the events; a plugin that must react to what a core route did

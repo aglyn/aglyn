@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostAction } from '@aglyn/aglyn'
+import type { SiteInteraction } from '@aglyn/aglyn'
 
 /**
  * Deeply removes `undefined`-valued keys so a value is safe to hand to
@@ -74,7 +74,7 @@ export interface InteractionCandidateInput {
  */
 export function buildInteractionCandidate(
   input: InteractionCandidateInput,
-): HostAction {
+): SiteInteraction {
   const { name, event, selector, frequency, cooldownMinutes, steps } = input
   const trigger: Record<string, unknown> = { event, selector }
   if (frequency === 'every') trigger.everyTime = true
@@ -86,7 +86,7 @@ export function buildInteractionCandidate(
     trigger,
     steps,
     enabled: true,
-  }) as unknown as HostAction
+  }) as unknown as SiteInteraction
 }
 
 export default buildInteractionCandidate

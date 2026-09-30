@@ -285,16 +285,6 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/components/interaction-builder-dialog.component.tsx",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:marketing",
-        "plugin-collection:workflows",
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
       "path": "apps/console/components/interactions-provider.component.tsx",
       "rules": [
         "plugin-collection:marketing"

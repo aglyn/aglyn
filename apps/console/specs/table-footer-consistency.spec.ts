@@ -1238,9 +1238,10 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'apps/console/components/interaction-builder-dialog.component.tsx',
-    'A picker dialog: workflows, overlays and screens are read as the ' +
-      'OPTIONS an interaction can be bound to, which is a lookup and not a ' +
-      'surface a reader scans — the same line the ordering guard draws.',
+    'A picker dialog: screens, and the records a plugin-declared step ' +
+      'picks, are read as the OPTIONS an interaction can be bound to, which ' +
+      'is a lookup and not a surface a reader scans — the same line the ' +
+      'ordering guard draws.',
   ],
   [
     'libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx',
