@@ -38,16 +38,17 @@ import { PLATFORM_BRAND_NAME } from './platform-brand'
  *   501  unconfigured this deployment never had payments    — info
  *   4xx/5xx error     something was tried and went wrong    — error
  *
- * The copy is deliberately split by AUDIENCE, and that split is the reason this
- * module exists rather than a bare status check at each call site:
+ * The copy is split by AUDIENCE, and only one audience's sentence is here:
  *
- *  - A STOREFRONT VISITOR is a stranger on someone else's site. They get a
- *    neutral sentence about the store and NOTHING about the cause. Naming an
- *    environment variable to a shopper leaks the operator's deployment shape to
- *    the public internet, and there is nothing they could do with it anyway.
  *  - A CONSOLE OPERATOR is the person who can fix it, so they are told what to
  *    set. They also get `PLATFORM_BRAND_NAME`, because on a self-host install
- *    the product is not called Aglyn.
+ *    the product is not called Aglyn. This is a sentence about the
+ *    deployment, so it is the platform's.
+ *  - A SITE VISITOR is a stranger on someone else's site, and gets a neutral
+ *    sentence about what they were trying to do and NOTHING about the cause.
+ *    That sentence belongs to the plugin whose page they are on — only a
+ *    storefront knows its visitor was buying something — and it names no
+ *    variable, because a visitor could do nothing with one.
  */
 
 /**
@@ -70,17 +71,6 @@ export function isPaymentsNotConfigured(status: number | null | undefined) {
 }
 
 /**
- * What a STOREFRONT VISITOR is shown. No cause, no variable names, no mention
- * of the platform — from the shopper's side this is a fact about the store.
- *
- * Present tense and permanent-sounding on purpose: "right now" or "temporarily"
- * would imply a transient outage and invite a retry that cannot succeed.
- */
-export function storefrontPaymentsNotConfiguredText() {
-  return 'This store is not set up to take payments.'
-}
-
-/**
  * What a CONSOLE OPERATOR is shown. They can act, so they are told how.
  *
  * `PLATFORM_BRAND_NAME` rather than a literal: a self-hoster who renamed the
@@ -91,18 +81,5 @@ export function operatorPaymentsNotConfiguredText() {
     `${PLATFORM_BRAND_NAME} is not configured to take payments on this ` +
     'deployment. Set STRIPE_SECRET_KEY and restart to enable purchases, ' +
     'payouts and subscriptions.'
-  )
-}
-
-/**
- * The marketplace's own sentence. Browsing works without Stripe; only the
- * money doors do not — so this says what still works, rather than presenting a
- * whole feature as broken.
- */
-export function operatorMarketplaceNotConfiguredText() {
-  return (
-    'Browsing and free installs work as normal. Paid listings, purchases and ' +
-    'publisher payouts need a Stripe platform account, which this deployment ' +
-    'does not have configured.'
   )
 }

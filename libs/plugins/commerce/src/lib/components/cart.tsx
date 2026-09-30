@@ -23,10 +23,8 @@ import {
   trackEventBeforeNavigation,
   type AnalyticsItem,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import {
-  isPaymentsNotConfigured,
-  storefrontPaymentsNotConfiguredText,
-} from '@aglyn/aglyn/app-utils/payments-configured'
+import { isPaymentsNotConfigured } from '@aglyn/aglyn/app-utils/payments-configured'
+import { storefrontPaymentsNotConfiguredText } from '../constants/storefront-payments'
 import * as CommerceModel from '../model'
 import { mdiCartOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'

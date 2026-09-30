@@ -33,7 +33,9 @@
 
 import { DeploymentCapabilitiesContext } from '@aglyn/aglyn'
 import { render, screen } from '@testing-library/react'
-import MarketplacePaymentsNotice from './marketplace-payments-notice.component'
+import MarketplacePaymentsNotice, {
+  operatorMarketplaceNotConfiguredText,
+} from './marketplace-payments-notice.component'
 
 /** The alert MUI renders, by severity class (`MuiAlert-colorInfo` etc). */
 const alertOfSeverity = (severity: 'info' | 'warning' | 'error') =>
@@ -85,5 +87,11 @@ describe('the marketplace capability notice (AGL-2019)', () => {
     const { container } = render(<MarketplacePaymentsNotice />)
     expect(screen.queryByText(/Payments are not configured/i)).toBeNull()
     expect(container.textContent).toBe('')
+  })
+
+  it('leads with what still works, so nothing reads as broken', () => {
+    const text = operatorMarketplaceNotConfiguredText()
+    expect(text).toMatch(/browsing and free installs work/i)
+    expect(text).not.toMatch(/error|failed|broken/i)
   })
 })

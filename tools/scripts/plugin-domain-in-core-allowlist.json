@@ -1135,13 +1135,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/payments-configured.ts",
-      "rules": [
-        "domain-declares:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
       "rules": [
         "domain-declares:ai",

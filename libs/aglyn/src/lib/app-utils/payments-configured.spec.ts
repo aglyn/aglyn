@@ -18,18 +18,15 @@
 /**
  * The "not configured is not failed" vocabulary (AGL-2019).
  *
- * Two audiences, two sentences, and the difference between them is the whole
- * reason this module exists rather than a bare `status === 501` at each call
- * site. A shopper is a stranger on someone else's site and gets no cause; an
- * operator can fix it and is told how.
+ * The status, and the sentence for the one audience that can act on it: an
+ * operator is told how. A visitor's sentence is the plugin's whose page they
+ * are on, and is specced there.
  */
 
 import {
   PAYMENTS_NOT_CONFIGURED_STATUS,
   isPaymentsNotConfigured,
-  operatorMarketplaceNotConfiguredText,
   operatorPaymentsNotConfiguredText,
-  storefrontPaymentsNotConfiguredText,
 } from './payments-configured'
 
 describe('isPaymentsNotConfigured', () => {
@@ -50,45 +47,9 @@ describe('isPaymentsNotConfigured', () => {
   })
 })
 
-describe('the STOREFRONT sentence is safe to show a stranger', () => {
-  const text = storefrontPaymentsNotConfiguredText()
-
-  it('says it about the store, in the present tense', () => {
-    expect(text).toMatch(/store/i)
-    expect(text).toMatch(/not set up to take payments/i)
-  })
-
-  it('leaks no variable name, no platform name and no deployment detail', () => {
-    // The operator's deployment shape is not a shopper's business, and this
-    // string is rendered on the public internet.
-    for (const leak of [
-      /STRIPE/i,
-      /SECRET/i,
-      /\benv\b/i,
-      /deployment/i,
-      /self-host/i,
-      /Aglyn/i,
-    ]) {
-      expect(text).not.toMatch(leak)
-    }
-  })
-
-  it('does not imply a transient outage that invites a retry', () => {
-    // "right now" / "temporarily" would say wait and try again; nothing about
-    // this resolves without the operator acting.
-    expect(text).not.toMatch(/right now|temporarily|try again|later/i)
-  })
-})
-
 describe('the OPERATOR sentence tells the person who can fix it', () => {
   it('names the variable to set — they are the audience for it', () => {
     expect(operatorPaymentsNotConfiguredText()).toMatch(/STRIPE_SECRET_KEY/)
-  })
-
-  it('leads with what still works, so nothing reads as broken', () => {
-    const text = operatorMarketplaceNotConfiguredText()
-    expect(text).toMatch(/browsing and free installs work/i)
-    expect(text).not.toMatch(/error|failed|broken/i)
   })
 
   it('uses the platform brand, so a rebranded install does not read our name', () => {
