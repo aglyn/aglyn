@@ -33,8 +33,8 @@ import type { CollectionReference } from 'firebase-admin/firestore'
  * So the answer is stored, and kept true at the three moments it can change:
  *
  *   created    `createOrganization` and `claimHostForOrg` write `false`, and
- *              `tools/scripts/backfill-suspended-flag.mjs` stamps the orgs
- *              and sites written before them. A query cannot find a document
+ *              a one-time backfill stamped the orgs and sites written before
+ *              them (`docs/SELF_HOSTING.md`). A query cannot find a document
  *              by a field it lacks, so `is Not suspended` needs every
  *              unsuspended document to say so.
  *   written    every writer of the family writes the flag in the same call:

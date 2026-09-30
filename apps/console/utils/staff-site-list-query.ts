@@ -51,8 +51,8 @@ import {
  *
  * An equality on the stored `suspended` flag (`utils/server/suspended-flag.ts`):
  * `claimHostForOrg` writes `false`, the lockdown core writes it beside the
- * staff takedown family, and `tools/scripts/backfill-suspended-flag.mjs`
- * stamps the sites written before either. A timed takedown lapses with no
+ * staff takedown family, and a one-time backfill stamped the sites written
+ * before either (`docs/SELF_HOSTING.md`). A timed takedown lapses with no
  * write, so the route clears the flag on every lapsed one before it runs a
  * query that asks about it — the answer, like the row's chip, is the one for
  * this moment.

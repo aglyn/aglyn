@@ -184,6 +184,14 @@ with its runbook:
   clean. Sign-up, reset and the console's password set write the credential
   document, and sign-in no longer reads a profile at all, so the fallback went
   with it.
+- `backfill-suspended-flag` (AGL-3416) read 20 organizations and 23 sites on
+  production on 2026-09-30, after the beta.218 promotion and its seven
+  `suspended` composites went READY, and found every one already carrying
+  the flag it computes (orgs 5 true, 15 false; sites 4 true, 19 false). Its
+  `--apply` committed 0 writes. `createOrganization` and `claimHostForOrg`
+  write `false`, and the lockdown core and the abuse-report put-back write
+  it beside the `suspended*` family. `docs/SELF_HOSTING.md` names the tag to
+  restore it from for an install upgrading across that release.
 
 A module whose only caller was one of those went with it —
 `lib/plugin-id-rename.mjs`, `lib/media-content-sha256-backfill.mjs`,
