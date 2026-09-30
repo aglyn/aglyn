@@ -13,6 +13,7 @@ import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
+import type { FormRecordTargetDeclaration } from './submission-record-target'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
@@ -533,6 +534,15 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = {
  * once, as written.
  */
 export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
+  "pluginId": "data",
+  "id": "dataset"
+}
+
+/**
+ * The plugin whose records a form's submission may also be filed as, declared
+ * by that plugin (AGL-3080). `null` when none does, and no form writes one.
+ */
+export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = {
   "pluginId": "data",
   "id": "dataset"
 }
