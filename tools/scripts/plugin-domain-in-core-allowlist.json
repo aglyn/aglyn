@@ -540,13 +540,6 @@
       "lane": "workflows"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/binding-token-catalog.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/campaign-membership.ts",
       "rules": [
         "domain-name",
@@ -752,13 +745,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/entity-picker-context.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/form-abuse-ceiling.ts",
       "rules": [
         "domain-name",
@@ -953,33 +939,12 @@
       "lane": "commerce"
     },
     {
-      "path": "libs/besigner/feature/designer/src/lib/components/element-props-form.component.tsx",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",
       "rules": [
         "domain-name"
       ],
       "lane": "stays",
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
-    },
-    {
-      "path": "libs/besigner/feature/designer/src/lib/hooks/use-insert-token-options.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "libs/besigner/feature/designer/src/lib/utils/token-segments.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "libs/shared/data/forms/src/lib/forms.ts",
