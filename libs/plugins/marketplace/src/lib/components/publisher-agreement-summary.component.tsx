@@ -20,7 +20,7 @@ import {
   PUBLISHER_AGREEMENT_POINTS,
   PUBLISHER_AGREEMENT_TITLE,
   PUBLISHER_AGREEMENT_VERSION,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 import { Link, Stack, Typography } from '@mui/material'
 
 /**

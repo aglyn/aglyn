@@ -33,7 +33,7 @@
  * forever or never re-asks at all.
  */
 
-import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
+import { LEGAL_ORIGIN, isPublishedLegalUrl } from '@aglyn/aglyn/app-utils/published-legal-pages'
 
 /**
  * The version of the agreement currently in force.

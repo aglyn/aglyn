@@ -47,7 +47,7 @@
 
 import { readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
 import { publishPreconditionRefusal } from './publish-preconditions'
 
 const CURRENT = { version: PUBLISHER_AGREEMENT_VERSION }

@@ -19,7 +19,7 @@ import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementRefusal,
   publisherAgreementState,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { marketplacePriceRefusal } from '../model/marketplace'
 import type { ResolvedPublisher } from './publisher-profile'

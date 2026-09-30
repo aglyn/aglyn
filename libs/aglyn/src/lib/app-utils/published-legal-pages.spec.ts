@@ -28,7 +28,9 @@
  * Now something does. The invariant is not "the link works" — an offline suite
  * cannot know that — it is "we never *offer acceptance* of a document that is
  * not in the published set", which is checkable here and is the half that
- * carries the legal weight.
+ * carries the legal weight. The one acceptance that rides on it — the
+ * marketplace publisher agreement — holds its half beside its model, in
+ * `libs/plugins/marketplace/src/lib/model/publisher-agreement-published.spec.ts`.
  */
 
 import {
@@ -36,12 +38,6 @@ import {
   LEGAL_ORIGIN,
   PUBLISHED_LEGAL_PATHS,
 } from './published-legal-pages'
-import {
-  PUBLISHER_AGREEMENT_URL,
-  publisherAgreementIsPublished,
-  publisherAgreementPresentation,
-  publisherAgreementRefusal,
-} from './publisher-agreement'
 
 describe('published legal pages', () => {
   it('recognises each published document, by absolute URL and by path', () => {
@@ -68,58 +64,5 @@ describe('published legal pages', () => {
     expect(isPublishedLegalUrl('')).toBe(false)
     expect(isPublishedLegalUrl(null)).toBe(false)
     expect(isPublishedLegalUrl('not a url')).toBe(false)
-  })
-})
-
-describe('the publisher agreement is only acceptable once it is readable', () => {
-  it('derives availability from the published set, not a separate flag', () => {
-    expect(publisherAgreementIsPublished()).toBe(
-      isPublishedLegalUrl(PUBLISHER_AGREEMENT_URL),
-    )
-  })
-
-  it('offers no link and no accept control while it is unpublished', () => {
-    for (const state of ['none', 'outdated'] as const) {
-      const presentation = publisherAgreementPresentation(state, false)
-      expect(presentation.documentUrl).toBeNull()
-      expect(presentation.canAccept).toBe(false)
-      expect(presentation.unavailableNotice).toBeTruthy()
-    }
-  })
-
-  it('offers both once it is published', () => {
-    expect(publisherAgreementPresentation('none', true)).toEqual({
-      documentUrl: PUBLISHER_AGREEMENT_URL,
-      canAccept: true,
-      unavailableNotice: null,
-    })
-    // Already current is "nothing to do", not "blocked".
-    expect(publisherAgreementPresentation('current', true).canAccept).toBe(false)
-    expect(
-      publisherAgreementPresentation('current', true).documentUrl,
-    ).toBe(PUBLISHER_AGREEMENT_URL)
-  })
-
-  it('does not send a blocked publisher to a control that is not there', () => {
-    // The publish refusal used to say "accept it in Marketplace → Publisher
-    // Profile". While the document is unpublished that is a dead end, and a
-    // dead end reads as a broken console rather than as our omission.
-    const refusal = publisherAgreementRefusal('none', false)
-    expect(refusal).not.toMatch(/Publisher Profile/)
-    expect(refusal).toMatch(/not published yet/)
-    expect(publisherAgreementRefusal('none', true)).toMatch(/Publisher Profile/)
-  })
-
-  it('gates the live constant on the live published set', () => {
-    // The whole point, stated once: whatever `PUBLISHER_AGREEMENT_URL` is
-    // today, the product must not be collecting acceptances unless that URL is
-    // in the published set. Publishing the page (adding its path to
-    // PUBLISHED_LEGAL_PATHS) is what flips this, and nothing else can.
-    if (!isPublishedLegalUrl(PUBLISHER_AGREEMENT_URL)) {
-      expect(publisherAgreementPresentation('none').canAccept).toBe(false)
-      expect(publisherAgreementPresentation('none').documentUrl).toBeNull()
-    } else {
-      expect(publisherAgreementPresentation('none').canAccept).toBe(true)
-    }
   })
 })

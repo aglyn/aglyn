@@ -62,7 +62,7 @@ import { VERIFICATION_DECLINE_COOLDOWN_DAYS } from '../model/listing-verificatio
 import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementState,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 import { FieldValue } from 'firebase-admin/firestore'
 import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 import { refreshListingQueryFields } from './listing-query-fields'
