@@ -28,7 +28,8 @@
  *     the one the editor rendered, and no other change is in flight. It sets
  *     the marker `consentGroupsChange` and creates the job document.
  *  2. CARRY — every carry of the plan through the three platform stores
- *     (`consent-group-carry.ts`), then every participant's carry phase.
+ *     (`consent-group-carry.ts`) and the organization's retained refusals
+ *     (`retained-refusals.ts`), then every participant's carry phase.
  *  3. CATCH UP — everything filed since the carry began, again.
  *  4. DECLARE — one transaction: the marker still names this change in its
  *     carry phase and the stored declaration is still the one the job
@@ -106,7 +107,11 @@ import {
   DEFAULT_EMAIL_TOPICS,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/email-topics'
-import { resolveMarketingConsentPolicy } from '@aglyn/aglyn/app-utils/marketing-consent'
+import {
+  MARKETING_CONSENT_BY_HOST_FIELD,
+  MARKETING_CONSENT_FIELD,
+  resolveMarketingConsentPolicy,
+} from '@aglyn/aglyn/app-utils/marketing-consent'
 import { isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
 import {
   type ConsentGroupChangeParticipant,
@@ -124,6 +129,7 @@ import {
 import firebaseAdmin from './firebase-admin'
 import { getLockdownVerdict } from './lockdown'
 import { logOrgActivity } from './organizations'
+import { carryRetainedRefusals, retainedRefusalsStore } from './retained-refusals'
 
 /** How long a claimed job stays claimed without a renewal. */
 export const CONSENT_GROUP_CHANGE_LEASE_MS = 90_000
@@ -279,7 +285,8 @@ export function consentGroupChangeStatus(
       failures: job.failures ?? 0,
       lastError: job.lastError ?? null,
       leaseUntilMs: job.lease && job.lease.untilMs > nowMs ? job.lease.untilMs : null,
-      counts: { ...job.counts },
+      // A job started before the retained store was carried has no count for it.
+      counts: { retainedRefusals: 0, ...job.counts },
       sitesReceiving: job.sitesReceiving?.length ?? 0,
       plugins: job.plugins ?? {},
     },
@@ -439,6 +446,14 @@ export async function previewConsentGroupChange(
   const optOuts = (hostId: string) => cached(`t:${hostId}`, () => store(hostId, 'topicOptOuts'))
   const paces = (hostId: string) =>
     cached(`p:${hostId}`, () => store(hostId, 'paces').where('cadence', '!=', null))
+  const retained = (hostId: string) =>
+    cached(`r:${hostId}`, () =>
+      retainedRefusalsStore(orgDoc(ctx, input.orgId)).where(
+        `${MARKETING_CONSENT_BY_HOST_FIELD}.${hostId}.${MARKETING_CONSENT_FIELD}`,
+        '==',
+        false,
+      ),
+    )
 
   const carries = await Promise.all(
     plan.carries.map(async (carry) => ({
@@ -447,6 +462,7 @@ export async function previewConsentGroupChange(
       siteSuppressions: await suppressions(carry.fromHostId),
       topicOptOuts: await optOuts(carry.fromHostId),
       paces: await paces(carry.fromHostId),
+      retainedRefusals: await retained(carry.fromHostId),
     })),
   )
 
@@ -528,7 +544,11 @@ export async function previewConsentGroupChange(
   const names = await siteNamesFor(ctx, plannedSites(plan))
   const texts = describeLines(plan.lines, names)
   const documents =
-    carries.reduce((total, carry) => total + carry.siteSuppressions + carry.topicOptOuts + carry.paces, 0) +
+    carries.reduce(
+      (total, carry) =>
+        total + carry.siteSuppressions + carry.topicOptOuts + carry.paces + carry.retainedRefusals,
+      0,
+    ) +
     participants.reduce(
       (total, entry) =>
         total + (entry.lines ?? []).reduce((sum, line) => sum + (line.count ?? 0), 0),
@@ -615,7 +635,7 @@ export async function startConsentGroupChange(
       siteNames: names,
       participants: plan.renameOnly ? [] : participants,
       units: {},
-      counts: { siteSuppressions: 0, topicOptOuts: 0, paces: 0 },
+      counts: { siteSuppressions: 0, topicOptOuts: 0, paces: 0, retainedRefusals: 0 },
       sitesReceiving: [],
       plugins: {},
       lease: null,
@@ -663,20 +683,22 @@ export async function startConsentGroupChange(
 
 type Unit =
   | { kind: 'carry'; key: string; carryIndex: number; store: ConsentGroupCarryStore; sinceMs: number | null }
+  | { kind: 'retained'; key: string; carryIndex: number; sinceMs: number | null }
   | { kind: 'participant'; key: string; pluginId: string; phase: ConsentGroupChangeParticipantPhase }
 
 /** The current step's units, in the order they run. */
 function unitsOf(job: ConsentGroupChangeJob): Unit[] {
   const carries = (sinceMs: number | null): Unit[] =>
-    job.plan.carries.flatMap((_carry, carryIndex) =>
-      CONSENT_GROUP_CARRY_STORES.map((store) => ({
+    job.plan.carries.flatMap((_carry, carryIndex): Unit[] => [
+      ...CONSENT_GROUP_CARRY_STORES.map((store) => ({
         kind: 'carry' as const,
         key: `c${carryIndex}:${store}`,
         carryIndex,
         store,
         sinceMs,
       })),
-    )
+      { kind: 'retained' as const, key: `c${carryIndex}:retainedRefusals`, carryIndex, sinceMs },
+    ])
   const participants = (phase: ConsentGroupChangeParticipantPhase): Unit[] =>
     job.participants.map((pluginId) => ({
       kind: 'participant' as const,
@@ -751,17 +773,28 @@ async function runUnit(
   deadlineMs: number,
 ): Promise<ConsentGroupChangeJob> {
   const state = job.units[unit.key] ?? { cursor: null, done: false }
-  if (unit.kind === 'carry') {
+  if (unit.kind === 'carry' || unit.kind === 'retained') {
     const carry = job.plan.carries[unit.carryIndex]
-    const page = await carryConsentGroupRefusals({
-      firestore: ctx.firestore,
-      store: unit.store,
-      carry,
-      changeId: job.changeId,
-      cursor: state.cursor,
-      sinceMs: unit.sinceMs,
-    })
-    const counts = { ...job.counts, [unit.store]: (job.counts[unit.store] ?? 0) + page.written }
+    const page =
+      unit.kind === 'carry'
+        ? await carryConsentGroupRefusals({
+            firestore: ctx.firestore,
+            store: unit.store,
+            carry,
+            changeId: job.changeId,
+            cursor: state.cursor,
+            sinceMs: unit.sinceMs,
+          })
+        : await carryRetainedRefusals({
+            firestore: ctx.firestore,
+            orgId: job.orgId,
+            carry,
+            changeId: job.changeId,
+            cursor: state.cursor,
+            sinceMs: unit.sinceMs,
+          })
+    const counted = unit.kind === 'carry' ? unit.store : 'retainedRefusals'
+    const counts = { ...job.counts, [counted]: (job.counts[counted] ?? 0) + page.written }
     const sitesReceiving =
       page.written > 0 && !job.sitesReceiving.includes(carry.toHostId)
         ? [...job.sitesReceiving, carry.toHostId]
@@ -886,7 +919,11 @@ async function declare(
 
 /** The "Finished" line: the carries' totals, then each participant's clause. */
 function finishedLine(job: ConsentGroupChangeJob): string {
-  const copied = job.counts.siteSuppressions + job.counts.topicOptOuts + job.counts.paces
+  const copied =
+    job.counts.siteSuppressions +
+    job.counts.topicOptOuts +
+    job.counts.paces +
+    (job.counts.retainedRefusals ?? 0)
   const sites = job.sitesReceiving.length
   const clauses = [
     `${copied} ${copied === 1 ? 'opt-out' : 'opt-outs'} copied to ${sites} ${sites === 1 ? 'site' : 'sites'}`,

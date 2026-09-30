@@ -262,11 +262,16 @@ describe('the CRM server entry', () => {
    * them (AGL-2804): a facet is the server's to write, so a console save the
    * register function forgot would have nowhere to go.
    */
-  it('registers the contact update and company delete routes, POST only (AGL-2804)', async () => {
+  it('registers the contact update, contact remove and company delete routes, POST only (AGL-2804, AGL-3338)', async () => {
     registerCrmConsoleApi()
     expect(CRM_API_ROUTES.contactUpdate).toBe('crm/contact-update')
+    expect(CRM_API_ROUTES.contactRemove).toBe('crm/contact-remove')
     expect(CRM_API_ROUTES.companyDelete).toBe('crm/company-delete')
-    for (const route of [CRM_API_ROUTES.contactUpdate, CRM_API_ROUTES.companyDelete]) {
+    for (const route of [
+      CRM_API_ROUTES.contactUpdate,
+      CRM_API_ROUTES.contactRemove,
+      CRM_API_ROUTES.companyDelete,
+    ]) {
       const { status, headers } = await call(route, 'GET')
       expect(status).toBe(405)
       expect(headers['Allow']).toBe('POST')

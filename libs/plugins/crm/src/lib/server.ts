@@ -47,8 +47,10 @@
  * holder's rows and the audience band are judgments the browser cannot make.
  * `crm/contact-update` (AGL-2804) is every other write to a contact's facets:
  * the rules cannot tell one field of a holder's facet from another, so they
- * leave a client nothing there but letting a holder go, and the plan is
- * asked here about the fields a save carries.
+ * leave a client nothing there, and the plan is asked here about the fields
+ * a save carries. `crm/contact-remove` (AGL-3338) is a holder letting a
+ * contact go: the refusals the document holds are kept, which a client
+ * write could not be trusted to do.
  */
 
 import {
@@ -115,6 +117,7 @@ import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/in
 import { crmCompanyDeleteHandler } from './server/company-delete'
 import { CONTACT_PHONE_REFUSAL, normalizeTags, typed } from './server/contact-profile'
 import { crmContactUpdateHandler } from './server/contact-update'
+import { crmContactRemoveHandler } from './server/contact-remove'
 import {
   CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
   crmEmailTemplateDuplicateHandler,
@@ -599,6 +602,7 @@ export function registerCrmConsoleApi(): void {
   // Every other console write to a contact's facets (AGL-2804): the rules
   // cannot tell one facet field from another, so the plan is asked here.
   registerPluginApiRoute(CRM_API_ROUTES.contactUpdate, crmContactUpdateHandler)
+  registerPluginApiRoute(CRM_API_ROUTES.contactRemove, crmContactRemoveHandler)
   // A company's contacts unlinked, then the company (AGL-2804): the unlink
   // clears a facet, which is the server's to write.
   registerPluginApiRoute(CRM_API_ROUTES.companyDelete, crmCompanyDeleteHandler)

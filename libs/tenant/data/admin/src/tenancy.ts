@@ -63,6 +63,9 @@ export * from './lib/server/email-marketing-gate'
 // and the executor that runs a change around them.
 export * from './lib/server/consent-group-carry'
 export * from './lib/server/consent-group-change'
+// A person's refusal kept after the record it was written on is deleted
+// (AGL-3338): the delete's write, the list gate's read, and the change's carry.
+export * from './lib/server/retained-refusals'
 export * from './lib/server/sms-keywords'
 export * from './lib/server/document-id'
 export * from './lib/server/collection-preview-token'

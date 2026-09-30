@@ -1320,46 +1320,6 @@ service cloud.firestore {
           .affectedKeys().hasAny(['visibleTo']);
       }
       /**
-       * The one update a client may still make to a contact (AGL-2804): a
-       * holder letting the person go.
-       *
-       * A contact keeps each holder's records in `facets.{groupId}`, and no
-       * rule can look inside that map for one holder. The holder is a
-       * dynamic key; a dotted write to any field of a facet reads in the
-       * document's diff as `facets` changing; and a diff of the map itself
-       * names the holder, never the field. So a rule cannot tell a lifecycle
-       * stage from a phone number, and a plan check on the CRM suite's fields
-       * would be a check on nothing. Every edit to a facet is therefore the
-       * server's — `crm/contact-update` and `crm/contact-stage`, which ask the
-       * plan about the fields a save carries — and what is left to a client
-       * is the detach "Remove from this site" performs:
-       *
-       *  - the keys it touches are the ones a detach touches — a holder's
-       *    facet, its consent entries, its scope token and its capture
-       *    attribution — and nothing a capture, a merge or a save writes;
-       *  - `facets` only LOSES holders: no facet is added, and none that
-       *    stays is changed in the same write;
-       *  - `marketingConsentByHost` only LOSES entries (AGL-2821). An entry
-       *    is the stored basis list enrollment carries across as the
-       *    person's own opt-in, and a client that could add or change one
-       *    could mint an opt-in nobody gave.
-       *
-       * Deleting the document outright is the delete rule's question.
-       */
-      function contactUpdateOnlyLetsGo() {
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'facets', 'marketingConsentByHost', 'visibleTo', 'capturedByHostIds',
-            'updatedAt']) &&
-          request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
-            .addedKeys().size() == 0 &&
-          request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
-            .changedKeys().size() == 0 &&
-          request.resource.data.get('marketingConsentByHost', {})
-            .diff(resource.data.get('marketingConsentByHost', {})).addedKeys().size() == 0 &&
-          request.resource.data.get('marketingConsentByHost', {})
-            .diff(resource.data.get('marketingConsentByHost', {})).changedKeys().size() == 0;
-      }
-      /**
        * Create-time twin of `canReadScoped` — it reads `request.resource`
        * because `resource` does not exist yet. Stops a scoped member
        * creating a resource they would immediately be unable to see, or
@@ -1458,15 +1418,20 @@ service cloud.firestore {
        * helper, where no surface asks for it. Disclosure is the risk this
        * collection carries, and disclosure is the read.
        *
-       * DELETE IS SOLE-HOLDER ONLY, and that is the load-bearing clause.
-       * Removing a contact from one site's CRM is a DETACH — drop that
-       * holder's facet, its consent entries and its scope tokens — because
-       * another site that captured the same person keeps its own notes,
-       * order history and consent, none of which the deleting site ever had a
-       * claim on. `hasOnly` is the reference count: the document may only be
-       * destroyed by a caller who is the last thing holding it, and every
-       * other case has to be an update. A privacy ERASURE is not this path
-       * and goes through the Admin SDK, which these rules do not gate.
+       * LETTING A CONTACT GO IS THE SERVER'S (AGL-3338). Removing a contact
+       * from one site's CRM is a DETACH — drop that holder's facet, its
+       * consent grants and its scope tokens — and the document is deleted
+       * only when nobody else holds it, because another site that captured
+       * the same person keeps its own notes, order history and consent. A
+       * person's REFUSAL of marketing email is kept either way: it stays on
+       * the document for the holders that remain, and the last holder's
+       * delete copies it into `retainedRefusals` in the same commit, so
+       * deleting somebody is not a way to put a person who said no on a
+       * list. A rule cannot tell a refusal from a grant inside a holder's
+       * map key, and no client may write the retained store, so
+       * `crm/contact-remove` does both and a client updates or deletes no
+       * contact at all. A privacy ERASURE is not this path either and goes
+       * through the Admin SDK, which these rules do not gate.
        *
        * A CONTACT IS CREATED BY THE SERVER (AGL-2819). Every door that brings
        * a person in — a capture, the create route, an import, a lead's
@@ -1474,29 +1439,16 @@ service cloud.firestore {
        * dedupes on the address and asks the plan for a person added by hand,
        * so a client create is refused. Staff keep theirs, for support.
        *
-       * AN UPDATE ONLY LETS A HOLDER GO (AGL-2804). Each holder's records
-       * live in a facet no rule can look inside for one holder, so the
-       * profile, the owner, the stage, the company, the custom values, the
-       * files, the tags and the campaign filing are written by the CRM's
-       * routes, which ask the plan; a client update may only drop a holder's
-       * half. See `contactUpdateOnlyLetsGo()`.
-       *
-       * THE PLAN, LAST (AGL-2851). Dropping a holder is the CRM's "Remove
-       * from this site", and the CRM is included from Starter, so the update
-       * also asks `orgCarriesCrmSuite(orgId)`, as every CRM collection's
-       * client writes do. The delete does not: removing a workspace's own
-       * record stays open on every plan.
+       * AN UPDATE IS THE SERVER'S TOO (AGL-2804, AGL-3338). Each holder's
+       * records live in a facet no rule can look inside for one holder, so
+       * the profile, the owner, the stage, the company, the custom values,
+       * the files, the tags and the campaign filing are written by the CRM's
+       * routes, which ask the plan; and letting a holder go is
+       * `crm/contact-remove`, above. Staff keep theirs, for support.
        */
       match /contacts/{contactId} {
         allow read: if isStaff() || canReadScopedPeople();
-        allow create: if isStaff();
-        allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-           contactUpdateOnlyLetsGo() && orgCarriesCrmSuite(orgId));
-        allow delete: if isStaff() ||
-          (canWriteScopedOrgData() &&
-           resource.data.visibleTo.hasOnly(
-             orgMember().get('scopeTokens', ['org'])));
+        allow create, update, delete: if isStaff();
       }
       /**
        * A lead, on the org and scoped by `visibleTo` (AGL-3275).
@@ -1533,9 +1485,9 @@ service cloud.firestore {
        * could clear it could email a person who asked not to be. So is its
        * list key `emailStatus` (AGL-3321).
        *
-       * DELETE IS SOLE-HOLDER ONLY, for the reason it is on a contact: in a
-       * multi-brand org the row is shared, and one brand removing a lead must
-       * not destroy the sibling brand's record of the same person. `hasOnly`
+       * DELETE IS SOLE-HOLDER ONLY, for the reason a contact's is a detach: in
+       * a multi-brand org the row is shared, and one brand removing a lead
+       * must not destroy the sibling brand's record of the same person. `hasOnly`
        * is the reference count. Every other case is an update that drops this
        * site's token.
        */
@@ -1560,7 +1512,7 @@ service cloud.firestore {
       // contacts, so it answers to the same authority they do.
       //
       // A segment is saved from the CRM's Contacts list, so its create and
-      // update ask the plan last, as the contact update above does (AGL-2851).
+      // update ask the plan last, as every CRM client write does (AGL-2851).
       // Its read and delete do not.
       match /contactSegments/{segmentId} {
         allow read: if isStaff() || canReadScopedPeople();
@@ -1593,6 +1545,22 @@ service cloud.firestore {
       }
 
       /**
+       * A person's refusal of marketing email, kept after the contact it was
+       * written on was deleted (AGL-3338): one document per person, keyed by
+       * `personKey`, holding no address.
+       *
+       * CLOSED TO EVERY CLIENT, staff included. It is written by the Admin
+       * SDK inside a contact's delete and carried by a consent group change,
+       * and read by the same list gate that reads the contacts. A client
+       * that could write it could clear somebody's "no"; one that could list
+       * it would hold a roster of the people who refused, which the store
+       * exists to answer about one address already in hand and never to be.
+       */
+      match /retainedRefusals/{personKey} {
+        allow read, write: if false;
+      }
+
+      /**
        * CRM v2 (AGL-2595): the six collections that sit BESIDE a contact.
        *
        * Companies, pipelines, deals, tasks, activities and custom-field
@@ -1606,7 +1574,7 @@ service cloud.firestore {
        * These rows are NOT shared across holders, which is the one place
        * they differ from `contacts`. A contact is one document for one
        * human however many sites captured them, so its delete is a detach
-       * gated on `hasOnly`; a company or a deal is one holder's record from
+       * the server decides; a company or a deal is one holder's record from
        * the moment it exists, so its delete is a delete and needs no
        * sole-holder clause. `scopeUnchanged()` on update keeps a scoped
        * member from widening their own record to the org or narrowing an
@@ -1615,8 +1583,8 @@ service cloud.firestore {
        *
        * THE PLAN, LAST (AGL-2801, AGL-2851). Every create and update below —
        * here and in the saved views and email templates after them — also
-       * asks `orgCarriesCrmSuite(orgId)`, as the contact update and the
-       * segment writes above do: these collections are the CRM, included
+       * asks `orgCarriesCrmSuite(orgId)`, as the segment writes above do:
+       * these collections are the CRM, included
        * from Starter, and a Free workspace writes none of it from a client.
        * Reads and deletes do not ask, because exporting and removing a
        * workspace's own records stay open on every plan, and the clause

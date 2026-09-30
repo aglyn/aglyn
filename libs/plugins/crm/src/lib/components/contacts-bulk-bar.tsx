@@ -42,9 +42,9 @@
  * the rows it reaches (`contacts-bulk-writes.ts` decides which), sent in
  * pieces the route accepts. A stage move is `crm/contact-stage`, row by row:
  * a move is what an automation listens for, and only the route that
- * performed it can announce it. Letting the rows go is the one act written
- * client-direct, because a holder dropping its own facet is the one facet
- * change the rules leave the browser.
+ * performed it can announce it. Letting the rows go is `crm/contact-remove`
+ * (AGL-3338): the route decides detach or delete against each stored
+ * document and keeps any marketing refusal the person gave.
  *
  * ## A refused row is named
  *
@@ -70,29 +70,24 @@ import {
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { Button, MenuItem, TextField } from '@mui/material'
-import { deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  useOrgMemberOptions,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useOrgMemberOptions, useUser } from '@aglyn/tenant-feature-instance'
+import { useContactRemove } from '../hooks/use-contact-remove'
 import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { CRM_CONTACT_REMOVE_MAX } from '../model/contact-remove'
 import { CRM_CONTACT_UPDATE_MAX, type ContactUpdateFields } from '../model/contact-update'
 import { setContactStage } from '../model/crm-api'
 import {
   contactBulkAddressOf,
   normalizeBulkTag,
   planAddTag,
-  planDetach,
   planRemoveTag,
   planSetCompany,
   type ContactBulkRow,
   type ContactBulkSelection,
   type ContactBulkSkip,
-  type ContactBulkWrite,
 } from '../model/contacts-bulk-writes'
 import {
   type ContactCsvOptions,
@@ -104,7 +99,6 @@ import {
   type CrmBulkOutcome,
   runCrmBulkBatch,
   runCrmBulkCalls,
-  runCrmBulkWrites,
 } from '../model/crm-bulk-writes'
 import AddToListDialog from './add-to-list-dialog'
 import {
@@ -120,8 +114,6 @@ import {
   countNoun,
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
-import { restampCrmListFields } from '../model/list-fields-api'
-import { crmTaskCallScope } from '../model/task-routes'
 import { CrmSuiteLockedButton } from './crm-suite-lock'
 
 export interface ContactsBulkBarProps {
@@ -218,11 +210,11 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     csv,
     suiteLocked = false,
   } = props
-  const firestore = useFirestore()
   const { data: user } = useUser()
   const { confirm } = useConfirmationContext()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'contact' })
   const contactUpdate = useContactUpdate(hostId)
+  const contactRemove = useContactRemove(hostId)
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)
@@ -256,29 +248,6 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     setCompany(null)
     setPending(action)
   }
-
-  /**
-   * The Firestore writers for the one act written client-direct: letting the
-   * rows go, a batch at a time and a row at a time for a batch that failed.
-   */
-  const writers = useMemo(() => {
-    const refFor = (id: string) =>
-      doc(firestore, scope?.[0] ?? 'orgs', scope?.[1] ?? '', 'contacts', id)
-    return {
-      commitBatch: async (writes: readonly ContactBulkWrite[]) => {
-        const batch = writeBatch(firestore)
-        for (const write of writes) {
-          if (write.kind === 'delete') batch.delete(refFor(write.id))
-          else batch.update(refFor(write.id), write.data)
-        }
-        await batch.commit()
-      },
-      commitOne: async (write: ContactBulkWrite) => {
-        if (write.kind === 'delete') await deleteDoc(refFor(write.id))
-        else await updateDoc(refFor(write.id), write.data)
-      },
-    }
-  }, [firestore, scope])
 
   /** One act's request for the rows it reaches, in the pieces the route accepts. */
   const saveThroughRoute = useCallback(
@@ -400,33 +369,28 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    const plan = planDetach(selectedRows, consentGroup, Date.now())
     const outcome = await apply({
-      attempted: plan.writes.length,
-      skipped: plan.skipped.map(skippedLine),
-      job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.email),
+      attempted: selectedRows.length,
+      skipped: [],
+      job: () =>
+        runCrmBulkBatch(
+          selectedRows,
+          (row) => row.$id,
+          contactBulkAddressOf,
+          (piece) => contactRemove.removeMany(piece.map((row) => row.$id)),
+          CRM_CONTACT_REMOVE_MAX,
+        ),
       done: (done) => doneSentence('detach', done),
     })
     // The rows that went are gone from the table; the refused ones stay
     // selected, so the reader can see which they are and try again.
     const refused = new Set(outcome.refused.map((row) => row.label))
-    // A detached row still carries the facet keys and scoped search tokens
-    // of the holder that let it go; the rules keep a client from restamping
-    // them, so the route does (AGL-3321). A deleted row answers `missing`.
-    await restampCrmListFields(
-      user,
-      crmTaskCallScope(hostId, scope?.[1] ?? null),
-      'contacts',
-      selectedRows
-        .filter((row) => !refused.has(contactBulkAddressOf(row)))
-        .map((row) => row.$id),
-    )
     onSelectedChange(
       selectedRows
         .filter((row) => refused.has(contactBulkAddressOf(row)))
         .map((row) => row.$id),
     )
-  }, [scope, selectedRows, confirm, apply, writers, consentGroup, onSelectedChange, user, hostId])
+  }, [scope, selectedRows, confirm, apply, contactRemove, consentGroup, onSelectedChange])
 
   const emails = selectedRows
     .map((row) => String(row.email ?? '').trim())

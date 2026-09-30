@@ -37,6 +37,12 @@ export const CRM_API_ROUTES = {
    */
   contactUpdate: 'crm/contact-update',
   /**
+   * `POST` — lets one or more contacts go from a site, or deletes them once
+   * nobody else holds them, keeping every marketing refusal they held
+   * (AGL-3338); see `server/contact-remove.ts`.
+   */
+  contactRemove: 'crm/contact-remove',
+  /**
    * `POST` — unlinks the contacts that name a company, then deletes it
    * (AGL-2804); see `server/company-delete.ts`.
    */

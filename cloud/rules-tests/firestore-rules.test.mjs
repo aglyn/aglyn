@@ -9903,18 +9903,85 @@ describe('contacts are per-site, and letting go of one is not a delete', () => {
     )
   })
 
-  it('allows the LAST holder to delete, and the detach in between', async () => {
-    await assertSucceeds(
+  /*
+   * LETTING GO IS THE SERVER'S (AGL-3338). A refusal of marketing email
+   * must outlive the delete, which takes a write to `retainedRefusals` no
+   * client may make, and a detach must keep a refusal a rule cannot tell
+   * from a grant. So the last holder's delete and the detach both go
+   * through `crm/contact-remove`, and neither is left to a client.
+   */
+  it('refuses even the LAST holder’s delete, and the detach, to a client', async () => {
+    await assertFails(
       deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'mine')),
     )
-    // The detach: the same collaborator drops their own half of the shared
-    // row, which is an update and is allowed.
-    await assertSucceeds(
+    await assertFails(
+      deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'mine')),
+    )
+    await assertFails(
       updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
         'facets.host-a': deleteField(),
       }),
     )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
+        'marketingConsentByHost.host-a': deleteField(),
+      }),
+    )
   })
+
+  it('keeps staff’s writes, for support — the control for the refusals above', async () => {
+    await assertSucceeds(
+      updateDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', 'shared'), {
+        'facets.host-a': deleteField(),
+      }),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', 'mine')),
+    )
+  })
+})
+
+/**
+ * A REFUSAL KEPT AFTER ITS CONTACT WAS DELETED (AGL-3338).
+ *
+ * `orgs/{orgId}/retainedRefusals/{personKey}` is written by the Admin SDK in
+ * a contact's delete and read by the list gate. Closed to every client,
+ * staff included: a write could clear somebody's "no", and a list would be
+ * a roster of the people who refused.
+ */
+describe('retained refusals are closed to every client', () => {
+  const KEY = 'person-key-1'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'retainedRefusals', KEY), {
+        marketingConsentByHost: { [HOST]: { marketingConsent: false } },
+      })
+      // The control: the same owner reads a contact, so a refusal below is
+      // about this collection and not about the owner.
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'control'), {
+        email: 'control@acme.test',
+        visibleTo: ['org'],
+      })
+    })
+  })
+
+  it('lets the owner read a contact — the control', async () => {
+    await assertSucceeds(getDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'control')))
+  })
+
+  for (const [label, db] of [
+    ['the owner', () => authed(OWNER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+  ]) {
+    it(`refuses ${label} a read, a list, a write and a delete`, async () => {
+      const ref = doc(db(), 'orgs', ORG, 'retainedRefusals', KEY)
+      await assertFails(getDoc(ref))
+      await assertFails(getDocs(collection(db(), 'orgs', ORG, 'retainedRefusals')))
+      await assertFails(setDoc(ref, { marketingConsentByHost: {} }))
+      await assertFails(deleteDoc(ref))
+    })
+  }
 })
 
 /**
@@ -11207,8 +11274,9 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
  * from a phone number inside a facet, and a plan check on the suite's fields
  * would check nothing. Every facet edit the console makes goes through
  * `crm/contact-update` or `crm/contact-stage`, where the plan is asked about
- * the fields a save carries, and a client update may do the one thing left:
- * let a holder go.
+ * the fields a save carries, and letting a holder go is `crm/contact-remove`
+ * (AGL-3338), which keeps the person's refusal of marketing email. A client
+ * updates no contact at all.
  *
  * Asserted on Free AND on Starter, because the refusal is not a plan
  * question: a client does not write a facet on any plan.
@@ -11319,22 +11387,33 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
     })
 
   /**
-   * THE CONTROL: the one update a client still makes, on a plan that carries
-   * the CRM. Every refusal above would pass against a rule that denied
-   * contact updates outright, which would take "Remove from this site" away
-   * from every paying workspace.
+   * THE CONTROL: staff keep the update, for support. Every refusal here
+   * would pass against a rule that denied the document outright, and this
+   * is what says it is the client being refused.
    */
-  it('lets a holder go on Starter', async () => {
+  it('lets staff let a holder go — the control', async () => {
     await setOrg({ plan: 'starter' })
-    await mustAllow("the owner removing site B's half of a shared contact on Starter", letSiteBGo())
+    await mustAllow(
+      "staff removing site B's half of a shared contact",
+      updateDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', SHARED), {
+        'facets.host-b': deleteField(),
+      }),
+    )
   })
 
-  // "Remove from this site" is a CRM act, and the CRM is included from Starter (AGL-2851).
-  it('refuses a holder going on Free, and on a paid plan whose subscription died', async () => {
-    await setOrg({ plan: 'free' })
-    await mustDeny("the owner removing site B's half of a shared contact on Free", letSiteBGo())
-    await setOrg({ plan: 'pro', billingStatus: 'canceled' })
-    await mustDeny("the owner removing site B's half on a canceled Pro subscription", letSiteBGo())
+  /*
+   * "Remove from this site" is `crm/contact-remove` since AGL-3338: a detach
+   * has to keep a refusal a rule cannot tell from a grant, so a client lets
+   * no holder go on any plan.
+   */
+  it('refuses a client letting a holder go, on every plan', async () => {
+    for (const fields of [{ plan: 'starter' }, { plan: 'free' }, { plan: 'pro', billingStatus: 'canceled' }]) {
+      await setOrg(fields)
+      await mustDeny(
+        `the owner removing site B's half of a shared contact on ${JSON.stringify(fields)}`,
+        letSiteBGo(),
+      )
+    }
   })
 
   it('refuses a holder going in the same write as an edit to a holder that stays', async () => {
@@ -11347,19 +11426,27 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
     )
   })
 
-  it("keeps the last holder's delete open on Free", async () => {
-    await setOrg({ plan: 'free' })
+  /*
+   * The last holder's delete stays open on Free — in `crm/contact-remove`,
+   * which keeps the person's refusal in the same commit (AGL-3338). From a
+   * client it is refused on every plan.
+   */
+  it("refuses the last holder's delete to a client, on every plan", async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'only-mine'), {
         email: 'only-mine@acme.test',
         visibleTo: [`host:${HOST}`],
+        marketingConsentByHost: { [HOST]: { marketingConsent: false } },
         facets: { [HOST]: { sources: {}, interactions: [], ownerUid: EDITOR } },
       })
     })
-    await mustAllow(
-      'a site editor deleting a contact only their site holds, on Free',
-      deleteDoc(contact(EDITOR, 'only-mine')),
-    )
+    for (const plan of ['free', 'starter']) {
+      await setOrg({ plan })
+      await mustDeny(
+        `a site editor deleting a contact only their site holds, on ${plan}`,
+        deleteDoc(contact(EDITOR, 'only-mine')),
+      )
+    }
   })
 })
 
@@ -11368,8 +11455,10 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
  *
  * `marketingConsentByHost` is the stored basis list enrollment carries across
  * as the person's own opt-in (`assignmentBasis`). A client that could add or
- * change an entry could mint an opt-in nobody gave. Letting a holder go
- * removes that holder's entries, and removing is all a client may do.
+ * change an entry could mint an opt-in nobody gave. And a client that could
+ * REMOVE one could drop a refusal, which is the one entry an operator's
+ * attestation cannot overrule (AGL-3338) — so a client writes no entry at
+ * all, and letting a holder go is `crm/contact-remove`, which keeps it.
  */
 describe("a contact's consent entries only shrink from the client (AGL-2821)", () => {
   const PERSON = 'consent-person'
@@ -11412,14 +11501,32 @@ describe("a contact's consent entries only shrink from the client (AGL-2821)", (
     )
   })
 
-  it('lets a holder go with its consent entries — the control', async () => {
-    await mustAllow(
-      "the owner removing site B's half, consent included",
+  it('refuses a client removing a consent entry — a refusal most of all (AGL-3338)', async () => {
+    await mustDeny(
+      "the owner dropping this site's recorded refusal",
+      updateDoc(contact(OWNER), {
+        [`facets.${HOST}`]: deleteField(),
+        [`marketingConsentByHost.${HOST}`]: deleteField(),
+        visibleTo: arrayRemove(`host:${HOST}`),
+        capturedByHostIds: arrayRemove(HOST),
+      }),
+    )
+    await mustDeny(
+      "the owner removing site B's half, grant included",
       updateDoc(contact(OWNER), {
         'facets.host-b': deleteField(),
         'marketingConsentByHost.host-b': deleteField(),
         visibleTo: arrayRemove('host:host-b'),
         capturedByHostIds: arrayRemove('host-b'),
+      }),
+    )
+  })
+
+  it('lets staff remove an entry — the control', async () => {
+    await mustAllow(
+      "staff removing site B's grant",
+      updateDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', PERSON), {
+        'marketingConsentByHost.host-b': deleteField(),
       }),
     )
   })
@@ -11846,8 +11953,6 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
       await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'c-seeded'), {
         email: 'buyer@acme.test',
         visibleTo: ['org', `host:${HOST}`],
-        // One site's half, which a member lets go of: the one contact write
-        // a client still makes (AGL-2804, AGL-2819).
         facets: { [HOST]: { sources: {}, interactions: [] } },
       })
     })
@@ -11863,12 +11968,6 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
         doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
         { screenId: 'screen-1', nodes: { root: { type: 'Text' } } },
       ),
-    )
-    await mustAllow(
-      'a verified owner letting a site go from a contact in the audience',
-      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
-        [`facets.${HOST}`]: deleteField(),
-      }),
     )
     await mustAllow(
       'a verified owner creating the list a campaign sends to',
@@ -11907,12 +12006,6 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
   })
 
   it('refuses the AUDIENCE — contacts, segments, topics, lists and datasets', async () => {
-    await mustDeny(
-      'an unverified owner letting a site go from a contact',
-      updateDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
-        [`facets.${HOST}`]: deleteField(),
-      }),
-    )
     await mustDeny(
       'an unverified owner saving a segment — a campaign audience',
       setDoc(doc(unverified(OWNER), 'orgs', ORG, 'contactSegments', 'seg-new'), {

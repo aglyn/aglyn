@@ -153,6 +153,9 @@ export * from './contact-custom-fields'
 // belongs to.
 export * from './consent-groups'
 export * from './marketing-consent'
+// A refusal kept after the record it was written on is deleted (AGL-3338),
+// read back through the same parser as the record's own.
+export * from './retained-refusals'
 // The ENROLLMENT-time half of the same question, beside its reader for the
 // same reason: `marketing-consent` decides whether a recorded basis lets us
 // mail somebody, and this decides what basis putting them on a list may

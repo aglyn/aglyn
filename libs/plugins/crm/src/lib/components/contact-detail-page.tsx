@@ -22,19 +22,12 @@ import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
-import { restampCrmListFields } from '../model/list-fields-api'
-import { crmTaskCallScope } from '../model/task-routes'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { Stack, Tooltip, Typography } from '@mui/material'
-import {
-  arrayRemove,
-  deleteDoc,
-  deleteField,
-  doc,
-  updateDoc,
-} from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
+import { useContactRemove } from '../hooks/use-contact-remove'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { CrmCreateSiteDefault, useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
@@ -105,10 +98,10 @@ const contactDocsHelp = pluginDocsHelp('contacts', {
  * The row is shared by every site that has captured this person, so the
  * action in the overflow menu drops THIS group's facet, consent, attribution
  * and scope tokens, and deletes the document only when nobody else is left
- * holding it — `planContactDetach` does the counting off `visibleTo`, which
- * is what both enforcement layers evaluate, and the rules refuse a delete by
- * a caller who is not the sole holder. Not the erasure path: a privacy
- * erasure removes the person regardless of who else holds them.
+ * holding it. `crm/contact-remove` decides which against the stored
+ * document and keeps any marketing refusal the person gave (AGL-3338); the
+ * rules refuse a client the write. Not the erasure path: a privacy erasure
+ * removes the person regardless of who else holds them.
  */
 export function ContactDetailPage(props: CrmDetailPageProps) {
   const { hostId, org, id, basePath } = props
@@ -243,7 +236,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     [emailsHub, hostId],
   )
 
-  const { data: user } = useUser()
+  const contactRemove = useContactRemove(hostId)
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
     const confirmed = await confirm({
@@ -262,22 +255,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       .catch(() => false)
     if (!confirmed) return
     try {
-      const ref = doc(firestore, scope[0], scope[1], 'contacts', id)
-      const plan = Aglyn.planContactDetach(row, consentGroup)
-      if (plan.action === 'delete') {
-        await deleteDoc(ref)
-      } else {
-        await updateDoc(ref, {
-          ...Object.fromEntries(plan.remove.map((path) => [path, deleteField()])),
-          visibleTo: arrayRemove(...plan.removeTokens),
-          capturedByHostIds: arrayRemove(...plan.removeHostIds),
-          updatedAt: new Date(),
-        })
-        // The facet and the scope just let go of are what the Contacts list
-        // filters and searches by; the rules keep a client from restamping
-        // them, so the route does (AGL-3321).
-        await restampCrmListFields(user, crmTaskCallScope(hostId, orgId), 'contacts', [id])
-      }
+      // The route decides against the stored document, keeps any refusal,
+      // and restamps what the Contacts list filters by (AGL-3338).
+      const removed = await contactRemove.removeOne(id)
       // `siteLabel` and not "this site": at the organization level the line
       // lands in a feed that spans every site, so it has to name the one.
       logActivity(`Removed contact from ${siteLabel}`, {
@@ -286,7 +266,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         name: record?.name || record?.email,
       })
       enqueueSnackbar(
-        plan.action === 'delete'
+        removed === 'deleted'
           ? 'Contact deleted'
           : `Contact removed from ${siteLabel}`,
         { variant: 'success', persist: false },
@@ -301,9 +281,8 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     }
   }, [
     confirm,
-    consentGroup,
+    contactRemove,
     enqueueSnackbar,
-    firestore,
     id,
     logActivity,
     record,
@@ -312,9 +291,6 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     row,
     scope,
     siteLabel,
-    user,
-    hostId,
-    orgId,
   ])
 
   const overflowItems: RowActionsMenuItem[] = [
