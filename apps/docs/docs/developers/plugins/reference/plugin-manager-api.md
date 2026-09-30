@@ -36,7 +36,8 @@ receives `hostId: null` and an `orgMount` naming the organization and its
 sites, and the shell admits only a member whose access spans the whole
 organization; an `href` that names one of the console's own organization
 routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
-`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`.
+`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`,
+`searchSources?`.
 
 `ConsoleExtension.themePresets?` adds built-in themes to every site's theme
 picker (**Setup → Theme**): each `{ id, name, description?, theme }` is a
@@ -47,6 +48,47 @@ theme stores it. Picking copies the theme onto the site and the site's edits
 are an override on that copy, so a later version of your plugin never
 repaints a site. Declare `hostThemePresets` in your `console.slots` so the
 theme page loads your plugin, and nothing else does.
+
+`ConsoleExtension.searchSources?` lets the console's search palette find
+your records. Each source is one group of results:
+
+```ts
+searchSources: [
+  {
+    id: 'bottles', // unique across the palette; keep it stable
+    group: 'Bottles', // the heading above the rows
+    noun: 'bottles', // "Only the first 30 bottles were searched."
+    scope: 'host', // `hosts/{hostId}/bottles`; or 'orgData': `orgs/{orgId}/…`
+    collection: 'bottles',
+    nameField: 'name',
+    fallbackNameField: 'label', // when a row has no name
+    extraFields: ['vintage'], // further fields a row is found by
+    entitlementKey: 'bottlesPerHost', // a plan quota that must be non-zero
+    order: 150, // where the group is listed
+    href: (row, { orgSlug, host }) =>
+      host ? `/${orgSlug}/hosts/${host}/cellar/${row.$id}` : null,
+  },
+],
+```
+
+- The palette reads a capped window of the collection, ordered by document
+  id, and matches it in the browser, so a source needs no index. A `host`
+  source is read only on a site. An `orgData` source is the organization's
+  shared data: it is read through the viewer's `visibleTo` tokens on a site,
+  and unfiltered at the organization level, where only an org-wide member is
+  offered it.
+- A source is offered only where your pages would open: your plugin on for
+  the workspace and the site, the extension's `featureFlag` and `permission`
+  held, and the source's own `featureFlag?` and `permission?` with them. A
+  quota in `entitlementKey` that is zero keeps the collection from being read.
+- `order` places the group among the console's own: sites 10, pages 20,
+  emails 30, then components, layouts, templates, content and authors at 100
+  to 140.
+- `href` gets the row (`$id` and its fields) and the two route params; `host`
+  is `null` at the organization level. Answer `null` for a row that has
+  nowhere to open, and the palette drops it rather than drawing a dead link.
+- Declare `consoleSearch` in your `console.slots` so the palette loads your
+  plugin when it opens.
 
 `ConsoleExtension.staffPages?` adds pages to the staff area: each
 `{ id, label, header?: { title, icon?, docsTopic? }, Component }` becomes a

@@ -178,28 +178,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/components/global-search/global-search-dialog.component.tsx",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/components/global-search/global-search-scope.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/global-search/use-global-search.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/components/interactions-provider.component.tsx",
       "rules": [
         "plugin-collection:marketing"

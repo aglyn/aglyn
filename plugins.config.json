@@ -235,6 +235,7 @@
             "/bookings"
           ],
           "slots": [
+            "consoleSearch",
             "crmRecordBooking"
           ]
         }
@@ -542,6 +543,7 @@
           ],
           "slots": [
             "commerceGlance",
+            "consoleSearch",
             "hostDashboard"
           ]
         }
@@ -686,6 +688,7 @@
             "/crm"
           ],
           "slots": [
+            "consoleSearch",
             "formContactFields",
             "hostDashboard",
             "orgDashboard"
@@ -1200,6 +1203,9 @@
           "shell": true,
           "routes": [
             "/redirects"
+          ],
+          "slots": [
+            "consoleSearch"
           ]
         }
       }
@@ -1349,6 +1355,7 @@
           ],
           "slots": [
             "adminOrgDetail",
+            "consoleSearch",
             "hostActivity",
             "staffSite"
           ]
