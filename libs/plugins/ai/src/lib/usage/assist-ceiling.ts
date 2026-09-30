@@ -23,7 +23,7 @@ import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   assistOperatorCeilingUsd,
   assistOrgMonthlyCostLimitUsd,
-} from '@aglyn/aglyn/app-utils/usage-budget'
+} from './assist-spend-guards'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /*
@@ -40,8 +40,8 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
  *
  * ## Why the repo default must not bind an org that has a band
  *
- * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` (in `usage-budget.ts`, beside
- * the alert that announces the ceiling) is $40, which was sized as a
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` (in `assist-spend-guards.ts`,
+ * beside the alert that announces the ceiling) is $40, which was sized as a
  * runaway guard back when every org's assist spend was bounded by a message
  * cap. It is BELOW what Agency and Enterprise include, so applying it to a
  * plan band would refuse those workspaces partway through capacity they are

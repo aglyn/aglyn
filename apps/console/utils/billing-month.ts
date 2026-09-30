@@ -65,7 +65,7 @@ export function previousMonth(now: Date = new Date()): string {
  * discipline.
  *
  * **Anything that is not a well-formed `YYYY-MM` reads as OPEN.** Fail-closed,
- * the same posture as `billsOrgLibraryStorage` and `billsAssistTokens`: a
+ * the same posture as `billsOrgLibraryStorage` and `billsFromMonth`: a
  * month wrongly withheld reports late and visibly, and a month wrongly
  * metered is a bill nobody can take back.
  */

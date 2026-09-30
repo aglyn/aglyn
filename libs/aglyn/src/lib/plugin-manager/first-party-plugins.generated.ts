@@ -12,7 +12,7 @@ import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from '
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
-import type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'
+import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
@@ -1057,6 +1057,27 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "actionRuns"
     ],
     "entitlement": "actionRunsPerMonth"
+  },
+]
+
+/**
+ * Every line of a workspace's monthly spend a first-party plugin contributes
+ * to its usage budget, in catalog order, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_SPEND_LINES_DECLARED: readonly ResolvedPluginSpendLine[] = [
+  {
+    "pluginId": "ai",
+    "id": "assist",
+    "label": "Assist",
+    "live": {
+      "collection": "assistUsage",
+      "field": "estCostUsd"
+    },
+    "billedFromEnv": "BILL_ASSIST_TOKENS_FROM",
+    "unit": {
+      "costUsd": 0.001,
+      "label": "Assist credits"
+    }
   },
 ]
 

@@ -47,9 +47,8 @@ const CONTEXT: UsageAlertContext = {
   month: '2026-09',
   spend: {
     meteredUsd: 0,
-    assistUsd: 0,
+    lines: [],
     totalUsd: 0,
-    assistBilled: false,
     meteredFresh: false,
   },
   guards: {},

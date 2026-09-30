@@ -179,6 +179,10 @@ import { POST } from '../app/api/billing/usage-budget/route'
 
 const MONTH = new Date().toISOString().slice(0, 7)
 
+/** The AI plugin's line of the served spend, as its declaration names it. */
+const assistLine = (payload: any) =>
+  payload.spend.lines.find((line: { id: string }) => line.id === 'assist')
+
 async function call(body: Record<string, unknown>) {
   const response = await POST(
     new Request('https://app.aglyn.com/api/billing/usage-budget', {
@@ -322,7 +326,7 @@ describe('get', () => {
     usageDocs[MONTH] = { month: MONTH, billedCents: 100 }
     assistDocs[MONTH] = { estCostUsd: 30 }
     const { payload } = await call({ action: 'get' })
-    expect(payload.spend.assistBilled).toBe(false)
+    expect(assistLine(payload).billed).toBe(false)
     expect(payload.spend.totalUsd).toBeCloseTo(1, 5)
   })
 
@@ -353,8 +357,7 @@ describe('get', () => {
       const { status, payload } = await call({ action: 'get' })
       expect(status).toBe(200)
       // $30 of provider spend at $0.001 a credit.
-      expect(payload.spend.assistCredits).toBe(30_000)
-      expect(payload.spend.assistUsd).toBeUndefined()
+      expect(assistLine(payload)).toMatchObject({ units: 30_000, usd: null })
     })
 
     it('the cost figure appears NOWHERE in the response body', async () => {
@@ -362,7 +365,6 @@ describe('get', () => {
       // the budget is 50, so a bare `30` in the body came from `estCostUsd`.
       const { payload } = await call({ action: 'get' })
       const flat = JSON.stringify(payload)
-      expect(flat).not.toMatch(/"assistUsd"/)
       expect(flat).not.toMatch(/:\s*30(\.0*)?[,}]/)
     })
 
@@ -370,15 +372,14 @@ describe('get', () => {
       // Anti-vacuity. The regex is only evidence if it fires on a payload that
       // DOES carry the figure — otherwise a typo in the pattern reads as a
       // clean boundary forever.
-      const leaked = JSON.stringify({ spend: { assistUsd: 30 } })
-      expect(leaked).toMatch(/"assistUsd"/)
+      const leaked = JSON.stringify({ spend: { lines: [{ usd: 30 }] } })
       expect(leaked).toMatch(/:\s*30(\.0*)?[,}]/)
     })
 
-    it('reports zero credits, not a missing field, when Assist was unused', async () => {
+    it('reports zero credits, not a missing line, when Assist was unused', async () => {
       delete assistDocs[MONTH]
       const { payload } = await call({ action: 'get' })
-      expect(payload.spend.assistCredits).toBe(0)
+      expect(assistLine(payload).units).toBe(0)
     })
   })
 

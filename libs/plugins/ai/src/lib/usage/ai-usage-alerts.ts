@@ -27,9 +27,10 @@ import {
   assistCogsAlertThresholdUsd,
   assistMarginBreach,
   assistMarginMultiple,
-} from '@aglyn/aglyn/app-utils/usage-budget'
+} from './assist-spend-guards'
 import type { UsageAlertContext } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
 import { assistBackstopCeilingUsd } from './assist-ceiling'
+import { AI_ASSIST_SPEND_LINE_ID } from '../usage-axes'
 
 /**
  * The AI plugin's staff alerts on provider spend (AGL-2984), evaluated for
@@ -81,28 +82,38 @@ export async function evaluateAiUsageAlerts(
   await alertOnHardCeiling(context)
 }
 
+/**
+ * The month's assist spend in dollars: this plugin's own line of the spend
+ * the sweep built (`usageAxes` → `spendLines`), or nothing when the line is
+ * absent.
+ */
+function assistSpendUsd({ spend }: UsageAlertContext): number {
+  return spend.lines.find((line) => line.id === AI_ASSIST_SPEND_LINE_ID)?.usd ?? 0
+}
+
 /** How both alerts name the org: its slug, or its id when it has none. */
 function orgName({ orgSlug, orgId }: UsageAlertContext): string {
   return orgSlug ?? orgId
 }
 
 async function alertOnMarginGuard(context: UsageAlertContext): Promise<void> {
-  const { org, month, spend } = context
+  const { org, month } = context
+  const assistUsd = assistSpendUsd(context)
   const thresholdUsd = assistCogsAlertThresholdUsd(
     process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD,
   )
   // The guard records the whole multiple announced, which is 0 for a zero or
   // non-finite threshold — a reading the breach predicate never agrees to.
-  const multiple = assistMarginMultiple(spend.assistUsd, thresholdUsd)
+  const multiple = assistMarginMultiple(assistUsd, thresholdUsd)
   const due = assistMarginBreach({
-    assistUsd: spend.assistUsd,
+    assistUsd,
     thresholdUsd,
     guard: context.guards[AI_MARGIN_GUARD_KEY],
     month,
   })
   if (!due || !context.recordAlert(AI_MARGIN_GUARD_KEY, multiple)) return
 
-  const title = `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`
+  const title = `Assist token spend is $${assistUsd.toFixed(2)} for one org this month`
   // The add-on state and the band: the same dollar figure is a finding on an
   // org paying for the add-on and an incident on one that is not, and the
   // reader should not have to open the console to know which.
@@ -122,7 +133,7 @@ async function alertOnMarginGuard(context: UsageAlertContext): Promise<void> {
     title,
     body:
       `${orgName(context)} has run about ` +
-      `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
+      `$${assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
       `tokens in ${month}, past the $${thresholdUsd.toFixed(0)} review ` +
       'threshold. Assist is a plan entitlement with no per-token ' +
       'price, so this is margin, not revenue. ' +
@@ -133,12 +144,13 @@ async function alertOnMarginGuard(context: UsageAlertContext): Promise<void> {
 }
 
 async function alertOnHardCeiling(context: UsageAlertContext): Promise<void> {
-  const { org, month, spend } = context
+  const { org, month } = context
+  const assistUsd = assistSpendUsd(context)
   // The same composition the reservation refuses on, for this org, so the
   // figure announced and the figure enforced cannot drift apart.
   const ceilingUsd = assistBackstopCeilingUsd(org as never)
   const due = assistCeilingBreach({
-    assistUsd: spend.assistUsd,
+    assistUsd,
     ceilingUsd,
     guard: context.guards[AI_CEILING_GUARD_KEY],
     month,
@@ -154,7 +166,7 @@ async function alertOnHardCeiling(context: UsageAlertContext): Promise<void> {
       `${ceiling} monthly spend ceiling is crossed`,
     body:
       `${orgName(context)} has run about ` +
-      `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
+      `$${assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
       `tokens in ${month}, past the ` +
       `${ceiling} ceiling. Every further ` +
       'Assist request from this organization is refused until the month ' +

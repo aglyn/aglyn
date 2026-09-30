@@ -37,6 +37,10 @@
  *  - a BAND names the rollup fields that measure it and the entitlement that
  *    says what the plan includes. The utilization table reads it beside
  *    core's own bands.
+ *  - a SPEND LINE names the month document holding what the plugin's usage
+ *    came to at the rates it bills, the deployment variable naming the month
+ *    it is first charged for, and the unit a customer sees it in. The usage
+ *    budget shows it beside the metered figure and counts it once charged.
  *
  * ## What core keeps
  *
@@ -59,8 +63,9 @@
  */
 
 import {
-  PLUGIN_USAGE_BANDS_DECLARED,
   PLUGIN_COST_AXES_DECLARED,
+  PLUGIN_SPEND_LINES_DECLARED,
+  PLUGIN_USAGE_BANDS_DECLARED,
 } from './first-party-plugins.generated'
 
 /** A meter a plugin contributes to the platform's cost model. */
@@ -116,13 +121,45 @@ export interface PluginUsageBandDeclaration {
   unitCostUsd?: number
 }
 
+/**
+ * A line of a workspace's monthly SPEND a plugin contributes to its usage
+ * budget (`usage-budget.ts`): what the plugin's usage came to this month, in
+ * the dollars it is billed at, shown on the customer's budget card and
+ * counted toward the budget from the month the plugin starts charging for it.
+ */
+export interface PluginSpendLineDeclaration {
+  /** The line's key. */
+  id: string
+  /** What the budget card and the budget alert call it. */
+  label: string
+  /**
+   * Where the month's figure is read: `orgs/{orgId}/{collection}/{month}`,
+   * field `field`, in dollars.
+   */
+  live: { collection: string; field: string }
+  /**
+   * The deployment variable naming the first month (`YYYY-MM`) the line is
+   * charged for. Until it names this month or an earlier one — and on any
+   * value that is not a month — the line is shown and never counted.
+   */
+  billedFromEnv: string
+  /**
+   * The unit the customer is shown the line in, when the stored dollars are
+   * not theirs to see: `ceil(dollars / costUsd)` of `label`, and the dollar
+   * figure never crosses to the browser.
+   */
+  unit?: { costUsd: number; label: string }
+}
+
 export type ResolvedPluginCostAxis = PluginCostAxisDeclaration & { pluginId: string }
 export type ResolvedPluginUsageBand = PluginUsageBandDeclaration & { pluginId: string }
+export type ResolvedPluginSpendLine = PluginSpendLineDeclaration & { pluginId: string }
 
 /** What a plugin's `usageAxes` function answers. */
 export interface PluginUsageAxesDeclaration {
   costAxes?: readonly PluginCostAxisDeclaration[]
   bands?: readonly PluginUsageBandDeclaration[]
+  spendLines?: readonly PluginSpendLineDeclaration[]
 }
 
 export function pluginCostAxes(): readonly ResolvedPluginCostAxis[] {
@@ -131,6 +168,10 @@ export function pluginCostAxes(): readonly ResolvedPluginCostAxis[] {
 
 export function pluginUsageBands(): readonly ResolvedPluginUsageBand[] {
   return PLUGIN_USAGE_BANDS_DECLARED
+}
+
+export function pluginSpendLines(): readonly ResolvedPluginSpendLine[] {
+  return PLUGIN_SPEND_LINES_DECLARED
 }
 
 /** A positive finite number, or 0 — the reading every meter is priced from. */

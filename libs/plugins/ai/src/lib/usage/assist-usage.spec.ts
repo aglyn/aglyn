@@ -43,7 +43,7 @@ import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
   assistOrgMonthlyCostLimitUsd,
-} from '@aglyn/aglyn/app-utils/usage-budget'
+} from './assist-spend-guards'
 import {
   aiBilledRatesForModel,
   aiProviderRatesForModel,

@@ -42,6 +42,7 @@ import {
   resolveUsageBudget,
 } from '@aglyn/aglyn/app-utils/usage-budget'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { readPluginSpendLines } from '../../_lib/plugin-spend-readings'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — self-serve billing surface, same posture as
@@ -159,16 +160,16 @@ async function handler(request: Request): Promise<Response> {
       // show this month's spend or none, never last month's under this
       // month's heading. `orgMonthlySpend` compares the two anyway, so a
       // missing document reads as `meteredFresh: false` rather than as $0.
-      const [rollup, assist] = await Promise.all([
+      const [rollup, lineReadings] = await Promise.all([
         orgRef.collection('usage').doc(month).get(),
-        orgRef.collection('assistUsage').doc(month).get(),
+        readPluginSpendLines(orgRef, month),
       ])
       const spend = orgMonthlySpend({
         month,
         rollupBilledCents: rollup.get('billedCents'),
         rollupMonth: rollup.exists ? (rollup.get('month') ?? month) : null,
-        assistEstCostUsd: assist.get('estCostUsd'),
-        assistBilledFrom: process.env.BILL_ASSIST_TOKENS_FROM,
+        lineReadings,
+        env: process.env,
       })
       /*==========================================
        * WHETHER THE BUDGET HAS ALERTED YET (AGL-2239).
@@ -200,17 +201,16 @@ async function handler(request: Request): Promise<Response> {
           /*
            * PROJECTED, never the breakdown itself.
            *
-           * `OrgSpendBreakdown.assistUsd` is `assistUsage/{month}.estCostUsd`
-           * verbatim — our provider bill at the serving model's list rates.
-           * This response reaches an org billing admin's browser, so a dollar
-           * figure on it is our unit cost published to a customer, whether or
-           * not they are charged a cent of it.
+           * A plugin's spend line declared with a unit stores the platform's
+           * own cost — the AI plugin's is its provider bill at the serving
+           * model's list rates. This response reaches an org billing admin's
+           * browser, so a dollar figure on it would be our unit cost published
+           * to a customer, whether or not they are charged a cent of it.
            *
-           * `publicOrgMonthlySpend` is the same boundary `publicAssistCredits`
-           * holds on `/api/billing/assist-credits` and `publicAssistQuota`
-           * holds on the chat route: credits cross, dollars of OUR cost do not.
-           * The breakdown stays available to `usage-alerts`, which is cron-run
-           * and mails the dollar figures to staff.
+           * `publicOrgMonthlySpend` sends such a line in its unit only: units
+           * cross, dollars of OUR cost do not. The breakdown stays available
+           * to `usage-alerts`, which is cron-run and mails the dollar figures
+           * to staff.
            */
           spend: publicOrgMonthlySpend(spend),
           lastAlert,

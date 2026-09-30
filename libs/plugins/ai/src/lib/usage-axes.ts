@@ -41,7 +41,18 @@ import {
  * The band is sold in credits, and a credit is `ASSIST_CREDIT_COST_USD` of
  * spend, so what was used is the dollars over that — rounded up, the one
  * conversion the customer's own meter uses.
+ *
+ * On the usage BUDGET the month's spend is the billed figure (`estCostUsd`),
+ * shown to the customer in credits and never in dollars: the dollars are our
+ * cost, and publishing them would put our model choice and our margin on a
+ * billing page. It counts toward the budget only from the month
+ * `BILL_ASSIST_TOKENS_FROM` names, because assist is a plan entitlement with
+ * no per-token price until then, and a budget that added it would be a
+ * surprise bill invented by a notification.
  */
+/** The AI plugin's line of a workspace's monthly spend, by the id it declares. */
+export const AI_ASSIST_SPEND_LINE_ID = 'assist'
+
 export function aiUsageAxes(): PluginUsageAxesDeclaration {
   return {
     costAxes: [
@@ -63,6 +74,15 @@ export function aiUsageAxes(): PluginUsageAxesDeclaration {
         fields: ['assistCostUsd'],
         entitlement: 'assistCreditsPerMonth',
         unitCostUsd: ASSIST_CREDIT_COST_USD,
+      },
+    ],
+    spendLines: [
+      {
+        id: AI_ASSIST_SPEND_LINE_ID,
+        label: 'Assist',
+        live: { collection: 'assistUsage', field: 'estCostUsd' },
+        billedFromEnv: 'BILL_ASSIST_TOKENS_FROM',
+        unit: { costUsd: ASSIST_CREDIT_COST_USD, label: 'Assist credits' },
       },
     ],
   }

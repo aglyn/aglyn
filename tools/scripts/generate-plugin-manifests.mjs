@@ -783,8 +783,9 @@ async function pluginPlanEntitlements() {
 }
 
 /**
- * The meters a plugin contributes to the platform's cost model and its
- * utilization table (AGL-3080): a plugin names a function under `usageAxes`,
+ * The meters a plugin contributes to the platform's cost model, its
+ * utilization table and the usage budget's spend (AGL-3080): a plugin names a
+ * function under `usageAxes`,
  * and this loads `${package}/usage-axes`, calls it, and compiles the answer
  * into the catalog file as data (core `plugin-usage-axes.ts`). The readers
  * include the discount guardrail and the staff org page, which prices a
@@ -795,7 +796,9 @@ async function pluginPlanEntitlements() {
  * and never one of core's own, an order no other axis or band holds, and a
  * rate KEY rather than a number — the rates stay in core's
  * `ORG_COGS_UNIT_RATES_USD`, and `plugin-usage-axes.spec.ts` holds every
- * declared key to a rate that exists there.
+ * declared key to a rate that exists there. A spend line names its month
+ * document, the variable holding the month it is first charged for, and — when
+ * the stored dollars are not the customer's to see — the unit shown instead.
  */
 const CORE_COST_AXIS_ORDERS = { storage: 10, pageViews: 20, dataStorage: 40, apiRequests: 50, emailSends: 70 }
 const CORE_USAGE_BAND_ORDERS = { hosts: 10, storageGb: 20, pageViews: 30, dataStorageMb: 50, apiRequests: 60, emailSends: 80 }
@@ -812,10 +815,12 @@ async function pluginUsageAxes() {
   const declaring = config.plugins.filter((plugin) => plugin.register?.usageAxes)
   const costAxes = []
   const bands = []
-  if (!declaring.length) return { costAxes, bands }
+  const spendLines = []
+  if (!declaring.length) return { costAxes, bands, spendLines }
   const jiti = jitiForWorkspace()
   const axisOwners = new Map(Object.keys(CORE_COST_AXIS_ORDERS).map((id) => [id, 'the platform']))
   const bandOwners = new Map(Object.keys(CORE_USAGE_BAND_ORDERS).map((id) => [id, 'the platform']))
+  const spendOwners = new Map()
   const axisOrders = new Map(Object.entries(CORE_COST_AXIS_ORDERS).map(([id, order]) => [order, id]))
   const bandOrders = new Map(Object.entries(CORE_USAGE_BAND_ORDERS).map(([id, order]) => [order, id]))
   for (const plugin of declaring) {
@@ -827,10 +832,11 @@ async function pluginUsageAxes() {
     const where = `${specifier}: ${fnName}()`
     const declaredAxes = answer.costAxes ?? []
     const declaredBands = answer.bands ?? []
-    if (!Array.isArray(declaredAxes) || !Array.isArray(declaredBands)) {
-      throw new Error(`${where}: "costAxes" and "bands" are lists`)
+    const declaredSpend = answer.spendLines ?? []
+    if (!Array.isArray(declaredAxes) || !Array.isArray(declaredBands) || !Array.isArray(declaredSpend)) {
+      throw new Error(`${where}: "costAxes", "bands" and "spendLines" are lists`)
     }
-    if (!declaredAxes.length && !declaredBands.length) {
+    if (!declaredAxes.length && !declaredBands.length && !declaredSpend.length) {
       throw new Error(`${where} declares nothing — drop the entry, or declare a meter`)
     }
     for (const axis of declaredAxes) {
@@ -877,10 +883,31 @@ async function pluginUsageAxes() {
       }
       bands.push({ pluginId: plugin.id, ...band })
     }
+    for (const line of declaredSpend) {
+      const { id, label, live, billedFromEnv, unit } = line ?? {}
+      const what = `${where} spend line "${id ?? ''}"`
+      if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a spend line needs a plain "id"`)
+      if (spendOwners.has(id)) throw new Error(`${what} is already declared by ${spendOwners.get(id)}`)
+      spendOwners.set(id, `"${plugin.id}"`)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label"`)
+      if (typeof live?.collection !== 'string' || !PLAIN_NAME.test(live.collection) || typeof live?.field !== 'string' || !PLAIN_NAME.test(live.field)) {
+        throw new Error(`${what}: "live" is { collection, field }, the org subcollection and the dollar field of its month document`)
+      }
+      if (typeof billedFromEnv !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(billedFromEnv)) {
+        throw new Error(`${what}: "billedFromEnv" is the name of the deployment variable holding the first month it is charged for`)
+      }
+      if (unit !== undefined) {
+        if (!(typeof unit?.costUsd === 'number' && Number.isFinite(unit.costUsd) && unit.costUsd > 0) || typeof unit?.label !== 'string' || !unit.label.trim()) {
+          throw new Error(`${what}: "unit" is { costUsd, label }, a positive number of dollars and what the customer calls the unit`)
+        }
+      }
+      spendLines.push({ pluginId: plugin.id, ...line })
+    }
   }
   return {
     costAxes: costAxes.sort((a, b) => a.order - b.order),
     bands: bands.sort((a, b) => a.order - b.order),
+    spendLines,
   }
 }
 
@@ -2529,7 +2556,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2617,6 +2644,14 @@ ${usageAxes.costAxes.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).
  */
 export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
 ${usageAxes.bands.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every line of a workspace's monthly spend a first-party plugin contributes
+ * to its usage budget, in catalog order, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_SPEND_LINES_DECLARED: readonly ResolvedPluginSpendLine[] = [
+${usageAxes.spendLines.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

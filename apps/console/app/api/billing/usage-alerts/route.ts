@@ -100,6 +100,7 @@ import {
   emailOrgAdmins,
   emailStaffAlert,
 } from '../../_lib/usage-alert-email'
+import { readPluginSpendLines } from '../../_lib/plugin-spend-readings'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller — and it HOSTS
@@ -708,9 +709,10 @@ async function handler(request: Request): Promise<Response> {
       // Read HERE, ahead of the quota loop, because the AI credits band below
       // (AGL-2898) measures the same `assistUsage/{month}` document the budget
       // reads further down; one read serves both.
-      const [thisMonthRollup, assistUsageDoc] = await Promise.all([
+      const [thisMonthRollup, assistUsageDoc, spendLineReadings] = await Promise.all([
         org.ref.collection('usage').doc(month).get(),
         org.ref.collection('assistUsage').doc(month).get(),
+        readPluginSpendLines(org.ref, month),
       ])
 
       // The AI credits band (AGL-2898). Measured in CREDITS — the unit the
@@ -1411,8 +1413,8 @@ async function handler(request: Request): Promise<Response> {
         rollupMonth: thisMonthRollup.exists
           ? (thisMonthRollup.get('month') ?? month)
           : null,
-        assistEstCostUsd: assistUsageDoc.get('estCostUsd'),
-        assistBilledFrom: process.env.BILL_ASSIST_TOKENS_FROM,
+        lineReadings: spendLineReadings,
+        env: process.env,
       })
       const budget = resolveUsageBudget(orgData)
       const budgetThreshold = budgetAlertDue({
@@ -1433,12 +1435,16 @@ async function handler(request: Request): Promise<Response> {
                 0,
               )} monthly usage budget`
         // The split, because a figure with no breakdown invites the support
-        // ticket asking what the figure was. Assist is named only when it
-        // counts toward the total — quoting a cost the customer is not being
-        // charged would be a surprise bill invented by a notification.
-        const split = spend.assistBilled
-          ? ` ($${spend.meteredUsd.toFixed(2)} metered usage, ` +
-            `$${spend.assistUsd.toFixed(2)} Assist)`
+        // ticket asking what the figure was. A plugin's line is named only
+        // when it counts toward the total — quoting a cost the customer is not
+        // being charged would be a surprise bill invented by a notification.
+        const billedLines = spend.lines.filter((line) => line.billed)
+        const split = billedLines.length
+          ? ` ($${spend.meteredUsd.toFixed(2)} metered usage` +
+            billedLines
+              .map((line) => `, $${line.usd.toFixed(2)} ${line.label}`)
+              .join('') +
+            ')'
           : ''
         // Names the workspace and the budget in its first sentence, like every
         // notice here (AGL-3431): the body is read on its own.

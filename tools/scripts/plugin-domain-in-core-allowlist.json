@@ -60,14 +60,6 @@
       "lane": "ai"
     },
     {
-      "path": "apps/console/app/api/billing/usage-budget/route.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "apps/console/app/api/billing/usage-email/route.ts",
       "rules": [
         "domain-declares:forms"
@@ -88,13 +80,6 @@
         "plugin-id"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/billing/billing-usage-budget-card.component.tsx",
-      "rules": [
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
     },
     {
       "path": "apps/console/components/billing/billing-usage.component.tsx",
@@ -453,13 +438,6 @@
       ],
       "lane": "stays",
       "why": "Aglyn's own console and docs surfaces, not a tenant feature: the consent default the operator's own tags start from (the console's analytics SDK, and a verbatim copy in the docs site), swapped with the operator identity on a self-host. Tenant sites answer to visitor-consent.ts and a vendor's adapter."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/usage-budget.ts",
-      "rules": [
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
     },
     {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",

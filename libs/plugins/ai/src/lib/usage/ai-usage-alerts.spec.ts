@@ -93,9 +93,17 @@ function fakeSweep(options: {
     month: MONTH,
     spend: {
       meteredUsd: 0,
-      assistUsd: options.assistUsd,
+      // This plugin's own line, as its spend-line declaration names it.
+      lines: [
+        {
+          id: 'assist',
+          pluginId: 'ai',
+          label: 'Assist',
+          usd: options.assistUsd,
+          billed: false,
+        },
+      ],
       totalUsd: 0,
-      assistBilled: false,
       meteredFresh: false,
     },
     guards: options.guards ?? {},

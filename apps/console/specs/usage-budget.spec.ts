@@ -25,11 +25,7 @@
  */
 
 import {
-  assistCeilingBreach,
-  assistCogsAlertThresholdUsd,
-  assistMarginBreach,
-  assistMarginMultiple,
-  billsAssistTokens,
+  billsFromMonth,
   budgetAlertDue,
   budgetThresholdCrossed,
   BUDGET_MAX_THRESHOLDS,
@@ -217,13 +213,19 @@ describe('budgetAlertDue — the idempotency contract', () => {
   })
 })
 
+/** The AI plugin's line, as its `usageAxes` declaration compiles it in. */
+const ASSIST = 'assist'
+const lineOf = <Line extends { id: string }>(
+  spend: { lines: readonly Line[] },
+  id = ASSIST,
+) => spend.lines.find((line) => line.id === id)
+
 describe('orgMonthlySpend', () => {
   it('reads the invoice’s own cents, in dollars', () => {
     const spend = orgMonthlySpend({
       month: '2026-08',
       rollupBilledCents: 4_237,
       rollupMonth: '2026-08',
-      assistEstCostUsd: 0,
     })
     expect(spend.meteredUsd).toBeCloseTo(42.37, 5)
     expect(spend.totalUsd).toBeCloseTo(42.37, 5)
@@ -239,7 +241,6 @@ describe('orgMonthlySpend', () => {
       month: '2026-08',
       rollupBilledCents: 12_000,
       rollupMonth: '2026-07',
-      assistEstCostUsd: 0,
     })
     expect(spend.meteredUsd).toBe(0)
     expect(spend.totalUsd).toBe(0)
@@ -248,7 +249,7 @@ describe('orgMonthlySpend', () => {
     expect(spend.meteredFresh).toBe(false)
   })
 
-  it('reports Assist spend but does NOT bill it by default', () => {
+  it('reports a plugin’s line but does NOT bill it by default', () => {
     // Assist is a plan entitlement (`aiAssist: true`) with no per-token price
     // anywhere in the platform. Folding its cost into a customer's "you will
     // owe" figure would be a surprise bill invented by a notification.
@@ -256,37 +257,45 @@ describe('orgMonthlySpend', () => {
       month: '2026-08',
       rollupBilledCents: 1_000,
       rollupMonth: '2026-08',
-      assistEstCostUsd: 6.5,
+      lineReadings: { [ASSIST]: 6.5 },
     })
-    expect(spend.assistUsd).toBe(6.5)
-    expect(spend.assistBilled).toBe(false)
+    expect(lineOf(spend)).toMatchObject({ usd: 6.5, billed: false, pluginId: 'ai' })
     expect(spend.totalUsd).toBeCloseTo(10, 5)
   })
 
-  it('counts Assist once the start month names it', () => {
+  it('counts the line once its own start month names this one', () => {
     // The other arm, so the branch is not decoration. Forced red by hard-coding
-    // `assistBilled: false` — this case failed and the one above passed, which
-    // is what makes the pair a test rather than an assertion.
+    // `billed: false` — this case failed and the one above passed, which is
+    // what makes the pair a test rather than an assertion.
     const spend = orgMonthlySpend({
       month: '2026-08',
       rollupBilledCents: 1_000,
       rollupMonth: '2026-08',
-      assistEstCostUsd: 6.5,
-      assistBilledFrom: '2026-08',
+      lineReadings: { [ASSIST]: 6.5 },
+      env: { BILL_ASSIST_TOKENS_FROM: '2026-08' },
     })
-    expect(spend.assistBilled).toBe(true)
+    expect(lineOf(spend)?.billed).toBe(true)
     expect(spend.totalUsd).toBeCloseTo(16.5, 5)
+  })
+
+  it('reports every declared line, reading an unread one as nothing', () => {
+    const spend = orgMonthlySpend({
+      month: '2026-08',
+      rollupBilledCents: 0,
+      rollupMonth: '2026-08',
+    })
+    expect(lineOf(spend)).toMatchObject({ usd: 0, billed: false })
   })
 })
 
 /*===========================================================================
  * THE CUSTOMER BOUNDARY.
  *
- * `OrgSpendBreakdown` is the internal shape. `assistUsd` on it is
+ * `OrgSpendBreakdown` is the internal shape. The AI plugin's line on it is
  * `assistUsage/{month}.estCostUsd` verbatim — our provider bill — and the
  * cron reads it to mail staff a margin alert, which is the right audience for
  * a cost. `publicOrgMonthlySpend` is what a customer's browser gets, and the
- * unit change from dollars to credits is the whole of it.
+ * unit change from dollars to the line's declared unit is the whole of it.
  *==========================================================================*/
 describe('publicOrgMonthlySpend', () => {
   const breakdown = (assistUsd: number) =>
@@ -294,22 +303,29 @@ describe('publicOrgMonthlySpend', () => {
       month: '2026-08',
       rollupBilledCents: 1_000,
       rollupMonth: '2026-08',
-      assistEstCostUsd: assistUsd,
+      lineReadings: { [ASSIST]: assistUsd },
     })
 
-  it('converts Assist cost to credits and drops the dollar figure', () => {
+  it('converts a unit line to its unit and drops the dollar figure', () => {
     const projected = publicOrgMonthlySpend(breakdown(6.5))
     // $0.001 a credit, rounded up — the same conversion the credits meter uses,
     // so the two cannot disagree about the same month.
-    expect(projected.assistCredits).toBe(6_500)
-    expect('assistUsd' in projected).toBe(false)
+    expect(lineOf(projected)).toEqual({
+      id: ASSIST,
+      label: 'Assist',
+      billed: false,
+      units: 6_500,
+      unitLabel: 'Assist credits',
+      usd: null,
+    })
+    expect(JSON.stringify(projected)).not.toContain('6.5')
   })
 
   it('CONTROL: the breakdown it projects DOES carry the dollars', () => {
     // Anti-vacuity. Without this the assertion above is satisfied by a source
-    // object that never had the field, and the projection would be proving
+    // object that never had the figure, and the projection would be proving
     // nothing about a boundary it was not crossing.
-    expect(breakdown(6.5).assistUsd).toBe(6.5)
+    expect(lineOf(breakdown(6.5))).toMatchObject({ usd: 6.5 })
   })
 
   it('keeps the BILLED dollars, which are the customer’s own money', () => {
@@ -319,170 +335,32 @@ describe('publicOrgMonthlySpend', () => {
     expect(projected.meteredFresh).toBe(true)
   })
 
-  it('reports zero credits rather than omitting the field', () => {
+  it('reports zero units rather than omitting the line', () => {
     // A missing field and a zero one read differently to a client that has to
     // decide whether to render a line at all.
-    expect(publicOrgMonthlySpend(breakdown(0)).assistCredits).toBe(0)
+    expect(lineOf(publicOrgMonthlySpend(breakdown(0)))).toMatchObject({ units: 0 })
   })
 
-  it('rounds a sub-credit exchange UP, never down to nothing', () => {
+  it('rounds a sub-unit exchange UP, never down to nothing', () => {
     // A long tail of fractional exchanges must not cost real money and draw
     // zero — the direction a meter may not err in.
-    expect(publicOrgMonthlySpend(breakdown(0.0004)).assistCredits).toBe(1)
+    expect(lineOf(publicOrgMonthlySpend(breakdown(0.0004)))).toMatchObject({ units: 1 })
   })
 })
 
-describe('billsAssistTokens', () => {
+describe('billsFromMonth', () => {
   it('is off unless a real YYYY-MM names a month at or before this one', () => {
-    expect(billsAssistTokens('2026-08', '2026-08')).toBe(true)
-    expect(billsAssistTokens('2026-09', '2026-08')).toBe(true)
-    expect(billsAssistTokens('2026-07', '2026-08')).toBe(false)
+    expect(billsFromMonth('2026-08', '2026-08')).toBe(true)
+    expect(billsFromMonth('2026-09', '2026-08')).toBe(true)
+    expect(billsFromMonth('2026-07', '2026-08')).toBe(false)
   })
 
   it('FAILS CLOSED on anything that is not a month', () => {
     // Charging customers because somebody wrote `yes` in a field that wanted a
     // month is the failure this shape exists to make impossible.
     for (const value of ['true', '1', 'yes', '2026-8', '2026-08-01', '', null, undefined]) {
-      expect(billsAssistTokens('2026-08', value as never)).toBe(false)
+      expect(billsFromMonth('2026-08', value as never)).toBe(false)
     }
-  })
-})
-
-describe('the Assist margin guard', () => {
-  const month = '2026-08'
-
-  it('takes its threshold from config and falls back to the default', () => {
-    expect(assistCogsAlertThresholdUsd('50')).toBe(50)
-    for (const bad of ['', '0', '-4', 'lots', null, undefined]) {
-      expect(assistCogsAlertThresholdUsd(bad as never)).toBe(25)
-    }
-  })
-
-  it('stays quiet under the threshold', () => {
-    expect(
-      assistMarginBreach({ assistUsd: 24.99, thresholdUsd: 25, guard: null, month }),
-    ).toBe(false)
-  })
-
-  it('fires once at the threshold', () => {
-    expect(
-      assistMarginBreach({ assistUsd: 25, thresholdUsd: 25, guard: null, month }),
-    ).toBe(true)
-    expect(
-      assistMarginBreach({
-        assistUsd: 30,
-        thresholdUsd: 25,
-        guard: { month, threshold: 1 },
-        month,
-      }),
-    ).toBe(false)
-  })
-
-  it('fires AGAIN at the next multiple', () => {
-    // Forced red by storing a boolean instead of the multiple: an org whose
-    // Assist cost went from $25 to $250 announced itself once, at $25, and
-    // then went quiet for the expensive part.
-    expect(assistMarginMultiple(52, 25)).toBe(2)
-    expect(
-      assistMarginBreach({
-        assistUsd: 52,
-        thresholdUsd: 25,
-        guard: { month, threshold: 1 },
-        month,
-      }),
-    ).toBe(true)
-  })
-
-  it('resets with the month', () => {
-    expect(
-      assistMarginBreach({
-        assistUsd: 30,
-        thresholdUsd: 25,
-        guard: { month: '2026-07', threshold: 9 },
-        month,
-      }),
-    ).toBe(true)
-  })
-})
-
-/**
- * The HARD ceiling's staff announcement (AGL-2264).
- *
- * Distinct from the margin alert above and deliberately so: past this figure
- * the org's assistant is REFUSED, not merely expensive, and the margin
- * alert's whole-multiples arithmetic cannot say so — an org climbing from
- * $25 to the $40 ceiling is still at 1x of the $25 threshold and stays
- * silent. That silence is the failure this block exists to prevent, so the
- * load-bearing test here is the third one.
- */
-describe('assistCeilingBreach — staff hear that the assistant STOPPED', () => {
-  const month = '2026-08'
-
-  it('stays quiet under the ceiling, and fires once at it', () => {
-    expect(
-      assistCeilingBreach({ assistUsd: 39.99, ceilingUsd: 40, guard: null, month }),
-    ).toBe(false)
-    expect(
-      assistCeilingBreach({ assistUsd: 40, ceilingUsd: 40, guard: null, month }),
-    ).toBe(true)
-    // Announced once for the month: crossing is a state, and the org is
-    // refused from here to the boundary however far past it the sum climbs.
-    expect(
-      assistCeilingBreach({
-        assistUsd: 400,
-        ceilingUsd: 40,
-        guard: { month, threshold: 1 },
-        month,
-      }),
-    ).toBe(false)
-  })
-
-  it('says nothing when an operator turned the ceiling OFF', () => {
-    // Nothing is being refused, so there is nothing to announce. Without
-    // this, a deployment that opted out would be mailed about a stop that
-    // never happened.
-    expect(
-      assistCeilingBreach({
-        assistUsd: 10_000,
-        ceilingUsd: null,
-        guard: null,
-        month,
-      }),
-    ).toBe(false)
-  })
-
-  it('is NOT suppressed by the margin alert having already spoken', () => {
-    // The two guards are separate keys on purpose. This is the case the
-    // margin alert cannot carry: $40 is still 1x of its $25 threshold, so
-    // `assistMarginBreach` is silent on the very reading where the customer's
-    // assistant went off.
-    expect(
-      assistMarginBreach({
-        assistUsd: 41,
-        thresholdUsd: 25,
-        guard: { month, threshold: 1 },
-        month,
-      }),
-    ).toBe(false)
-    expect(
-      assistCeilingBreach({
-        assistUsd: 41,
-        ceilingUsd: 40,
-        guard: null,
-        month,
-      }),
-    ).toBe(true)
-  })
-
-  it('resets with the month', () => {
-    expect(
-      assistCeilingBreach({
-        assistUsd: 41,
-        ceilingUsd: 40,
-        guard: { month: '2026-07', threshold: 1 },
-        month,
-      }),
-    ).toBe(true)
   })
 })
 
@@ -512,20 +390,21 @@ describe('the AI overage ceiling never enters the budget (AGL-2898)', () => {
       month: '2026-09',
       rollupBilledCents: 1_250,
       rollupMonth: '2026-09',
-      assistEstCostUsd: 4.75,
-      assistBilledFrom: null,
+      lineReadings: { [ASSIST]: 4.75 },
+      env: {},
     }
     const spend = orgMonthlySpend(inputs)
     expect(spend).toEqual({
       meteredUsd: 12.5,
-      assistUsd: 4.75,
-      assistBilled: false,
+      lines: [
+        { id: ASSIST, pluginId: 'ai', label: 'Assist', usd: 4.75, billed: false },
+      ],
       totalUsd: 12.5,
       meteredFresh: true,
     })
     // The function's whole input surface, spelled out: no `org`, no cap.
     expect(Object.keys(inputs).sort()).toEqual(
-      ['assistBilledFrom', 'assistEstCostUsd', 'month', 'rollupBilledCents', 'rollupMonth'],
+      ['env', 'lineReadings', 'month', 'rollupBilledCents', 'rollupMonth'],
     )
     expect(orgMonthlySpend.length).toBe(1)
   })
