@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import type { MarketplaceArtifactType } from './marketplace-provenance'
-import { resolveProvenance } from './marketplace-provenance'
+import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import { resolveProvenance } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import {
   offeredPluginVersion,
   type PluginRevocation,
-} from './plugin-manifest'
+} from '@aglyn/aglyn/app-utils/plugin-manifest'
 
 /**
  * "Is what I have installed still what the publisher ships?" (AGL-1016).

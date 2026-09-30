@@ -69,9 +69,11 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ currentOrg: { role: 'owner', $id: ORG_ID } }),
   useOrgSlug: () => 'acme',
 }))
-jest.mock('../hooks/use-firestore-collection', () => ({
+// The installed half of the inventory is a zone the installing plugin draws
+// (AGL-3080); these specs are about the built-in switches beside it.
+jest.mock('../components/plugin-widget-slot.component', () => ({
   __esModule: true,
-  default: () => ({ data: [] }),
+  default: () => null,
 }))
 jest.mock('../components/layouts/dashboard.layout', () => ({
   __esModule: true,

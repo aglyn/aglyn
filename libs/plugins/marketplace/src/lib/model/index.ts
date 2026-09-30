@@ -60,7 +60,7 @@ export {
   type UpdateComparableListing,
   type UpdateState,
   type UpdateStatus,
-} from '@aglyn/aglyn/app-utils/marketplace-update-state'
+} from './update-state'
 /**
  * The email-starter policy, re-exported for the same reason the provenance and
  * visibility policies are: it lives in core because `scope:app` may not depend

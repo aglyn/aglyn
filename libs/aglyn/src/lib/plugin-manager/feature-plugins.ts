@@ -697,6 +697,36 @@ export const CONSOLE_WIDGET_SLOTS = {
    * the installation detail page and a site's layouts list — offering a
    * marketplace action in passing.
    */
+  /**
+   * The org Plugins page, above the built-in plugins (AGL-3080): the code a
+   * plugin has INSTALLED into this workspace, one row per installation.
+   * Props: {@link ConsoleOrgPluginInstallsZoneProps}.
+   *
+   * The Plugins page is the workspace's inventory — what it runs, wherever it
+   * came from. The built-in half is the shell's own: the switchboard catalog
+   * says what ships. The installed half is not: where an installation is
+   * pinned, what version it runs, whether a newer one may be installed and
+   * whether its publisher's kill switch is thrown are all facts held by the
+   * plugin that installed it, in collections that are its own. So the page
+   * hands over the sites it can see and the plugin draws its installations.
+   *
+   * Every row links to `/[orgSlug]/plugins/[pluginRef]`, the shell's
+   * installation page, keyed by whatever id the installing plugin pins by —
+   * that page is the one place an installation is managed, whoever drew the
+   * row.
+   */
+  orgPluginInstalls: 'orgPluginInstalls',
+  /**
+   * The installation page of a plugin some plugin INSTALLED, above where it
+   * runs (AGL-3080): what the installer says about the version this
+   * workspace runs. Props: {@link ConsolePluginInstallStatusZoneProps}.
+   *
+   * Drawn only for an installation that exists — a first-party plugin has no
+   * version to be behind, and a page for code installed nowhere says so
+   * itself. A widget here reports; it never installs. Applying an update is
+   * the installing plugin's own surface, which the widget may link to.
+   */
+  pluginInstallStatus: 'pluginInstallStatus',
   /** Bottom of the host dashboard. Props: hostId, org. (AGL-433) */
   dashboardFooter: 'dashboardFooter',
   /** Org settings page, below the tabbed cards. Props: orgId, org. */
@@ -1095,6 +1125,41 @@ export interface ConsolePublishableArtifact {
   /** Seeds the listing's name; the person may change it. */
   displayName?: string
   description?: string
+}
+
+/** One site of the workspace, as the console names it. */
+export interface ConsoleZoneSite {
+  id: string
+  label: string
+}
+
+/** What the `orgPluginInstalls` zone hands each widget (AGL-3080). */
+export interface ConsoleOrgPluginInstallsZoneProps {
+  /** The organization whose inventory the page is. */
+  orgId: string
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /**
+   * The sites of the organization the reader can see. An installation may be
+   * pinned to some of them rather than to the whole organization, so a widget
+   * reads each site's pins through this list rather than listing sites
+   * itself.
+   */
+  hosts: ReadonlyArray<ConsoleZoneSite>
+}
+
+/** What the `pluginInstallStatus` zone hands each widget (AGL-3080). */
+export interface ConsolePluginInstallStatusZoneProps {
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The installation's id: the segment of the page, which is the pin's key. */
+  pluginRef: string
+  /**
+   * One pin of the installation — org-wide if there is one, else any site's.
+   * Every pin carries the same version and manifest, which is what a status
+   * is about.
+   */
+  pin: Readonly<Record<string, unknown>>
 }
 
 /** What the `hostArtifactPublish` zone hands each widget (AGL-3080). */

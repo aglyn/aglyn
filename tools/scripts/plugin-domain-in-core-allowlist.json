@@ -40,13 +40,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/(app)/[orgSlug]/plugins/[pluginRef]/page.tsx",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/(app)/admin/orgs/[orgId]/page.tsx",
       "rules": [
         "plugin-collection:data"
@@ -1202,13 +1195,6 @@
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/marketplace-theme.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/marketplace-update-state.ts",
       "rules": [
         "domain-name"
       ],

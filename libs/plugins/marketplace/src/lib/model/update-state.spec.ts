@@ -13,13 +13,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment node
  */
 
 import {
   compareArtifactVersions,
   resolveUpdateState,
   updateStateLabel,
-} from './marketplace-update-state'
+} from './update-state'
 
 describe('compareArtifactVersions (AGL-1016)', () => {
   it('orders integers numerically, not as strings', () => {

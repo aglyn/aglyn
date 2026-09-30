@@ -395,6 +395,18 @@ Object.assign(MOUNTS, {
     how: 'slot',
     props: { hostId: 'host-1', orgId: undefined, count: 2, options: {}, setOption: mockProductWrite },
   },
+  // AGL-3080: the installed half of the workspace's plugin inventory, and an
+  // installation's version line, drawn by the plugin that installed them.
+  orgPluginInstalls: {
+    file: 'apps/console/app/(app)/[orgSlug]/plugins/page.tsx',
+    how: 'slot',
+    props: { orgId: 'org-1', orgSlug: 'acme', hosts: [{ id: 'host-1', label: 'Main' }] },
+  },
+  pluginInstallStatus: {
+    file: 'apps/console/app/(app)/[orgSlug]/plugins/[pluginRef]/page.tsx',
+    how: 'slot',
+    props: { orgSlug: 'acme', pluginRef: 'listing-1', pin: { version: '1.0.0' } },
+  },
 })
 
 const NEW_ZONES = Object.keys(MOUNTS)

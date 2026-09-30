@@ -19,8 +19,9 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |
-| `marketplaceListing` | Marketplace listing detail body | `hostId`, `listingId`, `permissions` |
-| `orgAddons` | Plugins & add-ons hub, installs section | `hostId` (the acting site) |
+| `hostArtifactPublish` | Wherever a console page offers to publish something it holds (a site's layouts, the organization's publish panel): the dialog that publishes it. The page keeps the control that opens it, and leaves that control out when no widget is registered here | `artifact` (`{ kind, hostId?, orgId?, artifactId?, displayName?, description? }`, or `null` while nothing is open), `onClose()` |
+| `orgPluginInstalls` | Organization → Plugins, above the built-in plugins: the plugins your plugin installed into the workspace, one row per installation, each linking to `/[orgSlug]/plugins/[pluginRef]` | `orgId`, `orgSlug`, `hosts` (`{ id, label }` for each site the reader can see) |
+| `pluginInstallStatus` | An installation's own page, above where it runs: what the installing plugin says about the version the workspace runs. Drawn only for an installation that exists | `orgSlug`, `pluginRef` (the installation's id), `pin` (one pin of it) |
 | `dashboardFooter` | Bottom of the host dashboard | `hostId` |
 | `orgSettings` | Organization → Settings, below the tabs | `orgId`, `org` |
 | `hostSettings` | Host setup page, below the built-in cards | `hostId` |

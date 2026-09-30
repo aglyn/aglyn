@@ -43,11 +43,7 @@ import {
   updateExisting,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
-import {
-  buildRoute,
-  compareArtifactVersions,
-  Route,
-} from '@aglyn/aglyn/server'
+import { buildRoute, Route } from '@aglyn/aglyn/server'
 import {
   outstandingChecklistItems,
   PLUGIN_REVIEW_CHECKLIST,
@@ -87,6 +83,7 @@ import {
 import { emailPublisher } from './publisher-review-email'
 import { dropCachesForListing } from './revoke-cache-drop'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { compareArtifactVersions } from '../model/update-state'
 
 /**
  * Marketplace review queue (AGL-432) — Strapi Market's two-phase review
@@ -447,7 +444,7 @@ async function listingDetail(
  * moves forward" — true of approvals, and the reason it is there. What nothing
  * did was move it BACK. A version approved and later rejected on re-review, or
  * killed with the per-version switch, left the listing still advertising it:
- * `host-plugins-card` and `marketplace-update-state` read this field to offer
+ * `host-plugins-card` and `model/update-state` read this field to offer
  * "Update to vX", and `install-plugin` would then refuse those exact bytes.
  *
  * Contained, because `install-plugin` recomputes approval live and never

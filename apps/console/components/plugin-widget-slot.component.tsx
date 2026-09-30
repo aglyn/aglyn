@@ -88,6 +88,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   orgData: 'bare',
   // A dialog that portals out of the page it is opened from.
   hostArtifactPublish: 'bare',
+  // A card of the Plugins page, and a notice above an installation's cards.
+  orgPluginInstalls: 'stack',
+  pluginInstallStatus: 'stack',
   // A notice above a subtree, spaced by the layout that draws it.
   // The body of the ƒx dialog, which spaces its own contents.
   besignerFunctions: 'bare',

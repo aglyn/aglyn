@@ -4212,7 +4212,7 @@ service cloud.firestore {
                      'verificationRequest',
                      // `latestApprovedVersion` above is the offer for PLUGINS;
                      // for every other artifact type the offer is
-                     // `latestVersion` (marketplace-update-state.ts). Denying
+                     // `latestVersion` (marketplace model/update-state.ts). Denying
                      // one sibling and not the other left the same advertise-
                      // anything hole open one artifact type over.
                      'latestVersion',

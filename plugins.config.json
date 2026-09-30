@@ -411,6 +411,8 @@
           "shell": true,
           "slots": [
             "hostArtifactPublish",
+            "orgPluginInstalls",
+            "pluginInstallStatus",
             "pluginSiteSet"
           ],
           "orgRoutes": [
