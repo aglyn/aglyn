@@ -372,6 +372,51 @@ a plugin shipping a media-bearing collection is covered the day it lands. A
 declaration names no FIELDS — the scan flattens generically, and a field list
 would be the same staleness trap one level down.
 
+### Creating a document — `resource`, and `plugin-host-resources`
+
+Clients create quota-governed site documents through one platform route,
+`POST /api/hosts/resources`: the security rules refuse a client `create` on
+those collections, and the route holds the field allow-list, meets the plan
+count inside the write's transaction, and stamps who made the document. A
+first-party plugin whose collection is created that way declares the KIND
+beside the collection, in the `hostCollections` block of `plugins.config.json`:
+
+```json
+{
+  "name": "bottles",
+  "routeSlug": "cellar",
+  "resource": {
+    "kind": "bottle",
+    "label": "bottles",
+    "activityNoun": "bottle",
+    "quotaKey": "bottlesPerHost",
+    "entitlement": "cellar",
+    "fields": ["name", "vintage", "notes"],
+    "duplicate": { "nameField": "name", "fields": ["vintage", "notes"] }
+  }
+}
+```
+
+| Field | Semantics |
+| --- | --- |
+| `kind` | What a caller names as `resource`. One owner per kind, and none of the platform's own (`screen`, `template`, `layout`, `reusableComponent`, `form`, `entry`, `author`). |
+| `fields` | The keys a client may send; anything else is dropped. `createdAt`, `updatedAt`, `createdBy` and `deletedAt` are never on it — the server stamps them. |
+| `quotaKey` / `entitlement` | The plan counter and feature, as KEYS the platform's plan table resolves. A declaration carries no number. |
+| `platformCap` | A flat cap no plan varies, named by the platform constant that holds it (`ACTIONS_MAX_PER_HOST`). A kind needs this or a `quotaKey`: a create nothing counts is unbounded documents from a browser. |
+| `softDeletes` | Deleting stamps `deletedAt`, so the cap counts live documents. |
+| `requiresPublishRole` | Creating needs the publishing role rather than the write role — for a kind that changes the live site the moment it exists. |
+| `stamps` | Constant values every create writes, never from the client (`"deletedAt": null` for a kind born live). |
+| `externalDestination: { field, approvedByField }` | A destination that may leave the site: when it is not a site path, the creator's verified uid is stamped into `approvedByField`. Only with `requiresPublishRole`. |
+| `livePathField` | The site path the document answers at; a create drops it from the site cache. |
+| `duplicate: { nameField, fields, stamps? }` | How a whole copy is made: a subset of `fields`, a unique name, and what the copy is born with (a cleared trigger). |
+
+The declarations are COMPILED, not registered: the route and the duplicator
+read them with no plugin loaded, and a kind nobody declared is refused as an
+unknown resource — never written with an open field list. The generator checks
+every rule above; `registerPluginHostCollections` refuses a declaration that
+carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
+(`@aglyn/aglyn/plugin-manager/plugin-host-resources`) read them.
+
 ## Record addresses — `plugin-record-routes`
 
 Where a plugin's records are read, published by the plugin that owns them, so

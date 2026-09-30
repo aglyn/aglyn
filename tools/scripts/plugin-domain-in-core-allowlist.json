@@ -199,13 +199,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/api/hosts/resources/route.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/orgs/datasets/export/route.ts",
       "rules": [
         "domain-name",
@@ -1202,13 +1195,6 @@
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/duplicate-resource.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts",

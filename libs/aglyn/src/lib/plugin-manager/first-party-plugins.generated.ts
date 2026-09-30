@@ -205,7 +205,24 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "bookings",
     "name": "services",
-    "routeSlug": "bookings"
+    "routeSlug": "bookings",
+    "resource": {
+      "kind": "service",
+      "label": "services",
+      "activityNoun": "service",
+      "quotaKey": "servicesPerHost",
+      "entitlement": "bookings",
+      "fields": [
+        "name",
+        "description",
+        "durationMinutes",
+        "priceUsd",
+        "timezone",
+        "windows",
+        "crmFollowUpTask",
+        "crmMeetingActivity"
+      ]
+    }
   },
   {
     "pluginId": "bookings",
@@ -216,7 +233,54 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "commerce",
     "name": "products",
-    "routeSlug": "products"
+    "routeSlug": "products",
+    "resource": {
+      "kind": "product",
+      "label": "products",
+      "activityNoun": "product",
+      "quotaKey": "productsPerHost",
+      "entitlement": "commerce",
+      "fields": [
+        "name",
+        "slug",
+        "description",
+        "type",
+        "status",
+        "mediaUrls",
+        "categoryIds",
+        "tags",
+        "options",
+        "variants",
+        "seo",
+        "supplierId",
+        "oversellPolicy",
+        "taxExempt",
+        "digitalFiles",
+        "downloadLimit",
+        "subscription",
+        "subscriptionOptional",
+        "gatedVideos",
+        "relatedProductIds",
+        "giftCard",
+        "lowStockThreshold",
+        "createdAtMs",
+        "updatedAtMs",
+        "nameLower",
+        "nameTokens",
+        "nameReversed",
+        "skus",
+        "barcodes",
+        "priceFromCents",
+        "soldOut",
+        "collectionIds",
+        "priceUsd",
+        "inventory",
+        "imageUrl"
+      ],
+      "stamps": {
+        "deletedAt": null
+      }
+    }
   },
   {
     "pluginId": "commerce",
@@ -231,7 +295,19 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "commerce",
     "name": "locations",
-    "routeSlug": "products"
+    "routeSlug": "products",
+    "resource": {
+      "kind": "location",
+      "label": "inventory locations",
+      "activityNoun": "inventory location",
+      "quotaKey": "inventoryLocations",
+      "entitlement": "commerce",
+      "fields": [
+        "name",
+        "isDefault",
+        "address"
+      ]
+    }
   },
   {
     "pluginId": "commerce",
@@ -314,7 +390,18 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "commerce",
     "name": "registers",
     "mediaScan": "none",
-    "mediaScanReason": "POS register allocations — a count against the register add-on, read by billing (AGL-1775). No content field at all."
+    "mediaScanReason": "POS register allocations — a count against the register add-on, read by billing (AGL-1775). No content field at all.",
+    "resource": {
+      "kind": "register",
+      "label": "POS registers",
+      "activityNoun": "POS register",
+      "quotaKey": "posRegisters",
+      "entitlement": "pos",
+      "fields": [
+        "name",
+        "locationId"
+      ]
+    }
   },
   {
     "pluginId": "commerce",
@@ -382,12 +469,40 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "logic",
     "name": "functions",
-    "routeSlug": "logic"
+    "routeSlug": "logic",
+    "resource": {
+      "kind": "function",
+      "label": "functions",
+      "activityNoun": "function",
+      "activityType": "function",
+      "quotaKey": "functionsPerHost",
+      "fields": [
+        "name",
+        "parameters",
+        "variables",
+        "operations",
+        "returnValue"
+      ]
+    }
   },
   {
     "pluginId": "logic",
     "name": "variables",
-    "routeSlug": "logic"
+    "routeSlug": "logic",
+    "resource": {
+      "kind": "variable",
+      "label": "variables",
+      "activityNoun": "variable",
+      "activityType": "variable",
+      "quotaKey": "variablesPerHost",
+      "fields": [
+        "name",
+        "type",
+        "value",
+        "workflowId",
+        "workflowName"
+      ]
+    }
   },
   {
     "pluginId": "marketing",
@@ -408,22 +523,102 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "redirects",
     "name": "redirects",
-    "routeSlug": "redirects"
+    "routeSlug": "redirects",
+    "resource": {
+      "kind": "redirect",
+      "label": "redirects",
+      "activityNoun": "redirect",
+      "quotaKey": "redirectsPerHost",
+      "entitlement": "redirects",
+      "requiresPublishRole": true,
+      "fields": [
+        "source",
+        "destination",
+        "statusCode",
+        "kind",
+        "priority",
+        "enabled"
+      ],
+      "externalDestination": {
+        "field": "destination",
+        "approvedByField": "externalDestinationApprovedBy"
+      },
+      "livePathField": "source"
+    }
   },
   {
     "pluginId": "workflows",
     "name": "workflows",
-    "routeSlug": "automation"
+    "routeSlug": "automation",
+    "resource": {
+      "kind": "workflow",
+      "label": "workflows",
+      "activityNoun": "workflow",
+      "activityType": "workflow",
+      "quotaKey": "workflowsPerHost",
+      "entitlement": "workflows",
+      "fields": [
+        "name",
+        "steps",
+        "returnValue",
+        "trigger"
+      ],
+      "duplicate": {
+        "nameField": "name",
+        "fields": [
+          "steps",
+          "returnValue"
+        ],
+        "stamps": {
+          "trigger": null
+        }
+      }
+    }
   },
   {
     "pluginId": "workflows",
     "name": "webhooks",
-    "routeSlug": "automation"
+    "routeSlug": "automation",
+    "resource": {
+      "kind": "webhook",
+      "label": "webhooks",
+      "activityNoun": "webhook",
+      "entitlement": "webhooks",
+      "platformCap": "WEBHOOK_MAX_PER_HOST",
+      "softDeletes": true,
+      "fields": [
+        "name",
+        "direction",
+        "url",
+        "workflowName",
+        "secret",
+        "enabled"
+      ]
+    }
   },
   {
     "pluginId": "workflows",
     "name": "actions",
-    "routeSlug": "automation"
+    "routeSlug": "automation",
+    "resource": {
+      "kind": "action",
+      "label": "interactions and actions",
+      "activityNoun": "action",
+      "platformCap": "ACTIONS_MAX_PER_HOST",
+      "softDeletes": true,
+      "fields": [
+        "name",
+        "description",
+        "trigger",
+        "steps",
+        "enabled",
+        "frequency",
+        "cooldownMinutes",
+        "audience",
+        "nodeId",
+        "screenId"
+      ]
+    }
   },
 ]
 

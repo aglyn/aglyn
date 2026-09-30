@@ -983,6 +983,7 @@ function releaseFlagsContent(flags) {
 function hostCollectionRows() {
   const rows = []
   const owners = new Map()
+  const resourceKinds = new Map()
   for (const plugin of config.plugins) {
     const declared = plugin.hostCollections
     if (!declared) continue
@@ -1019,10 +1020,129 @@ function hostCollectionRows() {
       if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
         throw new Error(`${what}: "label" is what ONE of its documents is called, or is left out`)
       }
-      rows.push({ pluginId: plugin.id, ...declaration })
+      const row = { pluginId: plugin.id, ...declaration }
+      if (declaration.resource !== undefined) {
+        row.resource = hostResourceRow(declaration.resource, `${what} resource`, resourceKinds, plugin.id)
+      }
+      rows.push(row)
     }
   }
   return rows
+}
+
+/**
+ * The kinds `/api/hosts/resources` creates from its own table: the platform's
+ * documents, which exist with no plugin loaded. A plugin declaring one of
+ * these would be a second allow-list for the same create.
+ */
+const CORE_HOST_RESOURCE_KINDS = ['screen', 'template', 'layout', 'reusableComponent', 'form', 'entry', 'author']
+
+/** Fields the create route stamps on every document; no declaration may let a client send them. */
+const SERVER_STAMPED_FIELDS = ['createdAt', 'updatedAt', 'createdBy', 'deletedAt']
+
+const PLAIN_FIELD = /^[A-Za-z][A-Za-z0-9]*$/
+
+/**
+ * A plugin's host collection as a KIND the generic create route writes
+ * (AGL-3080): the route is the writable-field allowlist for client creates,
+ * so everything a reader would otherwise have to trust is checked here.
+ *
+ *  - ONE OWNER PER KIND, and none of core's own.
+ *  - A COUNT. A kind with neither a plan `quotaKey` nor a `platformCap` is
+ *    unbounded documents mintable from a browser (AGL-2266).
+ *  - NO SERVER FIELD ON THE ALLOW-LIST. `createdAt`, `updatedAt`,
+ *    `createdBy` and `deletedAt` are stamped; a stamp, and the field an
+ *    external destination's approver lands in, are never client-writable —
+ *    provenance the caller supplies is provenance the caller chose.
+ *  - AN APPROVAL ONLY THE PUBLISH ROLE GIVES. `externalDestination` stamps
+ *    the creator's uid as the approval a serve path trusts, which is only true
+ *    when the create required the publishing role.
+ *  - A COPY THAT IS A SUBSET. `duplicate.fields` are the create's own fields,
+ *    less what a copy must not inherit.
+ */
+function hostResourceRow(resource, what, kinds, pluginId) {
+  if (!resource || typeof resource !== 'object' || Array.isArray(resource)) throw new Error(`${what} is an object`)
+  const { $comment: _note, ...fields } = resource
+  const { kind, label, activityNoun, activityType, quotaKey, entitlement, platformCap, softDeletes, requiresPublishRole } = fields
+  if (typeof kind !== 'string' || !/^[a-z][A-Za-z0-9]*$/.test(kind)) throw new Error(`${what} needs a "kind" in camelCase`)
+  if (CORE_HOST_RESOURCE_KINDS.includes(kind)) throw new Error(`${what}: "${kind}" is a kind the platform creates itself`)
+  const held = kinds.get(kind)
+  if (held) throw new Error(`${what}: kind "${kind}" is already declared by "${held}" — one kind has one allow-list`)
+  kinds.set(kind, pluginId)
+  for (const [key, value] of [['label', label], ['activityNoun', activityNoun]]) {
+    if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${key}"`)
+  }
+  for (const [key, value] of [['activityType', activityType], ['quotaKey', quotaKey], ['entitlement', entitlement], ['platformCap', platformCap]]) {
+    if (value !== undefined && (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(value))) {
+      throw new Error(`${what}: "${key}" is a plain key, or is left out`)
+    }
+  }
+  if (!quotaKey && !platformCap) {
+    throw new Error(`${what} needs a "quotaKey" or a "platformCap" — a create nothing counts is unbounded documents from a browser`)
+  }
+  for (const [key, value] of [['softDeletes', softDeletes], ['requiresPublishRole', requiresPublishRole]]) {
+    if (value !== undefined && typeof value !== 'boolean') throw new Error(`${what}: "${key}" is true or false`)
+  }
+  const writable = plainFieldList(fields.fields, `${what} fields`)
+  for (const field of writable) {
+    if (SERVER_STAMPED_FIELDS.includes(field)) throw new Error(`${what}: "${field}" is stamped by the server and never sent by a client`)
+  }
+  const stamped = stampRecord(fields.stamps, `${what} stamps`, writable)
+  if (fields.externalDestination !== undefined) {
+    const { field, approvedByField } = fields.externalDestination ?? {}
+    if (!writable.includes(field)) throw new Error(`${what}: "externalDestination.field" is one of its own fields`)
+    if (typeof approvedByField !== 'string' || !PLAIN_FIELD.test(approvedByField)) {
+      throw new Error(`${what}: "externalDestination.approvedByField" is a plain field name`)
+    }
+    if (writable.includes(approvedByField) || SERVER_STAMPED_FIELDS.includes(approvedByField) || approvedByField in stamped) {
+      throw new Error(`${what}: "${approvedByField}" is the approver the server stamps, so no client and no other stamp writes it`)
+    }
+    if (requiresPublishRole !== true) {
+      throw new Error(`${what}: "externalDestination" stamps an approval, and only a create that required the publishing role is one`)
+    }
+  }
+  if (fields.livePathField !== undefined && !writable.includes(fields.livePathField)) {
+    throw new Error(`${what}: "livePathField" is one of its own fields`)
+  }
+  if (fields.duplicate !== undefined) {
+    const { nameField } = fields.duplicate ?? {}
+    if (!writable.includes(nameField)) throw new Error(`${what}: "duplicate.nameField" is one of its own fields`)
+    const copied = plainFieldList(fields.duplicate.fields, `${what} duplicate.fields`)
+    for (const field of copied) {
+      if (!writable.includes(field)) throw new Error(`${what}: duplicate field "${field}" is not one a create may write`)
+      if (field === nameField) throw new Error(`${what}: the copy's name is made unique, not copied — drop "${field}" from duplicate.fields`)
+    }
+    stampRecord(fields.duplicate.stamps, `${what} duplicate.stamps`, copied)
+    const { $comment: _why, ...duplicate } = fields.duplicate
+    fields.duplicate = duplicate
+  }
+  return fields
+}
+
+function plainFieldList(list, what) {
+  if (!Array.isArray(list) || !list.length) throw new Error(`${what} names at least one field`)
+  for (const field of list) {
+    if (typeof field !== 'string' || !PLAIN_FIELD.test(field)) throw new Error(`${what}: "${field}" is not a plain field name`)
+  }
+  if (new Set(list).size !== list.length) throw new Error(`${what} names a field twice`)
+  return list
+}
+
+/** Constant values written on every create: never a client field, never another stamp's. */
+function stampRecord(stamps, what, writable) {
+  if (stamps === undefined) return {}
+  if (!stamps || typeof stamps !== 'object' || Array.isArray(stamps)) throw new Error(`${what} is an object`)
+  for (const [field, value] of Object.entries(stamps)) {
+    if (!PLAIN_FIELD.test(field)) throw new Error(`${what}: "${field}" is not a plain field name`)
+    if (writable.includes(field)) throw new Error(`${what}: "${field}" is also client-writable — a stamp is the server's word`)
+    if (field === 'deletedAt' ? value !== null : SERVER_STAMPED_FIELDS.includes(field)) {
+      throw new Error(`${what}: "${field}" is stamped by the server (deletedAt only as null, born live)`)
+    }
+    if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
+      throw new Error(`${what}: "${field}" is a string, number, boolean or null`)
+    }
+  }
+  return stamps
 }
 
 /**
