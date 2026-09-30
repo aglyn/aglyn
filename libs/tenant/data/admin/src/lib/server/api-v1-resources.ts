@@ -21,6 +21,7 @@ import {
   registerPluginService,
   resolvePluginServices,
 } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import type { ApiV1ResourceDescription } from './api-v1-description'
 import type { ApiV1Context } from './api-v1-kit'
 
 /**
@@ -39,9 +40,17 @@ import type { ApiV1Context } from './api-v1-kit'
  * ## The published contract does not move
  *
  * A path, a field, a scope and a status are the same whichever module
- * answers them; the OpenAPI document is still the router's. Moving a
- * resource into its plugin changes where it is written, never what an
- * integrator sees.
+ * answers them. The OpenAPI document is still the router's to build, and a
+ * registration hands it the resource's description (`describe`), so the
+ * document — and the MCP tools derived from it — describe every resource the
+ * build serves and nothing it does not. Moving a resource into its plugin
+ * changes where it is written, never what an integrator sees.
+ *
+ * ## What the organization's usage reports
+ *
+ * `GET /v1/usage` is the platform's; a plugin whose records the plan bands
+ * or an integration sizes a sync by adds its own figures to it
+ * (`registerApiV1UsageFigures`), read with the platform's on every call.
  *
  * ## The plan, before the handler
  *
@@ -84,6 +93,11 @@ export interface ApiV1Resource {
    * `The CRM … is not included in this organization's plan`.
    */
   entitlement?: { feature: string; message: string }
+  /**
+   * The resource as the OpenAPI document describes it, loaded when the
+   * document is built. Absent, the resource is served and undocumented.
+   */
+  describe?: () => Promise<ApiV1ResourceDescription>
 }
 
 export const API_V1_RESOURCES = definePluginServiceContract<ApiV1Resource>(
@@ -134,6 +148,35 @@ export function registerApiV1Resource(
   registerPluginService(API_V1_RESOURCES, registration, { pluginId, key })
 }
 
+/** Every resource the plugins serve here, in registration order. */
+export function apiV1Resources(): Array<{ name: string; pluginId: string; resource: ApiV1Resource }> {
+  return resolvePluginServices(API_V1_RESOURCES).map((entry) => ({
+    name: entry.key ?? '',
+    pluginId: entry.pluginId,
+    resource: entry.impl,
+  }))
+}
+
+/**
+ * The descriptions of every resource the plugins serve, in registration
+ * order. A description that fails to load is left out and logged, rather
+ * than taking the platform's own description with it.
+ */
+export async function describeApiV1Resources(): Promise<ApiV1ResourceDescription[]> {
+  const described = await Promise.all(
+    apiV1Resources().map(async ({ name, pluginId, resource }) => {
+      if (!resource.describe) return null
+      try {
+        return await resource.describe()
+      } catch (error) {
+        console.error(`[api-v1] ${pluginId} could not describe /v1/${name}`, error)
+        return null
+      }
+    }),
+  )
+  return described.filter((one): one is ApiV1ResourceDescription => one !== null)
+}
+
 /** The plugin serving `/v1/<resource>` here, or `null` when none does. */
 export function apiV1Resource(
   resource: string,
@@ -141,4 +184,59 @@ export function apiV1Resource(
   const key = String(resource ?? '').trim()
   const entry = resolvePluginServices(API_V1_RESOURCES).find((one) => one.key === key)
   return entry ? { pluginId: entry.pluginId, resource: entry.impl } : null
+}
+
+// ── Usage ──────────────────────────────────────────────────────────────────
+
+/**
+ * A plugin's figures on `GET /v1/usage`, as top-level members of the usage
+ * object — a band the plan meters, or a size an integration plans a sync by
+ * (`usageBand` in `api-v1-kit.ts` gives either its published shape). Read on
+ * every call, with the request's context; a reader that throws fails the
+ * request, as a platform figure that cannot be read does.
+ */
+export type ApiV1UsageFigures = (context: ApiV1Context) => Promise<Record<string, unknown>>
+
+export const API_V1_USAGE_FIGURES = definePluginServiceContract<ApiV1UsageFigures>(
+  'core.api-v1-usage-figures',
+  { multiple: true },
+)
+
+/**
+ * Adds a plugin's figures to `GET /v1/usage`. One reader per plugin;
+ * registering again replaces it. The owner is the loader's marker when a
+ * register fn is running, else `options.pluginId`.
+ */
+export function registerApiV1UsageFigures(
+  read: ApiV1UsageFigures,
+  options?: { pluginId?: string },
+): void {
+  const pluginId = (getRegisteringPluginId() ?? options?.pluginId ?? '').trim()
+  if (!pluginId) throw new Error('/v1 usage figures were registered with no owner')
+  registerPluginService(API_V1_USAGE_FIGURES, read, { pluginId })
+}
+
+/**
+ * Every plugin's figures for one request, merged in registration order. A
+ * member the platform's own figures (`reserved`) or an earlier plugin
+ * already names is dropped and logged: a plugin adds figures, never
+ * replaces one.
+ */
+export async function readApiV1UsageFigures(
+  context: ApiV1Context,
+  reserved: ReadonlySet<string>,
+): Promise<Record<string, unknown>> {
+  const readers = resolvePluginServices(API_V1_USAGE_FIGURES)
+  const figures = await Promise.all(readers.map((entry) => entry.impl(context)))
+  const merged: Record<string, unknown> = {}
+  figures.forEach((one, index) => {
+    for (const [key, value] of Object.entries(one)) {
+      if (reserved.has(key) || key in merged) {
+        console.error(`[api-v1] ${readers[index].pluginId} named usage figure "${key}", which is taken`)
+        continue
+      }
+      merged[key] = value
+    }
+  })
+  return merged
 }

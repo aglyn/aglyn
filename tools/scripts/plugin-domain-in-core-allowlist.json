@@ -381,10 +381,7 @@
     {
       "path": "apps/console/utils/api-v1-openapi.ts",
       "rules": [
-        "plugin-id",
-        "domain-declares:crm",
-        "domain-declares:data",
-        "domain-declares:marketing"
+        "domain-declares:data"
       ],
       "lane": "plugin-id"
     },
@@ -393,10 +390,8 @@
       "rules": [
         "plugin-id",
         "plugin-collection:commerce",
-        "plugin-collection:crm",
         "plugin-collection:data",
         "plugin-collection:forms",
-        "domain-declares:crm",
         "domain-declares:data",
         "domain-declares:forms",
         "domain-declares:marketing"

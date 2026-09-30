@@ -17,18 +17,16 @@
 
 /**
  * What every `/v1` resource handler shares (AGL-2606): the context the
- * pipeline hands it, the scope check, and the cursor, serialization and
- * idempotency helpers.
+ * pipeline hands it, the scope check, the cursor, serialization and
+ * idempotency helpers, and the shape a usage figure is published in.
  *
- * These lived at the top of the console's `api-v1-resources.ts` while that
- * file held every resource, then beside it once the CRM resources were
- * modules of their own. A second copy of the cursor grammar or the
- * idempotency claim in any handler is exactly the drift the originals were
- * written to prevent: a cursor one resource encodes and another cannot
+ * One copy for every resource, whoever serves it. A second copy of the
+ * cursor grammar or the idempotency claim in any handler is exactly the drift
+ * these exist to prevent: a cursor one resource encodes and another cannot
  * decode, or a claim digest that collides across resources because one copy
- * forgot the org. They live in the data layer since AGL-3080, because a
- * resource a plugin serves (`api-v1-resources.ts`) is a handler too, and a
- * plugin may not import the console.
+ * forgot the org. They are the data layer's because a resource a plugin
+ * serves (`api-v1-resources.ts`) is a handler too, and a plugin may not
+ * import the console.
  */
 import { type AttemptClaim, claimAttempt } from '@aglyn/aglyn/server'
 import type { AglynOrganization } from '@aglyn/aglyn'
@@ -253,6 +251,40 @@ export async function claimWrite(
       status: result.replay.status,
       headers: ctx.headers,
     }),
+  }
+}
+
+// ── Usage ───────────────────────────────────────────────────────────────────
+
+/**
+ * One metered dimension, as published (AGL-2277).
+ *
+ * `included`/`remaining` are `null` for an UNLIMITED band rather than the
+ * sentinel itself: `UNLIMITED` is `Number.POSITIVE_INFINITY`, which
+ * `JSON.stringify` silently turns into `null` anyway — so the choice is
+ * between a `null` that means "unlimited" on purpose and the same `null`
+ * arriving by accident, indistinguishable from a bug. Stated explicitly, and
+ * documented, so an integrator can branch on it.
+ *
+ * `metered` is the field that actually answers "what happens when I cross
+ * this" — true means the excess bills, false means the next call is refused.
+ * It is read off the plan's own overage rate through the `check*Quota`
+ * helpers rather than re-derived here, because a second copy of that rule
+ * would drift from the one the enforcement path uses, and this endpoint's
+ * whole value is telling a customer what the enforcement path will do.
+ */
+export function usageBand(
+  used: number,
+  included: number,
+  remaining: number,
+  overageRateUsd: number | null,
+) {
+  const unlimited = !Number.isFinite(included)
+  return {
+    used,
+    included: unlimited ? null : included,
+    remaining: unlimited ? null : remaining,
+    metered: overageRateUsd !== null,
   }
 }
 

@@ -26,7 +26,6 @@
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   checkApiRequestQuota,
-  checkCrmRecordsQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
@@ -36,7 +35,6 @@ import {
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   defaultScopeForNewResource,
-  CRM_COLLECTIONS,
   effectiveDatasetModel,
   getOrderFulfilmentService,
   inspectUploadBytes,
@@ -47,7 +45,6 @@ import {
   type OrderFulfilmentTarget,
   screenRoutePathToUrl,
   SUBDOMAIN_PATTERN,
-  UNLIMITED,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
@@ -66,7 +63,14 @@ import {
 import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 // The registry's leaf: a resource a plugin serves is found here (AGL-3080).
-import { apiV1Resource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import {
+  apiV1Resource,
+  apiV1Resources,
+  describeApiV1Resources,
+  readApiV1UsageFigures,
+} from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import type { ApiV1ResourceDescription } from '@aglyn/tenant-data-admin/server/api-v1-description'
+import { usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
@@ -2412,38 +2416,6 @@ async function handleScopedMedia(
 // ── Usage (read) ────────────────────────────────────────────────────────────
 
 /**
- * One metered dimension, as published (AGL-2277).
- *
- * `included`/`remaining` are `null` for an UNLIMITED band rather than the
- * sentinel itself: `UNLIMITED` is `Number.POSITIVE_INFINITY`, which
- * `JSON.stringify` silently turns into `null` anyway — so the choice is
- * between a `null` that means "unlimited" on purpose and the same `null`
- * arriving by accident, indistinguishable from a bug. Stated explicitly, and
- * documented, so an integrator can branch on it.
- *
- * `metered` is the field that actually answers "what happens when I cross
- * this" — true means the excess bills, false means the next call is refused.
- * It is read off the plan's own overage rate through the `check*Quota`
- * helpers rather than re-derived here, because a second copy of that rule
- * would drift from the one the enforcement path uses, and this endpoint's
- * whole value is telling a customer what the enforcement path will do.
- */
-function usageBand(
-  used: number,
-  included: number,
-  remaining: number,
-  overageRateUsd: number | null,
-) {
-  const unlimited = !Number.isFinite(included)
-  return {
-    used,
-    included: unlimited ? null : included,
-    remaining: unlimited ? null : remaining,
-    metered: overageRateUsd !== null,
-  }
-}
-
-/**
  * `GET /v1/usage` (AGL-2277) — the caller's own meter, for the current
  * billing month.
  *
@@ -2480,54 +2452,25 @@ export async function handleUsage(
   }
   const orgRef = ctx.firestore.collection('orgs').doc(ctx.orgId)
   const month = apiUsageMonth()
-  const [
-    apiSnap,
-    storageSnap,
-    contactsSnap,
-    datasetsSnap,
-    campaignEmailSnap,
-    companiesSnap,
-    dealsSnap,
-    tasksSnap,
-    activitiesSnap,
-    leadCounts,
-  ] = await Promise.all([
-    orgRef.collection('apiUsage').doc(month).get(),
-    orgRef.collection('usage').doc(month).get(),
-    orgRef.collection('contacts').count().get(),
-    orgRef.collection('datasets').count().get(),
-    // The ORG counter, which is what `reserveCampaignEmailSends` claims
-    // against. The per-site counter beside it is site history and answers a
-    // different question; reporting it here would disagree with the gate.
-    orgRef.collection('counters').doc('campaignEmailSends').get(),
-    // The CRM collections (AGL-2606): sizes, not bands — see `crm` below.
-    // Aggregations, so an org with ten thousand deals pays ten reads.
-    orgRef.collection(CRM_COLLECTIONS.companies).count().get(),
-    orgRef.collection(CRM_COLLECTIONS.deals).count().get(),
-    orgRef.collection(CRM_COLLECTIONS.tasks).count().get(),
-    orgRef.collection(CRM_COLLECTIONS.activities).count().get(),
-    /*
-     * ONE AGGREGATE (AGL-3275). Leads used to live under each SITE, so this
-     * was one count per site the org owns, summed. They share an org
-     * collection now, and a sum over per-site counts would report a lead that
-     * two brands in a consent group both hold twice — so the org's size is a
-     * single unscoped count, the way every other CRM collection above is.
-     */
-    orgRef.collection('leads').count().get(),
-  ])
+  const [apiSnap, storageSnap, datasetsSnap, campaignEmailSnap, pluginFigures] =
+    await Promise.all([
+      orgRef.collection('apiUsage').doc(month).get(),
+      orgRef.collection('usage').doc(month).get(),
+      orgRef.collection('datasets').count().get(),
+      // The ORG counter, which is what `reserveCampaignEmailSends` claims
+      // against. The per-site counter beside it is site history and answers a
+      // different question; reporting it here would disagree with the gate.
+      orgRef.collection('counters').doc('campaignEmailSends').get(),
+      // What the plugins add (AGL-3080) — a band their records are metered
+      // on, the sizes of their collections — each read by its plugin.
+      ensurePluginDeclarations().then(() =>
+        readApiV1UsageFigures(ctx, PLATFORM_USAGE_FIGURES),
+      ),
+    ])
 
   const apiQuota = checkApiRequestQuota(
     ctx.org as never,
     Number(apiSnap.get('count') ?? 0),
-  )
-  // The records band is measured on the SUM (AGL-2611); the contacts entry
-  // below keeps reporting the people count against it, so a client that
-  // only ever read `contacts` still sees the headroom that refuses it.
-  const crmRecordsQuota = checkCrmRecordsQuota(
-    ctx.org as never,
-    contactsSnap.data().count +
-      companiesSnap.data().count +
-      dealsSnap.data().count,
   )
   const datasetQuota = checkDatasetQuota(ctx.org, datasetsSnap.data().count)
   const storageQuota = checkDataStorageQuota(
@@ -2556,25 +2499,6 @@ export async function handleUsage(
         apiQuota.included,
         apiQuota.remaining,
         apiQuota.overageRateUsd,
-      ),
-      contacts: usageBand(
-        contactsSnap.data().count,
-        crmRecordsQuota.included,
-        crmRecordsQuota.remaining,
-        crmRecordsQuota.overageRateUsd,
-      ),
-      /*
-       * THE BAND ITSELF (AGL-2611): contacts, companies and deals as one
-       * figure against the one band the plan sells. `contacts` above keeps
-       * its shape for the client that only reads it — same band, same
-       * headroom — and this is the number the invoice and the console
-       * meter are computed from. Companies and deals below stay as sizes.
-       */
-      crmRecords: usageBand(
-        crmRecordsQuota.used,
-        crmRecordsQuota.included,
-        crmRecordsQuota.remaining,
-        crmRecordsQuota.overageRateUsd,
       ),
       // Datasets are the one band with no overage RATE — extra slots are an
       // add-on you buy, not usage that meters — so `metered` is always false
@@ -2610,38 +2534,49 @@ export async function handleUsage(
         campaignEmailQuota.remaining,
         null,
       ),
-      /*
-       * The CRM collections (AGL-2606) — SIZES, in the band shape so a client
-       * reads them with the code it already has. No plan bands them: a
-       * company or a deal is not metered and is never refused, so `included`
-       * and `remaining` are `null` — the unlimited band the docs define —
-       * and `metered` is false because there is nothing to bill. What the
-       * numbers are for is sizing a sync: how many pages a full walk of
-       * `/v1/deals` will take, before taking it.
-       */
-      crm: {
-        companies: usageBand(companiesSnap.data().count, UNLIMITED, UNLIMITED, null),
-        deals: usageBand(dealsSnap.data().count, UNLIMITED, UNLIMITED, null),
-        tasks: usageBand(tasksSnap.data().count, UNLIMITED, UNLIMITED, null),
-        activities: usageBand(
-          activitiesSnap.data().count,
-          UNLIMITED,
-          UNLIMITED,
-          null,
-        ),
-        leads: usageBand(
-          Number(leadCounts.data().count ?? 0),
-          UNLIMITED,
-          UNLIMITED,
-          null,
-        ),
-      },
+      ...pluginFigures,
     },
     { headers: ctx.headers },
   )
 }
 
+/** The members of `GET /v1/usage` the platform answers, which no plugin may take. */
+const PLATFORM_USAGE_FIGURES: ReadonlySet<string> = new Set([
+  'object',
+  'month',
+  'apiRequests',
+  'datasets',
+  'dataStorageMb',
+  'campaignEmails',
+])
+
 // ── Dispatch ────────────────────────────────────────────────────────────────
+
+/**
+ * Runs the app's declarations step when no plugin has registered a `/v1`
+ * resource — a process whose boot failed — so what the plugins serve,
+ * describe and report is registered before it is read. The step memoizes
+ * itself, so this is one attempt per process.
+ */
+async function ensurePluginDeclarations(): Promise<void> {
+  if (apiV1Resources().length > 0) return
+  await runPluginDeclarationsRepair().catch(() => false)
+}
+
+/** The top-level resources the plugins serve here, in registration order. */
+export async function pluginApiV1ResourceNames(): Promise<string[]> {
+  await ensurePluginDeclarations()
+  return apiV1Resources().map(({ name }) => name)
+}
+
+/**
+ * How the plugins describe the resources they serve, for the OpenAPI
+ * document and the MCP tools derived from it.
+ */
+export async function describePluginApiV1Resources(): Promise<ApiV1ResourceDescription[]> {
+  await ensurePluginDeclarations()
+  return describeApiV1Resources()
+}
 
 /**
  * The resource a plugin serves under `/v1/<name>` (AGL-3080), or `null`.

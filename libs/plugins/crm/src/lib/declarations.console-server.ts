@@ -20,6 +20,7 @@
 import {
   type ApiV1ResourceHandler,
   registerApiV1Resource,
+  registerApiV1UsageFigures,
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
 
@@ -66,15 +67,32 @@ const CRM_API_V1_RESOURCES: ReadonlyArray<readonly [string, ApiV1ResourceHandler
  * owns the pipeline in front of them — the key, the plan's API access, the
  * quota, the rate limit, the error envelope — and hands every request under
  * `/v1/contacts`, `/v1/deals` and the rest to the CRM once the key is
- * authenticated and the organization's plan carries the CRM. The API is the
+ * authenticated and the organization's plan carries the CRM. Each resource
+ * brings its description for the API's OpenAPI document, and the CRM's
+ * records band and collection sizes join `GET /v1/usage`. The API is the
  * console's alone, so the tenant runtime does not register them.
  *
- * Light at boot: each resource's module is imported with its first request.
+ * Light at boot: each resource's module is imported with its first request,
+ * the descriptions when the document is first built, and the usage reader
+ * with the first usage call.
  * Registering again replaces this plugin's own entries, so a second call (a
  * hot reload, a spec) is harmless.
  */
 export function registerCrmConsoleServerDeclarations(): void {
   for (const [resource, handle] of CRM_API_V1_RESOURCES) {
-    registerApiV1Resource(resource, { handle, entitlement: CRM_SUITE }, { pluginId: BUNDLE_ID })
+    registerApiV1Resource(
+      resource,
+      {
+        handle,
+        entitlement: CRM_SUITE,
+        describe: async () =>
+          (await import('./server/api-v1/openapi')).CRM_API_V1_DESCRIPTIONS[resource],
+      },
+      { pluginId: BUNDLE_ID },
+    )
   }
+  registerApiV1UsageFigures(
+    async (ctx) => (await import('./server/api-v1/usage')).crmUsageFigures(ctx),
+    { pluginId: BUNDLE_ID },
+  )
 }

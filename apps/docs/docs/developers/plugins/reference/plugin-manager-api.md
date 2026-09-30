@@ -150,9 +150,12 @@ registerApiV1Resource(
 | `apiV1Resource(resource)` | What the router asks after the platform's own resources: the serving plugin and its registration, or `null`. A name nobody registered is asked once more after the app's declarations step runs, so a process whose boot failed repairs itself rather than answering `404`. |
 | `handle(request, ctx, segments, url)` | Runs after the pipeline admitted the request — the API key, the plan's API access, the request quota, the rate limit. `ctx` is the `ApiV1Context`; the handler asks for its own scopes with `requireScope` and answers in the published envelope (`apiJson`, `ApiErrors`). |
 | `entitlement` | The plan feature the resource needs. The router refuses an organization without it — `402 plan_required`, the feature as the `code`, the registration's sentence as the message — before the handler runs and before any scope is asked, so a key minted while the plan carried the feature cannot outlive it. |
+| `describe` | Loads the resource's description — tag, record schema, writable members, operations — in the terms of `@aglyn/tenant-data-admin/server/api-v1-description`. The OpenAPI document at `/api/v1/openapi.json`, and the MCP tools derived from it, list every resource the build serves and nothing it does not; a description that fails to load is left out and logged. `apiV1Resources()` lists the registrations, and the API root's `resources` names them. |
+| `registerApiV1UsageFigures(read, { pluginId? })` | Adds the plugin's members to `GET /v1/usage` — a band its records are metered on, the sizes an integration plans a sync by — read with the platform's on every call (`usageBand` gives one its published shape). A member the platform or another plugin already names is dropped and logged. |
 
 The helpers every handler shares — `claimWrite` (the idempotency claim),
-`paginate`, `serialize`, `readJsonBody`, `orgOwnsHost` and `requireScope` —
+`paginate`, `serialize`, `readJsonBody`, `orgOwnsHost`, `requireScope` and
+`usageBand` —
 are `@aglyn/tenant-data-admin/server/api-v1-kit`'s, so a cursor or an
 idempotency key means the same thing on every resource whoever serves it.
 
