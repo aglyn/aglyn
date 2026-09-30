@@ -360,7 +360,7 @@ describe('every zone says how it places its widgets', () => {
       'besignerToolbar',
       'besignerInspector',
       'seoFields',
-      'assistPanel',
+      'consoleDock',
     ]) {
       expect(`${zone}: ${widgetZoneLayout(zone)}`).toBe(`${zone}: bare`)
     }

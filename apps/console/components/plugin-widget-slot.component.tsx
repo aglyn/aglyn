@@ -118,7 +118,7 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // The card beneath the collaborators table; its columns never render here.
   hostMembers: 'stack',
   // A floating dock, positioned by the widget itself.
-  assistPanel: 'bare',
+  consoleDock: 'bare',
   // Controls in the besigner's Attributes panel and its toolbar.
   besignerInspector: 'bare',
   besignerToolbar: 'bare',

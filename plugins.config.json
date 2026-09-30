@@ -953,7 +953,7 @@
         "console": {
           "shell": true,
           "slots": [
-            "assistPanel",
+            "consoleDock",
             "automationEditor",
             "automationRun",
             "besignerInspector",

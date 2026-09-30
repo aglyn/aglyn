@@ -169,8 +169,8 @@ const MOUNTS: Record<
     how: 'both',
     props: { hostId: 'host-1', canManage: true },
   },
-  assistPanel: {
-    file: 'apps/console/components/assist-dock-slot.component.tsx',
+  consoleDock: {
+    file: 'apps/console/components/console-dock-slot.component.tsx',
     how: 'slot',
     props: {},
   },
@@ -494,8 +494,8 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
   })
 
   it('both shells mount the assistant dock above every route boundary', () => {
-    expect(read('apps/console/app/(app)/layout.tsx')).toContain('<AssistDockSlot />')
-    expect(read('apps/console/app/(editor)/layout.tsx')).toContain('<AssistDockSlot />')
+    expect(read('apps/console/app/(app)/layout.tsx')).toContain('<ConsoleDockSlot />')
+    expect(read('apps/console/app/(editor)/layout.tsx')).toContain('<ConsoleDockSlot />')
   })
 })
 

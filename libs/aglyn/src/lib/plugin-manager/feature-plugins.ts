@@ -869,12 +869,13 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostMembers: 'hostMembers',
   /**
-   * The console shell's assistant dock (AGL-2940): the one position above
-   * every route boundary in both the `(app)` and `(editor)` shells, where a
-   * floating helper survives a navigation. Props: none — a widget here
-   * resolves its own scope from the URL, as the shell's own chrome does.
+   * The console dock (AGL-2940): the one position above every route boundary
+   * in both the `(app)` and `(editor)` shells, where a floating panel — an
+   * assistant, a helper — survives a navigation. Props:
+   * {@link ConsoleDockZoneProps}. Named for the position, not for what a
+   * plugin puts there (AGL-3080: it was `assistPanel`).
    */
-  assistPanel: 'assistPanel',
+  consoleDock: 'consoleDock',
   /**
    * A section at the bottom of the besigner's Attributes panel (AGL-2940),
    * under the selected element's own fields. Props: `hostId` (`null` on an
@@ -1167,6 +1168,41 @@ export interface ConsolePluginInstallStatusZoneProps {
    * is about.
    */
   pin: Readonly<Record<string, unknown>>
+}
+
+/** A release flag's verdict as the console applies it: the staff bypass included. */
+export interface ConsoleReleaseVerdict {
+  /** Released, or the reader is staff. */
+  visible: boolean
+  /** Visible ONLY because the reader is staff. */
+  staffPreview: boolean
+}
+
+/** What the `consoleDock` zone hands each widget (AGL-2940, AGL-3080). */
+export interface ConsoleDockZoneProps {
+  orgId?: string
+  org?: unknown
+  orgReady: boolean
+  /**
+   * The org a widget may speak for, act as, and be METERED against — or
+   * `undefined` where the page named none, or where the membership positively
+   * contradicts the URL (AGL-1130, AGL-1916, AGL-1934).
+   */
+  scopedOrgId?: string
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site in view, or null off a host route. */
+  hostId: string | null
+  /** The product's name as this org reads it (AGL-2319). */
+  productName: string
+  /**
+   * The verdict for any release flag the widget names, staff bypass applied.
+   * The shell names no plugin's flag; a widget asks for its own.
+   */
+  releaseVerdict: (key: string) => ConsoleReleaseVerdict
+  isStaff: boolean
+  /** The reader's verdict for every declared permission key on the site in view. */
+  permissionsOnHost?: { loaded: boolean; granted: Readonly<Record<string, boolean>> }
 }
 
 /** What the `hostArtifactPublish` zone hands each widget (AGL-3080). */

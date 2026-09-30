@@ -316,14 +316,6 @@
       "lane": "marketing"
     },
     {
-      "path": "apps/console/components/assist-dock-slot.component.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "apps/console/components/billing/billing-metered-estimate.component.tsx",
       "rules": [
         "plugin-collection:forms",
@@ -419,7 +411,6 @@
     {
       "path": "apps/console/components/plugin-widget-slot.component.tsx",
       "rules": [
-        "domain-declares:ai",
         "domain-declares:commerce",
         "domain-declares:forms",
         "domain-declares:workflows"
@@ -1277,7 +1268,6 @@
     {
       "path": "libs/aglyn/src/lib/plugin-manager/feature-plugins.ts",
       "rules": [
-        "domain-declares:ai",
         "domain-declares:commerce",
         "domain-declares:forms",
         "domain-declares:workflows"
