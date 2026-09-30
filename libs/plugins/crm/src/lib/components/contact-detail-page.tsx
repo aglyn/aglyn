@@ -30,6 +30,7 @@ import { useCallback, useMemo } from 'react'
 import { useContactRemove } from '../hooks/use-contact-remove'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { CrmCreateSiteDefault, useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { crmShareChipFor } from '../model/crm-sharing'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
@@ -51,6 +52,7 @@ import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { CrmSuiteNotice, crmSuiteIncluded, crmSuiteLockedReason } from './crm-suite-lock'
 import { useErasePersonAction } from './erase-person-action'
 import RecordFilesCard from './record-files-card'
+import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
 import { RecordTasksCard } from './record-tasks-card'
 import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
@@ -403,6 +405,8 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
               {/* The verdict on the address (AGL-3245), first: a bounce or a
                   do-not-contact mark is what a person deciding to write must see. */}
               <CrmEmailStateChip state={record.emailState} />
+              {/* Seen here only through a share (AGL-3336): who shared it. */}
+              <CrmShareChipView chip={crmShareChipFor(row, viewingGroup?.hostIds ?? [])} org={org} />
               {/* The mail gateway in front of the address (AGL-3328). */}
               <CrmEmailGatewayChip
                 hostId={siteHostId}
@@ -486,6 +490,16 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             />
           ) : null}
           {mount ? <ContactKnownByCard row={row} contactId={id} org={org} /> : null}
+          {/* Where the person is visible and why, and a manager's share (AGL-3336). */}
+          <RecordSharingCard
+            object="contacts"
+            id={id}
+            record={row}
+            hostId={hostId ?? null}
+            orgId={orgId}
+            org={org}
+            viewingHostIds={viewingGroup?.hostIds}
+          />
           <ContactPropertiesCard
             hostId={hostId}
             org={org}

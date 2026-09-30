@@ -115,6 +115,8 @@ import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-pe
 import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
 import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/inbound-address'
 import { crmCompanyDeleteHandler } from './server/company-delete'
+import { crmSharingHandler } from './server/crm-sharing'
+import { CRM_SHARING_ROUTE } from './model/crm-sharing'
 import { CONTACT_PHONE_REFUSAL, normalizeTags, typed } from './server/contact-profile'
 import { crmContactUpdateHandler } from './server/contact-update'
 import { crmContactRemoveHandler } from './server/contact-remove'
@@ -615,6 +617,10 @@ export function registerCrmConsoleApi(): void {
   // What a client-direct write the browser cannot follow up asks for: the
   // fields the CRM lists query, restamped from the record (AGL-3321).
   registerPluginApiRoute(CRM_LIST_FIELDS_ROUTE, crmListFieldsHandler)
+  // Sharing records with other sites (AGL-3336): a manager's share and
+  // unshare, the org's sharing rules and their recompute, and the rules'
+  // re-evaluation a client-direct write owes.
+  registerPluginApiRoute(CRM_SHARING_ROUTE, crmSharingHandler)
   // A lead source value renamed or deleted (AGL-3298): the list and every
   // lead and contact holding the old label, in one request.
   registerPluginApiRoute(CRM_LEAD_SOURCE_VALUES_ROUTE, crmLeadSourceValuesHandler)

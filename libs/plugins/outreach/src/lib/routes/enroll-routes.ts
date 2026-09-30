@@ -21,7 +21,7 @@ import {
   normalizeCampaignIds,
 } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
-import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { scopeTokensForHost, seenOnlyThroughGrant } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   CRM_COLLECTIONS,
   crmLeadStatus,
@@ -350,6 +350,9 @@ async function leadsViewPeople(
     .get()
   const matching = window.docs.slice(0, LEADS_VIEW_WINDOW).filter((doc) => {
     const lead = doc.data() as Record<string, unknown>
+    // Held, not merely seen: a lead shared with this site (AGL-3336) is not
+    // its to sequence.
+    if (seenOnlyThroughGrant(lead, sequence.hostId)) return false
     if (wanted === 'all') return true
     if (wanted === 'open') return isCrmLeadOpen(lead as never) && !lead['convertedContactId']
     return crmLeadStatus(lead as never) === wanted

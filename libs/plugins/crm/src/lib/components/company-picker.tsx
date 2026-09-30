@@ -55,6 +55,7 @@ import {
   EMPTY_COMPANY_DRAFT,
   suggestCompanyForEmail,
 } from '../model/companies'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 export { suggestCompanyForEmail, type CompanyOption }
 
@@ -165,6 +166,7 @@ export function useCreateCompany(props: {
   // captured by — the mounted one, or at the organization level the one the
   // reader picked (AGL-2630). No site picked, no create offered.
   const { scope, createTokens, createHostId } = useCrmScope({ hostId, org })
+  const followUpSharing = useCrmSharingFollowUp(hostId, scope?.[1] ?? null)
   const uid = user?.uid ?? ''
   return useMemo<CreateCompany | null>(() => {
     if (!scope || !createHostId) return null
@@ -191,9 +193,11 @@ export function useCreateCompany(props: {
           updatedAt: serverTimestamp(),
         },
       )
+      // A rule may share companies created on this site (AGL-3336).
+      followUpSharing('companies', [id])
       return { id, name: String(result.set['name']), domain: null }
     }
-  }, [scope, createTokens, firestore, createHostId, uid, org])
+  }, [scope, createTokens, firestore, createHostId, uid, org, followUpSharing])
 }
 
 /** The sentinel id of the "Create …" row the list grows when nothing matches. */

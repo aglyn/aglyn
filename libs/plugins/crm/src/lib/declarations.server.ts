@@ -25,6 +25,7 @@ import {
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonMatcher } from '@aglyn/aglyn/plugin-manager/plugin-person-matches'
 import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
@@ -118,6 +119,18 @@ export function registerCrmServerDeclarations(): void {
       },
     },
     { pluginId: BUNDLE_ID },
+  )
+  // Sharing rules (AGL-3336), re-evaluated after every server write of a
+  // lead, a contact, a company or a deal: the core tells its record-written
+  // listeners from the list-field restamp every such writer ends with, in
+  // both apps — a form's capture on the tenant, an edit in the console.
+  // Deferred like the rest: an org with no rules pays one cached read.
+  registerPluginRecordWrittenListener(
+    async (event) => {
+      const { crmSharingRecordWritten } = await import('./server/crm-sharing')
+      await crmSharingRecordWritten(event)
+    },
+    { pluginId: BUNDLE_ID, key: 'sharing' },
   )
   registerPluginConsentGroupParticipant(
     {

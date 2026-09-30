@@ -28,6 +28,7 @@ import {
   decodeStoredNodes,
   emailStarterSendBlock,
   resolveBrandingProfile,
+  seenOnlyThroughGrant,
   siteLockdownFromDocs,
   visibleToHost,
 } from '@aglyn/aglyn/server'
@@ -1301,7 +1302,9 @@ export async function performCampaignSend(
       (await orgDataQueryForHost(hostId, 'leads')).query,
     )
     audienceTruncated = leads.truncated
-    recipients = leads.docs.map((doc) => {
+    // Held, not merely seen: a lead another site SHARED with this one
+    // (AGL-3336) is visible here and was never this site's audience.
+    recipients = leads.docs.filter((doc) => !seenOnlyThroughGrant(doc.data(), hostId)).map((doc) => {
       const email = String(doc.get('email') ?? '')
       collectName(email, doc.get('name'))
       collectConsent(email, doc.data())
@@ -1375,6 +1378,9 @@ export async function performCampaignSend(
      */
     audienceTruncated = contacts.truncated
     recipients = contacts.docs
+      // Held, not merely seen — a shared contact is no site's audience but
+      // its holders' (AGL-3336).
+      .filter((doc) => !seenOnlyThroughGrant(doc.data(), hostId))
       .filter((doc) =>
         contactMatchesSegment(
           { tags: doc.get('tags') ?? [], sources: doc.get('sources') ?? {} },

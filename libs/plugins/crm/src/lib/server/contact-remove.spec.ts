@@ -81,6 +81,7 @@ import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { queryFakeFirestore } from '@aglyn/tenant-data-admin/server/test-firestore-queries'
 import {
   CONTACT_REMOVE_SCOPED_REFUSAL,
+  CONTACT_REMOVE_SHARED_REFUSAL,
   crmContactRemoveHandler,
 } from './contact-remove'
 
@@ -318,6 +319,38 @@ describe('who may let a contact go', () => {
       error: 'That contact is not visible to this site.',
     })
     expect(contact('ada')).toBeDefined()
+  })
+})
+
+/**
+ * CRM SHARING (AGL-3336). A site a contact was only SHARED with holds
+ * nothing there: it cannot "remove" the share, and the share never stands
+ * between the holding site's collaborator and the delete.
+ */
+describe('a contact shared with another site', () => {
+  const sharedOut = () => ({
+    ...soleHeld(),
+    visibleTo: [`host:${HOST}`, `host:${OTHER_HOST}`],
+    writeTo: [`host:${HOST}`],
+    sharing: { added: [`host:${OTHER_HOST}`] },
+  })
+
+  it('lets the holding site’s collaborator delete it, the share notwithstanding', async () => {
+    mockFirestore = queryFakeFirestore({ [`${CONTACTS}/ada`]: sharedOut() })
+    caller = { uid: 'scoped-uid' }
+    const { payload } = await post({ hostId: HOST, contactIds: ['ada'] })
+    expect(payload.results[0]).toEqual({ contactId: 'ada', ok: true, removed: 'deleted' })
+  })
+
+  it('refuses the site it was shared with, and writes nothing', async () => {
+    mockFirestore = queryFakeFirestore({ [`${CONTACTS}/ada`]: sharedOut() })
+    const { payload } = await post({ hostId: OTHER_HOST, contactIds: ['ada'] })
+    expect(payload.results[0]).toEqual({
+      contactId: 'ada',
+      ok: false,
+      error: CONTACT_REMOVE_SHARED_REFUSAL,
+    })
+    expect(contact('ada')).toEqual(sharedOut())
   })
 })
 

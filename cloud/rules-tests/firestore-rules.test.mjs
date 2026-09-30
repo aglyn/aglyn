@@ -12627,4 +12627,133 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
 })
 
 
+
+/**
+ * CRM SHARING (AGL-3336).
+ *
+ * A manager's share widens `visibleTo`, so a record shared with a site is
+ * READ there by the same `array-contains-any` list every site already sends —
+ * and nothing about who may WRITE it moves unless the share granted edit:
+ * a shared record carries `writeTo`, and a scoped member's update and delete
+ * are admitted against it. `sharing` and `writeTo` are the server's, and the
+ * tokens a share ADDED never count as a holder, so a share can neither keep
+ * a record alive past its last holder nor be undone from a browser.
+ */
+describe('CRM sharing: a share is read where it lands and written only as granted (AGL-3336)', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  const shared = (access) => ({
+    grants: {
+      manual_a: { source: 'manual', tokens: [MINE], access, byUid: OWNER, atMs: 1 },
+    },
+    tokens: [MINE],
+    added: [MINE],
+    ruleIds: [],
+    orgWideHeldBy: [],
+  })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      const createdAt = new Date('2026-09-30T12:00:00Z')
+      // Held by site B, shared read-only with this editor's site.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'shared-read'), {
+        email: 'r@acme.test', hostId: 'host-b', status: 'new', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS], sharing: shared('read'),
+      })
+      // …and one shared with edit.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'shared-edit'), {
+        email: 'e@acme.test', hostId: 'host-b', status: 'new', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS, MINE], sharing: shared('edit'),
+      })
+      // Held by this editor's site, shared out to site B.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'mine-shared-out'), {
+        email: 'm@acme.test', hostId: HOST, status: 'new', createdAt,
+        visibleTo: [MINE, THEIRS], writeTo: [MINE],
+        sharing: { ...shared('read'), tokens: [THEIRS], added: [THEIRS] },
+      })
+      // Held by both sites — a real second holder, the control.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'co-held'), {
+        email: 'c@acme.test', hostId: HOST, status: 'new', createdAt,
+        visibleTo: [MINE, THEIRS],
+      })
+      // Held by site B alone and never shared — invisible here.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'theirs'), {
+        email: 't@acme.test', hostId: 'host-b', status: 'new', createdAt,
+        visibleTo: [THEIRS],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'deals', 'deal-shared-read'), {
+        title: 'Theirs', hostId: 'host-b', stageId: 's1', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS], sharing: shared('read'),
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'companies', 'company-shared-edit'), {
+        name: 'Theirs Co', hostId: 'host-b', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS, MINE], sharing: shared('edit'),
+      })
+    })
+  })
+
+  const lead = (uid, id) => doc(authed(uid), 'orgs', ORG, 'leads', id)
+
+  it('lists a record shared with the site on the site’s own scoped query, and not one that is not', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'orgs', ORG, 'leads'),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(
+      snapshot.docs.map((entry) => entry.id).sort(),
+      ['co-held', 'mine-shared-out', 'shared-edit', 'shared-read'],
+    )
+    await assertFails(getDoc(lead(EDITOR, 'theirs')))
+  })
+
+  it('refuses a read-only share’s update from the target site, and admits an edit share’s', async () => {
+    await mustDeny('an update of a read-only share', updateDoc(lead(EDITOR, 'shared-read'), { status: 'working' }))
+    await mustAllow('an update of an edit share', updateDoc(lead(EDITOR, 'shared-edit'), { status: 'working' }))
+    // An org-wide member writes as they always have.
+    await mustAllow('the owner’s update of the read-only share', updateDoc(lead(OWNER, 'shared-read'), { status: 'working' }))
+    await mustDeny(
+      'a read-only deal share’s update',
+      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read'), { stageId: 's2' }),
+    )
+    await mustAllow(
+      'an edit company share’s update',
+      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'companies', 'company-shared-edit'), { name: 'Renamed' }),
+    )
+  })
+
+  it('keeps `sharing` and `writeTo` the server’s, for every client', async () => {
+    await mustDeny('widening writeTo from the target', updateDoc(lead(EDITOR, 'shared-edit'), { writeTo: ['org'] }))
+    await mustDeny('an owner dropping the grants', updateDoc(lead(OWNER, 'shared-read'), { sharing: deleteField() }))
+    await mustDeny('an owner setting writeTo', updateDoc(lead(OWNER, 'co-held'), { writeTo: [MINE] }))
+    await mustDeny(
+      'a deal created with a grant',
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-new'), {
+        title: 'New', hostId: HOST, stageId: 's1', visibleTo: [MINE],
+        sharing: shared('edit'),
+      }),
+    )
+  })
+
+  it('never counts a site a record was shared with as a holder', async () => {
+    // A share out does not stop the holding site's delete (a contact's is
+    // the server's since AGL-3338, and counts holders the same way)…
+    await mustAllow('deleting a lead held here and shared out', deleteDoc(lead(EDITOR, 'mine-shared-out')))
+    // …while a real second holder still does (the control)…
+    await mustDeny('deleting a lead another site also holds', deleteDoc(lead(EDITOR, 'co-held')))
+    // …and the target site cannot delete what was only shared with it.
+    await mustDeny('deleting a read-only share from the target', deleteDoc(lead(EDITOR, 'shared-read')))
+    await mustDeny(
+      'deleting a read-only deal share from the target',
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read')),
+    )
+  })
+})
+
+
 assert.ok(true)

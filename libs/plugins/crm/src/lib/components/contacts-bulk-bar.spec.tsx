@@ -70,6 +70,8 @@ const COMPANY_ROWS = [
   { $id: 'c-globex', name: 'Globex', nameLower: 'globex' },
 ]
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The member document behind "Share with sites…" (AGL-3336): not a manager here.
+  useFirestoreDoc: () => ({ data: undefined, status: 'success', fromCache: false }),
   // The viewer's reach, which `useCrmScope` reads only for a site in a
   // declared consent group (AGL-3320); an org-wide member here.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),

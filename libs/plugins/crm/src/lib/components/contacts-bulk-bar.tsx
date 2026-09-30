@@ -114,6 +114,7 @@ import {
   countNoun,
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
+import { CrmBulkShareButton } from './record-sharing-card'
 import { CrmSuiteLockedButton } from './crm-suite-lock'
 
 export interface ContactsBulkBarProps {
@@ -531,6 +532,13 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
       >
         {'Add to list'}
       </Button>
+      <CrmBulkShareButton
+        object="contacts"
+        ids={selectedRows.map((row) => row.$id)}
+        hostId={hostId ?? null}
+        orgId={scope?.[1] ?? null}
+        disabled={busy}
+      />
       <Button size="small" disabled={busy} onClick={handleExport}>
         {'Export CSV'}
       </Button>

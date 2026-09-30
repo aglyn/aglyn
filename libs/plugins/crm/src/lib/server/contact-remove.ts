@@ -65,10 +65,12 @@ import {
   consentGroupForHost,
   contactPrimaryGroup,
   crmReadTokens,
+  heldScopeTokens,
   isOrgWideMember,
   memberScopeTokens,
   planContactDetach,
   type PluginApiHandler,
+  seenOnlyThroughGrant,
   visibleToTokens,
 } from '@aglyn/aglyn/server'
 import {
@@ -88,6 +90,15 @@ import { authorizeCrmWriter, canReach, type Writer } from './task-routes'
 
 /** What the suite gate names for a detach on a plan without the CRM. */
 export const CONTACT_DETACH_SUITE_ACT = 'Removing a contact from one site'
+
+/**
+ * What a site is told for a contact it sees only because it was SHARED with
+ * it (AGL-3336): it holds nothing there to let go of, and taking the share
+ * away is a manager's unshare, not a removal.
+ */
+export const CONTACT_REMOVE_SHARED_REFUSAL =
+  'This contact was shared with this site by another site. An owner or ' +
+  'admin can stop sharing it from its Sharing card.'
 
 /** A contact read at the organization level that no site has captured. */
 export const CONTACT_REMOVE_NO_HOLDER =
@@ -178,11 +189,16 @@ export const crmContactRemoveHandler: PluginApiHandler = async (req, res) => {
       if (siteTokens && !visibleToTokens(visibleTo, siteTokens)) {
         return { refused: 'That contact is not visible to this site.' }
       }
+      if (siteGroup && siteGroup.hostIds.every((hostId) => seenOnlyThroughGrant(contact, hostId))) {
+        return { refused: CONTACT_REMOVE_SHARED_REFUSAL }
+      }
       const group = siteGroup ?? contactPrimaryGroup(contact, writer.org)
       if (!group.groupId || !group.hostIds.length) return { refused: CONTACT_REMOVE_NO_HOLDER }
       const plan = planContactDetach(contact, group)
       if (plan.action === 'delete') {
-        const holders = Array.isArray(visibleTo) ? visibleTo : []
+        // The HOLDERS: a site the contact was only shared with holds
+        // nothing, so it never stands between a holder and its delete.
+        const holders = heldScopeTokens(contact)
         if (!orgWide(writer) && !holders.every((token) => callerTokens.has(token))) {
           return { refused: CONTACT_REMOVE_SCOPED_REFUSAL }
         }

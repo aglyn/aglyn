@@ -272,6 +272,23 @@ describe('letting go of a shared contact', () => {
   })
 
   /**
+   * A site the contact was only SHARED with (AGL-3336) sees it and holds
+   * nothing: the last real holder's delete destroys the row, the share
+   * notwithstanding — including a share with every site.
+   */
+  it('does not count a site the contact was shared with as a holder', () => {
+    const sharedOut = {
+      visibleTo: ['host:site-a', 'host:site-b'],
+      sharing: { added: ['host:site-b'] },
+    }
+    expect(planContactDetach(sharedOut, A).action).toBe('delete')
+    const sharedWithAll = { visibleTo: ['host:site-a', 'org'], sharing: { added: ['org'] } }
+    expect(planContactDetach(sharedWithAll, A).action).toBe('delete')
+    // The control: the same tokens HELD are a second holder.
+    expect(planContactDetach({ visibleTo: ['host:site-a', 'host:site-b'] }, A).action).toBe('detach')
+  })
+
+  /**
    * An org-wide row is held by every site in the account, so one site letting
    * go leaves it held. Narrowing it here would be a scope decision, and a
    * delete button is not where that belongs.

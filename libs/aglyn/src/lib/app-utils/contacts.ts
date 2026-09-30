@@ -27,6 +27,7 @@ import type { AglynPostalAddress } from '../foundation'
 import { consentGroupForHost } from './consent-groups'
 import type { ContactCustomValue, ContactLifecycleStage } from './crm'
 import type { EmailState } from './email-state'
+import { heldScopeTokens } from './scope-tokens'
 import {
   CAPTURED_BY_HOST_FIELD,
   MARKETING_CONSENT_BY_HOST_FIELD,
@@ -579,14 +580,15 @@ export function contactDisplayName(
  * READ the row is still holding it whether or not they ever wrote a note. A
  * count taken from the facets would drop a holder who has one and no facet
  * and leave them able to see a document nothing believes they hold.
+ *
+ * Less the tokens a share ADDED (AGL-3336): a site the record was shared
+ * with sees it and holds nothing, so it must not keep the record alive when
+ * its last holder lets go — `heldScopeTokens` is `visibleTo` without them.
  */
 export function contactHolderTokens(
   contact: Record<string, unknown> | null | undefined,
 ): string[] {
-  const visibleTo = (contact ?? {})['visibleTo']
-  return Array.isArray(visibleTo)
-    ? visibleTo.filter((token): token is string => typeof token === 'string')
-    : []
+  return heldScopeTokens(contact)
 }
 
 /** What a holder letting go of a contact should do to the document. */

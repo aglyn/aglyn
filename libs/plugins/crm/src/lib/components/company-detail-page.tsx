@@ -33,6 +33,7 @@ import { RecordActivityCard } from './record-activity-card'
 import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
 import CompanyPropertiesCard from './company-properties-card'
+import { RecordSharingCard } from './record-sharing-card'
 import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 
 /**
@@ -149,6 +150,16 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           recordId={id}
           mediaIds={company.mediaIds}
           topic="companies"
+        />
+        {/* Where the company is visible and why, and a manager's share (AGL-3336). */}
+        <RecordSharingCard
+          object="companies"
+          id={id}
+          record={company as unknown as Record<string, unknown>}
+          hostId={hostId ?? null}
+          orgId={orgId}
+          org={org}
+          viewingHostIds={crmScope.consentGroup?.hostIds}
         />
         <RecordActivityCard hostId={hostId} org={org} companyId={id} />
       </Stack>

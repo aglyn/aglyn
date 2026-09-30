@@ -51,7 +51,7 @@
 
 import { normalizeContactEmail, contactDisplayName, readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
 import { crmLeadDisplayName, crmLeadStatus } from '@aglyn/aglyn/app-utils/crm'
-import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { seenOnlyThroughGrant, visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import {
   evaluateOutreachGates,
@@ -209,8 +209,10 @@ export async function readOutreachEnrollCandidates(
           leadId: person.id,
           contact: data ? leadAsContact(data, input.contactGroupId) : null,
           lead: data,
-          // A lead is the site's own record: no scope to check.
-          visible: data !== null,
+          // A lead is the site's own record — unless another site only
+          // SHARED it with this one (AGL-3336): seen, not held, and a
+          // sequence is a site's own outreach.
+          visible: data !== null && !seenOnlyThroughGrant(data, input.hostId),
           name: data ? crmLeadDisplayName(data) : '',
           email,
           companyId: '',
@@ -225,7 +227,10 @@ export async function readOutreachEnrollCandidates(
         leadId: null,
         contact: data,
         lead: null,
-        visible: data ? visibleToHost(data['visibleTo'] as string[] | undefined, input.hostId) : false,
+        visible: data
+          ? visibleToHost(data['visibleTo'] as string[] | undefined, input.hostId) &&
+            !seenOnlyThroughGrant(data, input.hostId)
+          : false,
         name: data ? contactDisplayName(data, input.contactGroupId).trim() : '',
         email: data ? normalizeContactEmail(data['email']) : null,
         companyId: data ? String(readContactFacet(data, input.contactGroupId).companyId ?? '') : '',
