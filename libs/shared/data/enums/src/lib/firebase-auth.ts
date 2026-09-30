@@ -226,8 +226,10 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   // Lockdown (AGL-1501): a user-scope lock disables the Firebase account, so
   // this is the notice a locked-out person actually sees at sign-in. The
   // copy is the action, not the diagnosis — the reason lives with support.
+  // It is also where a BANNED account learns it may appeal (AGL-3420): the
+  // sign-in form cannot know why an account is disabled, so it names both.
   [AuthErrorCodes.USER_DISABLED]:
-    `This account is currently disabled. Contact ${OPERATOR_CONTACT} to restore access.`,
+    `This account is currently disabled. Contact ${OPERATOR_CONTACT} to restore access, or to appeal the decision.`,
   [AuthErrorCodes.USER_SIGNED_OUT]:
     'You have been signed out. Sign in again to continue.',
   [AuthErrorCodes.WEAK_PASSWORD]:

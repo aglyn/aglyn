@@ -18,7 +18,9 @@
 import {
   domainLockdownDocId,
   featureLockdownDocId,
+  isAccountBanLockdownReason,
   isLockableDomain,
+  isSecurityClassLockdownReason,
   isLockdownActive,
   isLockdownFeatureKey,
   listLockdownFeatureKeys,
@@ -1449,5 +1451,43 @@ describe('DOMAIN scope (AGL-1513) — lock one NAME, not the site', () => {
       )
       expect(notice.body).toBe('Pending registrar review.')
     })
+  })
+})
+
+describe('an appeal is offered on every security-class lock (AGL-3420)', () => {
+  it('offers it on a security or abuse lock of an account or a workspace, even under a custom message', () => {
+    for (const reason of ['security', 'abuse'] as const) {
+      for (const scope of ['user', 'org', 'host'] as const) {
+        expect(lockdownNotice({ scope, reason }).appeal).toBe(true)
+        expect(lockdownNotice({ scope, reason, message: 'Staff words.' }).appeal).toBe(true)
+      }
+    }
+  })
+
+  it('does not on a platform-wide lock, nor on billing, maintenance or manual', () => {
+    expect(lockdownNotice({ scope: 'platform', reason: 'security' }).appeal).toBeUndefined()
+    for (const reason of ['billing', 'maintenance', 'manual'] as const) {
+      expect(lockdownNotice({ scope: 'user', reason }).appeal).toBeUndefined()
+    }
+  })
+
+  it('carries the offer across the 423 wire only beside an address to appeal to', () => {
+    expect(parseLockdownRefusal(423, { contact: 'support@example.com', appeal: true })).toMatchObject({
+      contact: 'support@example.com',
+      appeal: true,
+    })
+    expect(parseLockdownRefusal(423, { appeal: true })?.appeal).toBeUndefined()
+    expect(parseLockdownRefusal(423, { contact: 'support@example.com', appeal: 'yes' })?.appeal).toBeUndefined()
+  })
+
+  it('reads abuse as the ban, and as strict as security', () => {
+    expect(isAccountBanLockdownReason('abuse')).toBe(true)
+    expect(isAccountBanLockdownReason('security')).toBe(false)
+    expect(['security', 'abuse', 'billing', 'manual'].map(isSecurityClassLockdownReason)).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ])
   })
 })

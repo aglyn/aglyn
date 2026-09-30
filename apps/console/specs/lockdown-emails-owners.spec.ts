@@ -309,6 +309,16 @@ describe('a lock emails the people it locked', () => {
     expect(body.mailLists).toMatchObject({ outcome: 'lifted' })
   })
 
+  it('quotes one reference an appeal can name, on the notice and on every resend (AGL-3420)', async () => {
+    const { body } = await post({ action: 'lock', scope: 'user', targetId: 'user-fraud', reason: 'abuse' })
+    const reference = mockNotices.find((notice) => notice['kind'] === 'account-locked')?.['reference']
+    expect(reference).toMatch(/^LK-[0-9A-F]{10}$/)
+    expect(body.ownerNotice).toMatchObject({ reference })
+    mockNotices.length = 0
+    await post({ action: 'resend-notice', targets: [{ scope: 'user', targetId: 'user-fraud' }] })
+    expect(mockNotices.map((notice) => notice['reference'])).toContain(reference)
+  })
+
   it('lifts the ban when a ban is re-placed under a milder reason', async () => {
     await post({ action: 'lock', scope: 'user', targetId: 'user-fraud', reason: 'abuse' })
     mockMailLists.length = 0

@@ -768,6 +768,7 @@ export function lockdownJsonResponse(
       title: notice.title,
       message: notice.body,
       ...(notice.contact ? { contact: notice.contact } : {}),
+      ...(notice.appeal ? { appeal: true } : {}),
       ...(typeof state.untilMs === 'number' ? { untilMs: state.untilMs } : {}),
     },
     {

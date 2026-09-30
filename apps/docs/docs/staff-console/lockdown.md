@@ -1133,6 +1133,33 @@ it.
 An account banned under `security` before `abuse` existed is not a ban. Re-place
 its lock with the reason `abuse`.
 
+### Appeals {#appeals}
+
+Every lock a person can contest offers an appeal — `security` and `abuse` locks
+on an account, a workspace, a site or a domain. The account holder sees it in
+three places:
+
+- **The notice email.** It asks them to reply, or to write to the support
+  address, with the lock's reference. Replies go to support, because that
+  address is the email's Reply-To.
+- **The sign-in form.** A locked account's sign-in is refused. The refusal
+  names the support address both "to restore access, or to appeal the
+  decision".
+- **The console notice** for a locked workspace or site. It reads "To appeal
+  this decision, write to …" in place of "Questions?", and a custom message
+  cannot remove the line.
+
+The reference is `LK-` and ten characters, the same for every notice about the
+same account or workspace. Search the **Audit log** for it: the lock's row
+carries it as its note. The appeal comes from the person's own address, so you
+can also find the account by searching **Users** for it.
+
+Answer an appeal from the support mailbox. A ban refuses what the platform
+sends, not what a person sends, so your reply reaches a banned address. To
+overturn the decision, unlock the account, or re-place the lock with another
+reason. That lifts the ban and sends the "restored" notice. To uphold it, say
+so in your reply, and leave the lock as it is.
+
 ### Email the owners {#email-the-owners}
 
 The checkbox is on for every reason and resets to on when you change the

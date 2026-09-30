@@ -112,6 +112,7 @@ import {
 import {
   LOCKDOWN_RESEND_MAX_TARGETS,
   type LockdownNoticeEffects,
+  lockdownNoticeReference,
   lockRecipientsFor,
   resendLockdownOwnerNotices,
   sendLockdownOwnerNotice,
@@ -255,6 +256,11 @@ async function audit(options: {
   target: string
   before: Record<string, unknown>
   after: Record<string, unknown>
+  /**
+   * The reference the lock's notice quotes (AGL-3420), as the row's note:
+   * an appeal names it, and the audit log's search finds the lock by it.
+   */
+  reference?: string
 }): Promise<void> {
   await addAdminAudit(firebaseAdmin.app().firestore(), {
     actorUid: options.actorUid,
@@ -264,6 +270,7 @@ async function audit(options: {
     target: options.target,
     before: options.before,
     after: options.after,
+    ...(options.reference ? { note: `Notice reference ${options.reference}` } : {}),
     at: FieldValue.serverTimestamp(),
   })
 }
@@ -737,6 +744,7 @@ async function lockOrgAndAudit(options: {
     action: `lockdown.${action}`,
     scope: 'org',
     target: `orgs/${orgId}`,
+    reference: lockdownNoticeReference('org', orgId),
     before: {
       locked: orgSnapshot.get('suspendedAt') != null,
       // The org scope carries the lock on the org doc's `suspended*`
@@ -1706,6 +1714,7 @@ async function handler(request: Request): Promise<Response> {
         action: `lockdown.${action}`,
         scope: 'domain',
         target: `lockdowns/${domainLockdownDocId(hostname)}`,
+        reference: lockdownNoticeReference('domain', hostname),
         before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
@@ -1808,6 +1817,7 @@ async function handler(request: Request): Promise<Response> {
         action: `lockdown.${action}`,
         scope: 'user',
         target: `users/${targetId}`,
+        reference: lockdownNoticeReference('user', targetId),
         before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
@@ -1951,6 +1961,7 @@ async function handler(request: Request): Promise<Response> {
       action: `lockdown.${action}`,
       scope: 'host',
       target: `hosts/${targetId}`,
+      reference: lockdownNoticeReference('host', targetId),
       before: {
         locked: hostSnapshot.get('suspendedAt') != null,
         ...auditLockShape({

@@ -1078,6 +1078,13 @@ export interface LockdownNotice {
   body: string
   /** Shown as the action line; undefined = no contact line (maintenance). */
   contact?: string
+  /**
+   * The lock is a decision the account holder may appeal — a `security` or
+   * `abuse` lock (AGL-3420) — so the contact line offers the appeal rather
+   * than taking questions. Set by reason, never by staff's message, so a
+   * custom message cannot remove the way to appeal.
+   */
+  appeal?: boolean
 }
 
 /**
@@ -1161,6 +1168,8 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
           'Access is temporarily disabled while we investigate a security ' +
             'concern.',
         contact: lockdownSupportEmail() ?? undefined,
+        // A platform-wide lock is ours, with nobody to appeal it.
+        ...(state.scope !== 'platform' ? { appeal: true } : {}),
       }
     case 'abuse':
       return {
@@ -1170,6 +1179,8 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
           'This account has been closed for a violation of our Terms of ' +
             'Service.',
         contact: lockdownSupportEmail() ?? undefined,
+        // A platform-wide lock is ours, with nobody to appeal it.
+        ...(state.scope !== 'platform' ? { appeal: true } : {}),
       }
     case 'manual':
     default:
@@ -1421,6 +1432,7 @@ export interface LockdownRefusalBody {
   title?: unknown
   message?: unknown
   contact?: unknown
+  appeal?: unknown
   untilMs?: unknown
 }
 
@@ -1429,6 +1441,8 @@ export interface LockdownRefusalNotice {
   title: string
   message: string
   contact?: string
+  /** The contact line offers an appeal — see {@link LockdownNotice.appeal}. */
+  appeal?: boolean
   scope?: LockdownScope
   feature?: LockdownFeatureKey
   /**
@@ -1551,6 +1565,7 @@ export function parseLockdownRefusal(
     title,
     message,
     ...(contact ? { contact } : {}),
+    ...(contact && payload.appeal === true ? { appeal: true } : {}),
     ...(typeof payload.scope === 'string'
       ? { scope: payload.scope as LockdownScope }
       : {}),
