@@ -50,7 +50,7 @@
  * scoped: the invalidating input is a root-level plugins.config.json that is
  * no app's source, and the outputs land in two different apps at once.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -607,6 +607,108 @@ function describeSubprocessorDrift(expected, actual) {
       "  the same hosts are declared; a declaration's wording, its plugin or the formatting differs",
     )
   return lines
+}
+
+/**
+ * The console's tab titles for plugin surfaces (AGL-2184, compiled since
+ * AGL-3080): each surface's name and the names of the sections on its rail,
+ * as the plugins that draw them declare them.
+ *
+ * The reader is a SERVER layout, and reaching the console registry there
+ * drags every nav item's client component into the server compile, so the
+ * layout reads this data file instead of the registry. It is read from the
+ * plugins' source rather than their runtime registration for the same reason
+ * `plugin-page-title.spec.ts` reads it that way: nothing here can load a
+ * console registrar.
+ *
+ *  - A nav item's `label` and `href` (`plugin.ts`) name a surface.
+ *  - A nav item's `sections` const names its rail, and the
+ *    `*-console-sections.ts` that exports it is plain data, loaded as such.
+ *
+ * A surface or a section named two different ways is refused: the tab could
+ * follow only one of them.
+ */
+const TITLES_MANIFEST = 'apps/console/constants/plugins.titles.generated.ts'
+const NAV_LABEL = /label:\s*'([^']+)',[\s\S]{0,200}?href:\s*'\/([a-z0-9-]+)'/g
+const NAV_SECTIONS = /href:\s*'\/([a-z0-9-]+)',[\s\S]{0,600}?sections:\s*([A-Z_]+)/g
+
+/** Every file beneath `dir` whose name `keep` accepts. */
+function filesBeneath(dir, keep) {
+  const found = []
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry)
+    if (statSync(abs).isDirectory()) {
+      if (entry !== 'node_modules') found.push(...filesBeneath(abs, keep))
+    } else if (keep(entry)) found.push(abs)
+  }
+  return found
+}
+
+async function pluginSurfaceTitles() {
+  const aliases = workspaceAliases()
+  const jiti = jitiForWorkspace()
+  const titles = new Map()
+  const sections = new Map()
+  const claim = (map, key, value, where) => {
+    const held = map.get(key)
+    if (held !== undefined && held !== value) {
+      throw new Error(`${where}: "${key}" is named both "${held}" and "${value}"`)
+    }
+    map.set(key, value)
+  }
+  for (const plugin of config.plugins) {
+    const entry = aliases[plugin.package]
+    if (!entry || !plugin.register?.console) continue
+    const root = entry.slice(0, entry.lastIndexOf('/src/') + '/src'.length)
+    const lists = new Map()
+    for (const file of filesBeneath(root, (name) => name.endsWith('-console-sections.ts'))) {
+      for (const [name, value] of Object.entries(await jiti.import(file))) {
+        if (Array.isArray(value)) lists.set(name, value)
+      }
+    }
+    for (const file of filesBeneath(root, (name) => name === 'plugin.ts')) {
+      const source = readFileSync(file, 'utf8')
+      const where = file.slice(ROOT.length + 1)
+      for (const [, label, slug] of source.matchAll(NAV_LABEL)) {
+        claim(titles, slug, label, where)
+      }
+      for (const [, slug, constName] of source.matchAll(NAV_SECTIONS)) {
+        const list = lists.get(constName)
+        if (!list) throw new Error(`${where}: /${slug} names sections ${constName}, which no *-console-sections.ts beside it exports`)
+        if (!sections.has(slug)) sections.set(slug, new Map())
+        for (const { id, label } of list) claim(sections.get(slug), id, label, `${where} /${slug}`)
+      }
+    }
+  }
+  return { titles, sections }
+}
+
+/** The titles manifest, byte for byte. */
+function titlesContent({ titles, sections }) {
+  const key = (name) => (/^[a-z][a-z0-9]*$/i.test(name) ? name : `'${name}'`)
+  const quote = (text) => `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  const sorted = (map) => [...map.entries()].sort(([a], [b]) => a.localeCompare(b))
+  const titleRows = sorted(titles).map(([slug, label]) => `  ${key(slug)}: ${quote(label)},\n`).join('')
+  const sectionRows = sorted(sections)
+    .map(
+      ([slug, list]) =>
+        `  ${key(slug)}: {\n` +
+        [...list.entries()].map(([id, label]) => `    ${key(id)}: ${quote(label)},\n`).join('') +
+        `  },\n`,
+    )
+    .join('')
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The plugin surfaces' tab titles (AGL-2184): each surface's name, and the\n` +
+    ` * sections on its rail, as the plugins' nav items and section lists name\n` +
+    ` * them. Data for the console's server layouts, which cannot load the\n` +
+    ` * console registry. Source of truth: the plugins in plugins.config.json.\n */\n\n` +
+    `/** A surface's display name, by its URL slug. */\n` +
+    `export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {\n${titleRows}}\n\n` +
+    `/** The sections a surface's rail declares, id to display name, by the surface's URL slug. */\n` +
+    `export const PLUGIN_SURFACE_SECTIONS: Readonly<\n  Record<string, Readonly<Record<string, string>>>\n> = {\n${sectionRows}}\n`
+  )
 }
 
 /**
@@ -1241,6 +1343,7 @@ const ALL = [
   })),
   { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
+  { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {
     file: SUBPROCESSORS_MANIFEST,
     content: subprocessorsContent(await pluginSubprocessors()),

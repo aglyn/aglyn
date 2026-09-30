@@ -25,7 +25,7 @@ export type OutreachConsoleSectionId = 'sequences' | 'mailboxes' | 'compliance'
  * Read twice and never copied, the CRM's rule: `plugin.ts` registers the list
  * on the org nav item so the shell routes and gates each section, and the hub
  * page switches its body on the id the shell resolves back. The console's
- * `PLUGIN_SECTIONS` title table keeps a checked copy for its server layout.
+ * generated titles manifest compiles a copy for its server layout.
  *
  * Ids are persisted vocabulary — `/[orgSlug]/outreach/sequences` is a link
  * people keep, and the surface slug stays `outreach` for the same reason the

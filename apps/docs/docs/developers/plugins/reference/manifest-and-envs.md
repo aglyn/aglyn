@@ -221,8 +221,8 @@ without a valid one, and `apps/console/specs/plugin-contributions-declared.spec.
 runs every registrar and fails when what it registers differs from what the
 entry declares.
 `node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
-generated loader manifests, the three declarations manifests and the
-subprocessors manifest — the only files allowed to reference
+generated loader manifests, the three declarations manifests, the
+subprocessors manifest and the titles manifest — the only files allowed to reference
 `@aglyn/plugins-*` outside `libs/plugins` (an nx boundary rule enforces
 this), and every reference is an `import()` so the apps never depend on a
 plugin statically.
@@ -263,6 +263,15 @@ inventory or another plugin already declares that the plugin's code reaches
 as well: the host keeps its one declaration, and the plugin's reason and
 data are appended to that entry. A use of a host nothing declares is
 refused — declare the host instead.
+
+The **titles manifest** (`apps/console/constants/plugins.titles.generated.ts`)
+is read from a plugin's source rather than from an entry: each console nav
+item's `label` and `href` in its `plugin.ts`, and the `*-console-sections.ts`
+list its `sections` names. The console's plugin layouts title a browser tab
+from it — the surface's label, then the open section's — because they are
+server components and cannot load the console registry. A surface or section
+named two different ways is refused. Regenerate after renaming a nav item or
+a section; `--check` refuses a stale manifest.
 
 A **videoEmbedProviders** entry names a function in
 `@aglyn/plugins-x/video-embed-providers` that returns the video hosts whose

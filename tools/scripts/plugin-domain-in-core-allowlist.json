@@ -271,13 +271,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/app/plugin-page-title.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/components/billing/billing-metered-estimate.component.tsx",
       "rules": [
         "plugin-collection:forms",
