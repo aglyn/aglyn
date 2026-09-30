@@ -241,9 +241,11 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       .where('target', '==', `orgs/${ORG}`)
       .where('action', '==', 'org.erased')
       .get()
-    expect(audit.docs.map((doc) => doc.get('after.plugins'))).toContainEqual({
-      [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 },
-    })
+    // Beside the stand-ins for the erasers a workspace erasure requires, which
+    // `standInRequiredOrgErasersForTests` registers and the audit records too.
+    expect(audit.docs.map((doc) => doc.get('after.plugins'))).toContainEqual(
+      expect.objectContaining({ [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 } }),
+    )
   }, 60_000)
 
 
