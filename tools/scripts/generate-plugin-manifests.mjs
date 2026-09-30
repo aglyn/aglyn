@@ -426,6 +426,67 @@ async function pluginSubprocessors() {
 }
 
 /**
+ * The emails a site sends its own customers (AGL-769/770), each declared by
+ * the plugin that sends it (AGL-3080): a plugin names a function under
+ * `tenantEmails`, and this loads `${package}/tenant-emails` through jiti,
+ * calls it, and compiles the answer into the email lib's catalog as data. The
+ * readers include the send path (`loadHostEmail`), which loads no plugin
+ * code, so a runtime registry would be one it had not filled.
+ *
+ * Checked here: every entry names its plugin (the console groups by it, and
+ * `enabledPlugins` decides whether it is listed), a key is declared once
+ * across all plugins (it is the template document id), `control` is one the
+ * console knows, and an `external` entry says where its copy is authored.
+ */
+const TENANT_EMAILS_FILE = 'libs/shared/util/email/src/lib/tenant-emails.generated.ts'
+const TENANT_EMAIL_CONTROLS = ['besigner', 'external', 'fixed']
+
+async function pluginTenantEmails() {
+  const jiti = jitiForWorkspace()
+  const entries = []
+  const keys = new Set()
+  for (const plugin of config.plugins.filter((entry) => entry.register?.tenantEmails)) {
+    const specifier = `${plugin.package}/tenant-emails`
+    const fnName = plugin.register.tenantEmails
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') throw new Error(`${specifier} exports no function named ${fnName}`)
+    const answer = await fn()
+    const where = `${specifier}: ${fnName}()`
+    if (!Array.isArray(answer)) throw new Error(`${where} is not a list`)
+    requireStringFields(answer, ['key', 'name', 'description', 'pluginId', 'plugin', 'control'], where)
+    for (const entry of answer) {
+      if (entry.pluginId !== plugin.id) {
+        throw new Error(`${where}: "${entry.key}" names plugin "${entry.pluginId}"; a plugin declares only its own emails`)
+      }
+      if (keys.has(entry.key)) throw new Error(`${where}: "${entry.key}" is declared twice`)
+      keys.add(entry.key)
+      if (!TENANT_EMAIL_CONTROLS.includes(entry.control)) {
+        throw new Error(`${where}: "${entry.key}" has control "${entry.control}"; one of ${TENANT_EMAIL_CONTROLS.join(', ')}`)
+      }
+      if (entry.control === 'external' && !entry.authoredIn) {
+        throw new Error(`${where}: "${entry.key}" is external and names no "authoredIn"`)
+      }
+      entries.push(entry)
+    }
+  }
+  return entries
+}
+
+function tenantEmailsContent(entries) {
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The emails sites send their own customers (AGL-3080): what each plugin's\n` +
+    ` * \`tenantEmails\` entry returned when this file was generated, in config\n` +
+    ` * order. \`TENANT_EMAILS\` in \`tenant-email-catalog.ts\` is this list.\n` +
+    ` * Source of truth: plugins.config.json and the entries it names.\n */\n\n` +
+    `import type { TenantEmailEntry } from './tenant-email-catalog'\n\n` +
+    `export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = ` +
+    `${JSON.stringify(entries, null, 2)}\n`
+  )
+}
+
+/**
  * The video hosts whose own player the Video element frames (AGL-3080), each
  * declared by the plugin that plays them: a plugin names a function under
  * `videoEmbedProviders`, and this loads `${package}/video-embed-providers`
@@ -1510,6 +1571,7 @@ const ALL = [
   })),
   { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
+  { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {

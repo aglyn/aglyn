@@ -1176,13 +1176,6 @@
       "why": "`'marketing'` here is a SEND PURPOSE, the legal category opposite `'transactional'` that decides which identity and which consent rules apply to a message. Any sender has it, whether or not the Marketing plugin exists."
     },
     {
-      "path": "libs/shared/util/email/src/lib/tenant-email-catalog.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/campaign-attribution-store.ts",
       "rules": [
         "domain-name",
