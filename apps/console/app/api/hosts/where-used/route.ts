@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   type BindingRefVia,
@@ -223,21 +224,26 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (kind === 'function') {
-      // Workflow steps call functions by name (AGL-129).
-      const workflows = await hostRef.collection('workflows').limit(100).get()
-      for (const docSnapshot of workflows.docs) {
-        if (docSnapshot.get('deletedAt')) continue
-        const steps = (docSnapshot.get('steps') ?? []) as Array<{
-          functionName?: string
-        }>
+      // Workflow steps call functions by name (AGL-129). A site's workflows
+      // are the plugin's that keeps them, read through the index it publishes
+      // — its live records, with each one's steps among the facts — and none
+      // where no plugin keeps them here.
+      const workflows = pluginRecordIndex('workflow')
+      const { records } = workflows
+        ? await workflows.index.list({ hostId, limit: 100 })
+        : { records: [] }
+      for (const record of records) {
+        const steps = (
+          Array.isArray(record.facts['steps']) ? record.facts['steps'] : []
+        ) as Array<{ functionName?: string } | null>
         if (
           refName &&
           steps.some((step) => String(step?.functionName ?? '') === refName)
         ) {
           dependents.push({
             type: 'workflow',
-            id: docSnapshot.id,
-            name: String(docSnapshot.get('name') ?? docSnapshot.id),
+            id: record.id,
+            name: record.name,
             via: ['name'],
           })
         }

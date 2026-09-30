@@ -57,7 +57,7 @@ import {
   type ImportChunkResult,
   type ImportSkippedRow,
   importNoMailServerSentence,
-  LIST_IMPORT_MAX_CHARACTERS,
+  CSV_UPLOAD_MAX_CHARACTERS,
   parseCsv,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
@@ -280,7 +280,7 @@ export function CsvImportDrawer<
     async (file: File | null | undefined) => {
       if (!file) return
       const contents = await file.text().catch(() => '')
-      if (contents.length > LIST_IMPORT_MAX_CHARACTERS) {
+      if (contents.length > CSV_UPLOAD_MAX_CHARACTERS) {
         return void enqueueSnackbar(
           'That file is too large to read in one go. Split it and import the ' +
             'pieces.',

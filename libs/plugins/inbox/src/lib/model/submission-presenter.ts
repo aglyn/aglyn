@@ -121,11 +121,20 @@ export function relativeTime(
 export interface SubmissionRouting {
   /** The dataset a record was appended to, when one was. */
   dataset?: { id?: string; name?: string; recordId?: string }
+  /**
+   * The dataset the form is bound to, when the record was refused because a
+   * value failed the dataset's model (AGL-2773): field id → the reason.
+   */
+  datasetRefused?: {
+    id?: string
+    name?: string
+    errors?: Record<string, string>
+  }
 }
 
 export interface RoutingChip {
   label: string
-  color: 'success' | 'info' | 'default'
+  color: 'success' | 'info' | 'warning' | 'default'
 }
 
 /**
@@ -151,6 +160,25 @@ export function routingChips(routing: SubmissionRouting | undefined): RoutingChi
         ? `Added to “${dataset.name}” dataset`
         : 'Added to a dataset',
       color: 'info',
+    })
+  }
+  /*
+   * The record the submission did NOT become, and why (AGL-2773). A form
+   * bound to a dataset whose model refuses one of the submitted values keeps
+   * the submission and writes no row; without this the owner sees a form
+   * that "stopped saving" and no reason for it.
+   */
+  const refused = routing?.datasetRefused
+  if (refused && !dataset?.recordId) {
+    const reasons = Object.values(refused.errors ?? {}).filter(
+      (reason) => typeof reason === 'string' && reason,
+    )
+    const where = refused.name ? `“${refused.name}” dataset` : 'the dataset'
+    chips.push({
+      label: reasons.length
+        ? `Not added to ${where}: ${reasons.join('; ')}`
+        : `Not added to ${where}`,
+      color: 'warning',
     })
   }
   return chips

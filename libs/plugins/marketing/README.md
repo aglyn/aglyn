@@ -16,6 +16,8 @@ The plugin declares four registrars in `plugins.config.json`, plus a `site` modu
 
 **On a published site** (`registerMarketingPlugin`, the `site` registrar, exported from `@aglyn/plugins-marketing/site`). It registers one site runtime, `marketing-site-runtime`, with `registerSiteRuntime`. The runtime is not a canvas element: the tenant page renders it generically, and it draws the active announcement bars and popups, applies experiment variants and runs the page's client automations from the data the server enricher wrote. In the editor's Preview, where no enricher runs, it rebuilds that data on the client through a deferred import.
 
+**Analytics tags** (`analyticsProvider`, exported from `@aglyn/plugins-marketing/analytics-provider`). The Google tag adapter behind core's analytics-provider contract: the Google Analytics 4 pair and the Google Tag Manager pair a site configures in its analytics settings (`gaMeasurementId`, `gtmContainerId`), with the Consent Mode default in front of each; how a resident Google tag is told a visitor's answer changed (the `ga-disable-<id>` flag and a consent `update`); and how an event reaches it. Declared under `analyticsProvider` in `plugins.config.json`, so core knows which settings configure a tag without loading it, and loaded only by a published page whose site configures one and by the console, whose own tag the consent controls answer to.
+
 **Console** (`registerMarketingConsole`, the `console` registrar):
 
 - A `Marketing` nav item at `/marketing` with the sections Overview, Campaigns, Conversions, Overlays and A/B testing. Each section is a route; the page is code-split.

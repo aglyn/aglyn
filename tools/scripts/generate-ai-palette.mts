@@ -556,8 +556,8 @@ async function main(): Promise<void> {
     'libs/aglyn/src/lib/app-utils/node-capabilities.ts',
   )
   const {
-    MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-    MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
+    PORTABLE_COMPONENT_ID_ALLOWLIST,
+    PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST,
   } = await load('libs/aglyn/src/lib/app-utils/node-definition-sanitizer.ts')
   const { SPAN_BREAKPOINTS } = await load(
     'libs/shared/data/enums/src/lib/breakpoint-span.ts',
@@ -646,12 +646,12 @@ async function main(): Promise<void> {
     return id
   }
   const pageAllow = [
-    ...new Set([...MARKETPLACE_COMPONENT_ID_ALLOWLIST, ...PAGE_EXTRA_IDS]),
+    ...new Set([...PORTABLE_COMPONENT_ID_ALLOWLIST, ...PAGE_EXTRA_IDS]),
   ]
     .map(registered)
     .filter((id) => !NEVER_IDS.has(id))
     .sort()
-  const emailAllow = (MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST as string[])
+  const emailAllow = (PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST as string[])
     .map(registered)
     .filter((id) => !NEVER_IDS.has(id))
     .sort()

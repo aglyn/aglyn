@@ -73,6 +73,7 @@ import {
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
 import { useCrmApi } from './use-crm-api'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 export interface CompaniesBulkBarProps {
   /**
@@ -131,6 +132,7 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
   const logActivity = useHostActivityLogger(hostId ?? undefined)
   const callCrm = useCrmApi(hostId)
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'company' })
+  const followUpSharing = useCrmSharingFollowUp(hostId ?? null, scope?.[1] ?? null)
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)
@@ -158,10 +160,18 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
       apply({
         attempted: plan.writes.length,
         skipped: plan.skipped,
-        job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.label),
+        job: async () => {
+          const outcome = await runCrmBulkWrites(writers, plan.writes, (write) => write.label)
+          // A client-direct write owes the sharing rules a re-evaluation (AGL-3336).
+          followUpSharing(
+            'companies',
+            plan.writes.filter((write) => write.kind === 'update').map((write) => write.id),
+          )
+          return outcome
+        },
         done: (count) => doneSentence(action, count),
       }),
-    [apply, writers],
+    [apply, writers, followUpSharing],
   )
 
   const handleApply = useCallback(async () => {

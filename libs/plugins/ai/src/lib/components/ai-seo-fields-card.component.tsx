@@ -18,6 +18,7 @@
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import type { SeoKeywordCoverage } from '@aglyn/aglyn/app-utils/seo-keywords'
 import {
   SEO_LISTING_FIELDS,
   seoListingFieldCount,
@@ -47,7 +48,6 @@ import {
   aiSeoAuditView,
   aiSeoFieldsProposalOf,
   type AiSeoFieldValues,
-  type AiSeoKeywordCoverage,
 } from '../model/ai-seo'
 import { readEventFrames } from './assist-jobs-drawer.component'
 
@@ -97,7 +97,7 @@ export function aiSeoValuesForEditor(
   return out
 }
 
-function Coverage({ keywords }: { keywords: readonly AiSeoKeywordCoverage[] }) {
+function Coverage({ keywords }: { keywords: readonly SeoKeywordCoverage[] }) {
   if (!keywords.length) return null
   return (
     <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }} aria-label="Keyword coverage">

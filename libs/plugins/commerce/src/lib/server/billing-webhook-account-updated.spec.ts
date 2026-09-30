@@ -26,12 +26,34 @@
  * restricted kept a stale `true` and kept selling; the shopper met the
  * failure at payment time.
  *
- * This asserts the WIRING: that the commerce webhook subscribes the event at
- * all, and points it at its own collection. What the sync then writes is
- * pinned by `connect-account-status.spec.ts` in tenant-data-admin.
+ * This asserts the WIRING: that the commerce webhook hands account events to
+ * the payment provider at all, and points them at its own collection. The
+ * contract and its Stripe adapter run for real here — which event is about an
+ * account, and where each keeps the account id — and only the two modules the
+ * adapter writes through are stood in. What they write is pinned by their own
+ * specs in tenant-data-admin.
  */
 
-const syncConnectAccountStatus = jest.fn(async () => 1)
+const syncConnectAccountStatus = jest.fn<Promise<number>, unknown[]>(async () => 1)
+const recordConnectPayoutFailure = jest.fn<Promise<number>, unknown[]>(async () => 1)
+const clearConnectPayoutFailure = jest.fn<Promise<number>, unknown[]>(async () => 1)
+
+jest.mock(
+  '@aglyn/tenant-data-admin/server/payment-provider-stripe-connect-status',
+  () => ({
+    syncConnectAccountStatus: (...args: unknown[]) =>
+      syncConnectAccountStatus(...args),
+  }),
+)
+jest.mock(
+  '@aglyn/tenant-data-admin/server/payment-provider-stripe-connect-payouts',
+  () => ({
+    recordConnectPayoutFailure: (...args: unknown[]) =>
+      recordConnectPayoutFailure(...args),
+    clearConnectPayoutFailure: (...args: unknown[]) =>
+      clearConnectPayoutFailure(...args),
+  }),
+)
 const recordStorefrontTax = jest.fn(async () => undefined)
 
 jest.mock('./storefront-tax-record', () => ({
@@ -54,8 +76,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     hostIds: [hostId],
     declared: false,
   }),
-  syncConnectAccountStatus: (...args: unknown[]) =>
-    syncConnectAccountStatus(...(args as [])),
   firebaseAdmin: {
     app: () => ({
       firestore: () => {
@@ -77,6 +97,8 @@ import { commerceBillingWebhookHandler } from './billing-webhook'
 
 beforeEach(() => {
   syncConnectAccountStatus.mockClear()
+  recordConnectPayoutFailure.mockClear()
+  clearConnectPayoutFailure.mockClear()
   recordStorefrontTax.mockClear()
 })
 
@@ -132,5 +154,27 @@ describe('commerce webhook: account.updated (AGL-1997)', () => {
     })
     expect(syncConnectAccountStatus).not.toHaveBeenCalled()
     expect(recordStorefrontTax).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a failed payout against the merchant profile, and clears it on the next', async () => {
+    const payout = { id: 'po_1', amount: 4200, destination: 'ba_bank' }
+    await commerceBillingWebhookHandler({
+      type: 'payout.failed',
+      object: payout,
+      event: { account: 'acct_1', livemode: true },
+    })
+    expect(recordConnectPayoutFailure).toHaveBeenCalledWith('profiles', {
+      kind: 'payout',
+      object: payout,
+      accountId: 'acct_1',
+      livemode: true,
+    })
+    await commerceBillingWebhookHandler({
+      type: 'payout.paid',
+      object: { id: 'po_2' },
+      event: { account: 'acct_1' },
+    })
+    expect(clearConnectPayoutFailure).toHaveBeenCalledWith('profiles', 'acct_1')
+    expect(recordStorefrontTax).not.toHaveBeenCalled()
   })
 })

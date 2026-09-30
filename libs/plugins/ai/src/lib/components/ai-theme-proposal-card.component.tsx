@@ -18,7 +18,7 @@
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import type { HostThemeSource } from '@aglyn/aglyn/app-utils/site-theme'
 import type { ConsoleHostThemeZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { HostThemeScheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'

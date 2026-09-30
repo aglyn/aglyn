@@ -37,6 +37,12 @@ export const CRM_API_ROUTES = {
    */
   contactUpdate: 'crm/contact-update',
   /**
+   * `POST` — lets one or more contacts go from a site, or deletes them once
+   * nobody else holds them, keeping every marketing refusal they held
+   * (AGL-3338); see `server/contact-remove.ts`.
+   */
+  contactRemove: 'crm/contact-remove',
+  /**
    * `POST` — unlinks the contacts that name a company, then deletes it
    * (AGL-2804); see `server/company-delete.ts`.
    */
@@ -66,6 +72,24 @@ export const CRM_API_ROUTES = {
    * `server/inbound-address.ts`.
    */
   inboundAddress: 'crm/inbound-address',
+  /**
+   * `POST` (a run) or `GET` (the plan) — the daily digest, posted by the
+   * scheduler with the cron secret (AGL-2619); a machine's route, see
+   * `server/daily-digest-route.ts`.
+   */
+  dailyDigest: 'crm/daily-digest',
+  /**
+   * `POST` (a run) or `GET` (the plan) — the hourly task reminders, posted
+   * by the scheduler with the cron secret (AGL-2659); a machine's route, see
+   * `server/task-reminders-route.ts`.
+   */
+  taskReminders: 'crm/task-reminders',
+  /**
+   * `POST` — the mail provider's signed notice of a message received at a
+   * capture address (AGL-2657); a machine's route, see
+   * `server/inbound-route.ts`.
+   */
+  inbound: 'crm/inbound',
 } as const
 
 /**

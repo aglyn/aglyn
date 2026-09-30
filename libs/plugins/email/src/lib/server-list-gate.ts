@@ -70,6 +70,11 @@ import {
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+// The leaves, not the barrels: this plugin's specs substitute both barrels
+// wholesale, and what a deleted contact's refusal still says must be read
+// under them by the real store and the real merge.
+import { readRetainedRefusals } from '@aglyn/tenant-data-admin/server/retained-refusals'
+import { refusalsOf, withRetainedRefusals } from '@aglyn/aglyn/app-utils/retained-refusals'
 
 /**
  * The most addresses one request may name.
@@ -439,10 +444,21 @@ async function suppressionFor(
  * exists, which is the same precedence `assignmentBasis` applies within a
  * single record.
  *
+ * ## A refusal outlives the contact it was written on (AGL-3338)
+ *
+ * Deleting a contact keeps every refusal it held in the org's retained store,
+ * so the address is read with what was retained laid over whatever record is
+ * left — `withRetainedRefusals` — and an address with no contact at all still
+ * reads `declined` when its person said no. A grant given after the refusal,
+ * on a contact the person signed up again through, is the person changing
+ * their mind and reads `granted`. The grants carried onto a membership come
+ * off the same merged record.
+ *
  * A failed read falls to `declined` for the whole batch, for the reason the
  * Inbox route states: a read that throws can neither say the person consented
  * nor that they refused, and the direction that costs a retry is the one that
- * does not enroll somebody whose stored refusal we simply failed to see.
+ * does not enroll somebody whose stored refusal we simply failed to see. The
+ * retained store is read the same way, and fails the same way.
  */
 async function storedConsentFor(
   hostId: string,
@@ -461,21 +477,28 @@ async function storedConsentFor(
     for (let at = 0; at < addresses.length; at += CONTACT_LOOKUP_CHUNK) {
       chunks.push(addresses.slice(at, at + CONTACT_LOOKUP_CHUNK))
     }
-    const snapshots = await Promise.all(
-      chunks.map((chunk) => contacts.where('email', 'in', chunk).get()),
-    )
+    const [snapshots, retained] = await Promise.all([
+      Promise.all(chunks.map((chunk) => contacts.where('email', 'in', chunk).get())),
+      readRetainedRefusals(contacts, addresses),
+    ])
+    const consider = (email: string, data: Record<string, unknown> | null) => {
+      const merged = withRetainedRefusals(data, refusalsOf(retained.get(email)))
+      const record = readMarketingBasis(merged, group)
+      const already = found.get(email)
+      if (already?.basis === 'declined') return
+      if (already && record.basis !== 'declined') return
+      found.set(email, record)
+      grants.set(email, grantEntriesAsRecorded(merged, group))
+    }
     for (const snapshot of snapshots) {
       for (const doc of snapshot.docs) {
         const email = normalizeContactEmail(doc.get('email'))
-        if (!email) continue
-        const data = doc.data() as Record<string, unknown>
-        const record = readMarketingBasis(data, group)
-        const already = found.get(email)
-        if (already?.basis === 'declined') continue
-        if (already && record.basis !== 'declined') continue
-        found.set(email, record)
-        grants.set(email, grantEntriesAsRecorded(data, group))
+        if (email) consider(email, doc.data() as Record<string, unknown>)
       }
+    }
+    // What was retained for an address no contact answers any more.
+    for (const email of retained.keys()) {
+      if (!found.has(email)) consider(email, null)
     }
     return { stored: found, grants }
   } catch (error) {

@@ -16,7 +16,7 @@
  */
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
-import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { describeTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { runThemeLibraryAction } from '@aglyn/tenant-data-admin/server/theme-library-write'

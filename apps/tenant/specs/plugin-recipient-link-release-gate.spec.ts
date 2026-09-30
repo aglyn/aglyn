@@ -83,6 +83,7 @@ import { GET } from '../app/api/[...pluginApi]/route'
 
 const LINK_ROUTE = 'events/leave'
 const DOOR_ROUTE = 'events/door'
+const MACHINE_ROUTE = 'events/nightly'
 
 beforeEach(() => {
   mockFlagOn = false
@@ -96,11 +97,13 @@ beforeEach(() => {
   }
   registerPluginApiRoute(LINK_ROUTE, handler, { recipientLink: true })
   registerPluginApiRoute(DOOR_ROUTE, handler)
+  registerPluginApiRoute(MACHINE_ROUTE, handler, { machine: true })
 })
 
 afterEach(() => {
   unregisterPluginApiRoute(LINK_ROUTE)
   unregisterPluginApiRoute(DOOR_ROUTE)
+  unregisterPluginApiRoute(MACHINE_ROUTE)
 })
 
 describe('tenant plugin API dispatcher — a recipient link (AGL-2981)', () => {
@@ -121,5 +124,23 @@ describe('tenant plugin API dispatcher — a recipient link (AGL-2981)', () => {
     )
     expect(response.status).toBe(404)
     expect(mockHandlerCalls).toBe(0)
+  })
+})
+
+/**
+ * A machine's route (AGL-3080) passes the same two gates on the same terms:
+ * it names no subject before it has verified its caller, and judges the
+ * plugin's gates itself. The console half holds the argument,
+ * `apps/console/specs/plugin-machine-route-release-gate.spec.ts`.
+ */
+describe('tenant plugin API dispatcher — a machine’s route (AGL-3080)', () => {
+  it('answers while the plugin is released to nobody and switched off for the site', async () => {
+    const response = await GET(
+      new Request(`https://site.aglyn.app/api/${MACHINE_ROUTE}?hostId=host-1`),
+      { params: Promise.resolve({ pluginApi: MACHINE_ROUTE.split('/') }) },
+    )
+    expect(response.status).toBe(200)
+    expect(mockHandlerCalls).toBe(1)
+    expect(mockGateCalls).toBe(0)
   })
 })

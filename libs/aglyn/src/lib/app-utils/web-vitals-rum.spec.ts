@@ -21,21 +21,24 @@
  */
 
 /**
- * Real-user Core Web Vitals → GA4 (AGL-1642).
+ * Real-user Core Web Vitals → the resident analytics tag (AGL-1642).
  *
  * What is pinned, and why each pin matters:
  *
  * - the exact wire shape of a metric event (web.dev's GA4 `web_vitals`
- *   pattern) — a drifted key silently becomes an unreportable param;
- * - the tag-loading race: metrics reported before gtag exists are HELD and
+ *   pattern) — a drifted key silently becomes an unreportable param — and
+ *   that every metric is marked for the measurement property only (AGL-2710;
+ *   which destination that names is the vendor adapter's, and its spec pins
+ *   it);
+ * - the tag-loading race: metrics reported before a tag exists are HELD and
  *   flushed when the tag arrives, because both surfaces load their tag late
  *   and dropping on first miss would discard TTFB on every pageview;
  * - the consent gate: a visitor whose tag NEVER arrives produces nothing,
  *   even after the watcher gives up — held metrics die unsent;
  * - the REGISTERED consent gate, which is a different case and the console's:
- *   there gtag.js is injected by Firebase and cannot be unloaded, so a
- *   mid-session withdrawal leaves a resident tag and this module — which calls
- *   `window.gtag` directly rather than through `deliver()` — is the console's
+ *   there the tag is injected by the analytics SDK and cannot be unloaded, so
+ *   a mid-session withdrawal leaves a resident tag and this module — which
+ *   hands it events directly rather than through `deliver()` — is the console's
  *   one analytics path the refusing transport does not cover. Its control is
  *   the no-gate case beside it, since a module that never delivered would
  *   satisfy both refusal cases otherwise;
@@ -50,6 +53,11 @@
  *     which is why there are two checks and not one.
  */
 
+import {
+  registerAnalyticsProvider,
+  resetAnalyticsProviders,
+  type AnalyticsProvider,
+} from './analytics-provider'
 import type { WebVitalsReportingOptions } from './web-vitals-rum'
 
 type MetricCallback = (metric: {
@@ -87,17 +95,33 @@ import {
   resetWebVitalsReporting,
 } from './web-vitals-rum'
 
+/**
+ * Every event the resident tag was handed, as `['event', name, params,
+ * options]`. The tag is a registered adapter this spec controls: the module
+ * names no vendor, so whether a tag is resident is the adapter's answer.
+ */
 const gtagCalls: unknown[][] = []
+let tagResident = false
+
+const fakeTag: AnalyticsProvider = {
+  mounts: () => [],
+  applyConsent: () => [],
+  resident: () => tagResident,
+  sendEvent: (name, params, options) => {
+    gtagCalls.push(['event', name, params, options])
+  },
+}
 
 function mountGtag() {
-  ;(window as unknown as { gtag?: unknown }).gtag = (...args: unknown[]) => {
-    gtagCalls.push(args)
-  }
+  tagResident = true
 }
 
 function unmountGtag() {
-  delete (window as unknown as { gtag?: unknown }).gtag
+  tagResident = false
 }
+
+beforeAll(() => registerAnalyticsProvider('fake', fakeTag))
+afterAll(() => resetAnalyticsProviders())
 
 /** Install and wait for the dynamic import + registration to settle. */
 async function install(options: WebVitalsReportingOptions = { surface: 'site' }) {
@@ -310,33 +334,12 @@ describe('web-vitals → GA4 reporting (AGL-1642)', () => {
 /**
  * Which DESTINATION a metric is sent to (AGL-2710).
  *
- * A gtag event with no `send_to` reaches every destination the loader is
- * configured for. On `aglyn.com` that is the GA4 property AND the Google Ads
- * account, and one such event was measured attempting seven requests to
- * `googleads.g.doubleclick.net` and `google.com/{pagead,rmkt,ccm}` — four
- * metrics deep, every pageview, for an account with no report that reads a
- * layout shift. The same event with `send_to` naming the GA4 id attempted
- * zero of them and still landed its GA hit.
- *
- * PLANTED REDS (both run, counts observed):
- *  1. Send `send_to` unconditionally, empty list included → 2 fail: the
- *     no-ids case here, and the exact-shape case above, which pins the whole
- *     param object and so also says the key is absent when nothing named it.
- *     That is a page whose tag came through GTM losing its measurement
- *     entirely, which is worse than the waste being fixed.
- *  2. Read the ids at INSTALL time instead of at delivery → 1 fails, the held
- *     metric. Both surfaces load their tag after the first metric, so an
- *     install-time read finds nothing on every pageview and the targeting
- *     never applies at all.
+ * A metric has nothing to say to an advertising account sharing the tag's
+ * library, so every one is marked for the measurement property only. Which
+ * destination that names is the vendor's, and the adapter's spec pins it;
+ * this pins that the mark is always there, held metrics included.
  */
 describe('the metric destination (AGL-2710)', () => {
-  const mountGtagScript = (id: string) => {
-    const script = document.createElement('script')
-    script.src = `https://www.googletagmanager.com/gtag/js?id=${id}`
-    document.head.appendChild(script)
-    return script
-  }
-
   beforeEach(() => {
     jest.useFakeTimers()
     resetWebVitalsReporting()
@@ -344,84 +347,26 @@ describe('the metric destination (AGL-2710)', () => {
     registerCalls = 0
     for (const key of Object.keys(registered)) delete registered[key]
     unmountGtag()
-    document.head.querySelectorAll('script').forEach((s) => s.remove())
   })
 
   afterEach(() => {
     jest.useRealTimers()
     unmountGtag()
-    document.head.querySelectorAll('script').forEach((s) => s.remove())
   })
 
-  it('names the resident GA4 property, so no ads destination is asked', async () => {
-    mountGtagScript('G-YW5PG16YTM')
+  it('marks a delivered metric for the measurement property only', async () => {
     mountGtag()
     await install({ surface: 'site' })
     registered['LCP'](LCP_METRIC)
-
-    const [, , params] = gtagCalls[0] as [
-      string,
-      string,
-      Record<string, unknown>,
-    ]
-    expect(params.send_to).toEqual(['G-YW5PG16YTM'])
-    // Everything the metric already carried is untouched: this narrows where
-    // the event goes, never what it says.
-    expect(params.metric_rating).toBe('needs-improvement')
-    expect(params.value).toBe(2412.5)
+    expect(gtagCalls[0][3]).toEqual({ measurementOnly: true })
   })
 
-  it('does NOT name an ads account that is loaded beside it', async () => {
-    // The whole point. A page running Google Ads has an `AW-` loader in the
-    // document too, and naming it would send the metric exactly where it is
-    // being kept out of.
-    mountGtagScript('G-YW5PG16YTM')
-    mountGtagScript('AW-18401436785')
-    mountGtag()
-    await install({ surface: 'site' })
-    registered['CLS']({ name: 'CLS', id: 'v4-1', value: 0.09, delta: 0.04 })
-
-    const [, , params] = gtagCalls[0] as [
-      string,
-      string,
-      Record<string, unknown>,
-    ]
-    expect(params.send_to).toEqual(['G-YW5PG16YTM'])
-  })
-
-  it('sends with NO send_to when no property can be named', async () => {
-    // A tag that arrived through GTM under an id this reader never saw. An
-    // empty destination list would be a worse answer than none — the event
-    // would go nowhere — so the absent key is the deliberate fail-open.
-    mountGtag()
-    await install({ surface: 'site' })
-    registered['LCP'](LCP_METRIC)
-
-    const [, , params] = gtagCalls[0] as [
-      string,
-      string,
-      Record<string, unknown>,
-    ]
-    expect(params).not.toHaveProperty('send_to')
-  })
-
-  it('targets a HELD metric by the tag that eventually arrived', async () => {
-    // The ordinary case on both surfaces: TTFB reports before the tag exists,
-    // so the ids cannot be read when the metric is taken — only when it is
-    // finally delivered.
+  it('marks a HELD metric the same way when it is finally delivered', async () => {
     await install({ surface: 'site' })
     registered['TTFB']({ name: 'TTFB', id: 'v4-2', value: 120, delta: 120 })
     expect(gtagCalls).toHaveLength(0)
-
-    mountGtagScript('G-LATE1234')
     mountGtag()
     jest.advanceTimersByTime(5_000)
-
-    const [, , params] = gtagCalls[0] as [
-      string,
-      string,
-      Record<string, unknown>,
-    ]
-    expect(params.send_to).toEqual(['G-LATE1234'])
+    expect(gtagCalls[0][3]).toEqual({ measurementOnly: true })
   })
 })

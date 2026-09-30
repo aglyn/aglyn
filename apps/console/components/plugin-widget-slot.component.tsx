@@ -88,6 +88,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   orgData: 'bare',
   // A dialog that portals out of the page it is opened from.
   hostArtifactPublish: 'bare',
+  // A card of the Plugins page, and a notice above an installation's cards.
+  orgPluginInstalls: 'stack',
+  pluginInstallStatus: 'stack',
   // A notice above a subtree, spaced by the layout that draws it.
   // The body of the ƒx dialog, which spaces its own contents.
   besignerFunctions: 'bare',
@@ -98,6 +101,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // own cards as any other card on it would be.
   hostFirstRun: 'stack',
   hostTheme: 'stack',
+  // The marketplace's cards among the overview's own, as one block.
+  staffOverview: 'stack',
   adminOrgDetail: 'stack',
   orgBillingUsage: 'stack',
   orgBillingOverview: 'stack',
@@ -113,7 +118,7 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // The card beneath the collaborators table; its columns never render here.
   hostMembers: 'stack',
   // A floating dock, positioned by the widget itself.
-  assistPanel: 'bare',
+  consoleDock: 'bare',
   // Controls in the besigner's Attributes panel and its toolbar.
   besignerInspector: 'bare',
   besignerToolbar: 'bare',

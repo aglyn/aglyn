@@ -100,6 +100,12 @@ import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-event
 // The leaf, not the barrel: the console's API specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The leaf for the same reason: the refusals a deleted contact held must be
+// kept by the real store under a spec's barrel (AGL-3338).
+import {
+  deleteWholeContact,
+  removeContactKeepingRefusals,
+} from '@aglyn/tenant-data-admin/server/retained-refusals'
 import { createHash, randomUUID } from 'crypto'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
@@ -3438,6 +3444,11 @@ async function updateContact(
 /**
  * `DELETE /v1/contacts/{id}` — the console's own delete, over the API.
  *
+ * Deletes the document whoever else holds it, and keeps every refusal it
+ * held — each site's and the unscoped one — in the organization's retained
+ * store in the same transaction (AGL-3338), so deleting a person over the
+ * API is not a way to add somebody who said no to a list.
+ *
  * Takes an `Idempotency-Key` with `deleteRecord`'s exact semantics, and for a
  * sharper reason: an erasure request is the operation most likely to be run
  * from a script on somebody else's deadline, and a retry after a lost
@@ -3458,15 +3469,18 @@ async function deleteContact(
   const { claim } = claimed
 
   try {
-    const snap = await contactRef.get()
-    if (!snap.exists) {
+    const removed = await removeContactKeepingRefusals({
+      contactRef,
+      decide: deleteWholeContact,
+      nowMs: Date.now(),
+    })
+    if (removed.outcome === 'missing') {
       await claim.release()
       return ApiErrors.notFound({
         message: 'No such contact',
         headers: ctx.headers,
       })
     }
-    await contactRef.delete()
     const view = { id: contactRef.id, object: 'contact', deleted: true }
     await claim.record(200, view)
     return apiJson(view, { headers: ctx.headers })

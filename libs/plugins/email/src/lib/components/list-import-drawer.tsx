@@ -57,7 +57,7 @@
  * resume it from where it stopped.
  */
 
-import { LIST_IMPORT_MAX_CHARACTERS, pluginDocsHelp } from '@aglyn/aglyn'
+import { CSV_UPLOAD_MAX_CHARACTERS, pluginDocsHelp } from '@aglyn/aglyn'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
@@ -233,7 +233,7 @@ export function ListImportDrawer(props: ListImportDrawerProps) {
     async (file: File | null | undefined) => {
       if (!file) return
       const contents = await file.text().catch(() => '')
-      if (contents.length > LIST_IMPORT_MAX_CHARACTERS) {
+      if (contents.length > CSV_UPLOAD_MAX_CHARACTERS) {
         return void enqueueSnackbar(
           'That file is too large to read in one go. Split it and import the ' +
             'pieces.',

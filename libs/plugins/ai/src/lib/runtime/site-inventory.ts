@@ -23,7 +23,7 @@ import {
   describeTheme,
   resolveSiteTheme,
   type ThemeHostDocument,
-} from '@aglyn/aglyn/app-utils/marketplace-theme'
+} from '@aglyn/aglyn/app-utils/site-theme'
 import {
   REUSABLE_COMPONENT_KIND_EMAIL,
   reusableComponentKindOf,

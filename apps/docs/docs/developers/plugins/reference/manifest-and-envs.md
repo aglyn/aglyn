@@ -63,7 +63,7 @@ console screens fetch your bundle, and it never runs your code to find out.
 | --- | --- | --- |
 | `site.components` | The canvas component ids `register()` registers | A published page whose node tree places one of them, and the Besigner for every site that runs the plugin |
 | `site.features` | The `runtimeId` of each site runtime it mounts | Every page of a site that has the plugin switched on, and the Besigner for that site |
-| `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`assistPanel`, `besignerInspector`) | A console screen that renders one of those slots |
+| `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`consoleDock`, `besignerInspector`) | A console screen that renders one of those slots |
 | `console.routes` / `console.orgRoutes` | The console routes its pages serve (`/my-plugin`) | The screens under those routes |
 | `console.shell` | It adds a nav tab, a provider or a staff page, which the shell draws on every screen | Every screen of the workspace |
 
@@ -203,7 +203,7 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 The single source mapping plugin ids to packages, register entry points
 per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
 declaration surfaces `declarations`, `serverDeclarations` and
-`consoleServerDeclarations`, and `subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
+`consoleServerDeclarations`, `subprocessors` and `videoEmbedProviders`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
 modules that create, transfer or destroy a durable customer object, which
 `check-activity-coverage.mjs` holds to writing an activity entry.
 
@@ -221,8 +221,8 @@ without a valid one, and `apps/console/specs/plugin-contributions-declared.spec.
 runs every registrar and fails when what it registers differs from what the
 entry declares.
 `node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
-generated loader manifests, the three declarations manifests and the
-subprocessors manifest — the only files allowed to reference
+generated loader manifests, the three declarations manifests, the
+subprocessors manifest and the titles manifest — the only files allowed to reference
 `@aglyn/plugins-*` outside `libs/plugins` (an nx boundary rule enforces
 this), and every reference is an `import()` so the apps never depend on a
 plugin statically.
@@ -263,6 +263,28 @@ inventory or another plugin already declares that the plugin's code reaches
 as well: the host keeps its one declaration, and the plugin's reason and
 data are appended to that entry. A use of a host nothing declares is
 refused — declare the host instead.
+
+The **titles manifest** (`apps/console/constants/plugins.titles.generated.ts`)
+is read from a plugin's source rather than from an entry: each console nav
+item's `label` and `href` in its `plugin.ts`, and the `*-console-sections.ts`
+list its `sections` names. The console's plugin layouts title a browser tab
+from it — the surface's label, then the open section's — because they are
+server components and cannot load the console registry. A surface or section
+named two different ways is refused. Regenerate after renaming a nav item or
+a section; `--check` refuses a stale manifest.
+
+A **videoEmbedProviders** entry names a function in
+`@aglyn/plugins-x/video-embed-providers` that returns the video hosts whose
+own player the plugin's Video element frames: the domains a host's links live
+on, the path patterns that carry the media id, the one origin the player is
+framed from, its path and the query it reads. The generator calls it,
+validates the answer and compiles it into core's
+`first-party-plugins.generated.ts`, because its readers — the published
+page, its `VideoObject` and the tenant middleware's `frame-src` — load no
+plugin code. Core's `video-embed-provider.ts` resolves a link from the
+compiled list alone and rebuilds every player address from the media id, so
+a frame is only ever on a declared origin. Regenerate after changing a
+declaration; `--check` refuses a stale copy.
 
 A **staff** entry names the registrar the console's staff area loads,
 usually the same function as `console`. The org routes load each

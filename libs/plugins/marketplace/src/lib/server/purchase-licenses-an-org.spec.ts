@@ -201,8 +201,8 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 // onboarding refusal can never masquerade as an entitlement result — and
 // `virtual` so this file does not depend on that module existing.
 jest.mock(
-  '@aglyn/tenant-data-admin/server/stripe-account-mode',
-  () => ({ connectLinkageIsReady: () => true }),
+  '@aglyn/tenant-data-admin/server/payment-provider',
+  () => ({ merchantAccountIsReady: () => true }),
   { virtual: true },
 )
 

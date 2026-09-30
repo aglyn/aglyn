@@ -37,6 +37,7 @@ import {
   type EmailRampVerdict,
   rampedDailyAllowance,
 } from '@aglyn/shared-util-email'
+import { notifyPluginRecordWritten } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -350,13 +351,22 @@ export interface CrmListFieldsRestamp {
   missing: number
 }
 
-/** Restamp one record's list fields from the record as stored. */
+/**
+ * Restamp one record's list fields from the record as stored.
+ *
+ * Then tell the plugins a record was written (AGL-3336): every server writer
+ * of an org record passes here after its write, so this is the one place a
+ * plugin that acts on the record AFTER any write — the CRM's sharing rules —
+ * is told, without an edit to each writer. Not for a record that no longer
+ * exists, and after the restamp's own transaction, never inside it.
+ */
 export async function restampCrmListFieldsAt(
   ref: FirebaseFirestore.DocumentReference,
   collection: CrmListCollection,
 ): Promise<'restamped' | 'current' | 'missing'> {
+  let outcome: 'restamped' | 'current' | 'missing'
   try {
-    return await ref.firestore.runTransaction(async (tx) => {
+    outcome = await ref.firestore.runTransaction(async (tx) => {
       const snapshot = await tx.get(ref)
       if (!snapshot.exists) return 'missing' as const
       const patch = crmListFieldsPatch(collection, snapshot.data() ?? {})
@@ -368,6 +378,10 @@ export async function restampCrmListFieldsAt(
     console.error(`[crm] list fields restamp failed for ${ref.path}`, error)
     return 'current'
   }
+  if (outcome !== 'missing') {
+    await notifyPluginRecordWritten({ path: ref.path, collection })
+  }
+  return outcome
 }
 
 /** Restamp several records of one collection, a few at a time. */

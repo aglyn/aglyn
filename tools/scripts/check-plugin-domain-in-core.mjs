@@ -106,12 +106,23 @@ const DOMAIN_DIR = /^apps\/[^/]+\/.*\/(crm|contacts|marketplace|campaigns?|datas
  * Rule 2. `home` is where the literal may live. `everywhere` extends the
  * sweep past the guarded trees, which is the AI rule as AGL-2939 wrote it:
  * no other plugin may grow a model vendor of its own either.
+ *
+ * The mail vendor's home is its provider module behind the platform's
+ * mail-provider contract (`mail-providers.ts` picks it by configuration),
+ * not a plugin: the transactional rail sends password resets, receipts and
+ * operator alerts from every server process with no plugin loaded, and a
+ * provider a plugin registered is one that can be silently absent. The rest
+ * of the rail names no vendor, which is what this rule holds.
  */
 export const VENDOR_LITERALS = [
   { vendor: 'ai', pattern: /api\.anthropic\.com|anthropic-version|\bclaude-[a-z0-9-]+|api\.openai\.com/, home: 'libs/plugins/ai/src/lib/providers/', everywhere: true },
   { vendor: 'ga4', pattern: /googletagmanager\.com|google-analytics\.com|\bgtag\(/ },
   { vendor: 'wistia', pattern: /wistia/i },
-  { vendor: 'resend', pattern: /api\.resend\.com|from\s+['"]resend['"]/ },
+  {
+    vendor: 'resend',
+    pattern: /api\.resend\.com|from\s+['"]resend['"]/,
+    home: 'libs/shared/util/email/src/lib/mail-provider-resend',
+  },
 ]
 
 /**
@@ -173,8 +184,9 @@ export function collectionOwnersAddressed(text) {
 /**
  * Rule 6. A file whose EXPORTS are one plugin's vocabulary, whatever it is
  * called: at least three of them, and at least half of what it exports.
- * `marketing-consent.ts` and `node-definition-sanitizer.ts` name no plugin and
- * export little else. The words are the distinctive ones only — `Product`,
+ * `marketing-consent.ts` names no plugin and exports little else, and
+ * `node-definition-sanitizer.ts` did until its rule was named for what it
+ * guards rather than for the marketplace that first asked. The words are the distinctive ones only — `Product`,
  * `Order`, `Lead` and `Listing` are ordinary English and would flag half the
  * platform — so this rule finds a plugin's module, never a module that
  * happens to mention one.
@@ -218,9 +230,12 @@ export function domainOfExports(text) {
  *
  * A declaration is code that lives here. A USE of another module's symbol is
  * not judged — that is the import graph's — which is what keeps this from
- * flagging every caller of a plugin's seam.
+ * flagging every caller of a plugin's seam. That includes an inline `type`
+ * specifier on a line of its own inside a multi-line `import { … }` or
+ * `export { … }`: it names a symbol declared somewhere else, so a type is a
+ * declaration here only as an alias (`type Name =` or `type Name<`).
  */
-const DECLARATION = /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:default\s+)?(?:function\*?|const|let|type|interface|class|enum)\s+([A-Za-z_$][\w$]*)/
+const DECLARATION = /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:default\s+)?(?:(?:function\*?|const|let|interface|class|enum)\s+([A-Za-z_$][\w$]*)|type\s+([A-Za-z_$][\w$]*)\s*[=<])/
 const MEMBER = /^\s{2,}(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*[:(]/
 
 /** The plugins whose vocabulary a file's code lines DECLARE. */
@@ -228,7 +243,8 @@ export function domainsDeclared(text) {
   const domains = new Set()
   for (const line of text.split('\n')) {
     if (COMMENT_LINE.test(line)) continue
-    const name = DECLARATION.exec(line)?.[1] ?? MEMBER.exec(line)?.[1]
+    const declared = DECLARATION.exec(line)
+    const name = declared?.[1] ?? declared?.[2] ?? MEMBER.exec(line)?.[1]
     if (!name) continue
     for (const [domain, pattern] of Object.entries(DOMAIN_EXPORTS)) if (pattern.test(name)) domains.add(domain)
   }
@@ -331,6 +347,8 @@ function selfTest() {
     { path: 'libs/plugins/crm/src/lib/summary.ts', text: "fetch('https://api.anthropic.com/v1/messages')\n" },
     { path: 'libs/plugins/ai/src/lib/providers/anthropic.ts', text: "fetch('https://api.anthropic.com/v1/messages')\n" },
     { path: 'libs/tenant/runtime/src/lib/video.ts', text: "const host = 'fast.wistia.net'\n" },
+    { path: 'libs/shared/util/email/src/lib/send-email.ts', text: "fetch('https://api.resend.com/emails')\n" },
+    { path: 'libs/shared/util/email/src/lib/mail-provider-resend.ts', text: "fetch('https://api.resend.com/emails')\n" },
     { path: 'libs/plugins/mui/src/lib/video.ts', text: "const host = 'fast.wistia.net'\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/catalog.ts', text: "const requires = ['commerce']\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/words.ts', text: "const kind = 'data'\n" },
@@ -347,6 +365,8 @@ function selfTest() {
     { path: 'libs/aglyn/src/lib/app-utils/neutral-name.ts', text: 'export const MARKETPLACE_A = 1\nexport function marketplaceB() {}\nexport type MarketplaceC = 1\nexport const other = 2\n' },
     { path: 'libs/aglyn/src/lib/app-utils/plans.ts', text: 'export const seats = 1\nexport const sites = 2\nexport const pages = 3\nexport const members = 4\ninterface Limits {\n  crmEmailsPerDay: number\n}\n' },
     { path: 'libs/aglyn/src/lib/app-utils/caller.ts', text: "import { crmRoutes } from './x'\nexport const href = crmRoutes(base).contact(id)\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/type-user.ts', text: "import {\n  crmRoutes,\n  type CrmDeal,\n  type CrmStage as Stage,\n} from './x'\nexport const deal: CrmDeal | null = null\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/type-alias.ts', text: 'export type CrmDealId = string\ntype CrmStageMap<T> = Record<string, T>\n' },
     { path: 'libs/aglyn/src/lib/app-utils/mentions-one.ts', text: 'export const MARKETPLACE_A = 1\nexport const a = 1\nexport const b = 2\nexport const c = 3\n' },
   ]
   const findings = findFindings(corpus, ids)
@@ -365,6 +385,8 @@ function selfTest() {
   ok('the adapter is not reported', !findings.has('libs/plugins/ai/src/lib/providers/anthropic.ts'))
   ok('a video vendor in the runtime is reported', has('libs/tenant/runtime/src/lib/video.ts', 'vendor:wistia'))
   ok('a video vendor inside a plugin is not', !findings.has('libs/plugins/mui/src/lib/video.ts'))
+  ok('a mail vendor on the rail is reported', has('libs/shared/util/email/src/lib/send-email.ts', 'vendor:resend'))
+  ok('the mail provider that is its home is not', !findings.has('libs/shared/util/email/src/lib/mail-provider-resend.ts'))
   ok('a plugin id in core is reported', has('libs/aglyn/src/lib/plugin-manager/catalog.ts', 'plugin-id'))
   ok('an id that is a plain word is not', !findings.has('libs/aglyn/src/lib/plugin-manager/words.ts'))
   ok('an id named in a comment is not', !findings.has('libs/aglyn/src/lib/plugin-manager/prose.ts'))
@@ -381,6 +403,8 @@ function selfTest() {
   ok('one export in a plugin’s words is a declaration, though not most of the file', has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-declares:marketplace') && !has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-exports:marketplace'))
   ok('a plugin’s key mixed into a platform type is reported', has('libs/aglyn/src/lib/app-utils/plans.ts', 'domain-declares:crm'))
   ok('USING a plugin’s symbol declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/caller.ts'))
+  ok('a type named inside a multi-line import declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/type-user.ts'))
+  ok('a type alias in a plugin’s words is a declaration', has('libs/aglyn/src/lib/app-utils/type-alias.ts', 'domain-declares:crm'))
 
   const rows = [
     { path: 'libs/aglyn/src/lib/app-utils/crm-deals.ts', rules: ['domain-name', 'plugin-id'], lane: 'crm' },

@@ -21,7 +21,7 @@ import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementIsPublished,
   publisherAgreementState,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 import { requiredAttestationIds } from '../model/publisher-attestation'
 
 /**

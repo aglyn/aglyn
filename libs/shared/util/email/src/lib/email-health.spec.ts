@@ -16,12 +16,16 @@
  */
 
 import {
-  RESEND_DOMAINS_ENDPOINT,
   checkEmailCredentials,
   describeEmailConfig,
   checkSharedSendingPool,
 } from './email-health'
-import { RESEND_SEND_ENDPOINT, sendEmail } from './send-email'
+import {
+  RESEND_DOMAINS_ENDPOINT,
+  RESEND_SEND_ENDPOINT,
+  resendMailProvider,
+} from './mail-provider-resend'
+import { sendEmail } from './send-email'
 
 function configure(apiKey: string | null, from: string | null) {
   if (apiKey === null) delete process.env.RESEND_API_KEY
@@ -40,6 +44,9 @@ describe('describeEmailConfig', () => {
     configure('re_test', 'Aglyn <noreply@aglyn.com>')
     expect(describeEmailConfig()).toEqual({
       configured: true,
+      provider: 'resend',
+      missingSettings: [],
+      providerProblem: null,
       hasApiKey: true,
       hasFrom: true,
       from: 'Aglyn <noreply@aglyn.com>',
@@ -56,6 +63,7 @@ describe('describeEmailConfig', () => {
     configure(null, 'Aglyn <noreply@aglyn.com>')
     expect(describeEmailConfig()).toMatchObject({
       configured: false,
+      missingSettings: ['RESEND_API_KEY'],
       hasApiKey: false,
       hasFrom: true,
     })
@@ -279,6 +287,9 @@ describe('the shared sending pool', () => {
       text: async () => JSON.stringify(body),
     } as unknown as Response)
 
+  /** The deployment's provider, holding only the read key a case gives it. */
+  const readingWith = (key: string) => resendMailProvider({ RESEND_READ_API_KEY: key })
+
   const verified = (names: string[]) => ({
     data: names.map((name) => ({ name, status: 'verified' })),
   })
@@ -287,7 +298,7 @@ describe('the shared sending pool', () => {
     global.fetch = respond(verified(POOL)) as never
     const report = await checkSharedSendingPool({
       pool: POOL,
-      readApiKey: 'read-key',
+      provider: readingWith('read-key'),
     })
     expect(report.status).toBe('ok')
     expect(report.unusable).toEqual([])
@@ -302,7 +313,7 @@ describe('the shared sending pool', () => {
     }) as never
     const report = await checkSharedSendingPool({
       pool: POOL,
-      readApiKey: 'read-key',
+      provider: readingWith('read-key'),
     })
     expect(report.status).toBe('degraded')
     expect(report.unusable).toEqual([POOL[1]])
@@ -313,7 +324,7 @@ describe('the shared sending pool', () => {
     global.fetch = respond(verified([POOL[0]])) as never
     const report = await checkSharedSendingPool({
       pool: POOL,
-      readApiKey: 'read-key',
+      provider: readingWith('read-key'),
     })
     expect(report.status).toBe('degraded')
     expect(report.domains.find((d) => d.domain === POOL[1])?.present).toBe(false)
@@ -335,7 +346,7 @@ describe('the shared sending pool', () => {
     }) as never
     const report = await checkSharedSendingPool({
       pool: POOL,
-      readApiKey: 'read-key',
+      provider: readingWith('read-key'),
     })
 
     expect(report.untracked).toEqual([POOL[1]])
@@ -353,7 +364,7 @@ describe('the shared sending pool', () => {
     global.fetch = respond(verified(POOL)) as never
     const report = await checkSharedSendingPool({
       pool: POOL,
-      readApiKey: 'read-key',
+      provider: readingWith('read-key'),
     })
 
     expect(report.untracked).toEqual([])
@@ -366,7 +377,7 @@ describe('the shared sending pool', () => {
     // pool — and "I could not look" must not be reported as "I looked".
     const called = jest.fn()
     global.fetch = called as never
-    const report = await checkSharedSendingPool({ pool: POOL, readApiKey: '' })
+    const report = await checkSharedSendingPool({ pool: POOL, provider: readingWith('') })
     expect(report.status).toBe('unreadable')
     expect(report.status).not.toBe('ok')
     expect(called).not.toHaveBeenCalled()
@@ -378,7 +389,7 @@ describe('the shared sending pool', () => {
     global.fetch = respond({ name: 'restricted_api_key' }, 401) as never
     const report = await checkSharedSendingPool({
       pool: POOL,
-      readApiKey: 'sending-key',
+      provider: readingWith('sending-key'),
     })
     expect(report.status).toBe('unreadable')
   })
@@ -386,7 +397,7 @@ describe('the shared sending pool', () => {
   it('a deployment with no pool is NOT-APPLICABLE', async () => {
     // Self-host: the pool is a platform concept, and an operator sending from
     // their own domain has none to be degraded by.
-    const report = await checkSharedSendingPool({ pool: [], readApiKey: 'k' })
+    const report = await checkSharedSendingPool({ pool: [], provider: readingWith('k') })
     expect(report.status).toBe('not-applicable')
   })
 })

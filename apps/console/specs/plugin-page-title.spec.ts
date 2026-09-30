@@ -19,9 +19,10 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import {
-  PLUGIN_SECTION_TITLES,
-  PLUGIN_SECTIONS,
-  PLUGIN_TITLES,
+  PLUGIN_SURFACE_SECTIONS,
+  PLUGIN_SURFACE_TITLES,
+} from '../constants/plugins.titles.generated'
+import {
   pluginPageTitle,
   pluginSectionTitle,
   titleCaseSlug,
@@ -85,18 +86,26 @@ describe('plugin page titles match the nav labels (AGL-2184)', () => {
       )
       .sort()
 
-    // Fix by adding the slug to PLUGIN_TITLES in app/plugin-page-title.ts —
-    // NOT by renaming the nav item. The nav label is what a human reads in
+    // Fix by regenerating the titles manifest
+    // (`node tools/scripts/generate-plugin-manifests.mjs`) — NOT by renaming
+    // the nav item. The nav label is what a human reads in
     // the console; the tab has to follow it.
     expect(wrong).toEqual([])
   })
 
-  it('keeps the exception table honest — every entry is still needed', () => {
-    // A stale exception silently widens what is allowed.
-    const unnecessary = Object.keys(PLUGIN_TITLES).filter(
-      (slug) => titleCaseSlug(slug) === PLUGIN_TITLES[slug],
-    )
-    expect(unnecessary).toEqual([])
+  it('keeps the manifest free of surfaces nothing declares', () => {
+    // A stale surface keeps a retired plugin's name in the tab.
+    const declared = new Set(pages.map((page) => page.slug))
+    const stale = Object.keys(PLUGIN_SURFACE_TITLES)
+      .filter((slug) => !declared.has(slug))
+      .sort()
+    expect(stale).toEqual([])
+  })
+
+  it('reads a slug that spells a prototype member as an undeclared slug', () => {
+    expect(pluginPageTitle('constructor')).toBe('Constructor')
+    expect(pluginSectionTitle('marketing', 'constructor')).toBe('')
+    expect(pluginSectionTitle('toString', 'valueOf')).toBe('')
   })
 
   it('Title Cases a multi-word slug, and cannot recover an acronym', () => {
@@ -194,9 +203,8 @@ describe('plugin section titles match the rail labels', () => {
       )
       .sort()
 
-    // Fix by adding the section to PLUGIN_SECTIONS — and, when Title Case
-    // cannot produce the label, to PLUGIN_SECTION_TITLES — in
-    // app/plugin-page-title.ts. Never by renaming the rail: that is what a
+    // Fix by regenerating the titles manifest
+    // (`node tools/scripts/generate-plugin-manifests.mjs`). Never by renaming the rail: that is what a
     // human reads in the console, and the tab follows it.
     expect(wrong).toEqual([])
   })
@@ -205,20 +213,15 @@ describe('plugin section titles match the rail labels', () => {
     const declared = new Set(
       sections.map((section) => `${section.surface}/${section.id}`),
     )
-    const stale = Object.entries(PLUGIN_SECTIONS)
-      .flatMap(([surface, ids]) => ids.map((id) => `${surface}/${id}`))
+    const stale = Object.entries(PLUGIN_SURFACE_SECTIONS)
+      .flatMap(([surface, ids]) =>
+        Object.keys(ids).map((id) => `${surface}/${id}`),
+      )
       .filter((key) => !declared.has(key))
       .sort()
     // A stale id makes the layout treat a document id as a section and put a
     // retired section's name in the tab.
     expect(stale).toEqual([])
-  })
-
-  it('keeps the label exceptions honest — every entry is still needed', () => {
-    const unnecessary = Object.entries(PLUGIN_SECTION_TITLES).filter(
-      ([key, label]) => titleCaseSlug(key.split('/')[1]) === label,
-    )
-    expect(unnecessary).toEqual([])
   })
 
   it('names nothing for a segment that is not a declared section', () => {

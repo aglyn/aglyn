@@ -18,7 +18,7 @@
 import {
   expandRepeatables,
   hasRepeatableNodes,
-  repeatDatasetKeys,
+  repeatKeys,
 } from './expand-repeatables'
 
 const baseNodes = () =>
@@ -216,7 +216,7 @@ describe('hasRepeatableNodes (AGL-1440)', () => {
  * keys `expandRepeatables` will look up — no more, which costs a read, and no
  * fewer, which renders a template row where the author put a list.
  */
-describe('repeatDatasetKeys', () => {
+describe('repeatKeys', () => {
   it('names each repeated dataset once, trimmed and sorted', () => {
     const nodes = {
       root: { $id: 'root', componentId: 'div', nodes: ['a', 'b', 'c'] },
@@ -224,26 +224,26 @@ describe('repeatDatasetKeys', () => {
       b: { $id: 'b', componentId: 'muiStack', props: { repeatDataset: ' Menu ' } },
       c: { $id: 'c', componentId: 'muiStack', props: { repeatDataset: 'Team' } },
     } as any
-    expect(repeatDatasetKeys(nodes)).toEqual(['Menu', 'Team'])
+    expect(repeatKeys(nodes)).toEqual(['Menu', 'Team'])
   })
 
   it('names nothing for every shape expandRepeatables refuses', () => {
     for (const repeatDataset of ['', '   ', 42, null, undefined, {}]) {
       const nodes = baseNodes()
       nodes.list.props.repeatDataset = repeatDataset
-      expect(repeatDatasetKeys(nodes)).toEqual([])
+      expect(repeatKeys(nodes)).toEqual([])
     }
   })
 
   it('agrees with hasRepeatableNodes on the tree it is given', () => {
-    expect(repeatDatasetKeys(baseNodes()).length > 0).toBe(
+    expect(repeatKeys(baseNodes()).length > 0).toBe(
       hasRepeatableNodes(baseNodes()),
     )
   })
 
   it('tolerates an empty or malformed node map', () => {
-    expect(repeatDatasetKeys({})).toEqual([])
-    expect(repeatDatasetKeys({ a: null } as any)).toEqual([])
-    expect(repeatDatasetKeys(undefined)).toEqual([])
+    expect(repeatKeys({})).toEqual([])
+    expect(repeatKeys({ a: null } as any)).toEqual([])
+    expect(repeatKeys(undefined)).toEqual([])
   })
 })

@@ -16,17 +16,21 @@
  */
 
 import {
-  ASSIST_DOCS_INDEX,
-  type AssistDocsSection,
+  DOCS_SECTION_INDEX,
+  type DocsSection,
 } from './docs-index.generated'
 import { DOCS_BASE_URL } from './docs-help'
 
 /**
- * Lexical docs retrieval for Aglyn Assist (AGL-1860, phase 1) — deliberately
- * no vector store: a BM25-flavoured term-frequency score over the generated
- * docs section index, with title/heading term boosts. Good enough to ground
- * "how do I…" answers in the right docs section and cheap enough to run on
- * every message inside the API route.
+ * Lexical docs search (AGL-1860, phase 1) — deliberately no vector store: a
+ * BM25-flavoured term-frequency score over the generated docs section index,
+ * with title/heading term boosts. Good enough to find the right docs section
+ * for a "how do I…" question and cheap enough to run on every request inside
+ * an API route.
+ *
+ * The platform's, and named so (AGL-3080): the console's issue reports
+ * deflect to it with no model involved, and the AI plugin grounds its answers
+ * in it — one reader among others, not its owner.
  */
 
 /** Words too common in this corpus to carry signal. */
@@ -45,7 +49,7 @@ export function tokenize(text: string): string[] {
 }
 
 export interface ScoredSection {
-  section: AssistDocsSection
+  section: DocsSection
   score: number
 }
 
@@ -56,7 +60,7 @@ export interface ScoredSection {
  * dedicated boosts because those are the docs' own statement of topic.
  */
 function scoreSection(
-  section: AssistDocsSection,
+  section: DocsSection,
   queryTokens: readonly string[],
   bodyTokenCounts: Map<string, number>,
   titleTokens: Set<string>,
@@ -73,7 +77,7 @@ function scoreSection(
 }
 
 interface IndexedSection {
-  section: AssistDocsSection
+  section: DocsSection
   bodyTokenCounts: Map<string, number>
   titleTokens: Set<string>
   headingTokens: Set<string>
@@ -82,7 +86,7 @@ interface IndexedSection {
 /** Tokenized once per process — module scope, ~650 sections. */
 let indexed: IndexedSection[] | null = null
 
-function buildIndex(sections: readonly AssistDocsSection[]): IndexedSection[] {
+function buildIndex(sections: readonly DocsSection[]): IndexedSection[] {
   return sections.map((section) => {
     const bodyTokenCounts = new Map<string, number>()
     for (const token of tokenize(section.text)) {
@@ -105,12 +109,12 @@ function buildIndex(sections: readonly AssistDocsSection[]): IndexedSection[] {
 export function retrieveDocsSections(
   question: string,
   limit = 6,
-  sections: readonly AssistDocsSection[] = ASSIST_DOCS_INDEX,
+  sections: readonly DocsSection[] = DOCS_SECTION_INDEX,
 ): ScoredSection[] {
   const queryTokens = [...new Set(tokenize(question))]
   if (!queryTokens.length) return []
   const index =
-    sections === ASSIST_DOCS_INDEX
+    sections === DOCS_SECTION_INDEX
       ? (indexed ??= buildIndex(sections))
       : buildIndex(sections)
   return index
@@ -150,7 +154,7 @@ export function docsDocumentFrequency(): {
   sections: number
 } {
   if (!documentFrequency) {
-    const index = (indexed ??= buildIndex(ASSIST_DOCS_INDEX))
+    const index = (indexed ??= buildIndex(DOCS_SECTION_INDEX))
     const frequency = new Map<string, number>()
     for (const entry of index) {
       const seen = new Set<string>([
@@ -164,7 +168,7 @@ export function docsDocumentFrequency(): {
     }
     documentFrequency = frequency
   }
-  return { frequency: documentFrequency, sections: ASSIST_DOCS_INDEX.length }
+  return { frequency: documentFrequency, sections: DOCS_SECTION_INDEX.length }
 }
 
 /**

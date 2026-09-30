@@ -58,6 +58,8 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 // folds `aiAddon` only once the declaration is registered.
 import '../declarations'
 import { AssistJobsDrawer, aiJobOutputHref } from './assist-jobs-drawer.component'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
 const ENTITLED = { plan: 'pro', billingStatus: 'active', seatAddons: { aiAddon: true } }
 const PLAIN_PRO = { plan: 'pro', billingStatus: 'active' }
@@ -344,6 +346,43 @@ describe('cancel', () => {
 })
 
 describe('aiJobOutputHref', () => {
+  /*
+   * A campaign's and a product's pages are other plugins' (AGL-3080): the
+   * drawer asks the record-route registry, so this stands in the addresses
+   * the marketing and commerce plugins publish — the AI plugin may not load
+   * either. What each owner publishes is held in its own spec.
+   */
+  const unloadOwners = () => {
+    unregisterPluginServices('marketing')
+    unregisterPluginServices('commerce')
+  }
+  afterEach(unloadOwners)
+  beforeEach(() => {
+    unloadOwners()
+    registerPluginRecordRoute(
+      'campaign',
+      {
+        list: () => null,
+        record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/marketing/campaigns/${id}`,
+      },
+      { pluginId: 'marketing' },
+    )
+    registerPluginRecordRoute(
+      'product',
+      {
+        list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/products`,
+        record: () => null,
+      },
+      { pluginId: 'commerce' },
+    )
+  })
+
+  it('links nothing for a campaign or a product when neither owner is loaded', () => {
+    unloadOwners()
+    expect(aiJobOutputHref(output({ resource: 'campaign', id: 'cmp-1' }) as never, 'acme')).toBeNull()
+    expect(aiJobOutputHref(output({ resource: 'product' }) as never, 'acme')).toBeNull()
+  })
+
   const output = (patch: Record<string, unknown>) => ({
     resource: 'screen',
     id: 'scr-1',

@@ -39,6 +39,19 @@
       "budgetBytes": 32768
     },
     {
+      "name": "a site with an analytics tag",
+      "why": "The vendor adapter a published page fetches when its site configures an analytics tag, as aglyn.com does: what the tag looks like on the page, how a resident tag hears a consent change, and how an event reaches it (AGL-3080). A site with no tag never fetches it. The vendor's own library is a third-party request and not counted.",
+      "loads": [
+        {
+          "from": "apps/tenant/utils/plugins.analytics.generated.ts",
+          "import": "@aglyn/plugins-marketing/analytics-provider",
+          "why": "The Google tag adapter, the one analytics provider the first-party build declares."
+        }
+      ],
+      "baselineBytes": 1401,
+      "budgetBytes": 2048
+    },
+    {
       "name": "a page that uses a realm plugin",
       "why": "What a page adds when it uses a trusted realm install (AGL-3116): the host ABI a bundle runs against. Since AGL-3392 that is core's and MUI's realm plugin surfaces, named lists of exports imported statically, instead of the whole core namespace the host used to hand over (260.0 KB measured before, 85.0 KB after, on the same build). Most of it is MUI components a realm element's page usually loads anyway; a bundle compiles none of MUI in. Growing a surface grows this group, which is the point of it.",
       "loads": [

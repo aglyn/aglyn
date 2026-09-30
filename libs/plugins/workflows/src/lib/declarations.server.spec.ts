@@ -55,6 +55,8 @@ jest.mock('./engine/run-event-actions', () => ({
     (mockRunSingleAction as (...a: unknown[]) => unknown)(...args),
 }))
 
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
   dispatchHostAutomation,
@@ -68,6 +70,7 @@ const REPO_ROOT = join(__dirname, '../../../../..')
 
 beforeEach(() => {
   resetHostEventListenersForTests()
+  resetPluginServicesForTests()
   mockRunEventAutomations.mockClear()
   mockRunSingleAction.mockClear()
 })
@@ -82,6 +85,15 @@ describe('the server declarations', () => {
     registerWorkflowsServerDeclarations()
     registerWorkflowsServerDeclarations()
     expect(listHostEventListeners()).toEqual([BUNDLE_ID])
+  })
+
+  it('publish the workflow, webhook and action indexes as this plugin’s (AGL-3080)', () => {
+    registerWorkflowsServerDeclarations()
+    expect(pluginRecordIndex('workflow')?.pluginId).toBe(BUNDLE_ID)
+    expect(pluginRecordIndex('webhook')?.pluginId).toBe(BUNDLE_ID)
+    expect(pluginRecordIndex('action')?.pluginId).toBe(BUNDLE_ID)
+    // Registering again — boot, then an API register function — refuses nothing.
+    expect(() => registerWorkflowsServerDeclarations()).not.toThrow()
   })
 
   it('carry an event raised by the runtime to the engine, and its alerts back', async () => {

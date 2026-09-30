@@ -26,7 +26,7 @@ import {
   isVersionApproved,
   listingArtifactType,
 } from '../model/marketplace'
-import { compareArtifactVersions } from '@aglyn/aglyn/server'
+
 import {
   reconcileInstallTallies,
   versionCollectionFor,
@@ -36,6 +36,7 @@ import {
 import { verifiedLivePins } from './install-pin-counts'
 import { canActAsPublisher } from './publisher-profile'
 import { attestationsForBytes } from '../model/publisher-attestation'
+import { compareArtifactVersions } from '../model/update-state'
 
 /**
  * One reconciled tally per version id, plus the totals (AGL-1418).

@@ -1973,7 +1973,8 @@ export function EntryDetailPage() {
                       excerpt:
                         'The film an entry is about, played in place of the ' +
                         'cover image at the top of the entry. Choose one from ' +
-                        'the media library or paste a video or Wistia link.',
+                        'the media library or paste a link to a video file ' +
+                        'or to a video host.',
                     })}
                     contentGutterX
                     contentGutterY

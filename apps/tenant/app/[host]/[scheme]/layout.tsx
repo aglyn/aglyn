@@ -17,7 +17,7 @@
 
 // Deep import (not the barrel) so this Server Component doesn't pull the
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
-import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { searchEngineVerificationMeta } from '@aglyn/aglyn/app-utils/search-engine-verification'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'

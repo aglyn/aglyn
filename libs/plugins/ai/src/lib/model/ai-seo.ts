@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { SeoAuditReport } from '@aglyn/aglyn/app-utils/seo-audit'
+import type { SeoKeywordCoverage } from '@aglyn/aglyn/app-utils/seo-keywords'
 import {
   isSeoListingFieldKey,
   type SeoListingFieldKey,
@@ -39,8 +41,9 @@ import type { AiJobOutput, AiJobSummary } from './ai-jobs.types'
  * ## The outputs of a job
  *
  * - `fields:{screen|product}:{id}` — one listing's values ({@link AiSeoFieldsProposal}).
- * - `audit:report` — the site audit: every audited page, its findings and
- *   its score, and which pages need generated fixes ({@link AiSeoAuditReport}).
+ * - `audit:report` — the site audit: the platform SEO check's report (every
+ *   audited page, its findings and its score) and which pages need generated
+ *   fixes ({@link AiSeoAuditReport}).
  * - `audit:site` — structured data for the site's entity and the agent
  *   guidance `/llms.txt` leads with ({@link AiSeoSiteBatch}).
  * - `audit:fixes:{n}` — one batch of page fixes ({@link AiSeoFixesBatch}).
@@ -62,15 +65,6 @@ export function aiSeoJobTarget(inputs: Record<string, unknown> | null | undefine
 /** Proposed values for one listing, by field. */
 export type AiSeoFieldValues = Partial<Record<SeoListingFieldKey, string>>
 
-/** Whether, and where, a page already says a target keyword. */
-export interface AiSeoKeywordCoverage {
-  keyword: string
-  inTitle: boolean
-  inDescription: boolean
-  inH1: boolean
-  inBody: boolean
-}
-
 /** A proposal for one page's or one product's search listing. */
 export interface AiSeoFieldsProposal {
   kind: 'fields'
@@ -84,75 +78,23 @@ export interface AiSeoFieldsProposal {
   }
   values: AiSeoFieldValues
   /** The target keywords the listing was asked to cover, and where it now does. */
-  keywords: AiSeoKeywordCoverage[]
+  keywords: SeoKeywordCoverage[]
   /** Customer-safe lines worth knowing (a field left out, and why). */
   notes: string[]
 }
 
-export type AiSeoFindingCode =
-  | 'title-missing'
-  | 'title-too-long'
-  | 'title-duplicate'
-  | 'description-missing'
-  | 'description-too-long'
-  | 'description-duplicate'
-  | 'h1-missing'
-  | 'h1-multiple'
-  | 'h1-thin'
-  | 'image-alt-missing'
-  | 'orphan'
-  | 'keyword-missing'
-  | 'search-discouraged'
-  | 'entity-incomplete'
-  | 'llms-guidance-missing'
-
-export type AiSeoSeverity = 'high' | 'medium' | 'low'
-
-export interface AiSeoFinding {
-  code: AiSeoFindingCode
-  severity: AiSeoSeverity
-  /** One customer-safe sentence. */
-  message: string
-  /** The elements it is about: the images without a description, the extra headings. */
-  nodeIds?: string[]
-  /** The other pages it involves: a duplicate's twins. */
-  screenIds?: string[]
-  /** The target keyword, for `keyword-missing`. */
-  keyword?: string
-}
-
-/** One audited page. */
-export interface AiSeoPageReport {
-  screenId: string
-  /** The public path, `/` for the home page. */
-  path: string
-  name: string
-  /** The published version the page was audited on. */
-  versionId: string | null
-  /** 100 with nothing found, less for each finding by its severity. */
-  score: number
-  findings: AiSeoFinding[]
-  keywords: AiSeoKeywordCoverage[]
-}
-
-/** The site audit: every audited page, what was found, and what still needs generating. */
-export interface AiSeoAuditReport {
+/**
+ * The site audit a job records: the platform's SEO check, whose findings any
+ * site owner sees without this plugin, plus what the job owes on top of it.
+ */
+export interface AiSeoAuditReport extends SeoAuditReport {
   kind: 'audit'
-  pages: AiSeoPageReport[]
-  /** Published pages past the audit's page cap, not audited. */
-  skipped: number
-  /** Findings about the site rather than a page. */
-  site: AiSeoFinding[]
   /** Whether the site-wide proposal (structured data, agent guidance) is owed. */
   siteProposal: boolean
   /** Pages whose fixes need generated text, in the order the batches take them. */
   queue: string[]
   /** How many pages one batch of fixes carries. */
   batchSize: number
-  /** The average page score. */
-  score: number
-  /** Customer-safe lines about the audit itself: a keyword line naming no page, say. */
-  notes: string[]
 }
 
 /** A content fix: applied into a NEW version of the page, never the published one. */
@@ -228,25 +170,6 @@ export const AI_SEO_OUTPUT_IDS = {
   fields: (kind: 'screen' | 'product', id: string | null) => `fields:${kind}:${id ?? 'new'}`,
 } as const
 
-/** What each finding is called where it is listed. */
-export const AI_SEO_FINDING_LABELS: Record<AiSeoFindingCode, string> = {
-  'title-missing': 'No search title',
-  'title-too-long': 'Title too long',
-  'title-duplicate': 'Title used on another page',
-  'description-missing': 'No search description',
-  'description-too-long': 'Description too long',
-  'description-duplicate': 'Description used on another page',
-  'h1-missing': 'No main heading',
-  'h1-multiple': 'More than one main heading',
-  'h1-thin': 'Main heading says little',
-  'image-alt-missing': 'Images without a description',
-  orphan: 'No page links here',
-  'keyword-missing': 'Target keyword not covered',
-  'search-discouraged': 'Search engines are discouraged',
-  'entity-incomplete': 'Structured data incomplete',
-  'llms-guidance-missing': 'No guidance for AI agents',
-}
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -278,7 +201,7 @@ export function readAiSeoProposal(value: unknown): AiSeoProposal | null {
           path: typeof subject['path'] === 'string' ? subject['path'] : null,
         },
         values: readValues(value['values']),
-        keywords: Array.isArray(value['keywords']) ? (value['keywords'] as AiSeoKeywordCoverage[]) : [],
+        keywords: Array.isArray(value['keywords']) ? (value['keywords'] as SeoKeywordCoverage[]) : [],
         notes: strings(value['notes']),
       }
     }

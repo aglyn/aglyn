@@ -23,7 +23,7 @@ import {
   getPluginConfig,
 } from '@aglyn/tenant-data-admin'
 import { captureHostContact } from '@aglyn/tenant-runtime'
-import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   buildRoute,
@@ -719,7 +719,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         .get()
       const accountId = ownerProfile.get('stripeAccountId')
       if (
-        !connectLinkageIsReady(
+        !merchantAccountIsReady(
           {
             accountId,
             chargesEnabled: ownerProfile.get('stripeChargesEnabled'),

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { hostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { hostThemeSource } from '@aglyn/aglyn/app-utils/site-theme'
 import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
 import ThemeEditor from '../../../../../../../../components/theme-editor/theme-editor.component'

@@ -32,8 +32,10 @@ import {
   canTransitionOutreachEnrollment,
   OUTREACH_ENROLLMENT_TRANSITIONS,
   outreachAttestationsFrom,
+  outreachEnrollmentStartStepIndex,
   planOutreachFirstDue,
   planOutreachStepCompletion,
+  readOutreachStartStepIndex,
 } from './enrollment-state'
 
 const CHICAGO = 'America/Chicago'
@@ -289,6 +291,108 @@ describe('enrolling', () => {
       random: middle,
     })
     expect(enrollment.campaignIds).toEqual(['founder-icp2', 'founder-icp1'])
+  })
+})
+
+describe('enrolling at a later step (AGL-3228)', () => {
+  // Monday 2026-09-14 at 15:12 CDT.
+  const nowMs = at('2026-09-14T20:12:00Z')
+  const draft = (startStepIndex?: number) => ({
+    id: 'enrollment-1',
+    sequence,
+    mailbox,
+    contactId: 'contact-1',
+    email: 'casey@example.com',
+    cold: false,
+    personalLine: '',
+    attestations: {},
+    enrolledByUid: 'u-avery',
+    nowMs,
+    random: middle,
+    ...(startStepIndex === undefined ? {} : { startStepIndex }),
+  })
+
+  it('reads the step to begin at: the first when none is named, a step the sequence has, or a refusal', () => {
+    expect(readOutreachStartStepIndex(undefined, sequence.steps)).toEqual({ startStepIndex: 0, refusal: null })
+    expect(readOutreachStartStepIndex(null, sequence.steps)).toEqual({ startStepIndex: 0, refusal: null })
+    expect(readOutreachStartStepIndex(0, sequence.steps)).toEqual({ startStepIndex: 0, refusal: null })
+    expect(readOutreachStartStepIndex(3, sequence.steps)).toEqual({ startStepIndex: 3, refusal: null })
+    expect(readOutreachStartStepIndex(4, sequence.steps)).toEqual({
+      startStepIndex: null,
+      refusal: "This sequence has 4 steps, so enrolling can't start at step 5.",
+    })
+    expect(readOutreachStartStepIndex(1, [first]).refusal).toBe(
+      "This sequence has 1 step, so enrolling can't start at step 2.",
+    )
+    for (const raw of [-1, 1.5, '1', Number.NaN, {}]) {
+      expect(readOutreachStartStepIndex(raw, sequence.steps)).toEqual({
+        startStepIndex: null,
+        refusal: 'Name the step to start at by its number in the sequence.',
+      })
+    }
+  })
+
+  it('begins at step 1 by default: the same document as ever, nothing skipped', () => {
+    const plain = buildOutreachEnrollment(draft())
+    expect(buildOutreachEnrollment(draft(0))).toEqual(plain)
+    expect(plain.stepIndex).toBe(0)
+    expect(plain.lastSentAtMs).toBeNull()
+    expect(plain).not.toHaveProperty('startStepIndex')
+    expect(plain).not.toHaveProperty('skippedSteps')
+    expect(outreachEnrollmentStartStepIndex(plain)).toBe(0)
+  })
+
+  it('begins at step N: the earlier steps skipped, step N scheduled by its own delay from the enrollment', () => {
+    const enrollment = buildOutreachEnrollment(draft(1))
+    expect(enrollment).toMatchObject({
+      stepIndex: 1,
+      startStepIndex: 1,
+      skippedSteps: [{ stepIndex: 0, stepId: 'email-1', kind: 'email', atMs: nowMs }],
+      // The reply watch reads the mailbox from the enrollment on.
+      lastSentAtMs: nowMs,
+      gmailThreadIds: [],
+      threadSubject: null,
+      messageIds: [],
+      status: 'active',
+    })
+    expect(enrollment.stepRecords).toBeUndefined()
+    // Step 2 waits 3 business days from Monday 15:12: Thursday, in the window.
+    expect(enrollment.nextDueAtMs).toBe(
+      planOutreachFirstDue({ sequence, mailbox, enrolledAtMs: nowMs, random: middle, startStepIndex: 1 }),
+    )
+    expect(new Date(enrollment.nextDueAtMs as number).toISOString().slice(0, 10)).toBe('2026-09-17')
+    expect(outreachEnrollmentStartStepIndex(enrollment)).toBe(1)
+
+    const later = buildOutreachEnrollment(draft(3))
+    expect(later.skippedSteps?.map((step) => [step.stepIndex, step.stepId, step.kind])).toEqual([
+      [0, 'email-1', 'email'],
+      [1, 'email-2', 'email'],
+      [2, 'task-1', 'task'],
+    ])
+    // Step 4 waits 7 business days: Wednesday the 23rd.
+    expect(new Date(later.nextDueAtMs as number).toISOString().slice(0, 10)).toBe('2026-09-23')
+  })
+
+  it('starts the thread with the first email it sends, though the step was written as a reply, then replies in it', () => {
+    const started = buildOutreachEnrollment(draft(1))
+    const sentAtMs = at('2026-09-17T15:00:00Z')
+    const { patch, error } = planOutreachStepCompletion({
+      enrollment: started,
+      sequence,
+      mailbox,
+      completedAtMs: sentAtMs,
+      sent: { messageId: '<step-2@example.org>', threadId: 'thread-1', subject: 'Your client sites' },
+      random: middle,
+    })
+    expect(error).toBeNull()
+    expect(patch).toMatchObject({
+      stepIndex: 2,
+      gmailThreadId: 'thread-1',
+      gmailThreadIds: ['thread-1'],
+      threadSubject: 'Your client sites',
+      messageIds: ['<step-2@example.org>'],
+      lastSentAtMs: sentAtMs,
+    })
   })
 })
 

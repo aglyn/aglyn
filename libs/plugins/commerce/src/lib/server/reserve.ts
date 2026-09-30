@@ -21,7 +21,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 
 /**
@@ -79,7 +79,7 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       : null
     const accountId = ownerProfile?.get('stripeAccountId')
     if (
-      !connectLinkageIsReady(
+      !merchantAccountIsReady(
         {
           accountId,
           chargesEnabled: ownerProfile?.get('stripeChargesEnabled'),

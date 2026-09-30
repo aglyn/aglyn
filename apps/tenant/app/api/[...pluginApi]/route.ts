@@ -38,6 +38,7 @@ import {
 // and a route's own registration must still be read where it was made.
 import {
   isPluginCardPaymentRoute,
+  isPluginMachineRoute,
   isPluginRecipientLinkRoute,
 } from '@aglyn/aglyn/app-utils/api-plugins'
 import {
@@ -114,8 +115,11 @@ async function dispatch(
     // its plugin is on or released for the workspace now (AGL-2981): an
     // opt-out outlives a rollout. It skips the gates below and nothing else;
     // it verifies its own signature, and the site it names still scopes the
-    // lockdown and the rate limit further down.
-    if (!isPluginRecipientLinkRoute(path)) {
+    // lockdown and the rate limit further down. A machine's route — a
+    // scheduler's sweep, a provider's webhook (AGL-3080) — skips them too:
+    // it names no subject before it has verified its caller, and judges the
+    // plugin's gates itself for each organization it resolves.
+    if (!isPluginRecipientLinkRoute(path) && !isPluginMachineRoute(path)) {
       let orgId: string | null
       let subjectUid: string | null = null
       if (hostId) {

@@ -99,6 +99,7 @@ describe('session-reauth store (AGL-664)', () => {
 describe('captureReauthIdentity', () => {
   it('reads password + federated factors off providerData', () => {
     const identity = captureReauthIdentity({
+      uid: 'u-1',
       email: 'user@example.com',
       providerData: [
         { providerId: 'password', email: 'user@example.com' },
@@ -109,6 +110,9 @@ describe('captureReauthIdentity', () => {
       email: 'user@example.com',
       hasPassword: true,
       providerId: 'google.com',
+      // The account the prompt is for, which a provider chooser can swap
+      // (AGL-3425).
+      uid: 'u-1',
     })
   })
 
@@ -121,11 +125,13 @@ describe('captureReauthIdentity', () => {
       email: 'sso@acme.com',
       hasPassword: false,
       providerId: 'saml.acme',
+      uid: null,
     })
     expect(captureReauthIdentity(null)).toEqual({
       email: null,
       hasPassword: false,
       providerId: null,
+      uid: null,
     })
   })
 })

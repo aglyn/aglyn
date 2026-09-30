@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PublisherAgreementState } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import type { PublisherAgreementState } from './publisher-agreement'
 
 /**
  * The machine-readable half of an agreement refusal (AGL-3407).

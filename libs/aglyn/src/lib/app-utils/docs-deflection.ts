@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AssistDocsSection } from './docs-index.generated'
+import type { DocsSection } from './docs-index.generated'
 import {
   DOCS_SITE_ORIGIN,
   docsDocumentFrequency,
@@ -341,7 +341,7 @@ export interface DeflectionVerdict {
   /** The composed answer; `''` unless `answered`. */
   answer: string
   /** Sections quoted in the answer; `[]` unless `answered`. */
-  quoted: readonly AssistDocsSection[]
+  quoted: readonly DocsSection[]
   /** The winning page's path; `''` when nothing won. */
   page: string
   /** Top section's retrieval score. 0 when nothing was retrieved. */
@@ -385,12 +385,12 @@ function tokenWeight(token: string): number {
 }
 
 /** The docs-site URL for one section. */
-export function sectionUrl(section: AssistDocsSection): string {
+export function sectionUrl(section: DocsSection): string {
   return `${DOCS_SITE_ORIGIN}${section.path}${section.anchor}`
 }
 
 /** `Title — Heading`, or just the title on a page intro. */
-export function sectionLabel(section: AssistDocsSection): string {
+export function sectionLabel(section: DocsSection): string {
   return section.heading ? `${section.title} — ${section.heading}` : section.title
 }
 
@@ -595,7 +595,7 @@ export function deflectToDocs(
  * something else — otherwise the cheap path looks like the assistant simply
  * being worse, and the next thing they do is stop using it.
  */
-export function composeDocsAnswer(sections: readonly AssistDocsSection[]): string {
+export function composeDocsAnswer(sections: readonly DocsSection[]): string {
   const parts: string[] = []
   let budget = MAX_ANSWER_CHARS
   for (const section of sections) {
@@ -647,7 +647,7 @@ const MAX_LINKED_SECTIONS = 4
  * error body, where an operator looks. This is the plain-English half.
  */
 export function composeDocsLinksAnswer(
-  sections: readonly AssistDocsSection[],
+  sections: readonly DocsSection[],
 ): string {
   const links = sections
     .slice(0, MAX_LINKED_SECTIONS)

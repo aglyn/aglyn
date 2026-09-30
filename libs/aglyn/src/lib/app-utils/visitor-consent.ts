@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+import { ANALYTICS_PROVIDERS_DECLARED } from '../plugin-manager/first-party-plugins.generated'
+import {
+  applyAnalyticsConsent,
+  type AnalyticsProviderDeclaration,
+} from './analytics-provider'
+
 /**
  * Visitor tracking consent (AGL-1498): the single answer to "may this
  * tracking feature run for this visitor?", shared by every surface that has
@@ -335,20 +341,49 @@ export function resolveGtmContainerId(
 }
 
 /**
- * Whether the site loads ANY Google tag — a GA property, a GTM container, or
- * both (AGL-2486).
+ * The site's analytics settings that can configure a tag, and the shape each
+ * must have to reach a page — the same patterns the console's Tracking tab
+ * validates with. A provider declares which of these it mounts a tag for
+ * (`analyticsProvider.settings` in `plugins.config.json`); a declared setting
+ * with no shape here configures nothing.
+ */
+export const ANALYTICS_SETTING_PATTERNS: Readonly<Record<string, RegExp>> =
+  Object.freeze({
+    gaMeasurementId: GA_MEASUREMENT_ID_PATTERN,
+    gtmContainerId: GTM_CONTAINER_ID_PATTERN,
+  })
+
+/**
+ * Whether the site runs ANY analytics tag a provider mounts — a measurement
+ * id, a tag container, or both (AGL-2486).
  *
  * The one predicate both consent questions are asked through, because the
- * alternative is two places that each remember only one of the two. A site
- * with a container and no GA id is a site that tracks: it was the shape that
- * would have had `consentGatedCategories` return `[]`, no banner rendered, and
- * the container loading ungated — which for GTM is worse than for GA, since a
- * container is exactly the thing that can carry advertising tags.
+ * alternative is two places that each remember only one of the settings. A
+ * site with a container and no measurement id is a site that tracks: it was
+ * the shape that would have had `consentGatedCategories` return `[]`, no
+ * banner rendered, and the container loading ungated — which for a container
+ * is worse than for a single tag, since a container is exactly the thing that
+ * can carry advertising tags.
+ *
+ * Read from the COMPILED provider declarations, never from which adapters
+ * have loaded: this is asked during render on the published page and in the
+ * console, before any adapter could have arrived, and "no tag" would mean no
+ * banner in front of one. With no provider declared, nothing can mount, and
+ * the answer is `false`.
  */
-export function hostHasGoogleTag(
+export function hostConfiguresAnalyticsTag(
   host: VisitorConsentHost | null | undefined,
+  declared: readonly AnalyticsProviderDeclaration[] = ANALYTICS_PROVIDERS_DECLARED,
 ): boolean {
-  return !!resolveGaMeasurementId(host) || !!resolveGtmContainerId(host)
+  const settings = (host?.analytics ?? null) as Record<string, unknown> | null
+  if (!settings) return false
+  for (const provider of declared) {
+    for (const field of provider.settings) {
+      const pattern = ANALYTICS_SETTING_PATTERNS[field]
+      if (pattern && pattern.test(String(settings[field] ?? ''))) return true
+    }
+  }
+  return false
 }
 
 /** Host opt-out of the tool. Absent means ACTIVE — the safe default. */
@@ -373,10 +408,10 @@ export function resolveHostConsentMode(
 export function consentGatedCategories(
   host: VisitorConsentHost | null | undefined,
 ): VisitorConsentCategory[] {
-  // A GTM CONTAINER counts (AGL-2486). Read as `resolveGaMeasurementId` alone,
-  // a site running only a container had no gated category, so no banner
-  // rendered and the container loaded ungated — see `hostHasGoogleTag`.
-  if (!hostHasGoogleTag(host)) return []
+  // A CONTAINER counts (AGL-2486). Read as the measurement id alone, a site
+  // running only a container had no gated category, so no banner rendered
+  // and the container loaded ungated — see `hostConfiguresAnalyticsTag`.
+  if (!hostConfiguresAnalyticsTag(host)) return []
   return hostAsksAboutAdvertising(host)
     ? ['analytics', 'advertising']
     : ['analytics']
@@ -394,10 +429,10 @@ export function consentGatedCategories(
 export function hostAsksAboutAdvertising(
   host: VisitorConsentHost | null | undefined,
 ): boolean {
-  // Either tag qualifies (AGL-2486): `ad_storage` is what a GA property reads
-  // and what a GTM container's advertising tags read, and a container is the
-  // likelier of the two to carry them.
-  return host?.consent?.advertising === true && hostHasGoogleTag(host)
+  // Either tag qualifies (AGL-2486): advertising storage is what a
+  // measurement tag reads and what a container's advertising tags read, and
+  // a container is the likelier of the two to carry them.
+  return host?.consent?.advertising === true && hostConfiguresAnalyticsTag(host)
 }
 
 /**
@@ -736,16 +771,6 @@ export function clearCookiesWithPrefixes(
   }
 }
 
-/**
- * The `window` flag `gtag.js` consults before every hit: with
- * `window['ga-disable-G-XXXX'] === true` the tag for that property sends
- * nothing and writes nothing. Google's own documented opt-out mechanism, and
- * the one that works on a tag which never received a consent-mode default
- * (AGL-1608) — a case that still exists after AGL-1622, because a tag arriving
- * through GTM or a host's own CMP is not one this module declared for.
- */
-export const GA_DISABLE_FLAG_PREFIX = 'ga-disable-'
-
 /** A single consent-mode signal value. */
 export type AnalyticsConsentSignal = 'granted' | 'denied'
 
@@ -848,220 +873,31 @@ export function advertisingGrantedByRecord(
 }
 
 /**
- * The consent-mode `default` declaration that goes in front of the tag
- * (AGL-1622), for injection into the same inline block that creates
- * `dataLayer` and calls `gtag('config', …)`.
+ * Make every resident analytics tag agree with the consent state, and return
+ * the ids it acted on (AGL-1608).
  *
- * ## What this is, and — load-bearing — what it is NOT
- *
- * It is NOT a licence to load the tag earlier. It is emitted INSIDE the block
- * that only renders when the AGL-1498 gate has already said yes, so it is
- * reached only on a pageview where analytics is granted. On every gated
- * pageview — an EU/UK/EEA visitor with no explicit accept, an unknown region, a
- * declined or opted-out visitor, a GPC browser — nothing here renders, no
- * request goes to `googletagmanager.com`, and this constant is never evaluated
- * into the page. "The script never LOADS, rather than load-then-suppress" is a
- * stated AGL-1498 property and it is intact everywhere the gate applies;
- * `consent-mode-default.spec.tsx` fails if that ever stops being true.
- *
- * the decision, 2026-08-14: load-then-restrict is approved for the UNITED
- * STATES, where the implied-consent posture already permits the load and the
- * restriction signals act on a tag that is legitimately resident. EU and UK
- * keep the prior-consent gate exactly as it is, because loading an analytics
- * tag before consent is the specific thing prior-consent law prohibits. So the
- * consent-mode mechanism is strictly ADDITIVE to the gate, never a replacement
- * for it.
- *
- * What declaring it actually buys, given the tag is granted by the time it is
- * read:
- *
- * - The advertising signals are denied FROM THE FIRST HIT. Without a default,
- *   a freshly loaded tag runs with `ad_storage` unrestricted and only becomes
- *   denied if the visitor happens to withdraw and change their mind again
- *   (AGL-1608's `update`). The load-time state now matches the tool's actual
- *   scope instead of being wider than it.
- * - A later `update` is a transition from a declared state rather than a tag's
- *   first-ever consent signal, which is the shape GA4's consent-mode reporting
- *   and any third-party CMP alongside ours both expect.
- *
- * The value is a literal, built from {@link analyticsConsentSignals} — no
- * interpolated input reaches it, which matters because it lands inside an
- * inline script (the AGL-138 concern).
- */
-export const GA_CONSENT_DEFAULT_SNIPPET = `gtag('consent', 'default', ${JSON.stringify(
-  analyticsConsentSignals(true),
-)});`
-
-/**
- * The same declaration for a visitor who granted ADVERTISING too (AGL-1649).
- *
- * A second CONSTANT rather than a parameterised builder, for the reason the
- * first one is a constant: it lands inside an inline script (the AGL-138
- * concern), and a constant cannot interpolate anything. Both values are
- * literals fixed at module load; the only thing the caller chooses is which
- * of the two to emit.
- *
- * Reached only where {@link advertisingGrantedByRecord} says yes — host
- * opted in, explicit accept, explicit yes to this category — which is
- * evaluated client-side after hydration, like every other part of this gate.
- * The ISR property is unaffected: the cached HTML contains neither snippet,
- * because the whole block is inside the client-side `analyticsAllowed`
- * condition.
- *
- * Declaring the grant as the DEFAULT rather than sending a later `update` is
- * what keeps the tag's first hit correct. An update would arrive after
- * `config`, so the session's first pageview — usually the entire session for
- * a marketing visit — would carry the denied state the visitor did not
- * choose.
- */
-export const GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET = `gtag('consent', 'default', ${JSON.stringify(
-  consentModeSignals({ analytics: true, advertising: true }),
-)});`
-
-/**
- * Consent-mode URL passthrough for the platform's own tag (AGL-2548).
- *
- * The advertising signals in {@link GA_CONSENT_DEFAULT_SNIPPET} are denied, so
- * on `aglyn.com` gtag writes no `_gcl_aw` cookie and the `gclid` an ad click
- * arrives with lives only in that first URL. The conversions it should be
- * credited for fire one hop later, on the console, where the posture grants
- * advertising storage outside the prior-consent regions — and without this
- * declaration the click id never makes that hop. The console reports a
- * conversion with no click behind it, and Google Ads counts nothing.
- *
- * `url_passthrough` is Google's mechanism for exactly this state: while
- * `ad_storage` is denied, gtag appends the click identifiers to links into the
- * cross-domain-linked hosts as URL parameters instead of setting a cookie. The
- * receiving tag reads them under its own consent state. Nothing is stored on
- * the denying surface, so the marketing site's opt-in advertising posture is
- * unchanged; the click id simply survives the link it was always meant to
- * survive.
- *
- * `ads_data_redaction` is the companion Google documents alongside it: with
- * `ad_storage` denied, the ad click identifiers are stripped from the hits this
- * tag sends and its network requests go to a cookieless endpoint. Declared
- * together so a denied visitor is measured with less, not merely differently.
- *
- * Both are `set` calls, so they must precede `gtag('config', …)` in the same
- * inline block — a `set` applies to hits processed after it, and the session's
- * first pageview is the one carrying the click.
- *
- * PLATFORM ID ONLY. A customer's tag is configured with their id and their
- * consent posture; how their ad click ids travel is theirs to decide, and a
- * passthrough declared on their behalf would rewrite links on their site.
- */
-export const GA_CLICK_ID_PASSTHROUGH_SNIPPET =
-  "gtag('set', 'url_passthrough', true);" +
-  "gtag('set', 'ads_data_redaction', true);"
-
-/**
- * The measurement ids whose tag is actually RESIDENT in this page.
- *
- * Discovered from the page rather than taken from the host document on
- * purpose: what has to be silenced is whatever gtag.js is currently loaded and
- * configured for, which is not always what the host record configures — a tag
- * can arrive through GTM, and a stale `<script>` from earlier in the pageview
- * is exactly the thing this function exists to find.
- *
- * Ids are format-checked before they are used, because each one becomes a
- * `window` property name.
- */
-export function residentGaMeasurementIds(): string[] {
-  if (typeof document === 'undefined') return []
-  const ids = new Set<string>()
-  try {
-    const loaded = document.querySelectorAll(
-      'script[src*="googletagmanager.com/gtag/js"]',
-    )
-    for (const element of Array.from(loaded)) {
-      const src = String((element as HTMLScriptElement).src ?? '')
-      const match = /[?&]id=([^&]*)/.exec(src)
-      const id = match ? decodeURIComponent(match[1]) : ''
-      if (GA_MEASUREMENT_ID_PATTERN.test(id)) ids.add(id)
-    }
-  } catch {
-    // A hostile or absent DOM: the dataLayer pass below still applies.
-  }
-  try {
-    const layer = (window as unknown as Record<string, unknown>)?.dataLayer
-    for (const entry of Array.from((layer ?? []) as ArrayLike<unknown>)) {
-      // `arguments` objects, not arrays — gtag pushes its own call sites.
-      const args = Array.from((entry ?? []) as ArrayLike<unknown>)
-      if (args[0] !== 'config') continue
-      const id = String(args[1] ?? '')
-      if (GA_MEASUREMENT_ID_PATTERN.test(id)) ids.add(id)
-    }
-  } catch {
-    // No dataLayer, or one that is not iterable: the script pass stands.
-  }
-  return [...ids]
-}
-
-/**
- * Make every resident GA tag agree with the consent state, and return the ids
- * it acted on.
- *
- * ## Why deleting the cookies is not enough (AGL-1608)
- *
- * The AGL-1498 gate stops the script from LOADING, which is the right
- * enforcement for a fresh pageview and the wrong tool for a visitor who
- * withdraws mid-pageview: `gtag.js` has already executed, and React unmounting
- * the `<script>` element does not unload it. `window.gtag` stays live, GA4
- * enhanced measurement fires on its own (scroll depth, outbound click, file
- * download), and the tag re-writes `_ga_<id>` AFTER
- * {@link clearAnalyticsCookies} has deleted it. Reproduced on aglyn.com: an
- * opt-out, a hand-run sweep to zero cookies, then one scroll to the footer
- * brought `_ga_YW5PG16YTM` back.
- *
- * Two signals, because they fail differently and neither is guaranteed:
- * the `ga-disable-<id>` window flag silences a tag that never received a
- * consent-mode default, and the `consent`/`update` call reaches a tag that
- * arrived through GTM with its own id this function never saw.
- *
- * ## What this deliberately does NOT do
- *
- * It never touches the gate. Both signals act only on a tag that is already
- * resident — which, by construction, only exists after a grant. AGL-1622 later
- * added a consent-mode DEFAULT ({@link GA_CONSENT_DEFAULT_SNIPPET}), but inside
- * the gated block and therefore only on a pageview the gate already allowed:
- * load-then-restrict is additive to "the script never LOADS", not a
- * replacement for it, and the prior-consent regions are unaffected.
+ * The AGL-1498 gate stops a tag from LOADING, which is the right enforcement
+ * for a fresh pageview and the wrong tool for a visitor who withdraws
+ * mid-pageview: the vendor's library has already executed, and React
+ * unmounting its `<script>` element does not unload it. So the tag that is
+ * already there is told, through the adapter of whichever vendor it is
+ * (`analytics-provider.ts`). A tag only exists after a grant, so this never
+ * touches the gate.
  *
  * Symmetric on purpose: a visitor who opts out and changes their mind in the
- * same pageview would otherwise stay silently unmeasured until they navigated,
- * because the re-rendered `<Script>` cannot re-execute an already-loaded tag.
- * The re-grant restores whatever the CALLER passes — analytics alone on a site
- * that never asks the advertising question (`advertising` defaults to false),
- * and both categories where the visitor's record grants both (AGL-1649). The
- * clamp in {@link consentModeSignals} still makes ads-without-analytics
- * unrepresentable, so a withdrawal can never restore advertising alone.
+ * same pageview would otherwise stay silently unmeasured until they
+ * navigated. The re-grant restores whatever the CALLER passes — analytics
+ * alone on a site that never asks the advertising question (`advertising`
+ * defaults to false), and both categories where the visitor's record grants
+ * both (AGL-1649). Advertising is clamped to analytics, so a withdrawal can
+ * never restore advertising alone.
  */
 export function setResidentAnalyticsTags(
   granted: boolean,
   advertising = false,
 ): string[] {
   if (typeof window === 'undefined') return []
-  const ids = residentGaMeasurementIds()
-  const scope = window as unknown as Record<string, unknown>
-  for (const id of ids) {
-    scope[`${GA_DISABLE_FLAG_PREFIX}${id}`] = !granted
-  }
-  try {
-    const send = scope.gtag
-    if (typeof send === 'function') {
-      // The same payload builder the load-time `default` is made from
-      // (AGL-1622), so the two declarations cannot drift.
-      ;(send as (...args: unknown[]) => void)(
-        'consent',
-        'update',
-        consentModeSignals({ analytics: granted, advertising }),
-      )
-    }
-  } catch {
-    // A tag that throws on its own consent call is one we cannot silence;
-    // the flag above and the cookie sweep still stand.
-  }
-  return ids
+  return applyAnalyticsConsent({ analytics: granted, advertising })
 }
 
 /**

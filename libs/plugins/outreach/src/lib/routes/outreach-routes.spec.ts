@@ -1309,6 +1309,113 @@ describe('outreach/enroll (AGL-2980)', () => {
   })
 })
 
+describe('outreach/enroll at a later step (AGL-3228)', () => {
+  const stored = (sequenceId: string, personId: string) =>
+    docs.get(org(`outreachEnrollments/${sequenceId}_${personId}`)) as Record<string, unknown> | undefined
+
+  it('begins at step 1 when no step is named: nothing skipped, the first step’s delay from now', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { body } = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }] })
+    expect(body.enrolled).toBe(1)
+    const enrollment = stored(sequenceId, 'c-warm')
+    expect(enrollment).toMatchObject({ stepIndex: 0, lastSentAtMs: null })
+    expect(enrollment).not.toHaveProperty('startStepIndex')
+    expect(enrollment).not.toHaveProperty('skippedSteps')
+    // A delay of 0 is the window's next opening: 10:00 on a Tuesday is inside it.
+    expect(new Date(enrollment?.['nextDueAtMs'] as number).toISOString().slice(0, 10)).toBe('2026-09-15')
+    expect(filed.map((entry) => entry.body)).toEqual(['Enrolled in Second locations'])
+  })
+
+  it('begins at the step named for someone who had the earlier ones by hand: those marked skipped, never sent, and that step’s own delay counted from now', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { status, body } = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [{ contactId: 'c-warm' }],
+      startStepIndex: 2,
+    })
+    expect(status).toBe(200)
+    expect(body.results[0]).toMatchObject({ outcome: 'enrolled', enrollmentId: `${sequenceId}_c-warm` })
+    const enrollment = stored(sequenceId, 'c-warm')
+    expect(enrollment).toMatchObject({
+      status: 'active',
+      stepIndex: 2,
+      startStepIndex: 2,
+      skippedSteps: [
+        { stepIndex: 0, stepId: 'step-a', kind: 'email', atMs: AT },
+        { stepIndex: 1, stepId: 'step-b', kind: 'task', atMs: AT },
+      ],
+      // Nothing of ours went out, so there is no thread yet and no send on record…
+      gmailThreadIds: [],
+      threadSubject: null,
+      messageIds: [],
+      // …but the sync watches the mailbox for their reply, bounce or opt-out
+      // from the enrollment on, as it does from a send.
+      lastSentAtMs: AT,
+    })
+    expect(enrollment?.['stepRecords']).toBeUndefined()
+    // Step 3 waits three business days, from Tuesday the 15th: Friday the 18th.
+    expect(new Date(enrollment?.['nextDueAtMs'] as number).toISOString().slice(0, 10)).toBe('2026-09-18')
+    expect(filed.map((entry) => entry.body)).toEqual([
+      'Enrolled in Second locations\nBegan at step 3 — steps 1–2 skipped, already done by hand',
+    ])
+  })
+
+  it('previews and tests the first email sent from the step named, starting the thread under the first email’s subject', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { body } = await post(createOutreachPreviewRoute(deps()), REP, {
+      sequenceId: saved.body.sequence.id,
+      contactId: 'c-warm',
+      startStepIndex: 1,
+    })
+    // Step 2 is a call, so the first email from there is step 3, which
+    // answers nothing of ours and so opens the thread.
+    expect(body.stepIndex).toBe(2)
+    expect(body.subject).toBe('Your second location, Casey')
+    expect(body.text.startsWith('Following up, Casey.')).toBe(true)
+  })
+
+  it('refuses a step past the last, and anything that is not a step’s place, enrolling no one', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const past = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [{ contactId: 'c-warm' }],
+      startStepIndex: 3,
+    })
+    expect(past).toMatchObject({
+      status: 400,
+      body: { reason: 'invalid-start-step', error: "This sequence has 3 steps, so enrolling can't start at step 4." },
+    })
+    for (const startStepIndex of [-1, 1.5, '2']) {
+      const refused = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }], startStepIndex })
+      expect(refused).toMatchObject({ status: 400, body: { reason: 'invalid-start-step' } })
+    }
+    expect(stored(sequenceId, 'c-warm')).toBeUndefined()
+    expect(filed).toEqual([])
+  })
+
+  it('refuses a curated copy of a step the person skips, since it would never be sent', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const refused = await post(enroll().confirm, REP, {
+      sequenceId,
+      startStepIndex: 2,
+      people: [
+        {
+          contactId: 'c-warm',
+          stepOverrides: [{ stepIndex: 0, subject: 'Hello, Casey', body: 'Hi Casey.', source: 'member' }],
+        },
+      ],
+    })
+    expect(refused).toMatchObject({ status: 400, body: { reason: 'invalid-override' } })
+    expect(refused.body.error).toBe('Step 1 is skipped for this person, so it has nothing to curate.')
+    expect(stored(sequenceId, 'c-warm')).toBeUndefined()
+  })
+})
+
 // ── Enrollment actions ──────────────────────────────────────────────────────
 
 describe('outreach/enrollments/action (AGL-2980)', () => {

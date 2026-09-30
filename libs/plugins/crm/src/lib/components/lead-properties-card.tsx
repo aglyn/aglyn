@@ -73,6 +73,7 @@ import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadSourceSelect } from './lead-source-select'
 import { LeadStatusChip } from './lead-status-chip'
 import { crmClientListFields, CRM_CLIENT_SEARCH_FIELDS } from '../model/crm-list-query'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 /** The Leads list's fields a profile save rewrites; the verdict key is the server's. */
 const LEAD_CLIENT_LIST_FIELDS = [...CRM_CLIENT_SEARCH_FIELDS, 'leadSourceKey'] as const
@@ -238,6 +239,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const routes = crmRoutes(basePath)
+  // A client-direct write owes the org's sharing rules a re-evaluation (AGL-3336).
+  const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
   /*
    * Built at USE, not at render (AGL-3275). A lead is an org row, so the org
    * has to be known to address one — and `orgId` is null while the lookup
@@ -322,6 +325,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         return false
       }
       await updateDoc(ref, { ...fields, updatedAt: serverTimestamp() })
+      followUpSharing('leads', [leadId])
       enqueueSnackbar(done, { variant: 'success', persist: false })
       return true
     } catch (error) {

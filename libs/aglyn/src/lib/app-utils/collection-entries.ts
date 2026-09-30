@@ -371,8 +371,8 @@ export interface CollectionEntryRecord {
   coverImage?: string
   /**
    * The entry's featured video (AGL-2956), stored in the shape
-   * {@link coverImage} is: a `media:{scope}/{id}` reference or a URL, a Wistia
-   * media link included. Raw here for the reason every image field in this
+   * {@link coverImage} is: a `media:{scope}/{id}` reference or a URL, a hosted
+   * player's media link included (`video-embed-provider.ts`). Raw here for the reason every image field in this
    * file is raw — the resolver needs the rendering host, which this record
    * does not carry.
    *

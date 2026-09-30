@@ -260,6 +260,48 @@ describe('the timeline: what happened, newest first', () => {
   })
 })
 
+describe('the timeline: an enrollment that began at a later step (AGL-3228)', () => {
+  const began = (overrides: Partial<OutreachEnrollment> = {}) =>
+    enrollment({
+      stepIndex: 3,
+      startStepIndex: 2,
+      skippedSteps: [
+        { stepIndex: 0, stepId: 'a', kind: 'email', atMs: T - 60 * MIN },
+        { stepIndex: 1, stepId: 'b', kind: 'task', atMs: T - 60 * MIN },
+      ],
+      stepRecords: [{ stepIndex: 2, stepId: 'c', kind: 'email', atMs: T, subject: 'Hi Keith', gmailThreadId: 'thread-1' }],
+      ...overrides,
+    })
+
+  it('says which steps it skipped, once, above the enrollment — and never as a send', () => {
+    const entries = build({ enrollment: began() })
+    expect(entries.map((entry) => entry.kind)).toEqual(['sent', 'skipped', 'enrolled'])
+    expect(entries[1]).toMatchObject({
+      title: 'Began at step 3 — steps 1–2 skipped',
+      detail: 'Already done by hand before they were enrolled, so the sequence never sent them.',
+      facts: ['Email 1 · step 1', 'Step 2 · Call'],
+      atMs: T - 60 * MIN,
+    })
+    expect(entries[0]).toMatchObject({ title: 'Email 2 · step 3 sent', gmailThreadId: 'thread-1' })
+  })
+
+  it('names one skipped step in the singular, and finishes on the steps that remained', () => {
+    const entries = build({
+      enrollment: began({
+        status: 'finished',
+        startStepIndex: 1,
+        skippedSteps: [{ stepIndex: 0, stepId: 'a', kind: 'email', atMs: T - 60 * MIN }],
+      }),
+    })
+    expect(entries.find((entry) => entry.kind === 'skipped')?.title).toBe('Began at step 2 — step 1 skipped')
+    expect(entries[0]).toMatchObject({ kind: 'finished', title: 'Finished — every remaining step ran' })
+  })
+
+  it('says nothing was skipped for an enrollment that began at step 1', () => {
+    expect(build().some((entry) => entry.kind === 'skipped')).toBe(false)
+  })
+})
+
 describe('the five figures', () => {
   it('counts sends, clicks, links, scanners and replies — and knows when nothing happened', () => {
     expect(outreachEnrollmentFigures(enrollment({ stepRecords: [], lastSentAtMs: null }))).toMatchObject({

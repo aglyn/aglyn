@@ -18,25 +18,20 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
-import { restampCrmListFields } from '../model/list-fields-api'
-import { crmTaskCallScope } from '../model/task-routes'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { Stack, Tooltip, Typography } from '@mui/material'
-import {
-  arrayRemove,
-  deleteDoc,
-  deleteField,
-  doc,
-  updateDoc,
-} from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
+import { useContactRemove } from '../hooks/use-contact-remove'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { CrmCreateSiteDefault, useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { crmShareChipFor } from '../model/crm-sharing'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
@@ -58,8 +53,9 @@ import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { CrmSuiteNotice, crmSuiteIncluded, crmSuiteLockedReason } from './crm-suite-lock'
 import { useErasePersonAction } from './erase-person-action'
 import RecordFilesCard from './record-files-card'
+import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
 import { RecordTasksCard } from './record-tasks-card'
-import { useEmailsHubPath } from './use-emails-hub-path'
+import { useSiteRouteContext } from './use-site-route-context'
 import { useOrgMembers } from './use-org-members'
 
 const contactDocsHelp = pluginDocsHelp('contacts', {
@@ -105,10 +101,10 @@ const contactDocsHelp = pluginDocsHelp('contacts', {
  * The row is shared by every site that has captured this person, so the
  * action in the overflow menu drops THIS group's facet, consent, attribution
  * and scope tokens, and deletes the document only when nobody else is left
- * holding it — `planContactDetach` does the counting off `visibleTo`, which
- * is what both enforcement layers evaluate, and the rules refuse a delete by
- * a caller who is not the sole holder. Not the erasure path: a privacy
- * erasure removes the person regardless of who else holds them.
+ * holding it. `crm/contact-remove` decides which against the stored
+ * document and keeps any marketing refusal the person gave (AGL-3338); the
+ * rules refuse a client the write. Not the erasure path: a privacy erasure
+ * removes the person regardless of who else holds them.
  */
 export function ContactDetailPage(props: CrmDetailPageProps) {
   const { hostId, org, id, basePath } = props
@@ -229,21 +225,23 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
 
   /*
    * Where a campaign entry on the timeline links to: the email's own report
-   * on this site's Emails hub (AGL-2616). Only a campaign THIS site sent can
-   * be addressed — a sibling site in the same consent group has an Emails
-   * hub of its own under a subdomain this page does not know — so the
-   * builder answers `null` for those and the entry draws unlinked.
+   * (AGL-2616), at the address the plugin that keeps messages publishes as
+   * `emailMessage` (AGL-3080). Only a campaign THIS site sent can be
+   * addressed — a sibling site in the same consent group has pages of its
+   * own under a subdomain this page does not know — so the builder answers
+   * `null` for those, and where nothing publishes the kind, and the entry
+   * draws unlinked.
    */
-  const emailsHub = useEmailsHubPath()
+  const siteRoute = useSiteRouteContext()
   const campaignHref = useCallback(
     (email: Aglyn.ContactCampaignEmail) =>
-      emailsHub && email.hostId === hostId
-        ? `${emailsHub}/messages/${encodeURIComponent(email.campaignId)}`
+      siteRoute && email.hostId === hostId
+        ? pluginRecordHref('emailMessage', siteRoute, email.campaignId)
         : null,
-    [emailsHub, hostId],
+    [siteRoute, hostId],
   )
 
-  const { data: user } = useUser()
+  const contactRemove = useContactRemove(hostId)
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
     const confirmed = await confirm({
@@ -262,22 +260,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       .catch(() => false)
     if (!confirmed) return
     try {
-      const ref = doc(firestore, scope[0], scope[1], 'contacts', id)
-      const plan = Aglyn.planContactDetach(row, consentGroup)
-      if (plan.action === 'delete') {
-        await deleteDoc(ref)
-      } else {
-        await updateDoc(ref, {
-          ...Object.fromEntries(plan.remove.map((path) => [path, deleteField()])),
-          visibleTo: arrayRemove(...plan.removeTokens),
-          capturedByHostIds: arrayRemove(...plan.removeHostIds),
-          updatedAt: new Date(),
-        })
-        // The facet and the scope just let go of are what the Contacts list
-        // filters and searches by; the rules keep a client from restamping
-        // them, so the route does (AGL-3321).
-        await restampCrmListFields(user, crmTaskCallScope(hostId, orgId), 'contacts', [id])
-      }
+      // The route decides against the stored document, keeps any refusal,
+      // and restamps what the Contacts list filters by (AGL-3338).
+      const removed = await contactRemove.removeOne(id)
       // `siteLabel` and not "this site": at the organization level the line
       // lands in a feed that spans every site, so it has to name the one.
       logActivity(`Removed contact from ${siteLabel}`, {
@@ -286,7 +271,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         name: record?.name || record?.email,
       })
       enqueueSnackbar(
-        plan.action === 'delete'
+        removed === 'deleted'
           ? 'Contact deleted'
           : `Contact removed from ${siteLabel}`,
         { variant: 'success', persist: false },
@@ -301,9 +286,8 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     }
   }, [
     confirm,
-    consentGroup,
+    contactRemove,
     enqueueSnackbar,
-    firestore,
     id,
     logActivity,
     record,
@@ -312,9 +296,6 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     row,
     scope,
     siteLabel,
-    user,
-    hostId,
-    orgId,
   ])
 
   const overflowItems: RowActionsMenuItem[] = [
@@ -427,6 +408,8 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
               {/* The verdict on the address (AGL-3245), first: a bounce or a
                   do-not-contact mark is what a person deciding to write must see. */}
               <CrmEmailStateChip state={record.emailState} />
+              {/* Seen here only through a share (AGL-3336): who shared it. */}
+              <CrmShareChipView chip={crmShareChipFor(row, viewingGroup?.hostIds ?? [])} org={org} />
               {/* The mail gateway in front of the address (AGL-3328). */}
               <CrmEmailGatewayChip
                 hostId={siteHostId}
@@ -510,6 +493,16 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             />
           ) : null}
           {mount ? <ContactKnownByCard row={row} contactId={id} org={org} /> : null}
+          {/* Where the person is visible and why, and a manager's share (AGL-3336). */}
+          <RecordSharingCard
+            object="contacts"
+            id={id}
+            record={row}
+            hostId={hostId ?? null}
+            orgId={orgId}
+            org={org}
+            viewingHostIds={viewingGroup?.hostIds}
+          />
           <ContactPropertiesCard
             hostId={hostId}
             org={org}

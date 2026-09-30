@@ -35,13 +35,14 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
-import { compareArtifactVersions } from '@aglyn/aglyn'
+
 import {
   resolveUninstallTargets,
   type OrgInstallSummary,
   type UninstallTarget,
 } from '../model/marketplace'
 import UninstallImpactDialog from './uninstall-impact-dialog.component'
+import { compareArtifactVersions } from '../model/update-state'
 
 export interface PluginSiteSetProps {
   /** The listing/installation these pins belong to. */

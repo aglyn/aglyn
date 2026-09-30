@@ -1412,21 +1412,20 @@ function tenantConnectSrcDirective(
  * implicit fallback to same-origin: without it the platform's own frames are
  * refused on their own page.
  *
- * Wistia is the Video element's hosted player (AGL-2826), closed the same way
- * as the two above: `wistiaPlayerSrc`
- * (`libs/aglyn/src/lib/app-utils/wistia-embed.ts`) reads the media id out of
- * an author's link and rebuilds `https://fast.wistia.net/embed/iframe/{id}`,
- * which answered 200 with no redirect when measured on 2026-09-10. The
- * player's scripts, beacons and video bytes load inside that frame under
- * Wistia's own policy, so no other directive here names a Wistia host. It is
- * pinned for every site rather than left to an owner's list because the
- * element that builds it is offered to every site, and the Security tab tells
- * owners that a player the platform builds needs no approval.
+ * A video host whose own player the Video element frames (AGL-2826) is NOT
+ * in this list, and neither is its origin anywhere in this file: the plugin
+ * that plays the host declares it, core compiles the declaration
+ * (`libs/aglyn/src/lib/plugin-manager/video-embed-provider.ts`), and the
+ * tenant middleware passes `videoEmbedPlayerOrigins()` in as `playerOrigins`
+ * below. It is closed the same way as the two above — the player address is
+ * rebuilt from the media id and the declaration alone — and it is pinned for
+ * every site rather than left to an owner's list because the element that
+ * builds it is offered to every site, and the Security tab tells owners that
+ * a player the platform builds needs no approval.
  */
 const TENANT_FRAME_ORIGINS = [
   'https://www.youtube-nocookie.com',
   'https://player.vimeo.com',
-  'https://fast.wistia.net',
   'https://js.stripe.com',
   'https://hooks.stripe.com',
 ]
@@ -1451,7 +1450,17 @@ function tenantConsoleFrameOrigin() {
   return process.env.AGLYN_STANDALONE === '1' ? undefined : 'https://app.aglyn.com'
 }
 
-function tenantFrameSrcDirective(isProduction, approvedFrameHosts, siteOrigins) {
+/**
+ * `playerOrigins` are the declared video hosts' player origins (see above).
+ * Each is held to an https origin, so a malformed declaration drops out
+ * rather than widening the directive.
+ */
+function tenantFrameSrcDirective(
+  isProduction,
+  approvedFrameHosts,
+  siteOrigins,
+  playerOrigins = [],
+) {
   const development = isProduction
     ? []
     : ['http://localhost:*', 'http://127.0.0.1:*']
@@ -1462,6 +1471,11 @@ function tenantFrameSrcDirective(isProduction, approvedFrameHosts, siteOrigins) 
     // on a custom domain has two origins and `'self'` is only one of them.
     .concat(approvedImageHostSources(siteOrigins))
     .concat(TENANT_FRAME_ORIGINS)
+    .concat(
+      (Array.isArray(playerOrigins) ? playerOrigins : [])
+        .map((origin) => configuredOrigin(origin))
+        .filter((origin) => origin && origin.startsWith('https://')),
+    )
     // The marketplace sandbox. `PluginFrame` points an iframe at this origin
     // for every installed executable plugin, and the cross-origin boundary IS
     // the sandbox — without the entry the plugin renders as nothing at all.

@@ -259,6 +259,11 @@ export function registerAiActivityActions(): void {
       label: AI_ACTIVITY_ACTION_LABELS[key],
       scope: AI_ACTIVITY_ACTION_SCOPES[key],
     })),
+    // A generation job (AGL-2904): the org feed names the job, and each of
+    // its outputs names the resource it produced. Filed as `aiJob` since
+    // before plugin target types were namespaced, so the noun is declared
+    // here rather than read off the type (AGL-3080).
+    targetTypes: { aiJob: 'AI generation' },
   })
 }
 

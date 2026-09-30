@@ -158,7 +158,10 @@ Steps run in order and mix **in-page effects** with **server-side work**:
   show custom HTML, track an analytics event, and run custom JS (Business).
 - **On the server (Pro+)**: run a workflow, write to or update a dataset, send a webhook
   (Business), send an email, notify site admins, enroll the contact in a list, assign a
-  campaign, fire a custom event to chain more actions.
+  campaign, fire a custom event to chain more actions. A dataset step holds its record to
+  the dataset's model like every other write: each value is stored as its field's type,
+  and a value that doesn't fit fails the step, naming the field, with nothing written.
+  An update checks only the fields it sends.
 - **In the CRM (Pro+)**: set the contact's lifecycle stage, tag the contact, assign the
   contact an owner, create a CRM task, log a CRM activity. See [CRM steps](#crm-steps).
 - **Flow steps (Pro+)**: **Wait**, **Wait for something to happen**, and **End the flow

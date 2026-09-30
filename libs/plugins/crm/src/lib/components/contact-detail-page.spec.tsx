@@ -30,10 +30,14 @@
  *
  * On Starter none of it happens. Each card is doubled to record the props
  * the page handed it; what a card does with its lock has a spec of its own.
+ *
+ * And on every plan, Delete goes through `crm/contact-remove` (AGL-3338),
+ * which keeps the person's marketing refusal: the page writes nothing to the
+ * contact itself.
  */
 
 import { soloConsentGroup } from '@aglyn/aglyn'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import ContactDetailPage from './contact-detail-page'
 
@@ -88,7 +92,13 @@ jest.mock('./crm-record-header', () => ({
   CrmRecordChip: () => null,
   CrmRecordHeader: (props: {
     actions?: ReactNode
-    menuItems?: Array<{ key: string; label: string; disabled?: boolean; disabledReason?: string }>
+    menuItems?: Array<{
+      key: string
+      label: string
+      disabled?: boolean
+      disabledReason?: string
+      onClick?: () => void
+    }>
     children?: ReactNode
   }) => (
     <header>
@@ -97,6 +107,7 @@ jest.mock('./crm-record-header', () => ({
         {(props.menuItems ?? []).map((item) => (
           <li
             key={item.key}
+            onClick={item.onClick}
             data-disabled={item.disabled ? 'true' : 'false'}
             title={item.disabled ? item.disabledReason : undefined}
           >
@@ -118,7 +129,7 @@ jest.mock('./record-files-card', () => ({
 jest.mock('./record-tasks-card', () => ({
   RecordTasksCard: (props: Record<string, unknown>) => double('tasks')(props),
 }))
-jest.mock('./use-emails-hub-path', () => ({ useEmailsHubPath: () => null }))
+jest.mock('./use-site-route-context', () => ({ useSiteRouteContext: () => null }))
 jest.mock('./use-org-members', () => ({
   useOrgMembers: () => ({
     options: [],
@@ -171,7 +182,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     <a href={href}>{children}</a>
   ),
   MdiIcon: () => null,
-  useConfirmationContext: () => ({ confirm: jest.fn() }),
+  useConfirmationContext: () => ({ confirm: async () => undefined }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
@@ -179,6 +190,17 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('next/navigation', () => ({
   useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+}))
+/** Every post the page made to a CRM route, in order. */
+const mockPosted: Array<{ route: string; payload: Record<string, unknown> }> = []
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => async (route: string, payload: Record<string, unknown>) => {
+    mockPosted.push({ route, payload })
+    return {
+      response: { ok: true, status: 200 },
+      payload: { ok: true, results: [{ contactId: 'con-1', ok: true, removed: 'deleted' }] },
+    }
+  },
 }))
 
 const renderPage = (org: Record<string, unknown>) =>
@@ -198,6 +220,7 @@ const SUITE_CARDS = ['deals', 'tasks', 'files']
 
 beforeEach(() => {
   for (const key of Object.keys(handed)) delete handed[key]
+  mockPosted.length = 0
 })
 
 describe('the contact record on Free', () => {
@@ -244,5 +267,18 @@ describe('the contact record on Starter', () => {
     for (const card of [...SUITE_CARDS, 'timeline', 'duplicates']) {
       expect(screen.getByTestId(card)).toBeTruthy()
     }
+  })
+})
+
+describe('deleting the contact (AGL-3338)', () => {
+  it('goes through crm/contact-remove and writes nothing to the contact itself', async () => {
+    const firestore = jest.requireMock('firebase/firestore') as Record<string, jest.Mock>
+    renderPage({ plan: 'free' })
+    fireEvent.click(screen.getByText('Delete contact'))
+    await waitFor(() =>
+      expect(mockPosted).toEqual([{ route: 'contact-remove', payload: { contactIds: ['con-1'] } }]),
+    )
+    expect(firestore['deleteDoc']).not.toHaveBeenCalled()
+    expect(firestore['updateDoc']).not.toHaveBeenCalled()
   })
 })

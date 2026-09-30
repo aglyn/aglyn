@@ -97,6 +97,13 @@ function mockDocRef(path: string) {
     path,
     id,
     collection: (name: string) => mockCollectionRef(`${path}/${name}`),
+    // The contact delete runs in a transaction off the reference (AGL-3338).
+    get firestore() {
+      return mockFirestore
+    },
+    get parent() {
+      return mockCollectionRef(path.slice(0, path.lastIndexOf('/')))
+    },
     get: async () => snapshot(),
     create: async (data: Record<string, unknown>) => {
       // `create` is not an upsert. Modelled exactly, because Firestore's
@@ -215,7 +222,49 @@ function mockCollectionRef(path: string) {
   }
 }
 
-const mockFirestore = { collection: (name: string) => mockCollectionRef(name) }
+/** A field path as `set(..., { mergeFields })` names one: dotted text, or a `FieldPath`. */
+const mockSegments = (field: unknown): string[] =>
+  typeof field === 'string' ? field.split('.') : (field as { mockSegments: string[] }).mockSegments
+
+/**
+ * A transaction that reads through and applies its writes in order once the
+ * body returns — the one the contact delete takes (AGL-3338). Enough for a
+ * test that asserts what landed; contention is `retained-refusals.spec.ts`'s.
+ */
+async function mockRunTransaction<T>(body: (transaction: unknown) => Promise<T>): Promise<T> {
+  const queued: Array<() => Promise<void>> = []
+  const transaction = {
+    get: (ref: ReturnType<typeof mockDocRef>) => ref.get(),
+    delete: (ref: ReturnType<typeof mockDocRef>) => void queued.push(() => ref.delete()),
+    update: (ref: ReturnType<typeof mockDocRef>, data: Record<string, unknown>) =>
+      void queued.push(() => ref.update(data)),
+    set: (
+      ref: ReturnType<typeof mockDocRef>,
+      data: Record<string, unknown>,
+      options?: { mergeFields?: unknown[] },
+    ) =>
+      void queued.push(async () => {
+        const next = JSON.parse(JSON.stringify(mockDocs.get(ref.path) ?? {}))
+        for (const field of options?.mergeFields ?? Object.keys(data)) {
+          const segments = mockSegments(field)
+          let source: unknown = data
+          for (const segment of segments) source = (source as Record<string, unknown>)?.[segment]
+          let target = next
+          for (const segment of segments.slice(0, -1)) target = target[segment] ??= {}
+          target[segments[segments.length - 1]] = source
+        }
+        mockDocs.set(ref.path, next)
+      }),
+  }
+  const result = await body(transaction)
+  for (const write of queued) await write()
+  return result
+}
+
+const mockFirestore = {
+  collection: (name: string) => mockCollectionRef(name),
+  runTransaction: mockRunTransaction,
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const apiHttp = jest.requireActual(
@@ -311,9 +360,20 @@ jest.mock('firebase-admin/firestore', () => {
       return stamp
     }
   }
+  // What the contact delete's retained store writes with (AGL-3338).
+  class MockFieldPath {
+    mockSegments: string[]
+    constructor(...segments: string[]) {
+      this.mockSegments = segments
+    }
+    static documentId() {
+      return '__name__'
+    }
+  }
   return {
     __esModule: true,
-    FieldPath: { documentId: () => '__name__' },
+    FieldPath: MockFieldPath,
+    FieldValue: { serverTimestamp: () => 'NOW' },
     Timestamp: MockTimestamp,
   }
 })
@@ -681,6 +741,49 @@ describe('idempotency on POST /v1/contacts', () => {
     // a typo is still distinguishable from a completed erasure.
     const missing = await deleteContact('con_404', 'k-other')
     expect(missing.status).toBe(404)
+  })
+
+  /*
+   * A person's "no" outlives the record it was written on (AGL-3338): the
+   * delete keeps every refusal in the organization's retained store, keyed
+   * by person and holding no address, which the list gate reads.
+   */
+  it('keeps every refusal the contact held, under each of its addresses', async () => {
+    mockDocs.set('orgs/org-1/contacts/con_r', {
+      email: 'no@example.com',
+      alternateEmails: ['no@work.example'],
+      visibleTo: ['host:site-a', 'host:site-b'],
+      marketingConsentByHost: {
+        'site-a': { marketingConsent: false, marketingConsentAtMs: 10 },
+        'site-b': { marketingConsent: true, marketingConsentAtMs: 20 },
+      },
+    })
+    const deleted = await deleteContact('con_r', 'k-refusal')
+    expect(deleted.status).toBe(200)
+    expect(mockDocs.has('orgs/org-1/contacts/con_r')).toBe(false)
+    for (const email of ['no@example.com', 'no@work.example']) {
+      const kept = mockDocs.get(`orgs/org-1/retainedRefusals/${personKey(email)}`)
+      expect(kept).toMatchObject({
+        marketingConsentByHost: {
+          'site-a': {
+            marketingConsent: false,
+            marketingConsentAtMs: 10,
+            retainedFromContactId: 'con_r',
+          },
+        },
+      })
+      // A grant is not a refusal and is not kept; nor is the address.
+      expect(kept?.['marketingConsentByHost']).not.toHaveProperty('site-b')
+      expect(JSON.stringify(kept)).not.toContain('example')
+    }
+  })
+
+  it('keeps nothing for a contact that refused nothing', async () => {
+    await postContact({ email: 'plain@example.com' })
+    expect((await deleteContact('con_1', 'k-plain')).status).toBe(200)
+    expect(
+      [...mockDocs.keys()].filter((path) => path.includes('/retainedRefusals/')),
+    ).toEqual([])
   })
 
   it("a create's key never replays into a delete", async () => {

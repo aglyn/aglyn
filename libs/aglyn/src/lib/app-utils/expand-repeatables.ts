@@ -259,12 +259,12 @@ export function repeatedRecords(
 /**
  * Does this tree contain anything {@link expandRepeatables} would expand?
  *
- * The datasets read is the largest on the render path — up to two pages of
- * {@link REPEAT_MAX_RECORDS} records for every dataset a page repeats over —
- * and a page that repeats over nothing should pay none of it (AGL-1440).
+ * The rows read is the largest on the render path — up to two pages of
+ * {@link REPEAT_MAX_RECORDS} records for every key a page repeats over — and a
+ * page that repeats over nothing should pay none of it (AGL-1440).
  *
  * Any gate on that read has to ask EXACTLY the question the expansion asks,
- * which is why this and {@link repeatDatasetKeys} share the one predicate
+ * which is why this and {@link repeatKeys} share the one predicate
  * `expandRepeatables` looks keys up with, {@link repeatKey}. A gate that is
  * even slightly stricter than the expansion is not a saving: it is a published
  * page that quietly renders one template row where the author put a list.
@@ -277,15 +277,15 @@ export function hasRepeatableNodes(
 }
 
 /**
- * Every dataset key this tree repeats over — a dataset id or a display name,
- * exactly as {@link expandRepeatables} looks it up — sorted and without
- * repeats.
+ * Every key this tree repeats over, exactly as {@link expandRepeatables} looks
+ * it up — sorted and without repeats.
  *
- * What the tenant compose reads, so a page loads the datasets it renders and
- * not every dataset its site may see. Built on the same predicate as
+ * What the tenant compose asks the repeat-rows contract for
+ * (`plugin-manager/repeat-rows.ts`), so a page loads the rows it renders and
+ * not everything its site may see. Built on the same predicate as
  * {@link hasRepeatableNodes} for the reason given there.
  */
-export function repeatDatasetKeys(
+export function repeatKeys(
   nodes: Record<NodeId, unknown> | null | undefined,
 ): string[] {
   const keys = new Set<string>()

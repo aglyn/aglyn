@@ -1215,7 +1215,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       footerReason:
         'You’re receiving this each morning because the Daily CRM digest is ' +
         'on in your {{brand.productName}} notification settings.',
-      source: 'apps/console/app/api/crm/daily-digest/route.ts',
+      source: 'libs/plugins/crm/src/lib/server/daily-digest-route.ts',
     },
     {
       key: 'crm-task-reminder',
@@ -1251,7 +1251,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       footerReason:
         'You’re receiving this because task reminders are on in your ' +
         '{{brand.productName}} notification settings.',
-      source: 'apps/console/app/api/crm/task-reminders/route.ts',
+      source: 'libs/plugins/crm/src/lib/server/task-reminders-route.ts',
     },
     {
       key: 'ai-insights-digest',

@@ -52,6 +52,8 @@ const rendered: Record<string, Record<string, unknown>> = {}
 let orgForHost: string | null = 'org-1'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The sharing card's requests (AGL-3336) are signed; none is made here.
+  useUser: () => ({ data: null }),
   // The viewer's reach, which `useCrmScope` reads only for a site in a
   // declared consent group (AGL-3320); an org-wide member here.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
@@ -120,6 +122,11 @@ jest.mock('./lead-history-card', () => ({
     rendered['history'] = props
     return null
   },
+}))
+// The Sharing card (AGL-3336) has a spec of its own; here it is a slot.
+jest.mock('./record-sharing-card', () => ({
+  RecordSharingCard: () => null,
+  CrmShareChipView: () => null,
 }))
 jest.mock('./record-activity-card', () => ({
   RecordActivityCard: (props: Record<string, unknown>) => {

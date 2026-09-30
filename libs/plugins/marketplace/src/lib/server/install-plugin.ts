@@ -18,7 +18,6 @@
 import {
   resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
-  compareArtifactVersions,
   isCompatibleHostAbi,
   isFirstPartyPlugin,
   isPluginRevoked,
@@ -39,6 +38,7 @@ import {
   isVersionApproved,
   listingArtifactType,
 } from '../model/marketplace'
+import { compareArtifactVersions } from '../model/update-state'
 
 /**
  * Installs (or upgrades) a marketplace plugin into a host (AGL-45), pinning a

@@ -24,7 +24,7 @@ import {
   themeArtifactContent,
   validateThemeForPublish,
   type ThemeHostDocument,
-} from '@aglyn/aglyn/app-utils/marketplace-theme'
+} from '@aglyn/aglyn/app-utils/site-theme'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { marketplacePriceRefusal } from '../model/marketplace'

@@ -67,7 +67,7 @@ jest.mock('./publisher-profile', () => ({
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       version: (
         jest.requireActual(
-          '@aglyn/aglyn/app-utils/publisher-agreement',
+          '../model/publisher-agreement',
         ) as { PUBLISHER_AGREEMENT_VERSION: string }
       ).PUBLISHER_AGREEMENT_VERSION,
     },

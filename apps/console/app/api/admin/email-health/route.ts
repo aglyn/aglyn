@@ -29,16 +29,18 @@ import { evaluateEmailHealth } from '../../../../utils/server/email-health'
  * mail?" without emailing a real person — the question that otherwise costs
  * an invite to a live inbox and a wait to find out.
  *
- * Reports which of `RESEND_API_KEY` / `USAGE_EMAIL_FROM` this runtime
- * actually sees, which matters because they arrive by different routes: the
- * Vercel Resend integration sets the key on one project, while the sender is
- * set by hand. A key without a sender sends nothing at all, silently, since
- * every call site requires both.
+ * Reports which mail provider this runtime hands mail to, which of its
+ * settings it still lacks, and whether `USAGE_EMAIL_FROM` is set — which
+ * matters because they arrive by different routes: a provider integration
+ * sets its key on one project, while the sender is set by hand. A key
+ * without a sender sends nothing at all, silently, since every call site
+ * requires both.
  *
- * `?probe=1` additionally asks Resend whether the key is accepted, using a
- * no-send credential probe. It never creates a message. Domain verification
- * is not observable this way — a sending-scoped key has no read permissions
- * — so a verified-looking report can still bounce until DNS is verified.
+ * `?probe=1` additionally asks the provider whether its credential is
+ * accepted, using its no-send credential probe. It never creates a message.
+ * Domain verification is not observable this way — a sending-scoped key has
+ * no read permissions — so a verified-looking report can still bounce until
+ * DNS is verified.
  *
  * Staff-claim gated, same trust anchor as the Firestore rules. The API key
  * is never returned.

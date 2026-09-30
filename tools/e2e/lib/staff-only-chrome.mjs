@@ -44,28 +44,19 @@ export const STAFF_ONLY_SELECTOR = `[${STAFF_ONLY_ATTRIBUTE}]`
 
 const HIDE_RULE = `${STAFF_ONLY_SELECTOR} { display: none !important; }`
 
-const RELEASE_FLAG_REGISTRY = join(
+const APP_UTILS = join(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../libs/aglyn/src/lib/app-utils/release-flags.ts',
+  '../../../libs/aglyn/src/lib/app-utils',
 )
+const RELEASE_FLAG_REGISTRY = join(APP_UTILS, 'release-flags.ts')
+const PLUGIN_RELEASE_FLAGS_FILE = join(APP_UTILS, 'plugin-release-flags.generated.ts')
 
-/**
- * The release flags that gate a console nav tab AND ship off — the only
- * chrome a staff account sees that a customer's console drops.
- *
- * Read from the registry's source because this module runs under plain node
- * and cannot import TypeScript. A text read can drift from the real array, so
- * apps/console/specs/nav-staff-only-marker.spec.ts runs this function and
- * holds its answer to `RELEASE_FLAGS` itself: a registry reshaped past this
- * reader fails there, not halfway through a capture run.
- */
-export function flaggedOffNavTabKeys(
-  source = readFileSync(RELEASE_FLAG_REGISTRY, 'utf8'),
-) {
-  const start = source.indexOf('export const RELEASE_FLAGS')
-  const end = source.indexOf('export const RELEASE_FLAG_KEYS', start)
+/** The platform's own flags that ship off with a nav tab, from the registry's source. */
+function platformFlaggedOff(source) {
+  const start = source.indexOf('const PLATFORM_RELEASE_FLAGS')
+  const end = source.indexOf('export const RELEASE_FLAGS', start)
   if (start < 0 || end < 0) {
-    throw new Error(`cannot find RELEASE_FLAGS in ${RELEASE_FLAG_REGISTRY}`)
+    throw new Error(`cannot find PLATFORM_RELEASE_FLAGS in ${RELEASE_FLAG_REGISTRY}`)
   }
   return source
     .slice(start, end)
@@ -78,6 +69,38 @@ export function flaggedOffNavTabKeys(
     )
     .map((entry) => entry.match(/^\s*key: '([a-z_]+)'/m)?.[1])
     .filter(Boolean)
+}
+
+/** The plugins' flags that ship off with a nav tab, from the generated JSON rows. */
+function pluginFlaggedOff(source) {
+  const marker = source.indexOf('PLUGIN_RELEASE_FLAGS')
+  const open = source.indexOf('= [', marker)
+  if (marker < 0 || open < 0) {
+    throw new Error(`cannot find PLUGIN_RELEASE_FLAGS in ${PLUGIN_RELEASE_FLAGS_FILE}`)
+  }
+  return JSON.parse(source.slice(open + 2))
+    .filter((flag) => flag.navTabId && flag.defaultEnabled === false)
+    .map((flag) => flag.key)
+}
+
+/**
+ * The release flags that gate a console nav tab AND ship off — the only
+ * chrome a staff account sees that a customer's console drops. The plugins'
+ * flags first, as `RELEASE_FLAGS` lists them.
+ *
+ * Read from SOURCE because this module runs under plain node and cannot
+ * import TypeScript: the platform's flags from the registry, the plugins'
+ * from the file the manifest generator compiles them into. A text read can
+ * drift from the real array, so apps/console/specs/nav-staff-only-marker.spec.ts
+ * runs this function and holds its answer to `RELEASE_FLAGS` itself: a
+ * registry reshaped past this reader fails there, not halfway through a
+ * capture run.
+ */
+export function flaggedOffNavTabKeys(
+  source = readFileSync(RELEASE_FLAG_REGISTRY, 'utf8'),
+  pluginSource = readFileSync(PLUGIN_RELEASE_FLAGS_FILE, 'utf8'),
+) {
+  return [...pluginFlaggedOff(pluginSource), ...platformFlaggedOff(source)]
 }
 
 /**

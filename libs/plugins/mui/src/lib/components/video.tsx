@@ -21,9 +21,9 @@ import {
   VISITOR_CONSENT_CHANGED_EVENT,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
 import {
-  wistiaMediaId,
-  wistiaPlayerSrc,
-} from '@aglyn/aglyn/app-utils/wistia-embed'
+  videoEmbedOf,
+  videoEmbedPlayerSrc,
+} from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { mdiPlay, mdiVideo } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
@@ -122,10 +122,11 @@ export interface VideoProps {
    * `media:{scope}/{mediaId}`, what "Browse media" stores (AGL-1215) — or any
    * URL. `resolveMediaSrc` decides, exactly as it does for an image.
    *
-   * A Wistia link is read differently (AGL-2826): the element keeps only the
-   * media id and plays Wistia's own player, which loads when a visitor
-   * presses play and never before, unless {@link loadPlayer} loads it with the
-   * page. See `wistia-embed.ts`.
+   * A hosted player's link — a Wistia link, or any host a plugin declares in
+   * `video-embed-providers.ts` — is read differently (AGL-2826): the element
+   * keeps only the media id and plays the host's own player, which loads when
+   * a visitor presses play and never before, unless {@link loadPlayer} loads
+   * it with the page. See core's `video-embed-provider.ts`.
    */
   src?: string
   /**
@@ -406,29 +407,31 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   const playback = { hostId, src: storedSrc, suppressed: suppressNavigation }
   const playbackHandlers = useVideoPlaybackBeacon(playback)
   /**
-   * A Wistia video (AGL-2826), and the player address a press produced.
+   * A hosted player's video, such as Wistia's (AGL-2826), and the player
+   * address a press produced.
    *
-   * Unless the page loads the player (see `pageLoadSrc` below), nothing of
-   * Wistia's renders before that press. The poster is a button, as it is for
+   * Unless the page loads the player (see `pageLoadSrc` below), nothing of the
+   * host's renders before that press. The poster is a button, as it is for
    * the lightbox, so a visitor who only looks at the page makes no request to
-   * Wistia and is handed no storage by it. `playerSrc` stays empty until the
+   * the host and is handed no storage by it. `playerSrc` stays empty until the
    * press, and setting it is what brings the frame in.
    */
-  const wistiaId = wistiaMediaId(storedSrc)
+  const embed = videoEmbedOf(storedSrc)
+  const embedId = embed?.mediaId
   const [playerSrc, setPlayerSrc] = useState<string>()
   /**
    * The press. Consent is read here and not during render: the record lives
    * in this browser's storage, which a cached page cannot vary on, and a
    * visitor may answer the banner between the first paint and the click.
    *
-   * Wistia records the viewing only when this visitor's analytics consent is
-   * on record. A visitor without that record — still deciding, refused,
+   * The host records the viewing only when this visitor's analytics consent
+   * is on record. A visitor without that record — still deciding, refused,
    * opted out by GPC, or visiting a site that runs no consent banner — gets
    * the player with `doNotTrack`.
    */
-  const playWistia = useCallback(() => {
+  const playEmbed = useCallback(() => {
     setPlayerSrc(
-      wistiaPlayerSrc(storedSrc, {
+      videoEmbedPlayerSrc(storedSrc, {
         doNotTrack: !readStoredVisitorConsent(hostId)?.analytics,
         muted: Boolean(muted),
         loop: Boolean(loop),
@@ -468,13 +471,13 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    */
   const [pageLoadSrc, setPageLoadSrc] = useState<string>()
   useEffect(() => {
-    if (!loadPlayer || !wistiaId || !poster || editorInert || playerSrc) {
+    if (!loadPlayer || !embedId || !poster || editorInert || playerSrc) {
       return undefined
     }
     const sync = () =>
       setPageLoadSrc(
         readStoredVisitorConsent(hostId)?.analytics
-          ? wistiaPlayerSrc(storedSrc, {
+          ? videoEmbedPlayerSrc(storedSrc, {
               autoPlay: false,
               muted: Boolean(muted),
               loop: Boolean(loop),
@@ -486,7 +489,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     return () => window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
   }, [
     loadPlayer,
-    wistiaId,
+    embedId,
     poster,
     editorInert,
     playerSrc,
@@ -504,7 +507,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    * loaded one, because it is the one that plays.
    */
   const inPlaceSrc =
-    wistiaId && (!lightbox || loadedSrc) ? (playerSrc ?? loadedSrc) : undefined
+    embedId && (!lightbox || loadedSrc) ? (playerSrc ?? loadedSrc) : undefined
   /**
    * What pressing the poster does. The poster's own button and a press sent
    * from outside the element both call this one function, so the two cannot
@@ -514,7 +517,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    * and never opens the lightbox.
    */
   const press = () => {
-    if (wistiaId) playWistia()
+    if (embedId) playEmbed()
     if (lightbox && !loadedSrc) openLightbox()
   }
   /**
@@ -545,9 +548,9 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    */
   const answerVideoCommand = useEventCallback((element: HTMLElement) => {
     if (editorInert || !src) return
-    if (wistiaId && !poster) return
+    if (embedId && !poster) return
     if (inPlaceSrc && playerSrc) return
-    if ((lightbox || wistiaId) && poster) return press()
+    if ((lightbox || embedId) && poster) return press()
     if (element instanceof HTMLVideoElement) {
       // A play the browser refuses (a trigger that was not a press, on an
       // unmuted film) is the browser's decision to make, not an error.
@@ -635,8 +638,10 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    * HTML and first paint, and what every visitor without analytics consent
    * goes on seeing.
    */
-  if (wistiaId && !poster) {
-    return placeholder('Video — add a poster image to play this Wistia video')
+  if (embedId && !poster) {
+    return placeholder(
+      `Video — add a poster image to play this ${embed?.provider.label} video`,
+    )
   }
   /**
    * The Wistia player in place of the poster: after a press when the lightbox
@@ -695,8 +700,8 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    * the player in above, and the lazy dialog is never armed, because nothing is
    * going to open it.
    */
-  if ((lightbox || wistiaId) && poster) {
-    const playsInPlace = Boolean(wistiaId) && !lightbox
+  if ((lightbox || embedId) && poster) {
+    const playsInPlace = Boolean(embedId) && !lightbox
     return (
       <Box
         ref={rootRef}
@@ -854,7 +859,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
               muted={muted}
               captions={track}
               playback={playback}
-              embedSrc={wistiaId ? playerSrc : undefined}
+              embedSrc={embedId ? playerSrc : undefined}
             />
           </Suspense>
         ) : null}

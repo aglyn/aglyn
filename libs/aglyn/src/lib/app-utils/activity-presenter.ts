@@ -39,6 +39,7 @@ import { duplicateActivityActionLabel } from './duplicate-resource'
 import {
   pluginActivityActionLabel,
   pluginActivityGroupForAction,
+  pluginActivityTargetLabel,
   pluginActivityTargetNoun,
 } from '../plugin-manager/plugin-activity-actions'
 
@@ -126,11 +127,8 @@ const TYPE_LABELS: Record<string, string> = {
   org: 'Organization',
   invite: 'Invitation',
   subscription: 'Subscription',
-  // A custom role's AI permission flipped (AGL-2929).
+  // A custom role's permission flipped (AGL-2929).
   role: 'Role',
-  // A generation job (AGL-2904): the org feed names the job, and each of its
-  // outputs names the resource it produced.
-  aiJob: 'AI generation',
   // CRM records (AGL-2622): a person added, a company or a deal created or
   // deleted, a lead converted — logged into the feed of the site whose
   // console did it, and linked to the record the way a screen is.
@@ -160,7 +158,7 @@ const ORG_CRM_SECTIONS: Record<string, string> = {
  */
 export function activityTypeLabel(type: string | undefined): string {
   if (!type) return 'Item'
-  const known = TYPE_LABELS[type]
+  const known = TYPE_LABELS[type] ?? pluginActivityTargetLabel(type)
   if (known) return known
   const noun = pluginActivityTargetNoun(type) ?? type
   return noun.charAt(0).toUpperCase() + noun.slice(1)
