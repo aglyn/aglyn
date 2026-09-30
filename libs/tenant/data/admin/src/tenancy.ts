@@ -163,6 +163,9 @@ export * from './lib/server/crm-inbound-email'
 // confirms one (AGL-2975).
 export * from './lib/server/member-email-aliases'
 export * from './lib/server/user-profiles'
+// The one "New account" staff notice per account, keyed on the auth
+// record's creation (AGL-3225).
+export * from './lib/server/new-account-announcement'
 export * from './lib/server/legal-acceptance'
 // The person's decision about the platform's own product email, on their
 // document and on the operator's marketing contact (AGL-3185).
