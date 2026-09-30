@@ -15,13 +15,22 @@
  * limitations under the License.
  */
 
+import {
+  definePluginZone,
+  registerPluginZone,
+} from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { BUNDLE_ID } from '../../constants/bundle-common'
+
 /**
- * The props the commerce plugin's zones hand each widget (AGL-2916): the
- * product editor, the products hub and the CSV import dialog.
+ * The zones this plugin hosts on its product surfaces (AGL-2916): the product
+ * editor, the products hub and the CSV import dialog.
  *
- * Types only. `feature-plugins.ts` re-exports them with `export type`, which
- * TypeScript erases, so a published page that imports the zone catalog does
- * not carry them.
+ * Each is drawn through the shell's renderer (`useConsoleWidgetSlot`), so a
+ * widget there passes the same enablement, entitlement and permission gates as
+ * one on a console page. The props are this plugin's words for its catalog,
+ * declared on the zone's token; a widget from another plugin restates the
+ * shape it reads rather than importing this package. A widget proposes and
+ * never writes: every write is this plugin's, with the guards it carries.
  */
 
 /** A product type, as the commerce catalog names it. */
@@ -33,7 +42,7 @@ export interface ConsoleProductOption {
   values: string[]
 }
 
-/** A product as the commerce editor holds it: saved, or staged and unsaved (AGL-2916). */
+/** A product as the commerce editor holds it: saved, or staged and unsaved. */
 export interface ConsoleProductDraft {
   /** `null` for a product nobody has saved yet. */
   id: string | null
@@ -50,8 +59,8 @@ export interface ConsoleProductDraft {
 }
 
 /**
- * Copy a widget proposes for one product (AGL-2916). A field left out is left
- * alone; `optionNames` renames the product's options in order, keeping every
+ * Copy a widget proposes for one product. A field left out is left alone;
+ * `optionNames` renames the product's options in order, keeping every
  * variant, and is ignored unless it names each option once.
  */
 export interface ConsoleProductCopyValues {
@@ -64,12 +73,11 @@ export interface ConsoleProductCopyValues {
 }
 
 /**
- * What the `productEditor` zone hands each widget (AGL-2916): the product as
- * the editor holds it, and `proposeValues`, which stages copy in the editor as
- * unsaved edits. The zone sits under the product's description, tags and
- * categories, hosted by the commerce plugin through `useConsoleWidgetSlot` as
- * the editor's search listing hosts `seoFields`. A widget here proposes and
- * never writes: Save product is the write, with the guards it carries.
+ * What the `productEditor` zone hands each widget: the product as the editor
+ * holds it, and `proposeValues`, which stages copy in the editor as unsaved
+ * edits. The zone sits under the product's description, tags and categories,
+ * as the editor's search listing hosts `seoFields`. Save product is the
+ * write, with the guards it carries.
  */
 export interface ConsoleProductEditorZoneProps {
   hostId: string
@@ -85,7 +93,7 @@ export interface ConsoleProductEditorZoneProps {
   proposeValues: (values: ConsoleProductCopyValues, key: string) => void
 }
 
-/** A catalog row as the products hub holds it (AGL-2916). */
+/** A catalog row as the products hub holds it. */
 export interface ConsoleProductSummary {
   id: string
   name: string
@@ -96,7 +104,7 @@ export interface ConsoleProductSummary {
   hasPhoto: boolean
 }
 
-/** A new product a widget asks the hub to create, always as a draft with no price (AGL-2916). */
+/** A new product a widget asks the hub to create, always as a draft with no price. */
 export interface ConsoleProposedProduct {
   name: string
   type: ConsoleProductType
@@ -107,7 +115,7 @@ export interface ConsoleProposedProduct {
   seoDescription: string
 }
 
-/** A discount a widget asks the hub to create, always switched off (AGL-2916). */
+/** A discount a widget asks the hub to create, always switched off. */
 export interface ConsoleProposedDiscount {
   name: string
   /** The code a shopper types, or `null` for a discount that applies on its own. */
@@ -119,15 +127,14 @@ export interface ConsoleProposedDiscount {
 }
 
 /**
- * What the `productsHub` zone hands each widget (AGL-2916): the catalog rows
- * the hub holds, the products its latest import created, and the hub's own
- * writes a widget may ask it to make — copy onto saved products, new draft
- * products, categories and switched-off discounts. The zone sits above the
- * catalog table. Each write is the hub's, with its seed, allowance and slug
- * checks; a widget writes nothing itself. Every write
- * resolves once it is stored and throws with a message a person can act on
- * when the hub refuses it: an allowance the plan has no room for, a product
- * that is gone.
+ * What the `productsHub` zone hands each widget: the catalog rows the hub
+ * holds, the products its latest import created, and the hub's own writes a
+ * widget may ask it to make — copy onto saved products, new draft products,
+ * categories and switched-off discounts. The zone sits above the catalog
+ * table. Each write is the hub's, with its seed, allowance and slug checks; a
+ * widget writes nothing itself. Every write resolves once it is stored and
+ * throws with a message a person can act on when the hub refuses it: an
+ * allowance the plan has no room for, a product that is gone.
  *
  * The creates are safe to ask twice: a product or a category named like one
  * the site has, and a discount with the code (or, with no code, the name) of
@@ -161,11 +168,11 @@ export interface ConsoleProductsHubZoneProps {
 }
 
 /**
- * What the `productImport` zone hands each widget (AGL-2916), inside the
- * commerce CSV import dialog: how many products the import creates, and
- * options a widget sets for what happens to them once they land. The hub hands
- * the options, with the ids of the products the import created, to
- * `productsHub` as its `lastImport`.
+ * What the `productImport` zone hands each widget, inside the CSV import
+ * dialog: how many products the import creates, and options a widget sets
+ * for what happens to them once they land. The hub hands the options, with
+ * the ids of the products the import created, to `productsHub` as its
+ * `lastImport`.
  */
 export interface ConsoleProductImportZoneProps {
   hostId: string
@@ -177,4 +184,57 @@ export interface ConsoleProductImportZoneProps {
   options: Readonly<Record<string, boolean>>
   /** Sets one option; the hub carries it to `productsHub` with what the import created. */
   setOption: (key: string, on: boolean) => void
+}
+
+export const PRODUCT_EDITOR_ZONE =
+  definePluginZone<ConsoleProductEditorZoneProps>('productEditor')
+
+export const PRODUCTS_HUB_ZONE =
+  definePluginZone<ConsoleProductsHubZoneProps>('productsHub')
+
+export const PRODUCT_IMPORT_ZONE =
+  definePluginZone<ConsoleProductImportZoneProps>('productImport')
+
+/**
+ * Declares the three zones, from the console registrar. The ids are the ones
+ * widgets have always registered under, so a widget written for them keeps
+ * working. Each is `bare`: the section is one item of a layout this plugin
+ * draws — among the editor's fields, above the catalog table, inside the
+ * import dialog — and a wrapper would add a gap the page already spaces.
+ */
+export function registerCommerceZones(): void {
+  const owner = { pluginId: BUNDLE_ID }
+  registerPluginZone(
+    {
+      zone: PRODUCT_EDITOR_ZONE,
+      label: 'Product editor',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'Under a product’s description, tags and categories in the product editor. A widget here proposes copy for the fields through `proposeValues`, staged as unsaved edits; Save product is the write.',
+    },
+    owner,
+  )
+  registerPluginZone(
+    {
+      zone: PRODUCTS_HUB_ZONE,
+      label: 'Products hub',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'Above the catalog table on the Products page. A widget here proposes copy, draft products, categories and switched-off discounts, and asks the hub to write them; every write is the hub’s, with its allowance and slug checks.',
+    },
+    owner,
+  )
+  registerPluginZone(
+    {
+      zone: PRODUCT_IMPORT_ZONE,
+      label: 'Product CSV import',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'Inside the CSV import dialog. A widget here sets options for what happens to the imported products once they land; the hub hands them to `productsHub` with the ids the import created.',
+    },
+    owner,
+  )
 }

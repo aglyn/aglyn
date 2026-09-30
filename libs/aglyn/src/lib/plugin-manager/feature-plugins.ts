@@ -52,19 +52,6 @@ import type { Plugin, PluginId } from './plugin-manager'
 import type { HostThemeSource } from '../app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType } from 'react'
-// The commerce zones' props live in a type-only module (AGL-2916).
-export type {
-  ConsoleProductCopyValues,
-  ConsoleProductDraft,
-  ConsoleProductEditorZoneProps,
-  ConsoleProductImportZoneProps,
-  ConsoleProductOption,
-  ConsoleProductSummary,
-  ConsoleProductType,
-  ConsoleProductsHubZoneProps,
-  ConsoleProposedDiscount,
-  ConsoleProposedProduct,
-} from './commerce-zone-props'
 export type {
   ConsoleImportMappingZoneProps,
   ConsoleRecordEmailZoneProps,
@@ -1033,12 +1020,6 @@ export const CONSOLE_WIDGET_SLOTS = {
    * changes nothing.
    */
   automationRun: 'automationRun',
-  /** The commerce product editor's fields (AGL-2916). Props: {@link ConsoleProductEditorZoneProps}. */
-  productEditor: 'productEditor',
-  /** Above the commerce products hub's catalog table (AGL-2916). Props: {@link ConsoleProductsHubZoneProps}. */
-  productsHub: 'productsHub',
-  /** Inside the commerce CSV import dialog (AGL-2916). Props: {@link ConsoleProductImportZoneProps}. */
-  productImport: 'productImport',
 } as const
 
 export type ConsoleWidgetSlot =

@@ -825,13 +825,6 @@
       "lane": "ai"
     },
     {
-      "path": "libs/aglyn/src/lib/plugin-manager/commerce-zone-props.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "libs/aglyn/src/lib/plugin-manager/feature-plugins.ts",
       "rules": [
         "domain-declares:commerce",

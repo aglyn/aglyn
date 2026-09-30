@@ -87,10 +87,12 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.hostAutomations,
   CONSOLE_WIDGET_SLOTS.automationEditor,
   CONSOLE_WIDGET_SLOTS.automationRun,
-  // The commerce zones a site's products pages host (AGL-2916).
-  CONSOLE_WIDGET_SLOTS.productEditor,
-  CONSOLE_WIDGET_SLOTS.productsHub,
-  CONSOLE_WIDGET_SLOTS.productImport,
+  // The zones the commerce plugin hosts on a site's products pages
+  // (AGL-2916). Plain ids: the commerce plugin declares them, so the
+  // catalog names none of them.
+  'productEditor',
+  'productsHub',
+  'productImport',
   // The CRM's record pages, composer and imports (AGL-2917). Under a site
   // they are listed from the site's set; at the organization level, from the
   // workspace's, where a job still names the record's site when it has one

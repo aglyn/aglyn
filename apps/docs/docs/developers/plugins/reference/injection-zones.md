@@ -51,9 +51,6 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostAutomations` | The Automation page's Actions, beside **Add action** and **Recipes**: another way to start an automation. Hosted by the workflows plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
 | `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
 | `automationRun` | On each failed run in an automation's run history. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
-| `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes. Hosted by the commerce plugin | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
-| `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them. Hosted by the commerce plugin | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
-| `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land. Hosted by the commerce plugin | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
 | `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
 | `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
 | `importMapping` | Inside a CRM contacts, companies, deals or leads import, under its column matching. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
@@ -82,6 +79,19 @@ return Slot ? <Slot slot="hostForms" hostId={hostId} orgId={orgId} /> : null
 The renderer is the same gated slot a console page mounts, so a widget there passes the
 same enablement, entitlement and permission gates. Outside the console shell it is `null`,
 and the zone draws nothing.
+
+A plugin that hosts a zone also declares it, with `registerPluginZone` and a token that
+carries the props it hands each widget (see
+[Zones a plugin hosts](./plugin-manager-api.md#zones-a-plugin-hosts--plugin-zones) in the
+plugin-manager reference). The commerce plugin declares these three on its product
+surfaces; a widget from another plugin restates the props it reads rather than importing
+the commerce package:
+
+| Zone | Where it renders | Props your widget receives |
+| --- | --- | --- |
+| `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
+| `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
+| `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
 
 ## How a zone spaces your widget
 
