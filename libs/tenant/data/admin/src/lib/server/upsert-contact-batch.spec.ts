@@ -39,8 +39,11 @@
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { queryFakeFirestore, type QueryFakeFirestore } from './test-firestore-queries'
-import { prepareContactCaptureBatch } from './contact-capture-batch'
-import { upsertHostContact, type UpsertHostContactVerdict } from './upsert-contact'
+import {
+  prepareContactCaptureBatch,
+  upsertHostContact,
+  type UpsertHostContactVerdict,
+} from './upsert-contact'
 
 const HOST = 'h1'
 const ORG = 'org1'

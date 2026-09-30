@@ -167,7 +167,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 /**
- * The capture batch (AGL-3423). Its reads are `contact-capture-batch.spec`'s
+ * The capture batch (AGL-3423). Its reads are `upsert-contact-batch.spec`'s
  * question; here it is a double that records what the route asked of it, in
  * order, so the band walk's file order is visible. Every address is new,
  * nobody is erased, and the band always has room unless a case says so.
