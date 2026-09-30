@@ -93,6 +93,10 @@ import {
   TEMPLATE_LIST_BASE,
 } from '../../utils/artifact-list-queries'
 import useStarterPages from './use-starter-pages'
+import {
+  LIBRARY_TEMPLATE_SOURCE_TYPES,
+  templateSourceBadge,
+} from './template-source-badge'
 
 /**
  * What every shelf asks: no Filters panel, the walk's order, and the name
@@ -210,7 +214,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
 
   /*
    * Your templates: this site's own library rows of the kind this surface
-   * picks (AGL-672, AGL-699) — saved here or installed from the marketplace,
+   * picks (AGL-672, AGL-699) — saved here or installed by a plugin,
    * never a starter's pages, which the Starters shelf presents as the
    * bundles they are. `libraryRow` also leaves the deleted ones out.
    */
@@ -218,7 +222,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     () => [
       ...TEMPLATE_LIST_BASE,
       { path: 'kind', op: '==', value: kind },
-      { path: 'source.type', op: 'in', value: ['authored', 'marketplace'] },
+      { path: 'source.type', op: 'in', value: [...LIBRARY_TEMPLATE_SOURCE_TYPES] },
     ],
     [kind],
   )
@@ -750,11 +754,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                         {template.displayName}
                       </Typography>
                       <Chip
-                        label={
-                          template.source?.type === 'marketplace'
-                            ? 'Marketplace'
-                            : 'Saved here'
-                        }
+                        label={templateSourceBadge(template.source).label}
                         size="small"
                         variant="outlined"
                         sx={{ my: 1 }}

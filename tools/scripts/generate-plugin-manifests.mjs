@@ -1342,6 +1342,48 @@ function orgCapacityRows() {
 }
 
 /**
+ * What a site's template library calls a template a plugin INSTALLED
+ * (AGL-3080): the `source.type` the plugin's install route stamps, and the
+ * badge and sentence the library shows for it. `authored` and `starter` are
+ * the platform's own values and cannot be declared; a type belongs to one
+ * plugin, because a library that found two owners for one stamp could not say
+ * where the template came from.
+ */
+function templateSourceRows() {
+  const rows = []
+  const taken = new Map([
+    ['authored', 'the platform'],
+    ['starter', 'the platform'],
+  ])
+  for (const plugin of config.plugins) {
+    const declared = plugin.templateSource
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" templateSource`
+    if (!declared || typeof declared !== 'object' || Array.isArray(declared)) {
+      throw new Error(`${where} is an object: { "type", "label", "description" }`)
+    }
+    const { type, label, description, $comment: _note, ...rest } = declared
+    const unknown = Object.keys(rest)
+    if (unknown.length) throw new Error(`${where}: unknown key(s) ${unknown.join(', ')}`)
+    if (typeof type !== 'string' || !/^[a-z][A-Za-z0-9]*$/.test(type)) {
+      throw new Error(`${where}: "type" is the plain word the install route stamps as source.type`)
+    }
+    if (taken.has(type)) {
+      throw new Error(`${where}: "${type}" is already a template source of ${taken.get(type)}`)
+    }
+    taken.set(type, `"${plugin.id}"`)
+    if (typeof label !== 'string' || !label.trim() || label.length > 40) {
+      throw new Error(`${where}: "label" is the badge's text, 1 to 40 characters`)
+    }
+    if (typeof description !== 'string' || !description.trim()) {
+      throw new Error(`${where}: "description" says in a sentence where the template came from`)
+    }
+    rows.push({ pluginId: plugin.id, type, label, description })
+  }
+  return rows
+}
+
+/**
  * Where published plugin versions and their kill switches live (AGL-3080),
  * declared by the one plugin that distributes them. The realm loader reads
  * this and names no collection of its own; with none declared it resolves
@@ -1775,7 +1817,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1873,6 +1915,15 @@ export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${J
  * by that plugin (AGL-3080). \`null\` when none does, and no form writes one.
  */
 export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = ${JSON.stringify(formRecordTargetRow(), null, 2)}
+
+/**
+ * What a site's template library calls a template a plugin installed, by the
+ * \`source.type\` that plugin stamps, declared by that plugin (AGL-3080).
+ * Core names no installer.
+ */
+export const PLUGIN_TEMPLATE_SOURCES: readonly PluginTemplateSource[] = [
+${templateSourceRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
 
 /**
  * The analytics settings each provider mounts a tag for, declared by the

@@ -708,6 +708,45 @@ source that registered nothing, threw or answered a malformed report comes back
 are missing. A read that could not run at all answers `failure` rather than a
 cap — "we read none of it" and "we read part of it" have different remedies.
 
+## Installed templates — `plugin-template-sources`
+
+If your plugin installs templates into a site's library, the template document
+carries a server-managed `source.type` that says where it came from. `authored`
+(saved on the site) and `starter` are the platform's own values; every other
+value is the stamp of the plugin that installed the template, and that plugin
+declares it in `plugins.config.json`:
+
+```json
+{
+  "id": "gallery",
+  "templateSource": {
+    "type": "gallery",
+    "label": "Gallery",
+    "description": "Installed from the template gallery"
+  }
+}
+```
+
+Your install route stamps `source: { type: 'gallery', listingId, version }` on
+every template it writes. The library's Source badge and its Source filter, the
+template's own page and the "Your templates" shelf of the template gallery then
+name it in your words, and the gallery's shelf asks for it by value.
+
+| API | Semantics |
+| --- | --- |
+| `PLUGIN_TEMPLATE_SOURCES` | Every declared template source, compiled from the config. |
+| `INSTALLED_TEMPLATE_SOURCE_TYPES` | Their `type` values. |
+| `installedTemplateSource(type)` | The declaration behind a stored `source.type`, or `null` for `authored`, `starter`, a missing stamp and a type no plugin in this build declares. |
+| `isInstalledTemplateSource(type)` | Whether a stamp is an installer's, declared or not. |
+
+**A declaration, not a registration.** The gallery's shelf is a Firestore
+`source.type in [...]` query, asked before any plugin code loads; a registry
+the page had not filled yet would drop every installed template from it
+without a word. A `type` belongs to one plugin, and `authored` and `starter`
+cannot be declared. A template whose stamp no plugin in the build declares —
+installed by a plugin since removed — still reads as **Installed**, never as
+something the site authored.
+
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 
 A security lockdown pauses the subscriptions a locked site sells to its own

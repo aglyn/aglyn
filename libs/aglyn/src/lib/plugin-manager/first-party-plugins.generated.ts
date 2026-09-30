@@ -14,6 +14,7 @@ import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
+import type { PluginTemplateSource } from './plugin-template-sources'
 import type { FormRecordTargetDeclaration } from './submission-record-target'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
@@ -788,6 +789,20 @@ export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | n
   "pluginId": "data",
   "id": "dataset"
 }
+
+/**
+ * What a site's template library calls a template a plugin installed, by the
+ * `source.type` that plugin stamps, declared by that plugin (AGL-3080).
+ * Core names no installer.
+ */
+export const PLUGIN_TEMPLATE_SOURCES: readonly PluginTemplateSource[] = [
+  {
+    "pluginId": "marketplace",
+    "type": "marketplace",
+    "label": "Marketplace",
+    "description": "Installed from the marketplace"
+  },
+]
 
 /**
  * The analytics settings each provider mounts a tag for, declared by the

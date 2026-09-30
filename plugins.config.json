@@ -570,6 +570,11 @@
           }
         }
       ],
+      "templateSource": {
+        "type": "marketplace",
+        "label": "Marketplace",
+        "description": "Installed from the marketplace"
+      },
       "contributes": {
         "console": {
           "shell": true,

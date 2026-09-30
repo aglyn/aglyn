@@ -95,55 +95,22 @@ import { releaseDefaultHomeRoot } from '../../constants/screen-publishing'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import UseTemplateDialog from './use-template-dialog.component'
 import useStarterPages from './use-starter-pages'
-
-/**
- * Provenance badge (AGL-666), qualified once the copy has been edited
- * locally (AGL-681).
- *
- * `source` is server-managed so a marketplace claim cannot be forged. But
- * once someone edits a downloaded template, "Marketplace" alone starts
- * vouching for content the publisher never wrote — so an edited copy says
- * so. `editedAt` is client-written on purpose: it is a claim nobody gains
- * anything by faking about their own copy.
- */
-function sourceChip(
-  source: { type?: string; listingId?: string } | undefined,
-  editedAt?: unknown,
-) {
-  const edited = Boolean(editedAt)
-  if (source?.type === 'marketplace') {
-    return {
-      label: edited ? 'Marketplace · edited' : 'Marketplace',
-      color: 'primary' as const,
-    }
-  }
-  if (source?.type === 'starter') {
-    return {
-      label: edited ? 'Starter · edited' : 'Starter',
-      color: 'default' as const,
-    }
-  }
-  return { label: 'Saved here', color: 'default' as const }
-}
-
-/** Where a template came from, by its stored `source.type`. */
-type TemplateSourceKey = 'marketplace' | 'starter' | 'authored'
-const templateSourceKey = (source: { type?: string } | undefined): TemplateSourceKey =>
-  source?.type === 'marketplace' || source?.type === 'starter' ? source.type : 'authored'
+import {
+  TEMPLATE_SOURCE_OPTIONS,
+  templateSourceBadge,
+} from './template-source-badge'
 
 /*
  * What the library grid's Filters panel and quick search offer: every clause
  * on the query (AGL-3321) — see `TEMPLATE_LIST_QUERY`, whose note says what
  * each asks and which composite serves it. Kind and Source are the STORED
  * values, which every create writes and the list-keys backfill stamped on
- * the templates that predate them.
+ * the templates that predate them; an installer's Source value is the one it
+ * declares (`TEMPLATE_SOURCE_OPTIONS`).
  */
 const TEMPLATE_FILTER_OPTIONS = {
   kind: TEMPLATE_KIND_OPTIONS,
-  source: (['marketplace', 'starter', 'authored'] as const).map((key) => ({
-    value: key,
-    label: sourceChip(key === 'authored' ? undefined : { type: key }).label,
-  })),
+  source: TEMPLATE_SOURCE_OPTIONS,
 }
 const TEMPLATE_SELECT_FIELDS = Object.keys(TEMPLATE_FILTER_OPTIONS)
 
@@ -318,8 +285,6 @@ export function HostTemplatesCard({
             displayName:
               template.source?.starterName ?? template.displayName ?? starterId,
             description: template.source?.starterDescription,
-            kindKey: template.kind ?? 'page',
-            sourceKey: templateSourceKey(template.source),
           }
         }
         return {
@@ -328,8 +293,6 @@ export function HostTemplatesCard({
           pages: [template],
           displayName: template.displayName ?? template.$id,
           description: template.description,
-          kindKey: template.kind ?? 'page',
-          sourceKey: templateSourceKey(template.source),
         }
       }),
     [heads, starterPages],
@@ -744,20 +707,14 @@ export function HostTemplatesCard({
       minWidth: 150,
       sortable: false,
       renderCell: ({ row }: any) => {
-        const chip = sourceChip(row.template.source, row.template.editedAt)
+        const badge = templateSourceBadge(row.template.source, {
+          editedAt: row.template.editedAt,
+        })
         return (
           // Provenance is server-managed (AGL-666), so this badge means
-          // something — a client cannot claim a marketplace origin.
-          <Tooltip
-            title={
-              row.template.source?.type === 'marketplace'
-                ? 'Installed from the marketplace'
-                : row.template.source?.type === 'starter'
-                  ? 'A first-party starter'
-                  : 'Saved from this site'
-            }
-          >
-            <Chip size="small" label={chip.label} color={chip.color} />
+          // something — a client cannot claim an installer's origin.
+          <Tooltip title={badge.title}>
+            <Chip size="small" label={badge.label} color={badge.color} />
           </Tooltip>
         )
       },

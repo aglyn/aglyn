@@ -34,13 +34,6 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/[templateId]/page.tsx",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
       "rules": [
         "domain-name"
@@ -82,7 +75,8 @@
       "rules": [
         "plugin-id"
       ],
-      "lane": "plugin-id"
+      "lane": "stays",
+      "why": "`'marketplace'` here is a FIELD NAME, not a plugin id: the component document's install stamp from before AGL-1015 (`{ listingId, profileId, version }`), which core's own provenance reader (`app-utils/artifact-provenance.ts`, `resolveProvenance`, argued stays) still reads as the listing an installed component came from, and which the component install still writes beside `installedFrom`. This list is the round trip of a live component document, so leaving the key out would restore every legacy installed component with its origin stripped; renaming it is a data migration of every installed component on every site."
     },
     {
       "path": "apps/console/app/api/admin/margin-utilization/route.ts",
@@ -107,7 +101,7 @@
       "rules": [
         "domain-declares:forms"
       ],
-      "lane": "marketplace"
+      "lane": "forms"
     },
     {
       "path": "apps/console/app/api/billing/report-usage/route.ts",
@@ -346,7 +340,6 @@
     {
       "path": "apps/console/components/templates/template-gallery-dialog.component.tsx",
       "rules": [
-        "plugin-id",
         "plugin-collection:marketplace",
         "domain-declares:marketplace"
       ],
@@ -888,13 +881,6 @@
         "domain-declares:workflows"
       ],
       "lane": "ai"
-    },
-    {
-      "path": "libs/aglyn/src/lib/foundation/definitions/platform.types.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/commerce-zone-props.ts",

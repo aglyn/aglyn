@@ -105,6 +105,7 @@ jest.mock('./use-template-dialog.component', () => ({
 }))
 
 import TemplateGalleryDialog from './template-gallery-dialog.component'
+import { LIBRARY_TEMPLATE_SOURCE_TYPES } from './template-source-badge'
 
 const open = (kind: 'page' | 'component' = 'page') =>
   render(
@@ -151,7 +152,7 @@ describe('the template gallery’s shelves are served by their queries (AGL-3321
       filters: [
         { path: 'libraryRow', op: '==', value: true },
         { path: 'kind', op: '==', value: 'page' },
-        { path: 'source.type', op: 'in', value: ['authored', 'marketplace'] },
+        { path: 'source.type', op: 'in', value: [...LIBRARY_TEMPLATE_SOURCE_TYPES] },
       ],
       orderBy: { path: LIST_QUERY_ID_PATH, direction: 'asc' },
     })
