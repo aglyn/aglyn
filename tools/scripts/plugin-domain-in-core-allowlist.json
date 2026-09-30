@@ -269,13 +269,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/api/hosts/tax-summary/route.ts",
-      "rules": [
-        "domain-declares:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "apps/console/app/api/hosts/where-used/route.ts",
       "rules": [
         "plugin-id",
@@ -307,13 +300,6 @@
         "plugin-id"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/account/product-updates-card.component.tsx",
-      "rules": [
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "apps/console/components/billing/billing-metered-estimate.component.tsx",
@@ -423,13 +409,6 @@
         "domain-declares:ai"
       ],
       "lane": "data"
-    },
-    {
-      "path": "apps/console/components/settings/org-privacy-card.component.tsx",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
     },
     {
       "path": "apps/console/components/site-accounts-card.component.tsx",
@@ -573,8 +552,7 @@
     {
       "path": "apps/console/utils/api-v1/crm-email-templates.ts",
       "rules": [
-        "domain-name",
-        "domain-declares:crm"
+        "domain-name"
       ],
       "lane": "crm"
     },
@@ -591,8 +569,7 @@
     {
       "path": "apps/console/utils/api-v1/crm-pipelines.ts",
       "rules": [
-        "domain-name",
-        "domain-declares:crm"
+        "domain-name"
       ],
       "lane": "crm"
     },
@@ -664,13 +641,6 @@
         "domain-declares:marketplace"
       ],
       "lane": "commerce"
-    },
-    {
-      "path": "apps/console/utils/signup-campaign.ts",
-      "rules": [
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "apps/console/utils/tx-return-webfile.ts",
@@ -863,8 +833,7 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
       "rules": [
-        "domain-name",
-        "domain-declares:crm"
+        "domain-name"
       ],
       "lane": "crm"
     },
@@ -879,7 +848,6 @@
       "path": "libs/aglyn/src/lib/app-utils/contact-merge.ts",
       "rules": [
         "domain-name",
-        "domain-declares:crm",
         "domain-declares:marketing"
       ],
       "lane": "crm"
@@ -1027,7 +995,6 @@
       "rules": [
         "domain-name",
         "domain-exports:email",
-        "domain-declares:crm",
         "domain-declares:email",
         "domain-declares:marketing"
       ],
@@ -1096,8 +1063,7 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/list-assignment-policy.ts",
       "rules": [
-        "domain-name",
-        "domain-declares:marketing"
+        "domain-name"
       ],
       "lane": "marketing"
     },
@@ -1170,13 +1136,6 @@
       ],
       "lane": "stays",
       "why": "Aglyn's own console and docs surfaces, not a tenant feature: the consent default the operator's own tags start from (the console's analytics SDK, and a verbatim copy in the docs site), swapped with the operator identity on a self-host. Tenant sites answer to visitor-consent.ts and a vendor's adapter."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/platform-marketing-consent.ts",
-      "rules": [
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/release-flags.ts",
@@ -1684,23 +1643,14 @@
     {
       "path": "libs/tenant/runtime/src/lib/assign-contact-owner.ts",
       "rules": [
-        "plugin-collection:crm",
-        "domain-declares:crm"
+        "plugin-collection:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/tenant/runtime/src/lib/associate-company-by-domain.ts",
       "rules": [
-        "plugin-collection:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/capture-host-contact.ts",
-      "rules": [
-        "domain-declares:crm"
+        "plugin-collection:crm"
       ],
       "lane": "crm"
     },

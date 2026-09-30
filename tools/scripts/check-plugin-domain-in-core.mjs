@@ -230,9 +230,12 @@ export function domainOfExports(text) {
  *
  * A declaration is code that lives here. A USE of another module's symbol is
  * not judged — that is the import graph's — which is what keeps this from
- * flagging every caller of a plugin's seam.
+ * flagging every caller of a plugin's seam. That includes an inline `type`
+ * specifier on a line of its own inside a multi-line `import { … }` or
+ * `export { … }`: it names a symbol declared somewhere else, so a type is a
+ * declaration here only as an alias (`type Name =` or `type Name<`).
  */
-const DECLARATION = /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:default\s+)?(?:function\*?|const|let|type|interface|class|enum)\s+([A-Za-z_$][\w$]*)/
+const DECLARATION = /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:default\s+)?(?:(?:function\*?|const|let|interface|class|enum)\s+([A-Za-z_$][\w$]*)|type\s+([A-Za-z_$][\w$]*)\s*[=<])/
 const MEMBER = /^\s{2,}(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*[:(]/
 
 /** The plugins whose vocabulary a file's code lines DECLARE. */
@@ -240,7 +243,8 @@ export function domainsDeclared(text) {
   const domains = new Set()
   for (const line of text.split('\n')) {
     if (COMMENT_LINE.test(line)) continue
-    const name = DECLARATION.exec(line)?.[1] ?? MEMBER.exec(line)?.[1]
+    const declared = DECLARATION.exec(line)
+    const name = declared?.[1] ?? declared?.[2] ?? MEMBER.exec(line)?.[1]
     if (!name) continue
     for (const [domain, pattern] of Object.entries(DOMAIN_EXPORTS)) if (pattern.test(name)) domains.add(domain)
   }
@@ -361,6 +365,8 @@ function selfTest() {
     { path: 'libs/aglyn/src/lib/app-utils/neutral-name.ts', text: 'export const MARKETPLACE_A = 1\nexport function marketplaceB() {}\nexport type MarketplaceC = 1\nexport const other = 2\n' },
     { path: 'libs/aglyn/src/lib/app-utils/plans.ts', text: 'export const seats = 1\nexport const sites = 2\nexport const pages = 3\nexport const members = 4\ninterface Limits {\n  crmEmailsPerDay: number\n}\n' },
     { path: 'libs/aglyn/src/lib/app-utils/caller.ts', text: "import { crmRoutes } from './x'\nexport const href = crmRoutes(base).contact(id)\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/type-user.ts', text: "import {\n  crmRoutes,\n  type CrmDeal,\n  type CrmStage as Stage,\n} from './x'\nexport const deal: CrmDeal | null = null\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/type-alias.ts', text: 'export type CrmDealId = string\ntype CrmStageMap<T> = Record<string, T>\n' },
     { path: 'libs/aglyn/src/lib/app-utils/mentions-one.ts', text: 'export const MARKETPLACE_A = 1\nexport const a = 1\nexport const b = 2\nexport const c = 3\n' },
   ]
   const findings = findFindings(corpus, ids)
@@ -397,6 +403,8 @@ function selfTest() {
   ok('one export in a plugin’s words is a declaration, though not most of the file', has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-declares:marketplace') && !has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-exports:marketplace'))
   ok('a plugin’s key mixed into a platform type is reported', has('libs/aglyn/src/lib/app-utils/plans.ts', 'domain-declares:crm'))
   ok('USING a plugin’s symbol declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/caller.ts'))
+  ok('a type named inside a multi-line import declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/type-user.ts'))
+  ok('a type alias in a plugin’s words is a declaration', has('libs/aglyn/src/lib/app-utils/type-alias.ts', 'domain-declares:crm'))
 
   const rows = [
     { path: 'libs/aglyn/src/lib/app-utils/crm-deals.ts', rules: ['domain-name', 'plugin-id'], lane: 'crm' },
