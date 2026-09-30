@@ -108,9 +108,6 @@ import { registerAiJobStep } from './ai-jobs'
 /** The resource the email plugin writes an email design under. */
 export const AI_EMAIL_DESIGN_RESOURCE = 'emailDesign'
 
-/** The id the email plugin is registered under. */
-export const AI_EMAIL_PLUGIN_ID = 'email'
-
 /** The longest answer an email may run to; the tree is held to the email budget either way. */
 export const AI_JOB_EMAIL_MAX_TOKENS = AI_ROUTING_TABLE['job.email'].maxTokens
 
@@ -546,7 +543,7 @@ export function aiEmailDesignOutput(
 export const aiEmailJobAdmission: AiJobAdmission = (context) =>
   aiPluginDraftAdmissionRefusal(context, {
     kind: 'email',
-    drafts: [{ resource: AI_EMAIL_DESIGN_RESOURCE, pluginId: AI_EMAIL_PLUGIN_ID, label: 'Email' }],
+    drafts: [{ resource: AI_EMAIL_DESIGN_RESOURCE, label: 'Email' }],
   })
 
 export interface AiJobEmailStepDeps {
