@@ -31,7 +31,7 @@ import {
   firebaseAdmin,
   getOrgDoc,
   isImpersonationSession,
-  listMemberEmailAliases,
+  loadMemberEmailAliases,
   lockdownRefusal,
   logOrgActivity,
   type MemberEmailAliasRefusal,
@@ -186,7 +186,7 @@ async function handler(request: Request): Promise<Response> {
     const signInEmail = membership.member.email || decoded.email || null
 
     if (action === 'list') {
-      const aliases = await listMemberEmailAliases(firestore, orgId, decoded.uid)
+      const aliases = await loadMemberEmailAliases(firestore, orgId, decoded.uid)
       return Response.json(
         { aliases: memberEmailAliasRows(aliases), signInEmail },
         { status: 200 },
@@ -226,7 +226,7 @@ async function handler(request: Request): Promise<Response> {
       // Only an address ALREADY on the caller's list, and only one waiting
       // for confirmation: without both this would mail any address named.
       const address = normalizeMemberEmailAlias(payload['address'])
-      const listed = (await listMemberEmailAliases(firestore, orgId, decoded.uid)).find(
+      const listed = (await loadMemberEmailAliases(firestore, orgId, decoded.uid)).find(
         (entry) => entry.address === address,
       )
       if (!listed) {

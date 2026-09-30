@@ -232,7 +232,7 @@ describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
   }, 60_000)
 
   it('THE DEFECT: From a confirmed alias, To the prospect, BCC capture — filed on the prospect, as the member', async () => {
-    const [entry] = await aliases.listMemberEmailAliases(db as unknown as FirebaseFirestore.Firestore, ORG, REP)
+    const [entry] = await aliases.loadMemberEmailAliases(db as unknown as FirebaseFirestore.Firestore, ORG, REP)
     const token = aliases.mintMemberEmailAliasToken({
       orgId: ORG,
       uid: REP,

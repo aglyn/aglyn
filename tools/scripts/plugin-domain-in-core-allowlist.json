@@ -1517,13 +1517,6 @@
       "why": "The operator's server-side revenue and activation events, sent to the operator's own property (GA4_MEASUREMENT_ID / GA4_API_SECRET, unset on a self-host that measures nothing): Aglyn's own funnel, like platform-ad-conversions.ts. A merchant's revenue goes to the merchant's property from the merchant's own tag, never through here."
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/host-memberships.ts",
-      "rules": [
-        "domain-declares:email"
-      ],
-      "lane": "email"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/host-visitor-records.ts",
       "rules": [
         "domain-declares:crm",
@@ -1539,13 +1532,6 @@
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/member-email-aliases.ts",
-      "rules": [
-        "domain-declares:email"
-      ],
-      "lane": "email"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/platform-marketing-consent.ts",
