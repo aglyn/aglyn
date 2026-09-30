@@ -29,6 +29,7 @@ content on the marketing site and is written separately.
 - **marketplace:** the listing page's owner cards and body share one set of edges, and Verified publisher gets its content gutters ([AGL-3414](https://linear.app/aglyn/issue/AGL-3414))
 - **console:** the saved workspace URL is no longer flagged invalid; only a new one is judged ([AGL-3415](https://linear.app/aglyn/issue/AGL-3415))
 - **console:** opening a staff org page no longer writes audit rows; actors show name and email, and recipients open their message ([AGL-3417](https://linear.app/aglyn/issue/AGL-3417))
+- **email:** automated platform mail — usage and budget alerts, notification email, digests, reminders, usage summaries — skips locked and disabled accounts and suspended workspaces; lock notices, security and receipt mail still go ([AGL-3418](https://linear.app/aglyn/issue/AGL-3418))
 - **health:** the Sign-in doors check no longer reports an outage when Identity Platform throttles the probe's own server address; it answers green with `probe-throttled` ([AGL-3419](https://linear.app/aglyn/issue/AGL-3419))
 
 ### Changed
