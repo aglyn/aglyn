@@ -425,9 +425,10 @@ its sites — lists every email the site sent, newest first: the recipient, the
 subject and the sender tag (a campaign, a form notification, site account
 mail), what became of it (sent, delivered, opened, bounced and why), and its
 opens and clicks. It is the same delivery record the staff account page reads,
-seen from the site instead of the person. Message bodies are not kept, so this
-answers *whether* and *when*, not *what*; a campaign's content is on the organization's
-[Email campaigns](#staff-org-email) card. Mail the platform sends to the
+seen from the site instead of the person. Click a recipient, or anywhere on
+the row, to open the message: the body is fetched from the sending provider on
+that click — the log itself keeps no bodies — along with the links that were
+followed. Reading a body is recorded in the audit log. Mail the platform sends to the
 organization's own members — invitations, billing — belongs to no site and is on
 each member's staff page. An organization with more than thirty sites reads the
 first thirty and says so.

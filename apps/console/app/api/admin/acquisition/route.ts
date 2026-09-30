@@ -29,7 +29,6 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { recordAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit'
 import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { platformMarketingHostId } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
@@ -53,12 +52,12 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * was created from, and where it last signed in — is `super` only, the same
  * line the sign-in history card draws; other roles see the country.
  *
- * ## The look is recorded first
+ * ## No audit row
  *
- * The cross-check reads the sales workspace's people for this person, so the
- * access is written to `adminAudit` BEFORE the answer is served, as the other
- * person-shaped staff reads do: a card that rendered and then failed to
- * record the look would be the access that collection exists to never lose.
+ * The card loads every time a staff page for an org or an account opens, so
+ * an `adminAudit` row per load recorded page views, not decisions, and
+ * buried the actions the audit card exists to show. It only reads; nothing
+ * here is written.
  */
 
 let declarationsRepaired: Promise<void> | null = null
@@ -187,13 +186,6 @@ async function handler(request: Request): Promise<Response> {
       if (!listPluginPersonMatchers().length) {
         matches.status = 'no-matchers'
       } else {
-        await recordAdminAudit({
-          actorUid: decoded.uid,
-          action: scope === 'user' ? 'user.acquisition-viewed' : 'org.acquisition-viewed',
-          target: scope === 'user' ? `users/${uid}` : `orgs/${orgIdParam}`,
-          subjectUid: uid || null,
-          note: 'Acquisition opened; the sales workspace was checked for this person',
-        })
         const report = await runPluginPersonMatchers({
           orgId: house.orgId,
           orgSlug: matches.workspace.slug,

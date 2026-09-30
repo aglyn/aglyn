@@ -21,7 +21,7 @@ import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import { Alert, Chip, Stack, Typography } from '@mui/material'
+import { Alert, Chip, Link, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
@@ -29,21 +29,15 @@ import { buildRoute, Route } from '../constants/route-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import { type StaffListPage, useStaffListPagination } from '../hooks/use-staff-list-pagination'
 import StaffListPaginationControls from './staff-list-pagination.component'
+import StaffEmailMessageDialog from './staff-email-message-dialog.component'
+import type { StaffEmailDeliveryRow } from './staff-user-email-history-card.component'
 
-/** One message of `/api/admin/email-deliveries`. */
-interface DeliveryRow {
-  $id: string
-  to: string
-  subject: string | null
-  context: string | null
-  status: string
-  firstSeenAtMs: number
-  openCount: number
-  clickCount: number
-  bounceType: string | null
-  detail: string | null
-  hostId: string | null
-}
+/**
+ * One message of `/api/admin/email-deliveries` — the whole delivery record,
+ * the same shape the account page's history lists, so a row opens the same
+ * message dialog.
+ */
+type DeliveryRow = StaffEmailDeliveryRow & { $id: string }
 
 const STATUS_COLOR: Record<string, 'success' | 'warning' | 'error' | undefined> = {
   delivered: 'success',
@@ -78,6 +72,7 @@ export function StaffEmailDeliveriesCard(props: StaffEmailDeliveriesCardProps) {
   userRef.current = user
   const { enqueueSnackbar } = useSnackbar()
   const [sitesOmitted, setSitesOmitted] = useState(0)
+  const [open, setOpen] = useState<DeliveryRow | null>(null)
   const scope = hostId ? `hostId=${encodeURIComponent(hostId)}` : orgId ? `orgId=${encodeURIComponent(orgId)}` : ''
   const uid = (user as { uid?: string } | null)?.uid ?? null
 
@@ -117,9 +112,21 @@ export function StaffEmailDeliveriesCard(props: StaffEmailDeliveriesCardProps) {
         minWidth: 180,
         renderCell: ({ row }: { row: DeliveryRow }) => (
           <Stack sx={{ justifyContent: 'center', height: '100%', lineHeight: 1.25 }}>
-            <Typography variant="body2" noWrap sx={{ lineHeight: 1.25 }}>
+            {/* The recipient opens the message, as a click on the row does. */}
+            <Link
+              component="button"
+              type="button"
+              variant="body2"
+              underline="hover"
+              noWrap
+              sx={{ lineHeight: 1.25, textAlign: 'left', maxWidth: '100%' }}
+              onClick={(event) => {
+                event.stopPropagation()
+                setOpen(row)
+              }}
+            >
               {row.to}
-            </Typography>
+            </Link>
             {row.context ? (
               <Typography variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.25 }}>
                 {row.context}
@@ -219,8 +226,11 @@ export function StaffEmailDeliveriesCard(props: StaffEmailDeliveriesCardProps) {
           noRowsLabel="No email recorded for this scope"
           hideFooter
           rowHeight={TABLE_ROW_HEIGHT}
+          onOpen={(_id, row) => setOpen(row as DeliveryRow)}
         />
         <StaffListPaginationControls pagination={pagination} />
+        {/* Mounted only while a message is open: it fetches the body on mount. */}
+        {open ? <StaffEmailMessageDialog row={open} onClose={() => setOpen(null)} /> : null}
       </Stack>
     </CardDisplay>
   )

@@ -115,8 +115,8 @@ export type AdminAuditKind = 'access' | 'change'
  */
 export const ADMIN_AUDIT_ACCESS_ACTIONS: readonly string[] = [
   'email.message-viewed',
-  // The acquisition card (AGL-3289): where an account or a workspace came
-  // from, cross-checked against the sales workspace's people. Read only.
+  // The acquisition card (AGL-3289). No longer written; the rows already in
+  // the log still classify as reads.
   'user.acquisition-viewed',
   'org.acquisition-viewed',
 ]

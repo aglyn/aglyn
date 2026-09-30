@@ -60,8 +60,8 @@ behind the marketing site (`PLATFORM_MARKETING_HOST_ID`) — for this person:
 
 The check runs through every plugin that keeps people, so the card says **could not
 check** for a plugin that failed rather than showing an absence it did not measure.
-Opening the card writes a `user.acquisition-viewed` (or `org.acquisition-viewed`) row to
-the audit trail, because it reads the sales workspace's people.
+Opening the card writes nothing to the audit trail — it loads with every visit to the
+page, so it would record page views rather than admin actions.
 
 ## Channels {#channels}
 

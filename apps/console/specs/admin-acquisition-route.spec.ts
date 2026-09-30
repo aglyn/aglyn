@@ -21,15 +21,14 @@
 /**
  * WHERE AN ACCOUNT CAME FROM, and who may see how much of it (AGL-3289).
  *
- * The staff Acquisition card's route. Three properties are pinned because
- * each is a privacy promise the card makes to the person it is about:
+ * The staff Acquisition card's route. Pinned:
  *
- * - the look at the sales workspace's people is written to `adminAudit`
- *   BEFORE any matcher reads them — a card that rendered and then failed to
- *   record the look would be the access the audit trail exists to never lose;
+ * - opening the card writes no `adminAudit` row — it loads with every visit
+ *   to a staff org or account page, and a row per load buried the real admin
+ *   actions;
  * - city-level geography is `super` only, for the record's own geography and
  *   for the newest sign-in alike — every other role gets the country;
- * - an install with no sales workspace asks nobody and audits nothing.
+ * - an install with no sales workspace asks nobody.
  */
 
 export {}
@@ -157,13 +156,11 @@ it('refuses anyone without a staff claim', async () => {
   expect((await get('uid=uid-1')).status).toBe(403)
 })
 
-it('records the look before any matcher reads the sales workspace', async () => {
+it('checks the sales workspace for the person and writes no audit row', async () => {
   const response = await get('uid=uid-1')
   const body = await response.json()
-  expect(order).toEqual(['audit:user.acquisition-viewed', 'match:person@personal.example'])
-  expect(mockAudit).toHaveBeenCalledWith(
-    expect.objectContaining({ actorUid: 'staff-1', target: 'users/uid-1', subjectUid: 'uid-1' }),
-  )
+  expect(order).toEqual(['match:person@personal.example'])
+  expect(mockAudit).not.toHaveBeenCalled()
   expect(body.matches).toMatchObject({ status: 'checked', workspace: { orgId: 'house-org', slug: 'house' } })
   expect(body.matches.items[0]).toMatchObject({ basis: 'name', pluginId: 'crm' })
   expect(body.subject).toMatchObject({ uid: 'uid-1', name: 'Matt Tropp', provider: 'password' })
@@ -187,10 +184,11 @@ it('reads a workspace’s copy and names the account it came from', async () => 
   expect(body.scope).toBe('org')
   expect(body.subject.uid).toBe('uid-1')
   expect(body.acquisition.copiedFromUid).toBe('uid-1')
-  expect(order[0]).toBe('audit:org.acquisition-viewed')
+  expect(order).toEqual(['match:person@personal.example'])
+  expect(mockAudit).not.toHaveBeenCalled()
 })
 
-it('asks nobody and audits nothing when no sales workspace is configured', async () => {
+it('asks nobody when no sales workspace is configured', async () => {
   mockHouseHost.mockReturnValue(null)
   const body = await (await get('uid=uid-1')).json()
   expect(body.matches).toEqual({ status: 'unconfigured', workspace: null, items: [], failed: [] })
