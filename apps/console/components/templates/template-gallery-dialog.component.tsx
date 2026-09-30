@@ -19,17 +19,11 @@
 import { MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-// A listing's preview may be a `media:` reference (AGL-1424), which is not a
-// URL. The marketplace lib's own `ListingImage` cannot be imported here —
-// `scope:app` may not depend on `aglyn:addons` — so this resolves directly.
 import {
   formatQuotaLimit,
-  lockdownRefusalText,
-  parseLockdownRefusal,
+  type ConsoleTemplateGalleryShelfState,
 } from '@aglyn/aglyn'
-import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
-  Box,
   Button,
   Card,
   CardActions,
@@ -93,6 +87,7 @@ import {
   TEMPLATE_LIST_BASE,
 } from '../../utils/artifact-list-queries'
 import useStarterPages from './use-starter-pages'
+import PluginWidgetSlot from '../plugin-widget-slot.component'
 import {
   LIBRARY_TEMPLATE_SOURCE_TYPES,
   templateSourceBadge,
@@ -107,11 +102,6 @@ const SHELF_QUERY: ListQueryDeclaration = {
   sorts: [ARTIFACT_LIST_ORDER],
   search: ARTIFACT_NAME_SEARCH,
 }
-
-/** The marketplace shelf's scope: published site templates. */
-const MARKETPLACE_SHELF_BASE: ListQueryFilter[] = [
-  { path: 'kind', op: '==', value: 'template' },
-]
 
 /** The code-defined starters, by id — at most thirty, one `in`. */
 const STARTER_IDS = STARTER_TEMPLATES.map((starter) => starter.id).slice(0, 30)
@@ -147,9 +137,9 @@ export interface TemplateGalleryDialogProps {
 /**
  * Template gallery (AGL-78/79, AGL-687).
  *
- * Two sources, presented identically:
+ * Two sources of its own, presented identically:
  *
- * - The host's own library — saved templates and marketplace installs.
+ * - The host's own library — saved templates and the ones a plugin installed.
  * - The first-party starters, rendered VIRTUALLY from the code definitions
  *   (`constants/starter-templates.ts`). Nothing is written for these until
  *   the user uses or edits one, at which point that one starter is copied
@@ -164,6 +154,10 @@ export interface TemplateGalleryDialogProps {
  * suppressed as a virtual entry, so it appears once. `source.starterId` is
  * the join key. Multi-page starters stay one card either way, which keeps
  * the one-click "add all five shop pages" behaviour.
+ *
+ * Templates offered from ELSEWHERE are shelves a plugin draws in the
+ * `templateGallery` zone below these two (AGL-3080): what it lists, and the
+ * route that installs one, are its own.
  */
 export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const {
@@ -337,105 +331,39 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     [starterGroups, virtualStarters],
   )
 
-  /*
-   * Marketplace site templates (AGL-137): published bundles with previews,
-   * searched by the listing's name keys, which every publish stamps. Whole-
-   * site page bundles, so — like the starters — only in the page-kind picker
-   * (AGL-699); a five-page site on the components list would install pages
-   * nobody asked for.
-   *
-   * An unpublished listing keeps its document (`deletedAt`), and Firestore
-   * cannot ask for the absence of that field without hiding every listing
-   * written before the field existed — so it is dropped from the page it
-   * falls in. That is the shelf's scope, not a filter: the search is on the
-   * query, and a page can only render fewer cards than its size.
-   */
-  const market = useListQuery<any>({
-    collection:
-      open && kind === 'page' ? collection(firestore, 'marketplaceListings') : null,
-    declaration: SHELF_QUERY,
-    request: shelfRequest(MARKETPLACE_SHELF_BASE),
-    deps: [firestore, open, kind],
-    idField: '$id',
-  })
-  const marketShown = useMemo(
-    () => market.rows.filter((listing: any) => !listing.deletedAt),
-    [market.rows],
-  )
   const savedShown = useMemo(
     () => saved.rows.filter((entry: any) => !entry.deletedAt),
     [saved.rows],
   )
-  const loading = [saved, materialized, market].some((shelf) => shelf.status === 'loading')
+  /*
+   * The shelves plugins draw (AGL-3080), as each reports itself: the
+   * "nothing matches" line below covers them too, and a shelf still loading
+   * holds it back as the gallery's own do.
+   */
+  const [pluginShelves, setPluginShelves] = useState<
+    Readonly<Record<string, ConsoleTemplateGalleryShelfState>>
+  >({})
+  const reportShelf = useCallback(
+    (shelfId: string, state: ConsoleTemplateGalleryShelfState) =>
+      setPluginShelves((shelves) =>
+        shelves[shelfId] === state ? shelves : { ...shelves, [shelfId]: state },
+      ),
+    [],
+  )
+  const pluginShelfStates = Object.values(pluginShelves)
+  const loading =
+    [saved, materialized].some((shelf) => shelf.status === 'loading') ||
+    pluginShelfStates.includes('loading')
   const isEmpty =
     !loading &&
     !savedShown.length &&
     !starterCards.length &&
-    !marketShown.length &&
-    saved.page === 0 &&
-    market.page === 0
+    !pluginShelfStates.includes('shown') &&
+    saved.page === 0
 
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
   )
-  const [installingId, setInstallingId] = useState<string | null>(null)
-  const handleInstallTemplate = useCallback(
-    (listing: any) => async () => {
-      if (installingId) return
-      setInstallingId(listing.$id)
-      const dequeue = queueLoading()
-      try {
-        const response = await authorizedFetch(
-          user,
-          '/api/marketplace/install-template',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ listingId: listing.$id, hostId }),
-          },
-        )
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) {
-          // An installs lock is not a broken listing (AGL-1532).
-          const locked = parseLockdownRefusal(response.status, payload)
-          if (locked) {
-            return void enqueueSnackbar(lockdownRefusalText(locked), {
-              variant: 'warning',
-              persist: true,
-            })
-          }
-          return void enqueueSnackbar(
-            payload?.error ?? 'Template install failed',
-            {
-              variant: response.status === 402 ? 'warning' : 'error',
-              allowDuplicate: true,
-            },
-          )
-        }
-        // Installing adds to the template library and publishes nothing
-        // (AGL-669), so the message must not imply pages appeared.
-        const added = Number(payload.templates ?? 0)
-        enqueueSnackbar(
-          `Saved ${added} template${added === 1 ? '' : 's'} from ` +
-            `"${listing.displayName}" to your library — open Templates to ` +
-            'create pages from them.',
-          { variant: 'success', persist: false },
-        )
-        onClose()
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      } finally {
-        setInstallingId(null)
-        dequeue()
-      }
-    },
-    [installingId, user, hostId, queueLoading, enqueueSnackbar, onClose],
-  )
-
   /**
    * Copies a starter into the library (AGL-687). Called on use and on edit —
    * the two moments a user commits to a starter — and never before, so an
@@ -862,83 +790,17 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             ) : null}
           </>
         ) : null}
-        {marketShown.length || market.hasMore || market.page > 0 ? (
-          <>
-            <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>
-              {'Marketplace templates'}
-            </Typography>
-            <Grid container spacing={2}>
-              {marketShown.map((listing: any) => (
-                <Grid key={listing.$id} size={{ xs: 12, sm: 6, md: 4 }}>
-                  <Card variant="outlined" sx={{ height: '100%' }}>
-                    {resolveMediaSrc(listing.previewImageUrl) ? (
-                      <Box
-                        component="img"
-                        src={resolveMediaSrc(listing.previewImageUrl)}
-                        alt={`${listing.displayName} preview`}
-                        sx={{
-                          width: '100%',
-                          height: 120,
-                          objectFit: 'cover',
-                        }}
-                      />
-                    ) : null}
-                    <CardContent>
-                      <Typography variant="h6">
-                        {listing.displayName}
-                      </Typography>
-                      {listing.category ? (
-                        <Chip
-                          label={listing.category}
-                          size="small"
-                          variant="outlined"
-                          sx={{ my: 1 }}
-                        />
-                      ) : null}
-                      <Typography variant="body2" color="text.secondary">
-                        {listing.description ?? ''}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        component="div"
-                        sx={{ mt: 1 }}
-                      >
-                        {`${listing.screenCount ?? '?'} screens · v${
-                          listing.latestVersion
-                        }` +
-                          (Number(listing.priceUsd ?? 0) > 0
-                            ? ` · $${listing.priceUsd}`
-                            : ' · free')}
-                      </Typography>
-                    </CardContent>
-                    <CardActions>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="primary"
-                        disabled={installingId === listing.$id}
-                        onClick={handleInstallTemplate(listing)}
-                      >
-                        {installingId === listing.$id
-                          ? 'Installing…'
-                          : 'Use template'}
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-            <ListPagination
-              page={market.page}
-              pageSize={market.pageSize}
-              rowCount={marketShown.length}
-              hasMore={market.hasMore}
-              onPageChange={market.setPage}
-              onPageSizeChange={market.setPageSize}
-            />
-          </>
-        ) : null}
+        {/* Shelves a plugin offers (AGL-3080): templates to install into
+            this site's library, searched by the same word as the shelves
+            above. */}
+        <PluginWidgetSlot
+          slot="templateGallery"
+          hostId={hostId}
+          kind={kind}
+          search={filter.trim()}
+          onInstalled={onClose}
+          reportShelf={reportShelf}
+        />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{'Start blank instead'}</Button>

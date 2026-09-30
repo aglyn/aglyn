@@ -330,22 +330,6 @@
       "why": "Staff diagnostics of an account's mail, not a Marketing feature: the row type mirrors one delivery-log record as the staff route returns it, and the member it trips on is that record's persisted `campaignId` — the id of the bulk send a message rode in — shown raw to staff beside the provider and message id."
     },
     {
-      "path": "apps/console/components/templates/host-templates-card.component.tsx",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/templates/template-gallery-dialog.component.tsx",
-      "rules": [
-        "plugin-collection:marketplace",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/constants/legal-documents.ts",
       "rules": [
         "vendor:wistia"

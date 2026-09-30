@@ -18,11 +18,15 @@
 /**
  * THE GALLERY'S SHELVES ARE QUERIES (AGL-3321), and it is still a gallery.
  *
- * The Saved, Starters and Marketplace shelves each put their scope and the
- * search word on their own Firestore query and page what it answers. So a
- * template on the third page of a library is found by a search typed on the
- * first — which the old gallery, matching its capped windows in memory,
- * could not do. The cards, the shelves and the search box are unchanged.
+ * The Saved and Starters shelves each put their scope and the search word on
+ * their own Firestore query and page what it answers. So a template on the
+ * third page of a library is found by a search typed on the first — which the
+ * old gallery, matching its capped windows in memory, could not do. The
+ * cards, the shelves and the search box are unchanged.
+ *
+ * A shelf of templates offered from elsewhere is a plugin's, in the
+ * `templateGallery` zone (AGL-3080): the gallery hands it the kind and the
+ * search word, and counts what it reports toward "nothing matches".
  */
 
 import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
@@ -52,7 +56,11 @@ const stored = (doc: Record<string, unknown>) => ({
 })
 
 let mockTemplates: Array<Record<string, unknown>> = []
-let mockListings: Array<Record<string, unknown>> = []
+
+/** Every set of props the `templateGallery` zone was handed, newest last. */
+let mockZoneProps: Array<Record<string, any>> = []
+/** What the zone's stand-in shelf reports, or `null` for a shelf that never does. */
+let mockShelfState: 'loading' | 'empty' | 'shown' | null = null
 
 /** ONE Firestore instance, as the real hook hands back. */
 const mockDb = {}
@@ -69,10 +77,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
   ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
   useListQuery: (options: UseListQueryOptions) => {
     const path = (options.collection as unknown as { path?: string } | null)?.path ?? ''
-    const answer = mockUseListQueryDouble(
-      () => (path === 'marketplaceListings' ? mockListings : mockTemplates),
-      options,
-    )
+    const answer = mockUseListQueryDouble(() => mockTemplates, options)
     if (options.collection) mockPlans.set(path, [...(mockPlans.get(path) ?? []), answer.plan])
     return answer
   },
@@ -103,6 +108,20 @@ jest.mock('./use-template-dialog.component', () => ({
   __esModule: true,
   default: () => null,
 }))
+jest.mock('../plugin-widget-slot.component', () => {
+  const { useEffect } = jest.requireActual('react')
+  return {
+    __esModule: true,
+    default: function MockZone(props: Record<string, any>) {
+      mockZoneProps.push(props)
+      const { reportShelf, search } = props
+      useEffect(() => {
+        if (mockShelfState) reportShelf('demo-shelf', mockShelfState)
+      }, [reportShelf, search])
+      return null
+    },
+  }
+})
 
 import TemplateGalleryDialog from './template-gallery-dialog.component'
 import { LIBRARY_TEMPLATE_SOURCE_TYPES } from './template-source-badge'
@@ -128,6 +147,8 @@ const search = (value: string) => {
 
 beforeEach(() => {
   mockPlans.clear()
+  mockZoneProps = []
+  mockShelfState = null
   // Twenty-five saved page templates, and the one searched for last in the
   // walk: THE CONTROL that a search over the first page would miss it.
   mockTemplates = Array.from({ length: 25 }, (_, index) =>
@@ -139,10 +160,6 @@ beforeEach(() => {
       libraryRow: true,
     }),
   )
-  mockListings = [
-    stored({ $id: 'listing-1', kind: 'template', displayName: 'Bakery site', latestVersion: 1 }),
-    stored({ $id: 'listing-2', kind: 'template', displayName: 'Florist site', latestVersion: 1 }),
-  ]
 })
 
 describe('the template gallery’s shelves are served by their queries (AGL-3321)', () => {
@@ -169,20 +186,6 @@ describe('the template gallery’s shelves are served by their queries (AGL-3321
     })
   })
 
-  it('searches the marketplace shelf by the listing’s name', async () => {
-    open()
-    expect(screen.getByText('Bakery site')).toBeTruthy()
-    search('flor')
-    await waitFor(() => expect(screen.queryByText('Bakery site')).toBeNull())
-    expect(screen.getByText('Florist site')).toBeTruthy()
-    asked('marketplaceListings', {
-      filters: [
-        { path: 'kind', op: '==', value: 'template' },
-        { path: 'nameTokens', op: 'array-contains', value: 'flor' },
-      ],
-    })
-  })
-
   it('asks the code-defined starters the same question: a word of the name', async () => {
     open()
     expect(screen.getByText('Portfolio')).toBeTruthy()
@@ -201,10 +204,58 @@ describe('the template gallery’s shelves are served by their queries (AGL-3321
 
   it('offers no whole-site bundles on a component picker', () => {
     open('component')
-    expect(mockPlans.has('marketplaceListings')).toBe(false)
     expect(screen.queryByText('Portfolio')).toBeNull()
+    expect(mockZoneProps.at(-1)).toEqual(expect.objectContaining({ kind: 'component' }))
     asked('hosts/host-1/templates', {
       filters: expect.arrayContaining([{ path: 'kind', op: '==', value: 'component' }]),
     })
+  })
+})
+
+describe('a plugin’s shelf is the templateGallery zone (AGL-3080)', () => {
+  it('hands the zone the site, the kind and the search word, and closes on an install', async () => {
+    const onClose = jest.fn()
+    render(
+      <TemplateGalleryDialog
+        hostId="host-1"
+        open
+        onClose={onClose}
+        existingSlugs={[]}
+        screenCount={0}
+        kind="page"
+      />,
+    )
+    expect(mockZoneProps.at(-1)).toEqual(
+      expect.objectContaining({ slot: 'templateGallery', hostId: 'host-1', kind: 'page', search: '' }),
+    )
+    search('  flor ')
+    await waitFor(() => expect(mockZoneProps.at(-1)?.search).toBe('flor'))
+    mockZoneProps.at(-1)?.onInstalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('holds back “nothing matches” while a plugin’s shelf shows something', async () => {
+    mockShelfState = 'shown'
+    open()
+    search('zzz')
+    await waitFor(() => expect(lastListQueryPlan()?.searched).toBe('zzz'))
+    expect(screen.queryByText('Nothing matches — try a different search.')).toBeNull()
+  })
+
+  it('and while it is still loading', async () => {
+    mockShelfState = 'loading'
+    open()
+    search('zzz')
+    await waitFor(() => expect(lastListQueryPlan()?.searched).toBe('zzz'))
+    expect(screen.queryByText('Nothing matches — try a different search.')).toBeNull()
+  })
+
+  it('says nothing matched once a plugin’s shelf reports it is empty too', async () => {
+    mockShelfState = 'empty'
+    open()
+    search('zzz')
+    await waitFor(() =>
+      expect(screen.getByText('Nothing matches — try a different search.')).toBeTruthy(),
+    )
   })
 })

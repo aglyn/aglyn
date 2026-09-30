@@ -91,6 +91,10 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // A card of the Plugins page, and a notice above an installation's cards.
   orgPluginInstalls: 'stack',
   pluginInstallStatus: 'stack',
+  // A shelf among the template gallery's own, spaced from the one above it.
+  templateGallery: 'stack',
+  // A control in a cell of the Templates library, beside the Source badge.
+  templateInstallStatus: 'bare',
   // A notice above a subtree, spaced by the layout that draws it.
   // The body of the ƒx dialog, which spaces its own contents.
   besignerFunctions: 'bare',

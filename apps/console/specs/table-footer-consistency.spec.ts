@@ -149,6 +149,12 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'templates gallery',
     'apps/console/components/templates/template-gallery-dialog.component.tsx',
   ],
+  // The gallery's marketplace shelf, drawn by the marketplace in the
+  // gallery's `templateGallery` zone since AGL-3080.
+  [
+    'templates gallery marketplace shelf',
+    'libs/plugins/marketplace/src/lib/components/template-gallery-shelf.component.tsx',
+  ],
   [
     'datasets records',
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',

@@ -583,7 +583,9 @@
             "orgPluginInstalls",
             "pluginInstallStatus",
             "pluginSiteSet",
-            "staffOverview"
+            "staffOverview",
+            "templateGallery",
+            "templateInstallStatus"
           ],
           "orgRoutes": [
             "/marketplace"
