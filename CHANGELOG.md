@@ -25,6 +25,8 @@ content on the marketing site and is written separately.
 - **sites:** a new site is born with a published Home page, not a 404 ([AGL-3408](https://linear.app/aglyn/issue/AGL-3408))
 - **tools:** the monaco DOMPurify guard skips preconditions the vendored copy fixed ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
 - **docs:** lodash-es is overridden to 4.18.1 under mermaid's chevrotain, clearing the docs site's last two Dependabot alerts ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
+- **marketplace:** the listing page's owner cards and body share one set of edges, and Verified publisher gets its content gutters ([AGL-3414](https://linear.app/aglyn/issue/AGL-3414))
+- **console:** the saved workspace URL is no longer flagged invalid; only a new one is judged ([AGL-3415](https://linear.app/aglyn/issue/AGL-3415))
 
 ### Changed
 
