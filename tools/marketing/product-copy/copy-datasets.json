@@ -36,7 +36,7 @@
       "actions": [],
       "items": [],
       "image": null,
-      "notes": "Single 34px Bold pull-quote at text/muted, one run, no emphasized phrase. It names the console and the API only, because those are the writers that run `validateDocument`: the console dataset route and `createRecord`/`updateRecord` in `api-v1-resources.ts`. A bound form and a workflow action write through `buildDatasetRecordValues`, which keeps known field ids and drops the rest but checks no type or rule, so 'every write' would be false. The workflow action is the `datasetAppend`/`updateDataset` step: today it runs only as an Actions step, and AGL-3105 makes every server-side Actions step, these two included, a step of a workflow, which is what makes 'a workflow action' exact."
+      "notes": "Single 34px Bold pull-quote at text/muted, one run, no emphasized phrase. It names the console and the API only, because those are the writers that run `validateDocument`: the console dataset route and `createRecord`/`updateRecord` in `api-v1-resources.ts`. When this was written a bound form and a workflow action checked no type or rule, so 'every write' would have been false. Since AGL-2773 they validate too, through `prepareDatasetRecordWrite` (the same `coerceDocumentValues` + `validateDocument` pair), so the line stays true and could now widen to every write. The workflow action is the `datasetAppend`/`updateDataset` step: today it runs only as an Actions step, and AGL-3105 makes every server-side Actions step, these two included, a step of a workflow, which is what makes 'a workflow action' exact."
     },
     {
       "kind": "capabilities",

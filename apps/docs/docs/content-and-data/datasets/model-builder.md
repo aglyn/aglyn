@@ -19,9 +19,10 @@ import in the console, or write through the REST API, are validated against it.
 
 1. In **Data**, create a dataset and open the **schema dialog**.
 2. Add **typed fields** — text, number, date, reference, and more.
-3. Save. The model is stored on the dataset. The console and the REST API validate
-   records against it; form submissions and automation steps store values as text
-   without checking them.
+3. Save. The model is stored on the dataset. Every write validates records against
+   it — the console, the REST API, a bound form and an automation step — and stores
+   each value as its field's type. A record with a value that doesn't fit is not
+   written.
 
 ### Display name vs reference ID
 

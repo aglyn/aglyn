@@ -388,7 +388,8 @@
       "register": {
         "console": "registerMarketplaceConsole",
         "staff": "registerMarketplaceConsole",
-        "consoleApi": "registerMarketplaceConsoleApi"
+        "consoleApi": "registerMarketplaceConsoleApi",
+        "serverDeclarations": "registerMarketplaceServerDeclarations"
       },
       "apiPrefixes": [
         "marketplace"
