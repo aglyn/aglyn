@@ -373,12 +373,14 @@ needs it starts.
     The number stays.
 17. **`plugins-workflows` → `plugins-logic`.** Gone (AGL-3080). What crossed
     was a client and a dialog. The client called a route the console itself
-    serves (`/api/hosts/where-used`), which scans variables, functions and
-    workflows alike, so it was never logic's: it lives in the core beside the
-    route, at `@aglyn/aglyn/app-utils/where-used`, and both plugins ask the
-    platform. The dialog is a widget logic registers in the `workflowUsage`
-    zone the Automation page hosts; with nothing registered the page gives the
-    answer in words. The number stays.
+    serves (`/api/hosts/where-used`), so it was never logic's: it lives in the
+    core beside the route, at `@aglyn/aglyn/app-utils/where-used`, and both
+    plugins ask the platform. The route reads published pages itself and asks
+    the plugins for the rest through `plugin-dependents`: logic answers which
+    variables a workflow computes, workflows which workflows call a function.
+    The dialog is a widget logic registers in the `workflowUsage` zone the
+    Automation page hosts; with nothing registered the page gives the answer
+    in words. The number stays.
 
 **Plugin → designer UI.** Gone (AGL-3080). No shipped file in `plugins-mui`
 imported the designer any more; two specs did, to draw the mui image and video

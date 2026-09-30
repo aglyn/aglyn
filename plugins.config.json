@@ -932,7 +932,8 @@
       "id": "logic",
       "package": "@aglyn/plugins-logic",
       "register": {
-        "console": "registerLogicConsole"
+        "console": "registerLogicConsole",
+        "serverDeclarations": "registerLogicServerDeclarations"
       },
       "catalog": {
         "order": 14,

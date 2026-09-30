@@ -589,6 +589,42 @@ Commerce publishes `product` and `productCategory`; Workflows publishes a site's
 `workflow`, `webhook` and `action` records (a webhook's facts never carry its URL
 or secret).
 
+## What depends on a thing — `plugin-dependents` (`/server`)
+
+The console's "Used by" scan (`/api/hosts/where-used`, asked through
+`@aglyn/aglyn/app-utils/where-used`) tells a person what they would break by
+renaming or deleting a site's variable, function or workflow. It reads the
+published pages itself. What refers to the thing from inside a plugin's own
+records is answered by that plugin: register a dependents source for the kinds
+of thing your records point at, and the scan lists what it finds beside its
+own.
+
+```ts
+// your plugin's serverDeclarations entry
+registerPluginDependentsSource(
+  {
+    kinds: ['function'],
+    find: async (request) => (await import('./server/recipe-dependents')).find(request),
+  },
+  { pluginId: 'cellar' },
+)
+
+// find({ hostId, kind, id, name? }) answers
+// { dependents: [{ type: 'recipe', id, name, via: ['id'] }], truncated: false }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginDependentsSource(source, { pluginId?, key? })` | `source.kinds` names the kinds it answers for; `find` answers one site's referring records. Owner = the loader's marker, else `pluginId`; no owner or no kind throws. The same plugin re-registering the same `key` replaces its own. |
+| `findPluginDependents({ hostId, kind, id, name? })` | What the scan calls: every source for the kind, in registration order. `{ dependents, complete }`, and `complete` is **false** when a source was truncated or threw — the scan then never says "nothing uses this". No source for the kind is a complete, empty answer. |
+
+A dependent's `type` is the word the scan lists it under (`variable`,
+`workflow`), and `via` says how it refers: `id` survives a rename, `name` does
+not. Workflows answers for a `function` (the workflows whose steps call it);
+Logic answers for a `workflow` (the variables it computes), which is how the
+Automation page learns what a workflow's deletion would leave on its fallback
+value without either plugin importing the other.
+
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The
