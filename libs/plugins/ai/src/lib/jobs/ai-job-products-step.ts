@@ -17,6 +17,10 @@
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import {
+  pluginRecordIndex,
+  type PluginRecordIndex,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { isHostPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
@@ -115,9 +119,6 @@ export const AI_PRODUCT_PHOTO_NOTES: Readonly<Partial<Record<AiProductPhotoRead,
   model: 'The photo was not read: the model this job ran on does not read pictures.',
 }
 
-/** The commerce plugin, as `plugins.config.json` names it. */
-const COMMERCE_PLUGIN_ID = 'commerce'
-
 /**
  * ASSUMED: how long a catalog or categories pass reads the site before it
  * asks: the host document and, for categories, the category names.
@@ -199,54 +200,54 @@ async function loadStore(firestore: Firestore, job: AiJob): Promise<StoreSite | 
   }
 }
 
-/** The site's categories by name, as many as a request lists. */
-async function readCategories(firestore: Firestore, hostId: string): Promise<AiProductCategory[]> {
-  const snapshot = await firestore
-    .collection('hosts')
-    .doc(hostId)
-    .collection('productCategories')
-    .select('name')
-    .limit(AI_PRODUCT_CATEGORY_LIST_MAX)
-    .get()
-  return snapshot.docs
-    .map((doc) => ({ id: doc.id, name: str(doc.get('name')) }))
-    .filter((category) => category.name)
+/**
+ * The site's categories by name, as many as a request lists — from the
+ * `productCategory` index the plugin that keeps them publishes (AGL-3080).
+ * None when no plugin keeps categories here.
+ */
+async function readCategories(
+  hostId: string,
+  given?: PluginRecordIndex | null,
+): Promise<AiProductCategory[]> {
+  const index = given ?? pluginRecordIndex('productCategory')?.index
+  if (!index) return []
+  const { records } = await index.list({ hostId, limit: AI_PRODUCT_CATEGORY_LIST_MAX })
+  return records
+    .map((record) => ({ id: record.id, name: record.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** A saved product's facts, as a bulk pass reads them; `null` when it is gone. */
-async function readProductFacts(firestore: Firestore, hostId: string, productId: string): Promise<AiProductFacts | null> {
-  const snapshot = await firestore.collection('hosts').doc(hostId).collection('products').doc(productId).get()
-  const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null
-  if (!data || data['deletedAt']) return null
-  const name = str(data['name'])
-  if (!name) return null
-  const type = data['type']
-  const seo = (data['seo'] ?? {}) as Record<string, unknown>
-  const mediaUrls = Array.isArray(data['mediaUrls']) ? data['mediaUrls'] : []
+/**
+ * A saved product's facts, as a bulk pass reads them; `null` when it is gone
+ * — read through the `product` index the plugin that keeps products publishes
+ * (AGL-3080), which answers live, named products only.
+ */
+async function readProductFacts(hostId: string, productId: string): Promise<AiProductFacts | null> {
+  const record = await pluginRecordIndex('product')?.index.get({ hostId, id: productId })
+  if (!record) return null
+  const facts = record.facts
+  const type = facts['type']
+  const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
   return {
-    id: productId,
-    name,
+    id: record.id,
+    name: record.name,
     type: (AI_PRODUCT_TYPES as readonly unknown[]).includes(type) ? (type as AiProductType) : 'physical',
-    text: str(data['description']).slice(0, AI_PRODUCT_TEXT_MAX_CHARS),
-    tags: (Array.isArray(data['tags']) ? data['tags'] : []).map(str).filter(Boolean),
-    categoryIds: (Array.isArray(data['categoryIds']) ? data['categoryIds'] : []).map(str).filter(Boolean),
-    options: (Array.isArray(data['options']) ? data['options'] : [])
+    text: str(facts['description']).slice(0, AI_PRODUCT_TEXT_MAX_CHARS),
+    tags: list(facts['tags']).map(str).filter(Boolean),
+    categoryIds: list(facts['categoryIds']).map(str).filter(Boolean),
+    options: list(facts['options'])
       .slice(0, AI_PRODUCT_OPTIONS_MAX)
       .map((option) => {
         const record = (option ?? {}) as Record<string, unknown>
         return {
           name: str(record['name']),
-          values: (Array.isArray(record['values']) ? record['values'] : [])
-            .map(str)
-            .filter(Boolean)
-            .slice(0, AI_PRODUCT_OPTION_VALUES_MAX),
+          values: list(record['values']).map(str).filter(Boolean).slice(0, AI_PRODUCT_OPTION_VALUES_MAX),
         }
       })
       .filter((option) => option.name),
-    imageUrl: str(mediaUrls[0]) || str(data['imageUrl']) || null,
-    seoTitle: str(seo['title']),
-    seoDescription: str(seo['description']),
+    imageUrl: str(facts['imageUrl']) || null,
+    seoTitle: str(facts['seoTitle']),
+    seoDescription: str(facts['seoDescription']),
   }
 }
 
@@ -270,6 +271,12 @@ export interface AiJobProductsStepDeps {
   image?: AiProductImageSeams
   /** Whether a model reads pictures; the provider's own descriptor otherwise. */
   readsImages?: (model: string) => boolean
+  /**
+   * Where the site's categories are read; the `productCategory` index the
+   * plugin that keeps them publishes otherwise. The eval harness hands its
+   * own, over the categories a case names.
+   */
+  categoryIndex?: PluginRecordIndex | null
 }
 
 interface CopyRun {
@@ -286,7 +293,7 @@ async function writeProductCopy(
   deps: AiJobProductsStepDeps,
 ): Promise<CopyRun> {
   const { job, firestore, signal } = context
-  const categories = await readCategories(firestore, site.hostId)
+  const categories = await readCategories(site.hostId, deps.categoryIndex)
   let photo: AiProductPhotoRead = 'none'
   let image = null
   if (product.imageUrl) {
@@ -357,7 +364,7 @@ export function createAiJobProductsStep(deps: AiJobProductsStepDeps = {}): AiJob
       const productId = inputs.productIds[done]
       if (!productId) return aiUnspentOutcome(model)
       const more = done + 1 < inputs.productIds.length
-      const product = await readProductFacts(firestore, site.hostId, productId)
+      const product = await readProductFacts(site.hostId, productId)
       if (!product) {
         const skipped: AiProductCopyProposal = {
           kind: 'copy',
@@ -421,7 +428,7 @@ export function createAiJobProductsStep(deps: AiJobProductsStepDeps = {}): AiJob
       }
     }
 
-    const existing = await readCategories(firestore, site.hostId)
+    const existing = await readCategories(site.hostId, deps.categoryIndex)
     const generation = await generateAiCategories({
       store: site.name,
       brief: job.brief,
@@ -457,12 +464,16 @@ export const aiProductsJobAdmission: AiJobAdmission = async (context) => {
   if (!owner || owner !== context.orgId) return { status: 404, error: AI_PRODUCTS_UNKNOWN_SITE_COPY }
   const org = context.org as (Partial<AglynOrgBilling> & { enabledPlugins?: string[] }) | null
   if (!checkEntitlement(org, 'commerce')) return { status: 403, error: AI_PRODUCTS_NOT_ENTITLED_COPY }
+  // The plugin that keeps products is whichever publishes their index
+  // (AGL-3080); none is the same refusal as one switched off.
+  const keeper = pluginRecordIndex('product')?.pluginId
+  if (!keeper) return { status: 403, error: AI_PRODUCTS_COMMERCE_OFF_COPY }
   const host = (await context.firestore.collection('hosts').doc(context.hostId).get()).data() ?? null
-  const released = await filterEnabledPluginsByReleaseFlags([COMMERCE_PLUGIN_ID], {
+  const released = await filterEnabledPluginsByReleaseFlags([keeper], {
     orgId: context.orgId,
     authorization: null,
   })
-  if (!released.includes(COMMERCE_PLUGIN_ID) || !isHostPluginEnabled(org, host, COMMERCE_PLUGIN_ID)) {
+  if (!released.includes(keeper) || !isHostPluginEnabled(org, host, keeper)) {
     return { status: 403, error: AI_PRODUCTS_COMMERCE_OFF_COPY }
   }
   return null

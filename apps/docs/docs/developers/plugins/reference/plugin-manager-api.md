@@ -425,6 +425,45 @@ every plugin's server entry before a plugin handler runs, so a reader
 registered from a server registrar is there wherever a handler asks. Import it
 by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-cards`).
 
+## Record indexes — `plugin-record-index` (`/server`)
+
+The records a plugin keeps, LISTED and READ for another plugin that works over
+them — an AI job enriching a catalog, a composer binding the products an email
+names — without that plugin reaching for the owner's collection. Keyed by
+record kind, like the card, the facts reader and the route; a card says how a
+record LOOKS, an index finds records and reads what the owner shares about
+them.
+
+```ts
+// the owner, from its serverDeclarations (so every server process has it)
+registerPluginRecordIndex('bottle', {
+  async list({ hostId, limit }) {
+    const rows = await readBottles(hostId, limit + 1)
+    return {
+      records: rows.slice(0, limit).map((b) => ({ id: b.id, name: b.name, facts: { vintage: b.vintage } })),
+      truncated: rows.length > limit,
+    }
+  },
+  async get({ hostId, id }) {
+    const b = await readBottle(hostId, id)
+    return b ? { id: b.id, name: b.name, facts: { vintage: b.vintage } } : null
+  },
+})
+
+// any other plugin's server code
+const bottles = pluginRecordIndex('bottle')?.index
+const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { records: [] }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordIndex(kind, index, { pluginId? })` | A kind another plugin keeps throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `pluginRecordIndex(kind)` | `{ pluginId, index }`, or **`null` when no plugin keeps the kind here** — a reader treats that as "none here", never as a reason to read the collection itself. The `pluginId` is also how a reader asks whether the keeper is switched on for a site. |
+| `index.list({ orgId?, hostId?, limit })` / `index.get({ orgId?, hostId?, id })` | Live, named records only — the owner decides what "deleted" is — each `{ id, name, facts }`, with `facts` in the shape the owner documents. `truncated` says the scope holds more. |
+
+Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
+Commerce publishes `product` and `productCategory`.
+
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The

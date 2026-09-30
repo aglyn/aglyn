@@ -577,7 +577,7 @@ export function createAiJobEmailStep(deps: AiJobEmailStepDeps = {}): AiJobStepRu
     const [inventory, orgSnapshot, products, hostSubdomain] = await Promise.all([
       readInventory(job.orgId, hostId, { firestore }),
       firestore.collection('orgs').doc(job.orgId).get(),
-      resolveAiEmailProducts(firestore, { hostId, brief: job.brief, inputs: job.inputs }),
+      resolveAiEmailProducts({ hostId, brief: job.brief, inputs: job.inputs }),
       aiSiteSubdomain(firestore, hostId),
     ])
     const org = (orgSnapshot.data() ?? null) as Record<string, unknown> | null

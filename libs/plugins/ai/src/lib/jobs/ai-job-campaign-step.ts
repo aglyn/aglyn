@@ -266,7 +266,7 @@ export function createAiJobCampaignStep(deps: AiJobCampaignStepDeps = {}): AiJob
 
     const [inventory, products] = await Promise.all([
       readInventory(job.orgId, hostId, { firestore }),
-      resolveAiEmailProducts(firestore, { hostId, brief: job.brief, inputs: job.inputs }),
+      resolveAiEmailProducts({ hostId, brief: job.brief, inputs: job.inputs }),
     ])
     const refusal = await design.refusal(context)
     if (refusal) {

@@ -26,6 +26,7 @@ import { createAiJobFormStep } from '../jobs/ai-job-form-step'
 import { createAiJobLayoutStep } from '../jobs/ai-job-layout-step'
 import { aiPageJobUnits, createAiJobPageStep } from '../jobs/ai-job-page-step'
 import { AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from '../jobs/ai-job-plan-step'
+import type { PluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { createAiJobProductsStep } from '../jobs/ai-job-products-step'
 import { aiSitePendingUnits } from '../jobs/ai-job-site-step'
 import type { AiJobStepOutcome } from '../jobs/ai-job-text-step'
@@ -713,11 +714,23 @@ const recordProducts: AiEvalRecorder = async (evalCase, options) => {
       : (evalCase.existingCategoryNames ?? []).map((name, index) => ({ id: `category-${index + 1}`, name }))
   const store = aiEvalMemoryFirestore({
     [`hosts/${hostId}`]: { orgId: EVAL_ORG, ...(evalCase.siteName ? { displayName: evalCase.siteName } : {}) },
-    ...Object.fromEntries(
-      categories.map((category) => [`hosts/${hostId}/productCategories/${category.id}`, { name: category.name }]),
-    ),
   })
-  const outcome = await createAiJobProductsStep({ image: aiEvalMediaSeams(evalCase, options) })({
+  // The case's categories, answered as the plugin that keeps categories
+  // would answer them (AGL-3080): the step reads them through an index.
+  const categoryIndex: PluginRecordIndex = {
+    list: async ({ limit }) => ({
+      records: categories.slice(0, limit).map((category) => ({ ...category, facts: {} })),
+      truncated: categories.length > limit,
+    }),
+    get: async ({ id }) => {
+      const found = categories.find((category) => category.id === id)
+      return found ? { ...found, facts: {} } : null
+    },
+  }
+  const outcome = await createAiJobProductsStep({
+    image: aiEvalMediaSeams(evalCase, options),
+    categoryIndex,
+  })({
     job: { ...evalJob(evalCase, 'products'), hostId, inputs: aiEvalProductsInputs(evalCase) },
     stepIndex: 0,
     now: options.now ?? new Date(),
