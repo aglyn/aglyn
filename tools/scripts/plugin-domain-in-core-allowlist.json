@@ -1,5 +1,5 @@
 {
-  "note": "Files outside libs/plugins/** that carry a plugin's domain today (AGL-3080): a domain-named file or route directory, a vendor literal, a quoted first-party plugin id, a static plugin import, a plugin-owned Firestore collection addressed from outside the plugin, exports that are mostly one plugin's vocabulary, or ANY declaration in a plugin's vocabulary mixed into a platform file. The last three were added by the content sweep of 2026-09-20, which is the one time this list grew: the rules were new, the files were not. `lane` is the line of AGL-3080's move set that takes the file out; `\"lane\": \"stays\"` is a binding argued to be the platform's own, with the argument in `why`. Read by check-plugin-domain-in-core.mjs, which is red for a finding missing here AND for a row or rule nothing trips any more (`--prune` drops those). This list may shrink and must never grow: a new finding is refused, not recorded.",
+  "note": "Files that carry a plugin's domain where it does not belong today (AGL-3080). Outside libs/plugins/**: a domain-named file or route directory, a vendor literal, a quoted first-party plugin id, a static plugin import, a plugin-owned Firestore collection addressed from outside the plugin, exports that are mostly one plugin's vocabulary, or ANY declaration in a plugin's vocabulary mixed into a platform file. The last three were added by the content sweep of 2026-09-20; the second time this list grew was 2026-09-30, when the guard took up Rule 3's \"nor in another plugin\" — a plugin file addressing ANOTHER plugin's collection or console page (`\"lane\": \"coupling\"`). Both times the rules were new, the files were not. `lane` is the line of AGL-3080's move set that takes the file out; `\"lane\": \"stays\"` is a binding argued to be the platform's own, with the argument in `why`. Read by check-plugin-domain-in-core.mjs, which is red for a finding missing here AND for a row or rule nothing trips any more (`--prune` drops those). This list may shrink and must never grow: a new finding is refused, not recorded.",
   "files": [
     {
       "path": "apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx",
@@ -940,6 +940,289 @@
       ],
       "lane": "stays",
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/components/assist-jobs-drawer.component.tsx",
+      "rules": [
+        "console-path:forms",
+        "console-path:workflows"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/insights/ai-figure-readers.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/jobs/ai-workflow-records.ts",
+      "rules": [
+        "plugin-collection:data",
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/runtime/site-inventory.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/components/deal-products-card.tsx",
+      "rules": [
+        "plugin-collection:commerce"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx",
+      "rules": [
+        "console-path:forms"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/components/org-lead-surfaces-note.tsx",
+      "rules": [
+        "console-path:forms"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/components/recipes-card.tsx",
+      "rules": [
+        "console-path:workflows"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/server/campaign-filing-activity.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/server/contact-email-history.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/server/lead-create.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/server/leads-import.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/components/contacts-card.component.tsx",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx",
+      "rules": [
+        "plugin-collection:crm",
+        "plugin-collection:forms"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/components/submissions-card.component.tsx",
+      "rules": [
+        "plugin-collection:forms"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/server.ts",
+      "rules": [
+        "plugin-collection:forms"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/components/host-reference-health-card.component.tsx",
+      "rules": [
+        "plugin-collection:data",
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/components/host-variables-card.component.tsx",
+      "rules": [
+        "plugin-collection:workflows"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/components/campaign-conversions-card.tsx",
+      "rules": [
+        "plugin-collection:bookings",
+        "plugin-collection:forms",
+        "console-path:crm"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/components/campaign-members-section.tsx",
+      "rules": [
+        "console-path:crm",
+        "console-path:forms"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/components/use-emails-hub-path.ts",
+      "rules": [
+        "console-path:email"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/server/campaign-manage.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/server/campaign-send.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/components/listing-content.component.tsx",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/components/marketplace-browse.component.tsx",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/components/org-publish-panel.component.tsx",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/server/install-dataset-schema.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/server/publish-dataset-schema.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/server/update-artifact.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/components/use-outreach-crm.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/enrollment/enroll-people.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/routes/curate-routes.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
+      "rules": [
+        "plugin-collection:crm",
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/routes/preview-routes.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/runtime/lead-records.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/components/use-automation-step-pickers.ts",
+      "rules": [
+        "plugin-collection:data",
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/components/use-org-automation-step-pickers.ts",
+      "rules": [
+        "plugin-collection:data",
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/engine/run-event-actions.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "coupling"
     },
     {
       "path": "libs/shared/data/forms/src/lib/forms.ts",
