@@ -317,14 +317,6 @@
       "why": "The subprocessor inventory discloses every vendor by name; naming them is its whole job, and a plugin-declared row still folds in through the subprocessor seam."
     },
     {
-      "path": "apps/console/next.config.js",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:workflows"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/utils/api-v1-openapi.ts",
       "rules": [
         "domain-declares:data"

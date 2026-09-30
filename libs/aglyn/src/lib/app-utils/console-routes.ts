@@ -477,7 +477,7 @@ export enum Route {
    * permanently, so a held bookmark still lands on the section (and keeps its
    * `?tab=`, which never changed).
    *
-   * Kept on the table rather than as a bare literal in `next.config.js`
+   * Kept on the table rather than as a bare literal in the redirect
    * because the redirect and the address it serves are one fact:
    * `automation-section.spec.ts` reads this entry and fails if the rule for
    * it goes missing.

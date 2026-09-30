@@ -1,0 +1,26 @@
+[
+  {
+    "pluginId": "marketplace",
+    "source": "/manage/marketplace",
+    "destination": "/org/marketplace",
+    "permanent": true
+  },
+  {
+    "pluginId": "email",
+    "source": "/:orgSlug/hosts/:host/emails/emails/:path*",
+    "destination": "/:orgSlug/hosts/:host/emails/messages/:path*",
+    "permanent": true
+  },
+  {
+    "pluginId": "email",
+    "source": "/:orgSlug/marketing/emails/:path*",
+    "destination": "/:orgSlug/emails/messages/:path*",
+    "permanent": true
+  },
+  {
+    "pluginId": "workflows",
+    "source": "/:orgSlug/hosts/:host/workflows",
+    "destination": "/:orgSlug/hosts/:host/automation",
+    "permanent": true
+  }
+]

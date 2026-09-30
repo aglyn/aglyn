@@ -88,6 +88,26 @@ never reachable when its surface is not. Omitting `sections` keeps the nav
 item matched exactly as before — a path beneath it does not resolve. See
 [Building feature plugins → Routed sections](../building-feature-plugins.md).
 
+A section or hub that is renamed keeps its old address answering. A
+first-party plugin declares the rule in `plugins.config.json`, in Next's own
+redirect shape, and the console's build config compiles every plugin's rules
+into its redirects:
+
+```json
+"consoleRedirects": [
+  {
+    "source": "/:orgSlug/hosts/:host/cellar/bottles/:path*",
+    "destination": "/:orgSlug/hosts/:host/cellar/wines/:path*",
+    "permanent": true
+  }
+]
+```
+
+Both paths are console paths, `permanent` is stated outright (a browser keeps
+a permanent redirect for good), one address has one rule, and the destination
+lies under one of the plugin's own `contributes.console` routes: a plugin
+moves only its own pages.
+
 ## Loading — `plugin-loader`
 
 | API | Semantics |

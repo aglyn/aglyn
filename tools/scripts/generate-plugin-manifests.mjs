@@ -2240,6 +2240,64 @@ ${notificationDigestRows().map((row) => `  ${indent(JSON.stringify(row, null, 2)
   )
 }
 
+/**
+ * The console addresses a plugin used to answer at, and where they answer
+ * now (AGL-3080): each plugin's `consoleRedirects`, compiled into a JSON file
+ * `apps/console/next.config.js` spreads into its `redirects()`. The shell
+ * keeps the platform's own old addresses; a plugin's are the plugin's to keep
+ * answering, so a renamed plugin section never edits core.
+ *
+ * JSON, because the reader is the console's CommonJS build config, which
+ * runs before anything can compile TypeScript. Checked here:
+ *
+ *  - a site path on both sides, and not the same one;
+ *  - `permanent` said outright — a 308 is cached by browsers for good, and
+ *    that is a choice to make on purpose;
+ *  - one plugin per source: two rules for one address would be answered by
+ *    whichever Next reads first;
+ *  - a destination inside the plugin's OWN console routes, so a plugin can
+ *    only move its own pages, never another's or the platform's.
+ */
+const REDIRECTS_MANIFEST = 'apps/console/constants/plugins.redirects.generated.json'
+const SITE_PATH = /^\/(?!\/)[^\s]*$/
+
+function consoleRedirectRows() {
+  const rows = []
+  const sources = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.consoleRedirects
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" consoleRedirects`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the old address`)
+    }
+    const own = [...(plugin.contributes?.console?.routes ?? []), ...(plugin.contributes?.console?.orgRoutes ?? [])]
+    for (const entry of declared) {
+      const { $comment: _note, ...rule } = entry ?? {}
+      const { source, destination, permanent } = rule
+      const what = `${where} "${source ?? ''}"`
+      const unknown = Object.keys(rule).filter((key) => !['source', 'destination', 'permanent'].includes(key))
+      if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a redirect field`)
+      if (typeof source !== 'string' || !SITE_PATH.test(source)) throw new Error(`${what}: "source" is a console path`)
+      if (typeof destination !== 'string' || !SITE_PATH.test(destination)) throw new Error(`${what}: "destination" is a console path`)
+      if (source === destination) throw new Error(`${what} redirects an address to itself`)
+      if (typeof permanent !== 'boolean') throw new Error(`${what}: "permanent" is said outright, true or false`)
+      const held = sources.get(source)
+      if (held) throw new Error(`${what} is already redirected by "${held}" — one address has one rule`)
+      sources.set(source, plugin.id)
+      const lands = own.some((route) => destination.endsWith(route) || destination.includes(`${route}/`))
+      if (!lands) {
+        throw new Error(
+          `${what}: "${destination}" is not under one of "${plugin.id}"'s own console routes ` +
+            `(${own.length ? own.join(', ') : 'it declares none'}) — a plugin moves only its own pages`,
+        )
+      }
+      rows.push({ pluginId: plugin.id, source, destination, permanent })
+    }
+  }
+  return rows
+}
+
 const check = process.argv.includes('--check')
 const drifted = []
 
@@ -2267,6 +2325,7 @@ const ALL = [
     content: subprocessorsContent(await pluginSubprocessors()),
     describe: describeSubprocessorDrift,
   },
+  { file: REDIRECTS_MANIFEST, content: `${JSON.stringify(consoleRedirectRows(), null, 2)}\n` },
 ]
 
 for (const { file, content, describe = describeDrift } of ALL) {

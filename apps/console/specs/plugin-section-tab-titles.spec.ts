@@ -146,8 +146,8 @@ describe('no section repeats the name of its surface', () => {
       .sort()
 
     // Fix by renaming the section in the plugin's `*-console-sections.ts` —
-    // id and label together, with the old path kept alive by a redirect in
-    // `next.config.js` — and regenerating the titles manifest.
+    // id and label together, with the old path kept alive by a redirect the
+    // plugin declares (`consoleRedirects`) — and regenerating the manifests.
     expect(repeated).toEqual([])
   })
 })
