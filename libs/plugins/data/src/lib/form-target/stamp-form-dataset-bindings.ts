@@ -15,20 +15,28 @@
  * limitations under the License.
  */
 
-import { formDatasetBindingsOf } from '@aglyn/aglyn/app-utils/form-dataset-binding'
-import { signFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
+import { formDatasetBindingsOf } from './form-dataset-binding'
+import { signFormDatasetBinding } from './form-dataset-binding-token'
 
-/** The prop a rendered `form` node carries its signed dataset binding in. */
+/**
+ * The prop a rendered `form` node carries its signed dataset binding in. The
+ * form element posts it back as {@link FORM_DATASET_BINDING_FIELD}. Both are
+ * on pages already rendered and cached — never rename.
+ */
 export const FORM_DATASET_BINDING_PROP = 'datasetBindingToken'
+
+/** The submission body field the form element posts the signed binding in. */
+export const FORM_DATASET_BINDING_FIELD = 'datasetBinding'
 
 /** Whether an unsigned render has been reported in this process yet. */
 let reportedUnsigned = false
 
 /**
- * Signs every `form` node's dataset binding into its props, for the submit
- * route to verify (AGL-2773).
+ * Signs every `form` node's dataset binding into its props, for this plugin's
+ * form record target to verify when the submission comes back (AGL-2773) —
+ * the stamping half of `plugin-manager/submission-record-target.ts`.
  *
- * The route writes a record only where a valid signature says, so a form
+ * A record is written only where a valid signature says, so a form
  * without one still submits — the Inbox copy is always written — but adds no
  * record. That is what happens when `TOKEN_SIGNING_SECRET` is missing: the
  * tree is returned unsigned rather than failing the page render, and the

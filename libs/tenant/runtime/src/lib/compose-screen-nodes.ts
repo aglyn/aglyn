@@ -28,7 +28,9 @@ import {
   servedPageVersion,
 } from '@aglyn/tenant-data-admin/server/hosted-page-review'
 import type { HostedPagePart } from '@aglyn/tenant-data-admin/server/held-page-subject'
-// By path: the one contract a repeat's rows are asked through, server-only.
+// By path: the contracts a repeat's rows and a form's record target are
+// asked through, both server-only.
+import { stampFormRecordTargets } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 import { readRepeatRows } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
@@ -47,7 +49,6 @@ import {
   socialImageAssetFacts,
   socialImageRefs,
 } from './social-image-facts'
-import { stampFormDatasetBindings } from './stamp-form-dataset-bindings'
 
 /**
  * Content-collection context for a compose (AGL-551): the collection the
@@ -738,12 +739,17 @@ export async function composeNodesWithChrome(options: {
   // the page actually ships — a slot grafted from a layout chain, an element
   // an author chose — rather than the screen as stored.
   const withLandmark = Aglyn.stampDocumentLandmark(finalNodes as any)
-  // Each form's dataset binding, signed so the submit route can trust it
-  // (AGL-2773). Read off THIS tree, the one the page ships, so a form grafted
-  // from a layout, a component or a form entity is signed as it renders; and
-  // after every stage that rewrites props, so nothing changes what the
-  // signature covers.
-  const withFormBindings = stampFormDatasetBindings(withLandmark, hostId)
+  // Each form the record target writes for, stamped with what that target
+  // trusts at submit time (AGL-2773) — a signed binding, today. Read off THIS
+  // tree, the one the page ships, so a form grafted from a layout, a component
+  // or a form entity is stamped as it renders; and after every stage that
+  // rewrites props, so nothing changes what the stamp covers. A declared
+  // target that is missing THROWS here rather than shipping forms that
+  // silently write nowhere.
+  const withFormBindings = await stampFormRecordTargets(
+    withLandmark as Record<string, unknown>,
+    hostId,
+  )
   const denormalized = Aglyn.canvas.processNodesToDenormalized(
     withFormBindings as any,
   )

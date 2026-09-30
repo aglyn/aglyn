@@ -196,7 +196,64 @@ beforeAll(async () => {
 })
 
 import { POST } from '../app/api/forms/submit/route'
-import { signFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
+import { stampFormRecordTargets } from '@aglyn/aglyn/plugin-manager/submission-record-target'
+
+/*
+ * The data plugin reads the dataset through the runtime's LEAF module, which
+ * the barrel double above does not intercept; this forwards the leaf to it.
+ */
+jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
+  resolveDatasetDoc: (...args: unknown[]) =>
+    (
+      jest.requireMock('@aglyn/tenant-runtime') as {
+        resolveDatasetDoc: (...a: unknown[]) => unknown
+      }
+    ).resolveDatasetDoc(...args),
+}))
+
+/**
+ * The token a published page carries for a form bound this way — made the
+ * way the page makes it: a form and its fields, stamped by the platform's
+ * submission-record-target contract, which the app's boot filled with the data
+ * plugin's target. An app never imports a plugin, so there is no signer here
+ * to call directly, and this is the closer copy of the page anyway.
+ */
+async function signFormDatasetBinding(
+  hostId: string,
+  binding: {
+    datasetId?: string
+    datasetName?: string
+    fieldMap: Record<string, string>
+  },
+): Promise<string> {
+  const fieldIds = Object.keys(binding.fieldMap).map((name) => `field-${name}`)
+  const nodes: Record<string, unknown> = {
+    form: {
+      $id: 'form',
+      componentId: 'form',
+      props: {
+        ...(binding.datasetId ? { datasetId: binding.datasetId } : {}),
+        ...(binding.datasetName ? { datasetName: binding.datasetName } : {}),
+      },
+      nodes: fieldIds,
+    },
+  }
+  for (const [name, datasetFieldId] of Object.entries(binding.fieldMap)) {
+    nodes[`field-${name}`] = {
+      $id: `field-${name}`,
+      componentId: 'formField',
+      parentId: 'form',
+      props: { fieldName: name, datasetFieldId },
+    }
+  }
+  const stamped = (await stampFormRecordTargets(nodes, hostId)) as Record<
+    string,
+    { props?: Record<string, unknown> }
+  >
+  const token = stamped['form']?.props?.['datasetBindingToken']
+  if (typeof token !== 'string') throw new Error('the page stamped no binding')
+  return token
+}
 
 /** The binding the page signed into its contact form. */
 const LEADS_BINDING = {
@@ -248,7 +305,7 @@ describe('a form submission writes where the page signed, not where the body say
 
   it('a crafted body cannot redirect the binding the page signed', async () => {
     const response = await submit({
-      datasetBinding: signFormDatasetBinding(HOST_ID, LEADS_BINDING),
+      datasetBinding: await signFormDatasetBinding(HOST_ID, LEADS_BINDING),
       datasetId: 'payroll',
       dataset: 'Payroll',
     })
@@ -260,7 +317,7 @@ describe('a form submission writes where the page signed, not where the body say
 
   it('takes the field map from the signed binding, not from the body', async () => {
     await submit({
-      datasetBinding: signFormDatasetBinding(HOST_ID, LEADS_BINDING),
+      datasetBinding: await signFormDatasetBinding(HOST_ID, LEADS_BINDING),
       fieldMap: { email: 'salary', message: 'salary' },
     })
 
@@ -273,7 +330,7 @@ describe('a form submission writes where the page signed, not where the body say
 
   it('refuses a binding signed for another site', async () => {
     await submit({
-      datasetBinding: signFormDatasetBinding('another-site', {
+      datasetBinding: await signFormDatasetBinding('another-site', {
         datasetId: 'payroll',
         fieldMap: {},
       }),
@@ -284,9 +341,8 @@ describe('a form submission writes where the page signed, not where the body say
   })
 
   it('refuses a binding whose payload was edited', async () => {
-    const [version, , signed] = signFormDatasetBinding(
-      HOST_ID,
-      LEADS_BINDING,
+    const [version, , signed] = (
+      await signFormDatasetBinding(HOST_ID, LEADS_BINDING)
     ).split('.')
     const forged = Buffer.from(
       JSON.stringify({ h: HOST_ID, d: 'payroll', m: {} }),
@@ -302,7 +358,7 @@ describe('a form submission writes where the page signed, not where the body say
     // A form bound by name before ids existed (AGL-141). Moving the decision
     // to the server must not move its records.
     const response = await submit({
-      datasetBinding: signFormDatasetBinding(HOST_ID, {
+      datasetBinding: await signFormDatasetBinding(HOST_ID, {
         datasetName: 'Leads',
         fieldMap: {},
       }),
