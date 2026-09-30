@@ -16,8 +16,8 @@
  */
 
 import {
-  MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-  sanitizeMarketplaceDefinition,
+  PORTABLE_COMPONENT_ID_ALLOWLIST,
+  sanitizePortableDefinition,
 } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import { AI_ACCEPTABLE_USE_BLOCK, type AiSystemBlock, type AiTool } from '../runtime/ai-runtime'
@@ -113,7 +113,7 @@ export function assistSectionTool(): AiTool {
   const pair = strictObject({ name: STRING, value: STRING })
   const node = strictObject({
     id: STRING,
-    componentId: { type: 'string', enum: [...MARKETPLACE_COMPONENT_ID_ALLOWLIST] },
+    componentId: { type: 'string', enum: [...PORTABLE_COMPONENT_ID_ALLOWLIST] },
     parentId: STRING,
     children: { type: 'array', items: STRING },
     props: { type: 'array', items: pair },
@@ -272,7 +272,7 @@ export function readAssistSection(result: AiResult): AssistSectionRead {
     ? definitionFromNodes(nodes)
     : definitionFromText(result.kind === 'completion' ? result.text : '')
   if (!definition) return { status: 'unreadable', error: 'AI returned invalid JSON' }
-  const sanitized = sanitizeMarketplaceDefinition(definition)
+  const sanitized = sanitizePortableDefinition(definition)
   // `=== false`, not `!`: see `AssistSectionRead`.
   if (sanitized.ok === false) return { status: 'rejected', error: sanitized.error }
   return { status: 'ok', section: { rootId: sanitized.rootId, nodes: sanitized.nodes } }

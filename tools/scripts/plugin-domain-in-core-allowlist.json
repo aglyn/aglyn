@@ -1201,14 +1201,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/node-definition-sanitizer.ts",
-      "rules": [
-        "domain-exports:marketplace",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/notifications.ts",
       "rules": [
         "plugin-id",

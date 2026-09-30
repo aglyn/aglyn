@@ -52,9 +52,9 @@ export * from './child-contract-compose'
 // The one reading of `restrictChildren`/`restrictParent`, shared by the
 // besigner's drop check and the AI plugin's node-tree validator (AGL-2905).
 export * from './lineal-order'
-// What a node tree must satisfy before it lands on a canvas that did not
-// author it (AGL-2939): the marketplace's install sanitizer and the AI
-// plugin's node-tree validator both pass through it.
+// What a portable node tree must satisfy before it lands on a canvas that did
+// not author it (AGL-2939): a tree installed from another workspace and a tree
+// a model generated both pass through it.
 export * from './node-definition-sanitizer'
 export * from './console-routes'
 export * from './console-record-links'

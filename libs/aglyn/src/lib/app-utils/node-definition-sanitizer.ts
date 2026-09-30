@@ -17,10 +17,14 @@
 
 /**
  * The node-definition sanitizer and the component allowlists (AGL-2939):
- * what a node tree must satisfy before it lands on a canvas that did not
- * author it — a marketplace install, and a tree a model generated. Core
- * rather than the marketplace plugin, because two plugins pass their trees
- * through it and a plugin may not import another plugin's model; the
+ * what a PORTABLE node tree must satisfy — one that lands on a canvas that did
+ * not author it. Today that is a tree installed from another workspace and a
+ * tree a model generated, and the rule is the same for both: whatever reaches
+ * the canvas renders in a site whose author never saw it.
+ *
+ * The platform's rule, so named for what it guards rather than for who asks
+ * (AGL-3080): any plugin that brings a tree in from elsewhere passes it
+ * through here, and a plugin may not import another plugin's model. The
  * marketplace re-exports it under the names its publishers use.
  */
 
@@ -34,7 +38,7 @@ import {
 import { SAFE_HREF_PATTERN } from './screen-link-value'
 
 /**
- * Component ids publishable to the marketplace. Mirrors the persisted ids in
+ * Component ids a portable tree may hold. Mirrors the persisted ids in
  * plugins-mui (plugin.spec.ts) minus `reusableInstance` — nested
  * instances would smuggle references to another tenant's private
  * definitions — and minus `layoutSlot`, which is layout chrome. Keep sorted.
@@ -52,7 +56,7 @@ import { SAFE_HREF_PATTERN } from './screen-link-value'
  * so the whole category was unpublishable. `blocks-publishable.spec.ts` walks
  * the presets and fails if this list falls behind them again.
  */
-export const MARKETPLACE_COMPONENT_ID_ALLOWLIST: readonly string[] = [
+export const PORTABLE_COMPONENT_ID_ALLOWLIST: readonly string[] = [
   'form',
   'formField',
   'image',
@@ -88,7 +92,7 @@ export const MARKETPLACE_COMPONENT_ID_ALLOWLIST: readonly string[] = [
  * else's domain is a phishing and tracking-pixel vector that no amount of
  * render-time sanitization makes reviewable. Keep sorted.
  */
-export const MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST: readonly string[] = [
+export const PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST: readonly string[] = [
   'emailButton',
   'emailDivider',
   'emailImage',
@@ -122,13 +126,13 @@ export const MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST: readonly string[] = [
  * paragraph, a link, a button — the remaining blocks already express as a
  * structured tree we render ourselves.
  */
-export const MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST: readonly string[] =
-  MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST.filter(
+export const PORTABLE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST: readonly string[] =
+  PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST.filter(
     (componentId) => componentId !== 'emailRichtext',
   )
 
 /** Serialized definition size cap (Firestore doc limit is 1 MiB). */
-export const MARKETPLACE_DEFINITION_MAX_BYTES = 200 * 1024
+export const PORTABLE_DEFINITION_MAX_BYTES = 200 * 1024
 
 const KEPT_NODE_KEYS = [
   '$id',
@@ -144,13 +148,13 @@ const KEPT_NODE_KEYS = [
  * elements' navigable protocols, and https, inline or site-relative images
  * (see `node-url-policy`).
  *
- * Exported under these names for the marketplace's property sanitizer, which
- * holds a published property's Link default to the same rule as a published
- * node's `href`, and an Image default to the `src` rule.
+ * Exported under these names for a property sanitizer (the marketplace's is
+ * one), which holds a portable property's Link default to the same rule as a
+ * portable node's `href`, and an Image default to the `src` rule.
  */
 export {
-  SAFE_HREF_PATTERN as MARKETPLACE_SAFE_HREF,
-  SAFE_SRC_PATTERN as MARKETPLACE_SAFE_SRC,
+  SAFE_HREF_PATTERN as PORTABLE_SAFE_HREF,
+  SAFE_SRC_PATTERN as PORTABLE_SAFE_SRC,
 }
 
 /**
@@ -269,7 +273,7 @@ function isUndecodedNodes(nodes: unknown): boolean {
   )
 }
 
-export type MarketplaceDefinitionNodes = Record<
+export type PortableDefinitionNodes = Record<
   string,
   {
     $id: string
@@ -296,7 +300,7 @@ export type MarketplaceDefinitionNodes = Record<
  * `src`) are hardened HERE as well, because publishing hands them to a
  * different org's render tree.
  */
-export function sanitizeMarketplaceDefinition(
+export function sanitizePortableDefinition(
   definition: {
     rootId: string
     nodes: Record<string, any>
@@ -327,10 +331,10 @@ export function sanitizeMarketplaceDefinition(
     declaredProps?: ReadonlyArray<{ name?: unknown; type?: unknown }>
   },
 ):
-  | { ok: true; rootId: string; nodes: MarketplaceDefinitionNodes }
+  | { ok: true; rootId: string; nodes: PortableDefinitionNodes }
   | { ok: false; error: string } {
   const { rootId, nodes } = definition
-  const base = options?.componentIds ?? MARKETPLACE_COMPONENT_ID_ALLOWLIST
+  const base = options?.componentIds ?? PORTABLE_COMPONENT_ID_ALLOWLIST
   const allowed = options?.extraComponentIds?.length
     ? [...base, ...options.extraComponentIds]
     : base
@@ -355,7 +359,7 @@ export function sanitizeMarketplaceDefinition(
   if (!rootId || !nodes?.[rootId]) {
     return { ok: false, error: 'Definition has no root node' }
   }
-  const sanitized: MarketplaceDefinitionNodes = {}
+  const sanitized: PortableDefinitionNodes = {}
   /** Set while walking; see the empty-definition check after the loop. */
   let rootIsWrapper = false
   const queue = [rootId]
@@ -415,7 +419,7 @@ export function sanitizeMarketplaceDefinition(
   } catch {
     return { ok: false, error: 'Definition is not serializable' }
   }
-  if (serialized.length > MARKETPLACE_DEFINITION_MAX_BYTES) {
+  if (serialized.length > PORTABLE_DEFINITION_MAX_BYTES) {
     return { ok: false, error: 'Definition is too large to publish' }
   }
   // An empty definition is not a listing (AGL-1033). Publishing one used to
@@ -439,14 +443,14 @@ export function sanitizeMarketplaceDefinition(
 }
 
 /**
- * Converts a sanitized marketplace/AI definition (normalized map) into the
+ * Converts a sanitized portable definition (normalized map) into the
  * nested node shape `canvas.addNodeFromPreset` grafts — ids regenerate on
  * insert, so collisions with existing canvas nodes are impossible
  * (AGL-169). A seen-set guards malformed self-referencing trees.
  */
-export function marketplaceDefinitionToNested(
+export function portableDefinitionToNested(
   rootId: string,
-  nodes: MarketplaceDefinitionNodes,
+  nodes: PortableDefinitionNodes,
 ): Record<string, unknown> | null {
   const seen = new Set<string>()
   const build = (id: string): Record<string, unknown> | null => {
@@ -466,12 +470,12 @@ export function marketplaceDefinitionToNested(
 }
 
 /**
- * Field types a published dataset schema may declare (AGL-657). Mirrors
+ * Field types a portable dataset schema may declare (AGL-657). Mirrors
  * `DATASET_FIELD_TYPES` in core; duplicated rather than imported to keep this
  * module dependency-free (it is imported by API routes and client components
  * alike), and asserted against the source of truth in the spec.
  */
-export const MARKETPLACE_DATASET_FIELD_TYPES: readonly string[] = [
+export const PORTABLE_DATASET_FIELD_TYPES: readonly string[] = [
   'bool',
   'bytes',
   'coordinates',

@@ -173,8 +173,9 @@ export function collectionOwnersAddressed(text) {
 /**
  * Rule 6. A file whose EXPORTS are one plugin's vocabulary, whatever it is
  * called: at least three of them, and at least half of what it exports.
- * `marketing-consent.ts` and `node-definition-sanitizer.ts` name no plugin and
- * export little else. The words are the distinctive ones only — `Product`,
+ * `marketing-consent.ts` names no plugin and exports little else, and
+ * `node-definition-sanitizer.ts` did until its rule was named for what it
+ * guards rather than for the marketplace that first asked. The words are the distinctive ones only — `Product`,
  * `Order`, `Lead` and `Listing` are ordinary English and would flag half the
  * platform — so this rule finds a plugin's module, never a module that
  * happens to mention one.

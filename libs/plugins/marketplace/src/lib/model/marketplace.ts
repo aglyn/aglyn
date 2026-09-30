@@ -1110,36 +1110,28 @@ export function marketplacePriceRefusal(priceUsd: number): string | undefined {
 }
 
 /**
- * The allowlists and the sanitizer live in core since AGL-2939 — see
- * `@aglyn/aglyn/app-utils/node-definition-sanitizer` — and keep their
- * marketplace names here for the publishers that import them.
+ * The rule a node tree meets before it lands on a canvas that did not author
+ * it is core's (`@aglyn/aglyn/app-utils/node-definition-sanitizer`, AGL-2939),
+ * under neutral names, because a model-generated tree passes through it too.
+ * A publisher reads it as the marketplace's rule, so the marketplace re-exports
+ * it under the names its publish routes and its docs use.
  */
+export {
+  PORTABLE_COMPONENT_ID_ALLOWLIST as MARKETPLACE_COMPONENT_ID_ALLOWLIST,
+  PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST as MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
+  PORTABLE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST as MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
+  sanitizePortableDefinition as sanitizeMarketplaceDefinition,
+  portableDefinitionToNested as marketplaceDefinitionToNested,
+  PORTABLE_SAFE_HREF as MARKETPLACE_SAFE_HREF,
+  PORTABLE_SAFE_SRC as MARKETPLACE_SAFE_SRC,
+  type PortableDefinitionNodes as MarketplaceDefinitionNodes,
+} from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import {
-  MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_DEFINITION_MAX_BYTES,
-  sanitizeMarketplaceDefinition,
-  marketplaceDefinitionToNested,
-  MARKETPLACE_DATASET_FIELD_TYPES,
+  PORTABLE_DATASET_FIELD_TYPES as MARKETPLACE_DATASET_FIELD_TYPES,
+  PORTABLE_DEFINITION_MAX_BYTES as MARKETPLACE_DEFINITION_MAX_BYTES,
 } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
-export {
-  MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_DEFINITION_MAX_BYTES,
-  sanitizeMarketplaceDefinition,
-  marketplaceDefinitionToNested,
-  MARKETPLACE_DATASET_FIELD_TYPES,
-}
-export {
-  MARKETPLACE_SAFE_HREF,
-  MARKETPLACE_SAFE_SRC,
-} from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
-export type {
-  MarketplaceDefinitionNodes,
-} from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
+export { MARKETPLACE_DATASET_FIELD_TYPES, MARKETPLACE_DEFINITION_MAX_BYTES }
 
 /** Field cap on a published schema — mirrors the console's create limit. */
 export const MARKETPLACE_DATASET_MAX_FIELDS = 100

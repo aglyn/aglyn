@@ -36,7 +36,7 @@
  * behind our CSP. A published EMAIL design is rendered by the recipient's mail
  * client, out of our reach entirely, and it leaves on a sending domain whose
  * reputation every tenant shares. The two facts that follow are the whole
- * reason this file is stricter than `sanitizeMarketplaceDefinition`:
+ * reason this file is stricter than `sanitizePortableDefinition`:
  *
  * - **A remote asset in an email is a read receipt.** The recipient's client
  *   fetches every `src` on open, so whatever host the string names learns that
@@ -68,7 +68,7 @@ const URL_PROPS = ['src', 'href'] as const
 /**
  * Props whose value is markup rather than text.
  *
- * `emailHtml` is already off `MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST`, so a
+ * `emailHtml` is already off `PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST`, so a
  * publish cannot mint one. This catches the same content arriving as a PROP on
  * a block that is on the list — a hand-written document, or a block that grows
  * an `html` prop later — which the component-id allowlist alone would pass.
