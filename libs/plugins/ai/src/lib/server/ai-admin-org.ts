@@ -31,7 +31,6 @@ import {
 import { assistUsageMonth } from '../usage/assist-usage'
 import { assistRefusalCounts } from '../usage/assist-refusals'
 import { readOrgAiUsageByUser } from '../usage/ai-usage-by-user'
-import { recordAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { addonKindFromPriceId } from '@aglyn/tenant-data-admin/server/billing-addons'
 import { orgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
@@ -71,15 +70,11 @@ import {
  * rollup for the month; and, when the add-on is on, ONE Stripe subscription
  * lookup that is cached in-process — see `addonSinceFor`.
  *
- * ## The `access` audit row
+ * ## No audit row
  *
- * Opening the card reads per-user attribution, which is the one thing on it
- * that is about a person rather than a workspace. So the open is recorded to
- * `adminAudit` as an ACCESS — `org.ai-viewed`, target the org's assist usage
- * path — through the same writer that records a staff member opening a
- * customer's email. No `subjectUid`: the row is about the org, and naming
- * every uid on the leaderboard would put a row on ten people's pages for one
- * staff glance at a table.
+ * The card loads every time the staff org page opens, so an `adminAudit` row
+ * per load recorded page views rather than decisions and buried the org's
+ * real admin actions under them. The route only reads.
  */
 
 /** Generation jobs read per request; the counts are a floor past it. */
@@ -330,24 +325,6 @@ async function handler(request: Request): Promise<Response> {
       ...(billingSnap.exists ? billingSnap.data() : {}),
     } as Record<string, unknown>
     const monthDoc = monthSnap.exists ? (monthSnap.data() ?? {}) : null
-
-    /*
-     * The row is written BEFORE the person-shaped read is served, and it is
-     * awaited: a card that rendered the leaderboard and then failed to
-     * record the look would be the access this collection exists to never
-     * lose. A failed write logs and still serves — the card is not a closed
-     * collection the way the delivery log is — but the order is the point.
-     */
-    try {
-      await recordAdminAudit({
-        actorUid: decoded.uid,
-        action: 'org.ai-viewed',
-        target: `orgs/${orgId}/assistUsage`,
-        note: `AI card opened for ${month}`,
-      })
-    } catch (error) {
-      console.error('[ai/admin/org] audit write failed', error)
-    }
 
     const [jobs, users, since] = await Promise.all([
       readOrgAiJobsSummary(db, orgId, month),

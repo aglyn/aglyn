@@ -45,13 +45,19 @@ export interface StaffPerson {
 }
 
 /**
- * Name-or-email for a resolved person; null when nothing resolved — the
- * caller then shows the uid itself, which at least identifies the account.
+ * Name and email for a resolved person — `Name (email)` — or whichever of
+ * the two resolved. A name alone cannot tell two accounts of one person
+ * apart, and an email alone reads as a different person from the same
+ * account shown by name elsewhere. Null when nothing resolved; the caller
+ * then shows the uid itself, which at least identifies the account.
  */
 export function staffPersonLabel(
   person: StaffPerson | null | undefined,
 ): string | null {
-  return person?.displayName ?? person?.email ?? null
+  const name = person?.displayName?.trim() || null
+  const email = person?.email?.trim() || null
+  if (name && email && name !== email) return `${name} (${email})`
+  return name ?? email
 }
 
 /** A labelled value row — the whole point of AGL-938's second half. */

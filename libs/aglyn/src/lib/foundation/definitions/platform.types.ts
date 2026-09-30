@@ -539,6 +539,14 @@ export interface AglynHost extends AglynDocument {
   suspendedMessage?: string
   suspendedUntilMs?: number
   /**
+   * Whether the takedown above is IN FORCE, stored so the staff Sites list
+   * can filter by it with an equality (AGL-3416). `false` on every site not
+   * taken down; written beside the family by the lockdown core, and cleared
+   * on a lapsed timed takedown before the list queries it. Never an
+   * enforcement input: every enforcing reader asks the family itself.
+   */
+  suspended?: boolean
+  /**
    * Per-site plugin deny-list (AGL-1014): plugin ids the org has enabled
    * but this site switches OFF. Subtracted from the org's resolved set by
    * `resolveHostEnabledPlugins` — the host can only ever narrow, never

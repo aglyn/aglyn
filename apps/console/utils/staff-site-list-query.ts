@@ -47,14 +47,26 @@ import {
  * and each equality has its `(field, createdAt DESC)` composite, pinned by
  * `specs/staff-site-list-query.spec.ts`.
  *
+ * ## Suspended
+ *
+ * An equality on the stored `suspended` flag (`utils/server/suspended-flag.ts`):
+ * `claimHostForOrg` writes `false`, the lockdown core writes it beside the
+ * staff takedown family, and `tools/scripts/backfill-suspended-flag.mjs`
+ * stamps the sites written before either. A timed takedown lapses with no
+ * write, so the route clears the flag on every lapsed one before it runs a
+ * query that asks about it — the answer, like the row's chip, is the one for
+ * this moment.
+ *
  * ## Not offered
  *
  *   Organization name  lives on the organization. Filter by Org ID; the
  *                      organization's own page lists its sites.
  *   Owner              the organization's `ownerUid`, not the site's.
- *   Status             derived (publish map, suspension windows,
- *                      maintenance) and wrong the moment a timed suspension
- *                      lapses — `utils/site-list-query.ts` gives the detail.
+ *   Status             Live, Draft and Maintenance are derived from the
+ *                      publish map and the customer's own switch, which the
+ *                      console's browser-side writers change without any
+ *                      mirror — `utils/site-list-query.ts` gives the detail.
+ *                      Suspended is the one part of it the list can answer.
  */
 export const STAFF_SITE_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   {
@@ -84,7 +96,20 @@ export const STAFF_SITE_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     lowerPath: 'cname',
     operators: ['equals'],
   },
-  { column: 'hasCustomDomain', kind: 'boolean', path: 'hasCustomDomain', operators: ['is'] },
+  /*
+   * Both picked from two named answers (`STAFF_SITE_LIST_FILTER_OPTIONS`),
+   * so the panel's select sends `equals`; a select offers no operator for a
+   * field that declares only `is`. Custom domain keeps `is` beside it for a
+   * clause written before.
+   */
+  {
+    column: 'hasCustomDomain',
+    kind: 'boolean',
+    path: 'hasCustomDomain',
+    operators: ['equals', 'is'],
+  },
+  // A staff takedown in force — see "Suspended" above.
+  { column: 'suspended', kind: 'boolean', path: 'suspended', operators: ['equals'] },
   {
     column: 'orgId',
     kind: 'exact',
@@ -108,16 +133,21 @@ export const STAFF_SITE_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = 
   subdomain: 'Subdomain',
   cname: 'Custom domain address',
   hasCustomDomain: 'Custom domain',
+  suspended: 'Suspended',
   orgId: 'Org ID',
   $id: 'Site ID',
   createdAt: 'Created',
 }
 
-/** The Custom domain filter's two answers, by the words the column uses. */
+/** The picked filters' answers, by the words the row uses. */
 export const STAFF_SITE_LIST_FILTER_OPTIONS = {
   hasCustomDomain: [
     { value: 'true', label: 'Connected' },
     { value: 'false', label: 'None' },
+  ],
+  suspended: [
+    { value: 'true', label: 'Suspended' },
+    { value: 'false', label: 'Not suspended' },
   ],
 }
 

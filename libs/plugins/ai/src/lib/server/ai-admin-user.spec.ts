@@ -201,15 +201,9 @@ describe('/api/ai/admin/user (AGL-2928)', () => {
     })
   })
 
-  it('records the open as an access ABOUT this person before serving it', async () => {
+  it('writes no audit row for opening the card', async () => {
     staff()
     await get()
-    expect(mockRecordAdminAudit).toHaveBeenCalledTimes(1)
-    expect(mockRecordAdminAudit.mock.calls[0][0]).toMatchObject({
-      actorUid: 'staff-1',
-      action: 'user.ai-usage-viewed',
-      target: 'users/user-a',
-      subjectUid: 'user-a',
-    })
+    expect(mockRecordAdminAudit).not.toHaveBeenCalled()
   })
 })

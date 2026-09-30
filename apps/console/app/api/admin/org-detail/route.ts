@@ -56,6 +56,12 @@ function serialize(value: unknown): unknown {
   return out
 }
 
+/** Staff page views once written to `adminAudit` on every open of an org. */
+const ORG_PAGE_VIEW_ACTIONS: ReadonlySet<string> = new Set([
+  'org.ai-viewed',
+  'org.acquisition-viewed',
+])
+
 /**
  * Staff organization detail, served from the Admin SDK (AGL-937).
  *
@@ -136,6 +142,12 @@ async function handler(request: Request): Promise<Response> {
     // override dialog would demand a reason, the row would carry it, and
     // the org's own page — the surface where the override is actually
     // looked at — would still show who and never why.
+    //
+    // ACCESS rows are left out: the card is the org's admin ACTIONS, and a
+    // row per staff page view buried them. The audit log page keeps those.
+    // The page-view actions are named as well as the stamped `kind`, because
+    // a plugin's read is classified from the registry of the process that
+    // wrote the row, which did not always hold the plugin's declarations.
     let audit:
       | Array<{
           $id: string
@@ -154,7 +166,12 @@ async function handler(request: Request): Promise<Response> {
         .limit(200)
         .get()
       audit = auditSnap.docs
-        .filter((doc) => String(doc.get('target') ?? '').includes(orgId))
+        .filter(
+          (doc) =>
+            String(doc.get('target') ?? '').includes(orgId) &&
+            doc.get('kind') !== 'access' &&
+            !ORG_PAGE_VIEW_ACTIONS.has(String(doc.get('action') ?? '')),
+        )
         .slice(0, 20)
         .map((doc) => ({
           $id: doc.id,
