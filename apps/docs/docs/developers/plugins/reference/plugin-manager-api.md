@@ -126,6 +126,36 @@ a component the first did not still reaches the plugin.
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
 | `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
 
+## Customer REST API resources — `api-v1-resources` (data layer, console server)
+
+A plugin that models records an integration reads and writes serves them on
+the customer REST API, `/v1/<resource>/…`, from its
+`consoleServerDeclarations`, with the handler loaded on the first request:
+
+```ts
+registerApiV1Resource(
+  'bookings',
+  {
+    handle: async (request, ctx, segments, url) =>
+      (await import('./server/api-v1/bookings')).handleBookings(request, ctx, segments, url),
+    entitlement: { feature: 'bookings', message: 'Bookings are not included in this organization’s plan' },
+  },
+  { pluginId: 'acme-bookings' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerApiV1Resource(resource, { handle, entitlement? }, { pluginId? })` | Serves every request under `/v1/<resource>`. The name is one lowercase path segment; the platform's own resources (`datasets`, `sites`, `media`, `usage`, `me`) and a resource another plugin already serves are refused, naming both, and the incumbent keeps serving. The same plugin registering again replaces its own. |
+| `apiV1Resource(resource)` | What the router asks after the platform's own resources: the serving plugin and its registration, or `null`. A name nobody registered is asked once more after the app's declarations step runs, so a process whose boot failed repairs itself rather than answering `404`. |
+| `handle(request, ctx, segments, url)` | Runs after the pipeline admitted the request — the API key, the plan's API access, the request quota, the rate limit. `ctx` is the `ApiV1Context`; the handler asks for its own scopes with `requireScope` and answers in the published envelope (`apiJson`, `ApiErrors`). |
+| `entitlement` | The plan feature the resource needs. The router refuses an organization without it — `402 plan_required`, the feature as the `code`, the registration's sentence as the message — before the handler runs and before any scope is asked, so a key minted while the plan carried the feature cannot outlive it. |
+
+The helpers every handler shares — `claimWrite` (the idempotency claim),
+`paginate`, `serialize`, `readJsonBody`, `orgOwnsHost` and `requireScope` —
+are `@aglyn/tenant-data-admin/server/api-v1-kit`'s, so a cursor or an
+idempotency key means the same thing on every resource whoever serves it.
+
 ## Site pipeline — `site-runtime`, `site-page-hooks` (`/server` for hooks)
 
 | API | Semantics |

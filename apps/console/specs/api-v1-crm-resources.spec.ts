@@ -137,6 +137,7 @@ import {
   DEFAULT_DEAL_STAGES,
 } from '@aglyn/aglyn/app-utils/crm'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import {
   childPaths,
   issued,
@@ -190,6 +191,9 @@ async function json(response: Response) {
 const tokensFor = (hostId: string) =>
   crmScopeTokens(mockOrg, consentGroupForHost(mockOrg, hostId))
 
+// The console's boot, which registers the CRM's `/v1` resources (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
+
 beforeEach(() => {
   resetMockFirestore()
   mockUidSeq = 0
@@ -214,7 +218,7 @@ describe('the premise (AGL-899)', () => {
     expect(scopes).toContain("'crm:read'")
     expect(scopes).toContain("'crm:write'")
     for (const resource of ['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']) {
-      const source = readSource(`apps/console/utils/api-v1/crm-${resource}.ts`)
+      const source = readSource(`libs/plugins/crm/src/lib/server/api-v1/crm-${resource}.ts`)
       expect(source).toContain("requireScope(ctx, 'crm:read')")
       if (resource !== 'pipelines') {
         expect(source).toContain("requireScope(ctx, 'crm:write')")

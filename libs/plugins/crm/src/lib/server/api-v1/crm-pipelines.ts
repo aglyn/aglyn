@@ -42,7 +42,10 @@ import {
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
 import { FieldPath } from 'firebase-admin/firestore'
-import { type ApiV1Context, requireScope } from '../api-v1'
+import {
+  type ApiV1Context,
+  requireScope,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { crmCollection, crmCreateStamp, crmTimes, isoFromMs, listCrm } from './crm-shared'
 
 /** Stages in pipeline order, whatever order the document holds them in. */

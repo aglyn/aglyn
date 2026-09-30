@@ -464,7 +464,8 @@
       "register": {
         "console": "registerCrmConsole",
         "consoleApi": "registerCrmConsoleApi",
-        "serverDeclarations": "registerCrmServerDeclarations"
+        "serverDeclarations": "registerCrmServerDeclarations",
+        "consoleServerDeclarations": "registerCrmConsoleServerDeclarations"
       },
       "apiPrefixes": [
         "crm"
