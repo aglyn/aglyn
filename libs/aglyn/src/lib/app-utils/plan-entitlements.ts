@@ -46,6 +46,11 @@ import {
 } from '../plugin-manager/plugin-entitlements'
 import { pluginOrgCapacity } from '../plugin-manager/plugin-org-capacity'
 import {
+  declaredMeterReading,
+  pluginCostAxes,
+  pluginCostAxisFields,
+} from '../plugin-manager/plugin-usage-axes'
+import {
   planQuotaOf,
   pluginPlanFeatureRow,
   pluginPlanQuotaRow,
@@ -2493,36 +2498,24 @@ export const ORG_COGS_UNIT_RATES_USD = {
   perRun: 0.000012,
 }
 
-/** The rollup fields `orgMonthlyCogsUsd` prices. All optional and all absent-safe. */
+/**
+ * The rollup fields `orgMonthlyCogsUsd` prices. All optional and all
+ * absent-safe.
+ *
+ * The named fields are the platform's own meters. A plugin's meter rides the
+ * index signature under the rollup field its declaration names
+ * (`plugin-usage-axes.ts`): the AI plugin's provider spend, the CRM's
+ * records, the forms plugin's submissions, the workflows plugin's runs.
+ */
 export interface OrgUsageRollupInput {
   hostCount?: number | null
   storageGb?: number | null
   pageViews?: number | null
-  formSubmissions?: number | null
   dataStorageMb?: number | null
   apiRequests?: number | null
   /**
-   * Contacts alone — the figure every rollup carried before AGL-2611 widened
-   * the band, kept so a month written under the old basis still prices.
-   * Read only when `crmRecordsCount` is absent; see it.
-   */
-  contactsCount?: number | null
-  /**
-   * Contacts + companies + deals, the CRM records band's own figure
-   * (AGL-2611). Priced at `perContactMonth` — the rate was measured on a
-   * contact, which is the most expensive of the three to hold, so it
-   * over-covers a company or a deal rather than under-pricing one. When
-   * present it REPLACES `contactsCount` in the model rather than adding to
-   * it: the contacts are inside this sum, and a model that priced both
-   * would charge the same people twice.
-   */
-  crmRecordsCount?: number | null
-  /** The components of `crmRecordsCount`, recorded so the sum is legible. */
-  companiesCount?: number | null
-  dealsCount?: number | null
-  /**
    * Every email the org sent this month, campaigns and transactional alike —
-   * the `emailSends` cost meter, not `campaignEmailSends`.
+   * the `emailSends` cost meter, not the campaign meter.
    *
    * The cost meter is the right input precisely because the campaign meter is
    * the one with a cap on it. What this org cost us is every message the
@@ -2531,24 +2524,13 @@ export interface OrgUsageRollupInput {
    */
   emailSends?: number | null
   /**
-   * Aglyn Assist provider spend for the month, ALREADY IN DOLLARS (AGL-2280).
-   *
-   * Unlike every other field here this is not a meter to be priced — it is
-   * `orgs/{id}/assistUsage/{month}.estCostUsd`, our own cost estimate at the
-   * provider's list rates, computed where the tokens were counted. So it
-   * enters the model at ×1 and has no entry in `ORG_COGS_UNIT_RATES_USD`;
-   * inventing a second per-token rate here is precisely the drift AGL-1134
-   * removed.
+   * A plugin's meter, by the rollup field its declaration names. `unknown`
+   * because a rollup document carries its month and its audit fields beside
+   * the meters, and a caller may hand the document over whole; every meter
+   * is read through `declaredMeterReading`, which prices only a positive
+   * finite number.
    */
-  assistCostUsd?: number | null
-  /**
-   * Workflow and action runs this month — the two counters `report-usage`
-   * sums across the org's hosts. Priced together at `perRun`: a run is the
-   * same handful of reads, two writes and a moment of compute whichever
-   * builder produced it, and the bands differ only in which tier sells them.
-   */
-  workflowRuns?: number | null
-  actionRuns?: number | null
+  [field: string]: unknown
 }
 
 export interface OrgCogsResult {
@@ -2562,6 +2544,26 @@ export interface OrgCogsResult {
   floorUsd: number
   /** Per-meter contributions, for showing the working in staff UI. */
   breakdown: Record<string, number>
+}
+
+/**
+ * The unit rate a declared cost axis names, or 1 where it names none (the
+ * rollup already records dollars).
+ *
+ * ⚑ A rate key core does not carry THROWS. Pricing an unknown axis at zero
+ * would make an org cost less than it does, which is the direction that
+ * approves a discount; `plugin-usage-axes.spec.ts` holds every declared key
+ * to a rate that exists, so this is reached only by a tree that skipped it.
+ */
+function cogsRateOf(axis: { id: string; rate?: string }): number {
+  if (axis.rate === undefined) return 1
+  const rate = (ORG_COGS_UNIT_RATES_USD as Record<string, number>)[axis.rate]
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+    throw new Error(
+      `cost axis "${axis.id}" names the rate "${axis.rate}", which ORG_COGS_UNIT_RATES_USD does not carry`,
+    )
+  }
+  return rate
 }
 
 /**
@@ -2597,47 +2599,39 @@ export function orgMonthlyCogsUsd(
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }
   const rates = ORG_COGS_UNIT_RATES_USD
-  const breakdown = {
-    storage: num(rollup?.storageGb) * rates.storagePerGbMonth,
-    pageViews: num(rollup?.pageViews) * rates.perPageView,
-    formSubmissions: num(rollup?.formSubmissions) * rates.perFormSubmission,
+  // The platform's own axes, at the positions the plugins' declared axes
+  // interleave with (`order`, a multiple of 10 here). The generator refuses a
+  // declaration that takes one of these ids or positions.
+  const core: Array<{ id: string; order: number; usd: number }> = [
+    { id: 'storage', order: 10, usd: num(rollup?.storageGb) * rates.storagePerGbMonth },
+    { id: 'pageViews', order: 20, usd: num(rollup?.pageViews) * rates.perPageView },
     // Megabytes on the doc, gigabytes in the rate — the unit mismatch is in
     // the stored field name, so convert here rather than in each caller.
-    dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
-    apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
-    // The records band (AGL-2611), under the axis name every breakdown reader
-    // already keys on. `??` and not `||`: a rollup that measured ZERO records
-    // has answered, and must not fall back to a contacts figure from a month
-    // written under the narrower basis.
-    contacts:
-      num(rollup?.crmRecordsCount ?? rollup?.contactsCount) *
-      rates.perContactMonth,
+    {
+      id: 'dataStorage',
+      order: 40,
+      usd: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
+    },
+    { id: 'apiRequests', order: 50, usd: num(rollup?.apiRequests) * rates.perApiRequest },
     // Every send, not the overage — the provider bills the first message of
-    // the month as much as the last, so a cost model that started counting at
-    // the plan's included band would report an org that stayed inside its
+    // the month as much as the last, so a cost model that started counting
+    // at the plan's included band would report an org that stayed inside its
     // allowance as free.
-    emailSends: num(rollup?.emailSends) * rates.perEmailSend,
-    /*==========================================
-     * AGLYN ASSIST PROVIDER SPEND (AGL-2280).
-     *
-     * Already dollars, so ×1 — see `OrgUsageRollupInput.assistCostUsd`.
-     *
-     * This is the ONE meter on the platform whose unit cost is not a fraction
-     * margin model read it: the discount guardrail priced six meters that
-     * together measured $0.0000054 for the largest real org, and ignored the
-     * only line item that can plausibly clear the $2/site floor on its own.
-     * A 93%-off coupon on an org burning $40/month of tokens rated green.
-     *
-     * It is deliberately NOT in `billedCents` — what an org is charged is a
-     * separate decision with a price sheet behind it. This is what the org
-     * COSTS US, which is the only question the guardrail asks.
-     *=========================================*/
-    assist: num(rollup?.assistCostUsd),
-    // Both run counters on one line: one rate, one cost, whichever builder
-    // produced the run. Unpriced until 2026-09-07 — the two bands were
-    // recorded on every rollup and read as nothing.
-    runs: (num(rollup?.workflowRuns) + num(rollup?.actionRuns)) * rates.perRun,
-  }
+    { id: 'emailSends', order: 70, usd: num(rollup?.emailSends) * rates.perEmailSend },
+  ]
+  // Each plugin's meter, priced at the core rate its declaration names — or
+  // at ×1 where the rollup already records dollars, as the AI plugin's
+  // provider spend does.
+  const declared = pluginCostAxes().map((axis) => ({
+    id: axis.id,
+    order: axis.order,
+    usd: declaredMeterReading(rollup, axis) * cogsRateOf(axis),
+  }))
+  const breakdown: Record<string, number> = Object.fromEntries(
+    [...core, ...declared]
+      .sort((a, b) => a.order - b.order)
+      .map((axis) => [axis.id, axis.usd]),
+  )
   const measuredUsd = Object.values(breakdown).reduce((sum, x) => sum + x, 0)
   const floorUsd = Math.max(0, siteCount) * INFRA_COGS_PER_SITE_USD
   return {
@@ -2666,9 +2660,9 @@ export function orgMonthlyCogsUsd(
  * UNITS, because the field names do not all say: `storageGb` and
  * `dataStorageMb` are gigabytes and MEGABYTES respectively (the conversion
  * lives in `orgMonthlyCogsUsd`, with its own test); `pageViews`,
- * `formSubmissions`, `apiRequests` and `emailSends` are counts FOR THE MONTH;
- * `contactsCount` and `crmRecordsCount` are point-in-time levels, not monthly
- * flows.
+ * `apiRequests` and `emailSends` are counts FOR THE MONTH. A plugin's fields
+ * carry the unit its cost-axis declaration states — a monthly count, a
+ * point-in-time level, or dollars.
  */
 export function orgCogsInputFrom(
   source: Record<string, unknown> | null | undefined,
@@ -2677,31 +2671,19 @@ export function orgCogsInputFrom(
     const value = source?.[field]
     return value == null ? undefined : (value as number)
   }
-  return {
+  const input: OrgUsageRollupInput = {
     hostCount: read('hostCount'),
     storageGb: read('storageGb'),
     pageViews: read('pageViews'),
-    formSubmissions: read('formSubmissions'),
     dataStorageMb: read('dataStorageMb'),
     apiRequests: read('apiRequests'),
-    contactsCount: read('contactsCount'),
-    // AGL-2611. The band's own figure, forwarded for the reason `assistCostUsd`
-    // is: a projection that drops it prices the CRM at its contacts alone,
-    // which is the direction that approves a discount.
-    crmRecordsCount: read('crmRecordsCount'),
-    companiesCount: read('companiesCount'),
-    dealsCount: read('dealsCount'),
     emailSends: read('emailSends'),
-    // AGL-2280. Dollars, not a meter — the projection still has to forward it
-    // or the model prices Assist at nothing, which is the direction that
-    // approves a discount.
-    assistCostUsd: read('assistCostUsd'),
-    // Priced since 2026-09-07 (`perRun`); a projection that drops them prices
-    // the org's automations at nothing, the same direction as every other
-    // omission on this list.
-    workflowRuns: read('workflowRuns'),
-    actionRuns: read('actionRuns'),
   }
+  // Every field a plugin's cost axis reads or records — forwarded for the
+  // reason the six above are: a projection that drops a priced field prices
+  // the meter at nothing, which is the direction that approves a discount.
+  for (const field of pluginCostAxisFields()) input[field] = read(field)
+  return input
 }
 
 /**

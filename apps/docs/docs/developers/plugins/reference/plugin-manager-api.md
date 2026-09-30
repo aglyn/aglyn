@@ -1667,6 +1667,50 @@ figure, and `plugin-plan-entitlements.spec.ts` fails on it. A plugin's entry
 points re-export the declaring function as a type (`export type { … }`), which
 brings the key's augmentation into every program that loads the package.
 
+## Usage axes — `plugin-usage-axes`
+
+The meters a plugin contributes to the platform's ONE cost model
+(`orgMonthlyCogsUsd`, which the discount guardrail and the staff org page
+read) and to the staff utilization table. A first-party plugin names a
+function under `register.usageAxes`; the manifest generator loads
+`${package}/usage-axes`, validates the answer and compiles it into
+`first-party-plugins.generated.ts`, beside the plan figures.
+
+```ts
+// libs/plugins/cellar/src/lib/usage-axes.ts
+export function cellarUsageAxes(): PluginUsageAxesDeclaration {
+  return {
+    costAxes: [
+      { id: 'tastings', order: 35, fields: ['tastingsRun'], rate: 'perRun' },
+    ],
+    bands: [
+      {
+        id: 'tastingsRun',
+        label: 'Tastings',
+        order: 45,
+        fields: ['tastingsRun'],
+        entitlement: 'tastingsPerMonth',
+        perHost: true,
+      },
+    ],
+  }
+}
+```
+
+| Field | Semantics |
+| --- | --- |
+| `register.usageAxes` | The function's name. Called by the generator, never at runtime — the guardrail and the staff page price a rollup without loading a plugin, and a meter a registry had not filled would price at nothing, which approves a discount. |
+| `costAxes[]` | `{ id, order, fields, fallbackFields?, recordedFields?, rate?, live? }`. `fields` are summed from the month's usage rollup; `fallbackFields` are read only when a rollup carries none of `fields` (an older, narrower basis — a measured zero never falls back); `recordedFields` ride along so the sum stays legible and are never priced. `rate` names a key of `ORG_COGS_UNIT_RATES_USD` — never a number: the money stays core's, beside the billed table it reconciles against — or is left out when the fields are already dollars. `live: { collection, fields }` names `orgs/{orgId}/{collection}/{month}`, whose first positive field replaces the rollup's snapshot wherever a reader fetches it. |
+| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. |
+| `pluginCostAxes()` / `pluginUsageBands()` / `pluginCostAxisFields()` | Every compiled declaration, and every rollup field the cost axes read or record (`orgCogsInputFrom` forwards them). |
+| `declaredMeterReading(rollup, declared)` / `liveMeterReading(doc, live)` | The one reading of a declared meter: a positive finite number, or nothing. |
+
+The generator refuses an id or an `order` another axis or band already holds
+(the platform's own sit at multiples of ten), a field name that is not plain,
+and a `rate` that is not a key. A rate key core does not carry throws when the
+model prices it, rather than pricing the meter at zero, and
+`plugin-usage-axes.spec.ts` holds every declared key to a rate that exists.
+
 ## Enablement, flags, config, fields, permissions, jobs
 
 | API | Semantics |
