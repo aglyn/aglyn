@@ -72,6 +72,12 @@ export function OrgGeneralCard() {
   const nameChanged =
     Boolean(name.trim()) && name.trim() !== (currentOrg?.orgName ?? '')
   const timeZoneChanged = orgReady && timeZone !== storedTimeZone
+  // Only a NEW address is judged. The saved one was valid under the rules of
+  // the day it was taken, and the rules have since grown (the brand screen,
+  // AGL-3362) — flagging it red would call a working address broken, and
+  // there is nothing to fix until someone types a different one.
+  const slugChanged = slug !== (currentOrg?.slug ?? '')
+  const slugInvalid = Boolean(slug) && slugChanged && !isValidOrgSlug(slug)
   const handleSlugChange = async () => {
     const next = slug.trim().toLowerCase()
     if (!currentOrg || !next || next === currentOrg.slug || busy) return
@@ -151,23 +157,22 @@ export function OrgGeneralCard() {
         onChange={(event) =>
           setSlug(event.target.value.toLowerCase())
         }
-        error={Boolean(slug) && !isValidOrgSlug(slug)}
+        error={slugInvalid}
         helperText={
-          isOwner
-            ? `Full address: ${slug || '…'}.${WORKSPACE_DOMAIN}. ` +
-              'Old URLs keep redirecting after a change.'
-            : 'Only the organization owner can change the URL.'
+          !isOwner
+            ? 'Only the organization owner can change the URL.'
+            : slugInvalid
+              ? 'Use 3–30 lowercase letters, digits or dashes. Reserved ' +
+                'names and brand names are not available.'
+              : `Full address: ${slug || '…'}.${WORKSPACE_DOMAIN}. ` +
+                'Old URLs keep redirecting after a change.'
         }
         sx={{ flexGrow: 1 }}
       />
       {isOwner ? (
         <Button
           variant="outlined"
-          disabled={
-            busy ||
-            !isValidOrgSlug(slug) ||
-            slug === (currentOrg?.slug ?? '')
-          }
+          disabled={busy || !slugChanged || !isValidOrgSlug(slug)}
           onClick={() => void handleSlugChange()}
           sx={{ mt: 1 }}
         >
