@@ -5361,18 +5361,32 @@ export function normalizeHostBandwidthCeiling(
 /**
  * Is the render path required to serve the capped notice instead of the page?
  *
- * Both halves must hold: the flag is for THIS month, and the trip was
- * recorded as one that degrades. `degraded` is written by the evaluator from
- * {@link bandwidthCeilingDegradesRender} at trip time rather than re-derived
- * here, so a host that upgrades mid-month is not still being degraded by a
- * flag written while it was free — and, in the other direction, a flag from a
- * paying host can never take that host down.
+ * Three things must hold: the flag is for THIS month, the trip was recorded
+ * as one that degrades, and the org's CURRENT plan still degrades.
+ *
+ * The stored `degraded` alone cannot answer the last one. It is written once,
+ * at trip time, and nothing rewrites it: the beacon stops evaluating a host
+ * once it has tripped this month, and a contained site serves no pages to
+ * beacon from. So a host that upgraded mid-month stayed on the notice until
+ * the 1st, while the owner notice and the visitor notice both promised an
+ * upgrade would bring it back. Re-deriving from `org` on every read releases
+ * it on the next org-doc TTL with no write, the same asymmetry
+ * `bandwidthCapEngaged` keeps for the plan band.
+ *
+ * Both halves still hold in the other direction: a flag written for a paying
+ * host (`degraded: false`) can never take that host down, whatever its plan
+ * becomes later. An unknown org (`null`) resolves as unmetered, so a lookup
+ * failure keeps the containment rather than lifting it.
  */
 export function bandwidthCeilingDegradesHost(
   host: Record<string, any> | null | undefined,
   month: string,
+  org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
-  return normalizeHostBandwidthCeiling(host, month)?.degraded === true
+  return (
+    normalizeHostBandwidthCeiling(host, month)?.degraded === true &&
+    bandwidthCeilingDegradesRender(org)
+  )
 }
 
 /** UTC `YYYY-MM`, the key both the beacon and the render path agree on. */
