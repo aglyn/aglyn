@@ -16,10 +16,10 @@
  */
 
 import {
-  CAMPAIGN_MEMBERSHIP_FIELD,
-  contactCampaignFieldPath,
-  normalizeCampaignIds,
-} from '@aglyn/aglyn/app-utils/campaign-membership'
+  containerMembershipField,
+  contactContainerFieldPath,
+  normalizeContainerIds,
+} from '@aglyn/aglyn/app-utils/container-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { scopeTokensForHost, seenOnlyThroughGrant } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
@@ -383,7 +383,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     candidate: OutreachEnrollCandidate,
     nowMs: number,
   ): Promise<void> {
-    const campaignIds = normalizeCampaignIds(sequence.campaignIds)
+    const campaignIds = normalizeContainerIds(sequence.campaignIds)
     if (!campaignIds.length) return
     try {
       const ref =
@@ -394,7 +394,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
             : null
       if (ref) {
         const field =
-          candidate.target === 'lead' ? CAMPAIGN_MEMBERSHIP_FIELD : contactCampaignFieldPath(contactGroupId)
+          candidate.target === 'lead' ? containerMembershipField('campaign') : contactContainerFieldPath(contactGroupId, 'campaign')
         await ref.update({ [field]: FieldValue.arrayUnion(...campaignIds), updatedAt: FieldValue.serverTimestamp() })
         // A lead's campaigns are what the Leads list's Campaign filter reads
         // under a site (AGL-3321): restamped from the lead as it now stands.
@@ -421,7 +421,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     orgId: string,
     sequence: OutreachSequence,
   ): Promise<string[]> {
-    const campaignIds = normalizeCampaignIds(sequence.campaignIds)
+    const campaignIds = normalizeContainerIds(sequence.campaignIds)
     if (!campaignIds.length || !orgId) return []
     try {
       const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')

@@ -112,7 +112,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/contacts'),
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
-  ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/campaign-membership'),
+  ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/container-membership'),
   ORG_SCOPE_TOKEN: 'org',
   checkCrmRecordsQuota: (_org: unknown, used: number) => ({ allowed: used < mockIncluded }),
 }))

@@ -113,9 +113,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin/server/organizations'
 import {
-  CAMPAIGN_MEMBER_HOST_COLLECTIONS,
-  CAMPAIGN_MEMBERSHIP_FIELD,
-  contactCampaignFieldPath,
+  contactContainerFieldPath,
   isOrgWideMember,
   type AglynOrgMember,
   type PluginApiHandler,
@@ -136,6 +134,11 @@ import {
   sendIsOnHost,
 } from './campaign-org-refs'
 import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-route'
+import {
+  CAMPAIGN_KIND,
+  CAMPAIGN_MEMBER_HOST_COLLECTIONS,
+  CAMPAIGN_MEMBERSHIP_FIELD,
+} from '../model/campaign-kind'
 import {
   campaignContainerSearchFields,
   campaignSendSearchFields,
@@ -432,7 +435,7 @@ async function detachMembers(
       await detachMembership(
         firestore,
         contacts,
-        contactCampaignFieldPath(groupId),
+        contactContainerFieldPath(groupId, CAMPAIGN_KIND),
         campaignId,
       ),
     )

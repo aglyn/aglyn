@@ -92,10 +92,10 @@ import {
   useState,
 } from 'react'
 import {
-  useHostCampaigns,
+  useSiteContainerOptions,
   useOrgMemberOptions,
 } from '@aglyn/tenant-feature-instance'
-import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker from '@aglyn/tenant-feature-instance/components/container-picker'
 import { useContentStable } from '@aglyn/shared-ui-jsx/hooks/use-content-stable'
 import {
   type OrgCompanyOption,
@@ -816,7 +816,7 @@ type TypedRuleKey =
 
 /** A text field that redraws only when what it shows changes (AGL-3423). */
 const MemoTextField = memo(TextField) as typeof TextField
-const MemoCampaignPicker = memo(CampaignPicker)
+const MemoContainerPicker = memo(ContainerPicker)
 
 /**
  * One `{ minWidth }` object per width, so a memoized field's `sx` is the same
@@ -1112,7 +1112,7 @@ export const DynamicListRuleFields = memo(function DynamicListRuleFields(
    * fields the reader came for, and the same reasoning that opens the segment
    * listen opens this one.
    */
-  const siteCampaigns = useHostCampaigns(hostId, { enabled: true })
+  const siteCampaigns = useSiteContainerOptions('campaign', hostId, { enabled: true })
   /*
    * THE CRM PICKERS' OPTIONS (AGL-2603), read because this form is on screen
    * — the same bargain the segments and the campaigns get, one section up.
@@ -1482,7 +1482,8 @@ export const DynamicListRuleFields = memo(function DynamicListRuleFields(
           one stored field comes to be presented two ways.
          */}
         <Box sx={CAMPAIGN_BOX}>
-          <MemoCampaignPicker
+          <MemoContainerPicker
+            kind="campaign"
             options={siteCampaigns.options}
             value={draft.campaignIds}
             onChange={on.campaignIds}

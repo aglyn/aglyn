@@ -210,8 +210,11 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import { CAMPAIGN_MEMBERSHIP_FIELD } from '@aglyn/aglyn/server'
+import { containerMembershipField } from '@aglyn/aglyn/server'
 import { runEventActions } from './run-event-actions'
+
+/** The field a contact's facet holds its campaigns in. */
+const CAMPAIGN_MEMBERSHIP_FIELD = containerMembershipField('campaign')
 
 /** An action that always matches, carrying one `assignCampaign` step. */
 const assigning = (step: Record<string, any>) => ({

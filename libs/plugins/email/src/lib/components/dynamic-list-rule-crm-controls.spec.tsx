@@ -40,7 +40,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
-  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useSiteContainerOptions: () => ({ options: [], truncated: false, ready: true }),
   useOrgMemberOptions: () => ({
     options: [
       { uid: 'uid-a', label: 'Ada Lovelace', email: 'ada@example.com' },
@@ -87,7 +87,7 @@ jest.mock('../hooks/use-org-company-options', () => ({
   },
 }))
 jest.mock(
-  '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component',
+  '@aglyn/tenant-feature-instance/components/container-picker',
   () => ({ __esModule: true, default: () => null }),
 )
 

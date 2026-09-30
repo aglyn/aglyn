@@ -1325,6 +1325,83 @@ function hostEventsContent(events) {
 }
 
 /**
+ * The container kinds each plugin declares (AGL-3080): a document other
+ * records are FILED UNDER by naming its id in a membership array on their own
+ * document. A campaign is the first; a form, a screen, a lead and a contact
+ * are filed under one.
+ *
+ * Compiled for the reason the catalog is: the readers are record pages in
+ * several plugins and the console app, and a form submission that loads no
+ * plugin reads which containers the form is filed under. Checked here:
+ *
+ *  - ONE OWNER per kind, since the kind names the membership field
+ *    (`<kind>Ids`) every member holds, and two owners would be two meanings
+ *    for one stored field.
+ *  - A kind that makes a plain field name, for the same reason.
+ *  - An org collection the declaring plugin itself owns (its own
+ *    `orgCollections`): a picker reads the containers there, and a kind
+ *    stored in another plugin's collection would be read around that plugin.
+ *  - A catalog label on the owner, which a picker names as where a container
+ *    is created.
+ */
+const CONTAINERS_FILE = 'libs/aglyn/src/lib/plugin-manager/plugin-containers.generated.ts'
+const CONTAINER_KIND = /^[a-z][A-Za-z0-9]*$/
+const CONTAINER_FIELDS = ['kind', 'label', 'pluralLabel', 'orgCollection', 'nameField']
+
+function containerKindRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.containers
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" containers`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the kind the plugin keeps`)
+    }
+    const ownerLabel = plugin.catalog?.label
+    if (typeof ownerLabel !== 'string' || !ownerLabel) {
+      throw new Error(`${where}: the plugin needs a catalog "label", which a picker names as where a container is created`)
+    }
+    const own = new Set((plugin.orgCollections ?? []).map((collection) => collection.name))
+    for (const declaration of declared) {
+      const { kind, label, pluralLabel, orgCollection, nameField } = declaration
+      const what = `${where} "${kind ?? ''}"`
+      if (typeof kind !== 'string' || !CONTAINER_KIND.test(kind)) {
+        throw new Error(`${where}: a container needs a lowerCamelCase "kind" — its members hold it in "<kind>Ids"`)
+      }
+      const held = owners.get(kind)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one kind has one owner`)
+      owners.set(kind, plugin.id)
+      const unknown = Object.keys(declaration).filter((key) => !CONTAINER_FIELDS.includes(key))
+      if (unknown.length) throw new Error(`${what}: unknown field(s) ${unknown.join(', ')}`)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what}: "label" is what ONE container is called`)
+      if (typeof pluralLabel !== 'string' || !pluralLabel.trim()) throw new Error(`${what}: "pluralLabel" is what several are called`)
+      if (!own.has(orgCollection)) {
+        throw new Error(`${what}: "orgCollection" is one of "${plugin.id}"'s own orgCollections — a picker reads the containers there`)
+      }
+      if (typeof nameField !== 'string' || !PLAIN_FIELD.test(nameField)) {
+        throw new Error(`${what}: "nameField" is the plain name of the field a container's name is stored in`)
+      }
+      rows.push({ pluginId: plugin.id, kind, label, pluralLabel, ownerLabel, orgCollection, nameField })
+    }
+  }
+  return rows
+}
+
+function containersContent(rows) {
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The container kinds plugins declare (AGL-3080): each plugin's\n` +
+    ` * \`containers\` block in plugins.config.json. Core's \`plugin-containers.ts\`\n` +
+    ` * reads them; core names no kind.\n */\n\n` +
+    `import type { PluginContainerKind } from './plugin-containers'\n\n` +
+    `export const PLUGIN_CONTAINER_KINDS_DECLARED: readonly PluginContainerKind[] = ` +
+    `${JSON.stringify(rows, null, 2)}\n`
+  )
+}
+
+/**
  * The host subcollections each plugin declares it owns (AGL-3080).
  *
  * DATA rather than a runtime registration, for the reason every other row in
@@ -2660,6 +2737,7 @@ const ALL = [
     file: STARTER_TEMPLATES_FILE,
     content: starterTemplatesContent(await pluginStarterTemplates()),
   },
+  { file: CONTAINERS_FILE, content: containersContent(containerKindRows()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {

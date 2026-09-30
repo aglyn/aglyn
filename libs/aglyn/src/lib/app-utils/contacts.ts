@@ -427,7 +427,7 @@ export interface ContactFacet {
    *
    * Per-holder for the reason the notes are: two unrelated businesses sharing
    * one row must not read each other's segmentation of a person they both
-   * know. See `campaign-membership.ts` for the field and the path.
+   * know. See `container-membership.ts` for the field and the path.
    */
   campaignIds?: string[]
   /** Gross of fees and refunds — see `upsertHostContact`. */

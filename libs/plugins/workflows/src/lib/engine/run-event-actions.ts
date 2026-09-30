@@ -37,7 +37,7 @@ import {
   type HostVariable,
   datasetDisplayName,
   describeDatasetRecordErrors,
-  contactCampaignFieldPath,
+  contactContainerFieldPath,
   datasetIntegrityFields,
   datasetIntegrityUpdate,
   effectiveDatasetModel,
@@ -1223,7 +1223,7 @@ async function runServerStep(
        */
       const group = await consentGroupForSite(hostId)
       await contact.ref.update({
-        [contactCampaignFieldPath(group.groupId)]: FieldValue.arrayUnion(
+        [contactContainerFieldPath(group.groupId, 'campaign')]: FieldValue.arrayUnion(
           campaignDoc.id,
         ),
         updatedAt: FieldValue.serverTimestamp(),

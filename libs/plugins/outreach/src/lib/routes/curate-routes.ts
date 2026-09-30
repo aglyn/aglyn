@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { readCampaignIds, readContactCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { readContainerIds, readContactContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
@@ -261,7 +261,7 @@ async function curationFacts(
   const lead = candidate.lead ?? {}
   const company = candidate.company ?? {}
   const campaignIds =
-    candidate.target === 'lead' ? readCampaignIds(lead) : readContactCampaignIds(contact, contactGroupId)
+    candidate.target === 'lead' ? readContainerIds(lead, 'campaign') : readContactContainerIds(contact, contactGroupId, 'campaign')
   const [mailboxSnapshot, host, campaigns] = await Promise.all([
     subject.sequence.mailboxId
       ? outreachOrgCollection(firestore, caller.orgId, 'mailboxes').doc(subject.sequence.mailboxId).get()

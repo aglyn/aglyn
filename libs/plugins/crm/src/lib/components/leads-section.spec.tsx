@@ -168,7 +168,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   // The campaigns placed on the site, for the Campaign filter and column
   // (AGL-3254) — and which site, and whether they were asked for at all.
-  useHostCampaigns: (hostId: string | undefined, options?: { enabled?: boolean }) => {
+  useSiteContainerOptions: (_kind: string, hostId: string | undefined, options?: { enabled?: boolean }) => {
     if (options?.enabled) mockCampaignReads.push(`site:${hostId}`)
     return {
       options: [
@@ -181,7 +181,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
   // Every campaign in the org, at the organization level: one more than any
   // one site carries, so an assertion can tell which list it was handed.
-  useOrgCampaigns: (orgId: string | null | undefined, options?: { enabled?: boolean }) => {
+  useOrgContainerOptions: (_kind: string, orgId: string | null | undefined, options?: { enabled?: boolean }) => {
     if (options?.enabled) mockCampaignReads.push(`org:${orgId}`)
     return {
       options: [

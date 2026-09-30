@@ -67,7 +67,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     ready: true,
     error: null,
   }),
-  useOrgCampaigns: () => ({ options: [{ value: 'camp-1', label: 'Q4 food makers' }], ready: true, truncated: false }),
+  useOrgContainerOptions: () => ({ options: [{ value: 'camp-1', label: 'Q4 food makers' }], ready: true, truncated: false }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),

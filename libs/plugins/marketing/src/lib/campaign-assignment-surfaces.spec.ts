@@ -33,7 +33,8 @@
  *     both sides compile perfectly.
  *
  * Read from the SOURCE rather than restated, so the guard cannot agree with a
- * comment while the code says something else.
+ * comment while the code says something else. The surfaces are other
+ * plugins' and the console's, read by path: nothing here imports them.
  */
 
 import { readFileSync } from 'node:fs'
@@ -41,9 +42,9 @@ import { join } from 'node:path'
 import {
   CAMPAIGN_MEMBERSHIP_FIELD,
   CAMPAIGN_MEMBER_HOST_COLLECTIONS,
-} from '@aglyn/aglyn'
+} from './model/campaign-kind'
 
-const REPO = join(__dirname, '..', '..', '..')
+const REPO = join(__dirname, '..', '..', '..', '..', '..')
 
 const read = (path: string): string => readFileSync(join(REPO, path), 'utf8')
 
@@ -51,9 +52,10 @@ const read = (path: string): string => readFileSync(join(REPO, path), 'utf8')
  * The surface each assignable record kind is edited on.
  *
  * A screen's page is in `apps/console` and a form's is in a plugin library —
- * which is exactly why the picker is a presentational component in a shared
- * ui lib rather than a marketing-plugin one: an app may not import a feature
- * plugin, so a control that lived there could never reach the screen page.
+ * which is exactly why the picker is the core's generic container picker,
+ * handed the `campaign` kind this plugin declares, rather than a component of
+ * this plugin: an app may not import a feature plugin, so a control that
+ * lived here could never reach the screen page.
  */
 const ASSIGNMENT_SURFACES: Record<string, string> = {
   screens:
@@ -85,14 +87,14 @@ describe('every assignable record kind has a picker on its own page', () => {
        * shape a picker takes when somebody removes the control and leaves the
        * import behind, and a name check alone would call that surface covered.
        */
-      expect(source).toContain('<CampaignPicker')
+      expect(source).toMatch(/<ContainerPicker\s+kind="campaign"/)
       /*
        * The SHARED control, by import path. A surface that hand-rolled its
        * own select would satisfy a name check and would be the third way this
        * console edits one stored field.
        */
       expect(source).toContain(
-        '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component',
+        '@aglyn/tenant-feature-instance/components/container-picker',
       )
     },
   )
@@ -101,28 +103,28 @@ describe('every assignable record kind has a picker on its own page', () => {
     'the %s surface writes through the shared value helper',
     (kind, path) => {
       /*
-       * `campaignMembershipValue` is what turns an empty selection into a
+       * `containerMembershipValue` is what turns an empty selection into a
        * stored empty array. A surface writing the picker's raw output would
        * work until somebody cleared the last campaign. A form writes it
        * through `formCampaignFields`, which stamps the Forms list's
        * `inCampaign` beside it (AGL-3330) — asserted to wrap the helper below.
        */
-      expect(read(path)).toContain(kind === 'forms' ? 'formCampaignFields' : 'campaignMembershipValue')
+      expect(read(path)).toContain(kind === 'forms' ? 'formCampaignFields' : 'containerMembershipValue')
     },
   )
 
   it("a form's campaign fields are the shared value helper's, plus the list's flag", () => {
     const forms = read('libs/aglyn/src/lib/app-utils/forms.ts')
-    expect(forms).toMatch(/export function formCampaignFields[\s\S]*?campaignMembershipValue\(/)
+    expect(forms).toMatch(/export function formCampaignFields[\s\S]*?containerMembershipValue\(/)
   })
 
   it('a lead is also filed as it is created, by the same control and helper', () => {
     const source = read(LEAD_CREATE_SURFACE)
-    expect(source).toContain('<CampaignPicker')
+    expect(source).toMatch(/<ContainerPicker\s+kind="campaign"/)
     expect(source).toContain(
-      '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component',
+      '@aglyn/tenant-feature-instance/components/container-picker',
     )
-    expect(source).toContain('campaignMembershipValue')
+    expect(source).toContain('containerMembershipValue')
   })
 })
 
@@ -150,7 +152,7 @@ describe('the campaign’s removal walks every collection a picker writes', () =
     expect(source).not.toContain(`'${CAMPAIGN_MEMBERSHIP_FIELD}'`)
     // The contact pass is separate and must stay separate: a facet path is
     // not a top-level field name.
-    expect(source).toContain('contactCampaignFieldPath')
+    expect(source).toContain('contactContainerFieldPath')
   })
 
   it('clears one campaign rather than the whole membership', () => {

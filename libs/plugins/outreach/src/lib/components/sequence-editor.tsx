@@ -20,11 +20,11 @@ import { pluginDocsHelp, type ConsolePluginOrgMount } from '@aglyn/aglyn'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
-import CampaignPicker, {
-  type CampaignPickerProps,
-} from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker, {
+  type ContainerPickerProps,
+} from '@aglyn/tenant-feature-instance/components/container-picker'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useOrgCampaigns, useUser } from '@aglyn/tenant-feature-instance'
+import { useOrgContainerOptions, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Autocomplete,
@@ -208,7 +208,7 @@ const MemoTextField = memo(TextField) as typeof TextField
  * when what it shows changes (AGL-3423).
  */
 const MemoMailboxPicker = memo(OutreachSequenceMailboxPicker)
-const MemoCampaignPicker = memo(CampaignPicker)
+const MemoContainerPicker = memo(ContainerPicker)
 const MemoSendWindowFields = memo(OutreachSendWindowFields)
 const MemoSequencePreview = memo(OutreachSequencePreview)
 
@@ -295,7 +295,7 @@ interface SequenceCardProps {
   hosts: ConsolePluginOrgMount['hosts']
   mailboxes: OutreachMailboxesResult
   mailboxesPath: string
-  campaignOptions: CampaignPickerProps['options']
+  campaignOptions: ContainerPickerProps['options']
   /** The organization has no campaigns at all. */
   noCampaigns: boolean
   nameIssue?: string
@@ -370,7 +370,8 @@ const SequenceCard = memo(function SequenceCard(props: SequenceCardProps) {
           and what the sequence produces is reported under them; it
           does not change who is enrolled or what is sent.
          */}
-        <MemoCampaignPicker
+        <MemoContainerPicker
+          kind="campaign"
           options={props.campaignOptions}
           value={props.campaignIds}
           onChange={props.onCampaigns}
@@ -756,7 +757,7 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
    * so the choice is every campaign in the org, whichever site the
    * sequence sends as.
    */
-  const campaigns = useOrgCampaigns(orgId, { enabled: true })
+  const campaigns = useOrgContainerOptions('campaign', orgId, { enabled: true })
 
   const issues = useMemo(() => {
     const judged = [

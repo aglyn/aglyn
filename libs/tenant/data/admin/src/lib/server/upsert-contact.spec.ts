@@ -203,7 +203,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     // The real campaign coercion, for the same reason: a fake that skipped
     // the dedupe or the cap would let this file pass while the writer grew a
     // membership array no reader is allowed to render.
-    ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/campaign-membership'),
+    ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/container-membership'),
     ORG_SCOPE_TOKEN: 'org',
     checkCrmRecordsQuota: () => ({ allowed: true }),
   }

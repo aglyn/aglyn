@@ -49,8 +49,12 @@ Typed hooks over the platform model in `@aglyn/aglyn`:
   `...Ref` counterparts (`useHostRef`, `useScreenRef` and so on).
 - `usePluginConfig` and `useSitePluginConfig` for a plugin's stored
   configuration.
-- `useOrgPlan`, the host organization id, organization member options, scope
-  tokens and host campaigns hooks.
+- `useOrgPlan`, the host organization id, organization member options and
+  scope tokens hooks.
+- `useSiteContainerOptions` and `useOrgContainerOptions`, the containers of a
+  kind a plugin declares (a campaign) that a record may be filed under, and
+  `ContainerPicker` (`components/container-picker`, by subpath), the control
+  every filing surface draws them in.
 - `useHostResourceApi`, `useHostVersionApi` and the duplicate-resource hook
   and dialog (`DuplicateResourceDialog`) call the console's resource APIs.
 

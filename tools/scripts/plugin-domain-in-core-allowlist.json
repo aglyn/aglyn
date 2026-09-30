@@ -240,7 +240,8 @@
       "rules": [
         "domain-declares:marketing"
       ],
-      "lane": "marketing"
+      "lane": "stays",
+      "why": "The operator's own lead-funnel probe (AGL-2586) on the health board: can a prospect still reach the platform's marketing host through its contact, sales and demo forms. Not a tenant feature; a self-host points it at its own marketing host or leaves it unset. It reads a form's campaigns through the core's container seam by kind, as any non-owner does, and the word it trips on is `campaignCount`, the fact it grades: a lead form filed under no campaign is mailed by nobody."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/actions.ts",
@@ -296,15 +297,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/campaign-membership.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/campaign-touch.ts",
@@ -741,15 +733,6 @@
       "why": "Generic field definitions for any data-driven form; nothing of the forms plugin."
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/components/campaign-picker.component.tsx",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-container.ts",
       "rules": [
         "domain-name",
@@ -983,13 +966,6 @@
       ],
       "lane": "stays",
       "why": "The console's Firebase boot, not a tenant feature: its analytics is the platform Firebase project's own, under the operator's measurement id (NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID), and the comment names what the SDK's boot sends. Swapped with the operator's Firebase project on a self-host."
-    },
-    {
-      "path": "libs/tenant/feature/instance/src/lib/hooks/use-host-campaigns.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/tenant/runtime/src/lib/assign-contact-owner.ts",

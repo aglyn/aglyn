@@ -396,14 +396,21 @@ A plugin can be used without the designer UI, which is what the map asks.
 finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the
 campaign domain model — `model/campaign-container.ts`,
 `campaign-conversions.ts`, `campaign-report.ts`, `campaign-revenue.ts`,
-`email-record.ts`, `components/campaign-picker.component.tsx` — and
-`campaign-container.ts` opens by naming the Firestore path a send is stored
-at. Five plugins read it, plus both apps. The send-time rule has left it
-(AGL-3080): it is the marketing plugin's, and the AI plugin asks for a list's
-send time through `plugin-record-facts` (`listSendTime`) instead of reading
-the sends. The guard cannot see it: `plugin` →
-`shared` is a legal edge on the map, so there is no allowlist row and this
-document is the only place the finding can live.
+`email-record.ts` — and `campaign-container.ts` opens by naming the Firestore
+path a send is stored at. Four plugins read it, and no app does. Two things
+have left it (AGL-3080). The send-time rule is the marketing plugin's, and the
+AI plugin asks for a list's send time through `plugin-record-facts`
+(`listSendTime`) instead of reading the sends. The campaign picker is gone:
+a campaign is a container kind the marketing plugin declares
+(`plugins.config.json` → `containers`, compiled into core
+`plugin-manager/plugin-containers`), and every surface that files a record
+under one uses the core's generic `ContainerPicker` and
+`useSiteContainerOptions` / `useOrgContainerOptions`
+(`@aglyn/tenant-feature-instance`) with the membership helpers of
+`app-utils/container-membership`, naming the kind and never the plugin. The
+guard cannot see the rest: `plugin` → `shared` is a legal edge on the map, so
+there is no allowlist row and this document is the only place the finding can
+live.
 
 It was not a mistake. It is what this section used to prescribe — a shared model
 rather than a sideways import — and five plugins sharing one model is strictly
@@ -411,12 +418,10 @@ better than the edges above. What changed is the rule, not the file: `shared` is
 generic only, plugin domains included, so the prescription that put it there is
 gone and what that prescription produced is now a finding.
 
-Fix: a campaign becomes a plugin-declared resource kind. `report-figures.tsx`
-and the numbers behind it resolve through `registerPluginFigureReader`
-(**present**); `campaign-picker.component.tsx` becomes a widget through the
-console widget registry (**present**); `email-record.ts`'s field names become
-part of the declared resource rather than a shared type. The resource-kind
-declaration itself is **owed** (AGL-3124) — the same contract row 15 needs.
+Fix: a campaign is a plugin-declared container kind (**present**, above).
+`report-figures.tsx` and the numbers behind it resolve through
+`registerPluginFigureReader` (**present**); `email-record.ts`'s field names
+become part of the declared kind rather than a shared type.
 
 Whatever replaces it keeps the split the package has now: `src/index.ts` exports
 only the model, with `components/report-figures` reached by its own `./*`

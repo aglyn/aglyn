@@ -16,18 +16,25 @@
  */
 'use client'
 
+import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import { Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
 
-/** One campaign a resource may be put in. */
-export interface CampaignPickerOption {
+/** One container a record may be filed under. */
+export interface ContainerPickerOption {
   value: string
   label: string
 }
 
-export interface CampaignPickerProps {
-  /** The campaigns this site has, newest window first is the caller's job. */
-  options: readonly CampaignPickerOption[]
-  /** The campaign ids currently selected. */
+export interface ContainerPickerProps {
+  /**
+   * The kind of container offered, as its owner declares it
+   * (`plugin-manager/plugin-containers.ts`); the default wording is its
+   * labels.
+   */
+  kind: string
+  /** The containers this record may be filed under, in the order to offer them. */
+  options: readonly ContainerPickerOption[]
+  /** The container ids currently selected. */
   value: readonly string[]
   onChange: (next: string[]) => void
   /** Overrides the default label — a contact says "filed under", not "in". */
@@ -36,7 +43,8 @@ export interface CampaignPickerProps {
   helperText?: string
   disabled?: boolean
   /**
-   * The site has no campaigns at all, so the picker has nothing to offer.
+   * The site has no containers of this kind at all, so the picker has
+   * nothing to offer.
    *
    * Distinct from "still loading": an empty select with no explanation reads
    * as a control that is broken, and the two states look identical.
@@ -46,39 +54,64 @@ export interface CampaignPickerProps {
   emptyText?: string
 }
 
+/** The words a picker uses for a kind, from its declaration. */
+export function containerPickerWords(kind: string): {
+  label: string
+  helperText: string
+  none: string
+  emptyText: string
+} {
+  const declared = pluginContainerKind(kind)
+  const one = (declared?.label ?? kind).trim()
+  const many = (declared?.pluralLabel ?? one).trim()
+  const lowerOne = one.toLowerCase()
+  const lowerMany = many.toLowerCase()
+  return {
+    label: many,
+    helperText: `The ${lowerMany} this belongs to. Clearing them all takes it out of every ${lowerOne}.`,
+    none: `No ${lowerOne}`,
+    emptyText: declared
+      ? `This site has no ${lowerMany} yet. Create one from ${declared.ownerLabel} to file records under it.`
+      : `This site has no ${lowerMany}.`,
+  }
+}
+
 /**
- * WHICH CAMPAIGNS THIS RECORD IS PART OF.
+ * WHAT THIS RECORD IS FILED UNDER.
  *
- * The one control behind every campaign assignment in the console — a form's
- * page, a screen's page and a contact's drawer — so that three surfaces
- * editing one stored field cannot come to present it three ways.
+ * The one control behind every filing of a record under a container — a
+ * form's page, a screen's page, a contact's and a lead's — so that several
+ * surfaces editing one stored field cannot come to present it several ways.
+ * The kind is another plugin's (a campaign is Marketing's), which is why the
+ * control is here and not in that plugin: an app route and the other plugins
+ * may not import it.
  *
  * ## It renders ids as NAMES and stores ids
  *
- * The chips read the label out of {@link CampaignPickerProps.options}, and an
- * id with no option left falls back to the id itself rather than
- * disappearing. A campaign that has been deleted is exactly that case, and
- * a chip that vanished would tell a merchant the assignment was gone when the
+ * The chips read the label out of {@link ContainerPickerProps.options}, and
+ * an id with no option left falls back to the id itself rather than
+ * disappearing. A container that has been deleted is exactly that case, and
+ * a chip that vanished would tell a merchant the filing was gone when the
  * document still carries it.
  *
  * ## Presentational, deliberately
  *
- * It reads no campaign collection of its own. The three callers already hold
- * a site scope and their own read budget — a screen's page is in the console
- * app, which may not import a feature plugin at all — and a control that
- * opened a listener per placement is the unrequested read on mount this
- * console refuses.
+ * It reads no collection of its own. The callers already hold a site scope
+ * and their own read budget (`useSiteContainerOptions`,
+ * `useOrgContainerOptions`), and a control that opened a listener per
+ * placement is the unrequested read on mount this console refuses.
  */
-export function CampaignPicker(props: CampaignPickerProps) {
+export function ContainerPicker(props: ContainerPickerProps) {
+  const words = containerPickerWords(props.kind)
   const {
     options,
     value,
     onChange,
-    label = 'Campaigns',
-    helperText = 'The campaigns this belongs to. Clearing them all takes it out of every campaign.',
+    label = words.label,
+    helperText = words.helperText,
     disabled,
     empty,
-    emptyText = 'This site has no campaigns yet. Create one from Marketing to file records under it.',
+    emptyText = words.emptyText,
   } = props
 
   if (empty) {
@@ -109,15 +142,16 @@ export function CampaignPicker(props: CampaignPickerProps) {
       fullWidth
       slotProps={{
         /*
-         * `shrink`, because `displayEmpty` below draws "No campaign" in the
-         * closed box while the value is still empty (AGL-2486's pairing).
+         * `shrink`, because `displayEmpty` below draws the "none" placeholder
+         * in the closed box while the value is still empty (AGL-2486's
+         * pairing).
          *
          * MUI shrinks a label when the input reports itself filled, and an
          * empty multiple select reports the opposite — so the label sat at
          * full size, inside the box, on top of the placeholder it had just
-         * drawn: two lines of text one on the other, on every screen, form,
-         * contact and dynamic-list page that renders this picker. Both halves
-         * have to be said together; `displayEmpty` alone IS the overlap.
+         * drawn: two lines of text one on the other, on every page that
+         * renders this picker. Both halves have to be said together;
+         * `displayEmpty` alone IS the overlap.
          *
          * Nothing sets `notched` here on purpose: `TextField` derives it from
          * this `shrink` for the outlined variant, so the outline's gap and the
@@ -132,7 +166,7 @@ export function CampaignPicker(props: CampaignPickerProps) {
             if (!ids.length) {
               return (
                 <Typography variant="body2" color="text.secondary">
-                  {'No campaign'}
+                  {words.none}
                 </Typography>
               )
             }
@@ -155,6 +189,6 @@ export function CampaignPicker(props: CampaignPickerProps) {
     </TextField>
   )
 }
-CampaignPicker.displayName = 'CampaignPicker'
+ContainerPicker.displayName = 'ContainerPicker'
 
-export default CampaignPicker
+export default ContainerPicker

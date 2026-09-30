@@ -560,7 +560,7 @@ export async function POST(request: Request): Promise<Response> {
      * to none.
      */
     const formCampaignIds = form
-      ? Aglyn.readCampaignIds(form.data() as Record<string, unknown>)
+      ? Aglyn.readContainerIds(form.data() as Record<string, unknown>, 'campaign')
       : []
     /*
      * THE CUSTOM CONTACT FIELDS THIS FORM SAVES TO (AGL-2601).
@@ -627,7 +627,7 @@ export async function POST(request: Request): Promise<Response> {
        * A STAMP of what the form said at the moment this arrived, not a live
        * edge: nothing edits a submission's campaigns afterwards, and refiling
        * the form later does not rewrite the submissions it already produced.
-       * That is why this collection is not in
+       * That is why this collection is not in the Marketing plugin's
        * `CAMPAIGN_MEMBER_HOST_COLLECTIONS` — the deletion pass walks the
        * collections a PICKER writes, and a campaign's removal must not rewrite
        * an unbounded, billed history collection to tidy up a field that is

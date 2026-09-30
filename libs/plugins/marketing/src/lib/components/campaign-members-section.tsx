@@ -35,8 +35,7 @@ import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   buildRoute,
-  CAMPAIGN_MEMBERSHIP_FIELD,
-  readCampaignIds,
+  readContainerIds,
   Route,
   type FormStats,
   type FormStatsTotals,
@@ -64,6 +63,7 @@ import {
   isWindowedRange,
   type CampaignFormsRollup,
 } from '../model/campaign-membership-figures'
+import { CAMPAIGN_KIND, CAMPAIGN_MEMBERSHIP_FIELD } from '../model/campaign-kind'
 import {
   CAMPAIGN_MEMBERS_QUERY,
   CAMPAIGN_MEMBERS_SEARCH_NOTICE,
@@ -255,7 +255,7 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
         hrefReason: versionId
           ? 'This site’s console URL has not resolved yet'
           : 'This page has no saved version yet',
-        campaigns: readCampaignIds(row).length,
+        campaigns: readContainerIds(row, CAMPAIGN_KIND).length,
       }
     },
     [orgSlug, host],
@@ -274,7 +274,7 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
         href: orgSlug && host ? pluginRecordHref('form', { orgSlug, host }, id) : null,
         hrefReason: 'This site’s console URL has not resolved yet',
         totals: campaignFormTotals(row['stats'] as FormStats | undefined, range),
-        campaigns: readCampaignIds(row).length,
+        campaigns: readContainerIds(row, CAMPAIGN_KIND).length,
       }
     },
     [orgSlug, host, range],

@@ -73,7 +73,7 @@ import {
   scopedToHost,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { normalizeCampaignIds, readCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { normalizeContainerIds, readContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { CampaignFilingRef } from '../model/campaign-filing-activity'
 import { fileCampaignFilingActivities } from './campaign-filing-activity'
@@ -135,7 +135,7 @@ export async function orgCampaigns(
   orgId: string,
   raw: unknown,
 ): Promise<CampaignFilingRef[] | null> {
-  const ids = normalizeCampaignIds(raw)
+  const ids = normalizeContainerIds(raw)
   if (!ids.length) return []
   if (!orgId || ids.some((id) => id.includes('/'))) return null
   const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')
@@ -381,7 +381,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
      * After the write and never before, and never failing it — the
      * membership is on the document; the entry records the act.
      */
-    const already = readCampaignIds(before ? (before.data() as Record<string, unknown>) : null)
+    const already = readContainerIds(before ? (before.data() as Record<string, unknown>) : null, 'campaign')
     await fileCampaignFilingActivities(firestore, {
       orgId: resolved.orgId,
       org: resolved.org as Record<string, unknown>,

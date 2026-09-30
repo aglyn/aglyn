@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
@@ -169,7 +169,7 @@ async function draftPlacementIssues(
   options: { activating?: boolean } = {},
 ): Promise<OutreachSequenceIssue[]> {
   const issues: OutreachSequenceIssue[] = []
-  const campaignIds = normalizeCampaignIds(draft.campaignIds)
+  const campaignIds = normalizeContainerIds(draft.campaignIds)
   if (draft.hostId) {
     const host = readOutreachDocumentId(draft.hostId)
       ? await firestore.collection('hosts').doc(draft.hostId).get()

@@ -111,7 +111,7 @@ function violations(file: string, write: DocumentWrite): string[] {
     found.push('sets displayName without formListFields/newFormListFields')
   }
   const writesCampaigns =
-    /(?:^|[{,\s])campaignIds\s*[:,}]|\[\s*(?:Aglyn\.)?CAMPAIGN_MEMBERSHIP_FIELD\s*\]/.test(data)
+    /(?:^|[{,\s])campaignIds\s*[:,}]|\[\s*(?:Aglyn\.)?(?:CAMPAIGN_MEMBERSHIP_FIELD|containerMembershipField\(\s*['"]campaign['"]\s*\))\s*\]/.test(data)
   if (writesCampaigns && !/\b(?:formCampaignFields|newFormListFields)\(/.test(data)) {
     found.push('sets campaignIds without formCampaignFields')
   }
@@ -202,6 +202,10 @@ describe('AGL-3330 · every write to a form keeps the Forms list true', () => {
       ],
       [
         "tx.update(hostRef.collection('forms').doc(formId), { [Aglyn.CAMPAIGN_MEMBERSHIP_FIELD]: ids, updatedAt: now })",
+        'sets campaignIds without formCampaignFields',
+      ],
+      [
+        "tx.update(hostRef.collection('forms').doc(formId), { [Aglyn.containerMembershipField('campaign')]: ids, updatedAt: now })",
         'sets campaignIds without formCampaignFields',
       ],
       [

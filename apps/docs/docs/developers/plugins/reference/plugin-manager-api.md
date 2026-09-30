@@ -638,6 +638,41 @@ server layout that loads no plugin code, and a segment nobody declared is a
 (`@aglyn/aglyn/plugin-manager/besigner-documents`) read them, and
 `useHostDocumentVersion` (`@aglyn/tenant-feature-instance`) reads a version.
 
+## Container kinds — `plugin-containers`
+
+A container is a document other records are FILED UNDER: a form, a screen, a
+lead or a contact filed under a campaign. The member holds the edge, as an
+array of container ids on its own document, so reading "what is this filed
+under" costs nothing on a page that already read the record, and deleting a
+member leaves nothing behind. The plugin that keeps a kind declares it in the
+`containers` block of `plugins.config.json`, compiled like the collections
+above:
+
+```json
+"containers": [
+  {
+    "kind": "tasting",
+    "label": "Tasting",
+    "pluralLabel": "Tastings",
+    "orgCollection": "tastings",
+    "nameField": "title"
+  }
+]
+```
+
+| API | Semantics |
+| --- | --- |
+| `pluginContainerKind(kind)` / `listPluginContainerKinds()` | One declared kind with its owner and its owner's catalog label, or `null` when no plugin keeps it; and every declared kind. |
+| `containerMembershipField(kind)` (`app-utils/container-membership`) | The field a member holds its containers in: `<kind>Ids`. Derived, not declared, so a record page in one plugin files itself under a kind another plugin keeps by the kind's name alone. |
+| `readContainerIds(record, kind)` / `readContactContainerIds(contact, groupId, kind)` / `contactContainerFieldPath(groupId, kind)` | Read a host record's membership, read one holder's filing of a contact, and the facet path to write it — a contact is shared by every site, so what one merchant filed a person under lives in that merchant's facet. |
+| `normalizeContainerIds(raw)` / `containerMembershipValue(selected)` / `containerMembershipUnchanged(stored, selected)` | The cleaning every reader applies (deduped, trimmed, capped at `CONTAINER_MEMBERSHIP_CAP`), the value a save stores (an empty selection is stored as `[]`, never removed), and an order-insensitive "nothing to save". |
+| `useSiteContainerOptions(kind, hostId, { enabled })` / `useOrgContainerOptions(kind, orgId, { enabled })` (`@aglyn/tenant-feature-instance`) | The containers a picker offers: the org collection the kind declares, narrowed on a site to the ones placed on it (`visibleTo`), retired ones (`deletedAt`) left out, named by `nameField`, ceilinged at fifty. Off until `enabled`; a kind no plugin keeps settles with nothing. |
+| `ContainerPicker` (`@aglyn/tenant-feature-instance/components/container-picker`) | The one control that files a record: `kind`, `options`, `value`, `onChange`. Its words are the kind's labels, and an empty site is told where one is created. |
+
+The owner removes a container by clearing its id from every member it can
+name; a plugin whose members it cannot name registers a detacher
+(`plugin-membership-detach`), which is handed the kind's field.
+
 ## Record addresses — `plugin-record-routes`
 
 Where a plugin's records are read, published by the plugin that owns them, so

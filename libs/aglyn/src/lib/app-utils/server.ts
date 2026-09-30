@@ -183,11 +183,12 @@ export * from './onboarding-deep-link'
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.
 export * from './utm-attribution'
-// The edge between a campaign and the forms, screens and contacts a push is
-// coordinated across. Beside the attribution above because the two answer
-// opposite questions about the same word: attribution records where somebody
-// CAME from, this records what a merchant DECLARED belongs together.
-export * from './campaign-membership'
+// What a record is filed under: the edge between a container a plugin keeps
+// (a campaign) and the forms, screens and contacts it gathers. Beside the
+// attribution above because the two answer opposite questions: attribution
+// records where somebody CAME from, this records what a merchant DECLARED
+// belongs together.
+export * from './container-membership'
 export * from './deployment-shape'
 // Which browser origins may complete a signed direct-to-GCS upload (AGL-1452).
 // GCS matches the origin list EXACTLY, so every serving console name needs its

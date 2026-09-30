@@ -70,7 +70,7 @@ import {
   useConsoleHostRoute,
   useDuplicateResource,
   useFirestore,
-  useHostCampaigns,
+  useSiteContainerOptions,
   useHostResourceApi,
   useLiveArtifactCount,
 } from '@aglyn/tenant-feature-instance'
@@ -307,7 +307,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
    * it a moment later.
    */
   const [wantsCampaigns, setWantsCampaigns] = useState(false)
-  const siteCampaigns = useHostCampaigns(hostId, {
+  const siteCampaigns = useSiteContainerOptions('campaign', hostId, {
     enabled: wantsCampaigns || formClauses.some((clause) => clause.field === 'campaignIds'),
   })
   const formFilterOptions = useMemo<Record<string, ListFilterOption[]>>(() => {
@@ -520,7 +520,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
       headerName: 'In a campaign',
       minWidth: 130,
       valueGetter: (_value: any, row: any) =>
-        String(Aglyn.readCampaignIds(row).length > 0),
+        String(Aglyn.readContainerIds(row, 'campaign').length > 0),
     },
     listActionsColumn((row: any) => {
       const form = { ...row, $id: row.$id as string }
