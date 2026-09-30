@@ -6,7 +6,8 @@
       "rules": [
         "vendor:ga4"
       ],
-      "lane": "analytics-provider"
+      "lane": "stays",
+      "why": "Aglyn's own plan checkout, not a tenant feature: it carries the operator's measurement client id and own-traffic flag to the operator's server-side revenue event, and the comment names how that stamp reaches the operator's tag. A self-host's operator identity replaces both."
     },
     {
       "path": "apps/console/app/(app)/[orgSlug]/contacts/page.tsx",
@@ -1098,7 +1099,8 @@
       "rules": [
         "vendor:ga4"
       ],
-      "lane": "analytics-provider"
+      "lane": "stays",
+      "why": "The operator's own-traffic stamp, not a tenant feature: the parameter the operator's property filters its own browsing out on, and the constant snippets that set it on the operator's property only (aglyn.com through the Google tag adapter, and a verbatim copy the docs site runs). A customer's property never receives it; a self-host's operator property replaces the target."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/list-assignment-policy.ts",
@@ -1182,7 +1184,8 @@
       "rules": [
         "vendor:ga4"
       ],
-      "lane": "analytics-provider"
+      "lane": "stays",
+      "why": "Aglyn's own console and docs surfaces, not a tenant feature: the consent default the operator's own tags start from (the console's analytics SDK, and a verbatim copy in the docs site), swapped with the operator identity on a self-host. Tenant sites answer to visitor-consent.ts and a vendor's adapter."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/platform-marketing-consent.ts",
@@ -1645,7 +1648,8 @@
         "domain-name",
         "vendor:ga4"
       ],
-      "lane": "analytics-provider"
+      "lane": "stays",
+      "why": "The operator's server-side revenue and activation events, sent to the operator's own property (GA4_MEASUREMENT_ID / GA4_API_SECRET, unset on a self-host that measures nothing): Aglyn's own funnel, like platform-ad-conversions.ts. A merchant's revenue goes to the merchant's property from the merchant's own tag, never through here."
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/host-memberships.ts",
@@ -1705,7 +1709,8 @@
       "rules": [
         "vendor:ga4"
       ],
-      "lane": "analytics-provider"
+      "lane": "stays",
+      "why": "The console's Firebase boot, not a tenant feature: its analytics is the platform Firebase project's own, under the operator's measurement id (NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID), and the comment names what the SDK's boot sends. Swapped with the operator's Firebase project on a self-host."
     },
     {
       "path": "libs/tenant/feature/instance/src/lib/hooks/use-host-campaigns.ts",
