@@ -17,6 +17,7 @@
 'use client'
 
 import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiCalendarClockOutline,
   mdiCloseCircleOutline,
@@ -64,12 +65,9 @@ import {
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
 import { emailPlainTextState } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { useMarketingHubPath } from './use-marketing-hub-path'
+import { siteRecordRouteContext, useRecordRouteContext } from './record-route-context'
 import { campaignSendDoc, campaignSendReportDoc } from './campaign-queries'
-import {
-  orgSiteHubPath,
-  useMarketingOrgId,
-  useMarketingOrgMount,
-} from './marketing-org-mount'
+import { useMarketingOrgId, useMarketingOrgMount } from './marketing-org-mount'
 import { CampaignDesignPreview as EmailDesignPreview } from './campaign-email-zones'
 import EmailEditDrawer from './email-edit-drawer'
 import EmailRecipientsCard from './email-recipients-card'
@@ -174,12 +172,11 @@ export function EmailDetail(props: EmailDetailProps) {
   /*
    * The message pages' own addresses, beneath the Emails page this one is on
    * — the site's or the organization's. A template is always the sending
-   * site's design, so over the org it opens on that site.
+   * site's design, so over the org it opens on that site, at the address the
+   * Emails page publishes for it.
    */
   const messagesPath = `${basePath}/messages`
-  const templatesHub = orgMount
-    ? orgSiteHubPath(orgMount, hostId, 'emails')
-    : basePath
+  const templateContext = siteRecordRouteContext(useRecordRouteContext(), orgMount, hostId)
 
   /*
    * The link rollup, its own document rather than a field on the message.
@@ -195,6 +192,9 @@ export function EmailDetail(props: EmailDetailProps) {
   )
 
   const templateScreenId: string | undefined = email?.templateScreenId
+  const templateHrefOf = (id: string | undefined): string | null =>
+    id && templateContext ? pluginRecordHref('emailTemplate', templateContext, id) : null
+  const templateHref = templateHrefOf(templateScreenId)
   const { data: template } = useFirestoreDoc<any>(
     () =>
       templateScreenId && hostId
@@ -825,11 +825,11 @@ export function EmailDetail(props: EmailDetailProps) {
           {'Write this email'}
         </Button>
       ) : null}
-      {templateScreenId && templatesHub ? (
+      {templateHref ? (
         <Button
           component={AppLink as any}
           {...({ componentVariant: 'naked', nativeButton: false } as any)}
-          href={`${templatesHub}/templates/${templateScreenId}`}
+          href={templateHref}
           size="small"
           color="primary"
         >
@@ -1074,9 +1074,9 @@ export function EmailDetail(props: EmailDetailProps) {
                 <TableRow>
                   <TableCell>{'Template'}</TableCell>
                   <TableCell align="right">
-                    {templateScreenId && templatesHub ? (
+                    {templateHref ? (
                       <AppLink
-                        href={`${templatesHub}/templates/${templateScreenId}`}
+                        href={templateHref}
                       >
                         {template?.displayName ?? 'Untitled template'}
                       </AppLink>

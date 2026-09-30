@@ -39,6 +39,9 @@ import { BUNDLE_ID } from '../constants/bundle-common'
  * - `sendingIdentity`: who the mail comes from, set up in the Sending
  *   section. An identity has no page of its own, so its record answers the
  *   section it is kept in.
+ * - `emailTemplate`: a site's email design, at `templates/{id}` (the
+ *   screen's id). A design is a site's, so the organization level has no
+ *   address for one: a caller at the org names the site the send used.
  */
 
 /** The nav slug the shell resolves this plugin's page by. */
@@ -61,6 +64,15 @@ export function registerEmailRecordRoutes(): void {
     {
       list: (context) => `${hub(context)}/messages`,
       record: (context, id) => `${hub(context)}/messages/${encodeURIComponent(id)}`,
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginRecordRoute(
+    'emailTemplate',
+    {
+      list: (context) => (context.host ? `${hub(context)}/templates` : null),
+      record: (context, id) =>
+        context.host ? `${hub(context)}/templates/${encodeURIComponent(id)}` : null,
     },
     { pluginId: BUNDLE_ID },
   )

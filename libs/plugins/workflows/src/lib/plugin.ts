@@ -30,6 +30,7 @@ import {
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { WORKFLOW_USAGE_ZONE } from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerWorkflowsRecordRoutes } from './model/workflows-record-routes'
 
 /** Code-split: the Automation console page only loads when opened. */
 const WorkflowsConsolePage = lazy(
@@ -51,6 +52,7 @@ const WorkflowsConsolePage = lazy(
  * them. Only what a reader sees carries the new name.
  */
 export function registerWorkflowsConsole(): void {
+  registerWorkflowsRecordRoutes()
   registerPluginZone(
     {
       zone: WORKFLOW_USAGE_ZONE,

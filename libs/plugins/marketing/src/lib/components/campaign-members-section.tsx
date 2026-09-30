@@ -16,6 +16,10 @@
  */
 'use client'
 
+import {
+  pluginRecordHref,
+  pluginRecordListHref,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import {
   Figure,
@@ -267,10 +271,7 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
       return {
         id,
         name: String(row['displayName'] ?? id),
-        href:
-          orgSlug && host
-            ? buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: id })
-            : null,
+        href: orgSlug && host ? pluginRecordHref('form', { orgSlug, host }, id) : null,
         hrefReason: 'This site’s console URL has not resolved yet',
         totals: campaignFormTotals(row['stats'] as FormStats | undefined, range),
         campaigns: readCampaignIds(row).length,
@@ -300,7 +301,7 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
       ? buildRoute(Route.HOST_ANALYTICS, { orgSlug, host })
       : null
   const contactsHref =
-    orgSlug && host ? buildRoute(Route.HOST_CONTACTS, { orgSlug, host }) : null
+    orgSlug && host ? pluginRecordListHref('contact', { orgSlug, host }) : null
 
   return (
     <Section

@@ -907,14 +907,6 @@
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
     },
     {
-      "path": "libs/plugins/ai/src/lib/components/assist-jobs-drawer.component.tsx",
-      "rules": [
-        "console-path:forms",
-        "console-path:workflows"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/ai/src/lib/insights/ai-figure-readers.ts",
       "rules": [
         "plugin-collection:data"
@@ -940,27 +932,6 @@
       "path": "libs/plugins/crm/src/lib/components/deal-products-card.tsx",
       "rules": [
         "plugin-collection:commerce"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx",
-      "rules": [
-        "console-path:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/org-lead-surfaces-note.tsx",
-      "rules": [
-        "console-path:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/recipes-card.tsx",
-      "rules": [
-        "console-path:workflows"
       ],
       "lane": "coupling"
     },
@@ -1042,21 +1013,6 @@
         "plugin-collection:bookings",
         "plugin-collection:forms",
         "console-path:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/components/campaign-members-section.tsx",
-      "rules": [
-        "console-path:crm",
-        "console-path:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/components/use-emails-hub-path.ts",
-      "rules": [
-        "console-path:email"
       ],
       "lane": "coupling"
     },

@@ -17,6 +17,7 @@
 'use client'
 
 import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
@@ -73,7 +74,7 @@ import {
   useMarketingOrgId,
   useMarketingOrgMount,
 } from './marketing-org-mount'
-import { useEmailsHubPath } from './use-emails-hub-path'
+import { useRecordRouteContext } from './record-route-context'
 
 /**
  * The help affordance, hoisted so BOTH headers carry it.
@@ -186,8 +187,8 @@ export interface CampaignReportCardProps {
  */
 export function CampaignReportCard(props: CampaignReportCardProps) {
   const { hostId, campaignId, basePath } = props
-  // The sibling hub: the message's own page belongs to the Emails console.
-  const emailsHub = useEmailsHubPath()
+  // The scope the message's own page is asked in: it belongs to the Emails page.
+  const routeContext = useRecordRouteContext()
   const orgMount = useMarketingOrgMount()
   const { orgId } = useMarketingOrgId(hostId)
   const firestore = useFirestore()
@@ -253,7 +254,9 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
    * the site's under a site, the organization's over the org; the
    * conversions list is always the sending site's.
    */
-  const messageHref = emailsHub ? `${emailsHub}/messages/${campaignId}` : null
+  const messageHrefOf = (id: string): string | null =>
+    routeContext ? pluginRecordHref('emailMessage', routeContext, id) : null
+  const messageHref = messageHrefOf(campaignId)
   const conversionsHub = orgMount
     ? orgSiteHubPath(orgMount, String(campaign?.hostId ?? ''), 'marketing')
     : basePath

@@ -493,6 +493,13 @@ plugin publishes the kind, or the owner has no address at that scope. Render
 text, which is what these surfaces already do while their route params settle.
 A link is not access: the page at the far end applies its own gates.
 
+The first-party kinds: `contact`, `lead`, `company` and `deal` (CRM),
+`product` (Commerce), `campaign` (Marketing), `emailMessage`, `emailTemplate`
+and `sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
+`webhook` (Workflows). A plugin that links to another plugin's page asks for
+one of these; `check:plugin-domain-in-core` refuses one that spells the other
+plugin's slug or core route itself.
+
 ## Record cards — `plugin-record-cards` (`/server`)
 
 What a plugin's record looks like in one line and one image, published by the
