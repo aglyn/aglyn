@@ -12,6 +12,7 @@ import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from '
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
+import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -473,6 +474,29 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
     }
   },
 ]
+
+/**
+ * Every top-level plugin collection a workspace erasure sweeps by the field
+ * naming the organization, declared by the plugin that owns it (AGL-3080).
+ */
+export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] = [
+  {
+    "pluginId": "outreach",
+    "name": "outreachMailboxCredentials",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "outreach",
+    "name": "outreachLinks",
+    "orgField": "orgId"
+  },
+]
+
+/**
+ * The plugins whose org eraser a workspace erasure may not run without
+ * (AGL-3080): each holds a record the erasure promises to destroy.
+ */
+export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ["marketplace"]
 
 /**
  * Where published plugin versions and their kill switches are stored, declared

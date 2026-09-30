@@ -68,6 +68,7 @@
 
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { standInRequiredOrgErasersForTests } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
@@ -106,6 +107,13 @@ jest.mock('./auth-pools', () => ({
 }))
 
 const describeEmulated = EMULATED ? describe : describe.skip
+
+/**
+ * The marketplace's org eraser is REQUIRED (AGL-3080): an erasure refuses to
+ * run without it. It is a plugin's, which this library may not load, so this
+ * spec — about the erasure's own sweeps — stands a no-op in for it.
+ */
+beforeAll(() => standInRequiredOrgErasersForTests())
 
 describeEmulated('a deletion instruction survives a restore (AGL-1975)', () => {
   let db: Firestore

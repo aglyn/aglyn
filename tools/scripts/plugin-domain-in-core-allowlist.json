@@ -1742,15 +1742,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/erase.ts",
-      "rules": [
-        "plugin-collection:marketplace",
-        "domain-declares:marketplace",
-        "domain-declares:outreach"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/form-dataset-binding-token.ts",
       "rules": [
         "domain-name",

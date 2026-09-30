@@ -849,6 +849,51 @@ function pluginDistributionRow() {
   return row
 }
 
+/**
+ * A plugin's top-level collections whose documents name an organization in a
+ * field (AGL-3080), which a workspace erasure sweeps by that field in every
+ * process. One owner per collection; plain names only.
+ */
+function orgKeyedCollectionRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.orgKeyedCollections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" orgKeyedCollections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name what the erasure must sweep`)
+    }
+    for (const { name, orgField } of declared) {
+      const what = `${where} "${name ?? ''}"`
+      if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(name)) {
+        throw new Error(`${where}: a collection needs a plain "name"`)
+      }
+      if (typeof orgField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(orgField)) {
+        throw new Error(`${what}: "orgField" is the plain name of the field naming a document's organization`)
+      }
+      const held = owners.get(name)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one collection has one owner`)
+      owners.set(name, plugin.id)
+      rows.push({ pluginId: plugin.id, name, orgField })
+    }
+  }
+  return rows
+}
+
+/** The plugins whose org eraser an erasure may not run without (AGL-3080). */
+function requiredOrgEraserIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.requiredOrgEraser === undefined) return false
+      if (plugin.requiredOrgEraser !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" requiredOrgEraser is true, or is left out`)
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
 function catalogContent() {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -872,7 +917,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -914,6 +959,20 @@ ${orgCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`)
 export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
 ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
+
+/**
+ * Every top-level plugin collection a workspace erasure sweeps by the field
+ * naming the organization, declared by the plugin that owns it (AGL-3080).
+ */
+export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] = [
+${orgKeyedCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * The plugins whose org eraser a workspace erasure may not run without
+ * (AGL-3080): each holds a record the erasure promises to destroy.
+ */
+export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ${JSON.stringify(requiredOrgEraserIds())}
 
 /**
  * Where published plugin versions and their kill switches are stored, declared

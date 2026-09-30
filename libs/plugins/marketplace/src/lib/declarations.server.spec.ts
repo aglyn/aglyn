@@ -19,6 +19,11 @@ import {
   getCustomFieldType,
   validateCustomFieldValue,
 } from '@aglyn/aglyn/plugin-manager/custom-fields'
+import {
+  listPluginOrgErasers,
+  PLUGIN_REQUIRED_ORG_ERASERS,
+  resetPluginOrgErasersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { registerMarketplaceServerDeclarations } from './declarations.server'
 
 /**
@@ -40,5 +45,22 @@ describe('registerMarketplaceServerDeclarations', () => {
   it('registers no input component, which only the client barrel carries', () => {
     registerMarketplaceServerDeclarations()
     expect(getCustomFieldType('rating')?.Input).toBeUndefined()
+  })
+})
+
+/**
+ * The org's public marketplace identity is erased by this plugin's REQUIRED
+ * org eraser (AGL-3080), registered at boot so the erasure cron and the
+ * operator script have it without loading a surface — and an erasure refuses
+ * to run without it.
+ */
+describe('the marketplace’s share of a workspace erasure', () => {
+  beforeEach(() => resetPluginOrgErasersForTests())
+
+  it('is declared required, and registered once however often boot runs', () => {
+    expect(PLUGIN_REQUIRED_ORG_ERASERS).toContain('marketplace')
+    registerMarketplaceServerDeclarations()
+    registerMarketplaceServerDeclarations()
+    expect(listPluginOrgErasers()).toEqual(['marketplace'])
   })
 })

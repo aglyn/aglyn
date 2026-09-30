@@ -48,9 +48,52 @@
  * `consoleServerDeclarations` for an eraser that opens a credential only the
  * console holds — so the eraser is in place in a server process that never
  * loaded the plugin's API surface.
+ *
+ * ## A REQUIRED eraser (AGL-3080)
+ *
+ * Isolation is right for a share whose failure leaves the workspace's data
+ * gone and only a provider-side courtesy undone. It is wrong for a share the
+ * erasure PROMISES: a public record naming the erased organization, a payout
+ * identifier on a world-readable document. A plugin holding such a record
+ * declares `"requiredOrgEraser": true` in `plugins.config.json`, compiled into
+ * {@link PLUGIN_REQUIRED_ORG_ERASERS} so no registration can opt out of it, and:
+ *
+ * - an erasure REFUSES to start while a required eraser is not registered —
+ *   a boot that failed to declare it must not produce a "complete" erasure
+ *   with the record still standing;
+ * - a required eraser that throws still lets every other eraser run, and then
+ *   fails the erasure's `plugins` step, which the cron retries.
+ *
+ * ## Plugin collections keyed by the organization (AGL-3080)
+ *
+ * A plugin's TOP-LEVEL collection whose documents carry the organization's id
+ * in a field is invisible to the erasure's path deletes. The plugin declares
+ * it (`orgKeyedCollections`, compiled into {@link PLUGIN_ORG_KEYED_COLLECTIONS})
+ * and the erasure sweeps it by that field in every process, with or without
+ * the plugin loaded — a deletion that must not depend on which bundles an
+ * erasing process happened to load, so it is data rather than an eraser.
  */
 
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
+import {
+  PLUGIN_ORG_KEYED_COLLECTIONS,
+  PLUGIN_REQUIRED_ORG_ERASERS,
+} from './first-party-plugins.generated'
+
+export { PLUGIN_ORG_KEYED_COLLECTIONS, PLUGIN_REQUIRED_ORG_ERASERS }
+
+/**
+ * A plugin's top-level collection whose documents name an organization in a
+ * field, declared by that plugin. See the module note.
+ */
+export interface PluginOrgKeyedCollection {
+  /** The plugin that declared it. */
+  pluginId: string
+  /** The top-level collection. */
+  name: string
+  /** The field naming the organization a document belongs to. */
+  orgField: string
+}
 
 /** What an eraser is asked to erase. */
 export interface PluginOrgErasureRequest {
@@ -106,19 +149,41 @@ export function registerPluginOrgEraser(
 /**
  * Runs every eraser, in registration order, and answers each plugin's
  * report by plugin id: the eraser's own report, or `null` for one that
- * threw. Never throws.
+ * threw.
+ *
+ * Throws in exactly two cases, both about a REQUIRED eraser (`required`,
+ * the compiled {@link PLUGIN_REQUIRED_ORG_ERASERS} unless a spec passes its
+ * own): before running anything, when one is not registered; and after
+ * running every eraser, when one threw.
  */
 export async function runPluginOrgErasers(
   request: PluginOrgErasureRequest,
+  required: readonly string[] = PLUGIN_REQUIRED_ORG_ERASERS,
 ): Promise<Record<string, PluginOrgErasureReport | null>> {
+  const registered = new Set(registrations.map((entry) => entry.pluginId))
+  const missing = required.filter((pluginId) => !registered.has(pluginId))
+  if (missing.length) {
+    throw new Error(
+      `[plugins] erasing org ${request.orgId} refused: ${missing.join(', ')} ` +
+        'declared a required org eraser and none is registered in this process',
+    )
+  }
   const reports: Record<string, PluginOrgErasureReport | null> = {}
+  const failedRequired: string[] = []
   for (const { pluginId, eraser } of [...registrations]) {
     try {
       reports[pluginId] = await eraser({ orgId: request.orgId, dryRun: request.dryRun })
     } catch (error) {
       reports[pluginId] = null
       console.error(`[plugins] ${pluginId} failed to erase org ${request.orgId}`, error)
+      if (required.includes(pluginId)) failedRequired.push(pluginId)
     }
+  }
+  if (failedRequired.length) {
+    throw new Error(
+      `[plugins] erasing org ${request.orgId} incomplete: the required eraser of ` +
+        `${failedRequired.join(', ')} failed`,
+    )
   }
   return reports
 }
@@ -131,4 +196,19 @@ export function listPluginOrgErasers(): string[] {
 /** Test seam: forget every eraser. */
 export function resetPluginOrgErasersForTests(): void {
   registrations.length = 0
+}
+
+/**
+ * Test seam: a no-op eraser for every REQUIRED plugin that has none, so a
+ * spec about the erasure's own sweeps can run it without loading a plugin
+ * (core and the data layer may not import one). A spec about a required
+ * plugin's share registers the real one through the app's manifest instead.
+ */
+export function standInRequiredOrgErasersForTests(): void {
+  const registered = new Set(registrations.map((entry) => entry.pluginId))
+  for (const pluginId of PLUGIN_REQUIRED_ORG_ERASERS) {
+    if (!registered.has(pluginId)) {
+      registrations.push({ pluginId, eraser: async () => ({ standIn: true }) })
+    }
+  }
 }

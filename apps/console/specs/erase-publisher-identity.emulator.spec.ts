@@ -22,6 +22,10 @@
 /**
  * An erasure must leave no PUBLIC identity standing (AGL-1970).
  *
+ * In the console's specs because the org half is the marketplace plugin's
+ * REQUIRED org eraser (AGL-3080), which only an app may load — through its
+ * generated manifest — and the person half is the data layer's `eraseUser`.
+ *
  * Three top-level collections outlived the erasure that was supposed to remove
  * them, and all three are `allow read: if true` in
  * `cloud/firebase-firestore.rules`:
@@ -70,10 +74,12 @@
  * (`npm run firebase:emulate`), then:
  *
  *   FIRESTORE_EMULATOR_HOST=localhost:8082 \
- *     npx jest -c libs/tenant/data/admin/jest.config.ts \
+ *     npx jest -c apps/console/jest.config.ts \
  *       --testPathPatterns erase-publisher-identity.emulator
  */
 
+import * as eraseModule from '@aglyn/tenant-data-admin/server/erase'
+import * as organizationsModule from '@aglyn/tenant-data-admin/server/organizations'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestore'
 
@@ -132,7 +138,7 @@ jest.mock('firebase-admin/storage', () => ({
 }))
 
 /** No Auth emulator here; an unstubbed lookup reaches real identity pools. */
-jest.mock('./auth-pools', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/auth-pools', () => ({
   findUserByUidAcrossPools: async () => null,
   authForPool: () => ({ deleteUser: async () => undefined }),
 }))
@@ -141,16 +147,16 @@ const describeEmulated = EMULATED ? describe : describe.skip
 
 describeEmulated('an erasure leaves no public identity standing (AGL-1970)', () => {
   let db: Firestore
-  let erase: typeof import('./erase')
-  let organizations: typeof import('./organizations')
+  let erase: typeof eraseModule
+  let organizations: typeof organizationsModule
 
   let plainOrgId: string
   let listedOrgId: string
   let otherOrgId: string
 
-  let plainResult: Awaited<ReturnType<typeof import('./erase').eraseOrg>>
-  let listedResult: Awaited<ReturnType<typeof import('./erase').eraseOrg>>
-  let userResult: Awaited<ReturnType<typeof import('./erase').eraseUser>>
+  let plainResult: Awaited<ReturnType<typeof eraseModule.eraseOrg>>
+  let listedResult: Awaited<ReturnType<typeof eraseModule.eraseOrg>>
+  let userResult: Awaited<ReturnType<typeof eraseModule.eraseUser>>
 
   /** Every URL the run addressed to Stripe. Must stay empty. */
   const stripeCalls: string[] = []
@@ -203,8 +209,15 @@ describeEmulated('an erasure leaves no public identity standing (AGL-1970)', () 
 
   beforeAll(async () => {
     db = getFirestore()
-    erase = await import('./erase')
-    organizations = await import('./organizations')
+    // The org half is the MARKETPLACE's required eraser (AGL-3080),
+    // registered the way the console registers it at boot — through the
+    // generated manifest, since an app spec may not import a plugin.
+    const { registerPluginServerDeclarations } = await import(
+      '../constants/plugins.declarations.server.generated'
+    )
+    await registerPluginServerDeclarations()
+    erase = eraseModule
+    organizations = organizationsModule
 
     await purge()
 
@@ -342,9 +355,11 @@ describeEmulated('an erasure leaves no public identity standing (AGL-1970)', () 
       expect(row.exists).toBe(false)
     }
 
-    expect(plainResult).toMatchObject({
+    // The marketplace's share, reported under its plugin (AGL-3080).
+    expect(plainResult.plugins?.['marketplace']).toEqual({
       publisherHandles: 2,
-      publisherProfile: 'deleted',
+      publisherProfileDeleted: true,
+      publisherProfileTombstoned: false,
       listingsRetained: 0,
     })
   }, 60_000)
@@ -382,8 +397,9 @@ describeEmulated('an erasure leaves no public identity standing (AGL-1970)', () 
 
     // And the erasure SAYS the listing outlived it rather than reporting a
     // clean success (AGL-1448 Tier 3 is still open).
-    expect(listedResult).toMatchObject({
-      publisherProfile: 'tombstoned',
+    expect(listedResult.plugins?.['marketplace']).toMatchObject({
+      publisherProfileDeleted: false,
+      publisherProfileTombstoned: true,
       listingsRetained: 1,
     })
   }, 60_000)

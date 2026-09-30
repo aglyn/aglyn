@@ -411,6 +411,7 @@
         "versions": "pluginVersions",
         "revocations": "revocations"
       },
+      "requiredOrgEraser": true,
       "contributes": {
         "console": {
           "shell": true,
@@ -495,6 +496,16 @@
         "releaseFlag": "release_outreach",
         "publishedSiteImpact": "console-only"
       },
+      "orgKeyedCollections": [
+        {
+          "name": "outreachMailboxCredentials",
+          "orgField": "orgId"
+        },
+        {
+          "name": "outreachLinks",
+          "orgField": "orgId"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
