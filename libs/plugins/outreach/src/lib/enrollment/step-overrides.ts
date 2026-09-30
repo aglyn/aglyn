@@ -65,6 +65,7 @@ export interface OutreachStepOverrideRead {
 export function readOutreachStepOverrideRequest(
   raw: unknown,
   steps: readonly OutreachSequenceStep[],
+  startStepIndex = 0,
 ): { stepIndex: number; override: Omit<OutreachStepOverride, 'draftedAtMs' | 'draftedByUid'>; issues: OutreachValidationIssue[] } | { refusal: string } {
   if (!raw || typeof raw !== 'object') return { refusal: 'A curated step is an object.' }
   const entry = raw as Record<string, unknown>
@@ -73,7 +74,12 @@ export function readOutreachStepOverrideRequest(
   if (step?.kind !== 'email') {
     return { refusal: 'A curated step names one of the sequence’s email steps.' }
   }
-  const startsThread = !isInThreadEmailStep(steps, stepIndex)
+  // A step the enrollment begins past (AGL-3228) is never sent, so a copy
+  // of it would be stored for nothing.
+  if (stepIndex < startStepIndex) {
+    return { refusal: `Step ${stepIndex + 1} is skipped for this person, so it has nothing to curate.` }
+  }
+  const startsThread = !isInThreadEmailStep(steps, stepIndex, startStepIndex)
   const body = typeof entry['body'] === 'string' ? entry['body'].replace(/\r\n?/g, '\n') : ''
   const subject = startsThread && typeof entry['subject'] === 'string' ? entry['subject'] : undefined
   const source = entry['source']
@@ -106,12 +112,14 @@ export function readOutreachStepOverrideRequests(
   raw: unknown,
   steps: readonly OutreachSequenceStep[],
   stamp: { uid: string; nowMs: number },
+  /** The step the enrollment begins at (AGL-3228); the first when absent. */
+  startStepIndex = 0,
 ): OutreachStepOverrideRead {
   const list = Array.isArray(raw) ? (raw as unknown[]) : []
   const overrides: OutreachStepOverrides = {}
   const issues: OutreachValidationIssue[] = []
   for (const entry of list) {
-    const read = readOutreachStepOverrideRequest(entry, steps)
+    const read = readOutreachStepOverrideRequest(entry, steps, startStepIndex)
     if ('refusal' in read) return { overrides: {}, issues: [], refusal: read.refusal }
     if (overrides[String(read.stepIndex)]) {
       return { overrides: {}, issues: [], refusal: 'A step is curated once per person.' }

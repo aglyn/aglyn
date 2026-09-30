@@ -283,6 +283,68 @@ describe('composeOutreachEmail: threading', () => {
   })
 })
 
+describe('composeOutreachEmail: an enrollment that began at a later step (AGL-3228)', () => {
+  const began = (stepIndex: number, startStepIndex: number, thread: Partial<typeof inThread> = {}) => ({
+    email: 'casey@example.com',
+    stepIndex,
+    personalLine: 'Saw the portfolio launch last week.',
+    threadSubject: null,
+    messageIds: [],
+    gmailThreadId: null,
+    startStepIndex,
+    ...thread,
+  })
+
+  it('starts the thread with the first email it sends, under the first email’s subject — no Re:, no thread headers', () => {
+    const result = composeOutreachEmail(input({ enrollment: began(1, 1) }))
+    expect(result.error).toBeNull()
+    expect(result.email).toEqual({
+      to: 'casey@example.com',
+      subject: "Example Agency's client sites",
+      text: `Casey — did the math for a portfolio your size.\n\n${FOOTER}`,
+      trackedLinks: [],
+    })
+  })
+
+  it('replies in the thread it started from there on', () => {
+    // Began at step 2; step 4 answers the thread step 2 started.
+    const result = composeOutreachEmail(
+      input({
+        enrollment: began(3, 1, {
+          threadSubject: "Example Agency's client sites",
+          messageIds: ['<step-2@example.org>'],
+          gmailThreadId: 'thread-2',
+        }),
+        templateBody: 'Last note, {{contact.firstName}}.',
+      }),
+    )
+    expect(result.error).toBeNull()
+    expect(result.email).toMatchObject({
+      subject: "Re: Example Agency's client sites",
+      threadId: 'thread-2',
+      inReplyTo: '<step-2@example.org>',
+    })
+  })
+
+  it('takes the person’s curated subject when their copy carries one', () => {
+    const result = composeOutreachEmail(
+      input({
+        enrollment: {
+          ...began(1, 1),
+          stepOverrides: {
+            '1': { subject: 'Following up on my note, {{contact.firstName}}', body: 'Hi again.', source: 'member', draftedAtMs: 1, draftedByUid: 'u-1' },
+          },
+        },
+      }),
+    )
+    expect(result.email?.subject).toBe('Following up on my note, Casey')
+  })
+
+  it('leaves an enrollment that began at step 1 as it was: a reply step with no thread is refused', () => {
+    expect(composeOutreachEmail(input({ enrollment: began(1, 0) })).error?.code).toBe('missing_thread')
+  })
+})
+
 describe('composeOutreachEmail: unsubscribe headers', () => {
   it('passes a signed https URL and a mailto through', () => {
     const result = composeOutreachEmail(

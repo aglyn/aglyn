@@ -37,7 +37,11 @@ import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-emai
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
-import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
+import {
+  buildOutreachEnrollment,
+  planOutreachFirstDue,
+  readOutreachStartStepIndex,
+} from '../engine/enrollment-state'
 import { outreachEnrollmentSearchTokens } from '../enrollment/enrollment-search'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
@@ -102,6 +106,12 @@ import {
  * Only an ACTIVE sequence takes people: enrolling schedules the first step
  * in the mailbox's hours, and a draft's steps and a paused sequence's timing
  * are not yet what will be sent.
+ *
+ * Confirm may name `startStepIndex` (AGL-3228) for people who already had
+ * the earlier steps by hand: everyone in the request begins at that step,
+ * scheduled by its own delay from now, and the steps before it are marked
+ * skipped on their enrollments. Absent, it is the first step; a step the
+ * sequence does not have refuses the whole request.
  */
 
 /** The permission enrolling reads the CRM with. */
@@ -546,6 +556,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     if (sequence instanceof Response) return sequence
 
     const nowMs = deps.now()
+    const start = readOutreachStartStepIndex(body['startStepIndex'], sequence.steps)
+    if (start.refusal !== null) return outreachRefusal(400, 'invalid-start-step', start.refusal)
+    const startStepIndex = start.startStepIndex
     // Each person once, by whichever record they are: a contact by id, or a
     // lead by its key (AGL-3234). A person named both ways is a contact.
     const requested = new Map<
@@ -565,10 +578,12 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       // The steps the member curated for this person (AGL-3324), validated
       // here rather than trusted: a copy that breaks a rule refuses the
       // whole request, so nobody is enrolled with a copy the route dropped.
-      const overrides = readOutreachStepOverrideRequests(person['stepOverrides'], sequence.steps, {
-        uid: caller.uid,
-        nowMs,
-      })
+      const overrides = readOutreachStepOverrideRequests(
+        person['stepOverrides'],
+        sequence.steps,
+        { uid: caller.uid, nowMs },
+        startStepIndex,
+      )
       if (outreachStepOverridesRefused(overrides)) {
         return outreachRefusal(
           400,
@@ -607,7 +622,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         "This sequence's mailbox is no longer connected. Choose another mailbox for it before enrolling people.",
       )
     }
-    if (planOutreachFirstDue({ sequence, mailbox, enrolledAtMs: nowMs, random: deps.random }) === null) {
+    if (planOutreachFirstDue({ sequence, mailbox, enrolledAtMs: nowMs, random: deps.random, startStepIndex }) === null) {
       return outreachRefusal(
         409,
         'mailbox-unavailable',
@@ -693,6 +708,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           enrolledByUid: caller.uid,
           nowMs,
           random: deps.random,
+          startStepIndex,
         })
         // The member ticked this person past the red gateway chip
         // (AGL-3326): that is their say-so, stamped as the hold's release,
@@ -733,7 +749,12 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         await joinSequenceCampaigns(firestore, caller.orgId, sequence, context.contactGroupId, candidate, nowMs)
         // The person's record says so (AGL-3274): "Enrolled in <sequence>",
         // with the campaigns it carried them into, once per enrollment.
-        const entry = outreachEnrolledEntry({ enrollmentId: id, sequenceName: sequence.name, campaignNames })
+        const entry = outreachEnrolledEntry({
+          enrollmentId: id,
+          sequenceName: sequence.name,
+          campaignNames,
+          startStepIndex,
+        })
         await fileOutreachNote(deps, {
           orgId: caller.orgId,
           hostId: sequence.hostId,

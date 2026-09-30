@@ -38,6 +38,7 @@ import {
   type OutreachSequence,
   type OutreachSequenceStats,
   type OutreachSequenceStatus,
+  type OutreachSkippedStep,
   type OutreachStepOverride,
   type OutreachStepOverrides,
   type OutreachStopReason,
@@ -153,6 +154,25 @@ export function readOutreachStepOverrides(raw: unknown): OutreachStepOverrides |
   return Object.keys(overrides).length ? overrides : undefined
 }
 
+/** The steps a stored enrollment skipped (AGL-3228), each as the model reads one; the malformed are dropped. */
+function readOutreachSkippedSteps(value: unknown): OutreachSkippedStep[] {
+  if (!Array.isArray(value)) return []
+  const steps: OutreachSkippedStep[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const raw = entry as Record<string, unknown>
+    const stepIndex = Number(raw['stepIndex'])
+    if (!Number.isInteger(stepIndex) || stepIndex < 0) continue
+    steps.push({
+      stepIndex,
+      stepId: text(raw['stepId']),
+      kind: raw['kind'] === 'task' ? 'task' : 'email',
+      atMs: ms(raw['atMs']) ?? 0,
+    })
+  }
+  return steps
+}
+
 /** A stored enrollment in its model shape, or `null` for no document. */
 export function readStoredOutreachEnrollment(
   id: string,
@@ -222,6 +242,14 @@ export function readStoredOutreachEnrollment(
   const stepOverrides = readOutreachStepOverrides(data['stepOverrides'])
   if (stepOverrides) enrollment.stepOverrides = stepOverrides
   else delete enrollment.stepOverrides
+  // Where it began, and what it skipped (AGL-3228) — absent on one that
+  // began at step 1, which is every enrollment made before either existed.
+  const startStepIndex = Number(data['startStepIndex'])
+  if (Number.isInteger(startStepIndex) && startStepIndex > 0) enrollment.startStepIndex = startStepIndex
+  else delete enrollment.startStepIndex
+  const skippedSteps = readOutreachSkippedSteps(data['skippedSteps'])
+  if (skippedSteps.length) enrollment.skippedSteps = skippedSteps
+  else delete enrollment.skippedSteps
   return enrollment
 }
 
