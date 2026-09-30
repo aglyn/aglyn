@@ -153,7 +153,6 @@ import { createHash, createHmac } from 'crypto'
 import {
   EMAIL_MAX_AUDIENCE_PER_SEND,
   EMAIL_MAX_RECIPIENTS_PER_SEND,
-  campaignBatchPlan,
   createProviderRequestPacer,
   effectiveReputationPolicy,
   HOST_SENDERS_COLLECTION,
@@ -166,6 +165,7 @@ import {
   type SendingIdentitySource,
   type EmailRampVerdict,
 } from '@aglyn/shared-util-email'
+import { campaignBatchPlan } from './campaign-batch-plan'
 /*
  * The List-Unsubscribe setting sequences share (AGL-3307), from its LEAF
  * module: the specs that reach this file spread the real barrel under their

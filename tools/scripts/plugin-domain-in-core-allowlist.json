@@ -1312,20 +1312,6 @@
       "why": "The mail rail's policy for the MARKETING send purpose (the legal category opposite `transactional`, see sending-domain.ts): the unsubscribe headers, the suppression check and the per-recipient frequency cap, sunset and cadence that every marketing-purpose message owes, asked by `sendEmail` whenever a caller declares a marketing context. The senders are campaigns, cart reminders, restock alerts, member posts and workflow emails across several plugins, and the cap is a deliverability control on the shared sending domain that no plugin may opt out of, so it cannot live in any one of them."
     },
     {
-      "path": "libs/shared/util/email/src/lib/send-ceilings.ts",
-      "rules": [
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/send-rate.ts",
-      "rules": [
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/util/email/src/lib/sending-domain.ts",
       "rules": [
         "plugin-id"
