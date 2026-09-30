@@ -17,6 +17,7 @@ content on the marketing site and is written separately.
 
 - **themes:** four more built-in themes, the platform type styles and tertiary in every theme ([AGL-3411](https://linear.app/aglyn/issue/AGL-3411))
 - **release:** production promotions are capped at three per Central day ([AGL-3413](https://linear.app/aglyn/issue/AGL-3413))
+- **console:** the staff Organizations, Sites and Users lists filter by Suspended, as a Firestore equality on a stored `suspended` flag for orgs and sites ([AGL-3416](https://linear.app/aglyn/issue/AGL-3416))
 
 ### Fixed
 
@@ -27,6 +28,7 @@ content on the marketing site and is written separately.
 - **docs:** lodash-es is overridden to 4.18.1 under mermaid's chevrotain, clearing the docs site's last two Dependabot alerts ([AGL-3410](https://linear.app/aglyn/issue/AGL-3410))
 - **marketplace:** the listing page's owner cards and body share one set of edges, and Verified publisher gets its content gutters ([AGL-3414](https://linear.app/aglyn/issue/AGL-3414))
 - **console:** the saved workspace URL is no longer flagged invalid; only a new one is judged ([AGL-3415](https://linear.app/aglyn/issue/AGL-3415))
+- **console:** opening a staff org page no longer writes audit rows; actors show name and email, and recipients open their message ([AGL-3417](https://linear.app/aglyn/issue/AGL-3417))
 
 ### Changed
 
