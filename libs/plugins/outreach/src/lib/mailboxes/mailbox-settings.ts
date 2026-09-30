@@ -101,7 +101,7 @@ export function clampDailyCap(value: unknown): number {
 /** Why a settings value was refused, in the words the panel shows. */
 export type OutreachSettingsRefusal = { field: string; message: string }
 
-/** A cap as typed: a whole number from 1 to 50, or a refusal. */
+/** A cap as typed: a whole number from 1 to the ceiling, or a refusal. */
 export function validateDailyCap(value: unknown): number | OutreachSettingsRefusal {
   const number = typeof value === 'number' ? value : Number.NaN
   if (!Number.isInteger(number) || number < 1 || number > OUTREACH_MAX_DAILY_CAP) {

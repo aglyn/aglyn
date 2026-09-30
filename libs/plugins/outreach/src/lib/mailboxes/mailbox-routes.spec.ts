@@ -725,12 +725,12 @@ describe('settings and status (AGL-2978)', () => {
     expect(bad.status).toBe(400)
   })
 
-  it('refuses an unverified send-as, a cap over 50, an empty window and an unknown timezone', async () => {
+  it('refuses an unverified send-as, a cap over 100, an empty window and an unknown timezone', async () => {
     const mailbox = await connectMailbox()
     const refuse = async (patch: Record<string, unknown>) =>
       (await run('settings', post('outreach/mailboxes/settings', { orgId: ORG, mailboxId: mailbox.id, ...patch }))).body
     expect((await refuse({ sendAs: 'unconfirmed@rep.example.com' })).reason).toBe('invalid-settings')
-    expect((await refuse({ dailyCap: 51 })).error).toBe('The daily cap must be a whole number from 1 to 50.')
+    expect((await refuse({ dailyCap: 101 })).error).toBe('The daily cap must be a whole number from 1 to 100.')
     expect((await refuse({ dailyCap: 2.5 })).reason).toBe('invalid-settings')
     expect((await refuse({ window: { days: [], startMinute: 0, endMinute: 60 } })).reason).toBe('invalid-settings')
     expect((await refuse({ window: { days: [1], startMinute: 600, endMinute: 600 } })).reason).toBe('invalid-settings')

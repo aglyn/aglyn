@@ -331,10 +331,10 @@ describe('MailboxCard — settings (AGL-2978)', () => {
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Mailbox settings saved', expect.objectContaining({ variant: 'success' }))
   })
 
-  it('refuses a cap over 50 and a window with no days before anything is sent', () => {
+  it('refuses a cap over 100 and a window with no days before anything is sent', () => {
     renderCard()
-    fireEvent.change(screen.getByLabelText('Daily cap'), { target: { value: '80' } })
-    expect(screen.getByText('The daily cap must be a whole number from 1 to 50.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Daily cap'), { target: { value: '180' } })
+    expect(screen.getByText('The daily cap must be a whole number from 1 to 100.')).toBeTruthy()
     expect((button(MAILBOX_ACTION_LABELS.save) as HTMLButtonElement).disabled).toBe(true)
 
     fireEvent.change(screen.getByLabelText('Daily cap'), { target: { value: '20' } })

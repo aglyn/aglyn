@@ -100,7 +100,7 @@ describe('the daily cap', () => {
   })
 
   it(`never exceeds ${OUTREACH_DAILY_CAP_MAX}, whatever is configured`, () => {
-    expect(outreachDailyCap({ configuredCap: 500, rampStartedAtMs: null, nowMs: now, timeZone: CHICAGO })).toBe(50)
+    expect(outreachDailyCap({ configuredCap: 500, rampStartedAtMs: null, nowMs: now, timeZone: CHICAGO })).toBe(100)
   })
 
   it('reads a cap that is not a count as nothing', () => {
