@@ -177,6 +177,7 @@ export const HOST_FIELDS_WITHOUT_SITE_DROP: Readonly<Record<string, string>> = {
   suspendedUntilMs: 'Server-owned suspension detail, as `suspendedAt`.',
   suspendedMode: 'Server-owned suspension detail, as `suspendedAt`.',
   suspendedEnforcement: 'Server-owned suspension detail, as `suspendedAt`.',
+  suspended: 'The staff Sites list\'s filter key; never rendered.',
   bandwidthCeiling: 'Server-owned free-tier containment state.',
   sendingDomain: 'The marketing mail `From:` domain; mail, not pages.',
   sendingLocalPart: 'The marketing mail `From:` mailbox; mail, not pages.',

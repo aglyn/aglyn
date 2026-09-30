@@ -31,6 +31,12 @@ import {
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
 import { ORG_LIST_QUERY } from '../../../../utils/org-list-query'
+import {
+  LAPSED_SUSPENSIONS_NOTICE,
+  asksAboutSuspension,
+  settleLapsedSuspensions,
+  suspensionInForce,
+} from '../../../../utils/server/suspended-flag'
 
 /**
  * Staff organization list (AGL-878). The page used to read `collection('orgs')`
@@ -96,6 +102,15 @@ async function handler(request: Request): Promise<Response> {
     if (!listRequest) {
       return Response.json({ error: 'Unreadable filters' }, { status: 400 })
     }
+    /*
+     * Suspended is an equality on the stored flag, and a timed suspension
+     * lapses with no write — so before a query asks about the flag, every
+     * lapsed one is cleared, and the answer is the one for this moment
+     * (`utils/server/suspended-flag.ts`).
+     */
+    const settled = asksAboutSuspension(listRequest.clauses)
+      ? await settleLapsedSuspensions(db.collection('orgs'))
+      : null
     const page = await runStaffListQuery({
       firestore: db,
       collection: db.collection('orgs'),
@@ -151,6 +166,8 @@ async function handler(request: Request): Promise<Response> {
             }
           : null,
         createdAt: ts(data['createdAt']),
+        // In force NOW — the chip and the Suspended filter give one answer.
+        suspended: suspensionInForce(data['suspendedAt'], data['suspendedUntilMs']),
         suspendedAt: ts(data['suspendedAt']),
         suspendedReason: data['suspendedReason'] ?? null,
         // Lockdown-core fields (AGL-1501/1505): the suspend dialog prefills
@@ -167,7 +184,9 @@ async function handler(request: Request): Promise<Response> {
         hasMore: page.hasMore,
         nextCursor: page.nextCursor,
         refused: page.refused,
-        notices: page.notices,
+        notices: settled?.bounded
+          ? [...page.notices, LAPSED_SUSPENSIONS_NOTICE]
+          : page.notices,
       },
       { status: 200 },
     )

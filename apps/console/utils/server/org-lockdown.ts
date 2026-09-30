@@ -24,7 +24,9 @@
  * only writer so all five always happen together:
  *
  *  1. the org doc's `suspendedAt` family — what every shipped AGL-202
- *     reader (tenant loader, console APIs, rules) already enforces on;
+ *     reader (tenant loader, console APIs, rules) already enforces on —
+ *     and the stored `suspended` flag the staff lists filter by
+ *     (`suspended-flag.ts`);
  *  2. the `orgSuspended` member projection — which the rules (:59) and
  *     three API routes read but, before this module, NOTHING wrote (found
  *     while building AGL-1501: the client-side staff toggle only ever wrote
@@ -53,6 +55,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import { revalidateEntireHost } from './tenant-revalidate'
+import { SUSPENDED_FIELD, suspensionInForce } from './suspended-flag'
 
 /**
  * Revocation fan-out bound. An org roster larger than this still locks —
@@ -154,6 +157,9 @@ export async function applyOrgLockdown(options: {
     await orgRef.set(
       {
         suspendedAt: FieldValue.serverTimestamp(),
+        // The staff lists' Suspended filter reads this (`suspended-flag.ts`).
+        // An expiry already passed is a lock that is not in force.
+        [SUSPENDED_FIELD]: suspensionInForce(true, options.lock?.untilMs),
         suspendedReason: options.lock?.reason ?? 'manual',
         suspendedReasonCode: options.lock?.reason ?? 'manual',
         ...(options.lock?.message
@@ -176,6 +182,7 @@ export async function applyOrgLockdown(options: {
     await orgRef.set(
       {
         suspendedAt: FieldValue.delete(),
+        [SUSPENDED_FIELD]: false,
         suspendedReason: FieldValue.delete(),
         suspendedReasonCode: FieldValue.delete(),
         suspendedMessage: FieldValue.delete(),
@@ -295,6 +302,7 @@ export async function applyHostLockdown(options: {
     await hostRef.set(
       {
         suspendedAt: Date.now(),
+        [SUSPENDED_FIELD]: suspensionInForce(true, options.lock?.untilMs),
         suspendedReasonCode: options.lock?.reason ?? 'manual',
         ...(options.lock?.message
           ? { suspendedMessage: options.lock.message }
@@ -316,6 +324,7 @@ export async function applyHostLockdown(options: {
     await hostRef.set(
       {
         suspendedAt: FieldValue.delete(),
+        [SUSPENDED_FIELD]: false,
         suspendedReasonCode: FieldValue.delete(),
         suspendedMessage: FieldValue.delete(),
         suspendedUntilMs: FieldValue.delete(),

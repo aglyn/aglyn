@@ -90,7 +90,21 @@ export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: MEMORY_TEXT_OPERATORS,
   },
   { column: 'uid', kind: 'text', path: 'uid', operators: MEMORY_TEXT_OPERATORS },
-  { column: 'disabled', kind: 'boolean', path: 'disabled' },
+  {
+    /*
+     * Suspended: the Firebase Auth `disabled` flag, which is what suspends
+     * an account — the staff Disable action and the user-scope lockdown
+     * both set it, and it is what refuses the sign-in. This list is Auth,
+     * not Firestore, so the clause is matched over the complete directory
+     * read like every other clause here, and refused past the scan bound.
+     */
+    column: 'disabled',
+    kind: 'boolean',
+    path: 'disabled',
+    // Picked from two named answers, so the panel's select sends `equals`;
+    // `is` stays for a clause written while the panel offered a checkbox.
+    operators: ['equals', 'is'],
+  },
   { column: 'staff', kind: 'boolean', path: 'staff' },
   {
     /*
@@ -148,12 +162,17 @@ export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   tenantId: 'SSO pool (empty = none)',
   providers: 'Sign-in providers',
   lastSignInAt: 'Last sign-in',
-  disabled: 'Disabled',
+  disabled: 'Suspended',
 }
 
 /** The choices of the account fields that are picked rather than typed. */
 export const USER_LIST_FILTER_OPTIONS = {
   staffRole: STAFF_ROLES.map((role) => ({ value: role, label: role })),
+  // The row's chip says "disabled", the Auth word, so the answer names both.
+  disabled: [
+    { value: 'true', label: 'Suspended (disabled)' },
+    { value: 'false', label: 'Not suspended' },
+  ],
 }
 
 /*

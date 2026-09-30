@@ -375,6 +375,10 @@ export async function createOrganization(
         Date.now(),
       ),
       hosts: {},
+      // Stored `false`, never left out: the staff Organizations list filters
+      // Suspended by equality on it, and a query cannot find a document by a
+      // field it lacks. The console's `suspended-flag.ts` names its other writers.
+      suspended: false,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })
