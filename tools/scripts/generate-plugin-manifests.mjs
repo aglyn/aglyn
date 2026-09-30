@@ -783,7 +783,7 @@ function catalogRows() {
   for (const plugin of config.plugins) {
     for (const source of [plugin, ...(plugin.capabilities ?? [])]) {
       if (!source.catalog) continue
-      const { order, publishedSiteImpact, editBarLink, $comment: _note, ...fields } = source.catalog
+      const { order, publishedSiteImpact, editBarLink, releaseFlagDefinition: _flag, $comment: _note, ...fields } = source.catalog
       const where = `plugins.config.json: "${source.id}" catalog`
       if (!Number.isInteger(order)) throw new Error(`${where} needs an integer "order"`)
       if (typeof fields.label !== 'string' || !fields.label) throw new Error(`${where} needs a "label"`)
@@ -827,6 +827,67 @@ function catalogRows() {
     }
   }
   return rows
+}
+
+/**
+ * The release flags plugins declare (AGL-422, compiled since AGL-3080). A
+ * catalog row that names a `releaseFlag` defines it beside the name — the
+ * label and description the staff Feature Flags page shows, the fallback
+ * verdict, the nav tab it hides — and core's `RELEASE_FLAGS` folds the
+ * compiled rows in ahead of the platform's own flags, so adding a plugin
+ * edits no core file. Compiled rather than registered: the flag gates the
+ * plugin LOADER itself, so a registry could only be filled by the code it
+ * decides whether to load.
+ *
+ * Written to a file of its own, beside the one module that reads it: the
+ * descriptions are staff copy, and the catalog rides on every published page.
+ */
+const RELEASE_FLAGS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-release-flags.generated.ts'
+const RELEASE_FLAG_KEY = /^release_[a-z0-9_]+$/
+
+function releaseFlagRows() {
+  const rows = []
+  for (const plugin of config.plugins) {
+    for (const source of [plugin, ...(plugin.capabilities ?? [])]) {
+      const key = source.catalog?.releaseFlag
+      const definition = source.catalog?.releaseFlagDefinition
+      const where = `plugins.config.json: "${source.id}" catalog`
+      if (!key) {
+        if (definition) throw new Error(`${where} defines a release flag without naming one in "releaseFlag"`)
+        continue
+      }
+      if (!RELEASE_FLAG_KEY.test(key)) throw new Error(`${where}: "releaseFlag" ${key} is not a release_* key`)
+      if (!definition) throw new Error(`${where} names ${key} but no "releaseFlagDefinition" defines it`)
+      const { label, description, defaultEnabled, navTabId } = definition
+      if (typeof label !== 'string' || !label) throw new Error(`${where} releaseFlagDefinition needs a "label"`)
+      if (typeof description !== 'string' || !description) throw new Error(`${where} releaseFlagDefinition needs a "description"`)
+      if (typeof defaultEnabled !== 'boolean') throw new Error(`${where} releaseFlagDefinition needs a boolean "defaultEnabled"`)
+      if (navTabId !== undefined && (typeof navTabId !== 'string' || !navTabId)) {
+        throw new Error(`${where} releaseFlagDefinition: "navTabId" is a nav tab id`)
+      }
+      rows.push({ order: source.catalog.order, flag: { key, label, description, defaultEnabled, ...(navTabId ? { navTabId } : {}) } })
+    }
+  }
+  rows.sort((a, b) => a.order - b.order)
+  const keys = rows.map((row) => row.flag.key)
+  if (new Set(keys).size !== keys.length) throw new Error('plugins.config.json: a release flag is named by two catalog rows')
+  return rows.map((row) => row.flag)
+}
+
+function releaseFlagsContent(flags) {
+  const keys = flags.map((flag) => `  | '${flag.key}'`).join('\n')
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The release flags plugins declare (AGL-3080): each catalog row's\n` +
+    ` * \`releaseFlagDefinition\` in plugins.config.json, in catalog order. Core's\n` +
+    ` * \`release-flags.ts\` folds them into \`RELEASE_FLAGS\`.\n */\n\n` +
+    `import type { PluginReleaseFlagDefinition } from './release-flags'\n\n` +
+    `/** Every release flag a plugin declares. */\n` +
+    `export type PluginReleaseFlagKey =\n${keys || "  never"}\n\n` +
+    `export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = ` +
+    `${JSON.stringify(flags, null, 2)}\n`
+  )
 }
 
 /**
@@ -1409,6 +1470,7 @@ const ALL = [
     content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
   })),
   { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
+  { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {

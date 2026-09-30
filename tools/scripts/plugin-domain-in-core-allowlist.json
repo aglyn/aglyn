@@ -1020,13 +1020,6 @@
       "why": "Aglyn's own console and docs surfaces, not a tenant feature: the consent default the operator's own tags start from (the console's analytics SDK, and a verbatim copy in the docs site), swapped with the operator identity on a self-host. Tenant sites answer to visitor-consent.ts and a vendor's adapter."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/release-flags.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/starter-templates.ts",
       "rules": [
         "plugin-id",
