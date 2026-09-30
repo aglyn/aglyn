@@ -461,6 +461,57 @@ handler, a cron or the billing webhook runs — and
 `tax-profile-is-registered.spec.ts` in each app runs the real registrars and
 holds the real rule, because a plugin's own spec may not import the owner.
 
+## Sales on the operator's tax return — `plugin-tax-return-sources`
+
+The operator of a deployment files a sales tax return for the sales it
+FACILITATED, not only its own. If your plugin sells through the platform's own
+account — tax Stripe computes against the operator's registrations lands in the
+operator's balance — your sales belong on that return. The return is the
+platform's: the period, the jurisdiction and registration, the verdict and the
+export. What you sold, how each row classifies and who is liable for it, and
+the words a preparer reads about it, are yours.
+
+```ts
+import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+
+// from your consoleApi registrar
+registerTaxReturnSource({
+  // One period, worded for request.filing (the jurisdiction being filed),
+  // read under request.rowCap.
+  read: async (request) => ({
+    id: 'tickets', name: 'Ticket', title: 'Ticket sales tax', help: '…', intro: '…',
+    truncated: false,      // true when you stopped at request.rowCap
+    undatedRows: 0,        // rows no date range can reach
+    findings: [{ id: 'ticketTaxHeld', severity: 'blocking', count: 825, label: '…', detail: '…' }],
+    filingLines: [],       // lines beneath the filing figures, for request.filing.form
+    tables: [], figures: [],
+    exports: [{ placement: 'sections', rows: [['Ticket tax'], ['Held', '8.25']] }],
+    summary, rows,         // your own figures and rows, carried whole for the audit
+  }),
+}, { pluginId: 'tickets' })
+```
+
+And declare it, in `plugins.config.json`:
+
+```json
+{ "id": "tickets", "taxReturnSource": true }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readTaxReturnSources(request)` | Every source's answer, declared sources first. **Never throws, never drops a declared source.** |
+| `PLUGIN_TAX_RETURN_SOURCES` | The plugins that declared `taxReturnSource`, compiled from the config. |
+
+**An unread source refuses the return.** A declared plugin that registered no
+source, a source that threw, and an answer with a malformed finding each come
+back `outcome: 'refused'`, and the return raises a blocking "do not file"
+finding. So do a read that stopped at the cap and rows no period can reach,
+whatever the source's own findings say. The declaration is what makes a
+missing registration a refusal: a registry alone cannot tell "nothing
+registered" from "nothing sold". `tax-return-sources-are-registered.spec.ts`
+runs the real registrars through the console's manifest.
+
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 
 A security lockdown pauses the subscriptions a locked site sells to its own

@@ -1087,6 +1087,24 @@ function analyticsManifestContent() {
   )
 }
 
+/**
+ * The plugins whose sales belong on the operator's sales tax return
+ * (AGL-3080): each sells through the platform's own account and registers a
+ * tax return source. The return refuses a declared source that registered
+ * nothing, which a runtime registry alone could not tell from nothing sold.
+ */
+function taxReturnSourceIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.taxReturnSource === undefined) return false
+      if (plugin.taxReturnSource !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" taxReturnSource is true, or is left out`)
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
 function catalogContent(videoEmbedRows) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -1166,6 +1184,13 @@ ${orgKeyedCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2)
  * (AGL-3080): each holds a record the erasure promises to destroy.
  */
 export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ${JSON.stringify(requiredOrgEraserIds())}
+
+/**
+ * The plugins whose sales the operator's sales tax return may not be filed
+ * without (AGL-3080): each registers a tax return source, and one that did
+ * not is refused rather than read as nothing sold.
+ */
+export const PLUGIN_TAX_RETURN_SOURCES: readonly string[] = ${JSON.stringify(taxReturnSourceIds())}
 
 /**
  * Where published plugin versions and their kill switches are stored, declared

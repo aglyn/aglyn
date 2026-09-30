@@ -21,10 +21,10 @@
  */
 
 /**
- * `GET /api/hosts/tax-summary` — a merchant's own storefront sales tax
+ * `GET /api/commerce/tax-summary` — a merchant's own storefront sales tax
  * (AGL-2440).
  *
- * TWO CONTRACTS ARE PINNED HERE, and they are the two ways this route could do
+ * TWO CONTRACTS ARE PINNED HERE, and they are the two ways this handler could do
  * real harm.
  *
  * 1. THE TENANT BOUNDARY. `storefrontTaxCollected` spans every merchant and a
@@ -179,7 +179,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-import { GET } from '../app/api/hosts/tax-summary/route'
+import { taxSummaryHandler as GET } from './tax-summary'
 
 const FROM = '2026-07-01T00:00:00.000Z'
 const TO = '2026-08-01T00:00:00.000Z'
@@ -193,7 +193,7 @@ const get = (
     ...(opts.to === undefined ? { to: TO } : opts.to ? { to: opts.to } : {}),
   })
   return GET(
-    new Request(`https://app.aglyn.com/api/hosts/tax-summary?${search}`, {
+    new Request(`https://app.aglyn.com/api/commerce/tax-summary?${search}`, {
       headers: opts.token ? { authorization: `Bearer ${opts.token}` } : {},
     }),
   )
@@ -249,7 +249,7 @@ beforeEach(() => {
   state.undated = []
 })
 
-describe('/api/hosts/tax-summary reach (AGL-2440)', () => {
+describe('/api/commerce/tax-summary reach (AGL-2440)', () => {
   it('401s an unauthenticated caller', async () => {
     expect((await get()).status).toBe(401)
     expect(mockFilters).toHaveLength(0)
@@ -258,7 +258,7 @@ describe('/api/hosts/tax-summary reach (AGL-2440)', () => {
   it('400s a missing hostId rather than reading the whole collection', async () => {
     authorize()
     const response = await GET(
-      new Request('https://app.aglyn.com/api/hosts/tax-summary', {
+      new Request('https://app.aglyn.com/api/commerce/tax-summary', {
         headers: { authorization: 'Bearer tok' },
       }),
     )

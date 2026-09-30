@@ -1156,8 +1156,9 @@ const NOT_A_LIST: Array<[string, string]> = [
   [
     'apps/console/app/(app)/admin/tax-return/page.tsx',
     'Form 01-114’s filing lines are fixed by the form, and the breakdowns ' +
-      'beside them run one row per state or jurisdiction. Another agent owns ' +
-      'this file today; the classification is not why it is untouched.',
+      'beside them run one row per state or jurisdiction — the facilitated-' +
+      'sales sources’ tables included, which are one row per liability ' +
+      'bucket or buyer state, read under the return’s own row cap.',
   ],
   [
     'apps/console/components/server-config-card.component.tsx',

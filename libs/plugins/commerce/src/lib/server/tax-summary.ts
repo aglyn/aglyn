@@ -24,11 +24,11 @@ import {
   lockdownRefusal,
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   storefrontTaxSummary,
   type StorefrontTaxReturnRowInput,
-} from '../../../../utils/server/tx-return'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+} from '../model/storefront-tax-summary'
 
 /** Rows read per request. Past this the answer is reported as PARTIAL. */
 const ROW_CAP = 2000
@@ -36,14 +36,18 @@ const ROW_CAP = 2000
 /**
  * The sales tax a merchant's OWN storefront collected (AGL-2440).
  *
- * `storefrontTaxCollected` has recorded every taxed storefront sale since
- * AGL-1904, and every reader of it was Aglyn's: the staff tax-return route
- * sums it for Aglyn's own Texas return, and the DSAR export includes it. The
- * merchant — whose sales these are — had no report at all. Their only tax
- * visibility was one order's `totals.taxCents` at a time. This is that
- * absence closed, and closing it is the whole of what this route does.
+ * `GET /api/commerce/tax-summary?hostId=…&from=…&to=…`, served by the
+ * console's plugin dispatcher.
  *
- * ## WHAT THIS ROUTE DOES NOT DO, and must never be extended to do
+ * `storefrontTaxCollected` has recorded every taxed storefront sale since
+ * AGL-1904, and every other reader of it is the operator's: the staff
+ * tax-return source sums it for the operator's own return, and the DSAR
+ * export includes it. The merchant — whose sales these are — had no report
+ * at all. Their only tax visibility was one order's `totals.taxCents` at a
+ * time. This is that
+ * absence closed, and closing it is the whole of what this handler does.
+ *
+ * ## WHAT THIS HANDLER DOES NOT DO, and must never be extended to do
  *
  * It emits NO per-merchant, per-jurisdiction verdict on who must remit — and
  * that is still true now that the facilitator question itself is answered.
@@ -71,13 +75,13 @@ const ROW_CAP = 2000
  * one into `attention.rowsUnclassified` rather than defaulting it into a
  * bucket — the property that makes a separated answer trustworthy.
  *
- * ## Why an Admin-SDK route and not a client read
+ * ## Why an Admin-SDK handler and not a client read
  *
  * `cloud/firebase-firestore.rules` denies `storefrontTaxCollected` to every
  * client (`allow read, write: if false`) and that stays exactly as it is: the
  * collection spans every merchant, and a row carries a shopper's address
- * beside the amounts. Rules do not apply to the Admin SDK, so this route needs
- * NO rules change — the deny is what makes a server route the only correct
+ * beside the amounts. Rules do not apply to the Admin SDK, so this handler needs
+ * NO rules change — the deny is what makes a server handler the only correct
  * shape, not an obstacle to it. The `hostId` filter below is therefore the
  * whole of the tenant boundary and is not optional.
  *
@@ -86,8 +90,8 @@ const ROW_CAP = 2000
  * Host membership, with an org-membership fallback — the same bar as
  * `/api/hosts/usage`. The workspace admins who own billing are frequently not
  * members of the site itself, and they are the people who file. A 404 rather
- * than a 403 on refusal, so the route never confirms a site exists to someone
- * who cannot see it.
+ * than a 403 on refusal, so the handler never confirms a site exists to
+ * someone who cannot see it.
  *
  * ## The query needs a composite index
  *
@@ -104,7 +108,7 @@ const ROW_CAP = 2000
  * a wrong one that looks right. With the index, truncation is the oldest rows
  * of a known period and is reported as `truncated`.
  */
-async function handler(request: Request): Promise<Response> {
+export async function taxSummaryHandler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders, query } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'GET') {
@@ -241,7 +245,7 @@ async function handler(request: Request): Promise<Response> {
  * The reporting window. Defaults to the current calendar month in UTC, which
  * is what a monthly filing period means when no timezone has been declared.
  *
- * A malformed date answers `null` and the route 400s rather than silently
+ * A malformed date answers `null` and the handler 400s rather than silently
  * substituting the default: a merchant who asked for Q1 and received the
  * current month would file the wrong number and have no way to notice.
  */
@@ -268,5 +272,3 @@ function resolveRange(
   return { start, end }
 }
 
-export const dynamic = 'force-dynamic'
-export { handler as GET }

@@ -22,19 +22,20 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { readTaxReturnSources } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import {
   asRowDate,
-  marketplaceTaxSummary,
-  storefrontTaxSummary,
   taxPeriodRange,
   taxReturnRowFindings,
   taxReturnSummary,
-  type MarketplaceTaxReturnRowInput,
-  type StorefrontTaxReturnRowInput,
   type TaxReturnRowInput,
   type TaxReturnScope,
 } from '../../../../utils/server/tx-return'
-import { TX_JURISDICTION } from '../../../../utils/tax-jurisdictions'
+import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
+import {
+  taxFilingJurisdiction,
+  TX_JURISDICTION,
+} from '../../../../utils/tax-jurisdictions'
 import { resolveTaxFilingSettings } from '../../../../utils/server/tax-filing-store'
 import { readTaxablePurchases } from '../../../../utils/server/taxable-purchases-store'
 import { taxFindingListRows } from '../../../../utils/tax-findings-list'
@@ -65,6 +66,12 @@ import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
  * need. Bounded because a route must be; `truncated: true` means the SUMMARY
  * is a lower bound and must not be filed from — raise the cap or narrow the
  * period instead.
+ *
+ * The sales the operator FACILITATED — whatever a plugin sold through the
+ * platform's own account — are not read here. Each plugin that declares
+ * `taxReturnSource` answers its own half through
+ * `@aglyn/aglyn/plugin-manager/plugin-tax-return-sources`, under the same cap,
+ * and this route reads no plugin's collection.
  */
 const ROW_CAP = 2000
 
@@ -193,34 +200,21 @@ async function readTaxReturn(
 ) {
   const firestore = firebaseAdmin.app().firestore()
   const revenue = firestore.collection('platformRevenue')
-  // Storefront commerce tax (AGL-1904): a SEPARATE collection, queried and
-  // reported separately, because a storefront row's money is mostly the
-  // merchant's while a `platformRevenue` row's is Aglyn's. Summing the two
-  // would put other companies' receipts into this return's total sales —
-  // which is why they never meet in one query.
-  const storefront = firestore.collection('storefrontTaxCollected')
-  // Marketplace sales tax (AGL-2137): a THIRD source, and it was missing
-  // entirely. Marketplace checkout enables `automatic_tax` on the PLATFORM's
-  // own charge with the tax added `exclusive` on top and kept platform-side
-  // — the publisher's transfer is a fixed amount computed from the PRE-tax
-  // price — so under the marketplace-provider registration that tax is
-  // Aglyn's to remit, in full. Nothing read `marketplacePurchases.taxCents`:
-  // every dollar of it was collected and then absent from the return.
-  //
-  // Ranged on `createdAt`, which is a SINGLE-FIELD inequality and therefore
-  // served by Firestore's automatic index — deliberately, so this cannot be
-  // the query that 500s the staff page in production over a composite index
-  // nobody deployed.
-  const marketplace = firestore.collection('marketplacePurchases')
+  // Awaited before anything asks a plugin, which is the whole reason a
+  // runtime registry is safe to read here: the sources are registered on
+  // this surface, and one that still did not register is REFUSED by the
+  // contract rather than read as nothing sold.
+  await serverPluginLoader.ensureAll(['consoleApi'])
+  // One cached document read, and the sources cannot be asked without it:
+  // each words its lines and findings for the jurisdiction being filed.
+  const registrationRead = taxRegistrationInForce()
   const [
     inPeriod,
     undatedProbe,
     undatedCount,
-    storefrontInPeriod,
-    storefrontUndated,
-    marketplaceInPeriod,
     registration,
     taxablePurchases,
+    sources,
   ] = await Promise.all([
       revenue
         .where('paidAt', '>=', range.start)
@@ -232,23 +226,33 @@ async function readTaxReturn(
       // …and how many there are, all of them: the probe above is capped for
       // the list, and a count read off it stopped at fifty (AGL-3321).
       revenue.where('paidAt', '==', null).count().get(),
-      storefront
-        .where('paidAt', '>=', range.start)
-        .where('paidAt', '<', range.end)
-        .limit(ROW_CAP + 1)
-        .get(),
-      storefront.where('paidAt', '==', null).count().get(),
-      marketplace
-        .where('createdAt', '>=', range.start)
-        .where('createdAt', '<', range.end)
-        .limit(ROW_CAP + 1)
-        .get(),
-      // Alongside the queries rather than before them: it is one cached
-      // document read and the return cannot be built without it either way.
-      taxRegistrationInForce(),
+      registrationRead,
       // Item 3, if anybody has entered one for this period. `null` when
       // nobody has, which is what makes the line read `not computed`.
       readTaxablePurchases(period),
+      /*
+       * THE SALES THE OPERATOR FACILITATED FOR OTHERS (AGL-3080) — every
+       * plugin that sells through the platform's account answers its own
+       * half, read and classified by that plugin, and never summed into
+       * `summary`: a facilitated sale's money is mostly somebody else's. A
+       * declared source that is unregistered, threw or answered nonsense
+       * comes back refused, and the return blocks on it.
+       */
+      registrationRead.then((resolved) => {
+        const filing = taxFilingJurisdiction(resolved.jurisdiction)
+        return readTaxReturnSources({
+          period,
+          start: range.start,
+          end: range.end,
+          filing: {
+            code: filing.code,
+            label: filing.label,
+            form: filing.form,
+            figuresName: filing.figuresName,
+          },
+          rowCap: ROW_CAP,
+        })
+      }),
     ])
   const truncated = inPeriod.size > ROW_CAP
   const docs = inPeriod.docs.slice(0, ROW_CAP)
@@ -264,45 +268,10 @@ async function readTaxReturn(
     obligationStart: taxPeriodRange(registration.firstTaxablePeriod ?? '')?.start ?? null,
   }
   const summary = taxReturnSummary(rows, range, scope)
-  const storefrontDocs = storefrontInPeriod.docs.slice(0, ROW_CAP)
-  const storefrontRows: StorefrontTaxReturnRowInput[] = storefrontDocs.map(
-    (doc) => ({
-      id: doc.id,
-      ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
-    }),
-  )
-  const marketplaceRows: MarketplaceTaxReturnRowInput[] =
-    marketplaceInPeriod.docs.slice(0, ROW_CAP).map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Omit<MarketplaceTaxReturnRowInput, 'id'>),
-    }))
   return {
     period,
     summary,
     truncated,
-    /**
-     * Marketplace sales tax (AGL-2137) — ADDITIVE and separate, for the
-     * same reason `storefront` below is: a marketplace row's gross is mostly
-     * the PUBLISHER's money, so summing it into `summary` would put someone
-     * else's receipts into this return's sales figure. Unlike either
-     * sibling it has ONE liability arm — the platform's — and its tax is
-     * reported NET of refunds, with the charged and refunded halves stated
-     * separately so a reader is never handed a single number that could be
-     * either.
-     */
-    marketplace: {
-      summary: marketplaceTaxSummary(marketplaceRows, range),
-      truncated: marketplaceInPeriod.size > ROW_CAP,
-      rows: marketplaceRows.map((row) => ({
-        id: row.id,
-        sellerOrgId:
-          typeof row.sellerOrgId === 'string' ? row.sellerOrgId : null,
-        createdAt: asRowDate(row.createdAt)?.toISOString() ?? null,
-        grossCents: Number(row.amountCents ?? 0),
-        taxCents: Number(row.taxCents ?? 0),
-        refundedCents: Number(row.refundedCents ?? 0),
-      })),
-    },
     /**
      * AGL-2021 — operator config, not source. Null identifiers when
      * unconfigured, and the jurisdiction they belong to so the surfaces can
@@ -310,40 +279,13 @@ async function readTaxReturn(
      */
     registration,
     /**
-     * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three
-     * buckets with no grand total, on purpose: `aglynLiable` is tax Stripe
-     * computed against Aglyn's own registrations and is money Aglyn holds;
-     * `merchantManual` is a merchant's own configured rate and is not
-     * Aglyn's to remit. A reader that adds them has made the mistake this
-     * shape exists to prevent.
+     * Every facilitated-sales source, ADDITIVE and separate from `summary`
+     * and from each other, with NO grand total anywhere: each is a different
+     * taxpayer's money or a different liability, and a reader who adds them
+     * has made the mistake this shape exists to prevent. Refused sources are
+     * listed, never dropped.
      */
-    storefront: {
-      summary: storefrontTaxSummary(storefrontRows, range),
-      truncated: storefrontInPeriod.size > ROW_CAP,
-      undatedRows: storefrontUndated.data().count,
-      rows: storefrontRows.map((row) => ({
-        id: row.id,
-        hostId: typeof row.hostId === 'string' ? row.hostId : null,
-        orgId: row.orgId ?? null,
-        paidAt: asRowDate(row.paidAt)?.toISOString() ?? null,
-        taxMode: typeof row.taxMode === 'string' ? row.taxMode : null,
-        taxLiability:
-          typeof row.taxLiability === 'string' ? row.taxLiability : null,
-        grossCents: Number(row.grossCents ?? 0),
-        taxCents: Number(row.taxCents ?? 0),
-        taxableSalesCents: (Array.isArray(row.taxLines) ? row.taxLines : [])
-          .map((line) => Number(line?.taxableAmountCents ?? 0))
-          .reduce((sum, base) => sum + (Number.isFinite(base) ? base : 0), 0),
-        state:
-          typeof row.customerAddress?.state === 'string'
-            ? row.customerAddress.state
-            : null,
-        country:
-          typeof row.customerAddress?.country === 'string'
-            ? row.customerAddress.country
-            : null,
-      })),
-    },
+    sources,
     /**
      * ITEM 3 — the figure this report cannot derive, as somebody entered it.
      *

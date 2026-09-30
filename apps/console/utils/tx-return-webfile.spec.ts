@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
+import type { TaxReturnSection } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import {
   centsToDollars,
   defaultTaxReturnPeriod,
-  storefrontPlatformLiableCents,
   taxReturnAttention,
   taxReturnCsv,
   taxReturnCsvFilename,
@@ -54,6 +54,8 @@ function cleanPayload(): TaxReturnPayload {
     period: '2026-Q3',
     truncated: false,
     undatedRows: 0,
+    // Every facilitated-sales source read, and none of them sold anything.
+    sources: [],
     summary: {
       periodStart: '2026-07-01T00:00:00.000Z',
       periodEnd: '2026-10-01T00:00:00.000Z',
@@ -797,51 +799,6 @@ describe('the filing output is selected by jurisdiction', () => {
     expect(lines.some((line) => line.label === 'Taxable purchases')).toBe(false)
   })
 
-  it('still separates the platform-liable storefront tax from the merchant’s', () => {
-    // The distinction that must survive generalization: one is money the
-    // platform holds under its own registration, the other never touched it.
-    const labels = taxReturnFilingLines(californiaPayload()).map(
-      (line) => line.label,
-    )
-    expect(labels).toContain(
-      'US-CA storefront tax under the platform’s registration (NOT in the figures above)',
-    )
-    expect(labels).toContain('US-CA storefront tax under the MERCHANT’s own rate')
-  })
-
-  it('reads the storefront liability from the CONFIGURED jurisdiction', () => {
-    const payload = californiaPayload()
-    payload.storefront = {
-      summary: {
-        aglynLiable: {
-          transactionCount: 1,
-          grossCents: 10660,
-          taxableSalesCents: 8000,
-          taxCollectedCents: 660,
-          byJurisdiction: {
-            'US-CA': {
-              transactionCount: 1,
-              totalSalesCents: 10000,
-              taxableSalesCents: 8000,
-              taxCollectedCents: 660,
-            },
-          },
-        },
-      },
-      truncated: false,
-      undatedRows: 0,
-      rows: [],
-    } as never
-    // A Texas-keyed read answers 0 here, and a 0 on this figure reads as
-    // "nothing to decide" on the finding that blocks filing.
-    expect(storefrontPlatformLiableCents(payload)).toBe(660)
-    const finding = taxReturnAttention(payload).items.find(
-      (item) => item.id === 'storefrontAglynLiableTax',
-    )
-    expect(finding).toMatchObject({ severity: 'blocking', count: 660 })
-    expect(finding?.label).toContain('US-CA')
-  })
-
   it('puts the configured jurisdiction at the top of the table, not Texas', () => {
     const rows = taxReturnJurisdictionRows(californiaPayload())
     expect(rows[0].jurisdiction).toBe('US-CA')
@@ -955,5 +912,165 @@ describe('the unconfigured state, per jurisdiction', () => {
     expect(
       verdict.items.some((item) => item.id === 'jurisdictionUnrecognized'),
     ).toBe(false)
+  })
+})
+
+/**
+ * THE SALES THE OPERATOR FACILITATED FOR OTHERS (AGL-3080).
+ *
+ * Each is a plugin's to read and word; what the PLATFORM holds is that none
+ * of them can go missing quietly. A source that was not read, a read that
+ * stopped at the cap and rows no period can reach each BLOCK, whatever the
+ * source says about itself — and a response with no list of sources at all
+ * read none of them. The sources' own words are proved beside them, in each
+ * plugin, and through the real registrars in
+ * `specs/tax-return-sources-are-registered`.
+ */
+describe('the facilitated-sales sources on the return', () => {
+  const answered = (over: Partial<TaxReturnSection> = {}): TaxReturnSection =>
+    ({
+      outcome: 'answered',
+      pluginId: 'shop',
+      id: 'sales',
+      name: 'Sales',
+      title: 'Sales tax — the plugin’s sales',
+      help: 'What the plugin sold.',
+      intro: 'None of this is in the filing figures above.',
+      truncated: false,
+      undatedRows: 0,
+      findings: [
+        { id: 'salesHeld', severity: 'blocking', count: 825, label: 'Tax held', detail: 'Decide.' },
+        { id: 'salesNoBase', severity: 'review', count: 2, label: 'No base', detail: 'Re-read.' },
+        { id: 'salesQuiet', severity: 'review', count: 0, label: 'Nothing', detail: 'None.' },
+      ],
+      filingLines: [
+        { item: '—', label: 'Texas sales tax held (NOT in Items 1–3)', dollars: '8.25', note: 'Beside.' },
+      ],
+      tables: [],
+      figures: [],
+      exports: [
+        { placement: 'jurisdictions', rows: [['Sales by buyer state'], ['US-TX', '1']] },
+        { placement: 'sections', rows: [['Sales tax — NOT in the Webfile figures'], ['Held', '8.25']] },
+      ],
+      summary: {},
+      rows: [],
+      ...over,
+    }) as TaxReturnSection
+
+  const withSources = (...sources: TaxReturnSection[]): TaxReturnPayload => ({
+    ...cleanPayload(),
+    sources,
+  })
+
+  it('raises a source’s findings in its own words, blocking first, zeros dropped', () => {
+    const verdict = taxReturnAttention(withSources(answered()))
+    expect(verdict.items.map((item) => [item.id, item.severity, item.count])).toEqual([
+      ['salesHeld', 'blocking', 825],
+      ['salesNoBase', 'review', 2],
+    ])
+    expect(verdict.clean).toBe(false)
+  })
+
+  it('reads a source that sold nothing as clean', () => {
+    const quiet = answered({
+      findings: [{ id: 'salesHeld', severity: 'blocking', count: 0, label: 'Tax held', detail: 'Decide.' }],
+    } as never)
+    expect(taxReturnAttention(withSources(quiet)).clean).toBe(true)
+  })
+
+  it('BLOCKS on a source that could not be read, and says which', () => {
+    const verdict = taxReturnAttention(
+      withSources({ outcome: 'refused', pluginId: 'shop', id: 'shop', reason: 'It threw.' }),
+    )
+    expect(verdict.clean).toBe(false)
+    expect(verdict.items).toEqual([
+      expect.objectContaining({
+        id: 'shopUnavailable',
+        severity: 'blocking',
+        count: 1,
+        label: 'Sales from the “shop” plugin were not read',
+      }),
+    ])
+    expect(verdict.items[0].detail).toMatch(/It threw\. .*Do not file from this\./)
+  })
+
+  it('BLOCKS on a source whose read stopped at the cap, whatever it says of itself', () => {
+    const verdict = taxReturnAttention(withSources(answered({ truncated: true, findings: [] } as never)))
+    expect(verdict.items).toEqual([
+      expect.objectContaining({
+        id: 'salesTruncated',
+        severity: 'blocking',
+        count: 1,
+        label: 'Sales rows exceeded the row cap',
+      }),
+    ])
+  })
+
+  it('BLOCKS on a source’s rows that no period can reach, at their real count', () => {
+    const verdict = taxReturnAttention(withSources(answered({ undatedRows: 3, findings: [] } as never)))
+    expect(verdict.items).toEqual([
+      expect.objectContaining({ id: 'salesUndatedRows', severity: 'blocking', count: 3 }),
+    ])
+  })
+
+  it('BLOCKS on a response that carries no list of sources at all', () => {
+    // Absent is not "none": it is a response that read no source.
+    const payload = cleanPayload()
+    delete payload.sources
+    const verdict = taxReturnAttention(payload)
+    expect(verdict.items.map((item) => [item.id, item.severity])).toEqual([
+      ['sourcesUnread', 'blocking'],
+    ])
+    expect(taxReturnCsv(payload)).toContain('Facilitated sales — NOT READ')
+  })
+
+  it('places a source’s findings between the operator’s own reviews and the paid-date one', () => {
+    const payload = withSources(answered())
+    payload.summary.attention.nonUsdRows = 1
+    payload.summary.attention.rowsMissingPaidAt = 1
+    expect(taxReturnAttention(payload).items.map((item) => item.id)).toEqual([
+      'salesHeld',
+      'nonUsdRows',
+      'salesNoBase',
+      'rowsMissingPaidAt',
+    ])
+  })
+
+  it('prints a source’s lines beneath the filing figures, for either exporter', () => {
+    const payload = withSources(answered())
+    const webfile = taxReturnFilingLines(payload)
+    expect(webfile.slice(0, 2).map((line) => line.item)).toEqual(['Item 1', 'Item 2'])
+    expect(webfile[webfile.length - 1]).toEqual({
+      item: '—',
+      label: 'Texas sales tax held (NOT in Items 1–3)',
+      dollars: '8.25',
+      note: 'Beside.',
+    })
+    // A refused source prints no line — its refusal blocks above them.
+    expect(
+      taxReturnFilingLines(withSources({ outcome: 'refused', pluginId: 'shop', id: 'shop', reason: 'x' })),
+    ).toEqual(taxReturnFilingLines(cleanPayload()))
+  })
+
+  it('exports each block where the source placed it, and a refusal after the papers', () => {
+    const csv = taxReturnCsv(
+      withSources(answered(), { outcome: 'refused', pluginId: 'resale', id: 'resale', reason: 'It threw.' }),
+    ).split('\n')
+    const at = (line: string) => csv.indexOf(line)
+    // Beside the operator's own jurisdictions, before the working papers…
+    expect(at('Sales by buyer state')).toBeGreaterThan(at('Aglyn’s own sales by jurisdiction'))
+    expect(at('Sales by buyer state')).toBeLessThan(
+      at('Working papers — why each jurisdiction came out as it did'),
+    )
+    expect(csv[at('Sales by buyer state') + 2]).toBe('')
+    // …and its figures after them, ahead of the invoice rows, with the
+    // refused source named in the file a return is filed from.
+    expect(at('Sales tax — NOT in the Webfile figures')).toBeGreaterThan(
+      at('Working papers — the rates behind each jurisdiction'),
+    )
+    expect(at('Sales from the “resale” plugin — NOT READ')).toBeGreaterThan(
+      at('Sales tax — NOT in the Webfile figures'),
+    )
+    expect(at('Sales from the “resale” plugin — NOT READ')).toBeLessThan(at('Invoice rows'))
   })
 })

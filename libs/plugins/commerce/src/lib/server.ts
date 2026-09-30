@@ -42,6 +42,9 @@ import { registerCommerceMediaPublishGuard } from './server/media-publish-guard'
 import { registerCommerceRecurringCharges } from './server/recurring-charges'
 import { registerProductCardReader } from './server/product-card'
 import { registerCommerceTaxProfile } from './server/tax-profile'
+import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+import { commerceTaxReturnSource } from './server/tax-return-source'
+import { taxSummaryHandler } from './server/tax-summary'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
 import { registerOrderFigureReaders } from './server/order-figures'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
@@ -308,6 +311,11 @@ export function registerCommerceConsoleApi(): void {
   registerCommerceRecurringCharges()
   // …and the tax rule, for the webhook that confirms what they charged.
   registerCommerceTaxProfile()
+  // …and its sales on the operator's own sales tax return (AGL-3080): the
+  // tax a storefront checkout collected under the platform's registrations.
+  // The staff return awaits this surface before it asks, and refuses to be
+  // filed without this source — commerce declares `taxReturnSource`.
+  registerTaxReturnSource(commerceTaxReturnSource, { pluginId: BUNDLE_ID })
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/
   // subscriptions ride the platform webhook via the hook registry.
   registerBillingWebhookHandler(commerceBillingWebhookHandler)
@@ -343,6 +351,9 @@ export function registerCommerceConsoleApi(): void {
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.
   registerPluginApiRoute('commerce/gift-cards', giftCardsHandler)
+  // The merchant's own storefront sales tax, by who owes it (AGL-2440): the
+  // same rows and classifier the operator's return reads, fenced to one site.
+  registerPluginApiRoute('commerce/tax-summary', { web: taxSummaryHandler })
   // A smart collection's rules changed or it was deleted: re-stamp which
   // products it holds (AGL-3321), the membership the storefront queries.
   registerPluginApiRoute('commerce/collection-membership', collectionMembershipHandler)

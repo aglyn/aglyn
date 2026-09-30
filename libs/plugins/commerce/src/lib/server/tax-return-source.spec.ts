@@ -21,8 +21,8 @@
  */
 
 /**
- * Storefront tax reaches the quarterly return, and the two store modes never
- * meet (AGL-1904).
+ * Storefront tax reaches the operator's quarterly return, and the two store
+ * modes never meet (AGL-1904, AGL-3080).
  *
  * The defect: a `mode: 'stripe'` storefront sale charges the shopper tax that
  * Stripe computes against AGLYN's registrations — measured, not inferred (the
@@ -40,23 +40,104 @@
  * a $100.00 base = $8.25.
  */
 
-export {}
+const mockDocs = new Map<string, Record<string, unknown>>()
 
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  firebaseAdmin: {
+    app: () => ({
+      firestore: () => ({
+        collection: (name: string) => mockQuery(name, []),
+      }),
+    }),
+  },
+}))
+
+/**
+ * The two queries the source runs: a `paidAt` range and a `paidAt == null`
+ * count. The range compares like the real thing — null never matches a
+ * range — which is the exact semantic the count exists for.
+ */
+function mockQuery(
+  name: string,
+  filters: Array<(data: Record<string, unknown>) => boolean>,
+): any {
+  const matched = () =>
+    [...mockDocs.entries()]
+      .filter(([path]) => path.startsWith(`${name}/`))
+      .filter(([, data]) => filters.every((filter) => filter(data)))
+  return {
+    where: (field: string, op: string, value: unknown) =>
+      mockQuery(name, [
+        ...filters,
+        (data) => {
+          const held = data[field]
+          if (op === '==') return held === value
+          if (!(held instanceof Date)) return false
+          if (op === '>=') return held >= (value as Date)
+          if (op === '<') return held < (value as Date)
+          return false
+        },
+      ]),
+    count: () => ({
+      get: async () => ({ data: () => ({ count: matched().length }) }),
+    }),
+    limit: (count: number) => ({
+      get: async () => {
+        const rows = matched().slice(0, count)
+        return {
+          size: rows.length,
+          docs: rows.map(([path, data]) => ({
+            id: path.split('/').pop(),
+            data: () => data,
+          })),
+        }
+      },
+    }),
+  }
+}
+
+import type {
+  TaxReturnFiling,
+  TaxReturnSourceRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import {
   storefrontTaxSummary,
   type StorefrontTaxReturnRowInput,
-} from '../utils/server/tx-return'
+} from '../model/storefront-tax-summary'
 import {
+  commerceTaxReturnSource,
+  storefrontFacilitatedJurisdictionRows,
+  storefrontFilingLines,
   storefrontPlatformLiableCents,
-  taxReturnAttention,
-  taxReturnFacilitatedJurisdictionRows,
-  taxReturnWebfileLines,
-  type TaxReturnPayload,
-} from '../utils/tx-return-webfile'
+  storefrontTaxFindings,
+  storefrontTaxReturnAnswer,
+} from './tax-return-source'
 
 const Q3_2026 = {
   start: new Date(Date.UTC(2026, 6, 1)),
   end: new Date(Date.UTC(2026, 9, 1)),
+}
+
+const TEXAS: TaxReturnFiling = {
+  code: 'US-TX',
+  label: 'Texas',
+  form: 'tx-webfile',
+  figuresName: 'Items 1–3',
+}
+
+const CALIFORNIA: TaxReturnFiling = {
+  code: 'US-CA',
+  label: 'US-CA',
+  form: 'breakdown',
+  figuresName: 'the breakdown',
+}
+
+const REQUEST: TaxReturnSourceRequest = {
+  period: '2026-Q3',
+  ...Q3_2026,
+  filing: TEXAS,
+  rowCap: 2000,
 }
 
 /** The measured Stripe-Tax cart sale: $100 base, 8.25%, $8.25 collected. */
@@ -378,102 +459,91 @@ describe('storefront working papers (AGL-2329)', () => {
 })
 
 describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', () => {
-  const basePayload: TaxReturnPayload = {
-    period: '2026-Q3',
-    truncated: false,
-    undatedRows: 0,
-    rows: [],
-    summary: {
-      periodStart: Q3_2026.start.toISOString(),
-      periodEnd: Q3_2026.end.toISOString(),
-      transactionCount: 1,
-      totalSalesCents: 10000,
-      taxableSalesCents: 8000,
-      taxCollectedCents: 660,
-      byJurisdiction: {
-        // Working-paper fields (AGL-2329) empty: this fixture stands in for
-        // the AGLYN half of the payload while the storefront half is under
-        // test, and their arithmetic is proved in `tx-return.spec.ts`.
-        'US-TX': {
-          transactionCount: 1,
-          totalSalesCents: 10000,
-          taxableSalesCents: 8000,
-          taxCollectedCents: 660,
-          taxabilityReasons: {},
-          rates: [],
-        },
-      },
-      refunds: {
-        rowsRefundedInPeriod: 0,
-        refundedGrossCents: 0,
-        estimatedRefundedTaxCents: 0,
-        chargedBackCents: 0,
-        rowsChargedBack: 0,
-      },
-      internal: {
-        transactionCount: 0,
-        totalSalesCents: 0,
-        taxableSalesCents: 0,
-        taxCollectedCents: 0,
-        byJurisdiction: {},
-      },
-      attention: {
-        untaxedRows: 0,
-        internalRows: 0,
-        untaxedRowsBeforeObligation: 0,
-        rowsMissingTaxableBase: 0,
-        rowsMissingAddress: 0,
-        nonUsdRows: 0,
-        rowsMissingPaidAt: 0,
-        rowsWithNetMismatch: 0,
-      },
-    },
-  }
+  /** The non-zero findings — the ones the return raises. */
+  const raised = (rows: StorefrontTaxReturnRowInput[]) =>
+    storefrontTaxFindings(storefrontTaxSummary(rows, Q3_2026), TEXAS).filter(
+      (finding) => finding.count > 0,
+    )
 
-  const withStorefront = (rows: StorefrontTaxReturnRowInput[]): TaxReturnPayload => ({
-    ...basePayload,
-    storefront: {
-      summary: storefrontTaxSummary(rows, Q3_2026),
-      truncated: false,
-      undatedRows: 0,
-      rows: [],
-    },
-  })
-
-  it('a period with no storefront section reads exactly as it did before', () => {
-    const verdict = taxReturnAttention(basePayload)
-    expect(verdict.clean).toBe(true)
-    expect(storefrontPlatformLiableCents(basePayload)).toBe(0)
+  it('a period with no storefront sales raises nothing', () => {
+    expect(raised([])).toEqual([])
+    expect(storefrontPlatformLiableCents(storefrontTaxSummary([], Q3_2026), TEXAS)).toBe(0)
   })
 
   it('Aglyn-liable storefront tax BLOCKS the period and names the amount', () => {
-    const payload = withStorefront([AGLYN_LIABLE_ROW])
-    expect(storefrontPlatformLiableCents(payload)).toBe(825)
-    const verdict = taxReturnAttention(payload)
-    expect(verdict.clean).toBe(false)
-    const item = verdict.items.find(
+    const summary = storefrontTaxSummary([AGLYN_LIABLE_ROW], Q3_2026)
+    expect(storefrontPlatformLiableCents(summary, TEXAS)).toBe(825)
+    const item = raised([AGLYN_LIABLE_ROW]).find(
       (entry) => entry.id === 'storefrontAglynLiableTax',
     )
     expect(item).toMatchObject({ severity: 'blocking', count: 825 })
+    expect(item?.label).toBe('Texas storefront tax collected under Aglyn’s registration')
   })
 
   it('a manual-mode storefront sale does NOT block, and is not Aglyn-liable', () => {
-    const payload = withStorefront([MANUAL_ROW])
-    expect(storefrontPlatformLiableCents(payload)).toBe(0)
-    expect(taxReturnAttention(payload).clean).toBe(true)
+    const summary = storefrontTaxSummary([MANUAL_ROW], Q3_2026)
+    expect(storefrontPlatformLiableCents(summary, TEXAS)).toBe(0)
+    expect(raised([MANUAL_ROW])).toEqual([])
   })
 
   it('the Webfile lines state both figures, separately, outside Items 1–3', () => {
-    const lines = taxReturnWebfileLines(withStorefront([AGLYN_LIABLE_ROW, MANUAL_ROW]))
+    const lines = storefrontFilingLines(
+      storefrontTaxSummary([AGLYN_LIABLE_ROW, MANUAL_ROW], Q3_2026),
+      TEXAS,
+    )
     const aglynLine = lines.find((line) => line.label.includes('under Aglyn'))
     const merchantLine = lines.find((line) => line.label.includes('MERCHANT'))
     expect(aglynLine?.dollars).toBe('8.25')
     expect(merchantLine?.dollars).toBe('8.00')
-    // Items 1–3 are untouched: the storefront money is stated beside the
-    // return, never folded into a form item this report has no authority to
-    // decide the treatment of.
-    expect(lines.find((line) => line.item === 'Item 1')?.dollars).toBe('100.00')
-    expect(lines.find((line) => line.item === 'Item 2')?.dollars).toBe('80.00')
+    expect(aglynLine?.label).toBe(
+      'Texas storefront tax under Aglyn’s registration (NOT in Items 1–3)',
+    )
+    expect(merchantLine?.label).toBe(
+      'Texas storefront tax under the MERCHANT’s own rate (not Aglyn’s)',
+    )
+    // Stated beside the form, never as one of its items: this report has no
+    // authority to decide the treatment of the storefront money.
+    expect(lines.every((line) => line.item === '—')).toBe(true)
+  })
+})
+
+/**
+ * A JURISDICTION WITH NO EXPORTER GETS A BREAKDOWN, and the storefront's
+ * distinction survives it: one figure is money the platform holds under its
+ * own registration, the other never touched it.
+ */
+describe('the storefront lines for a breakdown jurisdiction', () => {
+  it('still separates the platform-liable storefront tax from the merchant’s', () => {
+    const labels = storefrontFilingLines(storefrontTaxSummary([], Q3_2026), CALIFORNIA).map(
+      (line) => line.label,
+    )
+    expect(labels).toContain(
+      'US-CA storefront tax under the platform’s registration (NOT in the figures above)',
+    )
+    expect(labels).toContain('US-CA storefront tax under the MERCHANT’s own rate')
+  })
+
+  it('reads the storefront liability from the CONFIGURED jurisdiction', () => {
+    const summary = storefrontTaxSummary(
+      [
+        {
+          ...AGLYN_LIABLE_ROW,
+          grossCents: 10660,
+          taxCents: 660,
+          customerAddress: { country: 'US', state: 'CA' },
+          taxLines: [{ amountCents: 660, taxableAmountCents: 8000 }],
+        },
+      ],
+      Q3_2026,
+    )
+    // A Texas-keyed read answers 0 here, and a 0 on this figure reads as
+    // "nothing to decide" on the finding that blocks filing.
+    expect(storefrontPlatformLiableCents(summary, CALIFORNIA)).toBe(660)
+    const finding = storefrontTaxFindings(summary, CALIFORNIA).find(
+      (item) => item.id === 'storefrontAglynLiableTax',
+    )
+    expect(finding).toMatchObject({ severity: 'blocking', count: 660 })
+    expect(finding?.label).toContain('US-CA')
   })
 })
 
@@ -490,17 +560,8 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
  * These guards were each forced red before being written the right way round.
  */
 describe('taxReturnFacilitatedJurisdictionRows (AGL-1956)', () => {
-  const payloadFor = (
-    rows: StorefrontTaxReturnRowInput[],
-  ): TaxReturnPayload =>
-    ({
-      storefront: {
-        summary: storefrontTaxSummary(rows, Q3_2026),
-        truncated: false,
-        undatedRows: 0,
-        rows: [],
-      },
-    }) as unknown as TaxReturnPayload
+  const rowsFor = (rows: StorefrontTaxReturnRowInput[]) =>
+    storefrontFacilitatedJurisdictionRows(storefrontTaxSummary(rows, Q3_2026), TEXAS)
 
   /** A California sale on a manual-rate store — a merchant remits it. */
   const CA_MANUAL_ROW: StorefrontTaxReturnRowInput = {
@@ -524,9 +585,7 @@ describe('taxReturnFacilitatedJurisdictionRows (AGL-1956)', () => {
     // Reading only the `aglynLiable` bucket would under-report every state
     // where Aglyn collects nothing — which is every state a threshold is
     // actually about.
-    const rows = taxReturnFacilitatedJurisdictionRows(
-      payloadFor([AGLYN_LIABLE_ROW, MANUAL_ROW, CA_MANUAL_ROW]),
-    )
+    const rows = rowsFor([AGLYN_LIABLE_ROW, MANUAL_ROW, CA_MANUAL_ROW])
     const texas = rows.find((row) => row.jurisdiction === 'US-TX')
     expect(texas?.transactionCount).toBe(2)
     // $100.00 Stripe-Tax + $100.00 manual, both net of their own tax.
@@ -534,17 +593,15 @@ describe('taxReturnFacilitatedJurisdictionRows (AGL-1956)', () => {
     expect(texas?.taxCollectedDollars).toBe('16.25')
     // ...but only Aglyn's $8.25 of it is Aglyn's to remit. The two questions
     // are answered off one row and must not blur.
-    expect(texas?.aglynLiableTaxDollars).toBe('8.25')
+    expect(texas?.platformLiableTaxDollars).toBe('8.25')
 
     const california = rows.find((row) => row.jurisdiction === 'US-CA')
     expect(california?.transactionCount).toBe(1)
-    expect(california?.aglynLiableTaxDollars).toBe('0.00')
+    expect(california?.platformLiableTaxDollars).toBe('0.00')
   })
 
   it('flags a state with sales and no tax — the one worth watching', () => {
-    const rows = taxReturnFacilitatedJurisdictionRows(
-      payloadFor([AGLYN_LIABLE_ROW, FL_UNTAXED_ROW]),
-    )
+    const rows = rowsFor([AGLYN_LIABLE_ROW, FL_UNTAXED_ROW])
     const florida = rows.find((row) => row.jurisdiction === 'US-FL')
     expect(florida?.untaxed).toBe(true)
     expect(florida?.totalSalesDollars).toBe('250.00')
@@ -554,9 +611,7 @@ describe('taxReturnFacilitatedJurisdictionRows (AGL-1956)', () => {
   it('puts Texas first, then the largest state — never alphabetical', () => {
     // Texas is the unconditional obligation (a Texas LLC has no in-state
     // threshold), so it leads however small it is. Florida outsells it here.
-    const rows = taxReturnFacilitatedJurisdictionRows(
-      payloadFor([AGLYN_LIABLE_ROW, FL_UNTAXED_ROW, CA_MANUAL_ROW]),
-    )
+    const rows = rowsFor([AGLYN_LIABLE_ROW, FL_UNTAXED_ROW, CA_MANUAL_ROW])
     expect(rows.map((row) => row.jurisdiction)).toEqual([
       'US-TX',
       'US-FL',
@@ -565,22 +620,85 @@ describe('taxReturnFacilitatedJurisdictionRows (AGL-1956)', () => {
   })
 
   it('never sums Aglyn’s own revenue into it', () => {
-    // The bug this replaces read `payload.summary` — platformRevenue. A
-    // payload carrying ONLY Aglyn's own sales must produce no facilitated
-    // rows at all, or the nexus table is answering with the wrong taxpayer.
-    const aglynOwnSalesOnly = {
-      summary: {
-        byJurisdiction: {
-          'US-TX': {
-            transactionCount: 9,
-            totalSalesCents: 900000,
-            taxableSalesCents: 720000,
-            taxCollectedCents: 59400,
-          },
-        },
-      },
-    } as unknown as TaxReturnPayload
-    expect(taxReturnFacilitatedJurisdictionRows(aglynOwnSalesOnly)).toEqual([])
-    expect(taxReturnFacilitatedJurisdictionRows(null)).toEqual([])
+    // The bug this replaced read the operator's OWN invoices. This fold is
+    // handed the storefront summary and nothing else, so with no storefront
+    // figures there are no facilitated rows at all.
+    expect(storefrontFacilitatedJurisdictionRows(null, TEXAS)).toEqual([])
+    expect(rowsFor([])).toEqual([])
+  })
+})
+
+/**
+ * THE SECTION THE RETURN PRINTS, and the reader behind it (AGL-3080).
+ *
+ * The storefront is one source among the operator's return's; these pin what
+ * it answers — worded for the jurisdiction being filed, with the two blocks
+ * the working papers carry — and that the reader reports what the platform
+ * must block on rather than trimming it away.
+ */
+describe('the storefront’s tax return source', () => {
+  beforeEach(() => mockDocs.clear())
+
+  it('answers as the storefront, with its findings, lines, tables and export blocks', () => {
+    const answer = storefrontTaxReturnAnswer(
+      { rows: [AGLYN_LIABLE_ROW, MANUAL_ROW], truncated: false, undatedRows: 0 },
+      REQUEST,
+    )
+    expect(answer).toMatchObject({ id: 'storefront', name: 'Storefront', truncated: false })
+    expect(answer.findings.map((finding) => finding.id)).toEqual([
+      'storefrontAglynLiableTax',
+      'storefrontUnclassified',
+      'storefrontMissingTaxableBase',
+    ])
+    expect(answer.filingLines.map((line) => line.dollars)).toEqual(['8.25', '8.00'])
+    expect(answer.intro).toMatch(/None of this is in the Webfile figures above/)
+    // Three buckets and never a fourth "total" row.
+    expect(answer.tables[0].rows.map((row) => row.key)).toEqual([
+      'aglynLiable',
+      'merchantManual',
+      'connectedAccountLiable',
+    ])
+    expect(answer.tables[0].rows[0].cells[0].tag?.label).toBe('Aglyn holds this')
+    expect(answer.tables[1].heading).toBe('Facilitated sales by buyer state')
+    expect(answer.exports.map((block) => [block.placement, block.rows[0][0]])).toEqual([
+      ['jurisdictions', 'Facilitated sales by buyer state (merchants’ storefronts)'],
+      ['sections', 'Storefront commerce tax by liability (AGL-1904) — NOT in the Webfile figures'],
+    ])
+    expect(answer.exports[1].rows[2]).toEqual([
+      'Computed against Aglyn’s registrations',
+      'In Aglyn’s balance. Stripe Tax computed it on Aglyn’s platform account.',
+      '1',
+      '108.25',
+      '100.00',
+      '8.25',
+    ])
+  })
+
+  it('reads the period, keeps the two modes apart, and projects every row', async () => {
+    mockDocs.set('storefrontTaxCollected/cs_q3', { ...AGLYN_LIABLE_ROW, id: undefined })
+    mockDocs.set('storefrontTaxCollected/cs_manual', { ...MANUAL_ROW, id: undefined })
+    mockDocs.set('storefrontTaxCollected/cs_q4', {
+      ...AGLYN_LIABLE_ROW,
+      paidAt: new Date('2026-11-01T00:00:00Z'),
+    })
+    const answer = await commerceTaxReturnSource.read(REQUEST)
+    const summary = answer.summary as ReturnType<typeof storefrontTaxSummary>
+    expect(summary.aglynLiable.taxCollectedCents).toBe(825)
+    expect(summary.aglynLiable.taxableSalesCents).toBe(10000)
+    expect(summary.merchantManual.taxCollectedCents).toBe(800)
+    expect(answer.rows).toHaveLength(2)
+    expect(answer.truncated).toBe(false)
+    expect(answer.undatedRows).toBe(0)
+  })
+
+  it('reports a read past the cap, and rows no period can reach', async () => {
+    mockDocs.set('storefrontTaxCollected/a', { ...AGLYN_LIABLE_ROW })
+    mockDocs.set('storefrontTaxCollected/b', { ...AGLYN_LIABLE_ROW })
+    mockDocs.set('storefrontTaxCollected/undated', { ...AGLYN_LIABLE_ROW, paidAt: null })
+    const answer = await commerceTaxReturnSource.read({ ...REQUEST, rowCap: 1 })
+    // Both are the platform's to BLOCK on; the source's job is to say so.
+    expect(answer.truncated).toBe(true)
+    expect(answer.rows).toHaveLength(1)
+    expect(answer.undatedRows).toBe(1)
   })
 })

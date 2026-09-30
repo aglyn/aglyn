@@ -24,6 +24,7 @@ import {
 // does not need, it must not import.
 import { registerPluginRouteMetadata } from '@aglyn/aglyn/plugin-manager/plugin-route-metadata'
 import { registerPluginArtifactInventory } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
+import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
 import { registerMarketplaceLockdown } from './server/publisher-lockdown'
@@ -44,6 +45,7 @@ import { installThemeHandler } from './server/install-theme'
 import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
 import { marketplaceArtifactInventory } from './server/artifact-inventory'
+import { marketplaceTaxReturnSource } from './server/tax-return-source'
 import { marketplaceAdminReports } from './server/admin-reports'
 import { marketplaceAdminReviews } from './server/admin-reviews'
 import { marketplaceAdminOverview } from './server/admin-overview'
@@ -119,6 +121,13 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginArtifactInventory(marketplaceArtifactInventory, {
     pluginId: BUNDLE_ID,
   })
+  /*
+   * Its sales on the operator's own sales tax return (AGL-3080): the tax a
+   * marketplace charge adds on the platform's own account. The staff return
+   * awaits this surface before it asks, and refuses to be filed without this
+   * source — the marketplace declares `taxReturnSource`.
+   */
+  registerTaxReturnSource(marketplaceTaxReturnSource, { pluginId: BUNDLE_ID })
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)

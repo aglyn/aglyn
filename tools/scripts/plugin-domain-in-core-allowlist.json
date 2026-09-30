@@ -48,14 +48,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/app/(app)/admin/tax-return/page.tsx",
-      "rules": [
-        "domain-declares:commerce",
-        "domain-declares:marketplace"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "apps/console/app/(auth)/signup/page.tsx",
       "rules": [
         "domain-declares:marketing"
@@ -148,15 +140,6 @@
         "domain-declares:marketplace"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/admin/tax-return/route.ts",
-      "rules": [
-        "plugin-collection:marketplace",
-        "domain-declares:commerce",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "apps/console/app/api/billing/report-usage/route.ts",
@@ -614,22 +597,6 @@
     },
     {
       "path": "apps/console/utils/server/revenue-report.ts",
-      "rules": [
-        "domain-declares:commerce",
-        "domain-declares:marketplace"
-      ],
-      "lane": "commerce"
-    },
-    {
-      "path": "apps/console/utils/server/tx-return.ts",
-      "rules": [
-        "domain-declares:commerce",
-        "domain-declares:marketplace"
-      ],
-      "lane": "commerce"
-    },
-    {
-      "path": "apps/console/utils/tx-return-webfile.ts",
       "rules": [
         "domain-declares:commerce",
         "domain-declares:marketplace"

@@ -27,26 +27,84 @@
  * equalled `transactionCount` BY CONSTRUCTION on a report whose whole job is
  * to say which authority is owed what.
  *
- * THE READ HALF. The writer is
- * `libs/plugins/marketplace/src/lib/server/billing-webhook.ts`, covered by
- * `purchase-records-its-jurisdiction.spec.ts` beside it. Two suites because a
- * `scope:app` project may not import that lib — so the FIELD NAME is pinned
- * here against the writer's source instead. That guard is not ceremony: a
- * webhook storing under one name and a return reading another are each
- * internally consistent and would each pass their own suite while the report
- * went on printing zero attributable sales.
+ * THE READ HALF. The writer is `billing-webhook.ts` beside this file,
+ * covered by `purchase-records-its-jurisdiction.spec.ts`. The FIELD NAME is
+ * pinned here against the writer's source as well: a webhook storing under
+ * one name and a return reading another are each internally consistent and
+ * would each pass their own suite while the report went on printing zero
+ * attributable sales.
  *
  * ASSERTED ON THE SUMMARY'S OWN FIGURES, never on rendered output: what is
  * filed comes off these, and a screen agreeing with them is a separate
  * question with its own coverage.
  */
 
+const mockDocs = new Map<string, Record<string, unknown>>()
+
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  firebaseAdmin: {
+    app: () => ({
+      firestore: () => ({
+        collection: (name: string) => mockQuery(name, []),
+      }),
+    }),
+  },
+}))
+
+/**
+ * The two queries the source runs: a `createdAt` range and a
+ * `createdAt == null` count. Null never matches a range, as in Firestore.
+ */
+function mockQuery(
+  name: string,
+  filters: Array<(data: Record<string, unknown>) => boolean>,
+): any {
+  const matched = () =>
+    [...mockDocs.entries()]
+      .filter(([path]) => path.startsWith(`${name}/`))
+      .filter(([, data]) => filters.every((filter) => filter(data)))
+  return {
+    where: (field: string, op: string, value: unknown) =>
+      mockQuery(name, [
+        ...filters,
+        (data) => {
+          const held = data[field]
+          if (op === '==') return held === value
+          if (!(held instanceof Date)) return false
+          if (op === '>=') return held >= (value as Date)
+          if (op === '<') return held < (value as Date)
+          return false
+        },
+      ]),
+    count: () => ({
+      get: async () => ({ data: () => ({ count: matched().length }) }),
+    }),
+    limit: (count: number) => ({
+      get: async () => {
+        const rows = matched().slice(0, count)
+        return {
+          size: rows.length,
+          docs: rows.map(([path, data]) => ({
+            id: path.split('/').pop(),
+            data: () => data,
+          })),
+        }
+      },
+    }),
+  }
+}
+
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { TaxReturnSourceRequest } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import {
+  marketplaceTaxFigures,
+  marketplaceTaxReturnAnswer,
+  marketplaceTaxReturnSource,
   marketplaceTaxSummary,
   type MarketplaceTaxReturnRowInput,
-} from '../utils/server/tx-return'
+} from './tax-return-source'
 
 const PERIOD = {
   start: new Date('2026-07-01T00:00:00Z'),
@@ -150,13 +208,7 @@ describe('the summary attributes the tax instead of counting it missing', () => 
     // either side lands here rather than in a report that quietly attributes
     // nothing. Proven to bite by the control below: with `customerAddress`
     // renamed in either file this assertion is the one that fails first.
-    const writer = readFileSync(
-      join(
-        __dirname,
-        '../../../libs/plugins/marketplace/src/lib/server/billing-webhook.ts',
-      ),
-      'utf8',
-    )
+    const writer = readFileSync(join(__dirname, 'billing-webhook.ts'), 'utf8')
 
     expect(writer).toContain('customerAddress: jurisdiction')
     // And it is written inside the first-record branch, beside `createdAt` —
@@ -250,5 +302,163 @@ describe('THE CONTROL — an unattributed sale is never given a jurisdiction', (
     expect(summary.taxRefundedCents).toBe(0)
     expect(summary.taxCollectedCents).toBe(1125)
     expect(summary.attention.rowsMissingJurisdiction).toBe(2)
+  })
+})
+
+const REQUEST: TaxReturnSourceRequest = {
+  period: '2026-Q3',
+  start: PERIOD.start,
+  end: PERIOD.end,
+  filing: { code: 'US-TX', label: 'Texas', form: 'tx-webfile', figuresName: 'Items 1–3' },
+  rowCap: 2000,
+}
+
+/**
+ * THE SOURCE THE OPERATOR'S RETURN READS (AGL-2137, AGL-3080).
+ *
+ * Marketplace checkout enables `automatic_tax` on the PLATFORM's own charge,
+ * adds the tax `exclusive` on top, and transfers the publisher a FIXED
+ * amount computed from the pre-tax price — so the tax stays platform-side
+ * and is the operator's to remit in full. These are the figures the staff
+ * return's route used to assert on its own response, now asserted on the
+ * source that answers them.
+ */
+describe('the marketplace’s tax return source', () => {
+  beforeEach(() => mockDocs.clear())
+
+  const read = () => marketplaceTaxReturnSource.read(REQUEST)
+  const summaryOf = (answer: Awaited<ReturnType<typeof read>>) =>
+    answer.summary as ReturnType<typeof marketplaceTaxSummary>
+
+  it('serves marketplace tax as its own section, net of refunds', async () => {
+    mockDocs.set('marketplacePurchases/cs_mkt_1', {
+      listingId: 'listing-1',
+      buyerUid: 'buyer-1',
+      sellerOrgId: 'seller-org',
+      amountCents: 10825,
+      taxCents: 825,
+      feeCents: 2000,
+      transferCents: 8000,
+      createdAt: new Date('2026-09-18T12:00:00Z'),
+    })
+    // Half refunded: half the tax goes back and is not remittable.
+    mockDocs.set('marketplacePurchases/cs_mkt_2', {
+      listingId: 'listing-2',
+      buyerUid: 'buyer-2',
+      sellerOrgId: 'seller-org',
+      amountCents: 2165,
+      taxCents: 165,
+      transferCents: 1600,
+      refundedCents: 1083,
+      createdAt: new Date('2026-09-19T12:00:00Z'),
+    })
+    const answer = await read()
+    const summary = summaryOf(answer)
+    expect(summary.transactionCount).toBe(2)
+    // Charged 825 + 165 = 990.
+    expect(summary.taxChargedCents).toBe(990)
+    // Refunded: 165 × 1083/2165 = 82.5 → 83 (Math.round).
+    expect(summary.taxRefundedCents).toBe(83)
+    // Remittable is charged − refunded, and it is the headline figure.
+    expect(summary.taxCollectedCents).toBe(907)
+    expect(answer.rows).toHaveLength(2)
+    expect(answer.findings.find((finding) => finding.id === 'marketplaceTaxCollected')).toMatchObject({
+      severity: 'blocking',
+      count: 907,
+      label: 'Marketplace tax collected under Aglyn’s registration',
+    })
+  })
+
+  /**
+   * A FULLY refunded marketplace sale nets to exactly zero tax — the case a
+   * pro-rata calculation gets wrong by a cent if it is written carelessly.
+   */
+  it('a fully refunded marketplace sale remits no tax at all', async () => {
+    mockDocs.set('marketplacePurchases/cs_mkt_full', {
+      sellerOrgId: 'seller-org',
+      amountCents: 10825,
+      taxCents: 825,
+      refundedCents: 10825,
+      createdAt: new Date('2026-09-18T12:00:00Z'),
+    })
+    const answer = await read()
+    const summary = summaryOf(answer)
+    expect(summary.taxChargedCents).toBe(825)
+    expect(summary.taxRefundedCents).toBe(825)
+    expect(summary.taxCollectedCents).toBe(0)
+    // And the row is still REPORTED — a refunded sale that vanished from the
+    // return would be indistinguishable from one that never happened.
+    expect(answer.rows).toHaveLength(1)
+  })
+
+  /**
+   * A refund LARGER than the charge is a data fault. It must not net the
+   * remittable figure below zero, because understating what is owed is the
+   * one direction with a filing consequence — it is clamped and counted.
+   */
+  it('never nets marketplace tax below zero on an over-refunded row', async () => {
+    mockDocs.set('marketplacePurchases/cs_mkt_bad', {
+      sellerOrgId: 'seller-org',
+      amountCents: 1000,
+      taxCents: 80,
+      refundedCents: 5000,
+      createdAt: new Date('2026-09-18T12:00:00Z'),
+    })
+    const summary = summaryOf(await read())
+    expect(summary.taxCollectedCents).toBe(0)
+    expect(summary.attention.rowsOverRefunded).toBe(1)
+  })
+
+  it('reads only the period, and reports a read past the cap and undated purchases', async () => {
+    mockDocs.set('marketplacePurchases/in', { ...attributedRow(), createdAt: new Date('2026-08-01T00:00:00Z') })
+    mockDocs.set('marketplacePurchases/in2', { ...attributedRow(), createdAt: new Date('2026-08-02T00:00:00Z') })
+    mockDocs.set('marketplacePurchases/later', { ...attributedRow(), createdAt: new Date('2026-11-01T00:00:00Z') })
+    mockDocs.set('marketplacePurchases/undated', { ...attributedRow(), createdAt: null })
+    const whole = await read()
+    expect(summaryOf(whole).transactionCount).toBe(2)
+    expect(whole.truncated).toBe(false)
+    expect(whole.undatedRows).toBe(1)
+    const capped = await marketplaceTaxReturnSource.read({ ...REQUEST, rowCap: 1 })
+    expect(capped.truncated).toBe(true)
+    expect(capped.rows).toHaveLength(1)
+  })
+
+  it('states charged and refunded beside the net, and the net’s jurisdictions', () => {
+    const summary = marketplaceTaxSummary(
+      [attributedRow(), unattributedRow({ id: 'cs_legacy', amountCents: 5300, taxCents: 300 })],
+      PERIOD,
+    )
+    const figures = marketplaceTaxFigures(summary, REQUEST.filing)
+    expect(figures.map((line) => [line.label, line.value])).toEqual([
+      ['Purchases in period', '2'],
+      ['Gross paid by buyers', '$161.25'],
+      ['Taxable base', '$150.00'],
+      ['Tax charged', '$11.25'],
+      ['Tax refunded', '$0.00'],
+      ['Tax collected, net', '$11.25'],
+      ['Tax collected — US-TX', '$8.25'],
+      ['Tax collected — no stated jurisdiction', '$3.00'],
+    ])
+    expect(figures[5].note).toBe('The remittable figure — and it is in NO Webfile line above.')
+  })
+
+  it('answers as the marketplace, its figures exported after the working papers', () => {
+    const answer = marketplaceTaxReturnAnswer(
+      { rows: [attributedRow()], truncated: false, undatedRows: 0 },
+      REQUEST,
+    )
+    expect(answer).toMatchObject({ id: 'marketplace', name: 'Marketplace', filingLines: [] })
+    expect(answer.findings.map((finding) => finding.id)).toEqual([
+      'marketplaceTaxCollected',
+      'marketplaceOverRefunded',
+      'marketplaceMissingJurisdiction',
+      'marketplaceMissingCreatedAt',
+    ])
+    expect(answer.exports).toHaveLength(1)
+    expect(answer.exports[0].placement).toBe('sections')
+    expect(answer.exports[0].rows.slice(0, 2)).toEqual([
+      ['Marketplace tax (AGL-2137) — NOT in the Webfile figures'],
+      ['Figure', 'Amount', 'Note'],
+    ])
   })
 })

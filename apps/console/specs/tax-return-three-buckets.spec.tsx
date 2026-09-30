@@ -16,7 +16,7 @@
  */
 
 /**
- * ALL THREE BUCKETS REACH THE SCREEN (AGL-2163).
+ * ALL THREE BUCKETS REACH THE SCREEN (AGL-2163, AGL-3080).
  *
  * `/api/admin/tax-return` computes three separate sets of figures — Aglyn's
  * own invoices (AGL-1811), merchants' storefront sales (AGL-1904) and
@@ -25,6 +25,13 @@
  * Webfile footnotes; the marketplace bucket did not reach it at all. Two of
  * the three buckets a human files this return from existed only in a JSON
  * response nobody sees.
+ *
+ * The storefront and marketplace buckets are each their plugin's answer now,
+ * drawn by one generic card per source. The sections rendered here are
+ * `fixtures/tax-return-sources.fixture.ts`, which
+ * `tax-return-sources-are-registered.spec.ts` holds EXACTLY to what the real
+ * registered sources answer — so this page renders production's words and
+ * figures, not a hand-written guess at them.
  *
  * ASSERTED BY RENDERING, not by reading the helpers. A helper that returns the
  * right rows and a page that never calls it is the exact state this defect was
@@ -36,6 +43,7 @@
 import type { ReactNode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import type { TaxReturnPayload } from '../utils/tx-return-webfile'
+import { TAX_RETURN_SOURCE_SECTIONS } from './fixtures/tax-return-sources.fixture'
 
 jest.mock('@aglyn/shared-data-enums', () => ({
   __esModule: true,
@@ -138,73 +146,7 @@ const payload: TaxReturnPayload = {
       rowsMissingPaidAt: 0,
     },
   } as never,
-  storefront: {
-    truncated: false,
-    undatedRows: 0,
-    rows: [],
-    summary: {
-      periodStart: '2026-07-01T00:00:00.000Z',
-      periodEnd: '2026-10-01T00:00:00.000Z',
-      transactionCount: 9,
-      aglynLiable: {
-        transactionCount: 5,
-        grossCents: 500_000,
-        taxableSalesCents: 400_000,
-        taxCollectedCents: 3_400,
-        // The Texas SLICE is smaller than the bucket, as it is in reality —
-        // which is also what keeps $34.00 unique to the new card, since the
-        // Webfile footnote prints the Texas figure ($20.00) instead.
-        byJurisdiction: {
-          'US-TX': {
-            transactionCount: 3,
-            totalSalesCents: 300_000,
-            taxableSalesCents: 240_000,
-            taxCollectedCents: 2_000,
-          },
-        },
-      },
-      merchantManual: {
-        transactionCount: 4,
-        grossCents: 200_000,
-        taxableSalesCents: 190_000,
-        taxCollectedCents: 5_700,
-        byJurisdiction: {},
-      },
-      connectedAccountLiable: {
-        transactionCount: 0,
-        grossCents: 0,
-        taxableSalesCents: 0,
-        taxCollectedCents: 0,
-        byJurisdiction: {},
-      },
-      attention: {
-        rowsMissingTaxableBase: 0,
-        rowsMissingAddress: 0,
-        nonUsdRows: 0,
-        rowsMissingPaidAt: 0,
-        rowsUnclassified: 0,
-      },
-    },
-  } as never,
-  marketplace: {
-    truncated: false,
-    rows: [],
-    summary: {
-      periodStart: '2026-07-01T00:00:00.000Z',
-      periodEnd: '2026-10-01T00:00:00.000Z',
-      transactionCount: 11,
-      grossCents: 300_000,
-      taxableSalesCents: 292_200,
-      taxChargedCents: 9_000,
-      taxRefundedCents: 1_200,
-      taxCollectedCents: 7_800,
-      attention: {
-        rowsMissingJurisdiction: 11,
-        rowsMissingCreatedAt: 0,
-        rowsOverRefunded: 0,
-      },
-    },
-  } as never,
+  sources: TAX_RETURN_SOURCE_SECTIONS,
 }
 
 beforeEach(() => {
@@ -243,9 +185,8 @@ describe('the staff tax-return page renders all three buckets (AGL-2163)', () =>
     expect(text).toMatch(/Tax collected, net/i)
     // Why part of it may carry no jurisdiction, said on screen rather than
     // left for someone to wonder about when a period does not fully break
-    // down by state. This fixture is a pre-AGL-2137 payload — 11 rows, all
-    // of them unattributed and no `byJurisdiction` at all — so it also pins
-    // that the page still renders an older response without inventing one.
+    // down by state. One of the fixture's two purchases predates the
+    // webhook storing a jurisdiction, and it is counted, never placed.
     expect(text).toMatch(/carry no jurisdiction and are counted as such/i)
     expect(text).toMatch(/Marketplace rows with no stated jurisdiction/i)
   })
@@ -269,24 +210,51 @@ describe('the staff tax-return page renders all three buckets (AGL-2163)', () =>
     expect(text).toMatch(/Marketplace tax collected under Aglyn’s registration/i)
   })
 
-  it('THE NEGATIVE CONTROL: a payload predating either bucket still renders', async () => {
-    // `storefront` and `marketplace` are optional precisely because an older
-    // response is a legitimate shape. A page that threw on one would take the
-    // whole return off the air for the periods that need it most.
+  it('THE NEGATIVE CONTROL: a response that read no source refuses, and still renders', async () => {
+    // A response with no list of sources read none of them. It must not
+    // render as a period with no facilitated sales — it blocks — and the
+    // figures that DO exist are untouched, so the refusal is not hiding a
+    // crash.
     global.fetch = jest.fn(async () => ({
       ok: true,
-      json: async () => ({ ...payload, storefront: null, marketplace: null }),
+      json: async () => ({ ...payload, sources: undefined }),
     })) as never
     render(<AdminTaxReturn />)
     await waitFor(() =>
-      expect(screen.getByText(/carries no marketplace figures/i)).toBeTruthy(),
+      expect(screen.getByText(/Facilitated sales were not read/i)).toBeTruthy(),
     )
     const text = document.body.textContent ?? ''
-    expect(text).toMatch(/carries no storefront figures/i)
-    expect(text).toMatch(/carries no marketplace figures/i)
-    // …and the figures that DO exist are untouched, so the empty state is not
-    // hiding a crash.
+    expect(text).toMatch(/Do not file/i)
+    expect(text).not.toContain('Storefront commerce tax')
     expect(text).toContain('$12.00')
+  })
+
+  it('draws a source that could not be read as a refusal, not as nothing', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ...payload,
+        sources: [
+          TAX_RETURN_SOURCE_SECTIONS[0],
+          {
+            outcome: 'refused',
+            pluginId: 'marketplace',
+            id: 'marketplace',
+            reason: 'The “marketplace” plugin could not read its sales for this period.',
+          },
+        ],
+      }),
+    })) as never
+    render(<AdminTaxReturn />)
+    await waitFor(() =>
+      expect(screen.getByText('Sales from the “marketplace” plugin')).toBeTruthy(),
+    )
+    const text = document.body.textContent ?? ''
+    expect(text).toMatch(/could not read its sales for this period/i)
+    expect(text).toMatch(/Sales from the “marketplace” plugin were not read/i)
+    // The source that DID answer is still drawn whole.
+    expect(text).toContain('$34.00')
+    expect(text).not.toContain('$78.00')
   })
 })
 
@@ -307,10 +275,10 @@ describe('facilitated sales by buyer state reach the screen (AGL-1956)', () => {
   it('renders the Texas storefront slice, not the bucket total', async () => {
     const text = await rendered()
     expect(text).toContain('Facilitated sales by buyer state')
-    // $3000.00 is `storefront.aglynLiable.byJurisdiction['US-TX']
-    // .totalSalesCents` and appears nowhere else in the payload — the bucket
-    // table prints the $5000.00 gross instead. So this figure can only have
-    // arrived through the new by-state view model.
+    // $3000.00 is the Texas slice of the storefront's sales and appears
+    // nowhere else in the payload — the bucket table prints the $5000.00
+    // gross instead. So this figure can only have arrived through the
+    // by-state table.
     expect(text).toContain('$3000.00')
     expect(text).toContain('US-TX')
   })
