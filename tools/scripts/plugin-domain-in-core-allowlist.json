@@ -124,17 +124,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "apps/console/app/api/admin/revenue/route.ts",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:commerce",
-        "plugin-collection:marketplace",
-        "domain-declares:commerce",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/billing/report-usage/route.ts",
       "rules": [
         "plugin-collection:ai",
@@ -566,28 +555,11 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/utils/revenue-view.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:commerce",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/utils/server/announce-dataset-change.ts",
       "rules": [
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "apps/console/utils/server/revenue-report.ts",
-      "rules": [
-        "domain-declares:commerce",
-        "domain-declares:marketplace"
-      ],
-      "lane": "commerce"
     },
     {
       "path": "apps/console/utils/usage-metering.ts",

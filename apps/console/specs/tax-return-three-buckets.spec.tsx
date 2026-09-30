@@ -29,7 +29,7 @@
  * The storefront and marketplace buckets are each their plugin's answer now,
  * drawn by one generic card per source. The sections rendered here are
  * `fixtures/tax-return-sources.fixture.ts`, which
- * `tax-return-sources-are-registered.spec.ts` holds EXACTLY to what the real
+ * `sales-sources-are-registered.spec.ts` holds EXACTLY to what the real
  * registered sources answer — so this page renders production's words and
  * figures, not a hand-written guess at them.
  *

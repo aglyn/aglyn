@@ -509,6 +509,13 @@ export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ["marketplace"]
 export const PLUGIN_TAX_RETURN_SOURCES: readonly string[] = ["commerce","marketplace"]
 
 /**
+ * The plugins whose earnings the operator's revenue report may not be read
+ * without (AGL-3080): each registers a revenue source, and one that did not
+ * is refused rather than read as nothing earned.
+ */
+export const PLUGIN_REVENUE_SOURCES: readonly string[] = ["commerce","marketplace"]
+
+/**
  * Where published plugin versions and their kill switches are stored, declared
  * by the plugin that distributes them (AGL-3080). `null` when none does, and
  * the realm loader then resolves nothing.

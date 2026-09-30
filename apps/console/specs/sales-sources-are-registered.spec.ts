@@ -16,8 +16,8 @@
  */
 
 /**
- * THE FACILITATED SALES REACH THE OPERATOR'S RETURN, FROM THE REAL PLUGINS
- * (AGL-3080).
+ * THE SALES A PLUGIN MADE THROUGH THE PLATFORM REACH THE OPERATOR'S RETURN
+ * AND ITS REVENUE REPORT, FROM THE REAL PLUGINS (AGL-3080).
  *
  * The staff return asks every plugin that sells through the platform's
  * account for its sales, and REFUSES — blocks the filing — when a declared
@@ -95,7 +95,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
-      firestore: () => ({ collection: (name: string) => mockQuery(name, []) }),
+      firestore: () => ({
+        collection: (name: string) => mockQuery(name, []),
+        collectionGroup: (name: string) => mockQuery(name, []),
+      }),
     }),
   },
   isImpersonationSession: () => false,
@@ -109,6 +112,11 @@ jest.mock('../utils/server-plugin-loader', () => ({
 }))
 
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  listRevenueSources,
+  PLUGIN_REVENUE_SOURCES,
+  readRevenueSources,
+} from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import {
   listTaxReturnSources,
   PLUGIN_TAX_RETURN_SOURCES,
@@ -333,5 +341,38 @@ describe('the facilitated-sales sources, after this app’s loader has run', () 
       resetPluginServicesForTests()
       ran = await registerEverySurface()
     }
+  })
+})
+
+/**
+ * The revenue report's sources, registered by the same loader run. Their
+ * folds are proved in each plugin; this is where the REAL registration is
+ * held, because an app's spec is the one place that can reach both.
+ */
+describe('the revenue sources, after this app’s loader has run', () => {
+  beforeAll(async () => {
+    resetPluginServicesForTests()
+    await registerEverySurface()
+  })
+
+  it('registers a source for every plugin that declares one', () => {
+    expect(PLUGIN_REVENUE_SOURCES).toEqual(['commerce', 'marketplace'])
+    expect(listRevenueSources()).toEqual(expect.arrayContaining([...PLUGIN_REVENUE_SOURCES]))
+  })
+
+  it('answers every declared source, none refused', async () => {
+    const sections = await readRevenueSources({
+      period: '2026-08',
+      start: new Date(Date.UTC(2026, 7, 1)),
+      end: new Date(Date.UTC(2026, 8, 1)),
+      attributionLimit: 100,
+      sweep: (async () => ({ docs: [], truncated: false })) as never,
+      orgNames: async () => new Map(),
+      nameRows: async () => undefined,
+    })
+    expect(sections.map((section) => [section.pluginId, section.outcome, section.id])).toEqual([
+      ['commerce', 'answered', 'commerce'],
+      ['marketplace', 'answered', 'marketplace'],
+    ])
   })
 })

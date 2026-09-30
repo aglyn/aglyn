@@ -25,6 +25,7 @@ import {
 import { registerPluginRouteMetadata } from '@aglyn/aglyn/plugin-manager/plugin-route-metadata'
 import { registerPluginArtifactInventory } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
 import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+import { registerRevenueSource } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
 import { registerMarketplaceLockdown } from './server/publisher-lockdown'
@@ -46,6 +47,7 @@ import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
 import { marketplaceArtifactInventory } from './server/artifact-inventory'
 import { marketplaceTaxReturnSource } from './server/tax-return-source'
+import { marketplaceRevenueSource } from './server/revenue-source'
 import { marketplaceAdminReports } from './server/admin-reports'
 import { marketplaceAdminReviews } from './server/admin-reviews'
 import { marketplaceAdminOverview } from './server/admin-overview'
@@ -128,6 +130,10 @@ export function registerMarketplaceConsoleApi(): void {
    * source — the marketplace declares `taxReturnSource`.
    */
   registerTaxReturnSource(marketplaceTaxReturnSource, { pluginId: BUNDLE_ID })
+  // …and the commission its sales earn the operator, on the staff revenue
+  // report — declared `revenueSource`, so a missing registration is named as
+  // unread there rather than counted as zero.
+  registerRevenueSource(marketplaceRevenueSource, { pluginId: BUNDLE_ID })
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)

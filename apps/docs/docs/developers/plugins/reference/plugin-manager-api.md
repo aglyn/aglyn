@@ -549,8 +549,47 @@ back `outcome: 'refused'`, and the return raises a blocking "do not file"
 finding. So do a read that stopped at the cap and rows no period can reach,
 whatever the source's own findings say. The declaration is what makes a
 missing registration a refusal: a registry alone cannot tell "nothing
-registered" from "nothing sold". `tax-return-sources-are-registered.spec.ts`
+registered" from "nothing sold". `sales-sources-are-registered.spec.ts`
 runs the real registrars through the console's manifest.
+
+## Earnings on the operator's revenue report — `plugin-revenue-sources`
+
+The staff revenue report states what the deployment actually kept. If your
+plugin earns the operator a take — a commission, an application fee — on
+sales through the platform's account, it answers for that take here: what it
+earned net of everything that is not the operator's, the gross-to-net lines
+that show why, and who produced it.
+
+```ts
+import {
+  groupRevenueAttribution,
+  registerRevenueSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
+
+registerRevenueSource({
+  read: async (request) => {
+    // Page your own period query under the report's ceiling…
+    const { docs, truncated } = await request.sweep(query, 'createdAt')
+    // …group by who earned it, capped at the report's own limit…
+    const byTicket = groupRevenueAttribution(entries, request.attributionLimit, 'Ticket not recorded')
+    // …and name only the rows that will be shown.
+    await request.nameRows(byTicket.rows, { collection: 'tickets', nameField: 'title', detailField: 'venue' })
+    return {
+      id: 'tickets', name: 'ticket sales',
+      earned: { label: 'Ticket commission', cents, note: '…' },
+      grossToNet: [/* { label, cents, deduction, note } */],
+      notes: [], attribution: [{ id: 'byTicket', heading: '…', unit: 'Ticket', countLabel: 'Sales', empty: '…', ...byTicket }],
+      truncated, failure: null, summary,
+    }
+  },
+}, { pluginId: 'tickets' })
+```
+
+Declare it with `"revenueSource": true` in `plugins.config.json`. A declared
+source that registered nothing, threw or answered a malformed report comes back
+`outcome: 'refused'`; the report counts none of its earnings and says whose
+are missing. A read that could not run at all answers `failure` rather than a
+cap — "we read none of it" and "we read part of it" have different remedies.
 
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 

@@ -213,7 +213,45 @@ jest.mock('@aglyn/aglyn/server', () => {
   }
 })
 
+// The route awaits the plugin surface before it asks the revenue sources.
+// Nothing is loaded here: a case that needs a source registers its own, and a
+// declared source nobody registered is refused.
+jest.mock('../utils/server-plugin-loader', () => ({
+  __esModule: true,
+  serverPluginLoader: { ensureAll: async () => undefined },
+}))
+
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  registerRevenueSource,
+  type RevenueSourceAnswer,
+  type RevenueSourceRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import { GET, SWEEP_CEILING } from '../app/api/admin/revenue/route'
+
+/** A stand-in source: the plugins' own reads are proved in each plugin. */
+function standIn(
+  read: (request: RevenueSourceRequest) => Promise<Partial<RevenueSourceAnswer>>,
+  pluginId = 'commerce',
+) {
+  registerRevenueSource(
+    {
+      read: async (request) => ({
+        id: pluginId,
+        name: `${pluginId} sales`,
+        earned: { label: `${pluginId} commission`, cents: 0, note: '' },
+        grossToNet: [],
+        notes: [],
+        attribution: [],
+        truncated: false,
+        failure: null,
+        summary: {},
+        ...(await read(request)),
+      }),
+    },
+    { pluginId },
+  )
+}
 
 const AUGUST_START = Date.UTC(2026, 7, 1)
 
@@ -248,6 +286,7 @@ async function call(period = '2026-08'): Promise<any> {
 }
 
 beforeEach(() => {
+  resetPluginServicesForTests()
   mockSources = { orgs: [], billing: [], platformRevenue: [] }
   mockFilters = {}
   mockGetAllIds = []
@@ -259,80 +298,36 @@ beforeEach(() => {
   })
 })
 
-describe('a query that failed is never reported as a row cap', () => {
-  it('raises the failure flag and NOT truncation when the orders sweep throws', async () => {
-    mockSources['orders'] = Object.assign(
-      new Error('9 FAILED_PRECONDITION: The query requires an index'),
-      { code: 9 },
-    )
-    const body = await call()
-
-    expect(body.commerceQueryFailed).toBe(true)
-    // The whole point: the failure must not masquerade as a cap.
-    expect(body.attention.commerceTruncated).toBe(false)
-    expect(body.subscriptionsTruncated).toBe(false)
-    expect(body.marketplaceTruncated).toBe(false)
-    expect(body.truncatedSources).toEqual([])
-  })
-
-  it('still reports the OTHER sources when the orders sweep throws', async () => {
-    mockSources['orders'] = new Error('boom')
+describe('a source that could not be read is named, never read as zero', () => {
+  it('REFUSES every declared source that registered nothing', async () => {
     mockSources['platformRevenue'] = [invoice(1, 2500)]
     const body = await call()
-
-    // A commerce failure degrading to "commerce not counted" must not take
-    // the subscription figure down with it.
+    expect(body.sources.map((section: any) => [section.pluginId, section.outcome])).toEqual([
+      ['commerce', 'refused'],
+      ['marketplace', 'refused'],
+    ])
+    // A refusal is not a cap, and it does not take the subscription figure
+    // down with it.
+    expect(body.truncatedSources).toEqual([])
     expect(body.settled.subscriptions.netOfReversalsCents).toBe(2500)
-    expect(body.settled.commerce.commissionNetCents).toBe(0)
-  })
-})
-
-describe('the storefront sweep reads the field the index covers', () => {
-  it('ranges orders on createdAtMs, never on the createdAt timestamp', async () => {
-    mockSources['orders'] = []
-    await call()
-
-    const fields = (mockFilters['orders'] ?? []).map(([field]) => field)
-    expect(fields.length).toBeGreaterThan(0)
-    expect(new Set(fields)).toEqual(new Set(['createdAtMs']))
-    expect(fields).not.toContain('createdAt')
+    expect(body.settled.totalEarnedCents).toBe(2500)
   })
 
-  it('ranges marketplace on createdAt — a top-level collection, not a group', async () => {
-    // The mirror image, and it earns its place: while fixing the orders
-    // query I crossed the two and pointed MARKETPLACE at `createdAtMs`, a
-    // field `marketplacePurchases` does not carry. The collection-group
-    // index guard cannot see that one — marketplace is not a collection
-    // group — so nothing but this would have caught it.
-    mockSources['marketplacePurchases'] = []
-    await call()
-
-    const fields = (mockFilters['marketplacePurchases'] ?? []).map(
-      ([field]) => field,
-    )
-    expect(fields.length).toBeGreaterThan(0)
-    expect(new Set(fields)).toEqual(new Set(['createdAt']))
-  })
-
-  it('counts an order that only a createdAtMs range can find', async () => {
-    // Carries BOTH fields, exactly as `draft-order.ts` writes them. A route
-    // ranging `createdAt` would filter this out of the double as a non-number
-    // and report $0 — which is precisely what production did.
-    mockSources['orders'] = [
-      {
-        $id: 'order-1',
-        createdAtMs: AUGUST_START + 60_000,
-        createdAt: { seconds: 1 },
-        amountCents: 10_000,
-        // Comfortably above the processing pass-through the fold subtracts,
-        // so the take is non-zero for a reason the fixture states rather than
-        // by luck: a fee at or below the pass-through nets to $0 legitimately.
-        feeCents: 1_000,
-      },
-    ]
+  it('adds an answered source’s earnings to the total, and a failed one’s not at all', async () => {
+    mockSources['platformRevenue'] = [invoice(1, 2500)]
+    standIn(async () => ({ earned: { label: 'Storefront commission', cents: 700, note: '' } }))
+    standIn(async () => {
+      throw new Error('boom')
+    }, 'marketplace')
     const body = await call()
-    expect(body.settled.commerce.transactionCount).toBe(1)
-    expect(body.settled.commerce.commissionNetCents).toBeGreaterThan(0)
+    expect(body.settled.totalEarnedCents).toBe(2500 + 700)
+    expect(body.sources[1]).toMatchObject({ outcome: 'refused', pluginId: 'marketplace' })
+  })
+
+  it('names a source whose sweep stopped at the ceiling, by its own name', async () => {
+    standIn(async () => ({ truncated: true }))
+    const body = await call()
+    expect(body.truncatedSources).toEqual(['commerce sales'])
   })
 })
 
@@ -363,11 +358,9 @@ describe('the sweep pages instead of clipping at a row cap', () => {
     const body = await call()
 
     expect(body.subscriptionsTruncated).toBe(true)
-    expect(body.truncatedSources).toEqual(['subscriptions'])
     // The other sources are whole, and the response says so per source rather
     // than condemning the whole page as "at least one total".
-    expect(body.marketplaceTruncated).toBe(false)
-    expect(body.attention.commerceTruncated).toBe(false)
+    expect(body.truncatedSources).toEqual(['subscriptions'])
   })
 })
 
@@ -410,79 +403,64 @@ describe('a period the settled mirror cannot answer says so', () => {
   })
 })
 
-describe('attribution is bounded, and keyed on the right dimension', () => {
-  it('attributes a storefront order to the host in its PATH', async () => {
-    mockSources['orders'] = [
-      {
-        $id: 'order-1',
-        $parentId: 'host-a',
-        createdAtMs: AUGUST_START + 60_000,
-        amountCents: 20_000,
-        feeCents: 2_000,
-      },
-    ]
+describe('what the report lends a source: its sweep, its names and its budget', () => {
+  it('pages a source’s query under the SAME ceiling, and says when it stopped', async () => {
+    mockSources['orders'] = Array.from({ length: 1200 }, (_, index) => ({
+      $id: `order-${index}`,
+      createdAtMs: AUGUST_START + index,
+    }))
+    let swept: { docs: unknown[]; truncated: boolean } | null = null
+    standIn(async (request) => {
+      swept = await request.sweep(
+        mockQuery('orders').where('createdAtMs', '>=', 0),
+        'createdAtMs',
+      )
+      return {}
+    })
+    await call()
+    // Past the 500-row page, folded whole — the sweep pages, never clips.
+    expect(swept?.docs).toHaveLength(1200)
+    expect(swept?.truncated).toBe(false)
+  })
+
+  it('names only the rows a source hands it, and says a deleted one is gone', async () => {
     mockSources['hosts'] = [
       { $id: 'host-a', displayName: 'Northwind Coffee', subdomain: 'northwind' },
     ]
-    const body = await call()
-
-    const rows = body.attributionByHost.rows
-    expect(rows).toHaveLength(1)
-    expect(rows[0].key).toBe('host-a')
-    // Decorated from the hosts collection, not left as a raw id.
-    expect(rows[0].name).toBe('Northwind Coffee')
-    // And it reconciles to the storefront line above it.
-    expect(rows[0].gainCents).toBe(body.settled.commerce.commissionNetCents)
-  })
-
-  it('reads names for the rows it will SHOW, not for every row it folded', async () => {
-    // The read-budget guard. Attributing by listing means touching a
-    // collection this page did not previously read, and the lookup has to be
-    // bounded by the display cap or it is an unbounded read arriving from a
-    // new direction.
-    mockSources['marketplacePurchases'] = Array.from(
-      { length: 260 },
-      (_, index) => ({
-        $id: `cs_${index}`,
-        listingId: `listing-${index}`,
-        sellerOrgId: 'pub-1',
-        createdAt: AUGUST_START + index,
-        amountCents: 10_000,
-        feeCents: 1_500,
-      }),
-    )
-    const body = await call()
-
-    const listingLookups = mockGetAllIds.filter((id) =>
-      id.startsWith('listing-'),
-    )
-    expect(body.attributionByListing.rows).toHaveLength(100)
-    expect(listingLookups).toHaveLength(100)
-    // 260 sales folded, 100 names read — the budget follows the table, not
-    // the data.
-    expect(body.settled.marketplace.transactionCount).toBe(260)
-    // And the remainder is carried as figures so the table still adds up.
-    const shown = body.attributionByListing.rows.reduce(
-      (sum: number, row: any) => sum + row.gainCents,
-      0,
-    )
-    expect(shown + body.attributionByListing.omittedGainCents).toBe(
-      body.settled.marketplace.commissionNetCents,
-    )
-  })
-
-  it('names a deleted entity rather than rendering a blank cell', async () => {
-    mockSources['orders'] = [
-      {
-        $id: 'order-1',
-        $parentId: 'host-gone',
-        createdAtMs: AUGUST_START + 1,
-        amountCents: 20_000,
-        feeCents: 2_000,
-      },
+    const rows = [
+      { key: 'host-a', name: 'host-a', detail: '', gainCents: 1, lossCents: 0, count: 1 },
+      { key: 'host-gone', name: 'host-gone', detail: '', gainCents: 1, lossCents: 0, count: 1 },
+      // The unattributed row is a label, not an id, and is never looked up.
+      { key: 'Host not recorded', name: 'Host not recorded', detail: '', gainCents: 1, lossCents: 0, count: 1 },
     ]
-    mockSources['hosts'] = []
-    const body = await call()
-    expect(body.attributionByHost.rows[0].name).toBe('host-gone (deleted)')
+    standIn(async (request) => {
+      await request.nameRows(rows, {
+        collection: 'hosts',
+        nameField: 'displayName',
+        detailField: 'subdomain',
+      })
+      return {}
+    })
+    await call()
+    expect(mockGetAllIds.filter((id) => id.startsWith('host'))).toEqual(['host-a', 'host-gone'])
+    expect(rows.map((row) => [row.name, row.detail])).toEqual([
+      ['Northwind Coffee', 'northwind'],
+      ['host-gone (deleted)', ''],
+      ['Host not recorded', ''],
+    ])
+  })
+
+  it('names an organization from the org sweep it already read — no read', async () => {
+    mockSources['orgs'] = [{ $id: 'pub-1', name: 'Acme Plugins' }]
+    let names: ReadonlyMap<string, string> = new Map()
+    standIn(async (request) => {
+      names = await request.orgNames(['pub-1', 'pub-unknown'])
+      return {}
+    })
+    await call()
+    expect([...names]).toEqual([['pub-1', 'Acme Plugins']])
+    // The only read of that org is its usage rollup, which the report makes
+    // for its own reasons; its name cost nothing.
+    expect(mockGetAllIds).not.toContain('pub-1')
   })
 })

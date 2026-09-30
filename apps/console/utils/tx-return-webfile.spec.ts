@@ -924,7 +924,7 @@ describe('the unconfigured state, per jurisdiction', () => {
  * source says about itself — and a response with no list of sources at all
  * read none of them. The sources' own words are proved beside them, in each
  * plugin, and through the real registrars in
- * `specs/tax-return-sources-are-registered`.
+ * `specs/sales-sources-are-registered`.
  */
 describe('the facilitated-sales sources on the return', () => {
   const answered = (over: Partial<TaxReturnSection> = {}): TaxReturnSection =>

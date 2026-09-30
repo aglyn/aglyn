@@ -270,7 +270,7 @@ describe('GET /api/admin/tax-return (AGL-1811)', () => {
    *
    * The sources' own figures are proved beside them — the storefront's in
    * the commerce plugin, the marketplace's in the marketplace plugin — and
-   * through the REAL registrars in `specs/tax-return-sources-are-registered`.
+   * through the REAL registrars in `specs/sales-sources-are-registered`.
    */
   it('REFUSES every declared source that registered nothing — never an empty list', async () => {
     resetPluginServicesForTests()

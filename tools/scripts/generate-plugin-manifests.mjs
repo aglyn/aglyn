@@ -1242,6 +1242,24 @@ function taxReturnSourceIds() {
     .map((plugin) => plugin.id)
 }
 
+/**
+ * The plugins whose earnings belong on the operator's revenue report
+ * (AGL-3080): each earns a take through the platform's own account and
+ * registers a revenue source. The report refuses a declared source that
+ * registered nothing rather than read it as nothing earned.
+ */
+function revenueSourceIds() {
+  return config.plugins
+    .filter((plugin) => {
+      if (plugin.revenueSource === undefined) return false
+      if (plugin.revenueSource !== true) {
+        throw new Error(`plugins.config.json: "${plugin.id}" revenueSource is true, or is left out`)
+      }
+      return true
+    })
+    .map((plugin) => plugin.id)
+}
+
 function catalogContent(videoEmbedRows) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -1328,6 +1346,13 @@ export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ${JSON.stringify(r
  * not is refused rather than read as nothing sold.
  */
 export const PLUGIN_TAX_RETURN_SOURCES: readonly string[] = ${JSON.stringify(taxReturnSourceIds())}
+
+/**
+ * The plugins whose earnings the operator's revenue report may not be read
+ * without (AGL-3080): each registers a revenue source, and one that did not
+ * is refused rather than read as nothing earned.
+ */
+export const PLUGIN_REVENUE_SOURCES: readonly string[] = ${JSON.stringify(revenueSourceIds())}
 
 /**
  * Where published plugin versions and their kill switches are stored, declared

@@ -45,6 +45,8 @@ import { registerCommerceTaxProfile } from './server/tax-profile'
 import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { commerceTaxReturnSource } from './server/tax-return-source'
 import { taxSummaryHandler } from './server/tax-summary'
+import { registerRevenueSource } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
+import { commerceRevenueSource } from './server/revenue-source'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
 import { registerOrderFigureReaders } from './server/order-figures'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
@@ -316,6 +318,10 @@ export function registerCommerceConsoleApi(): void {
   // The staff return awaits this surface before it asks, and refuses to be
   // filed without this source — commerce declares `taxReturnSource`.
   registerTaxReturnSource(commerceTaxReturnSource, { pluginId: BUNDLE_ID })
+  // …and the take its orders earn the operator, on the staff revenue report
+  // (AGL-3080) — commerce declares `revenueSource`, so the report names this
+  // source as unread rather than counting it as zero if it is missing.
+  registerRevenueSource(commerceRevenueSource, { pluginId: BUNDLE_ID })
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/
   // subscriptions ride the platform webhook via the hook registry.
   registerBillingWebhookHandler(commerceBillingWebhookHandler)
