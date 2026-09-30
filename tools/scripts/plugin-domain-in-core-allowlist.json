@@ -1609,13 +1609,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "libs/tenant/runtime/src/lib/host-event-listeners.ts",
-      "rules": [
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
       "path": "libs/tenant/runtime/src/lib/resolve-dataset.ts",
       "rules": [
         "domain-declares:data"
