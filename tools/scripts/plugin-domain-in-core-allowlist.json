@@ -497,13 +497,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/components/web-vitals-reporter.component.tsx",
-      "rules": [
-        "vendor:ga4"
-      ],
-      "lane": "analytics-provider"
-    },
-    {
       "path": "apps/console/constants/legal-documents.ts",
       "rules": [
         "vendor:wistia"
@@ -708,14 +701,6 @@
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx",
-      "rules": [
-        "vendor:ga4",
-        "plugin-id"
-      ],
-      "lane": "analytics-provider"
     },
     {
       "path": "apps/tenant/app/api/analytics/collect/route.ts",
@@ -1234,20 +1219,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/visitor-consent.ts",
-      "rules": [
-        "vendor:ga4"
-      ],
-      "lane": "analytics-provider"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/web-vitals-rum.ts",
-      "rules": [
-        "vendor:ga4"
-      ],
-      "lane": "analytics-provider"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/workflows.ts",

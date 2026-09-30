@@ -102,7 +102,8 @@ consolidated Platform property, not the archived `G-BQ49X14QCD` — and the
 console's Firebase-injected tag uses the same id. So both ends are one property.
 
 There is deliberately **no `linker` config in our code**, and none is needed:
-`site-analytics.tsx` emits a bare `gtag('config', '<id>')` and the domain list
+the Google tag adapter (`libs/plugins/marketing/src/lib/analytics-provider.ts`,
+which `site-analytics.tsx` mounts) emits a bare `gtag('config', '<id>')` and the domain list
 is delivered to the tag from the GA UI. Grepping for `linker` and concluding
 cross-domain is unconfigured is the wrong inference.
 
@@ -381,9 +382,10 @@ decisions in full live on the issues.
 - **Real-user Core Web Vitals (AGL-1642)** — `web-vitals` (already a
   transitive dep of `@firebase/performance`; 2.6KB gz as a lazy chunk) →
   GA4 events in web.dev's exact shape, from
-  `libs/aglyn/src/lib/app-utils/web-vitals-rum.ts`. Delivery is
-  `window.gtag` on both surfaces, so the tenant consent gate stays
-  structural: no grant, no tag, no hit. Metrics that report before the
+  `libs/aglyn/src/lib/app-utils/web-vitals-rum.ts`. Delivery is to the
+  resident tag through its vendor's adapter (`analytics-provider.ts`, AGL-3080)
+  on both surfaces, so the tenant consent gate stays structural: no grant, no
+  tag, no hit. Metrics that report before the
   late-loading tag are held in memory ~60s and flushed when it arrives; a
   visitor whose tag never appears produces nothing — the hold is NOT the
   forbidden pre-consent queue (`web-vitals-rum.spec.ts` pins both halves).
@@ -890,8 +892,10 @@ code follow. `consent-advertising-copy-drift.spec.ts` is the lock that makes the
 copy move with the rule in either direction — it has now gone red in both.
 
 **Two payload builders, and the split is deliberate.** Both live in
-`libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are
-the **single source** for every declaration — the load-time `default` and the
+`libs/aglyn/src/lib/app-utils/visitor-consent.ts`, the Google tag adapter
+(`libs/plugins/marketing/src/lib/analytics-provider.ts`) builds its snippets
+from them, and between them they are the **single source** for every
+declaration — the load-time `default` and the
 withdrawal `update` alike — so the two directions cannot drift:
 
 - `analyticsConsentSignals(granted)` — the analytics-only path, feeding
@@ -909,8 +913,9 @@ Read the payloads there rather than trusting any restatement here.
 The three mechanisms, in the order a visitor meets them:
 
 - **A consent-mode `default` is declared before the first hit** (AGL-1622).
-  `site-analytics.tsx` (`apps/tenant/app/[host]/[scheme]/[[...slug]]/`) emits it
-  **inside the gated block**, in the same inline script that creates
+  The Google tag adapter puts it in the boot it returns, and
+  `site-analytics.tsx` (`apps/tenant/app/[host]/[scheme]/[[...slug]]/`) emits
+  that boot **inside the gated block**, in the same inline script that creates
   `dataLayer`, ahead of `gtag('js')` and `gtag('config')` — so it exists only
   on a pageview the AGL-1498 gate already permitted, and no hit is ever sent
   before the tag has been told what it may store. It is deliberately **not**
@@ -920,7 +925,8 @@ The three mechanisms, in the order a visitor meets them:
 - **A withdrawal silences the already-resident tag before sweeping**
   (AGL-1608). Unmounting the `<script>` cannot unload `gtag.js`, and enhanced
   measurement re-creates `_ga` on the next scroll. So
-  `setResidentAnalyticsTags` (same module) sets `window['ga-disable-<id>']`
+  `setResidentAnalyticsTags` (same module) tells every registered adapter
+  (`applyAnalyticsConsent`), and the Google one sets `window['ga-disable-<id>']`
   for every resident measurement id AND sends
   `gtag('consent', 'update', analyticsConsentSignals(false))` — two signals
   because they fail differently: the flag reaches a tag that never got a

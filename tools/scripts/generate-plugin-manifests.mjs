@@ -1001,6 +1001,48 @@ function orgKeyedCollectionRows() {
   return rows
 }
 
+/**
+ * The analytics providers (AGL-3080): each plugin that adapts a vendor's
+ * measurement tag declares it under `analyticsProvider` — the module its
+ * adapter lives in, and which of a site's analytics settings configure a tag
+ * it mounts. Core compiles the settings into the catalog, because the consent
+ * gate asks "does this site run a tag?" synchronously during render, where a
+ * registry nothing had filled yet would answer "no" and leave a tag with no
+ * banner in front of it. The module is written into each app's
+ * `plugins.analytics.generated.ts` as an `import()`, fetched only by a
+ * document that uses it.
+ *
+ * Checked here: a plain module path, at least one setting, plain setting
+ * names, and no setting claimed by two providers — two adapters mounting a tag
+ * for one id would load the vendor twice.
+ */
+function analyticsProviderRows() {
+  const claimed = new Map()
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.analyticsProvider
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" analyticsProvider`
+    if (typeof declared.module !== 'string' || !/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/.test(declared.module)) {
+      throw new Error(`${where}: "module" is a subpath of the plugin's package`)
+    }
+    if (!Array.isArray(declared.settings) || !declared.settings.length) {
+      throw new Error(`${where}: "settings" names at least one analytics setting`)
+    }
+    for (const field of declared.settings) {
+      if (typeof field !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(field)) {
+        throw new Error(`${where}: "${field}" is not the plain name of an analytics setting`)
+      }
+      if (claimed.has(field)) {
+        throw new Error(`${where}: "${field}" is already mounted by "${claimed.get(field)}"`)
+      }
+      claimed.set(field, plugin.id)
+    }
+    rows.push({ plugin, module: declared.module, settings: [...declared.settings] })
+  }
+  return rows
+}
+
 /** The plugins whose org eraser an erasure may not run without (AGL-3080). */
 function requiredOrgEraserIds() {
   return config.plugins
@@ -1012,6 +1054,37 @@ function requiredOrgEraserIds() {
       return true
     })
     .map((plugin) => plugin.id)
+}
+
+const ANALYTICS_MANIFESTS = [
+  'apps/console/constants/plugins.analytics.generated.ts',
+  'apps/tenant/utils/plugins.analytics.generated.ts',
+]
+
+function analyticsManifestContent() {
+  const rows = analyticsProviderRows()
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The plugins' ANALYTICS PROVIDERS (AGL-3080): the adapter each declares\n` +
+    ` * under \`analyticsProvider\`, loaded with \`import()\` by a document that\n` +
+    ` * uses it and registered with core's \`analytics-provider.ts\`. One of the\n` +
+    ` * sanctioned @aglyn/plugins-* references outside libs/plugins (AGL-417).\n` +
+    ` * Source of truth: plugins.config.json.\n */\n` +
+    `/* eslint-disable @nx/enforce-module-boundaries */\n\n` +
+    `import type { AnalyticsProviderLoader } from '@aglyn/aglyn/app-utils/analytics-provider'\n\n` +
+    `export const ANALYTICS_PROVIDER_LOADERS: readonly AnalyticsProviderLoader[] = [\n` +
+    rows
+      .map(
+        (row) =>
+          `  {\n` +
+          `    pluginId: '${row.plugin.id}',\n` +
+          `    load: () => import('${row.plugin.package}/${row.module}'),\n` +
+          `  },\n`,
+      )
+      .join('') +
+    `]\n`
+  )
 }
 
 function catalogContent(videoEmbedRows) {
@@ -1037,7 +1110,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1102,6 +1175,15 @@ export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ${JSON.stringify(r
 export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(pluginDistributionRow(), null, 2)}
 
 /**
+ * The analytics settings each provider mounts a tag for, declared by the
+ * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
+ * setting configures a tag.
+ */
+export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
+${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: row.plugin.id, settings: row.settings }, null, 2))},`).join('\n')}
+]
+
+/**
  * Every first-party element that runs a site function, and the prop naming
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
@@ -1133,6 +1215,7 @@ const ALL = [
     content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
   })),
   { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
+  ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   {
     file: SUBPROCESSORS_MANIFEST,
     content: subprocessorsContent(await pluginSubprocessors()),

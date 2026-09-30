@@ -14,6 +14,7 @@ import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
+import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -510,6 +511,21 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = {
   "versions": "pluginVersions",
   "revocations": "revocations"
 }
+
+/**
+ * The analytics settings each provider mounts a tag for, declared by the
+ * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
+ * setting configures a tag.
+ */
+export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
+  {
+    "pluginId": "marketing",
+    "settings": [
+      "gaMeasurementId",
+      "gtmContainerId"
+    ]
+  },
+]
 
 /**
  * Every first-party element that runs a site function, and the prop naming

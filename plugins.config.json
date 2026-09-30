@@ -759,6 +759,13 @@
         "campaigns",
         "experiments"
       ],
+      "analyticsProvider": {
+        "module": "analytics-provider",
+        "settings": [
+          "gaMeasurementId",
+          "gtmContainerId"
+        ]
+      },
       "catalog": {
         "order": 15,
         "label": "Marketing",

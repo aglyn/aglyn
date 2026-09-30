@@ -632,6 +632,45 @@ A video is served from the provider only when the `release_video_delivery` flag,
 off by default, is on for its org and a copy of its current bytes exists;
 everything else serves from the platform exactly as before.
 
+## Site analytics tags — `analytics-provider`
+
+A site can send its visitors' measurement to an analytics vendor it chose, by
+saving an id in its analytics settings. The platform owns everything around
+that tag — whether the visitor may be measured, the consent banner, the
+first-party pageview beacon that meters the site — and names no vendor. A
+plugin's adapter knows the vendor: what its tag looks like on the page, how a
+resident tag is told the visitor's answer changed, and how an event reaches it.
+
+The adapter is declared in `plugins.config.json`, not registered from code:
+
+```json
+"analyticsProvider": {
+  "module": "analytics-provider",
+  "settings": ["gaMeasurementId", "gtmContainerId"]
+}
+```
+
+- `settings` are the site analytics settings the adapter mounts a tag for. They
+  are compiled into core (`ANALYTICS_PROVIDERS_DECLARED`), because the consent
+  gate asks "does this site run a tag?" during render, before any adapter has
+  loaded. A setting no provider declares configures nothing, and a site with no
+  tag asks its visitors nothing. Two providers may not declare one setting.
+- `module` is the adapter's subpath. The generator writes it into each app's
+  `plugins.analytics.generated.ts` as an `import()`: a published page fetches it
+  only when its site configures a tag, and the console fetches it for the tag
+  its own analytics SDK injects. The module exports `analyticsProvider`.
+
+| API | Semantics |
+| --- | --- |
+| `provider.mounts(host, { consentRequired, advertising })` | The tags a granted pageview mounts, in order: `{ id, boot, src, library? }`. The page renders each as an inline `${id}-init` and a library `${id}-src`, under the consent gate, with the request's nonce. `boot` is inline script, built from constants and format-checked ids only. |
+| `provider.applyConsent({ analytics, advertising })` | Make every resident tag of the vendor agree with the answer; returns the ids it acted on. Called when a visitor's answer changes, and on registration with the last answer given in the document. |
+| `provider.resident()` / `provider.sendEvent(name, params, { measurementOnly? })` | Whether a tag is resident, and one event to it. `measurementOnly` addresses the measurement property only, not an advertising destination sharing the library. |
+| `hostConfiguresAnalyticsTag(host)` (`visitor-consent`) | Whether a declared setting is present and well formed. |
+| `applyAnalyticsConsent(grants)`, `sendAnalyticsProviderEvent(...)`, `analyticsTagResident()` | Core's side: what the consent writer and the Core Web Vitals reporter call. |
+
+The pageview beacon (`/api/analytics/collect`) is not a tag and never goes
+through this contract: it is the platform's metered door.
+
 ## Platform events — `plugin-events` (`/server`)
 
 Core raises the events; a plugin that must react to what a core route did

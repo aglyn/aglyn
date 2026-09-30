@@ -303,7 +303,9 @@ Generate the key pair with
   and refuses a plugin surface a published page cannot render. Four rules:
   a plugin with both a site and a console surface names `modules.site`; a
   plugin with no site surface contributes nothing before settle; a site
-  plugin contributes only what its site module reaches statically; and the
+  plugin contributes only what its site module — or the analytics-tag
+  adapter it declares under `analyticsProvider` (AGL-3080), which a page
+  fetches when its site configures a tag — reaches statically; and the
   module a `register.console` names is never there, whatever imports it. It
   reads the same before-settle chunk set `check:tenant-wire-weight` budgets
   — that gate asks how many bytes, this one asks whose.
