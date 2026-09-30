@@ -100,7 +100,7 @@ function LockdownNotice(props: LockdownNoticeProps) {
           color="text.secondary"
           sx={{ mt: 0.5 }}
         >
-          {'Questions? '}
+          {notice.appeal ? 'To appeal this decision, write to ' : 'Questions? '}
           <Link href={`mailto:${notice.contact}`}>{notice.contact}</Link>
         </Typography>
       ) : null}

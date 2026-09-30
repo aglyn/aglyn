@@ -59,6 +59,23 @@ import type {
 
 type AdminFirestore = FirebaseFirestore.Firestore
 
+/**
+ * The reference a lock's notices carry, and the handle an appeal quotes
+ * (AGL-3420): `LK-` and ten hex characters of the locked target.
+ *
+ * Derived, not stored, so the lock notice, every resend and the lock's own
+ * audit row name the same code with nothing written to find it by — staff
+ * search the audit log for it. One per target rather than per lock, because
+ * an appeal is about the account or the workspace, whichever lock it was.
+ */
+export function lockdownNoticeReference(scope: string, targetId: string): string {
+  return `LK-${createHash('sha256')
+    .update(`${scope}:${targetId}`)
+    .digest('hex')
+    .slice(0, 10)
+    .toUpperCase()}`
+}
+
 /** The scopes a lock can name somebody at. Platform-wide locks name nobody. */
 const NOTICE_KINDS: Record<string, { lock: RiskEventKind; unlock: RiskEventKind }> = {
   org: { lock: 'workspace-locked', unlock: 'workspace-unlocked' },
@@ -88,6 +105,8 @@ export interface LockdownOwnerNoticeStep {
   kind: RiskEventKind | null
   scope: string
   targetId: string
+  /** The code the notice quotes, and an appeal names — see {@link lockdownNoticeReference}. */
+  reference: string
   recipients: number
   emailed: number
   emailFailed: number
@@ -245,6 +264,7 @@ export async function sendLockdownOwnerNotice(input: {
     kind,
     scope: input.scope,
     targetId: input.targetId,
+    reference: lockdownNoticeReference(input.scope, input.targetId),
     recipients: 0,
     emailed: 0,
     emailFailed: 0,
@@ -279,6 +299,7 @@ export async function sendLockdownOwnerNotice(input: {
       userUid: input.scope === 'user' ? input.targetId : null,
       item: { label: subject.label, path: subject.path },
       occurredAtMs: input.nowMs ?? Date.now(),
+      reference: step.reference,
       lock: {
         message,
         affected: lockdownAffectedText({
@@ -542,6 +563,9 @@ export async function resendLockdownOwnerNotices(input: {
           path: due.length === 1 ? due[0].path : null,
         },
         occurredAtMs: nowMs,
+        // The first lock's, which is the one an appeal most likely names;
+        // each of the others is findable by its own target.
+        reference: lockdownNoticeReference(due[0].scope, due[0].targetId),
         lock: {
           message:
             messages.length === 1
