@@ -87,6 +87,7 @@ import {
   getOrgForHost,
   orgDataCollectionForHost,
 } from './organizations'
+import type { ContactCaptureBatch } from './contact-capture-batch'
 
 /**
  * What an upsert did, for the callers that need to know (AGL-2602).
@@ -468,6 +469,17 @@ export interface UpsertHostContactOptions {
    * capture that already happened.
    */
   onCreated?: (created: HostContactCreated) => void | Promise<void>
+  /**
+   * The lookups of a whole file, read once (AGL-3423) — see
+   * `contact-capture-batch.ts`.
+   *
+   * A door capturing many addresses at once prepares one batch and hands it
+   * to every capture; each one then takes the site, the group, the person
+   * the address already is, the erasure and the band from it instead of
+   * reading them. Every decision below is made by the same lines either way.
+   * A batch prepared for another site is ignored.
+   */
+  batch?: ContactCaptureBatch
 }
 
 export async function upsertHostContact(
@@ -515,12 +527,13 @@ export async function upsertHostContact(
 
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(options.hostId)
+    const batch =
+      options.batch?.hostId === options.hostId ? options.batch : undefined
     // Contacts are org-scoped (AGL-237): every host in the org feeds one
     // shared list.
-    const contactsRef = await orgDataCollectionForHost(
-      options.hostId,
-      'contacts',
-    )
+    const contactsRef =
+      batch?.contactsRef ??
+      (await orgDataCollectionForHost(options.hostId, 'contacts'))
     /*
      * The consent group this capture belongs to — the sites declared to be
      * one sender, or this site alone. Resolved once and used for three
@@ -528,7 +541,7 @@ export async function upsertHostContact(
      * basis is recorded for, which sites the row becomes visible to, and
      * which holder the profile is filed under.
      */
-    const group = await consentGroupForSite(options.hostId)
+    const group = batch?.group ?? (await consentGroupForSite(options.hostId))
     /*
      * THE CONSENT ENTRY THIS CAPTURE WRITES, decided once for both branches.
      *
@@ -624,7 +637,11 @@ export async function upsertHostContact(
      * stays as the fallback, so a row the index has not seen costs one extra
      * read once and needs no backfill.
      *=========================================*/
-    const docSnapshot = await findContactByEmail(contactsRef, email)
+    const prefetched = batch?.claim(email)
+    const docSnapshot =
+      prefetched !== undefined
+        ? prefetched
+        : await findContactByEmail(contactsRef, email)
 
     if (docSnapshot) {
       /*
@@ -847,7 +864,10 @@ export async function upsertHostContact(
      * something, and the merchant's record of the sale is not the CRM's
      * record of the person.
      */
-    if (await hostRefusesCaptureForErasure(options.hostId, email, firestore)) {
+    if (
+      batch?.erased(email) ??
+      (await hostRefusesCaptureForErasure(options.hostId, email, firestore))
+    ) {
       return { refused: 'erased' }
     }
 
@@ -864,16 +884,25 @@ export async function upsertHostContact(
     // verdict the company drawer would give the ninety-first company.
     // `contactsRef` is handed in so the contacts aggregate is the one this
     // door already reads; the org reference is its parent.
-    const orgBilling = await getOrgForHost(options.hostId)
-    const orgRef =
-      contactsRef.parent ??
-      firestore.collection('orgs').doc(String(orgBilling?.orgId ?? ''))
-    const { crmRecordsCount } = await countCrmRecords(orgRef, contactsRef)
-    const quota = checkCrmRecordsQuota(
-      (orgBilling?.org as any) ?? null,
-      crmRecordsCount,
-    )
-    if (!quota.allowed) {
+    //
+    // A batch counted once and keeps the tally, in call order, so each of
+    // its creates is admitted exactly as it would be here one at a time.
+    const orgBilling = batch
+      ? batch.orgBilling
+      : await getOrgForHost(options.hostId)
+    const admitted = batch
+      ? batch.admitCreate(email)
+      : await (async () => {
+          const orgRef =
+            contactsRef.parent ??
+            firestore.collection('orgs').doc(String(orgBilling?.orgId ?? ''))
+          const { crmRecordsCount } = await countCrmRecords(orgRef, contactsRef)
+          return checkCrmRecordsQuota(
+            (orgBilling?.org as any) ?? null,
+            crmRecordsCount,
+          ).allowed
+        })()
+    if (!admitted) {
       await hostRef
         .collection('counters')
         .doc('contactsDropped')

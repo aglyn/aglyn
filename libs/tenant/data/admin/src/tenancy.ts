@@ -144,6 +144,8 @@ export * from './lib/server/contact-company-link'
 export * from './lib/server/contact-email-index'
 export * from './lib/server/contact-merge'
 export * from './lib/server/upsert-contact'
+// The lookups of a whole file of captures, read once (AGL-3423).
+export * from './lib/server/contact-capture-batch'
 // The stage floor a won deal applies to its contact (AGL-2641).
 export * from './lib/server/contact-lifecycle-floor'
 export * from './lib/server/crm-records'

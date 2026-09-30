@@ -293,6 +293,12 @@ export type ContactImportSkipReason =
   /** The person was erased from this workspace at their request (AGL-2623). */
   | 'erased'
   | 'write-failed'
+  /**
+   * The request ran out of time before it reached the row (AGL-3423). Nothing
+   * was written for it, and importing the skipped file again is safe: a row
+   * that did land merges into its record rather than creating a second one.
+   */
+  | 'not-reached'
 
 /** How a skip reason reads on screen and in the downloaded file. */
 export const CONTACT_IMPORT_SKIP_LABELS: Record<ContactImportSkipReason, string> = {
@@ -301,6 +307,7 @@ export const CONTACT_IMPORT_SKIP_LABELS: Record<ContactImportSkipReason, string>
   'audience-band': 'Contact limit reached',
   erased: 'Erased from this workspace at their request',
   'write-failed': 'Could not be saved',
+  'not-reached': 'Not reached in time; import the skipped rows again',
 }
 
 /** A cell the file carried that could not be read as the field it was mapped to. */
