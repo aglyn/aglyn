@@ -682,6 +682,25 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
       expect(stored).not.toHaveProperty('externalDestinationApprovedBy')
     })
   })
+
+  /*
+   * A plugin's kinds are compiled declarations since AGL-3080, so the table
+   * this route reads is no longer one object literal. What must not change is
+   * the answer for a kind nobody declared: refused, with nothing written —
+   * never an open field list. Including the names a plain object lookup would
+   * find on its prototype.
+   */
+  it.each(['nonesuch', 'constructor', 'toString', 'hasOwnProperty'])(
+    'refuses a kind nobody declared (%s), and writes nothing',
+    async (resource) => {
+      const response = await postResource(resource, { name: 'x' })
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        error: 'Missing hostId or unknown resource',
+      })
+      expect(mockWrite).not.toHaveBeenCalled()
+    },
+  )
 })
 
 /**

@@ -24,7 +24,10 @@ import {
   CUSTOMER_API_MOUNT,
   CUSTOMER_API_VERSION,
 } from '../../../utils/api-v1-openapi'
-import { dispatchResource } from '../../../utils/api-v1-resources'
+import {
+  describePluginApiV1Resources,
+  dispatchResource,
+} from '../../../utils/api-v1-resources'
 import {
   handleMcpMessage,
   JSON_RPC_ERRORS,
@@ -94,11 +97,14 @@ export async function POST(request: Request): Promise<Response> {
 
   const origin = new URL(request.url).origin
   const tools = buildMcpTools(
-    buildCustomerApiOpenApi({
-      origin,
-      documentationUrl: buildDocsUrl('/api'),
-      brandName: PLATFORM_BRAND_NAME,
-    }),
+    buildCustomerApiOpenApi(
+      {
+        origin,
+        documentationUrl: buildDocsUrl('/api'),
+        brandName: PLATFORM_BRAND_NAME,
+      },
+      await describePluginApiV1Resources(),
+    ),
   )
 
   const deps = {

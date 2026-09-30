@@ -39,7 +39,12 @@ import {
   ApiErrors,
   countCrmActivitiesForRecord,
 } from '@aglyn/tenant-data-admin'
-import { type ApiV1Context, requireScope } from '../api-v1'
+import {
+  type ApiV1Context,
+  claimWrite,
+  readJsonBody,
+  requireScope,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import {
   CRM_LABEL_MAX,
   CRM_TEXT_MAX,
@@ -61,7 +66,6 @@ import {
   readRefId,
   refuseUnknownKeys,
 } from './crm-shared'
-import { claimWrite, readJsonBody } from './shared'
 
 const ACTIVITY_KINDS = ['call', 'email', 'meeting', 'note', 'other'] as const
 

@@ -191,20 +191,31 @@ export async function announceAiAllotmentAlerts(
       const link = input.orgSlug
         ? `${buildRoute(Route.MANAGE_BILLING_USAGE, { orgSlug: input.orgSlug })}#ai-allotments`
         : null
-      await notify(recipients.managerUids, {
-        type: 'billing.usage',
-        title: copy.title,
-        body: copy.body,
-        orgId: input.orgId,
-        ...(link ? { link } : {}),
-      })
-      if (recipients.subjectUid && !recipients.managerUids.includes(recipients.subjectUid)) {
-        await notify([recipients.subjectUid], {
+      // `skipEmail`: the email below is this crossing's email, so the
+      // per-person channel does not send a second one to anybody who switched
+      // billing email on (AGL-3431).
+      await notify(
+        recipients.managerUids,
+        {
           type: 'billing.usage',
           title: copy.title,
           body: copy.body,
           orgId: input.orgId,
-        })
+          ...(link ? { link } : {}),
+        },
+        { skipEmail: true },
+      )
+      if (recipients.subjectUid && !recipients.managerUids.includes(recipients.subjectUid)) {
+        await notify(
+          [recipients.subjectUid],
+          {
+            type: 'billing.usage',
+            title: copy.title,
+            body: copy.body,
+            orgId: input.orgId,
+          },
+          { skipEmail: true },
+        )
       }
       const origin = consoleOrigin()
       const managerText = link && origin ? `${copy.body}\n\n${origin}${link}` : copy.body

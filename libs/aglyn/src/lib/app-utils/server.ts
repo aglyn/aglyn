@@ -296,6 +296,9 @@ export * from './plugin-api-rate-limit'
 // `plugin-api-rate-limit`, whose `isMachinePluginApiPath` it reuses so the
 // two gates exempt exactly the same machine surfaces.
 export * from './plugin-api-cross-origin'
+// What a published page does when a visitor does something (AGL-3080): the
+// platform's interaction vocabulary, which `./actions` builds its automations on.
+export * from './site-interactions'
 export * from './actions'
 export * from './element-animation'
 export * from './attribution-guard'

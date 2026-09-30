@@ -16,6 +16,7 @@
  */
 
 import type { AglynAttributeSchema } from '../foundation/definitions/components.types'
+import type { EntityPickerKind } from './entity-picker-context'
 import type { RepeatableDataset } from './expand-repeatables'
 
 /**
@@ -81,6 +82,14 @@ export interface RepeatSource {
    * component attribute is. The panel names the field after `keyProp`.
    */
   keyAttribute: Omit<AglynAttributeSchema, 'name'>
+  /**
+   * The entity picker kind a key names, when a key is an entity the picker
+   * lists. With it, the insert-token menu inside the repeat names the entity
+   * through the picker and offers `{{item.<field>}}` for each field the
+   * entity declares (`EntityPickerContextValue.entityFields`). Without it the
+   * menu offers no item tokens and authors type them.
+   */
+  entityKind?: EntityPickerKind
   /**
    * Reads one key's rows for the besigner's canvas preview and badge. A React
    * hook: the editor mounts one reader per key and calls it unconditionally,

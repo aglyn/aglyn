@@ -203,7 +203,8 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 The single source mapping plugin ids to packages, register entry points
 per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
 declaration surfaces `declarations`, `serverDeclarations` and
-`consoleServerDeclarations`, `subprocessors` and `videoEmbedProviders`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
+`consoleServerDeclarations`, `subprocessors`, `tenantEmails` and
+`videoEmbedProviders`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
 modules that create, transfer or destroy a durable customer object, which
 `check-activity-coverage.mjs` holds to writing an activity entry.
 
@@ -263,6 +264,17 @@ inventory or another plugin already declares that the plugin's code reaches
 as well: the host keeps its one declaration, and the plugin's reason and
 data are appended to that entry. A use of a host nothing declares is
 refused — declare the host instead.
+
+A **tenantEmails** entry names a function in `@aglyn/plugins-x/tenant-emails`
+that returns the emails a site sends its own customers through the plugin —
+each with its key (the site's template document id), name, description,
+plugin, and whether the site owner designs it in the email besigner, authors
+it elsewhere, or cannot change it yet, with the default subject, merge tokens
+and built-in copy a designable one needs. The generator compiles the answer
+into the email lib's `TENANT_EMAILS` as data, because the send path reads it
+without loading any plugin. A key declared twice, an entry that names another
+plugin, or an `external` entry with no `authoredIn` is refused. Regenerate
+after changing an entry; `--check` refuses a stale catalog.
 
 The **titles manifest** (`apps/console/constants/plugins.titles.generated.ts`)
 is read from a plugin's source rather than from an entry: each console nav

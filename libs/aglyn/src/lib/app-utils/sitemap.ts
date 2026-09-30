@@ -19,8 +19,9 @@
  * Sitemap addressing and XML (AGL-2520).
  *
  * A site publishes ONE sitemap index at `/sitemap.xml` and a child sitemap per
- * section — pages, products, the catalog, and one per content collection —
- * each of which pages further at {@link SITEMAP_URLS_PER_FILE}.
+ * section — pages, authors, one per content collection, and any a plugin
+ * declares for its own pages — each of which pages further at
+ * {@link SITEMAP_URLS_PER_FILE}.
  *
  * The split is what makes the sitemap survive a site growing. The protocol
  * caps a single sitemap at 50,000 URLs and 50MB, and a flat file has no
@@ -58,10 +59,11 @@ export const SITEMAP_URLS_PER_FILE = 5000
  */
 export const SITEMAP_MAX_PAGES_PER_SECTION = 100
 
-/** The fixed sections; a content collection adds one of its own. */
+/**
+ * The platform's fixed sections. A content collection adds one of its own,
+ * and a plugin declares any its pages fill (`plugin-sitemap-sections`).
+ */
 export const SITEMAP_SECTION_PAGES = 'pages'
-export const SITEMAP_SECTION_PRODUCTS = 'products'
-export const SITEMAP_SECTION_CATALOG = 'catalog'
 /**
  * Author pages (AGL-2518) — `/author/{slug}`, one per author record.
  *
@@ -75,8 +77,8 @@ export const SITEMAP_SECTION_AUTHORS = 'authors'
 /**
  * The prefix a content collection's section carries.
  *
- * It exists so a collection slugged `products` cannot claim the commerce
- * section, and it cannot itself collide: stripping happens ONCE, so a
+ * It exists so a collection slugged like a section a plugin declares cannot
+ * claim it, and it cannot itself collide: stripping happens ONCE, so a
  * collection actually slugged `content-products` addresses
  * `content-content-products` and stays distinct from `content-products`,
  * which is the collection slugged `products`.

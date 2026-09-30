@@ -149,6 +149,12 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'templates gallery',
     'apps/console/components/templates/template-gallery-dialog.component.tsx',
   ],
+  // The gallery's marketplace shelf, drawn by the marketplace in the
+  // gallery's `templateGallery` zone since AGL-3080.
+  [
+    'templates gallery marketplace shelf',
+    'libs/plugins/marketplace/src/lib/components/template-gallery-shelf.component.tsx',
+  ],
   [
     'datasets records',
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
@@ -1238,9 +1244,10 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'apps/console/components/interaction-builder-dialog.component.tsx',
-    'A picker dialog: workflows, overlays and screens are read as the ' +
-      'OPTIONS an interaction can be bound to, which is a lookup and not a ' +
-      'surface a reader scans — the same line the ordering guard draws.',
+    'A picker dialog: screens, and the records a plugin-declared step ' +
+      'picks, are read as the OPTIONS an interaction can be bound to, which ' +
+      'is a lookup and not a surface a reader scans — the same line the ' +
+      'ordering guard draws.',
   ],
   [
     'libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx',

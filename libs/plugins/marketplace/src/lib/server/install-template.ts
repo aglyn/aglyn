@@ -30,6 +30,7 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
+import { TEMPLATE_SOURCE_TYPE } from '../constants/template-source'
 import { recordVersionMove } from './version-stats'
 import { isPublisherSecurityLocked } from './sale-risk'
 import {
@@ -225,7 +226,7 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
     // Shared across the bundle so the library can group these as one
     // install and offer them together.
     const source = {
-      type: 'marketplace' as const,
+      type: TEMPLATE_SOURCE_TYPE,
       listingId,
       version: listing.latestVersion ?? null,
     }

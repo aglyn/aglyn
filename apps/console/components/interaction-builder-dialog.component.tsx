@@ -25,6 +25,7 @@ import {
   checkEntitlement,
   components,
   createResourceUid,
+  declaredInteractionSteps,
   ELEMENT_VISIBILITY_MAX_DELAY_MS,
   ensureElementHiddenStyle,
   isClientActionStep,
@@ -32,7 +33,8 @@ import {
   isInteractionAttributeAllowed,
   planLabelGrantingFeature,
   SCROLL_TO_MAX_OFFSET_PX,
-  validateHostAction,
+  validateInteraction,
+  type InteractionStepDeclaration,
 } from '@aglyn/aglyn'
 // The analytics module is not on the `@aglyn/aglyn` barrel — it is imported by
 // the plugin SERVER graph, where the barrel's React contexts break the RSC
@@ -112,7 +114,8 @@ export interface InteractionBuilderDialogProps {
 
 type StepDraft = Record<string, any> & { type: string }
 
-const STEP_TYPES: Array<{ value: string; label: string }> = [
+/** The platform's own steps, in the order the picker lists them. */
+const PLATFORM_STEP_TYPES: Array<{ value: string; label: string }> = [
   // Element, menu & drawer choreography (AGL-562; menu commands
   // AGL-568) — the nav-menu headliners.
   { value: 'toggleElement', label: 'Show/hide an element' },
@@ -136,11 +139,97 @@ const STEP_TYPES: Array<{ value: string; label: string }> = [
   { value: 'scrollTo', label: 'Scroll to element' },
   { value: 'playVideo', label: 'Play a video' },
   { value: 'siteAlert', label: 'Show a message' },
-  { value: 'runWorkflow', label: 'Run a workflow' },
-  { value: 'showOverlay', label: 'Open an overlay' },
   { value: 'redirect', label: 'Go to a URL' },
   { value: 'trackGaEvent', label: 'Track an analytics event' },
 ]
+
+/**
+ * Every step the picker offers: the platform's own, with each step a plugin
+ * declares (`interactionSteps` in `plugins.config.json`) listed after the
+ * message step, where the steps that act on a site's records have always
+ * been. The builder names no plugin step.
+ */
+const STEP_TYPES: Array<{ value: string; label: string }> = (() => {
+  const at =
+    PLATFORM_STEP_TYPES.findIndex((entry) => entry.value === 'siteAlert') + 1
+  return [
+    ...PLATFORM_STEP_TYPES.slice(0, at),
+    ...declaredInteractionSteps().map((declaration) => ({
+      value: declaration.type,
+      label: declaration.label,
+    })),
+    ...PLATFORM_STEP_TYPES.slice(at),
+  ]
+})()
+
+/** The declared steps that pick a record, by the step type they are stored under. */
+const DECLARED_PICKS = new Map(
+  declaredInteractionSteps()
+    .filter((declaration) => declaration.picks)
+    .map((declaration) => [declaration.type, declaration]),
+)
+
+/** Every declared pick field, cleared when a step changes type. */
+const DECLARED_PICK_RESET: Record<string, undefined> = Object.fromEntries(
+  [...DECLARED_PICKS.values()].flatMap((declaration) =>
+    declaration.picks
+      ? [
+          [declaration.picks.idField, undefined],
+          [declaration.picks.nameField, undefined],
+        ]
+      : [],
+  ),
+)
+
+/**
+ * The record a declared step acts on (AGL-3080), picked from the collection
+ * its plugin declares and stored by id, with the name beside it as a display
+ * hint (AGL-261). Read only while such a step is on screen.
+ */
+function DeclaredStepPicker(props: {
+  hostId: string
+  declaration: InteractionStepDeclaration
+  step: StepDraft
+  onChange: (patch: Partial<StepDraft>) => void
+}) {
+  const { hostId, declaration, step, onChange } = props
+  const firestore = useFirestore()
+  const picks = declaration.picks as NonNullable<InteractionStepDeclaration['picks']>
+  const { data: records } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, picks.collection),
+        limit(picks.limit),
+      ),
+    [firestore, hostId, picks.collection, picks.limit],
+    { idField: '$id' },
+  )
+  const live = (records ?? []).filter((record: any) => !record.deletedAt)
+  return (
+    <TextField
+      label={picks.label}
+      value={step[picks.idField] ?? ''}
+      onChange={(inputEvent) => {
+        const record = live.find(
+          (item: any) => item.$id === inputEvent.target.value,
+        )
+        onChange({
+          [picks.idField]: inputEvent.target.value,
+          [picks.nameField]: record?.name,
+        })
+      }}
+      size="small"
+      select
+      sx={{ flex: 1 }}
+    >
+      {live.map((record: any) => (
+        <MenuItem key={record.$id} value={record.$id}>
+          {record.name ?? record.$id}
+        </MenuItem>
+      ))}
+    </TextField>
+  )
+}
 
 /** Human phrasing for the default interaction name per trigger. */
 const TRIGGER_PHRASES: Record<string, string> = {
@@ -368,8 +457,8 @@ EventParamsEditor.displayName = 'EventParamsEditor'
 /**
  * Fluent interaction builder (AGL-319): the whole trigger + actions +
  * frequency configuration in one dialog on the canvas — replacing the
- * old "create disabled, finish on the Automation page" detour. Pickers
- * only for workflows/overlays (id-based, AGL-261); element/class steps
+ * old "create disabled, finish on the Automation page" detour. Record
+ * pickers only for the steps plugins declare (id-based, AGL-261); element/class steps
  * pick their target by clicking it on the canvas (AGL-574) and Test runs
  * class steps against the live canvas DOM.
  */
@@ -381,16 +470,6 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
   const createResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
 
-  const { data: workflowDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const { data: overlayDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
   // Screen picker for redirects (AGL-339): stored by id, rename-safe.
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
@@ -429,7 +508,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
    */
   const stepPlanGate = useCallback(
     (type: string): StepPlanGate => {
-      const step = { type } as unknown as Aglyn.HostActionStep
+      const step = { type }
       return {
         entitled: isClientActionStep(step)
           ? isClientStepEntitled(step, stepEntitlements)
@@ -617,7 +696,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     )
   }
 
-  const problem = validateHostAction(candidate as any)
+  const problem = validateInteraction(candidate)
 
   // Test (AGL-314/319): class steps execute against the canvas DOM so
   // the designer sees the result immediately; everything else explains
@@ -910,8 +989,8 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     // Reset type-specific fields, keep the selector.
                     className: undefined,
                     message: undefined,
-                    workflowId: undefined,
-                    overlayId: undefined,
+                    // A declared step's pick belongs to that step alone.
+                    ...DECLARED_PICK_RESET,
                     url: undefined,
                     eventName: undefined,
                     // Analytics parameters belong to the event that names
@@ -1162,55 +1241,15 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                   sx={{ flex: 1 }}
                 />
               ) : null}
-              {step.type === 'runWorkflow' ? (
-                <TextField
-                  label="Workflow"
-                  value={step.workflowId ?? ''}
-                  onChange={(inputEvent) => {
-                    const workflow = (workflowDocs ?? []).find(
-                      (item: any) => item.$id === inputEvent.target.value,
-                    )
-                    updateStep(index, {
-                      workflowId: inputEvent.target.value,
-                      workflowName: workflow?.name,
-                    })
-                  }}
-                  size="small"
-                  select
-                  sx={{ flex: 1 }}
-                >
-                  {(workflowDocs ?? [])
-                    .filter((workflow: any) => !workflow.deletedAt)
-                    .map((workflow: any) => (
-                      <MenuItem key={workflow.$id} value={workflow.$id}>
-                        {workflow.name ?? workflow.$id}
-                      </MenuItem>
-                    ))}
-                </TextField>
-              ) : null}
-              {step.type === 'showOverlay' ? (
-                <TextField
-                  label="Overlay"
-                  value={step.overlayId ?? ''}
-                  onChange={(inputEvent) => {
-                    const overlay = (overlayDocs ?? []).find(
-                      (item: any) => item.$id === inputEvent.target.value,
-                    )
-                    updateStep(index, {
-                      overlayId: inputEvent.target.value,
-                      overlayName: overlay?.name,
-                    })
-                  }}
-                  size="small"
-                  select
-                  sx={{ flex: 1 }}
-                >
-                  {(overlayDocs ?? []).map((overlay: any) => (
-                    <MenuItem key={overlay.$id} value={overlay.$id}>
-                      {overlay.name ?? overlay.$id}
-                    </MenuItem>
-                  ))}
-                </TextField>
+              {DECLARED_PICKS.has(step.type) ? (
+                <DeclaredStepPicker
+                  hostId={hostId}
+                  declaration={
+                    DECLARED_PICKS.get(step.type) as InteractionStepDeclaration
+                  }
+                  step={step}
+                  onChange={(patch) => updateStep(index, patch)}
+                />
               ) : null}
               {step.type === 'redirect' ? (
                 <>

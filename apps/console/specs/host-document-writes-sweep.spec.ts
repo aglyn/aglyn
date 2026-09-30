@@ -453,12 +453,13 @@ describe('/v1: every write handler of rendered data announces', () => {
         'Create only: a new file is on no page until one references it. The ' +
         'API has no replace or delete for media.',
     },
-    'api-v1-resources.ts#createContact': { unrendered: 'CRM; never rendered.' },
-    'api-v1-resources.ts#updateContact': { unrendered: 'CRM; never rendered.' },
-    'api-v1-resources.ts#deleteContact': { unrendered: 'CRM; never rendered.' },
   }
-  /** Whole modules that hold CRM resources only, none of them rendered. */
-  const CRM_MODULES = /^crm-|^contacts-merge\.ts$/
+  /**
+   * The CRM's resources, served from the plugin (AGL-3080): whole modules
+   * that hold CRM records only, none of them rendered.
+   */
+  const CRM_API_V1 = join(PLUGINS, 'crm', 'src', 'lib', 'server', 'api-v1')
+  const CRM_MODULES = /^crm-|^contacts(?:-merge)?\.ts$/
 
   const WRITE = [
     /\bawait\s+[\w$]+(?:\s*(?:\.\w+|\((?:[^()]|\([^()]*\))*\)))*?\s*\.(?:create|update|set|delete)\(/,
@@ -523,7 +524,7 @@ describe('/v1: every write handler of rendered data announces', () => {
     // They write only under `orgs/{orgId}` CRM collections. A write into a
     // host from one of them is a new kind of write, and belongs in the table
     // above instead of under this blanket.
-    const dir = join(CONSOLE, 'utils', 'api-v1')
+    const dir = CRM_API_V1
     const crm = readdirSync(dir).filter(
       (name) => CRM_MODULES.test(name) && !name.includes('.spec.'),
     )

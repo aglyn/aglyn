@@ -102,9 +102,13 @@ Nothing here guarantees that a price or feature set will remain the same.
   one-to-one emails sent today, [AI assist credits](#assist-overage), and more — with
   redesigned plan cards.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
-- Org admins also get an in-app **notification** when email sends, dataset count, data
-  storage, or [bandwidth](bandwidth.md) crosses 80% or 100% — once per threshold per month,
-  so nobody has to be watching the console to find out. The bandwidth message differs by
+- Org admins also get an in-app **notification** and an email when sites, pages on a site,
+  storage, datasets, email sends, or [bandwidth](bandwidth.md) crosses 80% or 100%, so nobody
+  has to be watching the console to find out. Each is sent once per crossing: something your
+  workspace has — sites, pages, datasets, stored files and data — is announced when it first
+  reaches a threshold and again only if it drops below and reaches it again, and a monthly
+  meter — email sends, runs, bandwidth, AI credits — once per threshold each month, because
+  it starts from zero on the 1st. The bandwidth message differs by
   plan, because what happens next differs by plan: paid organizations are told the extra is
   billed, Free organizations are told the site will be paused.
 - The monthly email allowance caps **campaign sends**. Transactional mail — password
