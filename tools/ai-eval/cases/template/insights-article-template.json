@@ -1,0 +1,154 @@
+{
+  "id": "template-insights-article",
+  "kind": "template",
+  "brief": "A page template for each of our insights articles: the headline, the author and date, the article body, and a short list of related reading.",
+  "framing": null,
+  "templateSubject": "entry",
+  "inventory": {
+    "hostId": "host-harbor-law",
+    "components": [
+      { "id": "cmp-practice-card", "name": "Practice area card", "props": { "title": "text", "body": "text", "image": "image" } }
+    ],
+    "layouts": [{ "id": "lay-article", "name": "Insights article layout", "parentId": null }],
+    "templates": [],
+    "forms": [],
+    "datasets": [],
+    "collections": [{ "id": "col-insights", "name": "Insights", "slug": "insights" }],
+    "screens": [{ "id": "scr-home", "name": "Home", "slug": "/", "layoutId": "lay-article", "template": false }],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#1f3a5f" }, "fonts": ["Inter"] },
+    "truncated": []
+  },
+  "expected": {
+    "plan": { "screens": [0, 0], "createKinds": ["template"], "maxCreate": 1 }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand for the brief AGL-3024 measured on 2026-09-22 (AGL-3433): the headline bound to the entry's title, a byline, the body and related reading as the blocks that fill themselves, and no video, because the brief asked for none.",
+      "plan": {
+        "reuse": [
+          { "kind": "layout", "id": "lay-article", "purpose": "the article shell every insights entry renders in" },
+          { "kind": "collection", "id": "col-insights", "purpose": "the entry this page shows, and the others its related list reads" }
+        ],
+        "create": [
+          {
+            "kind": "template",
+            "name": "Insights article",
+            "why": "No template renders an insights entry's headline, byline, body and related reading.",
+            "duplicateOf": null,
+            "fields": ["{{entry.title}}", "{{entry.author}}", "{{entry.date}}"]
+          }
+        ],
+        "screens": []
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["article"] },
+            "article": { "componentId": "section", "props": { "element": "article", "ariaLabel": "Article" }, "nodes": ["headline", "byline", "body", "related"] },
+            "headline": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "{{entry.title}}" } },
+            "byline": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "By {{entry.author}} · {{entry.date}}" } },
+            "body": { "componentId": "collectionEntryBody" },
+            "related": { "componentId": "collectionRelated", "props": { "heading": "Related reading", "layout": "list" } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": 5, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "The 9/22 answer's shape: a Video embed the brief never asked for, playing the entry's featured video, on a template every article renders (rules 16 and 17).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["article"] },
+            "article": { "componentId": "section", "props": { "element": "article", "ariaLabel": "Article" }, "nodes": ["headline", "byline", "body_video", "body", "related"] },
+            "headline": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "{{entry.title}}" } },
+            "byline": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "By {{entry.author}} · {{entry.date}}" } },
+            "body_video": { "componentId": "videoEmbed", "props": { "url": "{{entry.coverVideo}}", "height": "480px" } },
+            "body": { "componentId": "collectionEntryBody" },
+            "related": { "componentId": "collectionRelated", "props": { "heading": "Related reading", "layout": "list" } }
+          }
+        }
+      },
+      "fails": ["rules", "budget"]
+    },
+    {
+      "why": "The same player at a YouTube link the brief never gave, which is the other thing the 9/22 node could have held (rules 16 and 17).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["article"] },
+            "article": { "componentId": "section", "props": { "element": "article", "ariaLabel": "Article" }, "nodes": ["headline", "byline", "body_video", "body", "related"] },
+            "headline": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "{{entry.title}}" } },
+            "byline": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "By {{entry.author}} · {{entry.date}}" } },
+            "body_video": { "componentId": "videoEmbed", "props": { "url": "https://www.youtube.com/watch?v=abcdefghijk" } },
+            "body": { "componentId": "collectionEntryBody" },
+            "related": { "componentId": "collectionRelated", "props": { "heading": "Related reading", "layout": "list" } }
+          }
+        }
+      },
+      "fails": ["rules", "budget"]
+    },
+    {
+      "why": "The featured video on the library player behind its poster, which the confirmed plan does not list, so every article would load a player nobody asked for (rule 16).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["article"] },
+            "article": { "componentId": "section", "props": { "element": "article", "ariaLabel": "Article" }, "nodes": ["headline", "byline", "featured", "body", "related"] },
+            "headline": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "{{entry.title}}" } },
+            "byline": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "By {{entry.author}} · {{entry.date}}" } },
+            "featured": { "componentId": "video", "props": { "src": "{{entry.coverVideo}}", "poster": "{{entry.coverImage}}" } },
+            "body": { "componentId": "collectionEntryBody" },
+            "related": { "componentId": "collectionRelated", "props": { "heading": "Related reading", "layout": "list" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A plan that lists a YouTube player on the template, quoting words of the brief that ask for no video (rule 16, plan).",
+      "plan": {
+        "reuse": [
+          { "kind": "layout", "id": "lay-article", "purpose": "the article shell every insights entry renders in" },
+          { "kind": "collection", "id": "col-insights", "purpose": "the entry this page shows, and the others its related list reads" }
+        ],
+        "create": [
+          {
+            "kind": "template",
+            "name": "Insights article",
+            "why": "No template renders an insights entry's headline, byline, body and related reading.",
+            "duplicateOf": null,
+            "fields": ["{{entry.title}}", "{{entry.author}}", "{{entry.date}}"]
+          }
+        ],
+        "screens": [],
+        "embeds": [{ "host": "youtube", "where": "new:Insights article", "asked": "the article body", "url": null }]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["article"] },
+            "article": { "componentId": "section", "props": { "element": "article", "ariaLabel": "Article" }, "nodes": ["headline", "byline", "body", "related"] },
+            "headline": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "{{entry.title}}" } },
+            "byline": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "By {{entry.author}} · {{entry.date}}" } },
+            "body": { "componentId": "collectionEntryBody" },
+            "related": { "componentId": "collectionRelated", "props": { "heading": "Related reading", "layout": "list" } }
+          }
+        }
+      },
+      "fails": ["plan"]
+    }
+  ]
+}

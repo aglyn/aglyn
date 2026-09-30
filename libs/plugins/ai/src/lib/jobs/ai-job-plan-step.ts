@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
   AI_BUILD_PLAN_TOOL,
+  aiBuildPlanToolFor,
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
@@ -38,8 +39,12 @@ import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { AI_SITE_CREATE_KINDS, aiSitePlanShapeRefusal } from '../model/ai-site-job'
 import { aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
 import { AI_STEP_TIERS } from '../providers/catalog'
-import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import {
+  aiPlanEmbedBriefViolations,
+  type AiDoctrineViolation,
+} from '../runtime/ai-doctrine-validators'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import type { AiTool } from '../providers/contract'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
@@ -193,12 +198,22 @@ export const AI_JOB_PLAN_SCOPES: Readonly<Partial<Record<AiJobKind, AiJobPlanSco
   site: { noun: 'a site scaffold', creates: AI_SITE_CREATE_KINDS, shapeRefusal: aiSitePlanShapeRefusal },
 }
 
-/** A kind's shape refusal as the violation the plan's one re-ask names. */
-function shapeViolations(scope: AiJobPlanScope | null): ((plan: AiBuildPlan) => AiDoctrineViolation[]) | undefined {
-  if (!scope) return undefined
+/**
+ * What the plan step holds beyond the doctrine's plan rules, as the
+ * violations the plan's one re-ask names: the players the plan lists against
+ * the brief it answers (AGL-3433), which only this step reads beside the plan,
+ * and a kind's shape refusal.
+ */
+function planViolations(
+  scope: AiJobPlanScope | null,
+  brief: string,
+): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   return (plan) => {
-    const message = scope.shapeRefusal(plan)
-    return message ? [{ rule: null, code: 'plan-job-shape', message }] : []
+    const message = scope?.shapeRefusal(plan) ?? null
+    return [
+      ...aiPlanEmbedBriefViolations(plan, brief),
+      ...(message ? [{ rule: null, code: 'plan-job-shape', message }] : []),
+    ]
   }
 }
 
@@ -291,6 +306,8 @@ export function aiJobPlanKey(input: {
   prompt: string
   model: string
   system: readonly AiSystemBlock[]
+  /** The plan tool the request offers (AGL-3433); the plain one when absent. */
+  tool?: AiTool
 }): string {
   const digest = createHash('sha256')
   for (const part of [
@@ -300,7 +317,7 @@ export function aiJobPlanKey(input: {
     input.model,
     input.prompt,
     ...input.system.map((block) => block.text),
-    JSON.stringify(AI_BUILD_PLAN_TOOL),
+    JSON.stringify(input.tool ?? AI_BUILD_PLAN_TOOL),
   ]) {
     // Length-prefixed, so two different splits of the same characters cannot
     // collide by running into one another.
@@ -460,11 +477,14 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // — this job's plan is proposed to this member, whatever the last one did
     // with theirs.
     const resolved = model ?? aiModelForStep('job.plan')
+    // A brief that asks for a video is offered the plan's list of players (AGL-3433).
+    const tool = aiBuildPlanToolFor(job.brief)
     const key = aiJobPlanKey({
       job,
       prompt,
       model: resolved,
       system: aiDoctrineSystemBlocks(inventory, { instructions: AI_JOB_PLAN_INSTRUCTIONS }),
+      tool,
     })
     const reused = findPlansByKey
       ? aiReusablePlan(await findPlansByKey(job.orgId, key, firestore), {
@@ -500,7 +520,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       instructions: AI_JOB_PLAN_INSTRUCTIONS,
       inventory,
       messages: [{ role: 'user', content: prompt }],
-      tool: AI_BUILD_PLAN_TOOL,
+      tool,
       // The routing ceiling, lowered on a tier too slow to look records up,
       // answer and ask again inside the least time the step registered.
       maxTokens: aiJobPlanMaxTokens(resolved),
@@ -508,7 +528,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
       capabilities,
-      extend: shapeViolations(scope),
+      extend: planViolations(scope, job.brief),
     })
     const spent: AiJobStepOutcome = {
       outputs: [],

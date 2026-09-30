@@ -45,6 +45,7 @@ import {
   aiDanglingWord,
   aiDoctrineViolationText,
   aiFreePageSectionsWithin,
+  aiPlanEmbedBriefViolations,
   aiNamesMatch,
   aiTreeCopy,
   detectAdHocWidths,
@@ -65,6 +66,7 @@ import {
   detectOffBrandEmail,
   detectOffVoiceCopy,
   detectOverBudget,
+  detectPlanEmbeds,
   detectPlanInlineForms,
   detectPlanLayoutRegions,
   detectPlanLiteralColors,
@@ -1592,10 +1594,130 @@ describe('rule 16 — the smallest document that does the job', () => {
     expect(codes(detectHeavyDocument(video, 'page'))).toEqual(['autoplay-video'])
   })
 
-  it('passes an embed the plan named, and a lean section', () => {
-    expect(
-      detectHeavyDocument(tree(page(section(text('h1', 'Roofs', 'h1')), { componentId: 'videoEmbed', props: { url: 'https://video.example.com/x' } })), 'page', { allowEmbeds: true }),
-    ).toEqual([])
+  describe('a third-party player (AGL-3433)', () => {
+    const YOUTUBE = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    const player = (url?: string) => ({ componentId: 'videoEmbed', props: url ? { url } : {} })
+    const planned = [{ host: 'youtube' as const, url: 'https://youtu.be/dQw4w9WgXcQ' }]
+
+    it('passes the player the plan lists, at the brief’s link however it is spelled, and a lean section', () => {
+      expect(
+        detectHeavyDocument(tree(page(section(text('h1', 'Roofs', 'h1')), player(YOUTUBE))), 'page', {
+          plannedEmbeds: planned,
+        }),
+      ).toEqual([])
+    })
+
+    it('passes a planned player whose link is left for the site owner to paste', () => {
+      expect(detectHeavyDocument(tree(page(player())), 'page', { plannedEmbeds: planned })).toEqual([])
+    })
+
+    it('refuses a player the plan does not list, and names what the model can do instead', () => {
+      const found = detectHeavyDocument(tree(page(player(YOUTUBE))), 'page')
+      expect(codes(found)).toEqual(['third-party-embed'])
+      expect(found[0].message).toContain('Remove it')
+      expect(found[0].message).toContain('Video (video)')
+      expect(found[0].message).not.toContain('in the plan')
+    })
+
+    it('refuses the 9/22 template’s player whether its link was the featured-video token or a made-up one', () => {
+      for (const url of ['{{entry.coverVideo}}', 'https://www.youtube.com/watch?v=abcdefghijk']) {
+        expect(codes(detectHeavyDocument(tree(page(player(url))), 'template'))).toEqual(['third-party-embed'])
+      }
+    })
+
+    it('refuses a planned player that plays a video the brief did not give', () => {
+      const found = detectHeavyDocument(tree(page(player('https://vimeo.com/123456789'))), 'page', {
+        plannedEmbeds: planned,
+      })
+      expect(codes(found)).toEqual(['embed-link-unplanned'])
+    })
+
+    it('passes a featured video bound to the library player behind a poster', () => {
+      const bound = tree(
+        page({ componentId: 'video', props: { src: '{{entry.coverVideo}}', poster: '{{entry.coverImage}}' } }),
+      )
+      expect(detectHeavyDocument(bound, 'template')).toEqual([])
+    })
+  })
+})
+
+describe('rule 16 (plan) — a third-party player the brief asks for (AGL-3433)', () => {
+  const BRIEF =
+    'An About page for the crew. Put our intro video from YouTube at the top: https://youtu.be/dQw4w9WgXcQ'
+  const embed = (patch: Partial<NonNullable<AiBuildPlan['embeds']>[number]> = {}) => ({
+    host: 'youtube' as const,
+    where: '/services/roof-repair',
+    asked: 'our intro video from YouTube',
+    url: 'https://youtu.be/dQw4w9WgXcQ',
+    ...patch,
+  })
+  const creation = (kind: AiBuildPlan['create'][number]['kind'], name: string) => ({
+    kind,
+    name,
+    why: 'Nothing the site has shows it.',
+    duplicateOf: null,
+    fields: [],
+  })
+
+  it('passes a player on a screen the plan builds or a component it creates, with the brief’s own words and link', () => {
+    const plan = planOf({
+      create: [creation('component', 'crew-video')],
+      embeds: [embed(), embed({ where: 'new:crew-video', url: null })],
+    })
+    expect(detectPlanEmbeds(plan)).toEqual([])
+    expect(aiPlanEmbedBriefViolations(plan, BRIEF)).toEqual([])
+  })
+
+  it('refuses a player on a template or a layout, which would load it on every page it serves', () => {
+    const plan = planOf({
+      create: [creation('template', 'article'), creation('layout', 'site')],
+      embeds: [embed({ where: 'new:article' }), embed({ where: 'new:site' })],
+    })
+    const found = detectPlanEmbeds(plan)
+    expect(codes(found)).toEqual(['plan-embed-refused'])
+    expect(found[0].paths).toEqual(['embeds[0].where', 'embeds[1].where'])
+  })
+
+  it('refuses a player planned where the plan builds nothing, more players than a page carries, and a link of another host', () => {
+    const plan = planOf({
+      embeds: [
+        embed({ where: '/nowhere' }),
+        embed(),
+        embed({ asked: 'intro video' }),
+        embed({ host: 'vimeo' }),
+      ],
+    })
+    expect(codes(detectPlanEmbeds(plan))).toEqual([
+      'plan-embed-nowhere',
+      'plan-embed-over-budget',
+      'plan-embed-link-host',
+    ])
+  })
+
+  it('refuses a player the brief never asks for, and a link the brief never gives', () => {
+    const plan = planOf({
+      embeds: [
+        embed({ asked: 'a short list of related reading', url: null }),
+        embed({ asked: 'the crew', url: null }),
+        embed({ url: 'https://www.youtube.com/watch?v=abcdefghijk' }),
+      ],
+    })
+    const found = aiPlanEmbedBriefViolations(plan, BRIEF)
+    expect(codes(found)).toEqual(['plan-embed-not-asked', 'plan-embed-link-not-given'])
+    expect(found[0].paths).toEqual(['embeds[0].asked', 'embeds[1].asked'])
+    expect(found[1].paths).toEqual(['embeds[2].url'])
+  })
+
+  it('refuses the 9/22 article template’s player: its brief asked for no video', () => {
+    const brief =
+      'A page template for each of our insights articles: the headline, the author and date, the article body, and a short list of related reading.'
+    const plan = planOf({ embeds: [embed({ asked: 'the article body', url: null })] })
+    expect(codes(aiPlanEmbedBriefViolations(plan, brief))).toEqual(['plan-embed-not-asked'])
+  })
+
+  it('runs with every plan rule', () => {
+    const plan = planOf({ create: [creation('template', 'article')], embeds: [embed({ where: 'new:article' })] })
+    expect(codes(validateAiBuildPlan(plan, INVENTORY))).toContain('plan-embed-refused')
   })
 })
 

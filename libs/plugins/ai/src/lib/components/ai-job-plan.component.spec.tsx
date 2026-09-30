@@ -24,7 +24,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AI_SITE_PASS_CREDITS, aiPlanCreditEstimate } from '../model/ai-site-job'
-import { AiJobPlan, aiJobReviewDetails } from './ai-job-plan.component'
+import { AiJobPlan, aiJobReviewDetails, aiPlanEmbedLine } from './ai-job-plan.component'
 
 const PLAN = {
   reuse: [],
@@ -213,5 +213,35 @@ describe('where a refused answer broke its rules (AGL-3078)', () => {
     expect(screen.getByText('A Grid lays out columns only as a container.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Show what was refused' })).toBeNull()
     expect(screen.queryByText(/areas-grid/)).toBeNull()
+  })
+})
+
+describe('a planned third-party player, read with its cost before it is confirmed (AGL-3433)', () => {
+  const named = (ref: string) => (ref.startsWith('new:') ? ref.slice(4) : ref)
+
+  it('names the host, where it plays, the brief’s words and what it loads', () => {
+    expect(
+      aiPlanEmbedLine(
+        { host: 'youtube', where: '/about', asked: 'our intro video', url: 'https://youtu.be/dQw4w9WgXcQ' },
+        named,
+      ),
+    ).toBe(
+      'Embeds a YouTube player on /about playing https://youtu.be/dQw4w9WgXcQ, as you asked (“our intro video”). It loads YouTube’s own code when a visitor reaches it, whether or not they press play.',
+    )
+    expect(
+      aiPlanEmbedLine({ host: 'vimeo', where: 'new:Crew video', asked: 'the Vimeo walkthrough', url: null }, named),
+    ).toBe(
+      'Embeds a Vimeo player on the component Crew video, its link left for you to paste, as you asked (“the Vimeo walkthrough”). It loads Vimeo’s own code when a visitor reaches it, whether or not they press play.',
+    )
+  })
+
+  it('lists it with the plan a member confirms', () => {
+    const plan = {
+      ...PLAN,
+      screens: [{ ...PLAN.screens[0], slug: '/about' }],
+      embeds: [{ host: 'youtube' as const, where: '/about', asked: 'our intro video', url: null }],
+    }
+    render(<AiJobPlan job={job({ plan })} onResume={() => undefined} />)
+    expect(screen.getByText(/Embeds a YouTube player on \/about/).textContent).toContain('whether or not they press play')
   })
 })

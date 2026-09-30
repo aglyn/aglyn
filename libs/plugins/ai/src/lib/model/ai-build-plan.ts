@@ -168,10 +168,42 @@ export interface AiBuildPlanScreen {
   id?: string
 }
 
+/** The third-party players a plan may embed: the hosts the Video embed element plays. */
+export type AiBuildPlanEmbedHost = 'youtube' | 'vimeo'
+
+export const AI_BUILD_PLAN_EMBED_HOSTS: readonly AiBuildPlanEmbedHost[] = ['youtube', 'vimeo']
+
+/** What each host is called in a sentence. */
+export const AI_BUILD_PLAN_EMBED_HOST_NAMES: Record<AiBuildPlanEmbedHost, string> = {
+  youtube: 'YouTube',
+  vimeo: 'Vimeo',
+}
+
+/**
+ * A third-party player the brief asks for (rule 16, AGL-3433). It loads its
+ * host's code on the page that carries it, so it is planned, where the member
+ * reads that cost before confirming, and a build admits only what the
+ * confirmed plan lists.
+ */
+export interface AiBuildPlanEmbed {
+  host: AiBuildPlanEmbedHost
+  /** Where it plays: a screen of the plan by its slug, or `new:<name>` for a component the plan creates. */
+  where: string
+  /** The brief's own words asking for it, which the plan step finds in the brief. */
+  asked: string
+  /** The video's link as the brief gives it, or null for the site owner to paste. */
+  url: string | null
+}
+
 export interface AiBuildPlan {
   reuse: AiBuildPlanReuse[]
   create: AiBuildPlanCreate[]
   screens: AiBuildPlanScreen[]
+  /**
+   * The third-party players the brief asks for. Absent is none: a plan kept
+   * before the list existed, and every plan whose brief asks for no player.
+   */
+  embeds?: AiBuildPlanEmbed[]
 }
 
 /**
@@ -186,6 +218,7 @@ export const AI_BUILD_PLAN_LIMITS = {
   sections: 16,
   uses: 8,
   fields: 30,
+  embeds: 4,
   text: 200,
   seoDescription: 320,
   items: 500,
@@ -330,6 +363,50 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
   },
 }
 
+/** Words that ask for a video, or a link to one. */
+export const AI_PLAN_ASKS_FOR_VIDEO = /\b(?:videos?|films?|clips?|youtube|vimeo|player)\b|youtu\.be/i
+
+const EMBEDS_SCHEMA = {
+  type: 'array',
+  description:
+    'A YouTube or Vimeo player the brief asks for, on a screen or a created component. Empty unless the brief asks; a library film is a Video.',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['host', 'where', 'asked', 'url'],
+    properties: {
+      host: { type: 'string', enum: [...AI_BUILD_PLAN_EMBED_HOSTS] },
+      where: string('A screen slug, or new:<name> of a component.'),
+      asked: string('The words of the brief that ask for it, copied exactly.'),
+      url: nullableString('The video link the brief gives, or null.'),
+    },
+  },
+}
+
+/**
+ * The plan tool with its list of third-party players, offered only to a brief
+ * that asks for a video (AGL-3433). Every other plan's request is the plain
+ * tool, byte for byte, so the list costs nothing on the plans that cannot use
+ * it, and a model answering a brief that names no video has nowhere to plan a
+ * player it was never asked for.
+ */
+export const AI_BUILD_PLAN_EMBEDS_TOOL: AiTool = {
+  ...AI_BUILD_PLAN_TOOL,
+  inputSchema: {
+    ...AI_BUILD_PLAN_TOOL.inputSchema,
+    required: [...(AI_BUILD_PLAN_TOOL.inputSchema['required'] as string[]), 'embeds'],
+    properties: {
+      ...(AI_BUILD_PLAN_TOOL.inputSchema['properties'] as Record<string, unknown>),
+      embeds: EMBEDS_SCHEMA,
+    },
+  },
+}
+
+/** The plan tool a brief is answered with. */
+export function aiBuildPlanToolFor(brief: string): AiTool {
+  return AI_PLAN_ASKS_FOR_VIDEO.test(brief) ? AI_BUILD_PLAN_EMBEDS_TOOL : AI_BUILD_PLAN_TOOL
+}
+
 export type AiBuildPlanParse =
   | { ok: true; plan: AiBuildPlan; repairs: string[] }
   | { ok: false; error: string }
@@ -465,7 +542,25 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         }
       },
     )
-    return { ok: true, plan: { reuse, create, screens }, repairs }
+    const embeds = list(root['embeds'] ?? [], 'embeds', AI_BUILD_PLAN_LIMITS.embeds).map(
+      (raw, index) => {
+        const entry = record(raw, `embeds[${index}]`)
+        const where = text(entry['where'], `embeds[${index}].where`)
+        if (!where) throw new PlanShapeError(`embeds[${index}].where is empty`)
+        return {
+          host: oneOf(entry['host'], AI_BUILD_PLAN_EMBED_HOSTS, `embeds[${index}].host`),
+          where,
+          asked: text(entry['asked'], `embeds[${index}].asked`),
+          url: nullable(entry['url'], `embeds[${index}].url`),
+        }
+      },
+    )
+    // A plan whose brief asks for no player carries no list, as it did before the list existed.
+    return {
+      ok: true,
+      plan: { reuse, create, screens, ...(embeds.length ? { embeds } : {}) },
+      repairs,
+    }
   } catch (error) {
     if (error instanceof PlanShapeError) return { ok: false, error: error.message }
     throw error
@@ -485,6 +580,67 @@ export function aiPlanCreateFor(
   if (!isAiPlanNewRef(ref)) return undefined
   const name = ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
   return plan.create.find((entry) => entry.name.toLowerCase() === name)
+}
+
+/** A slug as two spellings of one path compare: lowercase, one leading slash, no trailing one. */
+export function aiPlanSlugKey(slug: string): string {
+  const path = slug.trim().toLowerCase().replace(/^\/*/, '/').replace(/\/+$/, '')
+  return path || '/'
+}
+
+/**
+ * The players the plan lists for one output (AGL-3433): a screen by its slug,
+ * or a creation by its name. A build admits these and no other.
+ */
+export function aiPlanEmbedsFor(
+  plan: Pick<AiBuildPlan, 'embeds'> | null | undefined,
+  target: { slug: string } | { create: string },
+): AiBuildPlanEmbed[] {
+  const key =
+    'slug' in target
+      ? aiPlanSlugKey(target.slug)
+      : `${AI_PLAN_NEW_REF_PREFIX}${target.create.trim().toLowerCase()}`
+  return (plan?.embeds ?? []).filter((embed) =>
+    'slug' in target
+      ? !isAiPlanNewRef(embed.where) && aiPlanSlugKey(embed.where) === key
+      : embed.where.trim().toLowerCase() === key,
+  )
+}
+
+/** The host a video link plays from, or null for a link neither host serves. */
+export function aiEmbedHostOf(url: string): AiBuildPlanEmbedHost | null {
+  try {
+    const parsed = new URL(url.trim())
+    if (parsed.protocol !== 'https:') return null
+    const host = parsed.hostname.replace(/^(?:www|m)\./, '')
+    if (host === 'youtu.be' || host === 'youtube.com' || host === 'youtube-nocookie.com') {
+      return 'youtube'
+    }
+    if (host === 'vimeo.com' || host === 'player.vimeo.com') return 'vimeo'
+  } catch {
+    /* not a link */
+  }
+  return null
+}
+
+/**
+ * One video however its link is spelled — `youtu.be/<id>`, a watch link, an
+ * embed or a Shorts link — as `<host>:<id>`, the way the Video embed element
+ * reads a link; null for a link it cannot play.
+ */
+export function aiEmbedVideoKey(url: string): string | null {
+  const host = aiEmbedHostOf(url)
+  if (!host) return null
+  const parsed = new URL(url.trim())
+  const parts = parsed.pathname.split('/').filter(Boolean)
+  const id =
+    host === 'vimeo'
+      ? parts.find((part) => /^\d{6,}$/.test(part))
+      : parsed.hostname.endsWith('youtu.be')
+        ? parts[0]
+        : (parsed.searchParams.get('v') ??
+          (parts[0] === 'embed' || parts[0] === 'shorts' ? parts[1] : undefined))
+  return id && /^[\w-]{6,20}$/.test(id) ? `${host}:${id}` : null
 }
 
 /**

@@ -19,7 +19,13 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
 } from '@aglyn/aglyn/app-utils/reusable-component-keys'
-import type { AiBuildPlanCreate, AiBuildPlanCreateKind } from '../model/ai-build-plan'
+import {
+  AI_BUILD_PLAN_EMBED_HOST_NAMES,
+  AI_PLAN_NEW_REF_PREFIX,
+  isAiPlanNewRef,
+  type AiBuildPlanCreate,
+  type AiBuildPlanCreateKind,
+} from '../model/ai-build-plan'
 import type {
   AiJob,
   AiJobOutput,
@@ -98,6 +104,14 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
   for (const screen of plan.screens) {
     const sections = screen.sections.map((section) => section.name).join(', ')
     lines.push(`- the screen "${screen.title}" at ${screen.slug}${sections ? `: ${sections}` : ''}`)
+  }
+  // The one place a Video embed is admitted (AGL-3433): where the plan lists it, at the brief's link or none.
+  for (const embed of plan.embeds ?? []) {
+    const where = isAiPlanNewRef(embed.where)
+      ? `the component "${embed.where.slice(AI_PLAN_NEW_REF_PREFIX.length)}"`
+      : embed.where
+    const link = embed.url ? `, url ${embed.url}` : ', url left empty for the site owner to paste'
+    lines.push(`- embed a ${AI_BUILD_PLAN_EMBED_HOST_NAMES[embed.host]} player (videoEmbed) on ${where}${link}`)
   }
   return lines.length > 1 ? lines : []
 }

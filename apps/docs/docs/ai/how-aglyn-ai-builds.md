@@ -38,7 +38,11 @@ Before it generates anything, a build job proposes a **plan**:
   datasets and collections;
 - what it will **create**, and why nothing you already have will do;
 - the **screens** it will build, each with its layout, address, search title and
-  sections.
+  sections;
+- any **YouTube or Vimeo player** your brief asks for, the page or component it
+  goes on, and what it costs: a player loads its host's own code when a visitor
+  reaches it, whether or not they press play. A brief that asks for no video gets
+  no player.
 
 A plan only proposes what your workspace can create: what your plan includes, and what
 your site still has room for. A plan the job could not build is stopped before you are
@@ -118,8 +122,11 @@ generated until you confirm.
 16. **The smallest document that does the job.** Generated pages use the fewest
     elements that render the design: no empty or doubled-up containers, no list item
     or card with nothing in it, text as text, images that load as they are reached,
-    video that plays on click, and no
-    fonts or third-party embeds you did not ask for.
+    video that plays on click behind its poster, and no fonts you did not ask for.
+    A YouTube or Vimeo player appears only where the plan you confirmed lists it,
+    playing the link your brief gave or waiting for you to paste one. A template
+    or a layout never carries one, because it would load on every page it serves;
+    a template plays an entry's featured video only when its plan lists it.
 17. **A measured size for every output.** Each page, component, layout, form and
     email is measured (elements, stored size, image weight, embeds and fonts)
     against a budget for its kind, and an email is kept under the size mail apps
