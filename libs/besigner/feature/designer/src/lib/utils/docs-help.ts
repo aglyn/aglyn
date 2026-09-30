@@ -27,6 +27,7 @@ import {
 
 export {
   BESIGNER_DOCS,
+  BESIGNER_DOCS_ANCHORS,
   type BesignerDocsAnchor,
   type BesignerDocsKey,
 } from './docs-help.generated'

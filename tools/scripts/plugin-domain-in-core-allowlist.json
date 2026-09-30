@@ -848,13 +848,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/besigner/feature/designer/src/lib/components/element-detail.component.tsx",
-      "rules": [
-        "domain-declares:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",
       "rules": [
         "domain-name"
