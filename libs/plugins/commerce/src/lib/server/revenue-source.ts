@@ -36,7 +36,7 @@
  * it would report the 30¢ Stripe just took as money the platform made.
  *
  * So the pass-through is recomputed with the SAME helper the fee was charged
- * from (`storefrontProcessingCostCents`) and subtracted. Both halves are
+ * from (`saleProcessingCostCents`) and subtracted. Both halves are
  * reported, because "we collected X of which Y was Stripe's" is the sentence a
  * margin figure needs.
  *
@@ -67,7 +67,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
+import { saleProcessingCostCents } from '@aglyn/aglyn/server'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import {
@@ -237,7 +237,7 @@ export function commerceOrderTake(row: CommerceOrderRowInput | null): {
   // subscription cycle's as a rate (AGL-2655). Clamped to the fee itself: the
   // recomputed cost can exceed a fee charged under an older rate, and a
   // negative take would subtract from another order's real margin.
-  const passThrough = Math.min(fee, storefrontProcessingCostCents(gross))
+  const passThrough = Math.min(fee, saleProcessingCostCents(gross))
   const take = fee - passThrough
   const refunded = Math.min(gross, Math.max(0, cents(row?.refundedCents)))
   const takeRefunded = gross > 0 ? Math.round((refunded * take) / gross) : 0

@@ -20,7 +20,7 @@ import {
   isBelowMarketplacePriceFloor,
   marketplacePriceCostNote,
   marketplacePriceFloorHint,
-} from '@aglyn/aglyn'
+} from '../model/listing-price-floor'
 import type {
   ConsoleArtifactPublishZoneProps,
   ConsolePublishableArtifact,

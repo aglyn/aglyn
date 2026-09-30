@@ -29,7 +29,7 @@ import {
   isFirstPartyMediaSrc,
   MEDIA_REF_PREFIX,
 } from '@aglyn/aglyn/app-utils/media-ref'
-import { marketplaceMinPriceUsd } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { marketplaceMinPriceUsd } from './listing-price-floor'
 import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import type { ListingVerificationRequest } from './listing-verification'
 import {

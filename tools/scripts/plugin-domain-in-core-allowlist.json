@@ -393,11 +393,9 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
       "rules": [
-        "domain-declares:commerce",
         "domain-declares:crm",
         "domain-declares:data",
-        "domain-declares:forms",
-        "domain-declares:marketplace"
+        "domain-declares:forms"
       ],
       "lane": "ai"
     },
