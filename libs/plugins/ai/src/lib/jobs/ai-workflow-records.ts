@@ -20,6 +20,7 @@ import { actionRunResult } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { isFormArchived } from '@aglyn/aglyn/app-utils/forms'
 import type { HostWorkflow } from '@aglyn/aglyn/app-utils/workflows'
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
 import type {
@@ -140,21 +141,24 @@ export async function readAiAutomationRecords(
           (data) => live(data) && data['direction'] === 'outbound',
           (data) => text(data['name']),
         ),
-    input.crm && wanted('stages')
-      ? scopedToHost(org.collection('pipelines'), input.hostId)
-          .select('stages', 'archivedAt')
-          .limit(AI_WORKFLOW_PIPELINES_WINDOW)
-          .get()
-          .then((snapshot) =>
-            snapshot.docs
-              .filter((doc) => !(Number(doc.get('archivedAt')) > 0))
-              .flatMap((doc) => (Array.isArray(doc.get('stages')) ? (doc.get('stages') as Data[]) : []))
-              .map((stage) => ({ id: text(stage?.['id']), name: text(stage?.['name']) }))
-              .filter((stage) => stage.id && stage.name),
-          )
-      : none,
+    input.crm && wanted('stages') ? readStages(input.orgId, input.hostId) : none,
   ])
   return { forms, datasets, lists, campaigns, workflows, webhooks, stages }
+}
+
+/**
+ * The stages of the pipelines the site can see, asked of the plugin that keeps
+ * pipelines (its `pipeline` record index), never read from its collection. No
+ * index means no plugin keeps pipelines in this process: no stage to name.
+ */
+async function readStages(orgId: string, hostId: string): Promise<AiAutomationNamedRecord[]> {
+  const pipelines = pluginRecordIndex('pipeline')
+  if (!pipelines) return []
+  const { records } = await pipelines.index.list({ orgId, hostId, limit: AI_WORKFLOW_PIPELINES_WINDOW })
+  return records
+    .flatMap((record) => (Array.isArray(record.facts['stages']) ? (record.facts['stages'] as Data[]) : []))
+    .map((stage) => ({ id: text(stage?.['id']), name: text(stage?.['name']) }))
+    .filter((stage) => stage.id && stage.name)
 }
 
 /** The site's functions, for a workflow outline that says which of its calls still resolve. */

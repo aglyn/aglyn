@@ -31,6 +31,11 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 }))
 
 import {
+  removeStandInPipelineIndex,
+  standInPipelineIndex,
+  type StoodInPipelineIndex,
+} from '../testing/stand-in-pipeline-index'
+import {
   AI_WORKFLOW_PIPELINES_WINDOW,
   AI_WORKFLOW_RECORDS_WINDOW,
   readAiAutomationRecords,
@@ -89,6 +94,8 @@ beforeEach(() => {
 })
 
 describe('readAiAutomationRecords', () => {
+  let pipelines: StoodInPipelineIndex
+
   beforeEach(() => {
     mockDocs.set('hosts/host-1/forms/form-a', {
       displayName: 'Newsletter sign-up',
@@ -114,11 +121,18 @@ describe('readAiAutomationRecords', () => {
     mockDocs.set('hosts/host-1/workflows/wf-a', { name: 'Quote calculator' })
     mockDocs.set('hosts/host-1/webhooks/hook-a', { name: 'Zapier', direction: 'outbound' })
     mockDocs.set('hosts/host-1/webhooks/hook-b', { name: 'Stripe in', direction: 'inbound' })
-    mockDocs.set('orgs/org-1/pipelines/p-a', {
-      stages: [{ id: 'new', name: 'New' }, { id: 'won', name: 'Won' }, { id: 'nameless' }],
-    })
-    mockDocs.set('orgs/org-1/pipelines/p-b', { stages: [{ id: 'old', name: 'Old stage' }], archivedAt: 1_700_000_000_000 })
+    // The pipelines are the CRM's, asked of its index: what it answers is
+    // its own live pipelines — an archived one is its to leave out.
+    pipelines = standInPipelineIndex([
+      {
+        id: 'p-a',
+        name: 'Sales',
+        stages: [{ id: 'new', name: 'New' }, { id: 'won', name: 'Won' }, { id: 'nameless' }],
+      },
+    ])
   })
+
+  afterEach(() => removeStandInPipelineIndex())
 
   it('reads the records a draft’s words are looked up among, leaving out what is archived, deleted or unnamed', async () => {
     expect(await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })).toEqual({
@@ -176,13 +190,17 @@ describe('readAiAutomationRecords', () => {
       },
       // Lists belong to the whole org, as the editor's picker and the executor read them.
       { path: 'orgs/org-1/lists', fields: ['name', 'deletedAt'], limit: AI_WORKFLOW_RECORDS_WINDOW, scopedTo: null },
-      {
-        path: 'orgs/org-1/pipelines',
-        fields: ['stages', 'archivedAt'],
-        limit: AI_WORKFLOW_PIPELINES_WINDOW,
-        scopedTo: 'host-1',
-      },
     ])
+    // The pipelines are asked of the plugin that keeps them, for this site,
+    // in the stage lookup's window — never read from their collection here.
+    expect(pipelines.asked).toEqual([{ orgId: 'org-1', hostId: 'host-1', limit: AI_WORKFLOW_PIPELINES_WINDOW }])
+  })
+
+  it('names no stage where no plugin keeps pipelines', async () => {
+    removeStandInPipelineIndex()
+    const records = await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })
+    expect(records.stages).toEqual([])
+    expect(readOf('orgs/org-1/pipelines')).toBeUndefined()
   })
 
   it('reads only the kinds asked for, and answers every other kind empty', async () => {
@@ -204,12 +222,13 @@ describe('readAiAutomationRecords', () => {
     expect(mockReads.map((read) => read.path).sort()).toEqual(['hosts/host-1/webhooks', 'orgs/org-1/lists'])
     await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true, only: [] })
     expect(mockReads).toHaveLength(2)
+    expect(pipelines.asked).toEqual([])
   })
 
   it('reads no pipeline for a workspace without the CRM', async () => {
     const records = await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: false })
     expect(records.stages).toEqual([])
-    expect(readOf('orgs/org-1/pipelines')).toBeUndefined()
+    expect(pipelines.asked).toEqual([])
   })
 })
 
