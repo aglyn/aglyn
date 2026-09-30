@@ -18,27 +18,23 @@
 /**
  * Who is allowed to see a marketplace listing (AGL-432/658/968/1196).
  *
- * These four predicates live in core for the same reason
- * `MarketplaceArtifactType` (AGL-1016) and the verification policy (AGL-1217)
- * do: a `scope:app` project may not depend on an `aglyn:addons` lib, and the
- * console now has to ask the question outside the marketplace plugin. The
- * listing route's `generateMetadata` (AGL-876) builds a social card from the
- * listing document, and that card is emitted to an UNAUTHENTICATED fetcher —
- * so it has to apply the same visibility rule the browse grid applies, or a
- * rejected, private or taken-down listing gets its name and description
- * unfurled into a chat message by anyone holding the URL.
+ * One reading of "is this listing public", on purpose. The rule gates browse
+ * AND install (AGL-965 added the second call site after the first proved
+ * insufficient on its own), and the listing's social card (AGL-876) is
+ * emitted to an UNAUTHENTICATED fetcher, so it applies the same rule the
+ * browse grid applies — or a rejected, private or taken-down listing gets its
+ * name and description unfurled into a chat message by anyone holding the
+ * URL. A third reading that drifts would be a disclosure bug, not a cosmetic
+ * one.
  *
- * They were moved rather than copied. A second copy of "is this listing
- * public" is the failure mode this file exists to prevent: the rule already
- * gates browse AND install (AGL-965 added the second call site after the
- * first proved insufficient on its own), and a third reading that drifts
- * would be a disclosure bug, not a cosmetic one.
- *
- * `libs/plugins/marketplace/src/lib/model/marketplace.ts` re-exports all four,
- * so publishing and install code keeps importing them from one place.
+ * These lived in core while a console route had to ask the question and a
+ * `scope:app` project may not depend on an `aglyn:addons` lib. The listing
+ * route and its card are the plugin's own now (AGL-3080), so the policy is
+ * too. `model/marketplace.ts` re-exports all four, so publishing and install
+ * code keeps importing them from one place.
  */
 
-import type { MarketplaceArtifactType } from './marketplace-provenance'
+import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 
 /**
  * The listing's artifact type, tolerating the pre-AGL-654 shape.

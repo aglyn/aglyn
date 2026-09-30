@@ -16,8 +16,14 @@
  */
 
 /**
- * Every server-owned field of `hosts/{hostId}` and
- * `marketplaceListings/{listingId}` is denied to client writes (AGL-1361).
+ * Every server-owned field of `hosts/{hostId}` is denied to client writes
+ * (AGL-1361).
+ *
+ * The guard was written for the host and the marketplace listing together,
+ * because the two documents carry the same hand-maintained-list shape. The
+ * listing half now lives beside the list it partitions, in the marketplace
+ * plugin (`libs/plugins/marketplace/src/lib/model/listing-write-deny-coverage.spec.ts`);
+ * the parsing both use is `write-deny-coverage.util.ts`, here.
  *
  * AGL-1355 built this property for `orgs/{orgId}` and said plainly that the
  * two documents carrying the same hand-maintained-list shape were NOT covered.
@@ -73,19 +79,17 @@ import { readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 
 import {
-  LISTING_CLIENT_WRITABLE_FIELDS,
-  LISTING_UNPERSISTED_FIELDS,
-} from '../../app-utils/marketplace-listing-visibility'
-import {
   HOST_CLIENT_WRITABLE_FIELDS,
   HOST_UNPERSISTED_FIELDS,
 } from './platform.types'
 import {
   declaredFields,
+  deniedAndDeclaredWritable,
   parseUpdateRule,
   readFieldsOf,
   recursiveMatchesReaching,
   seedFieldsOfCollection,
+  unclassifiedFields,
 } from './write-deny-coverage.util'
 
 const REPO_ROOT = resolve(__dirname, '../../../../../..')
@@ -96,8 +100,6 @@ const read = (relativePath: string): string =>
 const RULES_FILE = 'cloud/firebase-firestore.rules'
 const HOST_TYPES_FILE =
   'libs/aglyn/src/lib/foundation/definitions/platform.types.ts'
-const LISTING_TYPES_FILE =
-  'libs/plugins/marketplace/src/lib/model/marketplace.ts'
 const RESOLVER_DIR = 'libs/aglyn/src/lib/app-utils'
 // AGL-2465 lifted the seed write out of `POST /api/hosts/create` and into
 // `claimHostForOrg`, so `/api/hosts/create` and `POST /v1/sites` share it
@@ -105,14 +107,7 @@ const RESOLVER_DIR = 'libs/aglyn/src/lib/app-utils'
 // host field set — which is the whole point of the throw. Repointed here.
 const HOST_SEED_FILE = 'apps/console/utils/server/provision-host.ts'
 
-/**
- * The resolver modules, read once.
- *
- * `LISTING_TYPES_FILE` is read as TEXT, never imported: this lib is core and
- * the marketplace model is a plugin lib, so an import would be a dependency
- * edge pointing the wrong way. Parsing keeps the guard honest without
- * inverting the graph.
- */
+/** The resolver modules, read once. */
 const resolverSources = readdirSync(resolve(REPO_ROOT, RESOLVER_DIR))
   .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
   .map((file) => readFileSync(resolve(REPO_ROOT, RESOLVER_DIR, file), 'utf8'))
@@ -120,10 +115,9 @@ const resolverSources = readdirSync(resolve(REPO_ROOT, RESOLVER_DIR))
 /**
  * Assert the partition, or throw naming every field that has no home.
  *
- * Shared by both documents because the failure is identical and the remedy is
- * identical: unclassified means CLIENT-WRITABLE in production right now — the
- * rules deny only what is named — so a field nobody listed is a field the
- * client can set today.
+ * Unclassified means CLIENT-WRITABLE in production right now — the rules deny
+ * only what is named — so a field nobody listed is a field the client can set
+ * today.
  */
 function expectFullyClassified(options: {
   document: string
@@ -133,11 +127,11 @@ function expectFullyClassified(options: {
   unpersisted: Set<string>
   writableList: string
 }): void {
-  const unclassified = [...options.universe].filter(
-    (field) =>
-      !options.denied.has(field) &&
-      !options.clientWritable.has(field) &&
-      !options.unpersisted.has(field),
+  const unclassified = unclassifiedFields(
+    options.universe,
+    options.denied,
+    options.clientWritable,
+    options.unpersisted,
   )
   if (unclassified.length > 0) {
     throw new Error(
@@ -146,7 +140,7 @@ function expectFullyClassified(options: {
         `Unclassified means CLIENT-WRITABLE in production right now — the ` +
         `rules deny only what is named, so a field nobody listed is a field ` +
         `any holder of the client SDK can set. That is AGL-1354, and ` +
-        `AGL-1364 found two more of them on this pair of documents.\n\n` +
+        `AGL-1364 found two more of them on this document and the listing.\n\n` +
         `Decide, on this commit:\n` +
         `  • server-owned — does a client rewrite change what the platform ` +
         `DECIDES (an entitlement, a price, where a request routes, who may ` +
@@ -167,10 +161,7 @@ function expectDisjoint(
   writable: Record<string, string>,
   unpersisted: Record<string, string>,
 ): void {
-  const both = [...Object.keys(writable), ...Object.keys(unpersisted)].filter(
-    (field) => denied.has(field),
-  )
-  expect(both).toEqual([])
+  expect(deniedAndDeclaredWritable(denied, writable, unpersisted)).toEqual([])
 }
 
 /**
@@ -333,150 +324,6 @@ describe('every server-owned host field is denied to client writes (AGL-1361)', 
     // their own `allow write`, but those sit deeper and cannot reach the host
     // document — the extra `{subcollection}` segment in the catch-all is
     // precisely what keeps a bare `{document=**}` from matching it (AGL-235).
-    expect(
-      rule.statements.filter((statement) => /\ballow\s+write\b/.test(statement)),
-    ).toEqual([])
-  })
-})
-
-describe('every server-owned listing field is denied to client writes (AGL-1361)', () => {
-  const rule = parseUpdateRule(
-    read(RULES_FILE),
-    'match /marketplaceListings/<listingId> {',
-    'listingManager()',
-  )
-  const declared = declaredFields(
-    read(LISTING_TYPES_FILE),
-    'export interface MarketplaceListing {',
-  )
-  // `listing` is the binding the visibility/update-state policies read.
-  const inputs = readFieldsOf(resolverSources, 'listing')
-
-  const denied = new Set(rule.denied)
-  const clientWritable = new Set(Object.keys(LISTING_CLIENT_WRITABLE_FIELDS))
-  const unpersisted = new Set(Object.keys(LISTING_UNPERSISTED_FIELDS))
-  const universe = new Set([...declared, ...rule.denied, ...inputs])
-
-  describe('the parsers still see what they are supposed to see', () => {
-    it('reads the listing deny-list out of the rules', () => {
-      expect(rule.denied).toEqual(
-        expect.arrayContaining([
-          'installCount',
-          // AGL-1420. The sibling counter, and the reason the pair is worth
-          // naming rather than leaning on the count below: `installCount` was
-          // denied here from the first pass while `activeInstalls` was
-          // declared NOWHERE — not in this list, not on `MarketplaceListing`
-          // — so it was not classified wrongly, it was outside the universe
-          // this guard partitions. A field a coverage guard cannot see is the
-          // one failure mode a coverage guard has.
-          'activeInstalls',
-          // AGL-1419's derived cache for it. `verifiedLivePins` short-circuits
-          // on `pinnedActiveInstalls === activeInstalls` inside the TTL, so a
-          // client that could write the triple could hold the cache open and
-          // stop the derivation that is the only thing able to lower a count.
-          'pinnedActiveInstalls',
-          'pinsVerifiedAtMs',
-          'pinnedVersionInstalls',
-          'priceUsd',
-          'profileId',
-          'reviewStatus',
-          'latestApprovedVersion',
-          'hiddenAt',
-          // AGL-1364. `reviewStatus` was denied, but the gate that reads it
-          // only applies to plugins — so relabelling the artifact skipped
-          // review without touching the verdict.
-          'artifactType',
-          'type',
-          'kind',
-        ]),
-      )
-      expect(rule.denied.length).toBeGreaterThanOrEqual(32)
-      // isStaff / listingManager.
-      expect(rule.branches).toHaveLength(2)
-    })
-
-    it('reads the document field set off MarketplaceListing', () => {
-      expect(declared).toEqual(
-        expect.arrayContaining([
-          'profileId',
-          'reviewStatus',
-          'artifactType',
-          'deletedAt',
-          // AGL-1420 — declared so the guard can see them at all.
-          'activeInstalls',
-          'pinnedActiveInstalls',
-        ]),
-      )
-      expect(declared.length).toBeGreaterThanOrEqual(34)
-    })
-
-    it('finds the listing fields the visibility policies read', () => {
-      expect(inputs).toEqual(
-        expect.arrayContaining(['artifactType', 'reviewStatus', 'hiddenAt']),
-      )
-    })
-  })
-
-  it('denies every listing field the visibility/update policies read', () => {
-    const exposed = inputs.filter(
-      (field) =>
-        !denied.has(field) &&
-        !clientWritable.has(field) &&
-        !unpersisted.has(field),
-    )
-    if (exposed.length > 0) {
-      throw new Error(
-        `These listing fields are read by the policies in ${RESOLVER_DIR} ` +
-          `but a publisher can still write them from the client SDK:\n\n` +
-          `${exposed.map((field) => `  • ${field}`).join('\n')}\n\n` +
-          `AGL-1364 was exactly this: \`isListingBrowsable\` consults ` +
-          `\`reviewStatus\` only for PLUGINS, and \`listingArtifactType\` ` +
-          `resolves three fields none of which were denied — so a publisher ` +
-          `sitting at 'rejected' could relabel the artifact and become ` +
-          `publicly browsable without touching the verdict.`,
-      )
-    }
-  })
-
-  it('classifies every field of the listing document, defaulting to denied', () => {
-    expectFullyClassified({
-      document: 'marketplaceListings/{listingId}',
-      universe,
-      denied,
-      clientWritable,
-      unpersisted,
-      writableList:
-        'LISTING_CLIENT_WRITABLE_FIELDS in ' +
-        'libs/aglyn/src/lib/app-utils/marketplace-listing-visibility.ts',
-    })
-  })
-
-  it('never lets a listing field be both denied and declared client-writable', () => {
-    expectDisjoint(
-      denied,
-      LISTING_CLIENT_WRITABLE_FIELDS,
-      LISTING_UNPERSISTED_FIELDS,
-    )
-  })
-
-  it('keeps the declared listing client-writable list honest', () => {
-    expectListHonest(universe, {
-      ...LISTING_CLIENT_WRITABLE_FIELDS,
-      ...LISTING_UNPERSISTED_FIELDS,
-    })
-  })
-
-  it('has no second rule that could OR a looser write onto the listing doc', () => {
-    expect(
-      recursiveMatchesReaching(rule.topLevelMatches, 'marketplaceListings'),
-    ).toEqual([])
-    // `/revocations/{listingId}` is keyed by the same id but is a DIFFERENT
-    // collection, so the filter is on the collection name, not the variable.
-    expect(
-      rule.topLevelMatches.filter((path) =>
-        path.startsWith('/marketplaceListings'),
-      ),
-    ).toEqual(['/marketplaceListings/<listingId>'])
     expect(
       rule.statements.filter((statement) => /\ballow\s+write\b/.test(statement)),
     ).toEqual([])

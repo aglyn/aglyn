@@ -365,7 +365,7 @@ Six existing plugins are console shells whose domain models stayed in
 | `data` | `datasets.ts`, `dataset-models.ts`, `dataset-query.ts`, `dataset-record-view.ts`, `dataset-csv.ts` — while the plugin holds only `model/dataset-io.ts` |
 | `logic` | `functions.ts`, `variables.ts` |
 | `email` / `marketing` | `email-topics.ts`, `dynamic-list-rule.ts`, `campaign-attribution.ts`, `campaign-forwarding.ts`, `marketing-consent.ts` |
-| `marketplace` | `marketplace-listing-visibility.ts`, `-overrides`, `-provenance`, `-theme`, `-update-state` — five modules. `-merge`, `-verification`, `publisher-attestation.ts` and `publisher-agreement.ts` (with its byte-pinned legal snapshots) went to the plugin in AGL-3080; the five that remain each have a reader that is neither core nor the marketplace (the tenant app, the ai and email plugins, the console's `/{org}/plugins` pages, core's rules-coverage spec) |
+| `marketplace` | `marketplace-overrides.ts`, `-provenance`, `-theme`, `-update-state` — four modules. `-merge`, `-verification`, `-listing-visibility` (with the listing half of the write-deny coverage guard), `publisher-attestation.ts` and `publisher-agreement.ts` (with its byte-pinned legal snapshots) went to the plugin in AGL-3080; the four that remain each have a reader that is neither core nor the marketplace (the tenant app, the ai and email plugins, the console's `/{org}/plugins` pages) |
 
 Every one of these is a capability living in three or more homes. By the
 brief's own heuristic that is the loudest signal on the list.

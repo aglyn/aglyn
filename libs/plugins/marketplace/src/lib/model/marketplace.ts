@@ -51,7 +51,7 @@ import {
   LISTING_CLIENT_WRITABLE_FIELDS,
   LISTING_UNPERSISTED_FIELDS,
   listingArtifactType,
-} from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
+} from './listing-visibility'
 
 export {
   isListingBrowsable,

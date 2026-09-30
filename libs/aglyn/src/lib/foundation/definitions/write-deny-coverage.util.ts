@@ -654,3 +654,35 @@ export function stripTypeScriptComments(source: string): string {
   }
   return out
 }
+
+/**
+ * The fields of a document's universe that no partition claims.
+ *
+ * Unclassified means CLIENT-WRITABLE in production — the rules deny only what
+ * is named — so every coverage guard reports this list and fails on any entry.
+ * Shared because the documents are not all core's: the marketplace listing's
+ * guard lives in the marketplace plugin beside the list it partitions, and a
+ * second copy of the partition test would be a second thing to keep true.
+ */
+export function unclassifiedFields(
+  universe: Iterable<string>,
+  ...partitions: Array<ReadonlySet<string>>
+): string[] {
+  return [...universe].filter(
+    (field) => !partitions.some((partition) => partition.has(field)),
+  )
+}
+
+/**
+ * The fields both denied by the rules and declared client-writable (or
+ * unpersisted). The two partitions disagreeing means one of them is a lie, so
+ * the guards expect this to be empty.
+ */
+export function deniedAndDeclaredWritable(
+  denied: ReadonlySet<string>,
+  ...declared: Array<Readonly<Record<string, string>>>
+): string[] {
+  return declared
+    .flatMap((record) => Object.keys(record))
+    .filter((field) => denied.has(field))
+}
