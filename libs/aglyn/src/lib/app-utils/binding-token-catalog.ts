@@ -148,8 +148,8 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     token: '{{entry.coverVideo}}',
     label: 'Featured video',
     description:
-      'The featured video’s source — a library film, a video link or a ' +
-      'Wistia link — for a Video element.',
+      'The featured video’s source — a library film, a video file link or ' +
+      'a video host’s link — for a Video element.',
   },
   {
     token: '{{entry.category}}',

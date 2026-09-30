@@ -65,6 +65,7 @@ import {
   type OutreachSequence,
   type OutreachSequenceStep,
 } from '../model/outreach.types'
+import { outreachStepName } from '../model/enrollment-timeline'
 import { outreachEmailStepLabel } from './curate-step-dialog'
 import {
   OutreachCuratedStepEditor,
@@ -139,16 +140,44 @@ interface Supplied {
   curation?: Curation
 }
 
+/**
+ * The drafts for the steps that will run: none before the step the
+ * enrollment begins at (AGL-3228), which is skipped and never sent.
+ */
+function liveDrafts(supplied: Supplied | undefined, startStepIndex: number): OutreachCuratedDraftState[] {
+  return Object.values(supplied?.drafts ?? {}).filter((draft) => draft.stepIndex >= startStepIndex)
+}
+
 /** The drafts the rep used, as the enroll and the preview carry them. */
-function usedOverrides(supplied: Supplied | undefined) {
-  return Object.values(supplied?.drafts ?? {})
+function usedOverrides(supplied: Supplied | undefined, startStepIndex: number) {
+  return liveDrafts(supplied, startStepIndex)
     .map(outreachDraftToOverride)
     .filter((override): override is NonNullable<typeof override> => override !== null)
 }
 
 /** Whether a drafted step is still waiting on the rep to use it or keep the template. */
-function hasOpenDrafts(supplied: Supplied | undefined): boolean {
-  return Object.values(supplied?.drafts ?? {}).some((draft) => draft.decision === 'pending')
+function hasOpenDrafts(supplied: Supplied | undefined, startStepIndex: number): boolean {
+  return liveDrafts(supplied, startStepIndex).some((draft) => draft.decision === 'pending')
+}
+
+/**
+ * The steps the dialog offers to begin at (AGL-3228), each by its place in
+ * the sequence: "Email 2 · step 3", "Step 2 · LinkedIn".
+ */
+export function outreachStartStepOptions(
+  steps: readonly OutreachSequenceStep[],
+): Array<{ value: number; label: string }> {
+  return steps.map((_step, index) => ({
+    value: index,
+    label: index === 0 ? `${outreachStepName(steps, 0)} — from the start` : outreachStepName(steps, index),
+  }))
+}
+
+/** What beginning at a later step does, as the dialog says it under the picker. */
+export function outreachStartStepHelp(startStepIndex: number): string {
+  if (startStepIndex < 1) return 'Everyone starts at step 1, after its delay.'
+  const skipped = startStepIndex === 1 ? 'Step 1 is' : `Steps 1–${startStepIndex} are`
+  return `For people who already had the earlier steps by hand. ${skipped} marked skipped and never sent; step ${startStepIndex + 1} goes out after its own delay, counted from now, and starts the email thread.`
 }
 
 /** Where one person's test send stands (AGL-3325). */
@@ -168,13 +197,14 @@ type Stage =
 export function outreachPersonReady(
   person: OutreachEnrollPreviewPerson,
   supplied: Supplied | undefined,
+  startStepIndex = 0,
 ): boolean {
   if (person.status === 'blocked' || !supplied?.include) return false
   const line = supplied.personalLine.trim()
   if (line.length > OUTREACH_PERSONAL_LINE_MAX) return false
   // A draft the rep has read but neither used nor kept holds them back
   // (AGL-3324): nothing is enrolled with a decision still open.
-  if (hasOpenDrafts(supplied)) return false
+  if (hasOpenDrafts(supplied, startStepIndex)) return false
   if (person.status === 'eligible') return true
   if (person.requires.personalLine && !line) return false
   return person.requires.attestations.every((kind) =>
@@ -220,6 +250,9 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     >
   >({})
   const [stepTests, setStepTests] = useState<Record<string, StepTest>>({})
+  // The step everyone in this enrollment begins at (AGL-3228), zero-based.
+  const [startStepIndex, setStartStepIndex] = useState(0)
+  const startOptions = useMemo(() => outreachStartStepOptions(sequence.steps), [sequence.steps])
 
   const views = useOutreachSavedViews(props.open ? orgId : null, props.uid)
   const search = useOutreachContactSearch({
@@ -242,6 +275,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     setSupplied({})
     setEmailPreview({})
     setStepTests({})
+    setStartStepIndex(0)
   }
   const close = () => {
     reset()
@@ -285,17 +319,17 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     () =>
       answer
         ? answer.people.filter((person) =>
-            outreachPersonReady(person, supplied[person.personId]),
+            outreachPersonReady(person, supplied[person.personId], startStepIndex),
           )
         : [],
-    [answer, supplied],
+    [answer, supplied, startStepIndex],
   )
   const waiting = answer
     ? answer.people.filter(
         (person) =>
           person.status !== 'blocked' &&
           supplied[person.personId]?.include &&
-          !outreachPersonReady(person, supplied[person.personId]),
+          !outreachPersonReady(person, supplied[person.personId], startStepIndex),
       ).length
     : 0
 
@@ -314,10 +348,12 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
           personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
           attestations: supplied[person.personId]?.attestations ?? [],
           // The steps they curated and confirmed (AGL-3324); nothing else.
-          ...(usedOverrides(supplied[person.personId]).length
-            ? { stepOverrides: usedOverrides(supplied[person.personId]) }
+          ...(usedOverrides(supplied[person.personId], startStepIndex).length
+            ? { stepOverrides: usedOverrides(supplied[person.personId], startStepIndex) }
             : {}),
         })),
+        // Named only when it is not the first step (AGL-3228).
+        ...(startStepIndex > 0 ? [startStepIndex] : []),
       )
       setStage({
         kind: 'done',
@@ -342,7 +378,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
       [person.personId]: { status: 'loading' },
     }))
     try {
-      const overrides = usedOverrides(supplied[person.personId])
+      const overrides = usedOverrides(supplied[person.personId], startStepIndex)
       const result = await api.previewEmail({
         sequenceId: sequence.id,
         ...(person.target === 'lead' && person.leadId
@@ -351,6 +387,8 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
         personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
         // The preview shows the curated version (AGL-3324).
         ...(overrides.length ? { stepOverrides: overrides } : {}),
+        // And the first email sent from where they begin (AGL-3228).
+        ...(startStepIndex > 0 ? { startStepIndex } : {}),
       })
       setEmailPreview((previous) => ({
         ...previous,
@@ -417,7 +455,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
   const sendTest = async (person: OutreachEnrollPreviewPerson) => {
     setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sending' } }))
     try {
-      const overrides = usedOverrides(supplied[person.personId])
+      const overrides = usedOverrides(supplied[person.personId], startStepIndex)
       const answer = await api.sendStepTest({
         sequenceId: sequence.id,
         ...(person.target === 'lead' && person.leadId
@@ -425,6 +463,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
           : { contactId: person.contactId }),
         personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
         ...(overrides.length ? { stepOverrides: overrides } : {}),
+        ...(startStepIndex > 0 ? { startStepIndex } : {}),
       })
       setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sent', answer } }))
     } catch (error) {
@@ -696,6 +735,29 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                   {`This shows the first ${answer.people.length} of ${answer.total}. Enroll these, then preview again for the rest.`}
                 </Alert>
               ) : null}
+              {startOptions.length > 1 ? (
+                <TextField
+                  select
+                  size="small"
+                  label="Start at"
+                  value={startStepIndex}
+                  onChange={(event) => {
+                    setStartStepIndex(Number(event.target.value))
+                    // A preview or a test was written for the old first email.
+                    setEmailPreview({})
+                    setStepTests({})
+                  }}
+                  helperText={outreachStartStepHelp(startStepIndex)}
+                  disabled={stage.kind === 'enrolling'}
+                  fullWidth
+                >
+                  {startOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ) : null}
               <Stack
                 spacing={1}
                 component="ul"
@@ -707,6 +769,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                     key={person.personId}
                     person={person}
                     steps={sequence.steps}
+                    startStepIndex={startStepIndex}
                     supplied={supplied[person.personId]}
                     onSupply={(next) => supply(person.personId, next)}
                     emailPreview={emailPreview[person.personId]}
@@ -816,6 +879,8 @@ function GatewayChip(props: { gateway: OutreachEnrollGateway | null; name: strin
 function PersonRow(props: {
   person: OutreachEnrollPreviewPerson
   steps: readonly OutreachSequenceStep[]
+  /** The step the enrollment begins at (AGL-3228); drafts before it are not shown. */
+  startStepIndex: number
   supplied: Supplied | undefined
   onSupply(next: Partial<Supplied>): void
   emailPreview:
@@ -835,7 +900,7 @@ function PersonRow(props: {
   const line = supplied?.personalLine ?? ''
   const tooLong = line.trim().length > OUTREACH_PERSONAL_LINE_MAX
   const curation = supplied?.curation ?? { status: 'idle' }
-  const drafts = Object.values(supplied?.drafts ?? {}).sort((a, b) => a.stepIndex - b.stepIndex)
+  const drafts = liveDrafts(supplied, props.startStepIndex).sort((a, b) => a.stepIndex - b.stepIndex)
   const usedCount = drafts.filter((draft) => draft.decision === 'use').length
   return (
     <Paper component="li" variant="outlined" sx={{ p: 1.5 }} aria-label={name}>

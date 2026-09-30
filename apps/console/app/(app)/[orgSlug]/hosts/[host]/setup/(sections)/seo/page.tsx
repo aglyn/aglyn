@@ -16,14 +16,16 @@
  */
 'use client'
 
+import type { ConsoleSeoCheck } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { Stack } from '@mui/material'
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import AppIconCard from '../../../../../../../../components/app-icon-card.component'
 import EntityLogoCard from '../../../../../../../../components/entity-logo-card.component'
 import FaviconCard from '../../../../../../../../components/favicon-card.component'
 import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
 import SearchIndexingCard from '../../../../../../../../components/search-indexing-card.component'
+import SeoCheckCard from '../../../../../../../../components/seo-check-card.component'
 import SocialImageCard from '../../../../../../../../components/social-image-card.component'
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
@@ -53,8 +55,14 @@ import {
  * toggle that writes on change does not belong inside a form that writes on
  * save. It is last because it is the only control here that is not metadata.
  *
- * The `hostSeo` zone sits at the top (AGL-2910). A widget there proposes
- * values for these fields — a structured-data description, the agent guidance
+ * The SEO check comes first: what is wrong with the site's pages and its
+ * metadata, for every site owner (`seo-check-card.component.tsx`). It is the
+ * one list of findings on this section.
+ *
+ * The `hostSeo` zone sits under it (AGL-2910), and is handed the check's last
+ * report as `check`, so a widget there adds to the findings — a proposed fix
+ * for each — instead of listing them again. A widget proposes values for
+ * these fields — a structured-data description, the agent guidance
  * `/llms.txt` leads with — and they land in the forms as unsaved edits,
  * routed to whichever card owns each field. Every card's Update is still the
  * only write, so nothing a widget proposes reaches the published site until
@@ -75,8 +83,16 @@ export default function HostSetupSeoSection() {
     },
     [proposeFormDraft],
   )
+  const [check, setCheck] = useState<ConsoleSeoCheck | null>(null)
   return (
     <Stack spacing={3}>
+      <SeoCheckCard
+        hostId={hostId}
+        orgSlug={orgSlug}
+        host={host ?? null}
+        check={check}
+        onChecked={setCheck}
+      />
       <PluginWidgetSlot
         slot="hostSeo"
         hostId={hostId}
@@ -85,6 +101,7 @@ export default function HostSetupSeoSection() {
         host={host ?? null}
         seo={data?.seo}
         proposeDraft={proposeDraft}
+        check={check}
       />
       <HostSettingsForm schemaId="hostSeo" />
       <FaviconCard hostId={hostId} />

@@ -16,7 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { resendDeliveryHistorySource } from '@aglyn/shared-util-email'
+import { mailProviderReads } from '@aglyn/shared-util-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -39,22 +39,21 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
  *
  * ## Why a sweep and not a per-person lookup
  *
- * Resend's list endpoint takes `limit`, `after` and `before` and **no
- * recipient filter**. Looking one person up therefore means paging the whole
- * account's history anyway — so it is done once, into our own store, rather
- * than on every render of a staff page. That is also the shape a second
- * provider can implement: `EmailDeliveryHistorySource` is cursor-paged and
- * unfiltered because that is the lowest common denominator.
+ * A provider's list endpoint need not take a recipient filter. Looking one
+ * person up therefore means paging the whole account's history anyway — so
+ * it is done once, into our own store, rather than on every render of a
+ * staff page. `EmailDeliveryHistorySource` is cursor-paged and unfiltered
+ * because that is the lowest common denominator.
  *
- * ## The key is separate on purpose
+ * ## The read credential is separate on purpose
  *
- * `RESEND_API_KEY` is scoped to sending, and answers every read on this
- * endpoint with `401 restricted_api_key`. That is the correct posture for the
- * key that sends mail — a leaked sending key cannot enumerate everyone we have
- * ever emailed — so the import takes its own read-scoped credential in
- * `RESEND_READ_API_KEY` rather than widening the one that already exists.
- * Unset, this route answers 501 and says which variable is missing, on the
- * same reasoning as the webhook endpoint.
+ * The provider sends with a sending-scoped credential, which cannot read its
+ * history — the correct posture for the key that sends mail, since a leaked
+ * sending key cannot enumerate everyone we have ever emailed — so the import
+ * goes through the provider's READS, which take their own read credential
+ * rather than widening the one that already exists. When they cannot be
+ * made this route answers 501 and says which setting is missing, on the same
+ * reasoning as the webhook endpoint.
  *
  * ## Resumable, and it says so
  *
@@ -91,24 +90,18 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
 
-    const apiKey = String(process.env.RESEND_READ_API_KEY ?? '').trim()
-    if (!apiKey) {
+    const reads = mailProviderReads()
+    const unmet = reads.unmet()
+    if (unmet) {
       // 501 rather than 500: nothing is broken, a credential is absent, and
       // the operator needs to be told WHICH one rather than reading a log.
-      return Response.json(
-        {
-          error:
-            'Set RESEND_READ_API_KEY to a full-access key. The sending key ' +
-            'cannot read message history.',
-        },
-        { status: 501 },
-      )
+      return Response.json({ error: unmet }, { status: 501 })
     }
 
     const cursor = String(payload?.cursor ?? '').trim() || null
     const maxPages = Number(payload?.maxPages)
     const result = await importEmailDeliveryHistory({
-      source: resendDeliveryHistorySource(apiKey),
+      source: reads.history,
       cursor,
       maxPages: Number.isFinite(maxPages) ? maxPages : undefined,
     })

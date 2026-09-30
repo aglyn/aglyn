@@ -832,17 +832,53 @@ export async function POST(request: Request): Promise<Response> {
           hostId,
         )
         if (datasetDoc?.exists && !datasetDoc.get('deletedAt')) {
-          const values = Aglyn.buildDatasetRecordValues(
-            {
-              model: datasetDoc.get('model'),
-              fields: Array.isArray(datasetDoc.get('fields'))
-                ? datasetDoc.get('fields')
-                : [],
-            },
-            sanitizedFields,
-            binding.fieldMap,
-          )
-          let allowed = Object.keys(values).length > 0
+          const bound = {
+            model: datasetDoc.get('model'),
+            fields: Array.isArray(datasetDoc.get('fields'))
+              ? datasetDoc.get('fields')
+              : [],
+          }
+          const boundModel = Aglyn.effectiveDatasetModel(bound)
+          // `displayName` first, then the legacy `name`, then the name the
+          // form was bound by — the same precedence `findDatasetByName`
+          // resolves in. Reading only `name` would leave every modern
+          // dataset's chip unnamed.
+          const datasetLabel = String(
+            datasetDoc.get('displayName') ??
+              datasetDoc.get('name') ??
+              binding.datasetName ??
+              '',
+          ).slice(0, 60)
+          /*
+           * CHECKED AGAINST THE MODEL (AGL-2773, option B). Each value is
+           * coerced to its field's type and held to the field's rules, the
+           * same pair the console and `/v1` run, custom field types included
+           * — so a plugin's validator has to be registered first.
+           *
+           * A refused record is not written, and the submission is kept: the
+           * Inbox copy above is the visitor's, and a value the dataset cannot
+           * hold is no reason to lose it. The refusal is stamped on the
+           * submission, per field, so the Inbox can say why the row is
+           * missing instead of leaving the owner to guess.
+           */
+          await Aglyn.ensureDeclaredCustomFieldTypes(boundModel)
+          const write = Aglyn.prepareDatasetRecordWrite(bound, sanitizedFields, {
+            fieldMap: binding.fieldMap,
+          })
+          const values = write.values
+          if (Object.keys(write.errors).length) {
+            await submissionRef.update({
+              routing: {
+                datasetRefused: {
+                  id: datasetDoc.id,
+                  name: datasetLabel,
+                  errors: write.errors,
+                },
+              },
+            })
+          }
+          let allowed =
+            !Object.keys(write.errors).length && Object.keys(values).length > 0
           if (allowed) {
             const recordCount = (
               await datasetDoc.ref.collection('records').count().get()
@@ -885,15 +921,7 @@ export async function POST(request: Request): Promise<Response> {
                 // A submission can land in a reference field through a
                 // bound form, so this leg carries it like every other
                 // write that sets `values`.
-                ...Aglyn.datasetIntegrityFields(
-                  Aglyn.effectiveDatasetModel({
-                    model: datasetDoc.get('model'),
-                    fields: Array.isArray(datasetDoc.get('fields'))
-                      ? datasetDoc.get('fields')
-                      : [],
-                  }),
-                  values,
-                ),
+                ...Aglyn.datasetIntegrityFields(boundModel, values),
                 createdAt: FieldValue.serverTimestamp(),
               })
             /*
@@ -918,16 +946,7 @@ export async function POST(request: Request): Promise<Response> {
               routing: {
                 dataset: {
                   id: datasetDoc.id,
-                  // `displayName` first, then the legacy `name`, then the
-                  // name the form was bound by — the same precedence
-                  // `findDatasetByName` resolves in. Reading only `name`
-                  // would leave every modern dataset's chip unnamed.
-                  name: String(
-                    datasetDoc.get('displayName') ??
-                      datasetDoc.get('name') ??
-                      binding.datasetName ??
-                      '',
-                  ).slice(0, 60),
+                  name: datasetLabel,
                   recordId: recordRef.id,
                 },
               },

@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { resolvePlatformStripeMode } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 
 async function stripe(path: string, params?: URLSearchParams) {
@@ -121,10 +121,10 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     //
     // The retrieve above IS the proof. Stripe refuses cross-mode account
     // access outright — "was a test account created with a testmode key" —
-    // so an account this key just fetched is in this key's mode, and
-    // `resolvePlatformStripeMode` asks Stripe (`/v1/balance.livemode`) what
-    // that mode is rather than reading the key string.
-    const platformMode = await resolvePlatformStripeMode()
+    // so an account this key just fetched is in this key's mode, and the
+    // payment provider asks Stripe (`/v1/balance.livemode`) what that mode is
+    // rather than reading the key string.
+    const platformMode = await paymentProvider().resolvePlatformMode()
     // Payout readiness rides along (AGL-1994): the sale gate stays on
     // charges_enabled — that is what Stripe checks at charge time — but
     // charges-yes/payouts-no was invisible to the storefront, because

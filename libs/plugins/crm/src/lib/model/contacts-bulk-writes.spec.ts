@@ -21,34 +21,17 @@
  *
  * The properties a second copy of this would get wrong: a row with nothing
  * to change is left out silently and a row that cannot be reached is named;
- * the tag cap is the record page's; a detach is the record page's detach,
- * per row; and a batch that fails is retried row by row so the refused
- * address is named rather than counted.
+ * and the tag cap is the record page's. Letting rows go is
+ * `crm/contact-remove`'s (AGL-3338), and its spec is `contact-remove.spec.ts`.
  */
 
 import {
-  CONTACT_BULK_WRITE_CHUNK,
   CONTACT_TAGS_CAP,
   normalizeBulkTag,
   planAddTag,
-  planDetach,
   planRemoveTag,
   planSetCompany,
-  runContactBulkWrites,
-  type ContactBulkWrite,
 } from './contacts-bulk-writes'
-
-/*
- * The sentinels as inspectable values. Real ones are opaque objects the
- * store interprets; here each says what it is so an assertion can read it.
- */
-jest.mock('firebase/firestore', () => ({
-  arrayRemove: (...values: unknown[]) => ({ op: 'remove', values }),
-  deleteField: () => ({ op: 'delete' }),
-}))
-
-const NOW = Date.UTC(2026, 8, 5)
-const GROUP = 'group-1'
 
 const rows = [
   { $id: 'c1', email: 'a@example.com', tags: ['vip'], visibleTo: ['host:h1'] },
@@ -136,85 +119,5 @@ describe('setting the company', () => {
     expect(selection.skipped).toEqual([
       { email: 'z@example.com', reason: 'its company link could not be read' },
     ])
-  })
-})
-
-describe('letting the rows go', () => {
-  it('deletes a row this holder alone holds, and detaches from a shared one', () => {
-    const plan = planDetach(rows, { groupId: GROUP, hostIds: ['h1'] }, NOW)
-    expect(plan.writes[0]).toEqual({ id: 'c1', email: 'a@example.com', kind: 'delete' })
-    expect(plan.writes[1]).toMatchObject({
-      id: 'c2',
-      kind: 'update',
-      data: {
-        'facets.group-1': { op: 'delete' },
-        'marketingConsentByHost.h1': { op: 'delete' },
-        visibleTo: { op: 'remove', values: ['host:h1'] },
-        capturedByHostIds: { op: 'remove', values: ['h1'] },
-      },
-    })
-  })
-})
-
-describe('applying the writes', () => {
-  const write = (i: number): ContactBulkWrite => ({
-    id: `c${i}`,
-    email: `p${i}@example.com`,
-    kind: 'update',
-    data: {},
-  })
-
-  it('commits in chunks of the batch size', async () => {
-    const batches: number[] = []
-    const outcome = await runContactBulkWrites(
-      {
-        commitBatch: async (chunk) => void batches.push(chunk.length),
-        commitOne: async () => undefined,
-      },
-      Array.from({ length: CONTACT_BULK_WRITE_CHUNK + 1 }, (_, i) => write(i)),
-    )
-    expect(batches).toEqual([CONTACT_BULK_WRITE_CHUNK, 1])
-    expect(outcome).toEqual({ done: CONTACT_BULK_WRITE_CHUNK + 1, refused: [] })
-  })
-
-  it('names the refused row by address after a batch fails, and keeps the rest', async () => {
-    const singles: string[] = []
-    const outcome = await runContactBulkWrites(
-      {
-        commitBatch: async () => {
-          throw Object.assign(new Error('denied'), { code: 'permission-denied' })
-        },
-        commitOne: async (one) => {
-          singles.push(one.id)
-          if (one.id === 'c1') {
-            throw Object.assign(new Error('denied'), { code: 'permission-denied' })
-          }
-        },
-      },
-      [write(0), write(1), write(2)],
-    )
-    // Every row of the failed chunk was tried on its own.
-    expect(singles).toEqual(['c0', 'c1', 'c2'])
-    expect(outcome).toEqual({
-      done: 2,
-      refused: [{ email: 'p1@example.com', error: 'not permitted' }],
-    })
-  })
-
-  it('pays the per-row pass only for the chunk that failed', async () => {
-    let batch = 0
-    const singles: string[] = []
-    await runContactBulkWrites(
-      {
-        commitBatch: async () => {
-          batch += 1
-          if (batch === 1) throw new Error('boom')
-        },
-        commitOne: async (one) => void singles.push(one.id),
-      },
-      [write(0), write(1), write(2), write(3)],
-      2,
-    )
-    expect(singles).toEqual(['c0', 'c1'])
   })
 })

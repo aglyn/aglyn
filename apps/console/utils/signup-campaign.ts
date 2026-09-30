@@ -17,9 +17,9 @@
 'use client'
 
 import {
-  campaignAttributionQuery,
-  parseCampaignAttribution,
-  type CampaignAttribution,
+  utmAttributionQuery,
+  parseUtmAttribution,
+  type UtmAttribution,
 } from '@aglyn/aglyn'
 import { doc, getDoc, setDoc, type Firestore } from 'firebase/firestore'
 
@@ -82,10 +82,10 @@ interface StoredSignUpCampaign {
 export async function rememberSignUpCampaign(
   firestore: Firestore,
   uid: string,
-  campaign: CampaignAttribution | null,
+  campaign: UtmAttribution | null,
 ): Promise<void> {
   if (!firestore || !uid || !campaign) return
-  const query = campaignAttributionQuery(campaign)
+  const query = utmAttributionQuery(campaign)
   if (!query) return
   const stored: StoredSignUpCampaign = { query, createdAtMs: Date.now() }
   try {
@@ -107,7 +107,7 @@ export async function rememberSignUpCampaign(
 export async function readSignUpCampaign(
   firestore: Firestore,
   uid: string,
-): Promise<CampaignAttribution | null> {
+): Promise<UtmAttribution | null> {
   if (!firestore || !uid) return null
   let stored: Partial<StoredSignUpCampaign> | null = null
   try {
@@ -119,5 +119,5 @@ export async function readSignUpCampaign(
     return null
   }
   if (!stored || typeof stored.query !== 'string' || !stored.query) return null
-  return parseCampaignAttribution(new URLSearchParams(stored.query))
+  return parseUtmAttribution(new URLSearchParams(stored.query))
 }

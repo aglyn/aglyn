@@ -89,19 +89,21 @@ import {
   ASSIGNMENT_REFUSAL_MESSAGES,
   assignmentBasis,
   createResourceUid,
-  importedBasisReason,
-  LIST_IMPORT_MAX_ADDRESSES,
-  LIST_IMPORT_MAX_CHARACTERS,
-  parseListImport,
+  CSV_UPLOAD_MAX_CHARACTERS,
   readMarketingBasis,
   registerPluginApiRoute,
-  screenListImport,
   type AssignmentRefusal,
-  type ListImportRow,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { enrollListMember } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  importedBasisReason,
+  LIST_IMPORT_MAX_ADDRESSES,
+  parseListImport,
+  screenListImport,
+  type ListImportRow,
+} from './list-import'
 /*
  * The gate module directly, never `server-console.ts`'s re-export of it.
  *
@@ -179,7 +181,7 @@ function readImportText(
 ): { text: string } | { error: string } {
   const text = String(req.body?.text ?? '')
   if (!text.trim()) return { error: 'The file is empty.' }
-  if (text.length > LIST_IMPORT_MAX_CHARACTERS) {
+  if (text.length > CSV_UPLOAD_MAX_CHARACTERS) {
     return {
       error:
         'That file is too large to read in one go. Split it and import the ' +

@@ -30,6 +30,7 @@ import {
   normalizeOutreachAllowedCountries,
   OUTREACH_MERGE_FIELDS,
   outreachSubjectHasReplyPrefix,
+  outreachThreadStartSubject,
   readOutreachSequenceSettings,
   validateOutreachCuratedStep,
   validateOutreachOrgSettings,
@@ -182,6 +183,28 @@ describe('email steps', () => {
     expect(firstEmailStepIndex(steps)).toBe(1)
     expect(isInThreadEmailStep(steps, 1)).toBe(false)
     expect(codes(validateOutreachSteps(steps))).toEqual(['subject_required'])
+  })
+
+  it('starts the thread at the first email an enrollment sends from the step it began at (AGL-3228)', () => {
+    const steps = [
+      firstEmail({ subject: 'Your client sites' }),
+      task(),
+      email({ subject: 'stale words nobody reads' }),
+      email({ subject: '' }),
+      email({ replyInThread: false, subject: 'Closing the loop' }),
+    ]
+    expect(firstEmailStepIndex(steps, 1)).toBe(2)
+    expect(firstEmailStepIndex(steps, 5)).toBe(-1)
+    // From step 1, as ever.
+    expect([0, 2, 3, 4].map((index) => isInThreadEmailStep(steps, index))).toEqual([false, true, true, false])
+    // From step 2: step 3 opens the thread, step 4 answers it.
+    expect([2, 3, 4].map((index) => isInThreadEmailStep(steps, index, 1))).toEqual([false, true, false])
+    expect([3, 4].map((index) => isInThreadEmailStep(steps, index, 3))).toEqual([false, false])
+    // A reply step that opens the thread takes the first email's subject, not its own field.
+    expect(outreachThreadStartSubject(steps, 2)).toBe('Your client sites')
+    expect(outreachThreadStartSubject(steps, 0)).toBe('Your client sites')
+    expect(outreachThreadStartSubject(steps, 4)).toBe('Closing the loop')
+    expect(outreachThreadStartSubject(steps, 1)).toBe('')
   })
 
   it('needs a subject on a later email that starts a new thread', () => {

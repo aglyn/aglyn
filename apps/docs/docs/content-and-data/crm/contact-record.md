@@ -126,6 +126,12 @@ keep their own records, and the person's form submissions, orders, bookings
 and membership records are separate and are deleted from their own pages. It
 is a housekeeping act, and it is not a privacy erasure.
 
+Deleting a contact does not forget that they turned down your marketing email.
+If the person said no to email from a site, that answer is kept after the
+record is gone, and adding their address to an email list is still refused,
+even when you confirm you have permission. It stops applying only when the
+person opts in again themselves, for example through one of your forms.
+
 **Erase this person** is the privacy erasure — what you use when someone asks
 to be forgotten under GDPR, the CCPA or any similar law. It removes the person
 from *every* site in the workspace, whoever captured them, and it cannot be

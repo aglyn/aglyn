@@ -470,6 +470,13 @@ pluginsConfig.plugins.push({
     label,
     description: `TODO: one line for the switchboard about ${label}.`,
     releaseFlag,
+    // The flag's definition is the plugin's too: the generator compiles it
+    // into core's RELEASE_FLAGS. Off until the plugin is released.
+    releaseFlagDefinition: {
+      label,
+      description: `TODO: what ${label} gates, for the staff Feature Flags page.`,
+      defaultEnabled: false,
+    },
     publishedSiteImpact: surfaces.includes('site') ? 'elements' : 'console-only',
   },
 })
@@ -487,8 +494,8 @@ Done. Manual follow-ups (deliberately not auto-edited):
 1. Write the switchboard description in this plugin's \`catalog\` block in
    plugins.config.json (and \`publishedSiteImpact: "routes"\` if it serves
    site routes without components), then re-run the generator.
-2. Register the release flag \`${releaseFlag}\` (AGL-422 three-synced-places):
-   - ReleaseFlagKey + RELEASE_FLAGS entry in libs/aglyn/src/lib/app-utils/release-flags.ts
-   - parameter in cloud/firebase-remoteconfig.template.json
+2. Describe the release flag \`${releaseFlag}\` (AGL-422) in the same block's
+   \`releaseFlagDefinition\`, and seed it, off, as a parameter in
+   cloud/firebase-remoteconfig.template.json.
 3. nx lint plugins-${id} && nx test plugins-${id}, then commit.
 `)

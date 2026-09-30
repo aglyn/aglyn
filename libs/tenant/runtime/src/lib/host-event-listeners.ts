@@ -88,15 +88,16 @@ export interface HostEventListener {
     context?: HostEventContext,
   ): Promise<readonly HostActionAlert[] | void>
   /**
-   * Runs ONE automation, by id, that a published page fired for a site event
-   * it evaluated itself — a scroll depth, a click, exit intent. The page has
-   * already decided the trigger matched, so the listener runs that one
-   * automation rather than every automation on the event; a listener that
-   * does not own the id resolves nothing.
+   * Runs the server half of ONE page interaction, by id, that a published
+   * page fired for a site event it evaluated itself — a scroll depth, a
+   * click, exit intent. The page has already decided the trigger matched, so
+   * the listener runs what that one interaction names rather than everything
+   * listening for the event; a listener that does not own the id resolves
+   * nothing.
    */
   onDispatch?(
     hostId: string,
-    automationId: string,
+    interactionId: string,
     event: string,
     payload: HostEventPayload,
     context?: HostEventContext,
@@ -188,12 +189,12 @@ export async function runHostEventListeners(
 }
 
 /**
- * Hands one page-dispatched automation to the listeners that dispatch, and
+ * Hands one page-dispatched interaction to the listeners that dispatch, and
  * gathers the alerts it produced. Never rejects.
  */
 export async function dispatchHostAutomation(
   hostId: string,
-  automationId: string,
+  interactionId: string,
   event: string,
   payload: HostEventPayload = {},
   context: HostEventContext = {},
@@ -204,12 +205,12 @@ export async function dispatchHostAutomation(
     try {
       alerts.push(
         ...alertsOf(
-          await listener.onDispatch(hostId, automationId, event, payload, context),
+          await listener.onDispatch(hostId, interactionId, event, payload, context),
         ),
       )
     } catch (error) {
       console.error(
-        `[host-events] ${pluginId} failed to dispatch ${automationId}`,
+        `[host-events] ${pluginId} failed to dispatch ${interactionId}`,
         hostId,
         error,
       )

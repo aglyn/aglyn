@@ -22,21 +22,19 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { taxPeriodRange } from '../../../../utils/server/tx-return'
 import {
-  commerceSettledSummary,
-  commerceHostAttribution,
+  readRevenueSources,
+  type RevenueAttributionRow,
+} from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
+import { taxPeriodRange } from '../../../../utils/server/tx-return'
+import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
+import {
   contractedSummary,
-  marketplaceListingAttribution,
-  marketplacePublisherAttribution,
   orgAttribution,
-  marketplaceSettledSummary,
   revenueGap,
   subscriptionSettledSummary,
   totalEarnedCents,
-  type CommerceOrderRowInput,
   type ContractedOrgInput,
-  type MarketplaceRevenueRowInput,
   type PlatformRevenueRowInput,
   type RevenueReport,
 } from '../../../../utils/server/revenue-report'
@@ -47,8 +45,9 @@ import {
  * `GET ?period=2026-08` (a month) or `?period=2026-Q3` (a quarter). READ-ONLY:
  * every query below is a Firestore `get()`, nothing here writes to Firestore
  * and nothing here calls Stripe at all — the settled figures come from the
- * `platformRevenue` / `marketplacePurchases` / `orders` mirrors the billing
- * webhooks already maintain, not from a live Stripe read. That is deliberate
+ * `platformRevenue` mirror the billing webhook maintains, and from what each
+ * plugin that earns through the platform answers out of its own mirrors
+ * (`plugin-revenue-sources`, AGL-3080), not from a live Stripe read. That is deliberate
  * beyond politeness: this repo runs the LIVE secret key on localhost, so a
  * reporting page that reached for the Stripe API would be one typo away from
  * touching real money.
@@ -195,34 +194,87 @@ async function handler(request: Request): Promise<Response> {
 
     const firestore = firebaseAdmin.app().firestore()
     const revenue = firestore.collection('platformRevenue')
-    const marketplace = firestore.collection('marketplacePurchases')
+
+    // Awaited before any plugin is asked, which is the whole reason a runtime
+    // registry is safe here: the sources register on this surface, and one
+    // that still did not is REFUSED by the contract and named on the page
+    // rather than counted as zero.
+    await serverPluginLoader.ensureAll(['consoleApi'])
+
+    // Contracted is a POINT-IN-TIME figure — what the book bills right now —
+    // so it is deliberately NOT ranged on the period. A past period's
+    // contracted MRR is not recoverable from current org docs and pretending
+    // otherwise by filtering on `createdAt` would report today's prices
+    // against yesterday's customers.
+    //
+    // PAGED like every other sweep here (AGL-2486). This was a bare `.get()`
+    // on the whole collection — no limit at all — which is the same growth
+    // cliff as the row caps this change removed, just without even a cap to
+    // notice. Ordered by document id because there is no filter to ride: an
+    // unfiltered collection ordered by `__name__` needs no index. Leaving one
+    // read on the page unbounded is how the next person concludes the paging
+    // is optional.
+    //
+    // Held as a promise because the sources name publishers from it: an
+    // organization is the platform's, already read here, so naming one costs
+    // a source nothing.
+    const orgsRead = sweepAll(
+      firestore.collection('orgs'),
+      firebaseAdmin.firestore.FieldPath.documentId(),
+    )
+
+    /**
+     * Names the rows a source will SHOW, read AFTER its fold has capped them
+     * (AGL-2486): the lookup is bounded by what is displayed (at most
+     * `ATTRIBUTION_ROW_LIMIT` per table), not by how many sales the period
+     * holds. Reading a name per row before capping would reintroduce an
+     * unbounded read from a new direction.
+     */
+    async function nameRows(
+      rows: RevenueAttributionRow[],
+      from: { collection: string; nameField: string; detailField: string },
+    ): Promise<void> {
+      const ids = rows
+        .map((row) => row.key)
+        .filter((key) => key && !key.includes(' '))
+      if (ids.length === 0) return
+      const docs: FirebaseFirestore.DocumentSnapshot[] = []
+      for (let index = 0; index < ids.length; index += 300) {
+        const chunk = ids
+          .slice(index, index + 300)
+          .map((id) => firestore.collection(from.collection).doc(id))
+        docs.push(...(await firestore.getAll(...chunk)))
+      }
+      const found = new Map(docs.map((doc) => [doc.id, doc]))
+      for (const row of rows) {
+        // An unattributed row is keyed by its label, which was never an id:
+        // it was not looked up, and it is not a deleted document.
+        if (!row.key || row.key.includes(' ')) continue
+        const doc = found.get(row.key)
+        // A row whose entity is GONE keeps its id and says so, rather than
+        // rendering a blank cell that reads as a loading bug.
+        if (!doc?.exists) {
+          if (!row.name || row.name === row.key) {
+            row.name = `${row.key} (deleted)`
+          }
+          continue
+        }
+        const name = String(doc.get(from.nameField) ?? '').trim()
+        if (name) row.name = name
+        const detail = String(doc.get(from.detailField) ?? '').trim()
+        if (detail) row.detail = detail
+      }
+    }
 
     const [
       orgsSnapshot,
       billingSnapshot,
       revenueInPeriod,
       revenueUndated,
-      marketplaceInPeriod,
-      ordersInPeriod,
       earliestRecorded,
+      sources,
     ] = await Promise.all([
-      // Contracted is a POINT-IN-TIME figure — what the book bills right now
-      // — so it is deliberately NOT ranged on the period. A past period's
-      // contracted MRR is not recoverable from current org docs and
-      // pretending otherwise by filtering on `createdAt` would report today's
-      // prices against yesterday's customers.
-      //
-      // PAGED like every other sweep here (AGL-2486). This was a bare `.get()`
-      // on the whole collection — no limit at all — which is the same growth
-      // cliff as the row caps this change removed, just without even a cap to
-      // notice. Ordered by document id because there is no filter to ride:
-      // an unfiltered collection ordered by `__name__` needs no index.
-      // Leaving one read on the page unbounded is how the next person
-      // concludes the paging is optional.
-      sweepAll(
-        firestore.collection('orgs'),
-        firebaseAdmin.firestore.FieldPath.documentId(),
-      ),
+      orgsRead,
       // `subscription` lives at `orgs/{orgId}/billing/stripe` since AGL-1028,
       // so the revenue signal is not on the org doc. One collection-group
       // read rather than a get per org inside the loop, matching
@@ -243,47 +295,6 @@ async function handler(request: Request): Promise<Response> {
       // to the sweep above and the settled figure is short by it. Counted so
       // the page can say so instead of quietly under-reporting.
       revenue.where('paidAt', '==', null).limit(50).get(),
-      // Ranged on `createdAt` — a SINGLE-FIELD inequality on a TOP-LEVEL
-      // collection, served by Firestore's automatic index. Unlike the orders
-      // sweep below, this one is not a collection group, which is exactly why
-      // the same field name is safe here and was not there.
-      sweepAll(
-        marketplace
-          .where('createdAt', '>=', range.start)
-          .where('createdAt', '<', range.end),
-        'createdAt',
-      ),
-      // Storefront orders live per host (`hosts/{hostId}/orders`), so this is
-      // the one collection-GROUP range here.
-      //
-      // Ranged on `createdAtMs` — the NUMBER — and not on the `createdAt`
-      // Timestamp beside it, which is the whole reason this page reported
-      // nothing (AGL-2486). Orders carry both: `draft-order.ts`, `pos-order.ts`
-      // and the renewal webhook each write a `serverTimestamp()` and a
-      // `Date.now()` millisecond copy. A collection-group range needs a
-      // COLLECTION_GROUP-scoped single-field index — Firestore's automatic
-      // single-field indexes are COLLECTION scope only, so a collection group
-      // gets no free ride — and the index that exists, is declared in
-      // `fieldOverrides` and is deployed, is on `createdAtMs` (AGL-1793).
-      // Querying `createdAt` therefore answered FAILED_PRECONDITION on every
-      // single request. Verified against production: the `createdAt` form
-      // raises `9 FAILED_PRECONDITION … requires a COLLECTION_GROUP_ASC index
-      // for collection orders and field createdAt`, the `createdAtMs` form
-      // runs. So this is not a missing deploy and must not be "fixed" by
-      // declaring a second index for the redundant field: it is one query
-      // reading the wrong one of two fields that mean the same thing.
-      sweepAll(
-        firestore
-          .collectionGroup('orders')
-          .where('createdAtMs', '>=', range.start.getTime())
-          .where('createdAtMs', '<', range.end.getTime()),
-        'createdAtMs',
-      )
-        // A collection-group index this deployment has not built answers with
-        // FAILED_PRECONDITION. That must degrade to "commerce not counted",
-        // loudly, rather than 500 the whole page and take the subscription
-        // and marketplace figures down with it.
-        .catch(() => null),
       // The FIRST invoice the mirror ever recorded, which is what makes an
       // honest $0 distinguishable from an unanswerable one (AGL-2486).
       //
@@ -295,6 +306,31 @@ async function handler(request: Request): Promise<Response> {
       // sent someone looking for a real Starter purchase and finding nothing.
       // One document, ordered on the automatic single-field index.
       revenue.orderBy('paidAt').limit(1).get().catch(() => null),
+      // WHAT EACH PLUGIN THAT EARNS THROUGH THE PLATFORM TOOK (AGL-3080),
+      // read and folded by that plugin under this route's own ceiling and
+      // read budget. A source that could not answer is refused, never zero.
+      readRevenueSources({
+        period: period.trim(),
+        start: range.start,
+        end: range.end,
+        attributionLimit: ATTRIBUTION_ROW_LIMIT,
+        sweep: (query, orderField) =>
+          sweepAll(
+            query as FirebaseFirestore.Query,
+            orderField as string | FirebaseFirestore.FieldPath,
+          ) as never,
+        orgNames: async (orgIds) => {
+          const wanted = new Set(orgIds)
+          const names = new Map<string, string>()
+          for (const doc of (await orgsRead).docs) {
+            if (!wanted.has(doc.id)) continue
+            const name = String(doc.get('name') ?? '').trim()
+            if (name) names.set(doc.id, name)
+          }
+          return names
+        },
+        nameRows,
+      }),
     ])
 
     const billingByOrgId = new Map<string, Record<string, unknown>>()
@@ -317,32 +353,7 @@ async function handler(request: Request): Promise<Response> {
         id: doc.id,
         ...(doc.data() as object),
       }))
-    const marketplaceRows: MarketplaceRevenueRowInput[] =
-      marketplaceInPeriod.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as object),
-      }))
-    const commerceRows: CommerceOrderRowInput[] = (
-      ordersInPeriod?.docs ?? []
-    ).map((doc) => ({
-      id: doc.id,
-      // Orders live at `hosts/{hostId}/orders/{orderId}`, so the storefront
-      // that earned the take is in the PATH. Lifted from there rather than
-      // read from a field: it costs no extra read and cannot disagree with
-      // where the document actually is.
-      hostId: doc.ref.parent.parent?.id ?? '',
-      ...(doc.data() as object),
-    }))
-
     const subscriptions = subscriptionSettledSummary(subscriptionRows)
-    const marketplaceSettled = marketplaceSettledSummary(marketplaceRows)
-    // TRUNCATION ONLY — a query that could not run at all is a different
-    // state, reported as `commerceQueryFailed`, and folding it in here is
-    // what made the page blame a row cap for a missing index (AGL-2486).
-    const commerce = commerceSettledSummary(
-      commerceRows,
-      ordersInPeriod?.truncated === true,
-    )
 
     // Metered usage that was MEASURED and never invoiced (AGL-1878) — a gap
     // cause, and deliberately NOT added to settled revenue. Metered usage
@@ -406,98 +417,18 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    // WHO produced the numbers, on the dimension each source is actually
-    // measured in. All four are built from the same rows the totals folded,
-    // so every table reconciles to the figure above it by construction.
+    // WHO produced the subscription numbers, by org. Each source attributes
+    // its own earnings on the dimension it is measured in, from the same rows
+    // its total folded, so every table reconciles to the figure above it.
     const attribution = orgAttribution(
       contractedInput,
       subscriptionRows,
       ATTRIBUTION_ROW_LIMIT,
       unbilledMeteredByOrg,
     )
-    const byListing = marketplaceListingAttribution(
-      marketplaceRows,
-      ATTRIBUTION_ROW_LIMIT,
-    )
-    const byPublisher = marketplacePublisherAttribution(
-      marketplaceRows,
-      ATTRIBUTION_ROW_LIMIT,
-    )
-    const byHost = commerceHostAttribution(commerceRows, ATTRIBUTION_ROW_LIMIT)
-
-    // Names, read AFTER the fold has capped the rows (AGL-2486).
-    //
-    // Listings and hosts are collections this page did not previously touch,
-    // and the ordering is the whole point: the lookup is bounded by what will
-    // be DISPLAYED (at most `ATTRIBUTION_ROW_LIMIT` per table), not by how
-    // many sales the period holds. Reading a name per row before capping
-    // would have reintroduced an unbounded read from a new direction, one
-    // commit after removing the last of them.
-    //
-    // Publisher names need no read at all: every org is already in
-    // `orgNames`, folded from the org sweep above.
-    const orgNames = new Map<string, string>()
-    for (const doc of orgsSnapshot.docs) {
-      const name = String(doc.get('name') ?? '').trim()
-      if (name) orgNames.set(doc.id, name)
-    }
-    async function decorate(
-      table: { rows: { key: string; name: string; detail: string }[] },
-      collection: string,
-      nameField: string,
-      detailField: string,
-    ): Promise<void> {
-      const ids = table.rows
-        .map((row) => row.key)
-        .filter((key) => key && !key.includes(' '))
-      if (ids.length === 0) return
-      const docs: FirebaseFirestore.DocumentSnapshot[] = []
-      for (let index = 0; index < ids.length; index += 300) {
-        const chunk = ids
-          .slice(index, index + 300)
-          .map((id) => firestore.collection(collection).doc(id))
-        docs.push(...(await firestore.getAll(...chunk)))
-      }
-      const found = new Map(docs.map((doc) => [doc.id, doc]))
-      for (const row of table.rows) {
-        const doc = found.get(row.key)
-        // A row whose entity is GONE keeps its id and says so, rather than
-        // rendering a blank cell that reads as a loading bug.
-        if (!doc?.exists) {
-          if (!row.name || row.name === row.key) {
-            row.name = `${row.key} (deleted)`
-          }
-          continue
-        }
-        const name = String(doc.get(nameField) ?? '').trim()
-        if (name) row.name = name
-        const detail = String(doc.get(detailField) ?? '').trim()
-        if (detail) row.detail = detail
-      }
-    }
-    await Promise.all([
-      decorate(byListing, 'marketplaceListings', 'displayName', 'pluginId'),
-      decorate(byHost, 'hosts', 'displayName', 'subdomain'),
-    ])
-    // Publisher rows resolve from the org sweep — no read.
-    for (const row of byPublisher.rows) {
-      const name = orgNames.get(row.key)
-      if (name) row.name = name
-    }
-    for (const row of byListing.rows) {
-      const publisher = orgNames.get(row.detail)
-      if (publisher) row.detail = publisher
-    }
-
     const settled = {
       subscriptions,
-      marketplace: marketplaceSettled,
-      commerce,
-      totalEarnedCents: totalEarnedCents({
-        subscriptions,
-        marketplace: marketplaceSettled,
-        commerce,
-      }),
+      totalEarnedCents: totalEarnedCents({ subscriptions, sources }),
     }
     const report: RevenueReport = {
       period: period.trim(),
@@ -505,10 +436,10 @@ async function handler(request: Request): Promise<Response> {
       periodEnd: range.end.toISOString(),
       contracted,
       settled,
+      sources,
       gap: revenueGap({ contracted, subscriptions, unbilledMeteredCents }),
       attention: {
         rowsOutsideEveryPeriod: revenueUndated.size,
-        commerceTruncated: commerce.truncated,
       },
     }
     // The mirror's own start date, and whether the requested period predates
@@ -522,15 +453,12 @@ async function handler(request: Request): Promise<Response> {
       // question, and reporting 0 would read as "nothing was missed".
       unbilledMeteredApplies,
       unbilledMeteredFailed,
-      // Loud when the orders sweep could not run, so a $0 commerce row is
-      // never mistaken for "no storefront sales". Kept strictly separate from
-      // truncation: one means "we read part of it", the other means "we read
-      // none of it", and they have different remedies.
-      commerceQueryFailed: ordersInPeriod === null,
       // NAMED per source. "At least one total is incomplete" leaves the
-      // reader unable to tell which figure they may still quote.
+      // reader unable to tell which figure they may still quote. A source
+      // whose read could not run at all says so on its own section
+      // (`failure`), kept strictly apart from truncation: one means "we read
+      // part of it", the other "we read none of it", with different remedies.
       subscriptionsTruncated: revenueInPeriod.truncated,
-      marketplaceTruncated: marketplaceInPeriod.truncated,
       // The CONTRACTED base can hit the ceiling too, now that its two reads
       // are bounded. Reported rather than left implicit: a clipped org sweep
       // under-reports MRR, which is the same silent-lower-bound fault as a
@@ -542,8 +470,9 @@ async function handler(request: Request): Promise<Response> {
           ? 'contracted MRR'
           : null,
         revenueInPeriod.truncated ? 'subscriptions' : null,
-        marketplaceInPeriod.truncated ? 'marketplace' : null,
-        commerce.truncated ? 'storefront orders' : null,
+        ...sources.map((section) =>
+          section.outcome === 'answered' && section.truncated ? section.name : null,
+        ),
       ].filter(Boolean),
       /**
        * How far back the SETTLED base can answer at all (AGL-2486).
@@ -560,9 +489,6 @@ async function handler(request: Request): Promise<Response> {
         earliestPaidAt !== null && range.start < earliestPaidAt,
       settledMirrorEmpty: earliestPaidAt === null,
       attribution,
-      attributionByListing: byListing,
-      attributionByPublisher: byPublisher,
-      attributionByHost: byHost,
       /**
        * Whether the period has already ended (AGL-2486).
        *

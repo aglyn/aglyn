@@ -99,6 +99,7 @@ import {
   dealPatchFromForm,
   emptyDealForm,
 } from '../model/deal-form-model'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 /**
  * How many recent contacts the picker matches against. The window is the
@@ -189,6 +190,8 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const { data: user } = useUser()
   const { orgId, consentGroup, visibleTo, createHostId, createTokens } =
     useCrmScope({ hostId, org })
+  // A client-direct write owes the org's sharing rules a re-evaluation (AGL-3336).
+  const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
   // The feed the act is logged in is the level it was PERFORMED at
   // (AGL-2738): this site's under a site, the organization's at the org
   // hub. `createHostId` is where the deal is STAMPED, which at the hub is a
@@ -375,6 +378,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
           return
         }
+        followUpSharing('deals', [deal.$id])
         enqueueSnackbar('Deal saved', { variant: 'success', persist: false })
         onSaved?.(deal.$id, 'edit')
       } else {
@@ -400,6 +404,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         // Setup → Activity shows CRM work (AGL-2622): the deal is org data,
         // but the act happened in this site's console and belongs in its
         // feed. Creation only — an edit is a save the card reports.
+        followUpSharing('deals', [created.id])
         logActivity('Added deal', { type: 'deal', id: created.id, name: values.title })
         enqueueSnackbar('Deal created', { variant: 'success', persist: false })
         onSaved?.(created.id, 'create')
@@ -418,6 +423,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     problem,
     bandFull,
     orgId,
+    followUpSharing,
     user,
     deal,
     values,

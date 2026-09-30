@@ -132,9 +132,9 @@ jest.mock('@aglyn/tenant-runtime/get-forms', () => ({
   __esModule: true,
   default: async () => ({ forms: {} }),
 }))
-jest.mock('@aglyn/tenant-runtime/get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: async () => ({}),
+  readRepeatRows: async () => ({}),
 }))
 jest.mock('@aglyn/tenant-runtime/get-collection-content', () => ({
   __esModule: true,

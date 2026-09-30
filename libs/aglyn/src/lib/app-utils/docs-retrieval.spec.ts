@@ -33,9 +33,9 @@ import {
   retrieveDocsSections,
   tokenize,
 } from './docs-retrieval'
-import type { AssistDocsSection } from './docs-index.generated'
+import type { DocsSection } from './docs-index.generated'
 
-const CORPUS: AssistDocsSection[] = [
+const CORPUS: DocsSection[] = [
   {
     path: '/building-sites/domains/connect-a-domain',
     title: 'Connect a custom domain',

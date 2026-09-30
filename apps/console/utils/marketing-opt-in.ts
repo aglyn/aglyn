@@ -41,7 +41,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type { PlatformMarketingHold } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
 
 /** The one route both halves of the record are read and written through. */
-export const MARKETING_CONSENT_ROUTE = '/api/auth/marketing-consent'
+export const PLATFORM_MARKETING_CONSENT_ROUTE = '/api/auth/marketing-consent'
 
 const MARKER_KEY = 'aglyn:marketing-opt-in-at'
 const DEFAULT_MAX_AGE_MS = 120_000
@@ -79,7 +79,7 @@ export function clearMarketingOptIn(): void {
 }
 
 /** What the route answers a GET with. */
-export interface MarketingConsentStatus extends PlatformMarketingConsentState {
+export interface PlatformMarketingConsentStatus extends PlatformMarketingConsentState {
   /** Whether the one-time prompt should show now, decided by the server. */
   promptDue: boolean
   /** The wording version this deploy shows. */
@@ -104,26 +104,26 @@ type TokenUser = { getIdToken: () => Promise<string> } | null | undefined
  * already answered, and must not hide the preference switch either — the
  * card says it could not load instead.
  */
-export async function fetchMarketingConsentStatus(
+export async function fetchPlatformMarketingConsentStatus(
   user: TokenUser,
   options: { detail?: 'hold' } = {},
-): Promise<MarketingConsentStatus | null> {
+): Promise<PlatformMarketingConsentStatus | null> {
   try {
     const response = await authorizedFetch(
       user,
       options.detail
-        ? `${MARKETING_CONSENT_ROUTE}?detail=${options.detail}`
-        : MARKETING_CONSENT_ROUTE,
+        ? `${PLATFORM_MARKETING_CONSENT_ROUTE}?detail=${options.detail}`
+        : PLATFORM_MARKETING_CONSENT_ROUTE,
     )
     if (!response.ok) return null
-    return (await response.json()) as MarketingConsentStatus
+    return (await response.json()) as PlatformMarketingConsentStatus
   } catch {
     return null
   }
 }
 
 /** What a door can send: a decision, or the prompt's dismissal. */
-export type MarketingConsentAnswer = PlatformMarketingConsentDecision | 'dismissed'
+export type PlatformMarketingConsentAnswer = PlatformMarketingConsentDecision | 'dismissed'
 
 /**
  * Hands a decision to the server, which stamps the server clock and writes
@@ -135,13 +135,13 @@ export type MarketingConsentAnswer = PlatformMarketingConsentDecision | 'dismiss
  * record is reported loudly and returns false, and must not present as a
  * failed sign-up.
  */
-export async function postMarketingConsent(
+export async function postPlatformMarketingConsent(
   user: TokenUser,
-  answer: MarketingConsentAnswer,
+  answer: PlatformMarketingConsentAnswer,
   source: PlatformMarketingConsoleSourceKind,
 ): Promise<boolean> {
   try {
-    const response = await authorizedFetch(user, MARKETING_CONSENT_ROUTE, {
+    const response = await authorizedFetch(user, PLATFORM_MARKETING_CONSENT_ROUTE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

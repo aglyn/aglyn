@@ -30,7 +30,8 @@
  * keeps a range-invisible row from silently understating a filing.
  */
 
-export {}
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 
 /** Every document, keyed by `collection/id`. */
 let docs = new Map<string, Record<string, unknown>>()
@@ -110,6 +111,14 @@ jest.mock('@aglyn/aglyn/server', () => ({
     body: null,
     headers: Object.fromEntries(request.headers),
   }),
+}))
+
+// The route awaits the plugin surface before it asks the facilitated-sales
+// sources. Nothing is loaded here: the sources a case needs are registered by
+// the case itself, and a declared source nobody registered must be REFUSED.
+jest.mock('../../../../utils/server-plugin-loader', () => ({
+  __esModule: true,
+  serverPluginLoader: { ensureAll: async () => undefined },
 }))
 
 const { GET } = require('./route') as {
@@ -254,139 +263,64 @@ describe('GET /api/admin/tax-return (AGL-1811)', () => {
   })
 
   /**
-   * AGL-1904. Storefront tax is a SECOND collection and a second query — the
-   * route used to read `platformRevenue` alone, so tax charged to shoppers
-   * under Aglyn's own registration reached no response field at all.
+   * THE SALES THE OPERATOR FACILITATED FOR OTHERS (AGL-1904, AGL-2137,
+   * AGL-3080) are each a plugin's to read. The route reads none of their
+   * collections: it asks every declared source, lists every answer beside
+   * the operator's own summary, and never sums one into it.
+   *
+   * The sources' own figures are proved beside them — the storefront's in
+   * the commerce plugin, the marketplace's in the marketplace plugin — and
+   * through the REAL registrars in `specs/sales-sources-are-registered`.
    */
-  it('serves storefront tax as its own section, never merged into the summary', async () => {
+  it('REFUSES every declared source that registered nothing — never an empty list', async () => {
+    resetPluginServicesForTests()
     seedRow('in_q3')
-    docs.set('storefrontTaxCollected/cs_q3', {
-      hostId: 'host-1',
-      orgId: 'org-2',
-      taxMode: 'stripe-automatic',
-      taxLiability: 'platform',
-      grossCents: 10825,
-      taxCents: 825,
-      currency: 'usd',
-      customerAddress: { country: 'US', state: 'TX' },
-      taxLines: [{ amountCents: 825, taxableAmountCents: 10000 }],
-      paidAt: new Date('2026-09-16T12:00:00Z'),
-    })
-    docs.set('storefrontTaxCollected/cs_manual', {
-      hostId: 'host-2',
-      orgId: 'org-3',
-      taxMode: 'manual',
-      taxLiability: null,
-      grossCents: 10800,
-      taxCents: 800,
-      currency: 'usd',
-      customerAddress: { country: 'US', state: 'TX' },
-      taxLines: [],
-      paidAt: new Date('2026-09-17T12:00:00Z'),
-    })
     const body = await (await GET(get('2026-Q3'))).json()
-    // Aglyn's OWN figures are untouched by the storefront rows.
+    expect(body.summary.taxCollectedCents).toBe(660)
+    expect(body.sources.map((section: any) => [section.pluginId, section.outcome])).toEqual([
+      ['commerce', 'refused'],
+      ['marketplace', 'refused'],
+    ])
+  })
+
+  it('lists what a source answered beside the summary, never summed into it', async () => {
+    resetPluginServicesForTests()
+    const read = jest.fn(async () => ({
+      id: 'sales',
+      name: 'Sales',
+      title: 'Sales tax',
+      help: 'What the plugin sold.',
+      intro: '',
+      truncated: false,
+      undatedRows: 0,
+      findings: [{ id: 'salesTax', severity: 'blocking', count: 825, label: 'Tax held', detail: 'Decide.' }],
+      filingLines: [],
+      tables: [],
+      figures: [],
+      exports: [],
+      summary: { taxCollectedCents: 825 },
+      rows: [],
+    }))
+    registerTaxReturnSource({ read } as never, { pluginId: 'commerce' })
+    seedRow('in_q3')
+    const body = await (await GET(get('2026-Q3'))).json()
+    // The operator's OWN figures are untouched by a facilitated sale.
     expect(body.summary.transactionCount).toBe(1)
     expect(body.summary.taxCollectedCents).toBe(660)
-    // …and the storefront money is present, split by who computed it.
-    expect(body.storefront.summary.aglynLiable.taxCollectedCents).toBe(825)
-    expect(body.storefront.summary.aglynLiable.taxableSalesCents).toBe(10000)
-    expect(body.storefront.summary.merchantManual.taxCollectedCents).toBe(800)
-    expect(body.storefront.rows).toHaveLength(2)
-  })
-
-  /**
-   * AGL-2137. Marketplace sales tax is a THIRD collection and a third query,
-   * and it was missing entirely.
-   *
-   * Marketplace checkout enables `automatic_tax` on the PLATFORM's own charge,
-   * adds the tax `exclusive` on top, and transfers the publisher a FIXED
-   * amount computed from the pre-tax price — so the tax stays platform-side
-   * and is Aglyn's to remit in full. Nothing anywhere read
-   * `marketplacePurchases.taxCents`: every dollar of it was collected and then
-   * absent from the return.
-   *
-   * Forced red by removing the third query from the route: `body.marketplace`
-   * is undefined and all four expectations fail.
-   */
-  it('serves marketplace tax as its own section, net of refunds', async () => {
-    seedRow('in_q3')
-    docs.set('marketplacePurchases/cs_mkt_1', {
-      listingId: 'listing-1',
-      buyerUid: 'buyer-1',
-      sellerOrgId: 'seller-org',
-      amountCents: 10825,
-      taxCents: 825,
-      feeCents: 2000,
-      transferCents: 8000,
-      createdAt: new Date('2026-09-18T12:00:00Z'),
+    expect(body.sources[0]).toMatchObject({
+      outcome: 'answered',
+      pluginId: 'commerce',
+      summary: { taxCollectedCents: 825 },
     })
-    // Half refunded: half the tax goes back and is not remittable.
-    docs.set('marketplacePurchases/cs_mkt_2', {
-      listingId: 'listing-2',
-      buyerUid: 'buyer-2',
-      sellerOrgId: 'seller-org',
-      amountCents: 2165,
-      taxCents: 165,
-      transferCents: 1600,
-      refundedCents: 1083,
-      createdAt: new Date('2026-09-19T12:00:00Z'),
+    // Asked for THIS period, for the jurisdiction being filed, under the cap.
+    expect(read).toHaveBeenCalledWith({
+      period: '2026-Q3',
+      start: new Date(Date.UTC(2026, 6, 1)),
+      end: new Date(Date.UTC(2026, 9, 1)),
+      filing: { code: 'US-TX', label: 'Texas', form: 'tx-webfile', figuresName: 'Items 1–3' },
+      rowCap: 2000,
     })
-    const body = await (await GET(get('2026-Q3'))).json()
-
-    // Aglyn's own subscription figures are untouched — three sources, three
-    // totals, never summed.
-    expect(body.summary.taxCollectedCents).toBe(660)
-    expect(body.storefront.summary.transactionCount).toBe(0)
-
-    expect(body.marketplace.summary.transactionCount).toBe(2)
-    // Charged 825 + 165 = 990.
-    expect(body.marketplace.summary.taxChargedCents).toBe(990)
-    // Refunded: 165 × 1083/2165 = 82.5 → 83 (Math.round).
-    expect(body.marketplace.summary.taxRefundedCents).toBe(83)
-    // Remittable is charged − refunded, and it is the headline figure.
-    expect(body.marketplace.summary.taxCollectedCents).toBe(907)
-    expect(body.marketplace.rows).toHaveLength(2)
-  })
-
-  /**
-   * A FULLY refunded marketplace sale nets to exactly zero tax — the case a
-   * pro-rata calculation gets wrong by a cent if it is written carelessly, and
-   * the one where "we collected this" would be plainly false.
-   */
-  it('a fully refunded marketplace sale remits no tax at all', async () => {
-    docs.set('marketplacePurchases/cs_mkt_full', {
-      sellerOrgId: 'seller-org',
-      amountCents: 10825,
-      taxCents: 825,
-      refundedCents: 10825,
-      createdAt: new Date('2026-09-18T12:00:00Z'),
-    })
-    const body = await (await GET(get('2026-Q3'))).json()
-    expect(body.marketplace.summary.taxChargedCents).toBe(825)
-    expect(body.marketplace.summary.taxRefundedCents).toBe(825)
-    expect(body.marketplace.summary.taxCollectedCents).toBe(0)
-    // And the row is still REPORTED — a refunded sale that vanished from the
-    // return would be indistinguishable from one that never happened.
-    expect(body.marketplace.rows).toHaveLength(1)
-  })
-
-  /**
-   * A refund LARGER than the charge is a data fault. It must not net the
-   * remittable figure below zero, because understating what is owed is the
-   * one direction with a filing consequence — it is clamped and counted.
-   */
-  it('never nets marketplace tax below zero on an over-refunded row', async () => {
-    docs.set('marketplacePurchases/cs_mkt_bad', {
-      sellerOrgId: 'seller-org',
-      amountCents: 1000,
-      taxCents: 80,
-      refundedCents: 5000,
-      createdAt: new Date('2026-09-18T12:00:00Z'),
-    })
-    const body = await (await GET(get('2026-Q3'))).json()
-    expect(body.marketplace.summary.taxCollectedCents).toBe(0)
-    expect(body.marketplace.summary.attention.rowsOverRefunded).toBe(1)
+    resetPluginServicesForTests()
   })
 })
 

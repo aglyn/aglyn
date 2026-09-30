@@ -309,7 +309,8 @@ export function normalizeEmailSendRateConfig(
 }
 
 /**
- * Contexts that are campaign sends, derived rather than threaded.
+ * Contexts whose sends take the refusable `campaign` priority, derived rather
+ * than threaded.
  *
  * The same move `contextTag` makes one file over, and for the same reason: a
  * `priority` argument added to 37 call sites is 37 places to remember and one
@@ -327,7 +328,7 @@ export function normalizeEmailSendRateConfig(
  * protected) would make a forgotten entry a dropped password reset, which is
  * the failure you find from a support ticket.
  */
-const CAMPAIGN_CONTEXTS: ReadonlySet<string> = new Set(['campaign'])
+const REFUSABLE_SEND_CONTEXTS: ReadonlySet<string> = new Set(['campaign'])
 
 /**
  * The priority for a send. An explicit `priority` always wins; otherwise a
@@ -339,7 +340,7 @@ export function resolveSendPriority(
 ): EmailSendPriority {
   if (explicit === 'campaign' || explicit === 'bulk') return explicit
   if (explicit === 'transactional') return 'transactional'
-  return CAMPAIGN_CONTEXTS.has(String(context ?? '').trim())
+  return REFUSABLE_SEND_CONTEXTS.has(String(context ?? '').trim())
     ? 'campaign'
     : 'transactional'
 }

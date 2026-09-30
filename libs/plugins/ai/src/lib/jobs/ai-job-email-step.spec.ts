@@ -102,6 +102,7 @@ import {
   AI_JOB_EMAIL_STEP_MINIMUM_MS,
 } from './ai-job-email-step'
 import { registerAiJobStep } from './ai-jobs'
+import { removeStandInProductIndexes, standInProductIndexes } from '../testing/stand-in-product-index'
 
 const NOW = new Date('2026-09-15T20:00:00.000Z')
 const STARTER_ORG = { plan: 'starter', billingStatus: 'active' }
@@ -178,6 +179,11 @@ function collectionRef(path: string): Record<string, unknown> {
 const firestore = {
   collection: (name: string) => collectionRef(name),
 } as unknown as FirebaseFirestore.Firestore
+
+// The product indexes the commerce plugin publishes (AGL-3080), stood in over
+// this spec's Firestore double: the AI plugin reads products through them.
+beforeEach(() => standInProductIndexes(firestore))
+afterEach(() => removeStandInProductIndexes())
 
 // ── The design writer, as the email plugin registers it ──────────────────
 

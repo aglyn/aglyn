@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ASSIST_DOCS_INDEX } from './docs-index.generated'
+import { DOCS_SECTION_INDEX } from './docs-index.generated'
 import {
   composeDocsAnswer,
   composeDocsLinksAnswer,
@@ -309,7 +309,7 @@ describe('never fabricate — every word is template or verbatim docs', () => {
   })
 
   it('every link in a deflected answer is a real docs section URL', () => {
-    const known = new Set(ASSIST_DOCS_INDEX.map((section) => sectionUrl(section)))
+    const known = new Set(DOCS_SECTION_INDEX.map((section) => sectionUrl(section)))
     for (const question of ANSWERABLE) {
       const verdict = verdictFor(question)
       if (!verdict.answered) continue
@@ -339,7 +339,7 @@ describe('never fabricate — every word is template or verbatim docs', () => {
     // only ever quotes sections handed to it by `retrieveDocsSections`.
     const verdict = verdictFor('how do I connect a custom domain to my site')
     for (const section of verdict.quoted) {
-      expect(ASSIST_DOCS_INDEX).toContain(section)
+      expect(DOCS_SECTION_INDEX).toContain(section)
     }
   })
 })
@@ -624,7 +624,7 @@ describe('the keyless degrade — the closest pages, honestly labelled', () => {
 
   it('offers the retrieved pages as links, and only real ones', () => {
     const answer = composeDocsLinksAnswer(sections())
-    const known = new Set(ASSIST_DOCS_INDEX.map((section) => sectionUrl(section)))
+    const known = new Set(DOCS_SECTION_INDEX.map((section) => sectionUrl(section)))
     const urls = [...answer.matchAll(/\]\((https?:\/\/[^)]+)\)/g)].map((m) => m[1])
     expect(urls.length).toBeGreaterThan(0)
     for (const url of urls) expect(known.has(url)).toBe(true)

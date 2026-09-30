@@ -30,6 +30,7 @@ export type CrmApiRoute =
   | 'leads-create'
   | 'contact-email-history'
   | 'contact-update'
+  | 'contact-remove'
   | 'company-delete'
   | 'contacts-merge'
   | 'email-send'

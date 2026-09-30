@@ -123,7 +123,7 @@ import {
   renderHostEmailWithTokens,
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
-import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
@@ -389,7 +389,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       ])
       chargeAccountId = String(ownerProfile?.get('stripeAccountId') ?? '')
       if (
-        !connectLinkageIsReady(
+        !merchantAccountIsReady(
           {
             accountId: chargeAccountId,
             chargesEnabled: ownerProfile?.get('stripeChargesEnabled'),

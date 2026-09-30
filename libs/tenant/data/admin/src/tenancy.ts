@@ -21,9 +21,22 @@ export * from './lib/server/api-keys'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
 export * from './lib/server/client-error-report'
-export * from './lib/server/connect-account-status'
-export * from './lib/server/connect-payout-failure'
-export * from './lib/server/stripe-account-mode'
+// The merchant's payment account, as a contract. Its adapter is not exported:
+// a plugin asks the contract, and the doors that only need the readiness rule
+// import `@aglyn/tenant-data-admin/server/payment-provider` directly, which
+// loads no Firebase.
+export {
+  merchantAccountIsReady,
+  merchantAccountReadiness,
+  paymentProvider,
+} from './lib/server/payment-provider'
+export type {
+  MerchantAccountReadiness,
+  MerchantAccountReadinessInput,
+  PaymentMode,
+  PaymentProvider,
+  PaymentProviderEvent,
+} from './lib/server/payment-provider'
 export * from './lib/server/auth-handoff'
 export * from './lib/server/console-domains'
 export * from './lib/server/dns-probe'
@@ -63,6 +76,9 @@ export * from './lib/server/email-marketing-gate'
 // and the executor that runs a change around them.
 export * from './lib/server/consent-group-carry'
 export * from './lib/server/consent-group-change'
+// A person's refusal kept after the record it was written on is deleted
+// (AGL-3338): the delete's write, the list gate's read, and the change's carry.
+export * from './lib/server/retained-refusals'
 export * from './lib/server/sms-keywords'
 export * from './lib/server/document-id'
 export * from './lib/server/collection-preview-token'
@@ -165,6 +181,9 @@ export * from './lib/server/crm-inbound-email'
 // confirms one (AGL-2975).
 export * from './lib/server/member-email-aliases'
 export * from './lib/server/user-profiles'
+// The one "New account" staff notice per account, keyed on the auth
+// record's creation (AGL-3225).
+export * from './lib/server/new-account-announcement'
 export * from './lib/server/legal-acceptance'
 // The person's decision about the platform's own product email, on their
 // document and on the operator's marketing contact (AGL-3185).

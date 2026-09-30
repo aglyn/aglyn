@@ -27,6 +27,7 @@ import type { AglynPostalAddress } from '../foundation'
 import { consentGroupForHost } from './consent-groups'
 import type { ContactCustomValue, ContactLifecycleStage } from './crm'
 import type { EmailState } from './email-state'
+import { heldScopeTokens } from './scope-tokens'
 import {
   CAPTURED_BY_HOST_FIELD,
   MARKETING_CONSENT_BY_HOST_FIELD,
@@ -34,6 +35,7 @@ import {
   readMarketingBasis,
   type MarketingBasis,
 } from './marketing-consent'
+import { refusalsOf, type RetainedRefusals } from './retained-refusals'
 
 export type ContactSource =
   | 'form'
@@ -578,14 +580,15 @@ export function contactDisplayName(
  * READ the row is still holding it whether or not they ever wrote a note. A
  * count taken from the facets would drop a holder who has one and no facet
  * and leave them able to see a document nothing believes they hold.
+ *
+ * Less the tokens a share ADDED (AGL-3336): a site the record was shared
+ * with sees it and holds nothing, so it must not keep the record alive when
+ * its last holder lets go — `heldScopeTokens` is `visibleTo` without them.
  */
 export function contactHolderTokens(
   contact: Record<string, unknown> | null | undefined,
 ): string[] {
-  const visibleTo = (contact ?? {})['visibleTo']
-  return Array.isArray(visibleTo)
-    ? visibleTo.filter((token): token is string => typeof token === 'string')
-    : []
+  return heldScopeTokens(contact)
 }
 
 /** What a holder letting go of a contact should do to the document. */
@@ -593,6 +596,12 @@ export type ContactDetach =
   | {
       /** Nobody else holds it. Delete the document. */
       action: 'delete'
+      /**
+       * Every refusal the document holds, every site's and the unscoped one,
+       * which the delete keeps in `retainedRefusals` in the same transaction
+       * — see `retained-refusals.ts`. `null` when it holds none.
+       */
+      retained: RetainedRefusals | null
     }
   | {
       /** Other holders remain. Drop this one's half. */
@@ -601,6 +610,10 @@ export type ContactDetach =
        * Field-level removals, as a patch. Dotted paths so the OTHER holders'
        * facets and consent entries are untouched — a nested write would
        * replace the whole map and take every other holder's records with it.
+       *
+       * A consent entry that is a REFUSAL is not among them: it stays on the
+       * document for the holders that remain, because a person's "no" is not
+       * the leaving holder's to take with it.
        */
       remove: string[]
       /** Scope tokens to pull out of `visibleTo`. */
@@ -616,8 +629,15 @@ export type ContactDetach =
  * holder's relationship with that person: they have their own notes, their
  * own order history and their own consent, none of which the deleting holder
  * ever had a claim on. So a delete drops the deleting group's facet, its
- * consent entries, its capture attribution and its scope tokens — and the
+ * consent grants, its capture attribution and its scope tokens — and the
  * DOCUMENT dies only when the last holder lets go.
+ *
+ * A REFUSAL IS NOT LET GO (AGL-3338). The list gate reads a stored refusal
+ * as the one fact an operator's attestation cannot overrule, so a detach
+ * leaves the leaving group's refusal entries on the document, and a delete
+ * answers every refusal the document holds for the caller to retain beside
+ * the delete. Read off the document's own data: a table row's projection
+ * carries neither the consent map nor the unscoped field.
  *
  * ⛔ This is NOT the erasure path. A privacy erasure removes the person
  * everywhere regardless of how many holders remain, and routing it through
@@ -641,12 +661,15 @@ export function planContactDetach(
    * be a scope decision, and a delete button is not where that belongs.
    */
   const remaining = held.filter((token) => !leaving.has(token))
-  if (!remaining.length) return { action: 'delete' }
+  if (!remaining.length) return { action: 'delete', retained: refusalsOf(contact) }
+  const refused = refusalsOf(contact)?.byHost ?? {}
   return {
     action: 'detach',
     remove: [
       `${CONTACT_FACETS_FIELD}.${group.groupId}`,
-      ...group.hostIds.map((id) => `marketingConsentByHost.${id}`),
+      ...group.hostIds
+        .filter((id) => !(id in refused))
+        .map((id) => `${MARKETING_CONSENT_BY_HOST_FIELD}.${id}`),
     ],
     removeTokens: [...leaving],
     removeHostIds: [...group.hostIds],

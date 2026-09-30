@@ -24,7 +24,12 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonMatcher } from '@aglyn/aglyn/plugin-manager/plugin-person-matches'
+import {
+  registerPluginRecordIndex,
+  type PluginRecordIndex,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
@@ -41,6 +46,21 @@ export const crmContactCaptureWriter: PluginContactCaptureWriter = {
   async capture(request) {
     const { captureContactForCrm } = await import('./server/capture-contact')
     return await captureContactForCrm(request)
+  },
+}
+
+/**
+ * The `pipeline` record index, its reads loaded with the first one — see
+ * `server/pipeline-record-index.ts` for what it answers.
+ */
+export const crmPipelineRecordIndex: PluginRecordIndex = {
+  async list(request) {
+    const { pipelineRecordIndex } = await import('./server/pipeline-record-index')
+    return pipelineRecordIndex.list(request)
+  },
+  async get(request) {
+    const { pipelineRecordIndex } = await import('./server/pipeline-record-index')
+    return pipelineRecordIndex.get(request)
   },
 }
 
@@ -119,6 +139,22 @@ export function registerCrmServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // Sharing rules (AGL-3336), re-evaluated after every server write of a
+  // lead, a contact, a company or a deal: the core tells its record-written
+  // listeners from the list-field restamp every such writer ends with, in
+  // both apps — a form's capture on the tenant, an edit in the console.
+  // Deferred like the rest: an org with no rules pays one cached read.
+  registerPluginRecordWrittenListener(
+    async (event) => {
+      const { crmSharingRecordWritten } = await import('./server/crm-sharing')
+      await crmSharingRecordWritten(event)
+    },
+    { pluginId: BUNDLE_ID, key: 'sharing' },
+  )
+  // The organization's pipelines and their stages, as another plugin reads
+  // them (AGL-3080): an automation the AI drafts names the stage a deal
+  // moves to. Deferred like the rest: the reads load with the first one.
+  registerPluginRecordIndex('pipeline', crmPipelineRecordIndex, { pluginId: BUNDLE_ID })
   registerPluginConsentGroupParticipant(
     {
       async preview(request) {

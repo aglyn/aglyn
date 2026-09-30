@@ -26,12 +26,10 @@ import {
   notifyRiskEvent,
   raiseOperatorAlert,
   renderHostEmailWithTokens,
-  clearConnectPayoutFailure,
-  recordConnectPayoutFailure,
-  syncConnectAccountStatus,
   updateExisting,
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
+import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 import { formatOperatorAlertAmount } from '@aglyn/aglyn/app-utils/operator-alerts'
 import {
@@ -2007,60 +2005,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   event,
   requestHost,
 }) => {
-  // Connect readiness, kept fresh (AGL-1997). Every commerce money route —
+  // THE MERCHANT'S PAYMENT ACCOUNT CHANGED. Every commerce money route —
   // checkout, cart checkout, draft orders, reservations, POS — gates the sale
-  // on the CACHED `stripeChargesEnabled` written by the connect route. Nothing
-  // refreshed it but the merchant reopening that route, so a merchant Stripe
-  // later restricted kept selling on a stale `true` and the shopper met the
-  // failure at payment time.
+  // on the readiness the connect route CACHED on the merchant's profile
+  // (AGL-1997), and nothing refreshed it but the merchant reopening that
+  // route: a merchant the provider later restricted kept selling on a stale
+  // `true`, and the shopper met the failure at payment time. A payout or
+  // transfer that never landed is recorded against the same profile, and a
+  // later one that did retires the warning.
   //
-  // FIRST and with an early return: this event shares nothing with the order
-  // sections below, and returning here keeps it out of every `metadata.type`
-  // test. `syncConnectAccountStatus` mirrors current state, so a redelivery is
-  // harmless.
-  // `event.livemode`, not `object.livemode` (AGL-2471): the Stripe Account
-  // object carries no `livemode` field, but the event announcing it does, and
-  // that is what lets a linkage whose mode was never recorded heal itself
-  // instead of staying refused forever.
-  if (type === 'account.updated') {
-    await syncConnectAccountStatus('profiles', object, event?.livemode)
-    return
-  }
-
-  // A PAYOUT OR TRANSFER THAT NEVER LANDED.
-  //
-  // Placed beside `account.updated` because it is the same kind of event —
-  // account-level, nothing to do with the `metadata.type` order sections
-  // below — and returns for the same reason.
-  //
-  // `payout.failed` is the CONNECTED account's balance failing to reach its
-  // bank, so the account id is `event.account`: the Payout object's own
-  // `destination` names the bank, not the Connect account. `transfer.failed`
-  // is the platform's balance failing to reach the connected account, a
-  // platform event whose `destination` IS the account.
-  //
-  // Recorded and surfaced, never retried: Stripe runs its own retry schedule
-  // and a second transfer against an account that just refused one is how a
-  // duplicate lands.
-  if (type === 'payout.failed' || type === 'transfer.failed') {
-    const failedAccountId =
-      type === 'payout.failed'
-        ? String(event?.account ?? '')
-        : String(object?.destination?.id ?? object?.destination ?? '')
-    await recordConnectPayoutFailure('profiles', {
-      kind: type === 'payout.failed' ? 'payout' : 'transfer',
-      object,
-      accountId: failedAccountId,
-      livemode: event?.livemode,
-    })
-    return
-  }
-  // A later success retires the warning the card shows. The history in
-  // `connectPayoutFailures` is kept — "has this account failed before" is what
-  // that record exists to answer — but a stale warning on a resolved problem
-  // trains people to ignore the surface.
-  if (type === 'payout.paid') {
-    await clearConnectPayoutFailure('profiles', String(event?.account ?? ''))
+  // The payment provider reads the event — which ones describe an account,
+  // and where each keeps its id — and mirrors current state, so a redelivery
+  // is harmless. FIRST and with an early return: these events share nothing
+  // with the order sections below, and returning here keeps them out of
+  // every `metadata.type` test.
+  if (await paymentProvider().applyAccountEvent('profiles', { type, object, event })) {
     return
   }
 

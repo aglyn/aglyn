@@ -32,7 +32,7 @@ const mockGetPublishedLayoutVersion = jest.fn()
 const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
-const mockGetDatasets = jest.fn()
+const mockReadRepeatRows = jest.fn()
 const mockGetWorkflows = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetForms = jest.fn()
@@ -50,9 +50,9 @@ jest.mock('./get-forms', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetForms(...a),
 }))
-jest.mock('./get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: (...a: unknown[]) => mockGetDatasets(...a),
+  readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
 }))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
@@ -143,7 +143,7 @@ describe('function bindings are declared, not named by core (AGL-3393)', () => {
     mockGetComponents.mockResolvedValue({ definitions: {} })
     mockGetVariables.mockResolvedValue({})
     mockGetFunctions.mockResolvedValue({ quote: QUOTE })
-    mockGetDatasets.mockResolvedValue([])
+    mockReadRepeatRows.mockResolvedValue([])
     mockGetWorkflows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue({})
     mockGetForms.mockResolvedValue({ forms: {} })
@@ -311,7 +311,7 @@ describe("the dev loop's plugins bind through their manifests on disk (AGL-3394)
     mockGetComponents.mockResolvedValue({ definitions: {} })
     mockGetVariables.mockResolvedValue({})
     mockGetFunctions.mockResolvedValue({ quote: QUOTE })
-    mockGetDatasets.mockResolvedValue([])
+    mockReadRepeatRows.mockResolvedValue([])
     mockGetWorkflows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue({})
     mockGetForms.mockResolvedValue({ forms: {} })

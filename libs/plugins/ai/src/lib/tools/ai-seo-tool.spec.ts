@@ -21,23 +21,19 @@
  * editor, to the audit's findings and to what the site actually shows.
  */
 
+import type { SeoFindingCode } from '@aglyn/aglyn/app-utils/seo-audit'
 import {
   SCREEN_SEO_LISTING_FIELDS,
   SCREEN_SEO_CARD_TEXT_FIELDS,
   SEO_LISTING_FIELDS,
   isSeoListingFieldKey,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
-import type { AiSeoFindingCode } from '../model/ai-seo'
-import { aiSeoPageFacts } from '../runtime/seo-page-facts'
+import { seoPageFacts } from '@aglyn/aglyn/app-utils/seo-page-facts'
 import {
   AI_SEO_ENTITY_TYPE_VALUES,
   AI_SEO_FIELDS_TOOL_NAME,
-  AI_SEO_MAX_KEYWORDS,
   aiSeoFieldsTool,
   aiSeoFixesTool,
-  aiSeoKeywordCount,
-  aiSeoKeywordCoverage,
-  aiSeoKeywordList,
   aiSeoSiteTool,
   checkAiSeoFields,
   checkAiSeoFixes,
@@ -155,29 +151,7 @@ describe('checkAiSeoFields', () => {
   })
 })
 
-describe('keywords', () => {
-  it('counts whole words in any case, and nothing inside a longer word', () => {
-    expect(aiSeoKeywordCount('Brass lamps, BRASS LAMPS and brasslamps', 'brass lamps')).toBe(2)
-    expect(aiSeoKeywordCount('Lampshade', 'lamp')).toBe(0)
-    expect(aiSeoKeywordCount('', 'lamp')).toBe(0)
-  })
-
-  it('reads a typed list trimmed, deduplicated and capped', () => {
-    expect(aiSeoKeywordList(' Lamps, lamps ,brass\n, ,  desk lamps ')).toEqual(['Lamps', 'brass', 'desk lamps'])
-    expect(aiSeoKeywordList('a,b,c,d,e,f,g')).toHaveLength(AI_SEO_MAX_KEYWORDS)
-  })
-
-  it('reports where a page already says each keyword', () => {
-    expect(
-      aiSeoKeywordCoverage(['lamps', 'austin'], { title: 'Desk lamps', body: 'Made in Austin.' }),
-    ).toEqual([
-      { keyword: 'lamps', inTitle: true, inDescription: false, inH1: false, inBody: false },
-      { keyword: 'austin', inTitle: false, inDescription: false, inH1: false, inBody: true },
-    ])
-  })
-})
-
-const facts = aiSeoPageFacts({
+const facts = seoPageFacts({
   root: { componentId: 'div', nodes: ['main'] },
   main: { componentId: 'section', props: { component: 'main' }, nodes: ['h', 'img', 'img2'] },
   h: { componentId: 'muiTypography', props: { variant: 'h1', children: 'Home' }, nodes: [] },
@@ -185,7 +159,7 @@ const facts = aiSeoPageFacts({
   img2: { componentId: 'image', props: { src: 'media:host-1/desk', alt: 'A desk' }, nodes: [] },
 }, { rootId: 'root' })
 
-const page = (codes: AiSeoFindingCode[], patch: Partial<AiSeoBatchPage> = {}): AiSeoBatchPage => ({
+const page = (codes: SeoFindingCode[], patch: Partial<AiSeoBatchPage> = {}): AiSeoBatchPage => ({
   screenId: 's1',
   path: '/lamps',
   name: 'Lamps',

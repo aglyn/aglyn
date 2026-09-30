@@ -18,7 +18,7 @@
 import {
   resolveSiteTheme,
   type ThemeHostDocument,
-} from '@aglyn/aglyn/app-utils/marketplace-theme'
+} from '@aglyn/aglyn/app-utils/site-theme'
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import {
   hostTokenMerge,

@@ -396,7 +396,10 @@ export function describeConsentGroupReview(
   const copied =
     sum(
       (preview?.carries ?? []).map(
-        (carry) => (carry?.siteSuppressions ?? 0) + (carry?.topicOptOuts ?? 0),
+        (carry) =>
+          (carry?.siteSuppressions ?? 0) +
+          (carry?.topicOptOuts ?? 0) +
+          (carry?.retainedRefusals ?? 0),
       ),
     ) + (lineCount(preview, 'crm.refusals') ?? 0)
   const paces = sum((preview?.carries ?? []).map((carry) => carry?.paces ?? 0))

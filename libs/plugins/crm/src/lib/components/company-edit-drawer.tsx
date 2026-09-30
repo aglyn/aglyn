@@ -74,6 +74,7 @@ import {
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmSitePicker } from './crm-site-picker'
 import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list-query'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 export interface CompanyEditDrawerProps {
   open: boolean
@@ -147,6 +148,8 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { scope, createTokens, createHostId } = useCrmScope({ hostId, org })
+  // A client-direct write owes the org's sharing rules a re-evaluation (AGL-3336).
+  const followUpSharing = useCrmSharingFollowUp(hostId, scope?.[1] ?? null)
   // The feed the act is logged in is the level it was PERFORMED at
   // (AGL-2738): this site's under a site, the organization's at the org
   // hub. `createHostId` is where the record is STAMPED, which at the hub is
@@ -273,6 +276,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
           },
         )
         if (!verdict.ok) return setError(verdict.message)
+        followUpSharing('companies', [company.$id])
         enqueueSnackbar('Company saved', { variant: 'success', persist: false })
         onSaved(company.$id)
       } else {
@@ -309,6 +313,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
         // Setup → Activity shows CRM work (AGL-2622): the company is org
         // data, but the act happened in this site's console and belongs in
         // its feed. Creation only — an edit is a save the card reports.
+        followUpSharing('companies', [id])
         logActivity('Added company', { type: 'company', id, name: draft.name.trim() })
         enqueueSnackbar(`Company "${draft.name.trim()}" created`, {
           variant: 'success',
@@ -326,6 +331,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   }, [
     busy,
     scope,
+    followUpSharing,
     draft,
     company,
     bandFull,

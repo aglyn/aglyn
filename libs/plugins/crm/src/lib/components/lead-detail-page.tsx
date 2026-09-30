@@ -42,6 +42,8 @@ import { LeadHistoryCard } from './lead-history-card'
 import { LeadPropertiesCard } from './lead-properties-card'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
 import { RecordActivityCard } from './record-activity-card'
+import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
+import { crmShareChipFor } from '../model/crm-sharing'
 
 type LeadDocument = Record<string, unknown> & CrmLeadFields
 
@@ -200,9 +202,17 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           // The campaigns the lead is filed under (AGL-3274), by name
           // beside the status. An id no container answers for draws no
           // chip: the card below keeps it, the header only names.
-          extraChips={leadCampaignNames(lead, campaigns.options).map((name) => (
-            <CrmRecordChip key={name} label="Campaign" value={name} />
-          ))}
+          extraChips={[
+            // Seen here only through a share (AGL-3336): who shared it.
+            <CrmShareChipView
+              key="shared"
+              chip={crmShareChipFor(lead, viewingGroup?.hostIds ?? [])}
+              org={org}
+            />,
+            ...leadCampaignNames(lead, campaigns.options).map((name) => (
+              <CrmRecordChip key={name} label="Campaign" value={name} />
+            )),
+          ]}
         />
         {/* What an assistant says about where the lead stands (AGL-2917): read on its own site. */}
         <CrmRecordInsightsZone
@@ -230,6 +240,16 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           }}
         />
         <LeadHistoryCard hostId={siteHostId} leadId={id} lead={lead} />
+        {/* Where the lead is visible and why, and a manager's share (AGL-3336). */}
+        <RecordSharingCard
+          object="leads"
+          id={id}
+          record={lead}
+          hostId={hostId ?? null}
+          orgId={orgId}
+          org={org}
+          viewingHostIds={viewingGroup?.hostIds}
+        />
         <RecordActivityCard hostId={siteHostId} org={org} leadId={id} />
       </Stack>
       <LeadConvertDialog

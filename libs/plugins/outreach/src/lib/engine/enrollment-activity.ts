@@ -52,22 +52,38 @@ export function outreachEnrolledEntryKey(enrollmentId: string): string {
 }
 
 /**
+ * The line that says an enrollment began past the first step (AGL-3228),
+ * and which steps it skipped: "Began at step 3 — steps 1–2 skipped, already
+ * done by hand". `''` for one that began at step 1.
+ */
+export function outreachStartedAtLine(startStepIndex: number | null | undefined): string {
+  const start = Number(startStepIndex)
+  if (!Number.isInteger(start) || start < 1) return ''
+  const skipped = start === 1 ? 'step 1' : `steps 1–${start}`
+  return `Began at step ${start + 1} — ${skipped} skipped, already done by hand`
+}
+
+/**
  * "Enrolled in <sequence>", and the campaigns it carried the person into
  * when the sequence was in any, named. A sequence with no name — never
- * stored, but a document can lose one — reads "a sequence".
+ * stored, but a document can lose one — reads "a sequence". An enrollment
+ * that began past the first step says so on a line of its own (AGL-3228).
  */
 export function outreachEnrolledEntry(input: {
   enrollmentId: string
   sequenceName: string
   campaignNames: readonly string[]
+  startStepIndex?: number
 }): OutreachTimelineEntry {
   const sequence = input.sequenceName.trim() || 'a sequence'
   const campaigns = input.campaignNames.map((name) => name.trim()).filter(Boolean)
+  const enrolled = campaigns.length
+    ? `Enrolled in ${sequence}\nFiled under ${campaigns.join(', ')}`
+    : `Enrolled in ${sequence}`
+  const startedAt = outreachStartedAtLine(input.startStepIndex)
   return {
     dedupeKey: outreachEnrolledEntryKey(input.enrollmentId),
-    body: campaigns.length
-      ? `Enrolled in ${sequence}\nFiled under ${campaigns.join(', ')}`
-      : `Enrolled in ${sequence}`,
+    body: startedAt ? `${enrolled}\n${startedAt}` : enrolled,
   }
 }
 

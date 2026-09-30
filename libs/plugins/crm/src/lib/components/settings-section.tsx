@@ -72,6 +72,7 @@ import EmailTemplatesCard from './email-templates-card'
 import EmailCaptureCard from './email-capture-card'
 import RecipesCard from './recipes-card'
 import SendingAddressesCard from './sending-addresses-card'
+import SharingRulesCard from './sharing-rules-card'
 
 export type CrmSettingsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
 
@@ -758,6 +759,17 @@ export function CrmSettingsSection(props: CrmSettingsSectionProps) {
       <EmailTemplatesCard hostId={hostId} org={org} />
       <EmailCaptureCard hostId={hostId} canManage={canManage} ready={scopeReady && roleReady} />
       <SendingAddressesCard orgId={orgId} ready={scopeReady} />
+      {/* Sharing rules (AGL-3336) are the organization's: mounted where its
+          sites are listed, at the org level only — before Recipes, which
+          stays last. */}
+      {mount ? (
+        <SharingRulesCard
+          orgId={orgId ?? null}
+          org={org}
+          canManage={canManage}
+          ready={scopeReady && roleReady}
+        />
+      ) : null}
       {mount ? <RecipesCard org={org} /> : null}
     </Stack>
   )

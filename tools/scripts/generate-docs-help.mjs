@@ -155,6 +155,7 @@ const PLUGIN_TOPICS = {
   contactFields: '/content-and-data/crm/custom-fields',
   crmLeads: '/content-and-data/crm/leads',
   crmSettings: '/content-and-data/crm/settings',
+  crmSharing: '/content-and-data/crm/sharing',
   crmViews: '/content-and-data/crm/views',
   datasets: '/content-and-data/datasets/overview',
   // The abuse/report triage topic: the marketplace's report queue moved into

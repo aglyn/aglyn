@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
+import {
+  analyticsTagResident,
+  sendAnalyticsProviderEvent,
+} from './analytics-provider'
 import { sanitizeEventParams } from './analytics-events'
-// The reader the consent sweep already uses to find which GA properties this
-// page has resident, reused rather than a second scan of the same document —
-// it is format-checked and it sees a tag that arrived through GTM as well as
-// one we mounted ourselves.
-import { residentGaMeasurementIds } from './visitor-consent'
 
 /**
- * Real-user Core Web Vitals → GA4 events (AGL-1642).
+ * Real-user Core Web Vitals → the page's analytics tag (AGL-1642).
  *
  * Until this module there was no field performance telemetry of any kind in
  * the repo, and the cost was concrete: AGL-1538 recorded a tenant hydration
@@ -60,15 +59,22 @@ import { residentGaMeasurementIds } from './visitor-consent'
  * - `surface` — same param the link-click listener sends: GA's Hostname
  *   dimension separates domains, `surface` separates product surfaces.
  *
+ * ## Delivery — the resident tag, through its vendor's adapter
+ *
+ * Each metric is handed to the resident analytics tag through the adapter
+ * that knows its vendor (`analytics-provider.ts`), marked `measurementOnly`
+ * so it reaches the measurement property and no advertising destination
+ * sharing the tag's library (AGL-2710). This module names no vendor.
+ *
  * ## Consent — the same gate as every other tenant event, plus one nuance
  *
- * Delivery is `window.gtag`, which on a tenant site exists only once a
- * granting consent state has loaded it (AGL-1498). No gtag, no hit.
+ * On a tenant site a tag exists only once a granting consent state has
+ * mounted it (AGL-1498). No tag, no hit.
  *
  * The nuance is TIMING, not posture. TTFB reports the moment the reporter
- * installs, and both gtag mounts load late by design — `afterInteractive` on
- * the tenant, Firebase's runtime injection on the console — so "no gtag YET"
- * is the normal state for the first metrics of every pageview, granting
+ * installs, and both tags load late by design — `afterInteractive` on the
+ * tenant, the analytics SDK's runtime injection on the console — so "no tag
+ * YET" is the normal state for the first metrics of every pageview, granting
  * visitors included. Dropping on first miss would silently discard TTFB (and
  * often LCP) on every surface, which reads in GA exactly like fast pages.
  * So a metric that finds no tag is held IN MEMORY and re-offered briefly
@@ -92,10 +98,10 @@ import { residentGaMeasurementIds } from './visitor-consent'
  * dynamic `import()` so the tenant's critical path pays nothing for it.
  *
  * The console's `traffic_type: 'internal'` stamp (AGL-1582) rides these hits
- * unchanged: Firebase's `setDefaultEventParameters` issues a global
- * `gtag('set', …)`, which applies to every later event on the page —
- * including these direct `window.gtag` calls (verified against the SDK's
- * `wrapGtag`, not assumed).
+ * unchanged: the analytics SDK's `setDefaultEventParameters` sets a default on
+ * the tag itself, which applies to every later event on the page — including
+ * these, which reach the same tag (verified against the SDK's `wrapGtag`, not
+ * assumed).
  */
 
 /** The four metrics worth a GA event, per web.dev's GA4 guidance. */
@@ -124,16 +130,16 @@ export interface WebVitalsReportingOptions {
   /**
    * Whether this visitor's consent currently permits analytics.
    *
-   * Optional, and ABSENT MEANS ALLOWED — on a tenant page the absence of
-   * `window.gtag` is already the gate, because the tag only loads for a
+   * Optional, and ABSENT MEANS ALLOWED — on a tenant page the absence of a
+   * resident tag is already the gate, because the tag only loads for a
    * visitor who granted (AGL-1498), and a self-hosted surface answers to its
    * operator's own configuration.
    *
-   * The console needs it because its gate has a different shape. Firebase
-   * injects gtag.js and a page cannot unload a script, so a visitor who
-   * WITHDRAWS mid-session leaves `window.gtag` resident — and this module
-   * calls it directly rather than through `deliver()`, so the console's
-   * refusing transport does not cover it. Re-read on every delivery rather
+   * The console needs it because its gate has a different shape. Its
+   * analytics SDK injects the tag and a page cannot unload a script, so a
+   * visitor who WITHDRAWS mid-session leaves the tag resident — and this
+   * module hands it events directly rather than through `deliver()`, so the
+   * console's refusing transport does not cover it. Re-read on every delivery rather
    * than captured at install, since the whole point is that the answer
    * changes within one document.
    */
@@ -158,60 +164,16 @@ function consentAllows(): boolean {
   }
 }
 
-function residentGtag(): ((...args: unknown[]) => void) | null {
-  if (typeof window === 'undefined') return null
-  const gtag = (window as unknown as { gtag?: unknown }).gtag
-  return typeof gtag === 'function'
-    ? (gtag as (...args: unknown[]) => void)
-    : null
+/** One metric to the measurement property of every resident tag. */
+function sendMetricEvent(name: string, params: Record<string, unknown>): void {
+  sendAnalyticsProviderEvent(name, params, { measurementOnly: true })
 }
 
-/**
- * Send one metric event to the MEASUREMENT properties only (AGL-2710).
- *
- * A gtag event with no `send_to` goes to every destination the loader has
- * configured, and on a surface that also runs Google Ads that includes the
- * ads account. This module's whole subject is "Core Web Vitals → GA4", and an
- * ads destination has nothing to do with a layout shift: measured on
- * `aglyn.com`, one such event attempted seven requests to
- * `googleads.g.doubleclick.net` and `google.com/{pagead,rmkt,ccm}` — per
- * metric, per pageview, four metrics deep — and Google Ads has no report that
- * reads any of them. Naming the GA4 ids drops all seven and leaves the GA hit
- * exactly as it was.
- *
- * The ids are read at DELIVERY time, from the page, through the reader the
- * consent sweep already uses: the tag routinely arrives after the first
- * metric, and what has to be addressed is whatever gtag is configured for now
- * — which on a customer site is their own property and not ours.
- *
- * No ids found means no `send_to` and the event goes wherever it went before.
- * That is the fail-open side on purpose: a tag that arrived through GTM with
- * an id this reader never saw would otherwise be handed an empty destination
- * list, and losing the measurement is a worse outcome than an ads account
- * receiving a metric it ignores.
- */
-function sendMetricEvent(
-  gtag: (...args: unknown[]) => void,
-  name: string,
-  params: Record<string, unknown>,
-): void {
-  try {
-    const destinations = residentGaMeasurementIds()
-    gtag(
-      'event',
-      name,
-      destinations.length ? { ...params, send_to: destinations } : params,
-    )
-  } catch {
-    // Analytics never breaks the page.
-  }
-}
-
-function flushPending(gtag: (...args: unknown[]) => void): void {
+function flushPending(): void {
   const held = pending
   pending = []
   for (const event of held) {
-    sendMetricEvent(gtag, event.name, event.params)
+    sendMetricEvent(event.name, event.params)
   }
 }
 
@@ -240,12 +202,11 @@ function deliverMetricEvent(
     stopWatcher()
     return
   }
-  const gtag = residentGtag()
-  if (gtag) {
-    // Anything held arrived before this one; keep GA's receive order honest.
-    if (pending.length) flushPending(gtag)
+  if (analyticsTagResident()) {
+    // Anything held arrived before this one; keep the receive order honest.
+    if (pending.length) flushPending()
     stopWatcher()
-    sendMetricEvent(gtag, name, params)
+    sendMetricEvent(name, params)
     return
   }
   pending.push({ name, params })
@@ -261,9 +222,8 @@ function deliverMetricEvent(
       stopWatcher()
       return
     }
-    const resident = residentGtag()
-    if (resident) {
-      flushPending(resident)
+    if (analyticsTagResident()) {
+      flushPending()
       stopWatcher()
       return
     }

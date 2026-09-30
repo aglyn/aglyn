@@ -61,12 +61,19 @@ describe('marketplace plugin', () => {
     /*
      * What is left in the zones, and what is NOT. Four went with the routes
      * that drew them — a zone exists so a console page can show marketplace
-     * UI without importing this plugin, and the hub is this plugin. These two
+     * UI without importing this plugin, and the hub is this plugin. These
      * are drawn by console pages that are not the marketplace: the
-     * installation detail page, and a site's layouts list.
+     * workspace's Plugins page, an installation's own page, a site's layouts
+     * list, and the staff overview.
      */
     const slots = (extension?.widgets ?? []).map((widget) => widget.slot)
-    expect(slots.sort()).toEqual(['hostArtifactPublish', 'pluginSiteSet'])
+    expect(slots.sort()).toEqual([
+      'hostArtifactPublish',
+      'orgPluginInstalls',
+      'pluginInstallStatus',
+      'pluginSiteSet',
+      'staffOverview',
+    ])
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
   })
 

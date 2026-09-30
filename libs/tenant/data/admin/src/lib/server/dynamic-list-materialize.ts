@@ -71,6 +71,7 @@ import {
   type DynamicListDimensions,
   dynamicListRuleNeedsEngagement,
   extractEmailFromFields,
+  seenOnlyThroughGrant,
   isContactLifecycleStage,
   normalizeContactEmail,
   normalizeDynamicListRule,
@@ -654,6 +655,9 @@ export async function collectDynamicListCandidates(options: {
       for (const doc of snapshot.docs) {
         read += 1
         after = doc.id
+        // A contact another site SHARED with this one (AGL-3336) is seen
+        // here, not held: it is never this site's audience.
+        if (source === 'contacts' && seenOnlyThroughGrant(doc.data(), options.hostId)) continue
         const candidate = toCandidate(source, doc, facetGroupId)
         if (candidate) pageCandidates.push(candidate)
       }

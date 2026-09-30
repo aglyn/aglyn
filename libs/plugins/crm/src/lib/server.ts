@@ -47,8 +47,10 @@
  * holder's rows and the audience band are judgments the browser cannot make.
  * `crm/contact-update` (AGL-2804) is every other write to a contact's facets:
  * the rules cannot tell one field of a holder's facet from another, so they
- * leave a client nothing there but letting a holder go, and the plan is
- * asked here about the fields a save carries.
+ * leave a client nothing there, and the plan is asked here about the fields
+ * a save carries. `crm/contact-remove` (AGL-3338) is a holder letting a
+ * contact go: the refusals the document holds are kept, which a client
+ * write could not be trusted to do.
  */
 
 import {
@@ -113,8 +115,11 @@ import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-pe
 import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
 import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/inbound-address'
 import { crmCompanyDeleteHandler } from './server/company-delete'
+import { crmSharingHandler } from './server/crm-sharing'
+import { CRM_SHARING_ROUTE } from './model/crm-sharing'
 import { CONTACT_PHONE_REFUSAL, normalizeTags, typed } from './server/contact-profile'
 import { crmContactUpdateHandler } from './server/contact-update'
+import { crmContactRemoveHandler } from './server/contact-remove'
 import {
   CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
   crmEmailTemplateDuplicateHandler,
@@ -599,6 +604,7 @@ export function registerCrmConsoleApi(): void {
   // Every other console write to a contact's facets (AGL-2804): the rules
   // cannot tell one facet field from another, so the plan is asked here.
   registerPluginApiRoute(CRM_API_ROUTES.contactUpdate, crmContactUpdateHandler)
+  registerPluginApiRoute(CRM_API_ROUTES.contactRemove, crmContactRemoveHandler)
   // A company's contacts unlinked, then the company (AGL-2804): the unlink
   // clears a facet, which is the server's to write.
   registerPluginApiRoute(CRM_API_ROUTES.companyDelete, crmCompanyDeleteHandler)
@@ -611,6 +617,10 @@ export function registerCrmConsoleApi(): void {
   // What a client-direct write the browser cannot follow up asks for: the
   // fields the CRM lists query, restamped from the record (AGL-3321).
   registerPluginApiRoute(CRM_LIST_FIELDS_ROUTE, crmListFieldsHandler)
+  // Sharing records with other sites (AGL-3336): a manager's share and
+  // unshare, the org's sharing rules and their recompute, and the rules'
+  // re-evaluation a client-direct write owes.
+  registerPluginApiRoute(CRM_SHARING_ROUTE, crmSharingHandler)
   // A lead source value renamed or deleted (AGL-3298): the list and every
   // lead and contact holding the old label, in one request.
   registerPluginApiRoute(CRM_LEAD_SOURCE_VALUES_ROUTE, crmLeadSourceValuesHandler)
@@ -676,6 +686,39 @@ export function registerCrmConsoleApi(): void {
   // and rotated here, behind the CRM's own gate, and the org document that
   // carries it is closed to every client.
   registerPluginApiRoute(CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler)
+  /*
+   * The three doors a MACHINE calls (AGL-3080), at the paths they have
+   * always answered on: the scheduler's daily digest and hourly task
+   * reminders, on the cron secret, and the mail provider's capture webhook,
+   * on its signature. None names a site or a member, so each is registered
+   * as a machine's route — the dispatcher leaves the plugin's release and
+   * enablement gates and its write limit to it — and each judges the CRM's
+   * plan and flag for every organization it resolves. Loaded with the
+   * first call, not with the surface.
+   */
+  registerPluginApiRoute(
+    CRM_API_ROUTES.dailyDigest,
+    {
+      web: async (request) =>
+        (await import('./server/daily-digest-route')).crmDailyDigestRoute(request),
+    },
+    { machine: true },
+  )
+  registerPluginApiRoute(
+    CRM_API_ROUTES.taskReminders,
+    {
+      web: async (request) =>
+        (await import('./server/task-reminders-route')).crmTaskRemindersRoute(request),
+    },
+    { machine: true },
+  )
+  registerPluginApiRoute(
+    CRM_API_ROUTES.inbound,
+    {
+      web: async (request) => (await import('./server/inbound-route')).crmInboundRoute(request),
+    },
+    { machine: true },
+  )
   registerPluginApiRoute(
     CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
     crmEmailTemplateDuplicateHandler,

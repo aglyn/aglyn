@@ -108,6 +108,7 @@ import {
 } from './ai-job-products-step'
 import { AI_PRODUCT_IMAGE_READ_MS } from './ai-product-image'
 import { registerAiJobStep, registerAiJobStepPasses } from './ai-jobs'
+import { removeStandInProductIndexes, standInProductIndexes } from '../testing/stand-in-product-index'
 
 function mockSnapshot(path: string) {
   const data = mockDocs.get(path)
@@ -174,6 +175,11 @@ const firestore = {
     throw new Error('the products step writes no batch')
   },
 } as unknown as FirebaseFirestore.Firestore
+
+// The product indexes the commerce plugin publishes (AGL-3080), stood in over
+// this spec's Firestore double: the AI plugin reads products through them.
+beforeEach(() => standInProductIndexes(firestore))
+afterEach(() => removeStandInProductIndexes())
 
 const ORG = 'org-1'
 const HOST = 'host-1'
@@ -607,6 +613,16 @@ describe('who may start a products job', () => {
 
   it('admits a store of the job’s own org whose plan sells and has Commerce on', async () => {
     await expect(aiProductsJobAdmission(context())).resolves.toBeNull()
+  })
+
+  it('refuses when no plugin keeps products here, however Commerce is switched (AGL-3080)', async () => {
+    // The keeper is whichever plugin publishes the product index; with none
+    // registered there is nothing to write copy for.
+    removeStandInProductIndexes()
+    await expect(aiProductsJobAdmission(context())).resolves.toMatchObject({
+      status: 403,
+      error: AI_PRODUCTS_COMMERCE_OFF_COPY,
+    })
   })
 
   it('refuses inputs it cannot run, a missing site, another org’s site, a plan that does not sell, and Commerce off', async () => {

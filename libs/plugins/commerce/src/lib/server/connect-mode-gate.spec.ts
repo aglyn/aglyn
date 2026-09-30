@@ -36,7 +36,7 @@
  * most repeated failure, and only the boundary can tell the two apart.
  *
  * The unit-level truth table lives in
- * `libs/tenant/data/admin/src/lib/server/stripe-account-mode.spec.ts`; the
+ * `libs/tenant/data/admin/src/lib/server/payment-provider.spec.ts`; the
  * seven doors that must all consult it are enumerated in
  * `connect-mode-gate-coverage.spec.ts`.
  *
@@ -119,7 +119,7 @@ const mockOrg: any = {
 }
 
 // Only Firestore is faked. The gate is NOT mocked — it reaches the handler
-// through `@aglyn/tenant-data-admin/server/stripe-account-mode`, a pure module
+// through `@aglyn/tenant-data-admin/server/payment-provider`, a pure module
 // with no Firebase dependency, so the REAL decision runs. That separation is
 // deliberate: a gate mocked out of the path proves nothing about the path.
 jest.mock('@aglyn/tenant-data-admin', () => ({

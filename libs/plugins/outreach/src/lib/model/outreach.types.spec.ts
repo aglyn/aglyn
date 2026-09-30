@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLUGIN_ORG_KEYED_COLLECTIONS } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -23,12 +24,12 @@ import {
 } from './outreach.types'
 
 /**
- * The collection names are spelled in three places this plugin may not
- * import: the Firestore rules, the org erasure and the personal-data export
- * (AGL-2974). The last two live in a `scope:data` library the boundary keeps
- * away from a plugin, so each carries the name as a literal, and this spec is
- * what holds all four spellings to one. Read as source text, because the
- * thing that would drift IS the text.
+ * The collection names are spelled in places this plugin may not import: the
+ * Firestore rules and the personal-data export (AGL-2974), which lives in a
+ * `scope:data` library the boundary keeps away from a plugin and so carries
+ * the name as a literal. The org erasure reads them from this plugin's own
+ * declaration instead (AGL-3080). This spec holds every spelling to one. Read
+ * as source text, because the thing that would drift IS the text.
  */
 
 const REPO_ROOT = join(__dirname, '../../../../../..')
@@ -65,14 +66,20 @@ describe('Outreach collection names (AGL-2974)', () => {
     },
   )
 
-  it.each([
-    ['OUTREACH_MAILBOX_CREDENTIALS_COLLECTION', OUTREACH_COLLECTIONS.mailboxCredentials],
-    ['OUTREACH_LINKS_COLLECTION', OUTREACH_COLLECTIONS.links],
-  ])('is swept by the org erasure under the same spelling (%s)', (constant, name) => {
-    const erase = read('libs/tenant/data/admin/src/lib/server/erase.ts')
-    expect(erase).toContain(`const ${constant} = '${name}'`)
-    expect(erase).toMatch(new RegExp(`deleteDocsByOrgId\\(\\s*${constant}`))
-  })
+  it.each([OUTREACH_COLLECTIONS.mailboxCredentials, OUTREACH_COLLECTIONS.links])(
+    'is declared to the org erasure under the same spelling, which then names it nowhere (%s)',
+    (name) => {
+      // Declared in `plugins.config.json` and compiled into core (AGL-3080):
+      // the erasure sweeps every declared collection by its org field in any
+      // process, and spells none of them itself.
+      expect(PLUGIN_ORG_KEYED_COLLECTIONS).toContainEqual({
+        pluginId: 'outreach',
+        name,
+        orgField: 'orgId',
+      })
+      expect(read('libs/tenant/data/admin/src/lib/server/erase.ts')).not.toContain(name)
+    },
+  )
 
   it.each([OUTREACH_COLLECTIONS.mailboxCredentials, OUTREACH_COLLECTIONS.links])(
     'has a disclosure decision in the personal-data export (%s)',

@@ -60,6 +60,20 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+/**
+ * The store the loader joins against is DECLARED by the distributing plugin
+ * (AGL-3080). The real compiled declaration by default; `null` to prove the
+ * loader closes when nothing declares one.
+ */
+let mockDistribution: unknown = jest.requireActual(
+  '@aglyn/aglyn/plugin-manager/plugin-distribution',
+).PLUGIN_DISTRIBUTION
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-distribution', () => ({
+  get PLUGIN_DISTRIBUTION() {
+    return mockDistribution
+  },
+}))
+
 import { resolveMarketplacePluginVersion } from './realm-plugins'
 
 const SHA = 'a'.repeat(64)
@@ -73,6 +87,35 @@ beforeEach(() => {
     signature: 'sig',
     trust: 'realm',
     manifest: { hostAbi: 2 },
+  })
+})
+
+describe('the store it joins against is declared, and absent is closed (AGL-3080)', () => {
+  const declared = jest.requireActual(
+    '@aglyn/aglyn/plugin-manager/plugin-distribution',
+  ).PLUGIN_DISTRIBUTION
+
+  afterEach(() => {
+    mockDistribution = declared
+  })
+
+  it('reads the store the marketplace declares, compiled rather than registered', () => {
+    // The double above answers for these three names and no others, so every
+    // resolution in this file is proof the loader reads the declaration.
+    expect(declared).toEqual({
+      pluginId: 'marketplace',
+      listings: 'marketplaceListings',
+      versions: 'pluginVersions',
+      revocations: 'revocations',
+    })
+  })
+
+  it('resolves nothing when no plugin declares a store', async () => {
+    listings.set('listing1', { displayName: 'Plugin' })
+    mockDistribution = null
+    await expect(
+      resolveMarketplacePluginVersion('listing1', '1.0.0'),
+    ).resolves.toBeNull()
   })
 })
 

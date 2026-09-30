@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import {
   campaignSendTimeLabel,
   suggestCampaignSendTime,
@@ -122,29 +123,32 @@ export interface AiEmailProductBinding {
 
 /**
  * The products an email binds: the member's picks that still exist, else the
- * ones the brief names. Reads ids and names, and returns only ids.
+ * ones the brief names. Reads ids and names through the `product` index the
+ * plugin that keeps products publishes (AGL-3080), and returns only ids; none
+ * where no plugin keeps products here.
  */
-export async function resolveAiEmailProducts(
-  firestore: Firestore,
-  input: { hostId: string; brief: string; inputs: Readonly<Record<string, unknown>> | undefined },
-): Promise<AiEmailProductBinding> {
-  const products = firestore.collection('hosts').doc(input.hostId).collection('products')
+export async function resolveAiEmailProducts(input: {
+  hostId: string
+  brief: string
+  inputs: Readonly<Record<string, unknown>> | undefined
+}): Promise<AiEmailProductBinding> {
   const picked = aiEmailPickedProductIds(input.inputs)
+  const index = pluginRecordIndex('product')?.index
+  if (!index) return { ids: [], picked: picked.length }
   if (picked.length) {
-    const snapshots = await Promise.all(picked.map((id) => products.doc(id).get()))
+    const records = await Promise.all(picked.map((id) => index.get({ hostId: input.hostId, id })))
     return {
-      ids: snapshots
-        .filter((snapshot) => snapshot.exists && snapshot.get('deletedAt') == null)
-        .map((snapshot) => snapshot.id),
+      ids: records.filter((record) => record !== null).map((record) => record.id),
       picked: picked.length,
     }
   }
-  const snapshot = await products.select('name', 'deletedAt').limit(AI_EMAIL_PRODUCT_SCAN).get()
-  const rows = snapshot.docs
-    .filter((doc) => doc.get('deletedAt') == null)
-    .map((doc) => ({ id: doc.id, name: String(doc.get('name') ?? '') }))
+  const { records } = await index.list({ hostId: input.hostId, limit: AI_EMAIL_PRODUCT_SCAN })
   return {
-    ids: aiRecordsNamedIn(input.brief, rows, AI_EMAIL_MAX_PRODUCTS).map((row) => row.id),
+    ids: aiRecordsNamedIn(
+      input.brief,
+      records.map((record) => ({ id: record.id, name: record.name })),
+      AI_EMAIL_MAX_PRODUCTS,
+    ).map((row) => row.id),
     picked: 0,
   }
 }

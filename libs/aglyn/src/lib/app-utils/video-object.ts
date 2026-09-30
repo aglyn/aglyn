@@ -52,6 +52,7 @@
 
 import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
 import type { AglynNodeSchema, NodeId } from '../foundation'
+import { videoEmbedUrl } from '../plugin-manager/video-embed-provider'
 import { collectDescendantIds } from './compose-reusable-components'
 import { videoDurationIso8601 } from './media-metadata'
 import {
@@ -59,7 +60,6 @@ import {
   absoluteMediaSrc,
   videoPosterSrc,
 } from './media-ref'
-import { wistiaEmbedUrl } from './wistia-embed'
 
 /** Component id of the Video element. Persisted in documents; never renamed. */
 export const VIDEO_COMPONENT_ID = 'video'
@@ -197,10 +197,11 @@ export function videoObjectJsonLd(
   // All three, or nothing. See the module note: a block missing one of these
   // is an error a search console reports, not a smaller win.
   if (!name || !uploadDate || !thumbnailUrl) return undefined
-  // A Wistia link names a player, not a file (AGL-2826), so it is published
-  // as the player page and never as `contentUrl`: the link an author pasted
-  // is Wistia's media page, whose bytes are HTML.
-  const embedUrl = wistiaEmbedUrl(props['src'])
+  // A hosted player's link names a player, not a file (AGL-2826), so it is
+  // published as the player page and never as `contentUrl`: the link an
+  // author pasted is the host's media page, whose bytes are HTML. Which hosts
+  // those are is declared by plugins (`video-embed-provider.ts`).
+  const embedUrl = videoEmbedUrl(props['src'])
   const contentUrl = embedUrl
     ? undefined
     : absoluteMediaSrc(
@@ -226,7 +227,7 @@ export function videoObjectJsonLd(
     uploadDate,
     // Exactly one of the two. `contentUrl` is the file, for a film served from
     // this site's media CDN or hotlinked; `embedUrl` is a PLAYER page, which
-    // this element renders only for a Wistia video.
+    // this element renders only for a declared host's link.
     ...(contentUrl ? { contentUrl } : {}),
     ...(embedUrl ? { embedUrl } : {}),
     ...(duration ? { duration } : {}),

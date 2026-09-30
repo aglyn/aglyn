@@ -16,11 +16,13 @@
  */
 
 /**
- * The site SEO audit card (AGL-2910), mounted through the `hostSeo` zone's
- * props: it stays absent while the route says the feature does not exist,
- * reads back the site's last audit, stages the site-wide proposal in the SEO
- * form through `proposeDraft`, and applies the rest only through the apply
- * door — which opens drafts — linking to each draft it opened.
+ * The SEO fixes card (AGL-2910), mounted through the `hostSeo` zone's props:
+ * it stays absent while the route says the feature does not exist, proposes
+ * fixes with the keywords the platform's SEO check was run with, lists the
+ * fixes and never the findings (the check above draws those), stages the
+ * site-wide proposal in the SEO form through `proposeDraft`, and applies the
+ * rest only through the apply door — which opens drafts — linking to each
+ * draft it opened.
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -128,6 +130,7 @@ const props: ConsoleHostSeoZoneProps = {
   host: 'shop',
   seo: {},
   proposeDraft,
+  check: null,
 }
 
 beforeEach(() => {
@@ -143,36 +146,41 @@ it('stays absent while the route says the feature does not exist', async () => {
   expect(container.textContent).toBe('')
 })
 
-it('runs an audit with the keyword lines typed', async () => {
+it('proposes fixes with the keyword lines the SEO check was run with', async () => {
   mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
-  render(<AiSeoAuditCard {...props} />)
-  const button = await screen.findByRole('button', { name: 'Run audit' })
-  fireEvent.change(screen.getByLabelText('Target keywords by page (optional)'), {
-    target: { value: '/lamps: brass lamps' },
-  })
+  const check = {
+    report: { pages: [], skipped: 0, site: [], score: 100, notes: [] },
+    keywords: '/lamps: brass lamps',
+  }
+  render(<AiSeoAuditCard {...props} check={check} />)
+  const button = await screen.findByRole('button', { name: 'Propose fixes' })
+  // The check draws the keyword box; this card has none of its own.
+  expect(screen.queryByLabelText('Target keywords by page (optional)')).toBeNull()
   mockFetch.mockResolvedValueOnce(json({ job: audit() }))
   fireEvent.click(button)
-  await screen.findByText('Score 68 of 100 · 2 pages · 4 findings')
+  await screen.findByRole('table', { name: 'Proposed fixes' })
   expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({
     orgId: 'org-1',
     hostId: 'host-1',
     kind: 'seo',
-    brief: 'Audit the SEO of this site',
+    brief: 'Propose fixes for the SEO of this site',
     inputs: { target: 'site', keywords: '/lamps: brass lamps' },
   })
 })
 
-it('reads back the last audit: its pages, its findings, its fixes and what it cost', async () => {
+it('reads back the last fixes: each page’s fix and what it cost, and never the findings', async () => {
   mockFetch.mockResolvedValueOnce(json({ jobs: [audit()] }))
   render(<AiSeoAuditCard {...props} />)
-  const table = await screen.findByRole('table', { name: 'Audited pages' })
-  // A page's findings wrap in their cell, so this stays a table — in a box
-  // that scrolls sideways inside the card rather than past its edge (AGL-3045).
+  const table = await screen.findByRole('table', { name: 'Proposed fixes' })
+  // A page's fix wraps in its cell, so this stays a table — in a box that
+  // scrolls sideways inside the card rather than past its edge (AGL-3045).
   expect(getComputedStyle(table.parentElement as HTMLElement).overflowX).toBe('auto')
   expect(within(table).getByText('/lamps')).toBeTruthy()
-  expect(within(table).getByText('No search title')).toBeTruthy()
   expect(within(table).getByText('Title: Brass desk lamps · 1 image description')).toBeTruthy()
-  expect(screen.getByText('This audit used 7 credits.')).toBeTruthy()
+  // The platform's SEO check lists the findings; drawing them here too would be a second list.
+  expect(screen.queryByText('No search title')).toBeNull()
+  expect(screen.queryByText('/llms.txt carries no guidance of your own for AI agents.')).toBeNull()
+  expect(screen.getByText('These fixes used 7 credits.')).toBeTruthy()
   expect(screen.getByText('An organization')).toBeTruthy()
 })
 

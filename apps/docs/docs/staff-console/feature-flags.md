@@ -94,8 +94,11 @@ sequenceDiagram
   `cloud/firebase-remoteconfig.template.json` seeds them
   (`firebase deploy --only remoteconfig`).
 - The registry of flags — keys, labels, code-side fallback defaults, and which nav tab
-  each governs — is versioned in `@aglyn/aglyn` (`release-flags.ts`). Adding a flag means
-  adding a registry entry, seeding the template, and wrapping the page in `<FeatureGate>`.
+  each governs — is versioned in `@aglyn/aglyn` (`release-flags.ts`). A plugin's flag is
+  defined by the plugin itself, in its catalog row's `releaseFlagDefinition` in
+  `plugins.config.json`, and compiled into that registry. Adding a flag means adding a
+  registry entry (or a plugin's definition), seeding the template, and wrapping the page
+  in `<FeatureGate>`.
 - If Remote Config is unreachable, the registry defaults gate — a default-off feature
   never flashes on while offline.
 - **The registry default and the seeded value must agree**, and a spec now enforces it

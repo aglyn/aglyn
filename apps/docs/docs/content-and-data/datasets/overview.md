@@ -34,9 +34,13 @@ and record caps, and extra-dataset add-ons are available.
 ## Model builder
 
 Define a model in the schema dialog with **typed fields** (text, number, date, reference,
-and more). The model is stored on the dataset itself. Records added or imported in the
-console, or written through the REST API, are validated against it; form submissions and
-automation steps store their values as text without validating them.
+and more). The model is stored on the dataset itself. Every record written to the
+dataset is validated against it: added or imported in the console, written through the
+REST API, sent by a bound form, or written by an automation step. Each value is stored as
+its field's type — a number as a number, a date as a date — and a record with a value its
+field can't hold is not written. A form submission is still kept in the Inbox, with a
+chip saying which field was refused; an automation step records the run as failed and
+names the field. Records written as text before this check keep reading as they did.
 
 ## Typed documents
 

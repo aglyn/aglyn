@@ -37,7 +37,7 @@ import {
   PUBLISHER_AGREEMENT_TITLE,
   publisherAgreementPresentation,
   publisherAgreementState,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 /*
   THE LEGAL NAME, not `useBranding().branding.productName` (AGL-2351).
 

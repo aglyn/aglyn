@@ -214,14 +214,43 @@ export function applyOutreachEnrollmentEvent(
 type ScheduleMailbox = Pick<OutreachMailbox, 'timezone' | 'window'>
 type ScheduleSequence = Pick<OutreachSequence, 'steps' | 'settings'>
 
-/** When a new enrollment's first step comes due, or `null` when it cannot be placed. */
+/**
+ * The step an enrollment begins at (AGL-3228), read from a request: the
+ * first when the request names none, or the zero-based index it names —
+ * or, as `refusal`, why that is not a step of this sequence.
+ */
+export function readOutreachStartStepIndex(
+  raw: unknown,
+  steps: readonly unknown[] | null | undefined,
+): { startStepIndex: number; refusal: null } | { startStepIndex: null; refusal: string } {
+  if (raw === undefined || raw === null) return { startStepIndex: 0, refusal: null }
+  const count = steps?.length ?? 0
+  const index = typeof raw === 'number' ? raw : Number.NaN
+  if (!Number.isInteger(index) || index < 0) {
+    return { startStepIndex: null, refusal: 'Name the step to start at by its number in the sequence.' }
+  }
+  if (index >= count) {
+    return {
+      startStepIndex: null,
+      refusal: `This sequence has ${count} ${count === 1 ? 'step' : 'steps'}, so enrolling can't start at step ${index + 1}.`,
+    }
+  }
+  return { startStepIndex: index, refusal: null }
+}
+
+/**
+ * When a new enrollment's first step comes due, or `null` when it cannot be
+ * placed: the step it begins at (AGL-3228; the first unless it says so),
+ * that step's own delay counted from the moment of enrollment.
+ */
 export function planOutreachFirstDue(input: {
   sequence: ScheduleSequence
   mailbox: ScheduleMailbox
   enrolledAtMs: number
   random: OutreachRandom
+  startStepIndex?: number
 }): number | null {
-  const first = input.sequence.steps?.[0]
+  const first = input.sequence.steps?.[input.startStepIndex ?? 0]
   if (!first) return null
   return scheduleOutreachDue({
     fromMs: input.enrolledAtMs,
@@ -268,15 +297,29 @@ export interface OutreachEnrollmentDraft {
   enrolledByUid: string
   nowMs: number
   random: OutreachRandom
+  /**
+   * The step to begin at (AGL-3228), zero-based; the first when absent.
+   * The caller has checked it names a step — {@link readOutreachStartStepIndex}.
+   */
+  startStepIndex?: number
 }
 
 /**
  * A new enrollment document, first step scheduled — one builder for every
  * door that enrolls, so an enrollment made from a contact and one made from
  * a list are the same shape. Call it after the gates allowed the person.
+ *
+ * An enrollment that begins past the first step (AGL-3228) is for someone
+ * who already had the earlier steps by hand: those are marked skipped, the
+ * step it begins at is scheduled by its own delay from now, and
+ * `lastSentAtMs` is the enrollment — the moment the earlier steps are
+ * accounted for — so the sync watches this mailbox for the person's reply,
+ * bounce or opt-out from the start, as it does after a send.
  */
 export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): OutreachEnrollment {
-  return {
+  const start = draft.startStepIndex ?? 0
+  const steps = draft.sequence.steps ?? []
+  const enrollment: OutreachEnrollment = {
     id: draft.id,
     sequenceId: draft.sequence.id,
     target: draft.target ?? 'contact',
@@ -286,12 +329,13 @@ export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): Outreac
     email: String(draft.email ?? '').trim().toLowerCase(),
     hostId: draft.sequence.hostId,
     mailboxId: draft.sequence.mailboxId,
-    stepIndex: 0,
+    stepIndex: start,
     nextDueAtMs: planOutreachFirstDue({
       sequence: draft.sequence,
       mailbox: draft.mailbox,
       enrolledAtMs: draft.nowMs,
       random: draft.random,
+      startStepIndex: start,
     }),
     status: 'active',
     stopReason: null,
@@ -313,6 +357,25 @@ export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): Outreac
     createdAtMs: draft.nowMs,
     updatedAtMs: draft.nowMs,
   }
+  if (start > 0) {
+    enrollment.startStepIndex = start
+    enrollment.skippedSteps = steps.slice(0, start).map((step, stepIndex) => ({
+      stepIndex,
+      stepId: step.id,
+      kind: step.kind,
+      atMs: draft.nowMs,
+    }))
+    enrollment.lastSentAtMs = draft.nowMs
+  }
+  return enrollment
+}
+
+/** The step an enrollment began at (AGL-3228): the first, unless it began later. */
+export function outreachEnrollmentStartStepIndex(
+  enrollment: Pick<OutreachEnrollment, 'startStepIndex'> | null | undefined,
+): number {
+  const start = Number(enrollment?.startStepIndex)
+  return Number.isInteger(start) && start > 0 ? start : 0
 }
 
 /** What the provider reported for an email step that was sent. */
@@ -329,7 +392,8 @@ export interface OutreachStepCompletionInput {
   enrollment: Pick<
     OutreachEnrollment,
     'status' | 'stepIndex' | 'gmailThreadId' | 'gmailThreadIds' | 'messageIds' | 'threadSubject'
-  >
+  > &
+    Partial<Pick<OutreachEnrollment, 'startStepIndex'>>
   sequence: ScheduleSequence
   mailbox: ScheduleMailbox
   /** When the step ran. */
@@ -394,7 +458,10 @@ export function planOutreachStepCompletion(
     if (!threadIds.includes(threadId)) threadIds.push(threadId)
     patch.gmailThreadId = threadId
     patch.gmailThreadIds = threadIds
-    if (isInThreadEmailStep(steps, enrollment.stepIndex) && enrollment.threadSubject) {
+    if (
+      isInThreadEmailStep(steps, enrollment.stepIndex, outreachEnrollmentStartStepIndex(enrollment)) &&
+      enrollment.threadSubject
+    ) {
       patch.messageIds = [...(enrollment.messageIds ?? []), messageId]
     } else {
       patch.threadSubject = String(sent.subject ?? '').trim()

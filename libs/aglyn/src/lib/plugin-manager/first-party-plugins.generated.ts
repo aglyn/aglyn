@@ -11,6 +11,11 @@ import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from '.
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { FunctionBindings } from './plugin-contributions'
+import type { PluginDistribution } from './plugin-distribution'
+import type { RepeatSourceDeclaration } from './repeat-rows'
+import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
+import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
+import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -474,7 +479,134 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
 ]
 
 /**
+ * Every top-level plugin collection a workspace erasure sweeps by the field
+ * naming the organization, declared by the plugin that owns it (AGL-3080).
+ */
+export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] = [
+  {
+    "pluginId": "outreach",
+    "name": "outreachMailboxCredentials",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "outreach",
+    "name": "outreachLinks",
+    "orgField": "orgId"
+  },
+]
+
+/**
+ * The plugins whose org eraser a workspace erasure may not run without
+ * (AGL-3080): each holds a record the erasure promises to destroy.
+ */
+export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ["marketplace"]
+
+/**
+ * The plugins whose sales the operator's sales tax return may not be filed
+ * without (AGL-3080): each registers a tax return source, and one that did
+ * not is refused rather than read as nothing sold.
+ */
+export const PLUGIN_TAX_RETURN_SOURCES: readonly string[] = ["commerce","marketplace"]
+
+/**
+ * The plugins whose earnings the operator's revenue report may not be read
+ * without (AGL-3080): each registers a revenue source, and one that did not
+ * is refused rather than read as nothing earned.
+ */
+export const PLUGIN_REVENUE_SOURCES: readonly string[] = ["commerce","marketplace"]
+
+/**
+ * Where published plugin versions and their kill switches are stored, declared
+ * by the plugin that distributes them (AGL-3080). `null` when none does, and
+ * the realm loader then resolves nothing.
+ */
+export const PLUGIN_DISTRIBUTION: PluginDistribution | null = {
+  "pluginId": "marketplace",
+  "listings": "marketplaceListings",
+  "versions": "pluginVersions",
+  "revocations": "revocations"
+}
+
+/**
+ * The plugin that answers a published page's repeats, declared by that plugin
+ * (AGL-3080). `null` when none does, and a repeat then renders its element
+ * once, as written.
+ */
+export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
+  "pluginId": "data",
+  "id": "dataset"
+}
+
+/**
+ * The analytics settings each provider mounts a tag for, declared by the
+ * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
+ * setting configures a tag.
+ */
+export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
+  {
+    "pluginId": "marketing",
+    "settings": [
+      "gaMeasurementId",
+      "gtmContainerId"
+    ]
+  },
+]
+
+/**
  * Every first-party element that runs a site function, and the prop naming
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
 export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {}
+
+/**
+ * Every video host whose own player the Video element frames, declared by
+ * the plugin that plays it (AGL-3080). Core names no host.
+ */
+export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [
+  {
+    "pluginId": "mui",
+    "id": "wistia",
+    "label": "Wistia",
+    "domains": [
+      "wistia.com",
+      "wistia.net",
+      "wi.st"
+    ],
+    "mediaIdPaths": [
+      "^\\/medias\\/([^/]+)(?:\\/manage)?\\/?$",
+      "^\\/m\\/([^/]+)\\/?$",
+      "^\\/embed\\/iframe\\/([^/]+)\\/?$",
+      "^\\/embed\\/medias\\/([^/.]+)(?:\\.jsonp?)?\\/?$"
+    ],
+    "mediaIdPattern": "^[a-z0-9]{10}$",
+    "playerOrigin": "https://fast.wistia.net",
+    "playerPath": "/embed/iframe/{id}",
+    "playerQuery": [
+      {
+        "param": "autoPlay",
+        "option": "autoPlay",
+        "on": "true",
+        "off": "false"
+      },
+      {
+        "param": "roundedPlayer",
+        "value": "false"
+      },
+      {
+        "param": "doNotTrack",
+        "option": "doNotTrack",
+        "on": "true"
+      },
+      {
+        "param": "muted",
+        "option": "muted",
+        "on": "true"
+      },
+      {
+        "param": "endVideoBehavior",
+        "option": "loop",
+        "on": "loop"
+      }
+    ]
+  },
+]

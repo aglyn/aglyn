@@ -394,3 +394,91 @@ export function hostQualifiedCdnPath(
   }
   return [`${head}${scopeSegment}:${hostId}`, ...tail].join('/')
 }
+
+/*==========================================
+ * SEEN, AND HELD (AGL-3336).
+ *
+ * `visibleTo` answers one question, "who may see this", because it is the
+ * one field both enforcement layers can evaluate. A visibility GRANT — an
+ * org manager sharing a record with another site, by hand or by a rule —
+ * has to widen exactly that field, or the other site's lists, which are
+ * real `array-contains-any` queries, could never return the record.
+ *
+ * But a site a record was shared with does not HOLD it. It did not capture
+ * the person, it holds no consent from them, and letting go of the record
+ * is not its decision. So a document that carries a grant records which of
+ * its tokens the grant added, under `sharing.added`, and every question
+ * about holding — who may delete it, whose audience it joins, which site's
+ * list it enters — reads {@link heldScopeTokens} instead of `visibleTo`.
+ *
+ * A document without the field is held by everything that sees it, which
+ * is every document written before grants existed.
+ *=========================================*/
+
+/** The map a scoped document records its visibility grants under. */
+export const SCOPE_GRANTS_FIELD = 'sharing'
+
+/** The tokens a grant ADDED to `visibleTo`: seen through, never held. */
+export function grantedScopeTokens(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+): string[] {
+  const grants = (doc ?? {})[SCOPE_GRANTS_FIELD]
+  if (!grants || typeof grants !== 'object' || Array.isArray(grants)) return []
+  const added = (grants as Record<string, unknown>)['added']
+  return Array.isArray(added)
+    ? added.filter((token): token is string => typeof token === 'string')
+    : []
+}
+
+/**
+ * The tokens that HOLD a document: `visibleTo` without the ones a grant
+ * added. Missing `visibleTo` is held by nobody, as it is seen by nobody.
+ *
+ * A site that created the document (`hostId`) or captured the person on it
+ * (`capturedByHostIds`) holds its token whatever the grants say: a record
+ * shared with a site that then captures the person itself is that site's
+ * own from the capture on, before anything re-evaluates the grants.
+ */
+export function heldScopeTokens(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+): string[] {
+  const visibleTo = (doc ?? {})['visibleTo']
+  if (!Array.isArray(visibleTo)) return []
+  const granted = new Set(grantedScopeTokens(doc))
+  const capturing = new Set<string>()
+  const hostId = (doc ?? {})['hostId']
+  if (typeof hostId === 'string' && hostId) capturing.add(hostScopeToken(hostId))
+  const captured = (doc ?? {})['capturedByHostIds']
+  if (Array.isArray(captured)) {
+    for (const id of captured) if (typeof id === 'string' && id) capturing.add(hostScopeToken(id))
+  }
+  return visibleTo.filter(
+    (token): token is string =>
+      typeof token === 'string' && (!granted.has(token) || capturing.has(token)),
+  )
+}
+
+/**
+ * Whether a site HOLDS a document rather than only seeing it through a
+ * grant. The question a marketing audience, a list rule, a sequence and a
+ * holder count ask; {@link visibleToHost} is the one a reader asks.
+ */
+export function heldByHost(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+  hostId: string,
+): boolean {
+  return visibleToHost(heldScopeTokens(doc), hostId)
+}
+
+/**
+ * Whether a site sees a document ONLY through a grant: it carries grants and
+ * the site does not hold it. The filter an audience sweep applies to what
+ * its scoped query returned — a document with no grants answers `false`, so
+ * every read that predates sharing keeps exactly the rows it had.
+ */
+export function seenOnlyThroughGrant(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+  hostId: string,
+): boolean {
+  return grantedScopeTokens(doc).length > 0 && !heldByHost(doc, hostId)
+}

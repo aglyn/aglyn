@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { ConsoleDockZoneProps } from '@aglyn/aglyn'
 import { useMemo, type ComponentProps } from 'react'
 import { AI_PLUGIN_ID } from '../constants'
 import { aiPermissionsOf } from '../model/ai-permissions'
@@ -95,14 +96,36 @@ export function AiAssistProviderOnHost(props: ProviderProps) {
 }
 AiAssistProviderOnHost.displayName = 'AiAssistProviderOnHost'
 
-type PanelProps = Omit<ComponentProps<typeof AssistPanelComponent>, 'aiPermissions'> & {
+type PanelProps = Omit<
+  ComponentProps<typeof AssistPanelComponent>,
+  'aiPermissions' | 'assistVisible' | 'assistStaffPreview' | 'generativeVisible'
+> & {
   permissionsOnHost?: ShellPermissionsOnHost
+  /**
+   * The shell's verdict for any release flag (the `consoleDock` zone's
+   * `releaseVerdict`): the assistant asks for its own two, so the shell names
+   * no AI flag.
+   */
+  releaseVerdict: ConsoleDockZoneProps['releaseVerdict']
 }
 
-/** The assistant dock, holding on the shell's permission answer. */
+/**
+ * The assistant, drawn in the console dock, holding on the shell's
+ * permission answer and asking the shell for its own release flags.
+ */
 export function AssistPanelOnHost(props: PanelProps) {
-  const { permissionsOnHost, ...rest } = props
+  const { permissionsOnHost, releaseVerdict, ...rest } = props
   const aiPermissions = useAiPermissionsOnHost(permissionsOnHost) ?? HELD
-  return <AssistPanelComponent {...rest} aiPermissions={aiPermissions} />
+  const assist = releaseVerdict('release_assist')
+  const generative = releaseVerdict('release_ai_generative')
+  return (
+    <AssistPanelComponent
+      {...rest}
+      assistVisible={assist.visible}
+      assistStaffPreview={assist.staffPreview}
+      generativeVisible={generative.visible}
+      aiPermissions={aiPermissions}
+    />
+  )
 }
 AssistPanelOnHost.displayName = 'AssistPanelOnHost'

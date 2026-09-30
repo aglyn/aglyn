@@ -20,6 +20,10 @@
  * as a projection of the fields a lookup needs, in the Actions editor's
  * windows, and scoped to the site where the org's records are shared among
  * sites. A run is read as the run history shows it — never its payload.
+ *
+ * The site's workflows, webhooks and saved actions are the workflows plugin's,
+ * read through the indexes it publishes (AGL-3080) — stood in here over the
+ * same Firestore double, since this plugin may not load that one.
  */
 
 const mockReads: Array<{ path: string; fields: string[]; limit: number | null; scopedTo: string | null }> = []
@@ -31,6 +35,11 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 }))
 
 import {
+  removeStandInPipelineIndex,
+  standInPipelineIndex,
+  type StoodInPipelineIndex,
+} from '../testing/stand-in-pipeline-index'
+import {
   AI_WORKFLOW_PIPELINES_WINDOW,
   AI_WORKFLOW_RECORDS_WINDOW,
   readAiAutomationRecords,
@@ -38,6 +47,7 @@ import {
   readAiWorkflowRun,
   readAiWorkflowTarget,
 } from './ai-workflow-records'
+import { removeStandInAutomationIndexes, standInAutomationIndexes } from '../testing/stand-in-automation-index'
 
 // ── Firestore double ─────────────────────────────────────────────────────
 
@@ -83,12 +93,20 @@ const firestore = { collection: (name: string) => collectionRef(name) } as unkno
 
 const readOf = (path: string) => mockReads.find((read) => read.path === path)
 
+/** The collections the workflows plugin keeps, read here only through its indexes. */
+const INDEXED = ['hosts/host-1/workflows', 'hosts/host-1/webhooks', 'hosts/host-1/actions']
+
 beforeEach(() => {
   mockReads.length = 0
   mockDocs.clear()
+  standInAutomationIndexes(firestore)
 })
 
+afterEach(() => removeStandInAutomationIndexes())
+
 describe('readAiAutomationRecords', () => {
+  let pipelines: StoodInPipelineIndex
+
   beforeEach(() => {
     mockDocs.set('hosts/host-1/forms/form-a', {
       displayName: 'Newsletter sign-up',
@@ -114,11 +132,18 @@ describe('readAiAutomationRecords', () => {
     mockDocs.set('hosts/host-1/workflows/wf-a', { name: 'Quote calculator' })
     mockDocs.set('hosts/host-1/webhooks/hook-a', { name: 'Zapier', direction: 'outbound' })
     mockDocs.set('hosts/host-1/webhooks/hook-b', { name: 'Stripe in', direction: 'inbound' })
-    mockDocs.set('orgs/org-1/pipelines/p-a', {
-      stages: [{ id: 'new', name: 'New' }, { id: 'won', name: 'Won' }, { id: 'nameless' }],
-    })
-    mockDocs.set('orgs/org-1/pipelines/p-b', { stages: [{ id: 'old', name: 'Old stage' }], archivedAt: 1_700_000_000_000 })
+    // The pipelines are the CRM's, asked of its index: what it answers is
+    // its own live pipelines — an archived one is its to leave out.
+    pipelines = standInPipelineIndex([
+      {
+        id: 'p-a',
+        name: 'Sales',
+        stages: [{ id: 'new', name: 'New' }, { id: 'won', name: 'Won' }, { id: 'nameless' }],
+      },
+    ])
   })
+
+  afterEach(() => removeStandInPipelineIndex())
 
   it('reads the records a draft’s words are looked up among, leaving out what is archived, deleted or unnamed', async () => {
     expect(await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })).toEqual({
@@ -147,20 +172,14 @@ describe('readAiAutomationRecords', () => {
 
   it('reads each as a projection, in the editor’s window, scoped to the site where the org shares them', async () => {
     await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })
-    expect(mockReads.sort((a, b) => a.path.localeCompare(b.path))).toEqual([
+    const own = mockReads.filter((read) => !INDEXED.includes(read.path))
+    expect(own.sort((a, b) => a.path.localeCompare(b.path))).toEqual([
       {
         path: 'hosts/host-1/forms',
         fields: ['displayName', 'slug', 'fields', 'archivedAt'],
         limit: AI_WORKFLOW_RECORDS_WINDOW,
         scopedTo: null,
       },
-      {
-        path: 'hosts/host-1/webhooks',
-        fields: ['name', 'direction', 'deletedAt'],
-        limit: AI_WORKFLOW_RECORDS_WINDOW,
-        scopedTo: null,
-      },
-      { path: 'hosts/host-1/workflows', fields: ['name', 'deletedAt'], limit: AI_WORKFLOW_RECORDS_WINDOW, scopedTo: null },
       {
         path: 'orgs/org-1/datasets',
         fields: ['displayName', 'name', 'deletedAt'],
@@ -176,13 +195,34 @@ describe('readAiAutomationRecords', () => {
       },
       // Lists belong to the whole org, as the editor's picker and the executor read them.
       { path: 'orgs/org-1/lists', fields: ['name', 'deletedAt'], limit: AI_WORKFLOW_RECORDS_WINDOW, scopedTo: null },
-      {
-        path: 'orgs/org-1/pipelines',
-        fields: ['stages', 'archivedAt'],
-        limit: AI_WORKFLOW_PIPELINES_WINDOW,
-        scopedTo: 'host-1',
-      },
     ])
+    // The pipelines are asked of the plugin that keeps them, for this site,
+    // in the stage lookup's window — never read from their collection here.
+    expect(pipelines.asked).toEqual([{ orgId: 'org-1', hostId: 'host-1', limit: AI_WORKFLOW_PIPELINES_WINDOW }])
+  })
+
+  it('names no stage where no plugin keeps pipelines', async () => {
+    removeStandInPipelineIndex()
+    const records = await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })
+    expect(records.stages).toEqual([])
+    expect(readOf('orgs/org-1/pipelines')).toBeUndefined()
+  })
+
+  it('names the site’s workflows and outbound webhooks through the index the workflows plugin publishes', async () => {
+    await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true, only: ['workflows', 'webhooks'] })
+    // The stand-in index is what read them, in the editor's window and one past it.
+    expect(mockReads.map((read) => [read.path, read.limit]).sort()).toEqual([
+      ['hosts/host-1/webhooks', AI_WORKFLOW_RECORDS_WINDOW + 1],
+      ['hosts/host-1/workflows', AI_WORKFLOW_RECORDS_WINDOW + 1],
+    ])
+  })
+
+  it('names no workflow or webhook, and reads neither collection, where no plugin keeps them', async () => {
+    removeStandInAutomationIndexes()
+    const records = await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })
+    expect(records.workflows).toEqual([])
+    expect(records.webhooks).toEqual([])
+    expect(mockReads.filter((read) => INDEXED.includes(read.path))).toEqual([])
   })
 
   it('reads only the kinds asked for, and answers every other kind empty', async () => {
@@ -204,12 +244,13 @@ describe('readAiAutomationRecords', () => {
     expect(mockReads.map((read) => read.path).sort()).toEqual(['hosts/host-1/webhooks', 'orgs/org-1/lists'])
     await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true, only: [] })
     expect(mockReads).toHaveLength(2)
+    expect(pipelines.asked).toEqual([])
   })
 
   it('reads no pipeline for a workspace without the CRM', async () => {
     const records = await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: false })
     expect(records.stages).toEqual([])
-    expect(readOf('orgs/org-1/pipelines')).toBeUndefined()
+    expect(pipelines.asked).toEqual([])
   })
 })
 
@@ -233,21 +274,27 @@ describe('readAiWorkflowTarget', () => {
     mockDocs.set('hosts/host-1/actions/act-2', { trigger: { event: 'lead' }, steps: [] })
     mockDocs.set('hosts/host-1/actions/act-3', { name: 'Deleted', deletedAt: 9 })
     mockDocs.set('hosts/host-1/workflows/wf-1', { name: 'Quote', steps: [] })
-    expect(await readAiWorkflowTarget(firestore, { hostId: 'host-1', type: 'action', id: 'act-1' })).toEqual({
+    expect(await readAiWorkflowTarget({ hostId: 'host-1', type: 'action', id: 'act-1' })).toEqual({
       type: 'action',
       id: 'act-1',
       name: 'Welcome',
-      action: { name: 'Welcome', trigger: { event: 'lead' }, steps: [] },
+      action: { name: 'Welcome', trigger: { event: 'lead' }, steps: [], enabled: true },
     })
-    expect((await readAiWorkflowTarget(firestore, { hostId: 'host-1', type: 'action', id: 'act-2' }))?.name).toBe('act-2')
-    expect(await readAiWorkflowTarget(firestore, { hostId: 'host-1', type: 'action', id: 'act-3' })).toBeNull()
-    expect(await readAiWorkflowTarget(firestore, { hostId: 'host-1', type: 'action', id: 'wf-1' })).toBeNull()
-    expect(await readAiWorkflowTarget(firestore, { hostId: 'host-1', type: 'workflow', id: 'wf-1' })).toEqual({
+    expect((await readAiWorkflowTarget({ hostId: 'host-1', type: 'action', id: 'act-2' }))?.name).toBe('act-2')
+    expect(await readAiWorkflowTarget({ hostId: 'host-1', type: 'action', id: 'act-3' })).toBeNull()
+    expect(await readAiWorkflowTarget({ hostId: 'host-1', type: 'action', id: 'wf-1' })).toBeNull()
+    expect(await readAiWorkflowTarget({ hostId: 'host-1', type: 'workflow', id: 'wf-1' })).toEqual({
       type: 'workflow',
       id: 'wf-1',
       name: 'Quote',
-      workflow: { name: 'Quote', steps: [] },
+      workflow: { name: 'Quote', steps: [], returnValue: null, trigger: null },
     })
+  })
+
+  it('finds nothing where no plugin keeps the site’s automations', async () => {
+    mockDocs.set('hosts/host-1/actions/act-1', { name: 'Welcome', trigger: { event: 'lead' }, steps: [] })
+    removeStandInAutomationIndexes()
+    expect(await readAiWorkflowTarget({ hostId: 'host-1', type: 'action', id: 'act-1' })).toBeNull()
   })
 })
 

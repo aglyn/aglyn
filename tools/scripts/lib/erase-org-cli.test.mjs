@@ -119,6 +119,27 @@ test('--confirm is the same call with dryRun false', async () => {
   ])
 })
 
+test('prints a plugin\'s share of the counts, under the names its owner gave them', async () => {
+  const { eraseOrg } = spyEraseOrg({
+    ok: true,
+    hosts: 2,
+    plugins: { marketplace: { publisherHandles: 1, publisherProfileDeleted: true } },
+    pluginCollections: { outreachMailboxCredentials: 3 },
+  })
+  const lines = []
+  const code = await runEraseOrgCli({
+    argv: ['--org', 'acme', '--confirm'],
+    eraseOrg,
+    log: (line) => lines.push(line),
+    warn: quiet,
+  })
+  assert.equal(code, 0)
+  const printed = lines.join('\n')
+  assert.match(printed, /2\s+hosts/)
+  assert.match(printed, /1\s+plugins\.marketplace\.publisherHandles/)
+  assert.match(printed, /3\s+pluginCollections\.outreachMailboxCredentials/)
+})
+
 test('--actor names the human in the audit row instead of the cron', async () => {
   const { eraseOrg, calls } = spyEraseOrg({ ok: true })
   await runEraseOrgCli({

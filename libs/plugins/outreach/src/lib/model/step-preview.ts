@@ -37,7 +37,7 @@ import {
   type ComposeOutreachEmailInput,
   type OutreachComposeResult,
 } from '../engine/compose'
-import { isInThreadEmailStep } from '../engine/sequence-validation'
+import { isInThreadEmailStep, outreachThreadStartSubject } from '../engine/sequence-validation'
 import type { OutreachOrgSettings, OutreachSequenceStep, OutreachStepOverrides } from './outreach.types'
 
 /** The holder id the sample person's facet is filed under. */
@@ -101,19 +101,23 @@ export interface OutreachStepPreviewInput {
   openPixelUrl?: string | null
   /** The person's own copies of steps (AGL-3324), as the enrollment would carry them. */
   stepOverrides?: OutreachStepOverrides | null
+  /** The step the enrollment would begin at (AGL-3228); the first when absent. */
+  startStepIndex?: number
 }
 
 /** The step's email, or why it can't be written — see the module note. */
 export function previewOutreachStep(input: OutreachStepPreviewInput): OutreachComposeResult {
   const steps = [...input.steps]
+  const start = input.startStepIndex ?? 0
   let threadSubject: string | null = null
-  if (isInThreadEmailStep(steps, input.stepIndex)) {
+  if (isInThreadEmailStep(steps, input.stepIndex, start)) {
     // The thread was started by the latest email before this one that did
-    // not itself reply in a thread.
-    for (let index = input.stepIndex - 1; index >= 0; index -= 1) {
+    // not itself reply in a thread — no earlier than where the enrollment
+    // began (AGL-3228).
+    for (let index = input.stepIndex - 1; index >= start; index -= 1) {
       const step = steps[index]
-      if (step?.kind === 'email' && !isInThreadEmailStep(steps, index)) {
-        threadSubject = resolveCrmMergeFields(step.subject, input.merge).text.trim() || null
+      if (step?.kind === 'email' && !isInThreadEmailStep(steps, index, start)) {
+        threadSubject = resolveCrmMergeFields(outreachThreadStartSubject(steps, index), input.merge).text.trim() || null
         break
       }
     }
@@ -128,6 +132,7 @@ export function previewOutreachStep(input: OutreachStepPreviewInput): OutreachCo
       messageIds: threadSubject ? [PREVIEW_MESSAGE_ID] : [],
       gmailThreadId: threadSubject ? 'preview' : null,
       ...(input.stepOverrides ? { stepOverrides: input.stepOverrides } : {}),
+      ...(start > 0 ? { startStepIndex: start } : {}),
     },
     orgSettings: input.orgSettings,
     merge: input.merge,

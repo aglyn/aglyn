@@ -43,6 +43,7 @@ import {
   mdiPlayCircleOutline,
   mdiReply,
   mdiShieldSearch,
+  mdiSkipNext,
   mdiStopCircleOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -165,6 +166,7 @@ export function outreachGmailThreadUrl(threadId: string, mailboxEmail: string | 
 
 const KIND_ICONS: Record<OutreachTimelineKind, { path: string }> = {
   enrolled: mdiAccountPlusOutline,
+  skipped: mdiSkipNext,
   curated: mdiPencilOutline,
   sent: mdiEmailOutline,
   task: mdiClipboardCheckOutline,

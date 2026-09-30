@@ -58,7 +58,6 @@ import {
   AI_WORKFLOW_RUN_NOT_FAILED_COPY,
   AI_WORKFLOW_SAVE_FAILURE_COPY,
   AI_WORKFLOW_UNAVAILABLE_COPY,
-  AI_WORKFLOWS_PLUGIN_ID,
   aiAutomationCapabilities,
   aiAutomationTriggerLabel,
   parseAiWorkflowJobInputs,
@@ -89,6 +88,7 @@ import { aiJobDraftId } from './ai-job-draft-ids'
 import { aiDoctrineReview, aiGenerationSpent, aiLimitReview, aiUnspentOutcome } from './ai-job-generation'
 import {
   aiPluginDraftAdmissionRefusal,
+  aiPluginDraftOwner,
   aiPluginDraftUnavailable,
   aiPluginDraftWriter,
   type AiPluginDraftWriterLookup,
@@ -461,7 +461,7 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
       }
     }
 
-    const target = await readTarget(firestore, { hostId, type: inputs.targetType, id: inputs.targetId })
+    const target = await readTarget({ hostId, type: inputs.targetType, id: inputs.targetId })
     if (!target) return unspent(AI_WORKFLOW_GONE_COPY)
     let run: AiRunRecord | null = null
     if (inputs.mode === 'diagnose') {
@@ -537,18 +537,24 @@ export const runAiJobWorkflowStep = createAiJobWorkflowStep()
 
 // ── Admission ─────────────────────────────────────────────────────────────
 
-/** Whether the workflows plugin runs on this site: switched on, and past its release flag. */
+/**
+ * Whether the plugin that writes automations runs on this site: switched on,
+ * and past its release flag. The owner is whichever plugin registered the
+ * automation writer (AGL-3080); none registered is the same refusal.
+ */
 async function workflowsPluginRefusal(
   context: Parameters<AiJobAdmission>[0],
   hostId: string,
 ): Promise<AiJobAdmissionRefusal | null> {
+  const owner = aiPluginDraftOwner(AI_AUTOMATION_RESOURCE)
+  if (!owner) return { status: 403, error: aiPluginDraftUnavailable('Automation') }
   const host = (await context.firestore.collection('hosts').doc(hostId).get()).data() ?? null
   const org = context.org as { enabledPlugins?: string[] } | null
-  const released = await filterEnabledPluginsByReleaseFlags([AI_WORKFLOWS_PLUGIN_ID], {
+  const released = await filterEnabledPluginsByReleaseFlags([owner], {
     orgId: context.orgId,
     authorization: null,
   })
-  return released.includes(AI_WORKFLOWS_PLUGIN_ID) && isHostPluginEnabled(org, host, AI_WORKFLOWS_PLUGIN_ID)
+  return released.includes(owner) && isHostPluginEnabled(org, host, owner)
     ? null
     : { status: 403, error: aiPluginDraftUnavailable('Automation') }
 }
@@ -574,7 +580,7 @@ export function createAiWorkflowJobAdmission(deps: AiWorkflowJobAdmissionDeps = 
     if (inputs.mode === 'draft') {
       return aiPluginDraftAdmissionRefusal(context, {
         kind: 'workflow',
-        drafts: [{ resource: AI_AUTOMATION_RESOURCE, pluginId: AI_WORKFLOWS_PLUGIN_ID, label: 'Automation' }],
+        drafts: [{ resource: AI_AUTOMATION_RESOURCE, label: 'Automation' }],
         ...(deps.writerFor ? { writerFor: deps.writerFor } : {}),
       })
     }
@@ -584,7 +590,7 @@ export function createAiWorkflowJobAdmission(deps: AiWorkflowJobAdmissionDeps = 
     if (!owner || owner !== context.orgId) return { status: 404, error: 'Unknown site' }
     const plugin = await workflowsPluginRefusal(context, hostId)
     if (plugin) return plugin
-    const target = await readTarget(context.firestore, { hostId, type: inputs.targetType, id: inputs.targetId })
+    const target = await readTarget({ hostId, type: inputs.targetType, id: inputs.targetId })
     if (!target) return { status: 404, error: AI_WORKFLOW_GONE_COPY }
     if (inputs.mode === 'diagnose') {
       const run = await readRun(context.firestore, { hostId, targetId: inputs.targetId, runId: inputs.runId })

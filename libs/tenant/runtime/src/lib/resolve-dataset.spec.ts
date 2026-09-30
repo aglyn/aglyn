@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { buildDatasetRecordValues } from '@aglyn/aglyn/server'
+import { prepareDatasetRecordWrite } from '@aglyn/aglyn/server'
 import { resolveDatasetDoc } from './resolve-dataset'
 
 interface FakeDoc {
@@ -151,7 +151,7 @@ describe('resolveDatasetDoc (AGL-556)', () => {
       datasetName: 'Survey responses',
     }, HOST)
     expect(doc?.exists).toBe(true)
-    const values = buildDatasetRecordValues(
+    const { values } = prepareDatasetRecordWrite(
       {
         model: doc?.get('model'),
         fields: doc?.get('fields'),
@@ -159,9 +159,10 @@ describe('resolveDatasetDoc (AGL-556)', () => {
       // The form submits its own field names…
       { stars: '5', feedback: 'Loved it' },
       // …and the id mapping routes them to the stable model fieldIds.
-      { stars: 'rating', feedback: 'comments' },
+      { fieldMap: { stars: 'rating', feedback: 'comments' } },
     )
-    expect(values).toEqual({ rating: '5', comments: 'Loved it' })
+    // Stored in the field's type (AGL-2773): `rating` is an int32.
+    expect(values).toEqual({ rating: 5, comments: 'Loved it' })
   })
 })
 

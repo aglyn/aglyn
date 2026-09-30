@@ -300,7 +300,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'apps/docs/docs/developers/self-hosting.md. It is the campaign-hop ' +
       'ALLOWLIST, not a destination: the one origin whose links get a ' +
       '`utm_*` put on them, so widening it is what would leak. ' +
-      '`campaign-forwarding.ts` itself writes no host and invents no default ' +
+      '`utm-forwarding.ts` itself writes no host and invents no default ' +
       "— it normalises the caller's origin and returns a no-op uninstaller " +
       'when that yields nothing, so an operator who configures the variable ' +
       'to their own console never reaches this literal, and one who sets it ' +
@@ -550,7 +550,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Renders Aglyn own marketing blog covers. Internal tool.',
   },
   {
-    file: 'tools/scripts/lib/contact-addresses.mjs',
+    file: 'tools/scripts/lib/provisioned-mailboxes.mjs',
     count: 22,
     reason:
       'AGL-2400. The registry of which @aglyn.com addresses are provisioned ' +

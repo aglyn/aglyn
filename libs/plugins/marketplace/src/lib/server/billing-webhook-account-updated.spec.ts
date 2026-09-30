@@ -25,9 +25,29 @@
  * route ever refreshed either. Deliberately a twin of the commerce spec: the
  * whole point of AGL-1994 was that a fix landing on one of these two routes
  * and not the other is invisible.
+ *
+ * The payment-provider contract and its Stripe adapter run for real; only the
+ * two modules the adapter writes through are stood in.
  */
 
-const syncConnectAccountStatus = jest.fn(async () => 1)
+const syncConnectAccountStatus = jest.fn<Promise<number>, unknown[]>(async () => 1)
+const recordConnectPayoutFailure = jest.fn<Promise<number>, unknown[]>(async () => 1)
+
+jest.mock(
+  '@aglyn/tenant-data-admin/server/payment-provider-stripe-connect-status',
+  () => ({
+    syncConnectAccountStatus: (...args: unknown[]) =>
+      syncConnectAccountStatus(...args),
+  }),
+)
+jest.mock(
+  '@aglyn/tenant-data-admin/server/payment-provider-stripe-connect-payouts',
+  () => ({
+    recordConnectPayoutFailure: (...args: unknown[]) =>
+      recordConnectPayoutFailure(...args),
+    clearConnectPayoutFailure: async () => 0,
+  }),
+)
 const purchaseSet = jest.fn(async () => undefined)
 
 /**
@@ -43,8 +63,6 @@ jest.mock('next/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  syncConnectAccountStatus: (...args: unknown[]) =>
-    syncConnectAccountStatus(...(args as [])),
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -66,6 +84,7 @@ import { marketplaceBillingWebhookHandler } from './billing-webhook'
 
 beforeEach(() => {
   syncConnectAccountStatus.mockClear()
+  recordConnectPayoutFailure.mockClear()
   purchaseSet.mockClear()
 })
 
@@ -118,5 +137,21 @@ describe('marketplace webhook: account.updated (AGL-1997)', () => {
     })
     expect(syncConnectAccountStatus).not.toHaveBeenCalled()
     expect(purchaseSet).toHaveBeenCalled()
+  })
+
+  it('records a failed transfer against the publisher profile it was headed for', async () => {
+    const transfer = { id: 'tr_1', amount: 800, destination: 'acct_pub' }
+    await marketplaceBillingWebhookHandler({
+      type: 'transfer.failed',
+      object: transfer,
+      event: { livemode: true },
+    })
+    expect(recordConnectPayoutFailure).toHaveBeenCalledWith('publisherProfiles', {
+      kind: 'transfer',
+      object: transfer,
+      accountId: 'acct_pub',
+      livemode: true,
+    })
+    expect(purchaseSet).not.toHaveBeenCalled()
   })
 })

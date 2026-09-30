@@ -107,7 +107,7 @@ describe('release-flagged nav tabs', () => {
       (definition) => definition.navTabId && !definition.defaultEnabled,
     ).map((definition) => definition.key)
     const probeRegistry = [
-      'export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [',
+      'const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [',
       '  {',
       "    key: 'release_probe_off',",
       "    label: 'Probe',",
@@ -129,13 +129,19 @@ describe('release-flagged nav tabs', () => {
       '    defaultEnabled: false,',
       '  },',
       ']',
-      'export const RELEASE_FLAG_KEYS = []',
+      'export const RELEASE_FLAGS = [...PLUGIN_RELEASE_FLAGS, ...PLATFORM_RELEASE_FLAGS]',
     ].join('\n')
+    const probePlugins =
+      'export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = ' +
+      JSON.stringify([
+        { key: 'release_plugin_off', label: 'Off', description: 'x', defaultEnabled: false, navTabId: 'nav-tab-plugin' },
+        { key: 'release_plugin_on', label: 'On', description: 'x', defaultEnabled: true, navTabId: 'nav-tab-on' },
+      ])
     const script =
       `const harness = await import(${JSON.stringify(pathToFileURL(HARNESS_MODULE).href)});` +
       'process.stdout.write(JSON.stringify({' +
       ' live: harness.flaggedOffNavTabKeys(),' +
-      ` probe: harness.flaggedOffNavTabKeys(${JSON.stringify(probeRegistry)}),` +
+      ` probe: harness.flaggedOffNavTabKeys(${JSON.stringify(probeRegistry)}, ${JSON.stringify(probePlugins)}),` +
       ' }))'
     const read = JSON.parse(
       execFileSync(process.execPath, ['--input-type=module', '-e', script], {
@@ -144,6 +150,6 @@ describe('release-flagged nav tabs', () => {
     )
 
     expect(read.live).toEqual(declared)
-    expect(read.probe).toEqual(['release_probe_off'])
+    expect(read.probe).toEqual(['release_plugin_off', 'release_probe_off'])
   })
 })

@@ -50,6 +50,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  PLUGIN_ORG_KEYED_COLLECTIONS,
+  PLUGIN_REQUIRED_ORG_ERASERS,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import {
   EXPORT_COVERED_COLLECTIONS,
   EXPORT_WITHHELD,
   PERSONAL_DATA_SOURCES,
@@ -182,7 +186,31 @@ function collectionsNamedIn(source: string): Set<string> {
   return found
 }
 
-const ERASED = collectionsNamedIn(ERASE_SOURCE)
+/**
+ * What the erasure reaches through its plugin seams (AGL-3080) rather than
+ * through its own text.
+ *
+ * - A plugin's top-level collection keyed by the org is DECLARED by its owner
+ *   and swept by `erase.ts` without naming it — so the declaration is read.
+ * - A REQUIRED org eraser (one the erasure refuses to run without) erases a
+ *   plugin's record in the plugin's own code, which this library may not
+ *   import — so its source is read as text, the way `erase.ts` is. Each
+ *   required plugin names the module holding its eraser here, and the list is
+ *   held to the compiled declaration, so a new required eraser fails this spec
+ *   until somebody points it at the code.
+ */
+const REQUIRED_ERASER_SOURCES: Record<string, string> = {
+  marketplace: 'libs/plugins/marketplace/src/lib/server/publisher-erasure.ts',
+}
+const REPO_ROOT = join(__dirname, '../../../../../../..')
+
+const ERASED = new Set([
+  ...collectionsNamedIn(ERASE_SOURCE),
+  ...PLUGIN_ORG_KEYED_COLLECTIONS.map((declared) => declared.name),
+  ...Object.values(REQUIRED_ERASER_SOURCES).flatMap((path) => [
+    ...collectionsNamedIn(readFileSync(join(REPO_ROOT, path), 'utf8')),
+  ]),
+])
 
 describe('the export and the erasure see the same collections', () => {
   it('finds the sweeps at all — the guard can fail', () => {
@@ -208,6 +236,15 @@ describe('the export and the erasure see the same collections', () => {
     ]) {
       expect(ERASED.has(known)).toBe(true)
     }
+  })
+
+  it('reads the code of every required plugin eraser, and only those', () => {
+    expect(Object.keys(REQUIRED_ERASER_SOURCES).sort()).toEqual(
+      [...PLUGIN_REQUIRED_ORG_ERASERS].sort(),
+    )
+    // The marketplace's share: the org's public publisher identity.
+    expect(ERASED.has('publisherProfiles')).toBe(true)
+    expect(ERASED.has('publisherHandles')).toBe(true)
   })
 
   it('EVERY collection the erasure touches has a disclosure decision', () => {

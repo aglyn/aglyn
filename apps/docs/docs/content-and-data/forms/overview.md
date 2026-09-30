@@ -175,9 +175,10 @@ Build a feedback survey with four fields:
 
 Submissions land in the inbox like any other form — a visitor who ticks two
 checkboxes submits `topics: Products, Pricing`, and the rating arrives as `4`.
-Like every form value it is stored as text, including in a bound
-[dataset](../datasets/overview.md), whose `=` filter still matches it as a number when
-the field is typed as one.
+The Inbox keeps every value as the visitor typed it. A bound
+[dataset](../datasets/overview.md) stores each value as its field's type instead: the
+rating `4` becomes the number 4 in a number field, and `Products, Pricing` becomes a
+two-item list in a list field.
 
 ## After submit
 
@@ -344,13 +345,19 @@ Open a submission and, under its fields, chips report what actually happened to 
   status: a submission you're looking at is, by definition, in the inbox.
 - **Added to "Leads" dataset** — only when this submission really did become a record in
   that dataset, named as the dataset is named today.
+- **Not added to "Leads" dataset: Seats must be a whole number** — when a submitted value
+  doesn't fit the dataset's model, the record is not written, and the chip names each
+  refused field and why. The visitor still sees your success message; fix the form's
+  field (or the dataset's) and later submissions land.
 
 The rule behind the second chip is worth knowing, because its **absence** is
 informative. It is stamped at submit time, only when a record was genuinely created. If
 the bound dataset had been deleted, or its record quota was full, or none of the
-submitted fields map onto the dataset's fields, the submission is still kept in full —
-it's the record that didn't happen. In that case **no dataset chip appears at all**,
-rather than a chip pointing at a row that doesn't exist. A submission with only **Saved
+submitted fields map onto the dataset's fields, or a value was refused by the dataset's
+model, the submission is still kept in full —
+it's the record that didn't happen. In those cases **no "Added to" chip appears**,
+rather than a chip pointing at a row that doesn't exist; a refused value is the one case
+that says why. A submission with only **Saved
 to Inbox** on a form you bound to a dataset is the signal to go and check the dataset.
 
 #### Replying to a submission {#replying-to-a-submission}

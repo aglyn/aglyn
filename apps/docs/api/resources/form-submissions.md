@@ -38,7 +38,7 @@ Submissions live **under a site**, not under your organization — the paths all
 | `path` | string \| null | The page path the visitor submitted from. |
 | `fields` | object | Exactly what the visitor typed, field name → value. **Not writable** — see [below](#read-is-the-only-writable-field). |
 | `read` | boolean | Your processing flag. The console inbox toggles the same field. |
-| `routing` | object \| null | Where the platform already sent this submission. `null` when it went only to the inbox. Check it before writing your own copy — a row with `routing.dataset.recordId` is already in that dataset. |
+| `routing` | object \| null | Where the platform already sent this submission. `null` when it went only to the inbox. Check it before writing your own copy — a row with `routing.dataset.recordId` is already in that dataset. `routing.datasetRefused` (`id`, `name`, `errors`: field id → reason) means the bound dataset's model refused a value and no record was written. |
 | `created` | string \| null | ISO 8601. |
 
 ## `read` is the only writable field {#read-is-the-only-writable-field}

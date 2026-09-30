@@ -147,26 +147,59 @@ const asText = (value: unknown): string => (typeof value === 'string' ? value : 
 const isEmailStep = (step: OutreachSequenceStep | null | undefined): step is OutreachEmailStep =>
   step?.kind === 'email'
 
-/** The index of the first email step, or `-1` for a sequence with none. */
+/**
+ * The index of the first email step at or after `fromIndex` — the first
+ * email an enrollment that began there sends (AGL-3228) — or `-1` when
+ * there is none.
+ */
 export function firstEmailStepIndex(
   steps: readonly OutreachSequenceStep[] | null | undefined,
+  fromIndex = 0,
 ): number {
-  return (steps ?? []).findIndex(isEmailStep)
+  const list = steps ?? []
+  for (let index = Math.max(0, fromIndex); index < list.length; index += 1) {
+    if (isEmailStep(list[index])) return index
+  }
+  return -1
 }
 
 /**
  * Whether the email at `index` is sent as a reply in the thread an earlier
  * email started: every email after the first unless it says otherwise. The
  * first email starts the thread whatever its `replyInThread` says.
+ *
+ * `startStepIndex` is where the enrollment began (AGL-3228): the first email
+ * it sends from there starts the thread, because the steps before it were
+ * sent by hand, if at all, and there is no email of ours to answer.
  */
 export function isInThreadEmailStep(
   steps: readonly OutreachSequenceStep[] | null | undefined,
   index: number,
+  startStepIndex = 0,
 ): boolean {
   const step = steps?.[index]
   if (!isEmailStep(step)) return false
-  const first = firstEmailStepIndex(steps)
+  const first = firstEmailStepIndex(steps, startStepIndex)
   return index > first && step.replyInThread !== false
+}
+
+/**
+ * The subject an email step starts a thread with, before merge fields
+ * (AGL-3228). A step written to start a thread carries its own. One written
+ * as a reply may start the thread only for an enrollment that began at it,
+ * and its subject field is not what its author wrote for it — so it takes
+ * the sequence's first email's subject, the one the person already had by
+ * hand.
+ */
+export function outreachThreadStartSubject(
+  steps: readonly OutreachSequenceStep[] | null | undefined,
+  index: number,
+): string {
+  const step = steps?.[index]
+  if (!isEmailStep(step)) return ''
+  if (!isInThreadEmailStep(steps, index)) return asText(step.subject)
+  const first = steps?.[firstEmailStepIndex(steps)]
+  return isEmailStep(first) ? asText(first.subject) : ''
 }
 
 /**

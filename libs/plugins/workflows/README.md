@@ -49,6 +49,11 @@ by the plugin's API register functions. The declaration is light: the engine
 itself is imported when the first event arrives, or when the plugin's API
 surface loads.
 
+The same declarations publish the record indexes of a site's `workflow`,
+`webhook` and `action` records (`server/automation-record-index.ts`), so the
+AI plugin and the console's "Used by" scan read them without reaching for this
+plugin's collections. The readers load on the first read.
+
 The vocabulary the engine runs — event types, step types, limits, condition
 shapes, validation — stays in the core (`@aglyn/aglyn/app-utils/actions` and
 `@aglyn/aglyn/app-utils/workflows`), because the console, the AI plugin and

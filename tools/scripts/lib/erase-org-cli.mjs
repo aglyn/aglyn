@@ -58,9 +58,19 @@ export function parseEraseArgs(argv) {
  * the shared function's own and they carry their meaning; a new one appears
  * here the moment it exists.
  */
-function reportCounts(result, log) {
+function reportCounts(result, log, prefix = '') {
   for (const [key, value] of Object.entries(result)) {
-    if (typeof value === 'number') log(`  ${String(value).padStart(6)}  ${key}`)
+    if (typeof value === 'number') log(`  ${String(value).padStart(6)}  ${prefix}${key}`)
+    // One level of nesting: a plugin's share, keyed by plugin or collection
+    // (`plugins.outreach.grants`, `pluginCollections.outreachLinks`). The
+    // names are the owners' own, so a plugin that declares a new one is
+    // printed the moment it exists, like every other count.
+    else if (!prefix && value && typeof value === 'object' && !Array.isArray(value)) {
+      for (const [owner, inner] of Object.entries(value)) {
+        if (typeof inner === 'number') log(`  ${String(inner).padStart(6)}  ${key}.${owner}`)
+        else if (inner && typeof inner === 'object') reportCounts(inner, log, `${key}.${owner}.`)
+      }
+    }
   }
 }
 

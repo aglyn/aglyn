@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   buildRoute,
@@ -314,7 +314,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const publisher = await resolvePublisherProfile(firestore, sellerOrgId)
     const accountId = publisher?.stripeAccountId
     if (
-      !connectLinkageIsReady(
+      !merchantAccountIsReady(
         {
           accountId,
           chargesEnabled: publisher?.stripeChargesEnabled,
