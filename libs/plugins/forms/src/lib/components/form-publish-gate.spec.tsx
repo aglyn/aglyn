@@ -6,7 +6,7 @@
  * THE `author` HOST ROLE MAY EDIT A FORM AND MAY NOT PUBLISH ONE.
  *
  * That is enforced where it must be — the Firestore rules and
- * `/api/hosts/forms/promote` both refuse — and the console's job is to say no
+ * `/api/forms/promote` both refuse — and the console's job is to say no
  * with a reason instead of letting a click come back as a bare
  * `permission-denied`.
  *

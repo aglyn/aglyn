@@ -26,7 +26,10 @@
  * so a marketplace `rating` of 9 could pass the validation those paths run.
  *
  * Two halves: the helper does what it says, and each write path calls it
- * between deriving the model and validating against it.
+ * between deriving the model and validating against it. Site import restores
+ * records through the data plugin's section of the bundle, whose own helper
+ * asks the restore to load the plugins — so the restore's half is that it
+ * really does.
  */
 
 import { readFileSync } from 'node:fs'
@@ -82,7 +85,7 @@ const PLAIN: DatasetModel = {
 const RECORD_WRITERS = [
   'app/api/orgs/datasets/route.ts',
   'utils/api-v1-resources.ts',
-  'app/api/hosts/import/route.ts',
+  '../../libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts',
 ]
 
 describe('every console record write loads custom field types first', () => {
@@ -98,6 +101,20 @@ describe('every console record write loads custom field types first', () => {
       expect(modelAt).toBeGreaterThan(-1)
       expect(source.slice(modelAt, at)).toContain('ensureCustomFieldTypes(')
     }
+  })
+})
+
+describe('a site restore', () => {
+  it('loads every plugin’s console API surface when a section asks it to', () => {
+    const route = readFileSync(
+      join(__dirname, '..', 'app/api/hosts/import/route.ts'),
+      'utf8',
+    )
+    const at = route.indexOf('loadPluginSurfaces:')
+    expect(at).toBeGreaterThan(-1)
+    expect(route.slice(at, route.indexOf('},', at))).toContain(
+      "serverPluginLoader.ensureAll(['consoleApi'])",
+    )
   })
 })
 

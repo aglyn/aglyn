@@ -99,28 +99,6 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/app/api/hosts/export/route.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/hosts/forms/promote/route.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/console/app/api/hosts/import/route.ts",
-      "rules": [
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/app/api/orgs/datasets/export/route.ts",
       "rules": [
         "domain-name",
@@ -295,13 +273,6 @@
       "lane": "workflows"
     },
     {
-      "path": "apps/console/utils/promote-form-version.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/console/utils/server/announce-dataset-change.ts",
       "rules": [
         "domain-declares:data"
@@ -370,13 +341,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/activity-presenter.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "ai"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/advertising-tag-mounts.tsx",

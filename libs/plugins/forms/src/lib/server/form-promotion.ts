@@ -28,7 +28,7 @@ import {
   type NodeId,
 } from '@aglyn/aglyn/server'
 
-/** The canvas id a form's own node carries, matching the besigner's. */
+/** The canvas id a form's own node carries. */
 const FORM_COMPONENT_ID = 'form'
 
 /** A promotion that must not happen, and what to tell the author. */

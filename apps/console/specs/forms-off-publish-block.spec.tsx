@@ -135,17 +135,21 @@ describe('every besigner publish asks before it writes', () => {
     expect(wrote).toBeGreaterThan(asked)
   })
 
-  it('a form publishes through the route that asks the site’s answer', () => {
-    // The form's own designer writes nothing live: it posts the version to the
-    // route the forms plugin declares, and that route refuses a site that
-    // switched Forms off before its write.
+  it('a form’s own designer asks the site’s answer before it publishes', () => {
+    // The form's designer writes nothing live: it posts the version to the
+    // route the forms plugin declares. That route sits behind the site's
+    // switch, so the editor asks the site's plugin set first and says why —
+    // and the route asks again before its write.
     const editor = read(
       `${EDITOR}/[documentSegment]/[docId]/versions/[versionId]/besigner/page.tsx`,
     )
-    expect(editor).toContain('authorizedFetch(user, declared.publish.path')
-    const route = read('apps/console/app/api/hosts/forms/promote/route.ts')
+    const asked = editor.indexOf('if (pluginOnForSite === false) {')
+    const posted = editor.indexOf('authorizedFetch(user, declared.publish.path')
+    expect(asked).toBeGreaterThan(-1)
+    expect(posted).toBeGreaterThan(asked)
+    const route = read('libs/plugins/forms/src/lib/server/form-promote-route.ts')
     expect(route).toContain(
-      'formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), FORMS_PLUGIN_ID)',
+      'formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), BUNDLE_ID)',
     )
   })
 })

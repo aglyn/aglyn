@@ -209,6 +209,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { POST as IMPORT_POST } from '../app/api/hosts/import/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import {
   EXPORT_COLLECTION_LIMITS,
   SITE_EXPORT_FORMAT,
@@ -333,6 +334,13 @@ const storedScreenIds = () =>
   writes
     .filter((entry) => entry.path.startsWith('hosts/host-1/screens/'))
     .map((entry) => entry.path.split('/').pop())
+
+// The restore resolves the sections plugins answer for before it counts
+// anything, and a section declared and not registered fails it — so the
+// plugins' declarations are registered as the console's boot registers them.
+beforeAll(async () => {
+  await registerPluginServerDeclarations()
+})
 
 beforeEach(() => {
   jest.clearAllMocks()

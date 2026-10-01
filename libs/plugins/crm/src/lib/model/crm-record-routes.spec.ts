@@ -38,9 +38,9 @@ beforeEach(() => {
 })
 
 describe('the addresses the CRM publishes', () => {
-  it('owns the four record kinds', () => {
+  it('owns the four record kinds, and tasks', () => {
     expect(listPluginRecordRouteKinds()).toEqual(
-      ['contact', 'lead', 'company', 'deal'].map((kind) => ({
+      ['contact', 'lead', 'company', 'deal', 'task'].map((kind) => ({
         kind,
         pluginId: 'crm',
       })),
@@ -68,6 +68,11 @@ describe('the addresses the CRM publishes', () => {
     expect(pluginRecordHref('deal', org, 'd1')).toBe('/acme/crm/deals/d1')
   })
 
+  it('sends a task to the Tasks list, which is where a task is kept', () => {
+    expect(pluginRecordHref('task', site, 't1')).toBe(siteHub.section('tasks'))
+    expect(pluginRecordListHref('task', org)).toBe('/acme/crm/tasks')
+  })
+
   it('addresses a lead by its id alone at the organization level (AGL-3303)', () => {
     // A lead is one org row per person (AGL-3275), so the org hub's own
     // lead page takes the id with no site — the page the organization's
@@ -84,6 +89,6 @@ describe('the addresses the CRM publishes', () => {
 
   it('registers again without refusing itself', () => {
     expect(() => registerCrmRecordRoutes()).not.toThrow()
-    expect(listPluginRecordRouteKinds()).toHaveLength(4)
+    expect(listPluginRecordRouteKinds()).toHaveLength(5)
   })
 })

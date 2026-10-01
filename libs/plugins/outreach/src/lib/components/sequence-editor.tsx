@@ -38,7 +38,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   isInThreadEmailStep,
   OUTREACH_SEQUENCE_NAME_MAX,
@@ -100,6 +100,69 @@ function stepIssueKey(path: string): { index: number; field: string } | null {
   return { index: Number(match[1]), field: field === 'id' ? 'step' : field }
 }
 
+interface OutreachCountriesFieldProps {
+  options: readonly string[]
+  value: readonly string[]
+  onChange(next: string[]): void
+  issue?: string
+  disabled: boolean
+}
+
+/**
+ * The countries a sequence sends to, as chips in an Autocomplete.
+ *
+ * MEMOIZED, AND EVERY PROP IT TAKES IS STABLE WHILE THE COUNTRIES ARE
+ * (AGL-3423). A multiple Autocomplete hands its input a new chip array as
+ * `startAdornment` on every render, and MUI's `InputBase` copies that into
+ * its `FormControl` from a passive effect — a state update after every
+ * commit this field takes part in. React 19 counts a commit that leaves such
+ * an update pending as a nested update, and keystrokes the browser delivers
+ * back to back (a held key, fast typing on a busy page) commit one after
+ * another with nothing in between to clear the count: fifty-one of them and
+ * the next keystroke's own `setState` throws "Maximum update depth exceeded"
+ * (minified error #185), which is what typing a step's body reported. Kept
+ * out of the editor's other renders, the field commits only when the
+ * countries, their options or their issue change.
+ */
+const OutreachCountriesField = memo(function OutreachCountriesField(
+  props: OutreachCountriesFieldProps,
+) {
+  return (
+    <Autocomplete<string, true>
+      multiple
+      options={props.options}
+      value={props.value as string[]}
+      getOptionLabel={outreachCountryLabel}
+      onChange={(_event, next) => props.onChange(next)}
+      disabled={props.disabled}
+      renderValue={(value, getItemProps) =>
+        value.map((code, index) => {
+          const { key, ...item } = getItemProps({ index })
+          return (
+            <Chip
+              key={key}
+              size="small"
+              label={outreachCountryLabel(code)}
+              {...item}
+            />
+          )
+        })
+      }
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Countries"
+          error={Boolean(props.issue)}
+          helperText={
+            props.issue ??
+            'Among the countries your organization allows. Cold contacts are emailed only in the United States.'
+          }
+        />
+      )}
+    />
+  )
+})
+
 /**
  * The sequence editor (AGL-2980): the name, the site and mailbox, the steps,
  * who it sends to and when, beside a live preview of each email.
@@ -119,7 +182,11 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
   const uid = user?.uid ?? null
   const mountedHosts = orgMount?.hosts
   const hosts = useMemo(() => mountedHosts ?? [], [mountedHosts])
-  const orgCountries = settings.settings?.allowedCountries ?? ['US']
+  const allowedCountries = settings.settings?.allowedCountries
+  const orgCountries = useMemo(
+    () => allowedCountries ?? ['US'],
+    [allowedCountries],
+  )
 
   const [draft, setDraft] = useState<OutreachSequenceDraft>(() =>
     sequence
@@ -211,10 +278,28 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
     issue.path.startsWith('settings.allowedCountries'),
   )?.message
 
+  // An edit clears what the last save refused. The empty list stays the same
+  // list, so an edit with nothing to clear does not change that state.
+  const clearServerIssues = useCallback(
+    () => setServerIssues((previous) => (previous.length ? [] : previous)),
+    [],
+  )
   const update = (next: Partial<OutreachSequenceDraft>) => {
-    setServerIssues([])
+    clearServerIssues()
     setDraft((previous) => ({ ...previous, ...next }))
   }
+  // Stable, for the memoized countries field: it reads the settings it
+  // replaces from the draft it is given rather than from this render's.
+  const setCountries = useCallback(
+    (next: string[]) => {
+      clearServerIssues()
+      setDraft((previous) => ({
+        ...previous,
+        settings: { ...previous.settings, allowedCountries: next },
+      }))
+    },
+    [clearServerIssues],
+  )
   const setStep = (index: number, step: OutreachSequenceStep) =>
     update({
       steps: draft.steps.map((entry, position) =>
@@ -274,9 +359,11 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
   }
 
   const siteName = hosts.find((host) => host.id === draft.hostId)?.name ?? ''
-  const countryOptions = [
-    ...new Set([...orgCountries, ...draft.settings.allowedCountries]),
-  ]
+  const draftCountries = draft.settings.allowedCountries
+  const countryOptions = useMemo(
+    () => [...new Set([...orgCountries, ...draftCountries])],
+    [orgCountries, draftCountries],
+  )
   /*
    * A test sends the step as STORED (AGL-3325): the route reads the saved
    * sequence, so a new one has nothing to send yet and an edited one sends
@@ -501,41 +588,12 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
             contentGutterY
           >
             <Stack spacing={2}>
-              <Autocomplete<string, true>
-                multiple
+              <OutreachCountriesField
                 options={countryOptions}
-                value={draft.settings.allowedCountries}
-                getOptionLabel={outreachCountryLabel}
-                onChange={(_event, next) =>
-                  update({
-                    settings: { ...draft.settings, allowedCountries: next },
-                  })
-                }
+                value={draftCountries}
+                onChange={setCountries}
+                issue={countriesIssue}
                 disabled={archived}
-                renderValue={(value, getItemProps) =>
-                  value.map((code, index) => {
-                    const { key, ...item } = getItemProps({ index })
-                    return (
-                      <Chip
-                        key={key}
-                        size="small"
-                        label={outreachCountryLabel(code)}
-                        {...item}
-                      />
-                    )
-                  })
-                }
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Countries"
-                    error={Boolean(countriesIssue)}
-                    helperText={
-                      countriesIssue ??
-                      'Among the countries your organization allows. Cold contacts are emailed only in the United States.'
-                    }
-                  />
-                )}
               />
               <FormControlLabel
                 control={

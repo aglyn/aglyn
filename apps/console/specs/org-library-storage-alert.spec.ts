@@ -310,7 +310,6 @@ const libraryAlerts = (notifications: CapturedAlert[]) =>
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
-  delete process.env.USAGE_ALERT_APPROACH_PCT
   jest.clearAllMocks()
   mockHosts = []
   mockOrgs = []
@@ -458,53 +457,37 @@ describe('the org library is warnable on its own (AGL-1886)', () => {
     expect(libraryAlerts(notifications)[0].title).toContain('above 80%')
   })
 
-  it('stays quiet below the approach threshold', async () => {
+  it('stays quiet below the first step', async () => {
     mockOrgs = [
       {
         id: 'org-1',
         plan: 'pro',
-        orgLibraryBytes: Math.round(0.79 * PRO_SCOPE_MB * MB),
+        orgLibraryBytes: Math.round(0.74 * PRO_SCOPE_MB * MB),
       },
     ]
     mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
     expect(libraryAlerts(await run())).toHaveLength(0)
   })
 
-  it('honours a configured approach percentage', async () => {
-    // `USAGE_ALERT_APPROACH_PCT` moves the warning; the same 79% that was
-    // silent above must speak at 70. Forced red by hard-coding 0.8 back into
-    // the loop.
-    process.env.USAGE_ALERT_APPROACH_PCT = '70'
-    mockOrgs = [
-      {
-        id: 'org-1',
-        plan: 'pro',
-        orgLibraryBytes: Math.round(0.79 * PRO_SCOPE_MB * MB),
-      },
-    ]
-    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
-    const notifications = await run()
-    expect(libraryAlerts(notifications)).toHaveLength(1)
-    expect(libraryAlerts(notifications)[0].title).toContain('above 70%')
-  })
-
-  it('falls back to 80 rather than going silent on a malformed percentage', async () => {
-    // The failure mode that matters: a typo in an env var must not disable the
-    // warning. `''`, `'yes'` and `'0'` each used to be candidates for a
-    // threshold of zero (alert always) or NaN (alert never).
-    for (const bad of ['yes', '0', '-10', '100', '']) {
-      process.env.USAGE_ALERT_APPROACH_PCT = bad
+  it('prints the step actually crossed: 75 at 79%, 90 at 95% (AGL-3431)', async () => {
+    // The ladder is 75, 80, 90, 100 and only the highest step reached is
+    // sent, so the title must name THAT step — a fixed "above 80%" would be
+    // wrong at both of these readings.
+    for (const [share, step] of [
+      [0.79, 'above 75%'],
+      [0.95, 'above 90%'],
+    ] as const) {
       mockOrgs = [
         {
           id: 'org-1',
           plan: 'pro',
-          orgLibraryBytes: Math.round(0.85 * PRO_SCOPE_MB * MB),
+          orgLibraryBytes: Math.round(share * PRO_SCOPE_MB * MB),
         },
       ]
       mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
       const notifications = await run()
       expect(libraryAlerts(notifications)).toHaveLength(1)
-      expect(libraryAlerts(notifications)[0].title).toContain('above 80%')
+      expect(libraryAlerts(notifications)[0].title).toContain(step)
     }
   })
 

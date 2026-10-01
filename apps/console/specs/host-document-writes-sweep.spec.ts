@@ -223,7 +223,7 @@ describe("plugins: a console card's write of something a page renders carries th
     productCategories:
       'Read only by the catalog API, fetched from the browser (60s CDN cache).',
     forms:
-      'The placed design renders from the nodes /api/hosts/forms/promote writes ' +
+      'The placed design renders from the nodes /api/forms/promote writes ' +
       'and announces; these writes are fields, names, routing, archive state ' +
       'and the draft pointer, which the tenant reads per submission.',
     formSubmissions: 'The inbox; never on a page.',

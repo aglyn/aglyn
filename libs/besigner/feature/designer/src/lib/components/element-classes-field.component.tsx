@@ -20,7 +20,7 @@ import { FieldMuteButton } from '@aglyn/shared-ui-jsx-forms'
 import { Autocomplete, Chip, TextField } from '@mui/material'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import { useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import { toggleRevealedNodeId } from '../utils/canvas-reveal'
@@ -35,6 +35,91 @@ const CLASS_NAME_PATTERN = /^-?[_a-zA-Z][_a-zA-Z0-9-]*$/
 
 export const isValidClassName = (name: string): boolean =>
   CLASS_NAME_PATTERN.test(name)
+
+/** Free-text only: there is no list of classes to choose from. */
+const NO_OPTIONS: string[] = []
+
+interface ElementClassesChipsProps {
+  classes: readonly string[]
+  isSwitchedOff(className: string): boolean
+  onToggle(className: string): void
+  onChange(event: unknown, value: string[]): void
+}
+
+/**
+ * The class chips themselves, MEMOIZED on props that hold still while the
+ * classes and their switches do (AGL-3423).
+ *
+ * A multiple Autocomplete hands its input a new chip array as
+ * `startAdornment` on every render, and MUI's `InputBase` copies that into
+ * its `FormControl` from a passive effect: a state update left pending after
+ * every commit the field takes part in. React 19 counts each such commit as
+ * a nested update, and keystrokes delivered back to back elsewhere in the
+ * panel commit one after another with nothing to clear the count, so the
+ * fifty-first throws "Maximum update depth exceeded" (#185). The field above
+ * is an `observer` of `node.props`, which every attribute commit replaces;
+ * kept out of those renders, the chips commit only when they change.
+ */
+const ElementClassesChips = memo(function ElementClassesChips(
+  props: ElementClassesChipsProps,
+) {
+  const { classes, isSwitchedOff, onToggle, onChange } = props
+  return (
+    <Autocomplete
+      multiple
+      freeSolo
+      size="small"
+      options={NO_OPTIONS}
+      value={classes as string[]}
+      onChange={onChange}
+      renderValue={(value, getItemProps) =>
+        value.map((option, index) => {
+          const off = isSwitchedOff(option)
+          const switchable = isClassSwitchable(option)
+          return (
+            <Chip
+              label={option}
+              size="small"
+              {...getItemProps({ index })}
+              key={option}
+              variant={off ? 'outlined' : 'filled'}
+              sx={
+                off
+                  ? { textDecoration: 'line-through', opacity: 0.6 }
+                  : undefined
+              }
+              icon={
+                <FieldMuteButton
+                  mute={{
+                    muted: off,
+                    label: switchable
+                      ? off
+                        ? `Apply ${option} again`
+                        : `Stop applying ${option} while designing`
+                      : off
+                        ? `Stop showing this element on the canvas`
+                        : `Show this element on the canvas`,
+                    onToggle: () => onToggle(option),
+                  }}
+                  sx={{ ml: 0.5 }}
+                />
+              }
+            />
+          )
+        })
+      }
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Classes"
+          placeholder="Add class…"
+          helperText="Custom CSS classes — targetable from theme styles and interactions"
+        />
+      )}
+    />
+  )
+})
+
 
 export interface ElementClassesFieldProps {
   node?: Aglyn.NodeSchema
@@ -116,57 +201,11 @@ export const ElementClassesField = observer(
     )
 
     return (
-      <Autocomplete
-        multiple
-        freeSolo
-        size="small"
-        options={[] as string[]}
-        value={classes}
+      <ElementClassesChips
+        classes={classes}
+        isSwitchedOff={isSwitchedOff}
+        onToggle={toggleClass}
         onChange={handleChange}
-        renderValue={(value, getItemProps) =>
-          value.map((option, index) => {
-            const off = isSwitchedOff(option)
-            const switchable = isClassSwitchable(option)
-            return (
-              <Chip
-                label={option}
-                size="small"
-                {...getItemProps({ index })}
-                key={option}
-                variant={off ? 'outlined' : 'filled'}
-                sx={
-                  off
-                    ? { textDecoration: 'line-through', opacity: 0.6 }
-                    : undefined
-                }
-                icon={
-                  <FieldMuteButton
-                    mute={{
-                      muted: off,
-                      label: switchable
-                        ? off
-                          ? `Apply ${option} again`
-                          : `Stop applying ${option} while designing`
-                        : off
-                          ? `Stop showing this element on the canvas`
-                          : `Show this element on the canvas`,
-                      onToggle: () => toggleClass(option),
-                    }}
-                    sx={{ ml: 0.5 }}
-                  />
-                }
-              />
-            )
-          })
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label="Classes"
-            placeholder="Add class…"
-            helperText="Custom CSS classes — targetable from theme styles and interactions"
-          />
-        )}
       />
     )
   },

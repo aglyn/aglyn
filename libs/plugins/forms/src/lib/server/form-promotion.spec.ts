@@ -40,13 +40,12 @@ import {
   resolveFormPromotion,
   type FormPromotionRefusal,
   type FormPromotionWrite,
-} from '../utils/promote-form-version'
+} from './form-promotion'
 
 const FORM_ID = 'form-abc'
-const ROUTE = 'apps/console/app/api/hosts/forms/promote/route.ts'
-// Jest's cwd is the repo root here, not apps/console.
-const readRepo = (rel: string) =>
-  readFileSync(join(process.cwd(), rel), 'utf8')
+/** The promote route, beside this module. */
+const readRoute = () =>
+  readFileSync(join(__dirname, 'form-promote-route.ts'), 'utf8')
 
 /**
  * A stored CANVAS tree — the shape a besigner save actually leaves behind.
@@ -307,8 +306,8 @@ describe('a promotion on a site that switched Forms off (AGL-3029)', () => {
   })
 
   it('the route asks the site’s own plugin set before it resolves', () => {
-    const text = readRepo(ROUTE)
-    expect(text).toContain('formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), FORMS_PLUGIN_ID)')
+    const text = readRoute()
+    expect(text).toContain('formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), BUNDLE_ID)')
   })
 })
 
@@ -341,7 +340,7 @@ describe('a promotion the CANVAS refuses', () => {
  * keeps over the besigner's publish, pointed at the second path.
  */
 describe('the promote route is gated on the resolver', () => {
-  const source = () => readRepo(ROUTE)
+  const source = readRoute
 
   it('resolves before the write that publishes', () => {
     const text = source()

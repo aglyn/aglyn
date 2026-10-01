@@ -84,6 +84,50 @@ function serialize(values: unknown): string {
   }
 }
 
+/** A stable token per function, so two keys agree only on the same function. */
+const functionTokens = new WeakMap<object, number>()
+let nextFunctionToken = 0
+let nextUnkeyable = 0
+
+/**
+ * What a value HOLDS, as a string: plain data by value, a function by
+ * identity, a Set by its members. A value it cannot write down — a cycle, a
+ * React element's owner — gets a key of its own, so it only ever equals
+ * itself.
+ */
+function contentKey(value: unknown): string {
+  try {
+    return JSON.stringify(value, (_key, entry: unknown) => {
+      if (typeof entry === 'function') {
+        let token = functionTokens.get(entry)
+        if (token === undefined) {
+          nextFunctionToken += 1
+          token = nextFunctionToken
+          functionTokens.set(entry, token)
+        }
+        return `ƒ${token}`
+      }
+      if (entry instanceof Set) return { set: [...entry].sort() }
+      return entry
+    })
+  } catch {
+    nextUnkeyable += 1
+    return `unkeyable:${nextUnkeyable}`
+  }
+}
+
+/**
+ * `value` itself while it holds the same content as last render, else the new
+ * one — so a caller that builds its fields inline on every render hands the
+ * form the SAME fields while they have not changed.
+ */
+function useContentStable<T>(value: T): T {
+  const held = useRef<{ key: string; value: T } | undefined>(undefined)
+  const key = contentKey(value)
+  if (!held.current || held.current.key !== key) held.current = { key, value }
+  return held.current.value
+}
+
 /** Hands the parent every change, and the form API for writes from outside. */
 function AttributeFieldsFormTemplate(
   props: FormTemplateRenderProps & {
@@ -132,9 +176,24 @@ export interface AttributeFieldsFormProps {
 /**
  * Attribute fields in a form of their own, resolved and drawn exactly as the
  * Attributes panel draws them, reporting every change.
+ *
+ * ## It renders its fields only when they change (AGL-3423)
+ *
+ * Every change is reported upward, and the owner typically keeps it in state:
+ * the Properties dialog re-renders every row on each keystroke in any row's
+ * Default, and builds each row's fields inline. Re-rendering the form with
+ * them re-rendered every field in it, and a multi-answer Choice's field is a
+ * multiple Autocomplete, which leaves a state update pending after every
+ * commit it takes part in (see `ElementClassesChips`). Fifty-one fast
+ * keystrokes in a sibling field and React refused the next one: "Maximum
+ * update depth exceeded" (#185), thrown from the typing field's own
+ * final-form subscriber. So the fields are held by CONTENT, and the rendered
+ * form is reused until the resolved fields change.
  */
 export function AttributeFieldsForm(props: AttributeFieldsFormProps) {
-  const { fields, values, onChange, mediaFields } = props
+  const { values, onChange } = props
+  const fields = useContentStable(props.fields)
+  const mediaFields = useContentStable(props.mediaFields)
   const [initialValues] = useState(() => values ?? {})
   const formApiRef = useRef<ReturnType<typeof useFormApi> | undefined>(undefined)
   const onChangeRef = useRef(onChange)
@@ -249,14 +308,19 @@ export function AttributeFieldsForm(props: AttributeFieldsFormProps) {
       },
   )
 
-  return (
-    <FormRenderer
-      componentMapper={elementPropsComponentMapper}
-      FormTemplate={Template}
-      initialValues={initialValues}
-      onSubmit={noop}
-      schema={{ fields: resolved as never }}
-    />
+  // The same element while the resolved fields are the same, which React
+  // takes as "nothing to render here".
+  return useMemo(
+    () => (
+      <FormRenderer
+        componentMapper={elementPropsComponentMapper}
+        FormTemplate={Template}
+        initialValues={initialValues}
+        onSubmit={noop}
+        schema={{ fields: resolved as never }}
+      />
+    ),
+    [Template, initialValues, resolved],
   )
 }
 

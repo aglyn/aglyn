@@ -167,7 +167,9 @@ describe('every record write path carries the index', () => {
   const FORM_SUBMIT =
     'libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts'
   const EVENT_ACTIONS = 'libs/plugins/workflows/src/lib/engine/run-event-actions.ts'
-  const SITE_IMPORT = 'apps/console/app/api/hosts/import/route.ts'
+  // A site restore: the data plugin's section of the bundle (AGL-3080).
+  const SITE_IMPORT =
+    'libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts'
 
   const callSites = (path: string) =>
     (read(path).match(/datasetIntegrity(Fields|Update)\(/g) ?? []).length
@@ -236,7 +238,7 @@ describe('every record write path carries the index', () => {
     // A bundle written before the field existed carries none, so accepting
     // its copy would restore records the check cannot reach.
     expect(read(SITE_IMPORT)).toContain(
-      'datasetIntegrityFields(model, record.values ?? {})',
+      "datasetIntegrityFields(model, record['values'] ?? {})",
     )
   })
 

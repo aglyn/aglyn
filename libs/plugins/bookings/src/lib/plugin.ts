@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerBookingsRecordRoutes } from './model/bookings-record-routes'
 import { BOOKINGS_SEARCH_SOURCES } from './model/bookings-search-sources'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 
@@ -35,6 +36,7 @@ const BookMeetingButton = lazy(() => import('./components/book-meeting-action'))
  * at console app load — the page is lazy (no besigner/canvas code).
  */
 export function registerBookingsConsole(): void {
+  registerBookingsRecordRoutes()
   // Per-plugin settings (AGL-428): the schema powers the generic form on
   // the Plugins & add-ons hub and defaults-merged reads everywhere.
   Aglyn.registerPluginConfigSchema(BOOKINGS_CONFIG_SCHEMA)

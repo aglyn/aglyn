@@ -70,8 +70,8 @@ import {
  *      only thing between a metered org and an invoice line. Now the two
  *      agree: bytes that land are bytes that bill.
  *   3. **Alerts are what prevent the surprise** — `usage-alerts` warns on
- *      approach (80%) and again at the band (100%), in-product and by the
- *      existing notification path. A warning, not a wall.
+ *      approach (75%, 80% and 90%) and again at the band (100%), in-product
+ *      and by email. A warning, not a wall.
  *   4. **A cap is the customer's option, never our default.** An org that
  *      wants a hard ceiling sets one in Billing; uploads past it are refused
  *      citing *their* limit, not ours. Off unless they choose it: the ceiling
@@ -98,65 +98,49 @@ import {
  */
 
 /**
- * Warn at 80% of the allowance and again at 100% (AGL-1886 item 3).
+ * The usage bands a quota is announced at: 75%, 80%, 90% and 100% of the
+ * allowance (AGL-3431, after AGL-1886's 80 and 100).
  *
- * WHY 80. It is the threshold `usage-alerts` has already used for every other
- * quota since AGL-276, so a storage warning arrives on the same schedule as
- * the email, bandwidth and dataset ones an owner already recognises — a
- * second, different percentage for storage alone would be a worse warning for
- * being unfamiliar. 80% of a monthly storage band is also days of headroom at
- * ordinary upload rates rather than minutes, which is what makes it a warning
- * rather than an announcement.
+ * FOUR STEPS, because the allowances are big numbers. Between 80% of 50,000
+ * emails or 100 GB of storage and the band itself lies most of a month, and a
+ * single warning at the start of that stretch is a warning nobody remembers
+ * by its end. 75 is the early heads-up, 80 and 90 the closing distance, 100
+ * the band — where a refusing quota stops and a metered one starts billing,
+ * and therefore the last moment a customer can act with no charge attached.
  *
- * WHY 100 AND NOT HIGHER. The cap notification fires at the allowance, not at
- * some margin past it, because at the allowance is the last moment the
- * customer can act without a charge attached — and with the ceiling above,
- * 100% is also where uploads start being refused for an org that has not
- * opted in. Warning after that would be describing an event rather than
- * preceding it.
+ * ONE NOTICE PER STEP, and only the HIGHEST step reached is sent: a reading
+ * that jumps from 70% to 95% sends one 90% notice, not 75, 80 and 90 at once,
+ * and a small limit (6 pages per site) moving from 4 to 5 sends one 80%
+ * notice. How often a step may repeat is `usageAlertGuardDecision`'s
+ * question, not this one.
  *
- * CONFIG, per the issue: `USAGE_ALERT_APPROACH_PCT` overrides the 80. It
- * FAILS TO THE DEFAULT — a blank, a word, a negative or anything at or above
- * 100 leaves 80 standing, because a malformed percentage that silently
- * disabled the approach warning would be an alert that cannot fire, which is
- * the exact defect this issue was opened to remove.
+ * NOT CONFIGURABLE. `USAGE_ALERT_APPROACH_PCT` used to move the single
+ * approach warning; with a fixed ladder there is no one number for it to
+ * move, and it was set nowhere.
  */
-export const USAGE_ALERT_APPROACH_PCT_DEFAULT = 80
+export const USAGE_ALERT_BANDS = [75, 80, 90, 100] as const
+export type UsageAlertBand = (typeof USAGE_ALERT_BANDS)[number]
+/** The band itself — the last step, where the allowance is used up. */
 export const USAGE_ALERT_CAP_PCT = 100
 
-/** The approach threshold in force, as a percentage. */
-export function usageAlertApproachPct(
-  configured?: string | null | undefined,
-): number {
-  const parsed = Number(String(configured ?? '').trim())
-  if (!Number.isFinite(parsed)) return USAGE_ALERT_APPROACH_PCT_DEFAULT
-  // Must be a real warning: above zero, and BELOW the cap threshold. A
-  // configured 100 would collapse the two notifications into one and delete
-  // the warning half; a configured 0 would alert every org at all times,
-  // which trains people to ignore the one that matters.
-  if (parsed <= 0 || parsed >= USAGE_ALERT_CAP_PCT) {
-    return USAGE_ALERT_APPROACH_PCT_DEFAULT
-  }
-  return parsed
-}
-
 /**
- * Which notification a usage ratio earns, or 0 for none.
+ * The highest band a usage reading has reached, or 0 for none.
  *
  * Shared by every quota in `usage-alerts` so the storage warning and the
  * bandwidth warning cannot drift apart, and so the percentages are testable
- * without standing up a cron.
+ * without standing up a cron. Compared as `used × 100 ≥ band × limit` rather
+ * than through a ratio, so 9 of 10 is exactly 90% and never 89.999…%.
  */
 export function usageAlertThreshold(
   used: number,
   limit: number,
-  approachPct = USAGE_ALERT_APPROACH_PCT_DEFAULT,
-): 0 | typeof USAGE_ALERT_APPROACH_PCT_DEFAULT | 100 {
+): 0 | UsageAlertBand {
   if (!Number.isFinite(limit) || limit <= 0) return 0
   if (!Number.isFinite(used) || used < 0) return 0
-  const ratio = (used / limit) * 100
-  if (ratio >= USAGE_ALERT_CAP_PCT) return USAGE_ALERT_CAP_PCT
-  if (ratio >= approachPct) return approachPct as never
+  for (let index = USAGE_ALERT_BANDS.length - 1; index >= 0; index -= 1) {
+    const band = USAGE_ALERT_BANDS[index]
+    if (used * 100 >= band * limit) return band
+  }
   return 0
 }
 

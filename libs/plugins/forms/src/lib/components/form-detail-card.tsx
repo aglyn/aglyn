@@ -117,7 +117,7 @@ export interface FormDetailCardProps {
  * how you go back, not only how you go forward, and an author restoring last
  * week's design should not have to open a canvas to do it.
  *
- * It rides `/api/hosts/forms/promote` rather than an `updateDoc` here, because
+ * It rides `/api/forms/promote` rather than an `updateDoc` here, because
  * a form's promotion has to run `checkFormContract` on the tree it is about to
  * write and REFUSE. A check in this component would be advice a determined
  * client could skip; the route reads the stored version itself, so nothing

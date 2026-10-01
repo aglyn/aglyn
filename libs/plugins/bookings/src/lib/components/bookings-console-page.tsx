@@ -16,8 +16,10 @@
  */
 'use client'
 
-import { checkQuota, crmContactByEmailHref, pluginDocsHelp } from '@aglyn/aglyn'
-import { BOOKINGS_BOOKER_PARAM, normalizeContactEmail } from '@aglyn/aglyn'
+import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
+import { normalizeContactEmail } from '@aglyn/aglyn'
+import { pluginRecordByEmailHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { BOOKINGS_BOOKER_PARAM } from '../model/bookings-record-routes'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
@@ -130,18 +132,19 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
    * Where a booker's CONTACT is (AGL-2622). A booking updated a person in
    * the CRM by the address it carried, and the row links there by that
    * address — the Contacts list holds the id nothing here does and opens
-   * the record on one match. The address comes from the SHARED builder
-   * rather than the CRM plugin, the way the commerce dialog's does: a
-   * plugin importing a sibling is a cycle waiting for its third edge, and
-   * the shared builder is pinned against the CRM's own routes by a spec.
-   * `null` until the route params settle, so no row renders a link to
-   * nowhere.
+   * the record on one match. The address is the one the plugin that keeps
+   * contacts publishes, asked of the record-route registry the way the
+   * commerce dialog asks: a plugin importing a sibling is a cycle waiting
+   * for its third edge. `null` until the route params settle, and where no
+   * plugin keeps contacts, so no row renders a link to nowhere.
    */
   const params = useParams<{ orgSlug?: string; host?: string }>()
   const siteContext =
     params?.orgSlug && params?.host
       ? { orgSlug: String(params.orgSlug), host: String(params.host) }
       : null
+  const contactHrefOf = (email: unknown): string | null =>
+    siteContext && email ? pluginRecordByEmailHref('contact', siteContext, String(email)) : null
   /*
    * The list narrowed to one booker (AGL-2660): a contact's record links
    * here with `?email=`, and the page answers with every booking that
@@ -615,11 +618,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                   </Typography>
                 </Stack>
                 <PaymentRiskChip risk={booking.paymentRisk} />
-                {siteContext && booking.email ? (
+                {contactHrefOf(booking.email) ? (
                   <Button
                     component={AppLink as any}
                     {...({ componentVariant: 'naked', nativeButton: false } as any)}
-                    href={crmContactByEmailHref(siteContext, String(booking.email))}
+                    href={contactHrefOf(booking.email) ?? undefined}
                     size="small"
                   >
                     {'View in CRM'}

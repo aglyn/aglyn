@@ -17,27 +17,23 @@
 
 import {
   encodeStoredNodes,
-  FORMS_PLUGIN_ID,
   hostRoleCanPublish,
   isHostPluginEnabled,
   pluginRequestFromWeb,
+  type PluginWebApiHandler,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
-  getLockdownVerdict,
   getOrgForHost,
   isImpersonationSession,
-  lockdownJsonResponse,
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { Timestamp } from 'firebase-admin/firestore'
-import {
-  isFormPromotionRefusal,
-  resolveFormPromotion,
-} from '../../../../../utils/promote-form-version'
-import { announceFormPublish } from '../../../../../utils/server/announce-form-publish'
-import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
+import { BUNDLE_ID } from '../constants/bundle-common'
+import { isFormPromotionRefusal, resolveFormPromotion } from './form-promotion'
+import { announceFormPublish } from './form-publish-announce'
 
 /**
  * PROMOTING A FORM: make one version the one the site serves.
@@ -83,13 +79,19 @@ import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
  * could send its own `nodes` could send a tree that passes the check and
  * publish a different one.
  *
+ * `POST /api/forms/promote`, served by the console's plugin API dispatcher,
+ * which has already refused an unverified account, a locked-down site or
+ * organization and a site that switched Forms off before this runs. It is the
+ * route `plugins.config.json` names as a form's `besignerDocuments` publish,
+ * so the besigner's Save & publish and the form page's version history reach
+ * the same check.
+ *
  * Body: `{ hostId, formId, versionId }`.
  * 422 with `{ violations }` when the contract would break; the shape is the
  * pure module's own, so the console renders the same sentences the besigner
  * does without either side parsing prose.
  */
-
-async function handler(request: Request): Promise<Response> {
+export const formPromoteHandler: PluginWebApiHandler = async (request) => {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST') {
@@ -137,15 +139,7 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const ownerOrg = await getOrgForHost(hostId)
-    const org = (ownerOrg?.org ?? {}) as any
-    const lockdown = await getLockdownVerdict({
-      request,
-      staff: decoded['staff'] === true,
-      uid: decoded.uid,
-      org,
-      host: hostSnapshot.data(),
-    })
-    if (lockdown) return lockdownJsonResponse(lockdown)
+    const org = (ownerOrg?.org ?? {}) as { enabledPlugins?: string[] }
 
     const formRef = hostRef.collection('forms').doc(formId)
     const [formSnapshot, versionSnapshot] = await Promise.all([
@@ -170,7 +164,7 @@ async function handler(request: Request): Promise<Response> {
       storedNodes: versionSnapshot.get('nodes'),
       // The site's own plugin set (AGL-3029): a site that switched Forms off
       // does not draw a form or accept its submissions, so none goes live.
-      formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), FORMS_PLUGIN_ID),
+      formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), BUNDLE_ID),
     })
     if (isFormPromotionRefusal(resolved)) {
       return Response.json(resolved.body, { status: resolved.status })
@@ -215,14 +209,12 @@ async function handler(request: Request): Promise<Response> {
     )
     return Response.json({ ok: true, versionId }, { status: 200 })
   } catch (error) {
-    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
-    // for anything else, so a real failure keeps the answer below.
-    const unauthenticated = invalidIdTokenResponse(error)
-    if (unauthenticated) return unauthenticated
-    console.error(error)
+    // A refused credential is a 401, not a fault of ours (AGL-1993); anything
+    // else keeps the answer below.
+    if (isRefusedIdToken(error)) {
+      return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+    }
+    console.error('[forms] publish failed', error)
     return Response.json({ error: 'Publish failed' }, { status: 500 })
   }
 }
-
-export const dynamic = 'force-dynamic'
-export { handler as POST }

@@ -41,7 +41,7 @@
  *   the change was most visibly supposed to reach.
  * - THAT each entry action calls it is a wiring failure, which renders
  *   perfectly, so it is asserted against the source — the shape
- *   `form-publish-revalidates.spec.ts` uses next door.
+ *   the forms plugin's `form-publish-announce.spec.ts` uses.
  */
 
 import { readFileSync } from 'node:fs'
@@ -241,7 +241,7 @@ describe('every entry action announces itself', () => {
     )
     // The 400 has to name the new key, or a caller sending one gets told the
     // field it just sent is not a field.
-    expect(source).toMatch(/formId, collectionId, redirectPath or paths/)
+    expect(source).toMatch(/componentId, collectionId, redirectPath or paths/)
   })
 
   it('the route sends the collection ADDRESSES too, not just screens', () => {

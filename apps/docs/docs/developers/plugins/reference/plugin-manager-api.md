@@ -511,9 +511,45 @@ and a restore writes them back by id and counts the result against the
 `resource` — its `quotaKey`, or its `platformCap` — before the first write,
 so a `siteExport` on a collection with no `resource` is refused. A collection
 may not take a key the platform's bundle already uses (`screens`, `media`,
-`datasets`, …). Compiled like `resource`, and refused at runtime:
+…) or another plugin's. Compiled like `resource`, and refused at runtime:
 `listPluginSiteExportCollections()`
 (`@aglyn/aglyn/plugin-manager/plugin-site-export`) reads them.
+
+## Site backup sections — `plugin-site-bundle` (`/server`)
+
+Some plugin data a backup must carry is not a plain host collection: it lives
+under the organization and is narrowed to the site, it has documents beneath
+it, a restore checks it against its own model, or its count is sold as an
+add-on. The plugin declares a SECTION of the bundle in `plugins.config.json`
+and answers for it from its `serverDeclarations` entry:
+
+```json
+"siteBundleSections": [{ "key": "cellarLogs", "limit": 50 }]
+```
+
+```ts
+registerPluginSiteBundleSection(
+  'cellarLogs',
+  {
+    export: async (request) => (await import('./server/backup')).exportLogs(request),
+    refusal: async (request) => (await import('./server/backup')).logsRefusal(request),
+    import: async (request) => (await import('./server/backup')).importLogs(request),
+  },
+  { pluginId: 'acme-cellar' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `export({ hostId, orgId, limit })` | The site's share, at most `limit` items, each a document with its `$id` and whatever it carries beneath it. Read whole or throw: a short list is a backup that lies. `orgId` is `null` for a site with no organization. |
+| `refusal({ …, org, items })` | Optional. Asked before the restore writes anything, with the bundle's items already capped at `limit`; answers the sentence the restore refuses with (403), or `null`. Sections are asked before the platform's own caps. |
+| `import({ …, write, stamps, loadPluginSurfaces })` | Writes the items back through `write(documentPath, data)` — whole documents, on the restore's batches and in its count, and only under the site's or its organization's tree — dated with `stamps()`. `loadPluginSurfaces()` loads every plugin's console server surface, for a check against something other plugins register there (a custom field type). Answers the rows the restore reports without refusing. |
+| `listDeclaredSiteBundleSections()` / `resolveSiteBundleSections()` | The declarations, and the declarations joined to their registered answers. A section declared and not registered runs the app's declarations step once; still missing, `resolveSiteBundleSections` throws, and the export or restore fails rather than leaving the section out. |
+
+One owner per key, never one the platform's bundle or a host collection's
+`siteExport` already uses, a `limit` from 1 to 1000, and a plugin with a
+`serverDeclarations` entry — the generator refuses anything else. The data
+plugin's `datasets` is the first.
 
 ## Sitemap sections — `plugin-sitemap-sections`
 
@@ -634,10 +670,13 @@ plugin publishes the kind, or the owner has no address at that scope. Render
 text, which is what these surfaces already do while their route params settle.
 A link is not access: the page at the far end applies its own gates.
 
-The first-party kinds: `contact`, `lead`, `company` and `deal` (CRM),
-`product` (Commerce), `campaign` (Marketing), `emailMessage`, `emailTemplate`
-and `sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
-`webhook` (Workflows). A plugin that links to another plugin's page asks for
+The first-party kinds: `contact`, `lead`, `company`, `deal` and `task` (CRM),
+`product` and `order` (Commerce), `booking` (Bookings), `formSubmission`
+(Inbox), `campaign` (Marketing), `emailMessage`, `emailTemplate` and
+`sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
+`webhook` (Workflows). The console's activity feeds link any of them the same
+way: an entry whose target type is a published kind opens at its owner's
+address. A plugin that links to another plugin's page asks for
 one of these; `check:plugin-domain-in-core` refuses one that spells the other
 plugin's slug or core route itself.
 

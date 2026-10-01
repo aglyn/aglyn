@@ -10,6 +10,7 @@
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
+import type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 import type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
@@ -724,6 +725,18 @@ export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSec
 ]
 
 /**
+ * Every section of the whole-site backup a first-party plugin answers for,
+ * declared by that plugin (AGL-3080), in the order the bundle carries them.
+ */
+export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBundleSectionDeclaration[] = [
+  {
+    "pluginId": "data",
+    "key": "datasets",
+    "limit": 50
+  }
+]
+
+/**
  * Every org collection a first-party plugin owns whose documents the media
  * scan reads, declared by that plugin (AGL-3273).
  */
@@ -1119,7 +1132,7 @@ export const PLUGIN_BESIGNER_DOCUMENTS_DECLARED: readonly ResolvedBesignerDocume
     "collection": "forms",
     "noun": "form",
     "publish": {
-      "path": "/api/hosts/forms/promote",
+      "path": "/api/forms/promote",
       "idField": "formId"
     }
   },

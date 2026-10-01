@@ -24,8 +24,10 @@
  * The tables below hold the platform's own documents. A plugin's collection
  * is carried because the plugin declares it (`siteExport` beside the
  * collection in `plugins.config.json`), and its cap and field list are folded
- * in from that declaration, so a plugin's document model is never written
- * here.
+ * in from that declaration; a plugin's data that is not a plain host
+ * collection — a site's datasets — is a section the plugin answers for
+ * itself (`plugin-site-bundle`), field lists included. Either way a plugin's
+ * document model is never written here.
  */
 
 import {
@@ -66,7 +68,6 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
   // anyone round-trips through a manifest.
   authors: 100,
   collections: 20,
-  datasets: 50,
   // Read by BOTH directions, so it has to be declared rather than passed at
   // one call site (AGL-1382): the export used a literal 500 while the import
   // fell through to the `?? 100` default, so a manifest of more than 100
@@ -137,15 +138,15 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
  * `RESOURCES[*].fields`, but updates and deletes stay client-direct by design,
  * and a document accretes fields for its whole life. Deriving from the create
  * allow-lists alone would drop `icon` and `props` off every reusable
- * component, `categories` off every content collection, and `model` off every
- * dataset — silently, on restore, with `merge: false` ERASING them rather
+ * component and `categories` off every content collection — silently, on
+ * restore, with `merge: false` ERASING them rather
  * than merely failing to add them. That is the opposite failure and the worse
  * one, which is why `site-export.spec.ts` round-trips a fully-populated
  * document of every shape through both directions.
  *
  * Four classes are deliberately absent:
  *
- * * `$id`, `version`, `entries`, `records` — structural; the import re-keys
+ * * `$id`, `version`, `entries` — structural; the import re-keys
  *   them explicitly.
  * * `createdAt`/`updatedAt` — stamped server-side; a client clock is not a
  *   fact about the document.
@@ -380,25 +381,6 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'publishedAt',
     'publishAt',
   ],
-  datasets: [
-    'displayName',
-    // Pre-AGL-536 human name, still read as a fallback by site search.
-    'name',
-    'fields',
-    // The typed DatasetModel, and exactly what `effectiveDatasetModel` reads
-    // below. Drop it and every restored dataset silently degrades to the
-    // derived all-text v1 model, losing types, `required`, `validation`,
-    // `default` and every `reference` link (AGL-180).
-    'model',
-    'names',
-    'description',
-    'source',
-    'installedFrom',
-    'detachedFrom',
-  ],
-  // `order` is what `sortDatasetRecords` sorts by, so dropping it reorders
-  // every repeatable on the restored site.
-  records: ['values', 'order'],
   media: [
     'fileName',
     'contentType',
@@ -457,7 +439,7 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
    *
    * Absent on purpose:
    *
-   * * `visibleTo` — as for datasets and media, the import assigns a fresh
+   * * `visibleTo` — as for media, the import assigns a fresh
    *   `host:` scope; a bundle is portable and an embedded `['org']` would
    *   publish one org's folders across another agency's client roster.
    * * `createdAt` — server-stamped.

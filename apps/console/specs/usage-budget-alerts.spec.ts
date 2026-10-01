@@ -405,7 +405,6 @@ const recipientsOf = (entry: { to: string[] | string }): string[] =>
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
-  delete process.env.USAGE_ALERT_APPROACH_PCT
   delete process.env.BILL_ASSIST_TOKENS_FROM
   delete process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD
   delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD

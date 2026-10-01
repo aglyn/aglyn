@@ -1262,6 +1262,48 @@ export async function hostRefusesCaptureForErasure(
  *=========================================*/
 
 /** The `reason` a lock's per-site row carries. */
+/**
+ * {@link hostRefusesCaptureForErasure} for many addresses in one read.
+ *
+ * The addresses a site has erased, among the ones given — one `getAll` of
+ * their suppression rows rather than one read per address, for a door that
+ * captures a whole file at once. Answers `null` when the read throws, which
+ * a caller takes as "not looked up" and asks per address instead, so the
+ * fail-open rule above is the single-address function's and not a second
+ * copy of it.
+ */
+export async function hostErasedEmails(
+  hostId: string,
+  emails: readonly (string | null | undefined)[],
+  injectedFirestore?: any,
+): Promise<Set<string> | null> {
+  const keyed = new Map<string, string>()
+  for (const email of emails) {
+    const key = emailSuppressionKey(email)
+    if (key && email && !keyed.has(key)) keyed.set(key, email)
+  }
+  if (!keyed.size) return new Set()
+  try {
+    const db = injectedFirestore ?? defaultFirestore()
+    const suppressions = db
+      .collection('hosts')
+      .doc(hostId)
+      .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+    const keys = [...keyed.keys()]
+    const snapshots = await db.getAll(...keys.map((key) => suppressions.doc(key)))
+    const erased = new Set<string>()
+    snapshots.forEach((snapshot: any, at: number) => {
+      if (snapshot?.exists && snapshot.get('reason') === HOST_ERASURE_SUPPRESSION_REASON) {
+        erased.add(keyed.get(keys[at]) as string)
+      }
+    })
+    return erased
+  } catch (error) {
+    console.error('[email-suppression] bulk erasure lookup failed', error)
+    return null
+  }
+}
+
 export const HOST_ACCOUNT_LOCK_SUPPRESSION_REASON = 'account_lock'
 
 /**

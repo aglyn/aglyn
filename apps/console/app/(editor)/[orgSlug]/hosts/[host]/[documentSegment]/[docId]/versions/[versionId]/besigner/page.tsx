@@ -17,6 +17,9 @@
 'use client'
 
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
+// By its own module rather than the barrel, as `useFormsPublishBlock` reads
+// it: the site's plugin set `withSitePlugins` publishes to every editor.
+import { useEnabledPlugins } from '@aglyn/aglyn/app-utils/enabled-plugins-context'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
@@ -26,6 +29,7 @@ import {
 } from '@aglyn/aglyn'
 import {
   besignerDocumentForSegment,
+  besignerDocumentOffForSite,
   besignerDocumentTitle,
   besignerPublishRefusal,
 } from '@aglyn/aglyn/plugin-manager/besigner-documents'
@@ -412,6 +416,12 @@ function PluginDocumentBesignerPage() {
   })
 
   const [publishing, setPublishing] = useState(false)
+  // Whether the document's plugin runs on this site: `undefined` where no
+  // site set was published to the editor, which refuses nothing.
+  const enabledPlugins = useEnabledPlugins()
+  const pluginOnForSite = enabledPlugins
+    ? enabledPlugins.includes(declared.pluginId)
+    : undefined
 
   /**
    * Publish: ask the document's plugin to make this version the one the site
@@ -428,6 +438,16 @@ function PluginDocumentBesignerPage() {
    */
   const publishVersion = useCallback(
     async (options?: { quiet?: boolean }): Promise<boolean> => {
+      // The plugin's route sits behind the site's switch and would answer as
+      // though it did not exist, so the editor says why before asking it.
+      if (pluginOnForSite === false) {
+        enqueueSnackbar(besignerDocumentOffForSite(declared), {
+          variant: 'warning',
+          allowDuplicate: true,
+          persist: true,
+        })
+        return false
+      }
       setPublishing(true)
       try {
         const response = await authorizedFetch(user, declared.publish.path, {
@@ -471,7 +491,16 @@ function PluginDocumentBesignerPage() {
         setPublishing(false)
       }
     },
-    [user, declared, hostId, docId, versionId, noun, enqueueSnackbar],
+    [
+      pluginOnForSite,
+      user,
+      declared,
+      hostId,
+      docId,
+      versionId,
+      noun,
+      enqueueSnackbar,
+    ],
   )
 
   /**

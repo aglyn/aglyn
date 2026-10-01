@@ -18,7 +18,10 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { CONTACT_LIFECYCLE_STAGE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
-import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import {
+  pluginRecordByEmailHref,
+  pluginRecordHref,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -188,18 +191,20 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   const members = useOrgMembers(orgId, { enabled: Boolean(record) })
   /*
    * Where this person's ORDERS are read (AGL-2622): the site's orders list,
-   * narrowed to their address. The count on the header is the number; the
-   * list is the rows. Built from the route params already in the URL, so
-   * no document is read to draw a link, and absent off a site — the
-   * org-level mount has no orders list to point at.
+   * narrowed to their address, at the address the plugin that keeps orders
+   * publishes. The count on the header is the number; the list is the rows.
+   * Built from the route params already in the URL, so no document is read
+   * to draw a link, and absent off a site — the org-level mount has no
+   * orders list to point at — and where no plugin keeps orders.
    */
   const params = useParams<{ orgSlug?: string; host?: string }>()
   const ordersHref =
     params?.orgSlug && params?.host && record?.email
-      ? Aglyn.siteRecordLinks({
-          orgSlug: String(params.orgSlug),
-          host: String(params.host),
-        }).ordersByCustomer(record.email)
+      ? pluginRecordByEmailHref(
+          'order',
+          { orgSlug: String(params.orgSlug), host: String(params.host) },
+          record.email,
+        )
       : null
   /*
    * Where this person's BOOKINGS are read (AGL-2660): the site's Bookings
@@ -217,10 +222,11 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       : null
   const bookingsHref =
     bookingDoor.open && params?.orgSlug && siteSlug && record?.email
-      ? Aglyn.siteRecordLinks({
-          orgSlug: String(params.orgSlug),
-          host: siteSlug,
-        }).bookingsByBooker(record.email)
+      ? pluginRecordByEmailHref(
+          'booking',
+          { orgSlug: String(params.orgSlug), host: siteSlug },
+          record.email,
+        )
       : null
 
   /*

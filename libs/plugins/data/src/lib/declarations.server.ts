@@ -19,6 +19,7 @@
 // registry and nothing else, and the barrel reaches the client contexts.
 import { registerFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 import { registerRepeatRowReader } from '@aglyn/aglyn/plugin-manager/repeat-rows'
+import { registerPluginSiteBundleSection } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import { BUNDLE_ID, DATASET_REPEAT_SOURCE_ID } from './constants/bundle-common'
 
 /**
@@ -36,6 +37,12 @@ import { BUNDLE_ID, DATASET_REPEAT_SOURCE_ID } from './constants/bundle-common'
  * target that stamps such a form with its signed binding when a page renders
  * and writes the record when the submission comes back. Declared the same way
  * (`formRecordTarget`), and just as light: both halves load on first use.
+ *
+ * A site's datasets are also its section of the whole-site backup: the
+ * console's export and restore ask this plugin for them. Declared too
+ * (`siteBundleSections`), so a boot that skipped this fails the export rather
+ * than shipping a backup without them; the answers load when a backup is made
+ * or restored.
  */
 export function registerDataServerDeclarations(): void {
   registerRepeatRowReader(
@@ -57,6 +64,16 @@ export function registerDataServerDeclarations(): void {
         (await import('./form-target/dataset-form-record-target.server')).writeFormSubmissionRecord(
           request,
         ),
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  const datasets = () => import('./site-bundle/datasets-site-bundle.server')
+  registerPluginSiteBundleSection(
+    'datasets',
+    {
+      export: async (request) => (await datasets()).exportSiteDatasets(request),
+      refusal: async (request) => (await datasets()).siteDatasetsRefusal(request),
+      import: async (request) => (await datasets()).importSiteDatasets(request),
     },
     { pluginId: BUNDLE_ID },
   )

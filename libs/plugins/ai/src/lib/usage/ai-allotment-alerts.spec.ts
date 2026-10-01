@@ -81,6 +81,7 @@ jest.mock('@aglyn/tenant-data-admin/server/account-mail', () => ({ __esModule: t
 jest.mock('@aglyn/shared-util-email', () => ({ __esModule: true, sendEmail: jest.fn() }))
 
 import { announceAiAllotmentAlerts } from './ai-allotment-alerts'
+import type { AiAllotmentThreshold } from '../model/ai-allotments'
 
 const ORG = 'org-alerts'
 const MONTH = '2026-09'
@@ -168,14 +169,16 @@ describe('a soft allotment’s crossing', () => {
 
   it('announces a threshold ONCE a month, a higher one again, and the same one next month', async () => {
     const pipeline = channels()
-    const at = (threshold: 80 | 100, month = MONTH) =>
+    const at = (threshold: AiAllotmentThreshold, month = MONTH) =>
       announceAiAllotmentAlerts(
         mockFirestore,
         { orgId: ORG, orgSlug: 'acme', month, alerts: [{ standing: memberStanding, threshold }] },
         pipeline,
       )
+    expect(await at(75)).toBe(1)
     expect(await at(80)).toBe(1)
     expect(await at(80)).toBe(0)
+    expect(await at(90)).toBe(1)
     expect(await at(100)).toBe(1)
     expect(await at(80)).toBe(0)
     expect(await at(80, '2026-10')).toBe(1)
