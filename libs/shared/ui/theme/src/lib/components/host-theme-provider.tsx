@@ -29,6 +29,7 @@ import {
   useThemeModeState,
 } from '../hocs/create-with-theme-provider'
 import { createResponsiveTheme } from '../util/create-responsive-theme'
+import { useInstantSchemeSwap } from '../util/instant-scheme-swap'
 import {
   createSiteSchemeThemes,
   SiteSchemeThemesContext,
@@ -158,6 +159,11 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
    */
   const canGoDark = hostTheme?.darkScheme !== 'off'
   const scheme = requested === 'dark' && !canGoDark ? 'light' : requested
+
+  // A swap repaints every element in the new scheme at once, rather than
+  // leaving the ones MUI animates (form labels, buttons) fading — or, in a
+  // tab that is not painting, stuck — on the old scheme's colors (AGL-3449).
+  useInstantSchemeSwap(scheme)
 
   // The mode state plus whether this site can honor a dark request, so a
   // visitor-facing control (the theme mode switcher) can tell a site that
