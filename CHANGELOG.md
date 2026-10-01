@@ -35,6 +35,9 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **tools:** the emulator sweep runs the CRM plugin's member-alias spec ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **billing:** the usage sweep visits a workspace with no sites, so its org-level usage is metered ([AGL-3445](https://linear.app/aglyn/issue/AGL-3445))
+- **release:** the second dist-tag waits out the biggest packages ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
 - **libs:** the svg-icons build never packs the previous release's manifest ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
 - **libs:** shared-util-tools ships no direct eval ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
 - **libs:** the published editor's inspector renders in a browser ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
@@ -117,18 +120,15 @@ content on the marketing site and is written separately.
 - **ai:** the dataset figure readers are named as the data plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 
 <details>
-<summary>Also in this release: 4 test, 6 chore, 1 ci</summary>
+<summary>Also in this release: 4 test, 3 chore, 1 ci</summary>
 
 - **release:** the consumer proof runs on the promotion PR and after publish ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
 - **billing:** the metering sweep records why moving a subscription onto a new default card is unmetered ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
 - **tools:** the org document's AI cap switch is argued to stay, and plan-entitlements' remaining quota checks are the CRM lane's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3124](https://linear.app/aglyn/issue/AGL-3124))
-- **release:** v1.0.0-beta.220 carries main through 03c8e81ae ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **tools:** raise the Linear id ceiling to AGL-3443, read from the workspace ([AGL-3443](https://linear.app/aglyn/issue/AGL-3443), [AGL-3442](https://linear.app/aglyn/issue/AGL-3442), [AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
 - **tools:** raise the Linear id ceiling to AGL-3437, read from the workspace ([AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
-- **release:** v1.0.0-beta.220 carries main through be7137dea ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **aglyn:** the spread-question fixture of the docs gate names no plugin seam ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **console:** the record kinds one plugin's picker lists from another have a source once the console boots ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
-- **release:** v1.0.0-beta.220 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **jsx:** a keystroke-cost spec sets its fresh-registry timeout file-wide ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
 
 </details>
