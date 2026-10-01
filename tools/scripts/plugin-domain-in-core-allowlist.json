@@ -506,13 +506,6 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/workflows/src/lib/components/use-automation-step-pickers.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/shared/data/forms/src/lib/forms.ts",
       "rules": [
         "domain-name"

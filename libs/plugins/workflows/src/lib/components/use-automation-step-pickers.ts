@@ -138,18 +138,20 @@ export function useAutomationStepPickers(
   )
   const { rows: datasetRows, truncated: datasetsTruncated } =
     ceilingedWindow<any>(datasetRead, EDITOR_OPTION_CEILING)
+  // The site's overlays are the marketing plugin's, listed through the
+  // source it publishes (AGL-3080); none where no plugin keeps them here.
   const { data: overlayRead } = useFirestoreCollection<any>(
     () =>
       editorOpened
-        ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'overlays'),
-            EDITOR_OPTION_CEILING,
-          )
+        ? pluginRecordListQuery('overlay', firestore, {
+            hostId,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
         : null,
     [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { rows: overlayDocs, truncated: overlaysTruncated } =
+  const { rows: overlayRows, truncated: overlaysTruncated } =
     ceilingedWindow<any>(overlayRead, EDITOR_OPTION_CEILING)
   // Lists live on the org (AGL-254), and so do campaigns.
   const { data: listRead } = useFirestoreCollection<any>(
@@ -238,15 +240,9 @@ export function useAutomationStepPickers(
   const datasetOptions = pluginRecordsFromRows('dataset', datasetRows)
     .map((dataset) => ({ id: dataset.id, name: dataset.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
-  const overlayOptions = (overlayDocs ?? [])
-    .filter((overlay: any) => !overlay.deletedAt)
-    .map((overlay: any) => ({
-      id: overlay.$id as string,
-      name: (overlay.name ||
-        overlay.bar?.text ||
-        overlay.popup?.headline ||
-        overlay.$id) as string,
-    }))
+  // Named as the Marketing page names them, by their owner.
+  const overlayOptions = pluginRecordsFromRows('overlay', overlayRows)
+    .map((overlay) => ({ id: overlay.id, name: overlay.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
   const listOptions = (listDocs ?? [])
     .filter((list: any) => !list.deletedAt && list.name)

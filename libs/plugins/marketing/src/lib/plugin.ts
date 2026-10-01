@@ -39,6 +39,7 @@ import {
 } from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { StaffOrgEmailCard } from './components/staff-org-email-card.component'
+import { registerMarketingRecordLists } from './model/overlay-record-list'
 import { registerMarketingRecordRoutes } from './model/marketing-record-routes'
 
 /** Code-split: the Marketing console page only loads when opened. */
@@ -162,6 +163,8 @@ export function registerMarketingConsole(): void {
     'On one message’s page. A widget here renders the stored design, or the plain-text body, through the renderer the send path uses.',
   )
   registerMarketingRecordRoutes()
+  // The site's overlays, for another plugin's picker to list (AGL-3080).
+  registerMarketingRecordLists()
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Marketing',

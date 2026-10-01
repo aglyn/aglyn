@@ -890,9 +890,10 @@ own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-lists`). Data lists the
 workspace's `dataset` records (a site's narrowed by its scope tokens, a scoped
 member's by theirs), each with the listing an installed one came from, which
 is how the marketplace knows what a workspace has installed; Workflows lists a
-site's `workflow`, `webhook` and `action` records, and Commerce FINDS a site's
-active `product` records by the first word typed, each with its price and
-priced variants.
+site's `workflow`, `webhook` and `action` records, Marketing lists a site's
+`overlay` records (its announcement bars and popups), and Commerce FINDS a
+site's active `product` records by the first word typed, each with its price
+and priced variants.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 

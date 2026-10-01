@@ -104,9 +104,12 @@ jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
 
 import HostWorkflowsCard from './host-workflows-card.component'
 import { standInDatasetList } from '../testing/stand-in-dataset-list'
+import { standInOverlayList } from '../testing/stand-in-overlay-list'
 
-// The datasets the pickers offer are the data plugin's (AGL-3080).
+// The datasets the pickers offer are the data plugin's, and the overlays
+// the marketing plugin's (AGL-3080).
 standInDatasetList()
+standInOverlayList()
 
 /** Stock `business`: entitles workflows, actions and webhooks. */
 const ORG = { $id: 'org-1', plan: 'business' } as never

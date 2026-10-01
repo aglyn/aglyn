@@ -26,6 +26,7 @@ The plugin declares four registrars in `plugins.config.json`, plus a `site` modu
 - Widgets in other hosts' slots: the "Last campaign" card on the site dashboard (`hostDashboard`), the campaigns card in the Inbox (`inboxCampaigns`), campaign attribution on a record's page (`crmRecordAttribution`, `inboxRecordAttribution`), and the site's section experiments, reported to the besigner's Interactions section (`besignerInteractions`), which badges an element with its experiment and starts a draft on a page's element.
 - Zones this plugin hosts for other plugins to fill, registered with `registerPluginZone`: two on the A/B testing card (beside the variants, and below a test's results), and five bare zones in the campaign composer and on a message's page for whichever plugin keeps the mail itself: the topic picker, the topic options, the add-a-sender editor, the design creator and the sent-design preview.
 - A record route for `campaign`, at both the site and the organization level, so another plugin can link to a campaign without knowing this plugin's URLs.
+- A record list source for `overlay` (`plugin-record-lists`): a site's announcement bars and popups, named, for another plugin's picker — the automation editor's "Show overlay" step — to list without reading this plugin's collection.
 
 **Server**, exported from `@aglyn/plugins-marketing/server`:
 
