@@ -38,7 +38,7 @@ import { Chip, type Theme } from '@mui/material'
  *
  * One vocabulary for the bell and the notifications page, so a fraud signal
  * is the same red in both and a recovery the same green. Every color is a
- * palette token, so a dark console and a white-labelled one follow it.
+ * palette token, so a dark console and a white-labeled one follow it.
  *
  * - `critical` is LOUD: a red icon, a solid red chip, a red bar and a red
  *   wash over the row. Fraud and stopped work must not read like routine.
@@ -47,13 +47,13 @@ import { Chip, type Theme } from '@mui/material'
  * - `success` is satisfying without being loud: green icon, bar and chip,
  *   and the faintest wash.
  * - `info` is a blue icon and chip, with no bar or wash, so the feed stays calm.
- * - `neutral` is the grey the feed always had.
+ * - `neutral` is the gray the feed always had.
  */
 
 /** A palette color a level is drawn in. */
 export type NotificationLevelColor = 'error' | 'warning' | 'success' | 'info'
 
-/** Each level's palette color; `neutral` keeps the default grey. */
+/** Each level's palette color; `neutral` keeps the default gray. */
 export const NOTIFICATION_LEVEL_COLORS: Record<
   NotificationLevel,
   NotificationLevelColor | null
@@ -193,7 +193,7 @@ export interface NotificationTypeChipProps {
 
 /**
  * The notification's type as a chip in its level's color: solid for
- * `critical`, tinted for the rest, the default grey for `neutral`.
+ * `critical`, tinted for the rest, the default gray for `neutral`.
  */
 export function NotificationTypeChip(props: NotificationTypeChipProps) {
   const { notification } = props

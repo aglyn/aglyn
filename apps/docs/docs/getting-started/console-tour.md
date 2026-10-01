@@ -306,7 +306,7 @@ the color of its type, both in the feed and in the bell:
 | **Warning** | Amber icon, amber type, amber bar and a light amber wash | A limit reached, low stock, a held email |
 | **Good news** | Green icon, green type, green bar | An order or a booking, a new subscription |
 | **Info** | Blue icon, blue type | An invitation, a support reply, a usage step on the way to a limit |
-| **Routine** | Grey bell | A form submission, an assignment, a digest |
+| **Routine** | Gray bell | A form submission, an assignment, a digest |
 
 The level belongs to the notification, not only to its type. A usage notice at 75%
 of a limit is **Info** and the one at 100% is a **Warning**; a released hold is
