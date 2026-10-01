@@ -168,12 +168,12 @@ it('answers a refusal with the module\'s status and sentence', async () => {
   mockDuplicateResource.mockResolvedValue({
     ok: false,
     status: 403,
-    error: 'Your plan includes 5 screens — upgrade in Billing for more',
+    error: 'Your plan includes 5 pages — upgrade in Billing for more',
   })
   const response = await post({})
   expect(response.status).toBe(403)
   expect(await response.json()).toEqual({
-    error: 'Your plan includes 5 screens — upgrade in Billing for more',
+    error: 'Your plan includes 5 pages — upgrade in Billing for more',
   })
 })
 

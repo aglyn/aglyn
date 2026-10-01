@@ -457,10 +457,10 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       // displayName and a slug — so there is nothing to pair an old screen to a
       // new one by. Any merge would be a guess dressed up as a diff.
       notMergeable =
-        'Template bundles have no stable per-screen identity, so their screens ' +
+        'Template bundles have no stable per-page identity, so their pages ' +
         'cannot be matched across versions. Installing the new version replaces ' +
         'this bundle in your Templates library — pages you already created from ' +
-        'the old templates are ordinary screens and are untouched.'
+        'the old templates stand on their own and are untouched.'
     } else if (artifactType === 'emailTemplate') {
       // Already safe by construction: an email template installs as an inactive
       // draft version, so taking a new one changes nothing that is being sent.

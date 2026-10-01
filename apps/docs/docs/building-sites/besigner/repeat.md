@@ -6,7 +6,7 @@ description: Make any element render once per record — a list, a grid, a galle
 
 # Repeat over data
 
-Any element on a screen can repeat. Point it at a dataset and it renders once
+Any element on a page can repeat. Point it at a dataset and it renders once
 per record on the published page, with each copy filled in from that record.
 A row of cards, a gallery, a team list, a price table — one design, as many
 copies as you have rows.
@@ -85,11 +85,11 @@ or sort that can't be read is ignored rather than emptying the page.
 ### The hundred-record ceiling
 
 A single repeat renders **at most 100 records**, whatever the limit says. It
-is a page, not a database export: a screen that tried to render ten thousand
+is a page, not a database export: one that tried to render ten thousand
 rows would be slower than any visitor would wait for. Records with an explicit
 order come first, in that order; the rest follow by creation.
 
-For a bigger collection, give it a screen per record instead of a hundred rows
+For a bigger collection, give it a page per record instead of a hundred rows
 on one.
 
 ## What you can't do

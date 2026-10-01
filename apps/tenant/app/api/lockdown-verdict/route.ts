@@ -250,6 +250,7 @@ export async function GET(request: Request): Promise<Response> {
     const contained = bandwidthCeilingDegradesHost(
       hostRes.host as never,
       bandwidthCeilingMonthKey(),
+      orgRes.org as never,
     )
     /**
      * The site's owner-approved image hosts (AGL-1152) — a FOURTH answer on

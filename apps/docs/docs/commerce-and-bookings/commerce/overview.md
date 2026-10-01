@@ -224,7 +224,7 @@ snapshots, totals, and a timeline:
   payment link (Shopify parity). Requires an active plan with commerce — see
   the note below.
 
-### The Orders screen {#orders-screen}
+### The Orders page {#orders-screen}
 
 Open your site's **Products** hub and choose the **Orders** tab. Before your first
 sale the tab is an invitation rather than a table: it explains where orders come from

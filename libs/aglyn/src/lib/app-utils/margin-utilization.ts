@@ -20,7 +20,6 @@
 // `usage-metering.ts` states at its own head. The specific modules underneath
 // are safe in both.
 import type { AglynOrgBilling, OrgPlan } from '../foundation'
-import { assistCreditsFromUsd } from './assist-credits'
 import {
   hasAiAddon,
   INFRA_COGS_PER_SITE_USD,
@@ -40,6 +39,11 @@ import {
   type OrgUsageRollupInput,
 } from './plan-entitlements'
 import { planQuotaOf } from '../plugin-manager/plugin-plan-entitlements'
+import {
+  declaredMeterReading,
+  pluginUsageBands,
+  type ResolvedPluginUsageBand,
+} from '../plugin-manager/plugin-usage-axes'
 
 export { MARGIN_SCOPE_NOTE }
 
@@ -96,52 +100,56 @@ export { MARGIN_SCOPE_NOTE }
  */
 
 /**
- * A meter with an included band, keyed by the ROLLUP field it is measured by.
- *
- * Every meter `orgMonthlyCogsUsd` prices, plus `hosts` and `assistCredits`.
- *
- * Assist is measured in CREDITS rather than in the dollars the rollup stores.
- * `assistCostUsd` is our provider bill and `assistCreditsPerMonth` is the band
- * the plan sells, so the two are only comparable through
- * `assistCreditsFromUsd` — the one conversion between the units, and the same
- * one the customer-facing meter uses.
- *
- * It is also the band most worth watching: Assist is the only line item on the
- * platform whose unit cost is real money paid to a third party, and the only
- * one that can clear the $2/site floor on its own.
+ * The platform's own bands, at the positions the plugins' declared bands
+ * interleave with (`order`, a multiple of 10 here) — every meter
+ * `orgMonthlyCogsUsd` prices that is the platform's, plus `hosts`.
  */
-export const UTILIZATION_BANDS = [
-  'hosts',
-  'storageGb',
-  'pageViews',
-  'formSubmissions',
-  'dataStorageMb',
-  'apiRequests',
-  'contactsCount',
-  'emailSends',
-  'assistCredits',
-  'workflowRuns',
-  'actionRuns',
-] as const
+const CORE_BANDS: ReadonlyArray<{ id: string; label: string; order: number }> = [
+  { id: 'hosts', label: 'Sites', order: 10 },
+  { id: 'storageGb', label: 'Media storage', order: 20 },
+  { id: 'pageViews', label: 'Bandwidth (page views)', order: 30 },
+  { id: 'dataStorageMb', label: 'Dataset storage', order: 50 },
+  { id: 'apiRequests', label: 'API requests', order: 60 },
+  { id: 'emailSends', label: 'Email sends', order: 80 },
+]
 
-export type UtilizationBand = (typeof UTILIZATION_BANDS)[number]
+/**
+ * Every band the table reads, in column order: the platform's, and each one a
+ * plugin declares beside the meter it contributes (`plugin-usage-axes.ts`) —
+ * the AI plugin's credits, the CRM's records, the forms plugin's
+ * submissions, the workflows plugin's runs.
+ *
+ * A plugin band sold in a unit OF cost is measured in that unit rather than
+ * in the dollars the rollup stores: the AI plugin's credits are the dollars
+ * over its declared unit cost, rounded up, which is the one conversion the
+ * customer's own meter uses. It is also the band most worth watching —
+ * provider spend is the only line item on the platform whose unit cost is
+ * real money paid to a third party, and the only one that can clear the
+ * $2/site floor on its own.
+ */
+const BANDS: ReadonlyArray<{
+  id: string
+  label: string
+  order: number
+  declared?: ResolvedPluginUsageBand
+}> = [
+  ...CORE_BANDS,
+  ...pluginUsageBands().map((declared) => ({
+    id: declared.id,
+    label: declared.label,
+    order: declared.order,
+    declared,
+  })),
+].sort((a, b) => a.order - b.order)
+
+/** Every band, keyed by what it measures, in column order. */
+export const UTILIZATION_BANDS: readonly string[] = BANDS.map((band) => band.id)
+
+export type UtilizationBand = string
 
 /** Column headings, so the page and the aggregate name a band identically. */
-export const UTILIZATION_BAND_LABELS: Record<UtilizationBand, string> = {
-  hosts: 'Sites',
-  storageGb: 'Media storage',
-  pageViews: 'Bandwidth (page views)',
-  formSubmissions: 'Form submissions',
-  dataStorageMb: 'Dataset storage',
-  apiRequests: 'API requests',
-  // The band under the rollup's `contactsCount` key widened to contacts,
-  // companies and deals (AGL-2611); the column says what it measures.
-  contactsCount: 'CRM records',
-  emailSends: 'Email sends',
-  assistCredits: 'Assist credits',
-  workflowRuns: 'Workflow runs',
-  actionRuns: 'Action runs',
-}
+export const UTILIZATION_BAND_LABELS: Readonly<Record<UtilizationBand, string>> =
+  Object.fromEntries(BANDS.map((band) => [band.id, band.label]))
 
 /**
  * Why a band has no percentage, or that it has one.
@@ -242,13 +250,11 @@ export function orgIncludedBands(
 ): Record<UtilizationBand, number> {
   const entitlements = resolveOrgEntitlements(org)
   const hostLimit = Math.max(1, entitlements.hostLimit)
-  return {
+  const included: Record<UtilizationBand, number> = {
     hosts: entitlements.hostLimit,
     // Per host, expanded by the host limit — `meteredIncludedAllowance`
-    // expands these two and nothing else.
+    // expands the per-host bands and nothing else.
     storageGb: (hostLimit * entitlements.storagePerHostMb) / 1024,
-    formSubmissions:
-      hostLimit * planQuotaOf(entitlements, 'formSubmissionsPerMonth'),
     // Bandwidth IS the page-view band, expressed in the unit customers buy.
     pageViews: pageViewsFromBandwidthGb(entitlements.bandwidthGb),
     // Org-wide, in the unit the rollup stores. `dataStorageMbPerOrg` is
@@ -256,18 +262,15 @@ export function orgIncludedBands(
     // `orgMonthlyCogsUsd` and must not happen twice.
     dataStorageMb: entitlements.dataStorageMbPerOrg,
     apiRequests: entitlements.apiRequestsPerMonth,
-    // Org-wide despite the name — see the module note.
-    contactsCount: entitlements.contactsPerHost,
     emailSends: entitlements.emailSendsPerMonth,
-    // Never `UNLIMITED` on any plan, deliberately — Enterprise carries a
-    // finite default. The band is a third-party liability rather than capacity
-    // the platform already owns, so an uncapped one would be an uncapped bill.
-    assistCredits: planQuotaOf(entitlements, 'assistCreditsPerMonth'),
-    // Two bands, one rate: the cost model prices both counters at `perRun`,
-    // and the utilization is read against the band each builder sells.
-    workflowRuns: planQuotaOf(entitlements, 'workflowRunsPerMonth'),
-    actionRuns: entitlements.actionRunsPerMonth,
   }
+  // A plugin's band reads the entitlement its declaration names — absent is
+  // nothing included — expanded by the host limit where it is per site.
+  for (const band of pluginUsageBands()) {
+    const figure = planQuotaOf(entitlements, band.entitlement)
+    included[band.id] = band.perHost ? hostLimit * figure : figure
+  }
+  return included
 }
 
 /** One band's reading. The whole of the `UNLIMITED` and zero-band rule. */
@@ -298,25 +301,24 @@ function bandUsage(
   org: Partial<AglynOrgBilling> | null | undefined,
   rollup: UtilizationRollup | null | undefined,
 ): Record<UtilizationBand, number> {
-  return {
+  const used: Record<UtilizationBand, number> = {
     hosts: orgSiteCount(org),
     storageGb: finite(rollup?.storageGb),
     pageViews: finite(rollup?.pageViews),
-    formSubmissions: finite(rollup?.formSubmissions),
     dataStorageMb: finite(rollup?.dataStorageMb),
     apiRequests: finite(rollup?.apiRequests),
-    // The records band's figure (AGL-2611), falling back to contacts alone
-    // only on a row written before the band was widened — the same rule
-    // `orgMonthlyCogsUsd` applies, so utilization and cost read one number.
-    contactsCount: finite(rollup?.crmRecordsCount ?? rollup?.contactsCount),
     emailSends: finite(rollup?.emailSends),
-    // Dollars on the rollup, credits on the band. `assistCreditsFromUsd` is
-    // the ONE conversion between them, so this figure and the one the customer
-    // sees on their own billing page cannot disagree about the same month.
-    assistCredits: assistCreditsFromUsd(finite(rollup?.assistCostUsd)),
-    workflowRuns: finite(rollup?.workflowRuns),
-    actionRuns: finite(rollup?.actionRuns),
   }
+  for (const band of pluginUsageBands()) {
+    const reading = declaredMeterReading(rollup, band)
+    // Dollars on the rollup, a unit of cost on the band: rounded UP, so spend
+    // already made never reads as less of the band.
+    used[band.id] =
+      band.unitCostUsd && reading > 0
+        ? Math.ceil(reading / band.unitCostUsd)
+        : reading
+  }
+  return used
 }
 
 export interface OrgMarginInput {

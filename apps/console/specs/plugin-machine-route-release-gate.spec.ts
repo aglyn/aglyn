@@ -93,6 +93,7 @@ jest.mock('../utils/server-plugin-loader', () => ({
 
 import {
   isPluginMachineRoute,
+  isPluginPortabilityRoute,
   registerPluginApiRoute,
   unregisterPluginApiRoute,
 } from '@aglyn/aglyn/app-utils/api-plugins'
@@ -101,6 +102,7 @@ import { GET, POST } from '../app/api/[...pluginApi]/route'
 
 const SWEEP_ROUTE = 'acme-mail/nightly-sweep'
 const DOOR_ROUTE = 'acme-mail/settings'
+const EXPORT_ROUTE = 'acme-mail/export'
 
 const params = (path: string) => Promise.resolve({ pluginApi: path.split('/') })
 
@@ -116,11 +118,17 @@ beforeEach(() => {
     { machine: true },
   )
   registerPluginApiRoute(DOOR_ROUTE, { web: async () => Response.json({ ok: true }) })
+  registerPluginApiRoute(
+    EXPORT_ROUTE,
+    { web: async () => new Response('email\n', { status: 200 }) },
+    { portability: true },
+  )
 })
 
 afterEach(() => {
   unregisterPluginApiRoute(SWEEP_ROUTE)
   unregisterPluginApiRoute(DOOR_ROUTE)
+  unregisterPluginApiRoute(EXPORT_ROUTE)
 })
 
 describe('console plugin API dispatcher — a machine’s route (AGL-3080)', () => {
@@ -178,5 +186,34 @@ describe('console plugin API dispatcher — a machine’s route (AGL-3080)', () 
       { params: params(SWEEP_ROUTE) },
     )
     expect(response.status).toBe(404)
+  })
+})
+
+describe('console plugin API dispatcher — a workspace’s own records, exported (AGL-3080)', () => {
+  it('knows the portability route by what it registered, and nothing else', () => {
+    expect(isPluginPortabilityRoute(EXPORT_ROUTE)).toBe(true)
+    expect(isPluginPortabilityRoute(DOOR_ROUTE)).toBe(false)
+    expect(isPluginPortabilityRoute(SWEEP_ROUTE)).toBe(false)
+    // A member's export is not a machine's: the write limit still counts it.
+    expect(isMachinePluginApiPath(EXPORT_ROUTE)).toBe(false)
+  })
+
+  it('answers while the plugin is released to nobody, and asks no gate', async () => {
+    const response = await GET(
+      new Request(`https://app.example.com/api/${EXPORT_ROUTE}?orgId=org-1&resource=contacts`, {
+        headers: { authorization: 'Bearer member' },
+      }),
+      { params: params(EXPORT_ROUTE) },
+    )
+    expect(response.status).toBe(200)
+    expect(mockGateCalls).toBe(0)
+  })
+
+  it('skips only the plugin’s gates: lockdown still stands', async () => {
+    mockLocked = true
+    const locked = await GET(new Request(`https://app.example.com/api/${EXPORT_ROUTE}`), {
+      params: params(EXPORT_ROUTE),
+    })
+    expect(locked.status).toBe(423)
   })
 })

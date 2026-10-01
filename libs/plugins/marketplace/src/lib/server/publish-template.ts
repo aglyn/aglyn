@@ -126,7 +126,7 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
     if (!screenIds.length) {
       return res
         .status(422)
-        .json({ error: 'Publish at least one screen before templating' })
+        .json({ error: 'Publish at least one page before templating' })
     }
     const screens: any[] = []
     for (const screenId of screenIds) {
@@ -156,11 +156,11 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
       })
       if (sanitized.ok === false) {
         return res.status(422).json({
-          error: `Screen "${screen.displayName ?? screenId}": ${sanitized.error}`,
+          error: `Page "${screen.displayName ?? screenId}": ${sanitized.error}`,
         })
       }
       screens.push({
-        displayName: screen.displayName ?? 'Screen',
+        displayName: screen.displayName ?? 'Page',
         ...(screen.description && { description: screen.description }),
         ...(screen.seo && { seo: screen.seo }),
         slug: routingMap[screenId],
@@ -170,7 +170,7 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
     if (!screens.length) {
       return res
         .status(422)
-        .json({ error: 'No publishable screens with versions found' })
+        .json({ error: 'No publishable pages with versions found' })
     }
 
     // One template listing per source host; re-publish bumps the version.

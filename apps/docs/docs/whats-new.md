@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## September 2026 — Aglyn AI (newest)
+## September 2026 — screens are now pages (newest)
+
+- **[Screens are now called pages](building-sites/screens-and-layouts/screens.md)** —
+  everywhere Aglyn names them: the **Pages** tab in the console, the Besigner, emails and
+  notifications, Aglyn AI and these docs. Only the name changed. Nothing about your site
+  does: its addresses, its content, how it publishes and your plan's limits stay exactly
+  as they were, and the console's own links and the `screens` data a plugin reads keep
+  their names, so nothing you built needs changing.
+
+## September 2026 — Aglyn AI
 
 - **[Aglyn AI](ai/overview.md)** — the assistant builds as well as answers. Describe what
   you want and it plans the work, builds it from what your site already has, and hands

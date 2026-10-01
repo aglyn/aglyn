@@ -18,5 +18,5 @@ Can't find the answer in the [docs](/), the [FAQ](faq.md), or
 When reporting an issue, it helps to include:
 
 - what you expected to happen and what happened instead,
-- the screen or page where it happened, and
+- the page where it happened, and
 - any error message you saw.

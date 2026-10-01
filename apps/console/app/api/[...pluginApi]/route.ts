@@ -41,6 +41,7 @@ import {
 // and a route's own registration must still be read where it was made.
 import {
   isPluginMachineRoute,
+  isPluginPortabilityRoute,
   isPluginRecipientLinkRoute,
 } from '@aglyn/aglyn/app-utils/api-plugins'
 import {
@@ -85,8 +86,16 @@ async function dispatch(
   // else; it verifies its own signature. A machine's route — a scheduler's
   // sweep, a provider's webhook (AGL-3080) — names no subject to gate
   // before it has verified its caller, so it skips them too and judges the
-  // plugin's gates itself, for each organization it resolves.
-  if (pluginId && !isPluginRecipientLinkRoute(path) && !isPluginMachineRoute(path)) {
+  // plugin's gates itself, for each organization it resolves. A workspace's
+  // own records, exported (`portability`), are owed whether or not the
+  // plugin is on or released for it now, so that route skips them as well
+  // and asks the plugin's gates itself of anything beyond them.
+  if (
+    pluginId &&
+    !isPluginRecipientLinkRoute(path) &&
+    !isPluginMachineRoute(path) &&
+    !isPluginPortabilityRoute(path)
+  ) {
     // Two different sites in one request is refused outright (AGL-3360):
     // gating either one lets the other through to a handler that may read
     // it, which is how a suspended workspace could still take a payment.

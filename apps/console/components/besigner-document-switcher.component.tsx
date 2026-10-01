@@ -429,7 +429,7 @@ export const BesignerDocumentSwitcherComponent = observer(
           <SwitcherSearchField
             value={queryText}
             onChange={setQueryText}
-            placeholder="Find screen or layout…"
+            placeholder="Find page or layout…"
           />
           <Divider />
           <Box sx={{ maxHeight: 320, overflowY: 'auto', py: 0.5 }}>
@@ -439,7 +439,7 @@ export const BesignerDocumentSwitcherComponent = observer(
                 color="text.secondary"
                 sx={{ px: 2, py: 1.5 }}
               >
-                {hasQuery ? 'No matches.' : 'No screens yet.'}
+                {hasQuery ? 'No matches.' : 'No pages yet.'}
               </Typography>
             ) : (
               <>
@@ -449,7 +449,7 @@ export const BesignerDocumentSwitcherComponent = observer(
                       disableSticky
                       sx={{ lineHeight: 2.5, bgcolor: 'transparent' }}
                     >
-                      {'Screens'}
+                      {'Pages'}
                     </ListSubheader>
                     {screens.map((screen: any) => renderRow('screen', screen))}
                   </>
@@ -495,7 +495,7 @@ export const BesignerDocumentSwitcherComponent = observer(
               <MdiIcon path={ICON_VARIANT_PAGES.path} fontSize="small" />
             </ListItemIcon>
             <ListItemText
-              primary="View all screens"
+              primary="View all pages"
               slotProps={{ primary: { color: 'primary' } }}
             />
           </MenuItem>

@@ -365,9 +365,9 @@ async function screenCapRefusal(options: {
       return {
         status: 403,
         error:
-          `This backup holds ${bundleScreens.length} screens and this site has ` +
+          `This backup holds ${bundleScreens.length} pages and this site has ` +
           `${prior.size}, which would put it at ${next.size} of ${limit} ` +
-          'screens. Nothing was imported — upgrade in Billing, or restore into ' +
+          'pages. Nothing was imported — upgrade in Billing, or restore into ' +
           'a site with room.',
       }
     }
@@ -387,8 +387,8 @@ async function screenCapRefusal(options: {
       return {
         status: 403,
         error:
-          `This backup holds ${bundleScreens.length} screens and this site ` +
-          `has ${prior.size} email and template screens, which would put it ` +
+          `This backup holds ${bundleScreens.length} pages and this site ` +
+          `has ${prior.size} email designs and template pages, which would put it ` +
           `at ${next.size} of ${NON_PAGE_SCREEN_MAX_PER_HOST}. Nothing was ` +
           'imported — delete some, or restore into a site with room.',
       }

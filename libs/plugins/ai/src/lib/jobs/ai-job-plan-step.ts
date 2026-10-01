@@ -91,8 +91,8 @@ export const AI_JOB_PLAN_INSTRUCTIONS: readonly AiSystemBlock[] = [
   {
     text:
       'You plan what a website builder job will build, before anything is built. You are given the kind of job and the brief from the person who owns the site. ' +
-      'Answer with submit_build_plan: what the site inventory already has that the job reuses, what it must create and why nothing listed will do, and each screen it builds with its layout, template, slug, search title, search description and sections from top to bottom. ' +
-      'Refer to inventory records by id and to what the plan creates as new:<name>. Plan only what the brief asks for: a component, layout, template, form or email job plans no screens unless the brief asks for pages, and a page job plans exactly one screen.',
+      'Answer with submit_build_plan: what the site inventory already has that the job reuses, what it must create and why nothing listed will do, and each page it builds (the screens list) with its layout, template, slug, search title, search description and sections from top to bottom. ' +
+      'Refer to inventory records by id and to what the plan creates as new:<name>. Plan only what the brief asks for: a component, layout, template, form or email job plans no pages unless the brief asks for them, and a page job plans exactly one page.',
   },
 ]
 

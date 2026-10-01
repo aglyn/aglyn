@@ -1,13 +1,13 @@
 ---
 sidebar_position: 7
 title: Copy & paste elements
-description: Copy any element — with its children — and paste it elsewhere, including into a different screen, layout or component.
+description: Copy any element — with its children — and paste it elsewhere, including into a different page, layout or component.
 ---
 
 # Copy & paste elements
 
 **Duplicate** makes another copy right where you are. **Copy and paste** goes further: it
-carries an element, with everything inside it, to somewhere else entirely — another screen,
+carries an element, with everything inside it, to somewhere else entirely — another page,
 a layout, a reusable component, an email template.
 
 ## Copy
@@ -34,7 +34,7 @@ Where it lands follows the same rule as **Add element**:
 
 - Select a **container** (a Stack, Section, Container) and the copy goes **inside** it, at the
   end.
-- Select a **leaf** — a Screen Link, button, icon, image — and the copy goes **beside** it as
+- Select a **leaf** — a Page Link, button, icon, image — and the copy goes **beside** it as
   the next sibling, because a leaf has no slot to render children in.
 
 Everything pasted is selected afterwards, so you can retext or restyle it straight away.
@@ -42,7 +42,7 @@ Paste is a single undo step.
 
 ## Between documents
 
-**What you copy stays copied after you navigate.** Open a different screen, layout, component
+**What you copy stays copied after you navigate.** Open a different page, layout, component
 or template and paste — the clipboard is still there. This is the fastest way to reuse a
 structure you have already built and refined.
 
@@ -52,7 +52,7 @@ Two things to know:
   pasted. When you want one source of truth across many places, promote it to a
   [reusable component](reusable-components.md) instead.
 - Elements have to exist where you're pasting. A block copied from an **email** template uses
-  email elements, and pasting it into a site screen is refused with a message naming the
+  email elements, and pasting it into a site page is refused with a message naming the
   element that isn't available there. Nothing is half-pasted — the paste either lands
   completely or not at all.
 

@@ -424,13 +424,13 @@ async function copy(
       !screenClaimsToBeAPage({ kind: sourceKind as string })
     if (recipe.collection === 'screens') {
       if (kind === 'emailDesign' && sourceKind !== SCREEN_KIND_EMAIL) {
-        return { ok: false, status: 400, error: 'That screen is not an email design' }
+        return { ok: false, status: 400, error: 'That page is not an email design' }
       }
       if (kind === 'screen' && nonPageScreen && sourceKind !== SCREEN_KIND_TEMPLATE) {
         return {
           ok: false,
           status: 400,
-          error: 'Only a page or a collection entry template can be duplicated as a screen',
+          error: 'Only a page or a collection entry template can be duplicated as a page',
         }
       }
     }
@@ -465,7 +465,7 @@ async function copy(
           status: 403,
           error:
             'This site is at its limit of ' +
-            `${NON_PAGE_SCREEN_MAX_PER_HOST} email and template screens — ` +
+            `${NON_PAGE_SCREEN_MAX_PER_HOST} email designs and template pages — ` +
             'delete some to make room',
         }
       }
@@ -482,7 +482,7 @@ async function copy(
           ok: false,
           status: 403,
           error:
-            `Your plan includes ${quota.limit} ${noun}s — ` +
+            `Your plan includes ${quota.limit} ${noun}${quota.limit === 1 ? '' : 's'} — ` +
             'upgrade in Billing for more',
         }
       }

@@ -108,7 +108,7 @@ describe('screenSlugHasPathSeparator', () => {
    */
   it('is refused with wording that says what to do instead', () => {
     expect(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE).toContain('one path segment')
-    expect(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE).toContain('parent screen')
+    expect(SCREEN_SLUG_PATH_SEPARATOR_MESSAGE).toContain('parent page')
   })
 
   /**

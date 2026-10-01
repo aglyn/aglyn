@@ -709,6 +709,108 @@ async function pluginPlanEntitlements() {
 }
 
 /**
+ * The meters a plugin contributes to the platform's cost model and its
+ * utilization table (AGL-3080): a plugin names a function under `usageAxes`,
+ * and this loads `${package}/usage-axes`, calls it, and compiles the answer
+ * into the catalog file as data (core `plugin-usage-axes.ts`). The readers
+ * include the discount guardrail and the staff org page, which prices a
+ * rollup in the browser, so a registry they had not filled would price the
+ * plugin's meter at nothing — the approving direction.
+ *
+ * Checked here: plain ids and field names, one owner per axis and per band
+ * and never one of core's own, an order no other axis or band holds, and a
+ * rate KEY rather than a number — the rates stay in core's
+ * `ORG_COGS_UNIT_RATES_USD`, and `plugin-usage-axes.spec.ts` holds every
+ * declared key to a rate that exists there.
+ */
+const CORE_COST_AXIS_ORDERS = { storage: 10, pageViews: 20, dataStorage: 40, apiRequests: 50, emailSends: 70 }
+const CORE_USAGE_BAND_ORDERS = { hosts: 10, storageGb: 20, pageViews: 30, dataStorageMb: 50, apiRequests: 60, emailSends: 80 }
+const PLAIN_NAME = /^[A-Za-z][A-Za-z0-9]*$/
+
+function plainNames(list, what, { optional = false } = {}) {
+  if (list === undefined && optional) return
+  if (!Array.isArray(list) || (!optional && !list.length) || !list.every((name) => typeof name === 'string' && PLAIN_NAME.test(name))) {
+    throw new Error(`${what} is a list of plain field names`)
+  }
+}
+
+async function pluginUsageAxes() {
+  const declaring = config.plugins.filter((plugin) => plugin.register?.usageAxes)
+  const costAxes = []
+  const bands = []
+  if (!declaring.length) return { costAxes, bands }
+  const jiti = jitiForWorkspace()
+  const axisOwners = new Map(Object.keys(CORE_COST_AXIS_ORDERS).map((id) => [id, 'the platform']))
+  const bandOwners = new Map(Object.keys(CORE_USAGE_BAND_ORDERS).map((id) => [id, 'the platform']))
+  const axisOrders = new Map(Object.entries(CORE_COST_AXIS_ORDERS).map(([id, order]) => [order, id]))
+  const bandOrders = new Map(Object.entries(CORE_USAGE_BAND_ORDERS).map(([id, order]) => [order, id]))
+  for (const plugin of declaring) {
+    const specifier = `${plugin.package}/usage-axes`
+    const fnName = plugin.register.usageAxes
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') throw new Error(`${specifier} exports no function named ${fnName}`)
+    const answer = (await fn()) ?? {}
+    const where = `${specifier}: ${fnName}()`
+    const declaredAxes = answer.costAxes ?? []
+    const declaredBands = answer.bands ?? []
+    if (!Array.isArray(declaredAxes) || !Array.isArray(declaredBands)) {
+      throw new Error(`${where}: "costAxes" and "bands" are lists`)
+    }
+    if (!declaredAxes.length && !declaredBands.length) {
+      throw new Error(`${where} declares nothing — drop the entry, or declare a meter`)
+    }
+    for (const axis of declaredAxes) {
+      const { id, order, fields, fallbackFields, recordedFields, rate, live } = axis ?? {}
+      const what = `${where} cost axis "${id ?? ''}"`
+      if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a cost axis needs a plain "id"`)
+      if (axisOwners.has(id)) throw new Error(`${what} is already priced by ${axisOwners.get(id)}`)
+      axisOwners.set(id, `"${plugin.id}"`)
+      if (!Number.isInteger(order)) throw new Error(`${what} needs an integer "order"`)
+      if (axisOrders.has(order)) throw new Error(`${what}: "order" ${order} is already taken by "${axisOrders.get(order)}"`)
+      axisOrders.set(order, id)
+      plainNames(fields, `${what} "fields"`)
+      plainNames(fallbackFields, `${what} "fallbackFields"`, { optional: true })
+      plainNames(recordedFields, `${what} "recordedFields"`, { optional: true })
+      if (rate !== undefined && (typeof rate !== 'string' || !PLAIN_NAME.test(rate))) {
+        throw new Error(`${what}: "rate" names a key of ORG_COGS_UNIT_RATES_USD, never a number`)
+      }
+      if (live !== undefined) {
+        if (typeof live?.collection !== 'string' || !PLAIN_NAME.test(live.collection)) {
+          throw new Error(`${what}: "live.collection" is the plain name of an org subcollection`)
+        }
+        plainNames(live.fields, `${what} "live.fields"`)
+      }
+      costAxes.push({ pluginId: plugin.id, ...axis })
+    }
+    for (const band of declaredBands) {
+      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd } = band ?? {}
+      const what = `${where} band "${id ?? ''}"`
+      if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a band needs a plain "id"`)
+      if (bandOwners.has(id)) throw new Error(`${what} is already measured by ${bandOwners.get(id)}`)
+      bandOwners.set(id, `"${plugin.id}"`)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label"`)
+      if (!Number.isInteger(order)) throw new Error(`${what} needs an integer "order"`)
+      if (bandOrders.has(order)) throw new Error(`${what}: "order" ${order} is already taken by "${bandOrders.get(order)}"`)
+      bandOrders.set(order, id)
+      plainNames(fields, `${what} "fields"`)
+      plainNames(fallbackFields, `${what} "fallbackFields"`, { optional: true })
+      if (typeof entitlement !== 'string' || !PLAIN_NAME.test(entitlement)) {
+        throw new Error(`${what} needs the "entitlement" holding what a plan includes`)
+      }
+      if (perHost !== undefined && typeof perHost !== 'boolean') throw new Error(`${what}: "perHost" is a boolean`)
+      if (unitCostUsd !== undefined && !(typeof unitCostUsd === 'number' && Number.isFinite(unitCostUsd) && unitCostUsd > 0)) {
+        throw new Error(`${what}: "unitCostUsd" is a positive number of dollars`)
+      }
+      bands.push({ pluginId: plugin.id, ...band })
+    }
+  }
+  return {
+    costAxes: costAxes.sort((a, b) => a.order - b.order),
+    bands: bands.sort((a, b) => a.order - b.order),
+  }
+}
+
+/**
  * One row as TypeScript source. JSON cannot spell `Infinity`, and a quota
  * that reads `null` in the generated file would be a band of zero to every
  * reader, so the one value JSON loses is written as the literal it is.
@@ -2032,7 +2134,7 @@ function revenueSourceIds() {
     .map((plugin) => plugin.id)
 }
 
-function catalogContent(videoEmbedRows, planEntitlements) {
+function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
   const editBarRows = rows
@@ -2055,7 +2157,7 @@ function catalogContent(videoEmbedRows, planEntitlements) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2121,6 +2223,22 @@ ${planEntitlements.quotas.map((row) => `  ${indent(literalRow(row))},`).join('\n
  */
 export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[] = [
 ${planEntitlements.features.map((row) => `  ${indent(literalRow(row))},`).join('\n')}
+]
+
+/**
+ * Every meter a first-party plugin contributes to the platform's cost model,
+ * in breakdown order, declared by that plugin (AGL-3080). Core keeps the rates.
+ */
+export const PLUGIN_COST_AXES_DECLARED: readonly ResolvedPluginCostAxis[] = [
+${usageAxes.costAxes.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every band a first-party plugin contributes to the utilization table, in
+ * column order, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
+${usageAxes.bands.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**
@@ -2314,7 +2432,11 @@ const ALL = [
   })),
   {
     file: CATALOG_FILE,
-    content: catalogContent(await pluginVideoEmbedProviders(), await pluginPlanEntitlements()),
+    content: catalogContent(
+      await pluginVideoEmbedProviders(),
+      await pluginPlanEntitlements(),
+      await pluginUsageAxes(),
+    ),
   },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
   { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },

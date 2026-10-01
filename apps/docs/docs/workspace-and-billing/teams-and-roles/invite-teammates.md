@@ -162,7 +162,7 @@ cannot read the log by any route.
   failed payments, a cancellation made by Aglyn staff, inbound CRM mail, a background AI job.
 
 Entries name the thing that changed and link straight to it, so "Saved the screen — Home"
-takes you to that screen. Entries recorded before this shipped show a plain description
+takes you to that page. Entries recorded before this shipped show a plain description
 instead of a link.
 
 The log filters through its table's toolbar, across the whole log rather than the page on
@@ -205,10 +205,10 @@ see everything.
 | Entry | What it records |
 | --- | --- |
 | **Started an AI generation** | A generation was briefed: what it builds, how long the brief was, and the site. |
-| **AI generated** | One thing a generation produced — a screen, a layout, a component — linked like any other change. A site's own activity carries a copy. |
+| **AI generated** | One thing a generation produced — a page, a layout, a component — linked like any other change. A site's own activity carries a copy. |
 | **Canceled an AI generation** | A generation was stopped before it finished. |
 | **AI generation paused for input** | A generation stopped and asked for a person, and why: the included band, the overage ceiling, the monthly message cap, or the job's own budget. |
-| **Applied AI edits** | Edits from a proposal landed on a screen version, with a count of what changed. |
+| **Applied AI edits** | Edits from a proposal landed on a page version, with a count of what changed. |
 | **AI generated a section** | The assistant returned a section for a page. Single-element rewrites are not logged one by one; their count is in the AI usage rollup. |
 | **AI stop-at-band switch** / **AI overage ceiling** | Someone changed the workspace's AI overage controls on the Billing page. |
 | **AI permission changed** | An AI permission moved on a role, a member, or a site collaborator. |

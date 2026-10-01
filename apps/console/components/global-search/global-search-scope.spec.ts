@@ -25,52 +25,72 @@
  * it looked at, which has to stay true as groups are added.
  */
 
-import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { Route } from '@aglyn/aglyn/app-utils/console-routes'
+import type { ConsoleSearchSource } from '@aglyn/aglyn'
 import {
   buildResultHref,
   describeEntities,
   entitlementAllows,
   GLOBAL_SEARCH_ENTITIES,
-  globalSearchReadKind,
   globalSearchScopeMessage,
   resolveGlobalSearchScope,
-  type GlobalSearchEntity,
+  searchSourceEntity,
   type GlobalSearchEntityDef,
 } from './global-search-scope'
+
+/**
+ * Two groups as a plugin contributes them (AGL-3080): records in the
+ * organization's shared data, and a site collection behind a plan quota. The
+ * palette names no plugin, so these stand in for every plugin that declares
+ * `searchSources`.
+ */
+const PEOPLE: ConsoleSearchSource = {
+  id: 'people',
+  group: 'People',
+  noun: 'people',
+  scope: 'orgData',
+  collection: 'people',
+  nameField: 'name',
+  fallbackNameField: 'email',
+  extraFields: ['email'],
+  order: 40,
+  href: (row, { orgSlug, host }) =>
+    host
+      ? `/${orgSlug}/hosts/${host}/people/${String(row['$id'])}`
+      : `/${orgSlug}/people/${String(row['$id'])}`,
+}
+const BOTTLES: ConsoleSearchSource = {
+  id: 'bottles',
+  group: 'Bottles',
+  noun: 'bottles',
+  scope: 'host',
+  collection: 'bottles',
+  nameField: 'name',
+  entitlementKey: 'bottlesPerHost',
+  featureFlag: 'reusableComponents',
+  permission: 'data.manage',
+  order: 150,
+  href: (_row, { orgSlug, host }) => (host ? `/${orgSlug}/hosts/${host}/cellar` : null),
+}
+const SOURCES = [searchSourceEntity(PEOPLE), searchSourceEntity(BOTTLES)]
 
 /** A workspace with everything switched on. */
 const RICH = {
   reusableComponents: true,
-  workflows: true,
-  commerce: true,
-  redirects: true,
-  bookings: true,
   sharedLayoutsPerHost: 5,
   templatesPerHost: 10,
-  workflowsPerHost: 5,
-  productsPerHost: 100,
-  redirectsPerHost: 10,
-  servicesPerHost: 3,
-  crm: true,
+  bottlesPerHost: 12,
 }
 
-/** The free plan, as `PLAN_ENTITLEMENTS.free` actually shapes it. */
+/** A plan that grants none of the gated groups. */
 const FREE = {
-  // The CRM is included from Starter (AGL-2851); the dialog flattens it here.
-  crm: false,
   reusableComponents: false,
-  workflows: false,
-  commerce: false,
-  redirects: false,
-  bookings: false,
   sharedLayoutsPerHost: 1,
   templatesPerHost: 10,
-  workflowsPerHost: 0,
-  productsPerHost: 0,
-  redirectsPerHost: 0,
-  servicesPerHost: 0,
+  bottlesPerHost: 0,
 }
+
+const TOKENS = ['org', 'host:host-1']
 
 const scopeAt = (overrides: Record<string, any> = {}) =>
   resolveGlobalSearchScope({
@@ -79,6 +99,7 @@ const scopeAt = (overrides: Record<string, any> = {}) =>
     hostReady: true,
     entitlements: RICH,
     entitlementsReady: true,
+    sources: SOURCES,
     ...overrides,
   })
 
@@ -87,7 +108,7 @@ const ids = (scope: { entities: GlobalSearchEntityDef[] }) =>
 
 describe('where the caller is standing', () => {
   it('offers nothing at all before a workspace resolves', () => {
-    const scope = scopeAt({ orgId: null })
+    const scope = scopeAt({ orgId: null, orgDataTokens: TOKENS })
     expect(scope.entities).toHaveLength(0)
     expect(scope.unavailable).toBe(true)
   })
@@ -102,176 +123,122 @@ describe('where the caller is standing', () => {
   })
 
   it('offers the full set on a site', () => {
-    const offered = ids(scopeAt())
-    expect(offered).toContain('sites')
+    const offered = ids(scopeAt({ orgDataTokens: TOKENS }))
+    for (const group of [
+      'sites',
+      'screens',
+      'emails',
+      'components',
+      'layouts',
+      'templates',
+      'collections',
+      'authors',
+      'people',
+      'bottles',
+    ]) {
+      expect(offered).toContain(group)
+    }
+  })
+
+  /**
+   * A plugin's group sits among the console's by its declared `order`, and
+   * the console names none of them: pages first, then the plugin's people,
+   * then the site's building blocks, then the plugin's site collection.
+   */
+  it("lists a plugin's groups among the console's by their order", () => {
+    expect(ids(scopeAt({ orgDataTokens: TOKENS }))).toEqual([
+      'sites',
+      'screens',
+      'emails',
+      'people',
+      'components',
+      'layouts',
+      'templates',
+      'collections',
+      'authors',
+      'bottles',
+    ])
+  })
+
+  it("drops a plugin's group that claims one of the console's ids", () => {
+    const imposter = searchSourceEntity({ ...PEOPLE, id: 'screens', scope: 'host' })
+    const offered = scopeAt({ sources: [imposter], orgDataTokens: TOKENS }).entities
+    expect(offered.filter((entity) => entity.id === 'screens')).toEqual([
+      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'screens'),
+    ])
+  })
+
+  it('offers no plugin group the caller was not handed', () => {
+    const offered = ids(scopeAt({ sources: undefined, orgDataTokens: TOKENS }))
+    expect(offered).not.toContain('people')
+    expect(offered).not.toContain('bottles')
     expect(offered).toContain('screens')
-    expect(offered).toContain('emails')
-    expect(offered).toContain('components')
-    expect(offered).toContain('layouts')
-    expect(offered).toContain('templates')
-    expect(offered).toContain('collections')
-    expect(offered).toContain('authors')
   })
 
   /**
-   * Contacts are org data judged by `visibleTo` (AGL-2596): the group exists
-   * only when the caller can say which tokens the viewer reads with. Absent,
-   * empty and unresolved all mean the same thing — no group — because a read
-   * without the filter is denied and would render as a failure.
+   * Org data is judged by `visibleTo` (AGL-2596): under a site the group
+   * exists only when the caller can say which tokens the viewer reads with.
+   * Absent, empty and unresolved all mean the same thing — no group —
+   * because a read without the filter is denied and would render as a
+   * failure.
    */
-  it('offers contacts only with the viewer\'s scope tokens', () => {
-    expect(ids(scopeAt({ orgDataTokens: ['org', 'host:host-1'] }))).toContain(
-      'contacts',
+  it("offers an org-data group only with the viewer's scope tokens", () => {
+    expect(ids(scopeAt({ orgDataTokens: TOKENS }))).toContain('people')
+    expect(ids(scopeAt())).not.toContain('people')
+    expect(ids(scopeAt({ orgDataTokens: null }))).not.toContain('people')
+    expect(ids(scopeAt({ orgDataTokens: [] }))).not.toContain('people')
+    // Tokens without a workspace address `orgs//people`.
+    expect(ids(scopeAt({ orgId: null, orgDataTokens: TOKENS }))).not.toContain(
+      'people',
     )
-    expect(ids(scopeAt())).not.toContain('contacts')
-    expect(ids(scopeAt({ orgDataTokens: null }))).not.toContain('contacts')
-    expect(ids(scopeAt({ orgDataTokens: [] }))).not.toContain('contacts')
-    // Tokens without a workspace address `orgs//contacts`.
-    expect(
-      ids(scopeAt({ orgId: null, orgDataTokens: ['org', 'host:host-1'] })),
-    ).not.toContain('contacts')
   })
 
   /**
-   * The CRM is included from Starter and a Free workspace has none of it
-   * (AGL-2851), so no CRM group is read on a plan without it — not under a
-   * site with the viewer's tokens, and not at the org hub for an org-wide
-   * member. The site's own groups are not the CRM's, and stay.
+   * The organization level (AGL-2662). Off a site there is no consent group
+   * to resolve tokens from, so the tokens cannot be the gate; org-wide
+   * membership is, because the rules admit the unfiltered read to that
+   * reader alone.
    */
-  it('offers no CRM group on a plan without the CRM (AGL-2851)', () => {
-    const onSite = ids(scopeAt({ entitlements: FREE, orgDataTokens: ['org', 'host:host-1'] }))
-    const atOrg = ids(scopeAt({ entitlements: FREE, hostId: null, crmOrgWide: true }))
-    for (const group of ['contacts', 'leads', 'companies', 'deals', 'tasks', 'activities']) {
-      expect(onSite).not.toContain(group)
-      expect(atOrg).not.toContain(group)
-    }
-    expect(onSite).toContain('screens')
-  })
-
-  /**
-   * Companies and deals are org data under the same predicate as contacts,
-   * and leads are host data whose rows open in the CRM (AGL-2622). All three
-   * follow the contacts gate: offered with the tokens and withheld without
-   * them, on a plan that carries the CRM.
-   */
-  it('offers leads, companies and deals under the same gate as contacts', () => {
-    const withTokens = ids(scopeAt({ orgDataTokens: ['org', 'host:host-1'] }))
-    expect(withTokens).toContain('leads')
-    expect(withTokens).toContain('companies')
-    expect(withTokens).toContain('deals')
-    for (const context of [{}, { orgDataTokens: null }, { orgDataTokens: [] }]) {
-      const offered = ids(scopeAt(context))
-      expect(offered).not.toContain('leads')
-      expect(offered).not.toContain('companies')
-      expect(offered).not.toContain('deals')
-    }
-  })
-
-  it('withholds leads off a site even with tokens — they are host data', () => {
-    expect(
-      ids(scopeAt({ hostId: null, hostReady: false, orgDataTokens: ['org'] })),
-    ).not.toContain('leads')
-  })
-
-  /**
-   * The organization hub (AGL-2662). Off a site there is no consent group to
-   * resolve tokens from, so the tokens cannot be the gate; org-wide
-   * membership is, which is the reach requirement the hub itself puts in
-   * front of these records.
-   */
-  it('offers the CRM at the org hub to an org-wide member', () => {
-    const offered = ids(scopeAt({ hostId: null, crmOrgWide: true }))
-    expect(offered).toContain('contacts')
-    expect(offered).toContain('companies')
-    expect(offered).toContain('deals')
-    expect(offered).toContain('tasks')
-    expect(offered).toContain('activities')
-    // The one host collection with an org-level answer of its own.
-    expect(offered).toContain('leads')
-    // Everything else host-scoped still belongs to one site.
+  it('offers org data at the organization level to an org-wide member', () => {
+    const offered = ids(scopeAt({ hostId: null, orgWide: true }))
+    expect(offered).toContain('people')
+    // A site's collections still belong to one site.
     expect(offered).not.toContain('screens')
-    expect(offered).not.toContain('templates')
+    expect(offered).not.toContain('bottles')
   })
 
-  it('withholds the CRM at the org hub from anyone else', () => {
+  it('withholds org data at the organization level from anyone else', () => {
     for (const context of [
       { hostId: null },
-      { hostId: null, crmOrgWide: false },
+      { hostId: null, orgWide: false },
       // Tokens are a SITE's answer and say nothing about org-wide reach.
-      { hostId: null, orgDataTokens: ['org', 'host:host-1'] },
+      { hostId: null, orgDataTokens: TOKENS },
     ]) {
-      const offered = ids(scopeAt(context))
-      for (const group of ['contacts', 'companies', 'deals', 'tasks', 'activities', 'leads']) {
-        expect(offered).not.toContain(group)
-      }
+      expect(ids(scopeAt(context))).not.toContain('people')
     }
   })
 
   /**
    * Org-wide membership is not a way into a SITE's window: under a site the
    * tokens are the question the rules ask, and a reader without them is
-   * withheld the groups rather than shown a denial.
+   * withheld the group rather than shown a denial.
    */
-  it('does not let org-wide reach stand in for a site\'s tokens', () => {
-    const offered = ids(scopeAt({ crmOrgWide: true, orgDataTokens: null }))
-    expect(offered).not.toContain('contacts')
-    expect(offered).not.toContain('leads')
-  })
-
-  /**
-   * An `orgHosts` fan-out is bounded by the site list the `sites` group has
-   * already read — that is what makes it cost no read of its own. Offering
-   * one without the group that supplies the list would leave it waiting on
-   * a window nobody was going to fetch.
-   */
-  it('never offers a fan-out group without the sites group beside it', () => {
-    const offered = scopeAt({ hostId: null, crmOrgWide: true }).entities
-    const fanOut = offered.filter((entity) => entity.orgScopeKind)
-    expect(fanOut.length).toBeGreaterThan(0)
-    expect(offered.map((entity) => entity.id)).toContain('sites')
-  })
-})
-
-describe('how a group is actually read from where the caller stands', () => {
-  const leads = GLOBAL_SEARCH_ENTITIES.find(
-    (entity) => entity.id === 'leads',
-  ) as GlobalSearchEntityDef
-  const screens = GLOBAL_SEARCH_ENTITIES.find(
-    (entity) => entity.id === 'screens',
-  ) as GlobalSearchEntityDef
-  const contacts = GLOBAL_SEARCH_ENTITIES.find(
-    (entity) => entity.id === 'contacts',
-  ) as GlobalSearchEntityDef
-
-  it('reads a host group under its site, and the fan-out one without', () => {
-    expect(globalSearchReadKind(leads, 'host-1')).toBe('host')
-    expect(globalSearchReadKind(leads, null)).toBe('orgHosts')
-  })
-
-  it('leaves a host group with no org-level answer alone', () => {
-    expect(globalSearchReadKind(screens, 'host-1')).toBe('host')
-    expect(globalSearchReadKind(screens, null)).toBe('host')
-  })
-
-  it('does not move an org-data group at either level', () => {
-    expect(globalSearchReadKind(contacts, 'host-1')).toBe('orgData')
-    expect(globalSearchReadKind(contacts, null)).toBe('orgData')
+  it("does not let org-wide reach stand in for a site's tokens", () => {
+    expect(ids(scopeAt({ orgWide: true, orgDataTokens: null }))).not.toContain(
+      'people',
+    )
   })
 })
 
 describe('entitlement gating, which is a cost control as well as a correctness one', () => {
   /**
-   * A free workspace has no workflows, products, services or redirects, so
-   * querying those collections would spend a read to render nothing, every
-   * time. Cost scaling with what the org actually owns is the right direction
-   * for a plan that has to hard-cap.
+   * Querying a collection the plan does not grant would spend a read to
+   * render nothing, every time. Cost scaling with what the org actually owns
+   * is the right direction for a plan that has to hard-cap.
    */
   it('never reads a collection the plan does not grant', () => {
     const offered = ids(scopeAt({ entitlements: FREE }))
-    expect(offered).not.toContain('workflows')
-    expect(offered).not.toContain('products')
-    expect(offered).not.toContain('services')
-    expect(offered).not.toContain('redirects')
+    expect(offered).not.toContain('bottles')
     expect(offered).not.toContain('components')
     // …but the ungated groups are unaffected.
     expect(offered).toContain('screens')
@@ -286,8 +253,8 @@ describe('entitlement gating, which is a cost control as well as a correctness o
    */
   it('holds gated groups while entitlements are UNRESOLVED', () => {
     const offered = ids(scopeAt({ entitlements: null, entitlementsReady: false }))
-    expect(offered).not.toContain('workflows')
-    expect(offered).not.toContain('products')
+    expect(offered).not.toContain('bottles')
+    expect(offered).not.toContain('components')
     // The ungated groups still work, so the palette is useful immediately.
     expect(offered).toContain('screens')
     expect(offered).toContain('sites')
@@ -297,20 +264,17 @@ describe('entitlement gating, which is a cost control as well as a correctness o
     // Every pre-existing org has a record that simply does not mention a
     // newer quota; reading absence as denial would empty most of the palette.
     const quiet = { ...RICH } as Record<string, unknown>
-    delete quiet.workflowsPerHost
-    expect(
-      entitlementAllows(
-        GLOBAL_SEARCH_ENTITIES.find((e) => e.id === 'workflows') as any,
-        quiet,
-      ),
-    ).toBe(true)
+    delete quiet.bottlesPerHost
+    expect(entitlementAllows(searchSourceEntity(BOTTLES), quiet)).toBe(true)
   })
 
   it('reads a zero quota as denied and a positive one as allowed', () => {
-    const workflows = GLOBAL_SEARCH_ENTITIES.find((e) => e.id === 'workflows')!
-    expect(entitlementAllows(workflows, { workflows: true, workflowsPerHost: 0 })).toBe(false)
-    expect(entitlementAllows(workflows, { workflows: true, workflowsPerHost: 3 })).toBe(true)
-    expect(entitlementAllows(workflows, { workflows: false, workflowsPerHost: 3 })).toBe(false)
+    const bottles = searchSourceEntity(BOTTLES)
+    expect(entitlementAllows(bottles, { bottlesPerHost: 0 })).toBe(false)
+    expect(entitlementAllows(bottles, { bottlesPerHost: 3 })).toBe(true)
+    const components = GLOBAL_SEARCH_ENTITIES.find((e) => e.id === 'components')!
+    expect(entitlementAllows(components, { reusableComponents: false })).toBe(false)
+    expect(entitlementAllows(components, { reusableComponents: true })).toBe(true)
   })
 
   it('lets an ungated group through with no entitlements at all', () => {
@@ -321,68 +285,24 @@ describe('entitlement gating, which is a cost control as well as a correctness o
 
 describe('the registry', () => {
   /**
-   * Getting `nameField` wrong renders a whole group of rows labelled with
+   * Getting `nameField` wrong renders a whole group of rows labeled with
    * their document id. The split is real and not tidy: the besigner resources
-   * use `displayName`, the logic and commerce resources use `name`.
+   * use `displayName`, authors use `name`.
    */
   it('names each collection by the field that write path actually stores', () => {
-    const nameFieldOf = (id: GlobalSearchEntity) =>
+    const nameFieldOf = (id: string) =>
       GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id)?.nameField
+    expect(nameFieldOf('sites')).toBe('displayName')
     expect(nameFieldOf('screens')).toBe('displayName')
     expect(nameFieldOf('layouts')).toBe('displayName')
     expect(nameFieldOf('components')).toBe('displayName')
     expect(nameFieldOf('templates')).toBe('displayName')
     expect(nameFieldOf('collections')).toBe('displayName')
     expect(nameFieldOf('authors')).toBe('name')
-    expect(nameFieldOf('workflows')).toBe('name')
-    expect(nameFieldOf('products')).toBe('name')
-    expect(nameFieldOf('services')).toBe('name')
-    expect(nameFieldOf('redirects')).toBe('source')
-    // A contact's canonical name, with the email standing in for a person a
-    // checkout captured without one.
-    expect(nameFieldOf('contacts')).toBe('name')
-    expect(
-      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'contacts')
-        ?.fallbackNameField,
-    ).toBe('email')
-    // A lead is labelled the way the Leads list labels it; a company by its
-    // name and found by its domain; a deal by its title (AGL-2622).
-    expect(nameFieldOf('leads')).toBe('name')
-    expect(
-      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'leads')?.fallbackNameField,
-    ).toBe('email')
-    expect(nameFieldOf('companies')).toBe('name')
-    expect(
-      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'companies')?.extraFields,
-    ).toContain('domain')
-    expect(nameFieldOf('deals')).toBe('title')
-    // A task by its title; an activity by the subject a sent message
-    // carried, falling back to the body a person typed into it (AGL-2662).
-    expect(nameFieldOf('tasks')).toBe('title')
-    expect(nameFieldOf('activities')).toBe('subject')
-    expect(
-      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'activities')
-        ?.fallbackNameField,
-    ).toBe('body')
-  })
-
-  /**
-   * `tasks` and `activities` are prefixed on the document path because the
-   * org document wants those words for other things. Reading them by the
-   * bare noun would query a collection nothing writes to, and an empty
-   * group is indistinguishable from a group with no matches.
-   */
-  it('reads tasks and activities out of the PREFIXED collections', () => {
-    const collectionOf = (id: GlobalSearchEntity) =>
-      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id)?.collection
-    expect(collectionOf('tasks')).toBe(CRM_COLLECTIONS.tasks)
-    expect(collectionOf('activities')).toBe(CRM_COLLECTIONS.activities)
-    expect(collectionOf('tasks')).toBe('crmTasks')
-    expect(collectionOf('activities')).toBe('crmActivities')
   })
 
   it('reads pages and emails out of the SAME collection', () => {
-    const collectionOf = (id: GlobalSearchEntity) =>
+    const collectionOf = (id: string) =>
       GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id)?.collection
     expect(collectionOf('screens')).toBe('screens')
     expect(collectionOf('emails')).toBe('screens')
@@ -391,43 +311,57 @@ describe('the registry', () => {
   /**
    * Nothing here may be a top-level collection query: that is the shape that
    * can leak, whatever it filters on. Sites come from the caller's own
-   * projection, everything else from the site already open.
+   * projection, everything else of the console's from the site already open.
    */
-  it('scopes every group under a user, a host or the org data root, never the root', () => {
+  it('scopes every group under a user or a host, never the root', () => {
     for (const entity of GLOBAL_SEARCH_ENTITIES) {
-      expect(['org', 'host', 'orgData']).toContain(entity.scopeKind)
+      expect(['org', 'host']).toContain(entity.scopeKind)
     }
     expect(
       GLOBAL_SEARCH_ENTITIES.filter((entity) => entity.scopeKind === 'org').map(
         (entity) => entity.collection,
       ),
     ).toEqual(['hostMemberships'])
-    // The org data root is read through `visibleTo`, and only the CRM's
-    // collections are read that way — a new entry here needs the rules'
-    // predicate too.
-    expect(
-      GLOBAL_SEARCH_ENTITIES.filter((entity) => entity.scopeKind === 'orgData').map(
-        (entity) => entity.collection,
-      ),
-    ).toEqual([
-      'contacts',
-      'companies',
-      'deals',
-      CRM_COLLECTIONS.tasks,
-      CRM_COLLECTIONS.activities,
+  })
+
+  /**
+   * The console names no plugin's group: every one arrives through a
+   * declaration, and the only thing the console keeps of it is the read it
+   * describes, its quota and its link.
+   */
+  it("keeps no plugin's group of its own", () => {
+    expect(GLOBAL_SEARCH_ENTITIES.map((entity) => entity.id)).toEqual([
+      'sites',
+      'screens',
+      'emails',
+      'components',
+      'layouts',
+      'templates',
+      'collections',
+      'authors',
     ])
-    // Leads are host data whose rows open in the CRM, and the flag is what
-    // ties the group to the hub's gate rather than the site's membership.
-    const leads = GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === 'leads')
-    expect(leads?.scopeKind).toBe('host')
-    expect(leads?.collection).toBe('leads')
-    expect(leads?.surface).toBe('crm')
-    // And the only group read a site at a time when there is no site.
-    expect(
-      GLOBAL_SEARCH_ENTITIES.filter((entity) => entity.orgScopeKind).map(
-        (entity) => entity.id,
-      ),
-    ).toEqual(['leads'])
+  })
+
+  it('takes a declared source as the read it describes', () => {
+    const people = searchSourceEntity(PEOPLE)
+    expect(people).toMatchObject({
+      id: 'people',
+      group: 'People',
+      noun: 'people',
+      scopeKind: 'orgData',
+      collection: 'people',
+      nameField: 'name',
+      fallbackNameField: 'email',
+      extraFields: ['email'],
+      order: 40,
+    })
+    expect(people.href).toBe(PEOPLE.href)
+    // The quota is judged here; the plan flag and the permission are the
+    // shell's gates and were applied before the source was handed over.
+    const bottles = searchSourceEntity(BOTTLES)
+    expect(bottles.entitlementKey).toBe('bottlesPerHost')
+    expect(bottles.featureKey).toBeUndefined()
+    expect(bottles).not.toHaveProperty('permission')
   })
 })
 
@@ -486,135 +420,78 @@ describe('the sentence under the field', () => {
   })
 })
 
-describe('where a result row goes', () => {
-  const context = { orgSlug: 'acme', hostSubdomain: 'demo' }
-  const href = (entity: GlobalSearchEntity, row: Record<string, any>) =>
-    buildResultHref(entity, row, context, ((route: Route, payload: any) => {
-      let out = String(route)
-      for (const [key, value] of Object.entries(payload)) {
-        out = out.replace(`[${key}]`, String(value))
-      }
-      return out
-    }) as any)
+const buildRouteFake = ((route: Route, payload: any) => {
+  let out = String(route)
+  for (const [key, value] of Object.entries(payload)) {
+    out = out.replace(`[${key}]`, String(value))
+  }
+  return out
+}) as any
 
-  it('reaches every kind of row', () => {
-    expect(href('sites', { $id: 'h1', subdomain: 'demo' })).toBe(
+const core = (id: string) =>
+  GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id) as GlobalSearchEntityDef
+
+describe('where a result row goes', () => {
+  const href = (definition: GlobalSearchEntityDef, row: Record<string, any>) =>
+    buildResultHref(
+      definition,
+      row,
+      { orgSlug: 'acme', hostSubdomain: 'demo' },
+      buildRouteFake,
+    )
+
+  it('reaches every kind of row the console keeps', () => {
+    expect(href(core('sites'), { $id: 'h1', subdomain: 'demo' })).toBe(
       '/acme/hosts/demo',
     )
-    expect(href('screens', { $id: 's1', versionId: 'v1' })).toBe(
+    expect(href(core('screens'), { $id: 's1', versionId: 'v1' })).toBe(
       '/acme/hosts/demo/screens/s1/versions/v1/view',
     )
-    expect(href('emails', { $id: 's2', versionId: 'v2' })).toBe(
+    expect(href(core('emails'), { $id: 's2', versionId: 'v2' })).toBe(
       '/acme/hosts/demo/screens/s2/versions/v2/besigner',
     )
-    expect(href('components', { $id: 'c1' })).toBe(
+    expect(href(core('components'), { $id: 'c1' })).toBe(
       '/acme/hosts/demo/components/c1',
     )
-    expect(href('layouts', { $id: 'l1' })).toBe('/acme/hosts/demo/layouts/l1')
-    expect(href('templates', { $id: 't1' })).toBe(
+    expect(href(core('layouts'), { $id: 'l1' })).toBe('/acme/hosts/demo/layouts/l1')
+    expect(href(core('templates'), { $id: 't1' })).toBe(
       '/acme/hosts/demo/templates/t1',
     )
-    expect(href('collections', { $id: 'x' })).toBe('/acme/hosts/demo/content')
-    expect(href('authors', { $id: 'a1' })).toBe('/acme/hosts/demo/content')
-    expect(href('workflows', { $id: 'w1' })).toBe('/acme/hosts/demo/automation')
-    expect(href('products', { $id: 'p1' })).toBe('/acme/hosts/demo/products')
-    expect(href('redirects', { $id: 'r1' })).toBe('/acme/hosts/demo/redirects')
-    expect(href('services', { $id: 'sv1' })).toBe('/acme/hosts/demo/bookings')
-    // A person's own page, under the CRM hub's contacts section — and a
-    // lead's, a company's and a deal's under theirs (AGL-2622).
-    expect(href('contacts', { $id: 'c 1' })).toBe(
-      '/acme/hosts/demo/crm/contacts/c%201',
-    )
-    expect(href('leads', { $id: 'l1' })).toBe('/acme/hosts/demo/crm/leads/l1')
-    expect(href('companies', { $id: 'co1' })).toBe(
-      '/acme/hosts/demo/crm/companies/co1',
-    )
-    expect(href('deals', { $id: 'd/1' })).toBe('/acme/hosts/demo/crm/deals/d%2F1')
+    expect(href(core('collections'), { $id: 'x' })).toBe('/acme/hosts/demo/content')
+    expect(href(core('authors'), { $id: 'a1' })).toBe('/acme/hosts/demo/content')
   })
 
   /**
-   * A task and an activity have no page of their own — a task is a row on a
-   * record's card, an activity a line on its timeline — so the useful
-   * destination is the record it was filed under (AGL-2662). The deal wins
-   * over the company and the company over the person: a task filed on a
-   * deal is about that deal, and landing on the contact would make the
-   * reader find it again.
+   * A plugin's row is linked by the plugin, handed the two route params —
+   * the console app may not import a plugin to learn its addresses.
    */
-  it('opens a task and an activity on the record they were filed under', () => {
-    expect(href('tasks', { $id: 't1', dealId: 'd1', contactId: 'c1' })).toBe(
-      '/acme/hosts/demo/crm/deals/d1',
+  it("asks a plugin's group where its row opens", () => {
+    expect(href(searchSourceEntity(PEOPLE), { $id: 'p1' })).toBe(
+      '/acme/hosts/demo/people/p1',
     )
-    expect(href('tasks', { $id: 't2', companyId: 'co1', contactId: 'c1' })).toBe(
-      '/acme/hosts/demo/crm/companies/co1',
+    expect(href(searchSourceEntity(BOTTLES), { $id: 'b1' })).toBe(
+      '/acme/hosts/demo/cellar',
     )
-    expect(href('tasks', { $id: 't3', contactId: 'c1' })).toBe(
-      '/acme/hosts/demo/crm/contacts/c1',
-    )
-    expect(href('activities', { $id: 'a1', dealId: 'd1' })).toBe(
-      '/acme/hosts/demo/crm/deals/d1',
-    )
-    // An activity filed on a lead names the site by path, so only the site
-    // hub can address it.
-    expect(href('activities', { $id: 'a2', leadId: 'l1' })).toBe(
-      '/acme/hosts/demo/crm/leads/l1',
-    )
-  })
-
-  it('lands a task that names no record on the Tasks list', () => {
-    expect(href('tasks', { $id: 't4' })).toBe('/acme/hosts/demo/crm/tasks')
-  })
-
-  /**
-   * An activity that names nothing has nowhere to go — there is no
-   * activities section to land on — so the row is dropped rather than
-   * rendered dead.
-   */
-  it('drops an activity that names no record', () => {
-    expect(href('activities', { $id: 'a3' })).toBeNull()
   })
 })
 
-describe('where a result row goes at the organization hub (AGL-2662)', () => {
-  const href = (entity: GlobalSearchEntity, row: Record<string, any>) =>
-    buildResultHref(entity, row, { orgSlug: 'acme', hostSubdomain: null }, ((
-      route: Route,
-      payload: any,
-    ) => {
-      let out = String(route)
-      for (const [key, value] of Object.entries(payload)) {
-        out = out.replace(`[${key}]`, String(value))
-      }
-      return out
-    }) as any)
+describe('where a result row goes at the organization level (AGL-2662)', () => {
+  const href = (definition: GlobalSearchEntityDef, row: Record<string, any>) =>
+    buildResultHref(
+      definition,
+      row,
+      { orgSlug: 'acme', hostSubdomain: null },
+      buildRouteFake,
+    )
 
-  it('opens each record in the org hub rather than nowhere', () => {
-    expect(href('contacts', { $id: 'c 1' })).toBe('/acme/crm/contacts/c%201')
-    expect(href('companies', { $id: 'co1' })).toBe('/acme/crm/companies/co1')
-    expect(href('deals', { $id: 'd/1' })).toBe('/acme/crm/deals/d%2F1')
-    expect(href('tasks', { $id: 't1', dealId: 'd1' })).toBe('/acme/crm/deals/d1')
-    expect(href('tasks', { $id: 't2' })).toBe('/acme/crm/tasks')
-  })
-
-  /**
-   * A lead's id is a person key, the same on every site that met the
-   * person, so the address has to name the site the row was read from — and
-   * a row that carries none cannot be addressed at all.
-   */
-  it('addresses a lead by its id alone, whether or not the row names a site (AGL-3275)', () => {
-    /*
-     * The link used to carry the site: a lead's id is a person key, and while
-     * a lead lived under its site two sites held two documents with that one
-     * id — so a row that could not say WHICH site it came from addressed
-     * nothing and was dropped. One org collection makes the key unambiguous,
-     * so the site is ignored and a row without one still links.
-     */
-    expect(href('leads', { $id: 'l/1', $hostId: 'host-1' })).toBe('/acme/crm/leads/l%2F1')
-    expect(href('leads', { $id: 'l1' })).toBe('/acme/crm/leads/l1')
+  it("hands a plugin's group no site, and takes its answer", () => {
+    expect(href(searchSourceEntity(PEOPLE), { $id: 'p1' })).toBe('/acme/people/p1')
+    expect(href(searchSourceEntity(BOTTLES), { $id: 'b1' })).toBeNull()
   })
 
   it('still refuses a site collection with no site', () => {
-    expect(href('layouts', { $id: 'l1' })).toBeNull()
-    expect(href('screens', { $id: 's1', versionId: 'v1' })).toBeNull()
+    expect(href(core('layouts'), { $id: 'l1' })).toBeNull()
+    expect(href(core('screens'), { $id: 's1', versionId: 'v1' })).toBeNull()
   })
 
   /**
@@ -623,31 +500,24 @@ describe('where a result row goes at the organization hub (AGL-2662)', () => {
    * by the dialog, rather than rendering as a link to nowhere.
    */
   it('returns null rather than a link to nowhere', () => {
+    const onSite = { orgSlug: 'acme', hostSubdomain: 'demo' }
     // The besigner routes are version-keyed; a screen with no version has
     // never been opened.
-    expect(href('screens', { $id: 's1' })).toBeNull()
-    expect(href('emails', { $id: 's1' })).toBeNull()
+    expect(buildResultHref(core('screens'), { $id: 's1' }, onSite, buildRouteFake)).toBeNull()
+    expect(buildResultHref(core('emails'), { $id: 's1' }, onSite, buildRouteFake)).toBeNull()
     // A membership row with no subdomain cannot address its site.
-    expect(href('sites', { $id: 'h1' })).toBeNull()
-    // Off a site there is no host segment to build with.
-    expect(
-      buildResultHref(
-        'layouts',
-        { $id: 'l1' },
-        { orgSlug: 'acme', hostSubdomain: null },
-        ((r: any) => String(r)) as any,
-      ),
-    ).toBeNull()
-    // A lead off a site links by its id alone since AGL-3275 — see the
-    // org-level suite above — so it is no longer one of the null cases.
-    // And without a workspace slug nothing in the console is addressable.
-    expect(
-      buildResultHref(
-        'screens',
-        { $id: 's1', versionId: 'v1' },
-        { orgSlug: null, hostSubdomain: 'demo' },
-        ((r: any) => String(r)) as any,
-      ),
-    ).toBeNull()
+    expect(buildResultHref(core('sites'), { $id: 'h1' }, onSite, buildRouteFake)).toBeNull()
+    // And without a workspace slug nothing in the console is addressable —
+    // a plugin's group included, which is never asked.
+    for (const definition of [core('screens'), searchSourceEntity(PEOPLE)]) {
+      expect(
+        buildResultHref(
+          definition,
+          { $id: 's1', versionId: 'v1' },
+          { orgSlug: null, hostSubdomain: 'demo' },
+          buildRouteFake,
+        ),
+      ).toBeNull()
+    }
   })
 })

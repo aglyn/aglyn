@@ -1053,7 +1053,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             filtering
               ? undefined
               : 'Build your catalog: add a product, then drop commerce ' +
-                'blocks on any screen in Besigner.'
+                'blocks on any page in Besigner.'
           }
         />
         {products.length === 0 && page === 0 && productsStatus !== 'loading' ? null : (

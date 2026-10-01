@@ -31,7 +31,7 @@ export const PropertiesDialogComponent = forwardRef<any, PropertiesDialogProps>(
     return (
       <CloseableDrawerComponent
         ref={ref}
-        drawerTitle={'Screen Properties'}
+        drawerTitle={'Page Properties'}
         action={'Done'}
         disableCloseButton
         onClose={onClose}

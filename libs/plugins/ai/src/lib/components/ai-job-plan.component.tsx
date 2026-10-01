@@ -127,7 +127,7 @@ export function AiJobPlan({
           </Typography>
           {plan.reuse.map((entry, index) => (
             <Typography key={`reuse-${index}`} variant="body2" role="listitem">
-              Reuses the {entry.kind} {named(entry.id)} — {entry.purpose}
+              Reuses the {entry.kind === 'screen' ? 'page' : entry.kind} {named(entry.id)} — {entry.purpose}
             </Typography>
           ))}
           {plan.create.map((entry, index) => (
@@ -141,7 +141,7 @@ export function AiJobPlan({
           ))}
           {plan.screens.map((screen, index) => (
             <Typography key={`screen-${index}`} variant="body2" role="listitem">
-              Builds the screen {screen.title} at {screen.slug}
+              Builds the page {screen.title} at {screen.slug}
               {screen.duplicateOf
                 ? `, from a copy of ${named(screen.duplicateOf)}`
                 : ''}

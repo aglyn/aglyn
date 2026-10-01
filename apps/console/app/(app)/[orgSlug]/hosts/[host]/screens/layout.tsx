@@ -27,7 +27,7 @@ export async function generateMetadata({
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Screens · ${host}` }
+  return { title: `Pages · ${host}` }
 }
 
 export default function HostScreensTitleLayout({

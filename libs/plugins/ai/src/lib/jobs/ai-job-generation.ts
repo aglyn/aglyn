@@ -94,7 +94,7 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
   if (!plan) return []
   const lines = ['Confirmed plan:']
   for (const entry of plan.reuse) {
-    lines.push(`- reuse the ${entry.kind} ${referenceOf(plan, entry.id)}: ${entry.purpose}`)
+    lines.push(`- reuse the ${entry.kind === 'screen' ? 'page' : entry.kind} ${referenceOf(plan, entry.id)}: ${entry.purpose}`)
   }
   for (const entry of plan.create) {
     const from = entry.duplicateOf ? `, from a copy of ${referenceOf(plan, entry.duplicateOf)}` : ''
@@ -103,7 +103,7 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
   }
   for (const screen of plan.screens) {
     const sections = screen.sections.map((section) => section.name).join(', ')
-    lines.push(`- the screen "${screen.title}" at ${screen.slug}${sections ? `: ${sections}` : ''}`)
+    lines.push(`- the page "${screen.title}" at ${screen.slug}${sections ? `: ${sections}` : ''}`)
   }
   // The one place a Video embed is admitted (AGL-3433): where the plan lists it, at the brief's link or none.
   for (const embed of plan.embeds ?? []) {

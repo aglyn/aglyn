@@ -13,7 +13,7 @@ The **console** is where you manage a site. Here's what each part of the chrome 
 1. **App bar** — the Aglyn console wordmark, search, notifications, and your account menu.
 2. **Workspace switcher** — jump between the organizations you belong to.
 3. **Site sections** — every area of the selected site (Dashboard,
-   Screens, Media, Content, …).
+   Pages, Media, Content, …).
 4. **Site switcher** — switch between the sites in your workspace.
 5. **Page body** — the selected section's cards and tables.
 
@@ -22,9 +22,9 @@ The **console** is where you manage a site. Here's what each part of the chrome 
 - **Site switcher** (left) — jump between the sites you belong to, search them by name
   with **Find site…**, or create a new one.
 - **Breadcrumbs** — show the current site's display name and where you are.
-- **Screen switcher** — a searchable dropdown for hopping between screens without leaving
-  the editor: your recent screens by default, or type to find any screen or layout in the
-  site by name. **View all screens** opens the full list.
+- **Page switcher** — a searchable dropdown for hopping between pages without leaving
+  the editor: your recent pages by default, or type to find any page or layout in the
+  site by name. **View all pages** opens the full list.
 - **Version dropdown** (right, near your avatar) — pick or schedule a
   [version](../building-sites/screens-and-layouts/versions-and-publishing.md) to view.
 - **Notifications** — the bell shows an unread badge and drops down your 10 most recent
@@ -121,13 +121,13 @@ These four are where a new site's work happens:
 | Section | What's there |
 | --- | --- |
 | **Dashboard** | The site at a glance — analytics and recent-signup summaries, and the ten most recent activity entries. |
-| **Screens** | The screen hierarchy — create, reorder (drag-and-drop), and open screens. This is where you build; start at [Publish your first screen](publish-your-first-screen.md). |
+| **Pages** | The page hierarchy — create, reorder (drag-and-drop), and open pages. This is where you build; start at [Publish your first page](publish-your-first-screen.md). |
 | **Media** | The media library — folders, images, video, and files. |
 | **Setup** | Basic details, SEO, tracking, theme, and emails. Each tab is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
 
 Alongside them, and always present: **Layouts** and **Components** (the shared frames and
-reusable pieces screens are assembled from — see
-[Screens & Layouts](../building-sites/screens-and-layouts/overview.md)), **Templates**
+reusable pieces pages are assembled from — see
+[Pages & Layouts](../building-sites/screens-and-layouts/overview.md)), **Templates**
 (saved starting points), **Content** (collections and blog entries), **Users** (the people
 who sign in to the site you're building, not your own team), and **Analytics**. **Admin**
 appears only if you're an owner or admin of the site; it holds per-site plugin settings,
@@ -146,7 +146,7 @@ in your account menu under **Billing** — one bill covers every site in the wor
 
 ## Editing vs. managing
 
-You can manage a screen (rename, schedule, view raw JSON) from its **detail page**
+You can manage a page (rename, schedule, view raw JSON) from its **detail view**
 without opening the editor. When you want to design it, open the
 **[Besigner](../building-sites/besigner/overview.md)**.
 
@@ -189,7 +189,7 @@ a site doesn't store its plan, owner or template. See
 | --- | --- |
 | **Live** (green) | How many pages are published — "12 published pages." |
 | **Draft** (gray outline) | "Nothing published yet — visitors see the placeholder." |
-| **Maintenance** (amber) | "Every path serves the maintenance screen." |
+| **Maintenance** (amber) | "Every path serves the maintenance page." |
 | **Suspended** (red) | "This site is serving a lockdown notice instead of content." |
 
 **Live** means exactly one thing: the site has at least one published page. Publishing
@@ -211,7 +211,7 @@ applies, in this order.
 So a suspended or maintenance site is **never** shown as **Live**, however much it has
 published. The order is the point: reporting either as Live would be the console
 agreeing with someone who thinks their site is up while every request is being served a
-lockdown or maintenance screen.
+lockdown or maintenance page.
 
 A **timed** suspension whose end has already passed is treated as over, even though the
 suspension fields are still on the record, and the site falls through to whatever it
@@ -267,7 +267,7 @@ and in through a card action.
 
 ## Next
 
-- [Publish your first screen](publish-your-first-screen.md)
+- [Publish your first page](publish-your-first-screen.md)
 
 ## Workspace settings & notifications
 

@@ -108,7 +108,7 @@ export function SiteBackupCard(props: { hostId: string }) {
       const confirmed = await confirm({
         title: 'Restore this backup?',
         description:
-          'Screens, layouts, theme, content, and data from the backup ' +
+          'Pages, layouts, theme, content, and data from the backup ' +
           'overwrite matching items on this site. Domain, members, and ' +
           'inbox are untouched.',
         confirmationText: 'Restore',
@@ -156,7 +156,7 @@ export function SiteBackupCard(props: { hostId: string }) {
       header={'Backup & restore'}
       help={docsHelp('downgradingAndCanceling', {
         excerpt:
-          'Export the whole site — screens, theme, content, data — as ' +
+          'Export the whole site — pages, theme, content, data — as ' +
           'one JSON file you can restore here or import into another site.',
       })}
       contentGutterX
@@ -164,7 +164,7 @@ export function SiteBackupCard(props: { hostId: string }) {
     >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
-          {'Download everything designable — screens, layouts, theme, ' +
+          {'Download everything designable — pages, layouts, theme, ' +
             'content, data, automations — as one file, and restore it ' +
             'here (or import it into another of your sites).'}
         </Typography>

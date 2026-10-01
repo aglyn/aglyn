@@ -6,7 +6,7 @@ description: Set colors, fonts, and light/dark schemes with a live preview.
 
 # Edit your theme
 
-Your **theme** controls how the whole site looks — applied consistently across every screen
+Your **theme** controls how the whole site looks — applied consistently across every page
 and previewed live as you edit.
 
 :::info Plan availability
@@ -123,9 +123,9 @@ nothing is saved until you save it. See
 - Prefer theme color *references* over fixed hex values when styling elements; references
   adapt per scheme, fixed colors don't (though the Besigner can scope custom colors per
   scheme too).
-- The theme also styles screen previews and published pages, so there's one source of truth.
+- The theme also styles previews in the Besigner and published pages, so there's one source of truth.
 
 ## Related
 
 - [The Besigner](../besigner/overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

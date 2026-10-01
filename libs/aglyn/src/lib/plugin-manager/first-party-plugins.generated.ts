@@ -11,6 +11,7 @@ import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from '.
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
@@ -924,6 +925,125 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
       "agency": true,
       "enterprise": true
     }
+  },
+]
+
+/**
+ * Every meter a first-party plugin contributes to the platform's cost model,
+ * in breakdown order, declared by that plugin (AGL-3080). Core keeps the rates.
+ */
+export const PLUGIN_COST_AXES_DECLARED: readonly ResolvedPluginCostAxis[] = [
+  {
+    "pluginId": "forms",
+    "id": "formSubmissions",
+    "order": 30,
+    "fields": [
+      "formSubmissions"
+    ],
+    "rate": "perFormSubmission"
+  },
+  {
+    "pluginId": "crm",
+    "id": "contacts",
+    "order": 60,
+    "fields": [
+      "crmRecordsCount"
+    ],
+    "fallbackFields": [
+      "contactsCount"
+    ],
+    "recordedFields": [
+      "companiesCount",
+      "dealsCount"
+    ],
+    "rate": "perContactMonth"
+  },
+  {
+    "pluginId": "ai",
+    "id": "assist",
+    "order": 80,
+    "fields": [
+      "assistCostUsd"
+    ],
+    "live": {
+      "collection": "assistUsage",
+      "fields": [
+        "providerCostUsd",
+        "estCostUsd"
+      ]
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "id": "runs",
+    "order": 90,
+    "fields": [
+      "workflowRuns",
+      "actionRuns"
+    ],
+    "rate": "perRun"
+  },
+]
+
+/**
+ * Every band a first-party plugin contributes to the utilization table, in
+ * column order, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
+  {
+    "pluginId": "forms",
+    "id": "formSubmissions",
+    "label": "Form submissions",
+    "order": 40,
+    "fields": [
+      "formSubmissions"
+    ],
+    "entitlement": "formSubmissionsPerMonth",
+    "perHost": true
+  },
+  {
+    "pluginId": "crm",
+    "id": "contactsCount",
+    "label": "CRM records",
+    "order": 70,
+    "fields": [
+      "crmRecordsCount"
+    ],
+    "fallbackFields": [
+      "contactsCount"
+    ],
+    "entitlement": "contactsPerHost"
+  },
+  {
+    "pluginId": "ai",
+    "id": "assistCredits",
+    "label": "Assist credits",
+    "order": 90,
+    "fields": [
+      "assistCostUsd"
+    ],
+    "entitlement": "assistCreditsPerMonth",
+    "unitCostUsd": 0.001
+  },
+  {
+    "pluginId": "workflows",
+    "id": "workflowRuns",
+    "label": "Workflow runs",
+    "order": 100,
+    "fields": [
+      "workflowRuns"
+    ],
+    "entitlement": "workflowRunsPerMonth"
+  },
+  {
+    "pluginId": "workflows",
+    "id": "actionRuns",
+    "label": "Action runs",
+    "order": 110,
+    "fields": [
+      "actionRuns"
+    ],
+    "entitlement": "actionRunsPerMonth"
   },
 ]
 

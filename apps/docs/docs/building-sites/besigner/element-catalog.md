@@ -75,7 +75,7 @@ for the site.
 | **Container** | Centers content and caps its maximum width. |
 | **Stack** | One-dimensional row or column with a gap. A natural frame for a [repeat](repeat.md), though every element can repeat. |
 | **Grid** | Responsive 12-column layout. See [Grid](#grid) below. |
-| **Layout slot** | Where a bound layout injects the screen's own content. Its **Component** is `main` unless you change it — see below. |
+| **Layout slot** | Where a bound layout injects the page's own content. Its **Component** is `main` unless you change it — see below. |
 
 ### The page's `main` landmark
 
@@ -85,10 +85,10 @@ needs. You don't have to place it, and you can't accidentally end up with two.
 
 It goes on the page's content region, which the platform works out for you:
 
-- On a screen framed by a **shared layout**, the layout's **Layout slot** — everything
+- On a page framed by a **shared layout**, the layout's **Layout slot** — everything
   between the chrome. The site nav and the site footer stay outside it, which is the
   whole point of the landmark.
-- On a screen with **no layout**, the **Document** layer at the top of the hierarchy.
+- On a page with **no layout**, the **Document** layer at the top of the hierarchy.
 
 Both of those have a **Component** attribute if you want to say otherwise. Set the
 Document layer to `main` and the slot steps aside; set the slot to `section` (for a layout
@@ -202,7 +202,7 @@ never in doubt.
 
 **Accordion Summary** takes an optional **Header links to**. Leave it empty and the whole
 header row toggles the panel, which is what every accordion does by default. Point it at a
-screen and the row splits in two: the header text becomes a link to that screen, and the
+page and the row splits in two: the header text becomes a link to that page, and the
 chevron beside it becomes the toggle. That split is the only way a header can do both — a
 link placed inside the toggle button is invalid markup and unreachable by keyboard. It is
 what lets a mobile drawer offer *Product* both as a group to open and as a page to visit.
@@ -213,21 +213,21 @@ The **FAQ** preset drops three complete panels at once.
 
 | Element | What it's for |
 | --- | --- |
-| **Screen Link** | A link that targets a screen, a content collection's listing page, one of its entries, or its RSS feed — by id, so it survives slug renames. Renders as a button or as a text link. See [Linking to a listing, an entry, or a feed](#linking-to-a-collection-listing). |
+| **Page Link** | A link that targets a page, a content collection's listing page, one of its entries, or its RSS feed — by id, so it survives slug renames. Renders as a button or as a text link. See [Linking to a listing, an entry, or a feed](#linking-to-a-collection-listing). |
 | **Link Container** | A box that is itself one link, so a whole card is the click target. See [Link Container](#link-container) below. |
 | **App bar** / **Toolbar Content** | The site header frame. The app bar is the band; **Toolbar Content** is the row inside it that holds the brand, the links and the actions, and it may only be dropped into an app bar. |
 | **Nav menu** / **Mega menu** | Dropdown and full-width navigation menus. |
 | **Drawer** / **Menu Button** | A panel that slides in from the **left, right, top or bottom**. Open it with a Menu Button or an interaction. **Width** applies to left/right drawers; top and bottom sheets span the viewport, and the control is hidden for them. The **Mobile Nav** preset wires a hamburger, a drawer and a desktop link row in one insert. |
 | **Tabs** / **Tab Panel** | A tab strip and its panels. See [Tabs](#tabs) below. |
-| **Breadcrumbs** | The trail showing where a page sits. Fill it with Screen Links so it survives renames, and leave the **current** page as plain Typography — linking a page to itself is the classic breadcrumb mistake. Set **Collapse above** to fold a long trail into an ellipsis. |
+| **Breadcrumbs** | The trail showing where a page sits. Fill it with Page Links so it survives renames, and leave the **current** page as plain Typography — linking a page to itself is the classic breadcrumb mistake. Set **Collapse above** to fold a long trail into an ellipsis. |
 | **Pagination** | A page picker. See [Pagination](#pagination) below. |
 | **Language switcher** / **Theme mode switcher** | Locale and light/dark controls. The theme mode switcher is hidden on published pages while the theme's Dark scheme is off. |
-| **Table of Contents** | An "On this page" list built from the headings of a [Markdown](long-form-markdown.md) element on the same screen. |
+| **Table of Contents** | An "On this page" list built from the headings of a [Markdown](long-form-markdown.md) element on the same page. |
 
 ### Where a link opens
 
-**Screen Link** and **Button** both carry an **Open link in** dropdown once they point at
-a screen or a URL:
+**Page Link** and **Button** both carry an **Open link in** dropdown once they point at
+a page or a URL:
 
 - **Same tab** — the default, and what you want for navigation inside your own site. The
   visitor keeps their back button and their history.
@@ -244,13 +244,13 @@ switch, which applies to external destinations only.
 
 ### Linking to a listing, an entry, or a feed {#linking-to-a-collection-listing}
 
-The **Screen** picker is a search box. Type and it looks through four kinds of target,
+The **Page** picker is a search box. Type and it looks through four kinds of target,
 grouped as you go:
 
-- **Pages** — your screens.
+- **Pages** — your site's pages.
 - **Collection listings** — the page at `/{collection}` that lists a collection's entries,
   such as your blog's `/blog`. Each reads like **Blog (/blog) — collection listing**, so a
-  listing is never mistaken for a screen with the same name.
+  listing is never mistaken for a page with the same name.
 - **RSS feeds** — a collection's feed, reading like **Blog (/blog/rss.xml) — RSS feed**.
 - **Entries** — a single post, reading like **Hello (/blog/hello) — Blog entry · published**.
   The status is there because a link to a draft goes nowhere until the draft is published.
@@ -262,16 +262,16 @@ a few matches per collection. Leave the box empty and it offers the entries most
 worked on.
 
 Picking any of them stores the target itself, not its address. Rename the collection's slug,
-or the entry's, and every link follows, just as a screen link follows its screen. An entry
+or the entry's, and every link follows, just as a page link follows its page. An entry
 link is assembled from both names at render time, so renaming the collection moves every
 link to every entry inside it. For a listing it makes no difference whether the collection
-has a list template screen: without one, the link opens the built-in listing.
+has a list template page: without one, the link opens the built-in listing.
 
 Deleting the collection warns you first: [its delete dialog](../site-templates/build-a-blog.md#delete-a-collection)
-names the published screens, layouts and components that link to its listing, so you can point
+names the published pages, layouts and components that link to its listing, so you can point
 those links elsewhere. If the collection is deleted anyway, or its slug is cleared, the link
 stops navigating, the canvas flags it as a broken link, and the picker shows **⚠ Unavailable
-collection listing (…)** — the same treatment an unpublished screen gets. Pick the listing
+collection listing (…)** — the same treatment an unpublished page gets. Pick the listing
 again or clear the link. A typed `/blog` in **External URL** gets none of this: it never
 follows a rename, nothing warns you when it stops working, and the delete dialog does not
 count it.
@@ -282,14 +282,14 @@ address yet, so the link renders as nothing on the live page rather than as an a
 site would 404 on. The picker shows **⚠ Unavailable entry (…)**. Publish the post and every
 link to it starts working — you do not need to reopen the pages that link to it.
 
-The same entries appear everywhere the Screen picker does — **Button**, **Image**, **Link
+The same entries appear everywhere the Page picker does — **Button**, **Image**, **Link
 Container**, **Tabs** links, an **Accordion Summary**'s header link, a form's redirect, and a
 component's **Link** property.
 
 ### Link Container {#link-container}
 
 Put an icon, a heading and a description inside a **Link Container** and the whole box goes
-to its **Screen** or **External URL**. Keep other links out of it: a link inside a link is
+to its **Page** or **External URL**. Keep other links out of it: a link inside a link is
 invalid, and browsers move the inner one out of the box. Use **Typography** for the title.
 
 A screen reader names a link by reading the text inside it. A box holding only an icon, or an
@@ -318,23 +318,23 @@ On the **canvas** every panel is shown stacked, each captioned with the tab it b
 — a hidden panel can't be edited, and a caption with a name you don't recognize is a
 label typo you can see. Preview and the published site show one at a time.
 
-#### Tabs that go to another screen
+#### Tabs that go to another page {#tabs-that-go-to-another-screen}
 
 A row like **Blog · Changelog · Newsroom** isn't really a tab strip — it's navigation
-between three separate screens. Give a tab a screen and it becomes one: pick the target in
+between three separate pages. Give a tab a page and it becomes one: pick the target in
 **Tab 1 link**, **Tab 2 link** and so on. A picker appears for each tab you've named, up
 to the first eight. Those tabs render as real links — a visitor can ⌘-click or middle-click
 one into a new tab, and search engines follow them — and they stop switching panels.
 
 Leave the link **unset** for the tab of the page the row is already on — a page that links
 to itself helps nobody. The **first** tab with no link is the one the row opens on and
-marks as the current page, so give that tab the name of the screen you're placing the row
+marks as the current page, so give that tab the name of the page you're placing the row
 on. Mixing the two is fine: unlinked tabs keep revealing their own Tab Panel.
 
 Link **every** tab and there is no current one to mark: the row renders with no indicator.
-That's the signal you've linked the tab you're standing on. A tab pointing at a screen
+That's the signal you've linked the tab you're standing on. A tab pointing at a page
 that has since been deleted goes inert — no link, and no panel either — so re-point it
-after you remove a screen.
+after you remove a page.
 
 As soon as one tab has a link the whole row is marked up as **navigation** rather than as a
 tab list, which is what it now is. Give it a name in **Accessible label** so it doesn't
@@ -352,7 +352,7 @@ itself change what the rest of the page shows — wire an
 | --- | --- |
 | **Typography** | One run of text — a headline, a label, a paragraph. The element you [edit inline on the canvas](text-editing.md). |
 | **Markdown** | A whole document, held as markdown source in one element. For policies, terms and anything whose real source is a `.md` file. See [Long documents in markdown](long-form-markdown.md). |
-| **Entry Body** | A content entry's markdown body, on an entry-template screen. |
+| **Entry Body** | A content entry's markdown body, on an entry-template page. |
 
 ## Data Display
 

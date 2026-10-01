@@ -2138,7 +2138,7 @@ export function EntryDetailPage() {
                       title: 'The stored document',
                       excerpt:
                         'Every field this entry holds, exactly as saved — the ' +
-                        'names a template screen’s entry tokens read from.',
+                        'names a template page’s entry tokens read from.',
                     })}
                     // Gutters and the content border belong to the CONTENT, so
                     // they come off with it. Left on, a closed card draws an

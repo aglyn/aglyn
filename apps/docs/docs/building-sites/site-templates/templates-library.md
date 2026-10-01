@@ -11,7 +11,7 @@ is on your live site until you deliberately use it. That is the whole point of t
 library — it means installing something from the marketplace can never publish pages
 to a site you are running.
 
-Find it at **Templates** in a site's navigation, alongside Screens, Layouts and
+Find it at **Templates** in a site's navigation, alongside Pages, Layouts and
 Components — the three things a template can produce.
 
 A template is a **copy**, not a live link: once you use one, the result is yours outright
@@ -36,8 +36,8 @@ first. See
 
 | Kind | What it holds | What you get from it |
 | --- | --- | --- |
-| **Page** | A screen's content | A new screen, unpublished |
-| **Component** | An element tree | A reusable component, or a drop onto a screen |
+| **Page** | A page's content | A new page, unpublished |
+| **Component** | An element tree | A reusable component, or a drop onto a page |
 | **Layout** | Page chrome — header, footer, navigation | A new shared layout |
 
 ## Installing from the marketplace
@@ -66,11 +66,11 @@ condition comes through.
 
 Look for **Save as template**:
 
-- **Screens** list — saves the page's published content
+- **Pages** list — saves the page's published content
 - **Layouts** list — saves the layout, including its content slot
 - **Components** list — saves the component definition
 
-A page template captures the **published** version of a screen. If a screen has never
+A page template captures the **published** version of a page. If a page has never
 been published there is nothing to capture, and Aglyn will tell you to publish it
 first rather than saving an empty template that fails later.
 
@@ -116,8 +116,8 @@ confirm it.
 The template lands in your library as **Saved here**, like one you saved yourself. It is bound
 to no collection, changes nothing on your site, and counts against your template allowance.
 To put it to work, **Use** it to create the page, then pick that page right away as the
-collection's **Entry template screen** in Content, the product page template in Store settings,
-or the author page screen on the Authors tab. Until you pick it, the new page shows its tokens
+collection's **Entry page** in Content, the product page template in Store settings,
+or the **Author page template** on the Authors tab. Until you pick it, the new page shows its tokens
 at its own address; once picked, it stops serving there and renders each record instead.
 
 ## Where a template came from
@@ -154,7 +154,7 @@ later. Delete one you don't want and it stays deleted.
 ## Templates are per-site
 
 A template lives on the site you saved it to. That keeps a template next to the
-screens, layouts and components it was built from.
+pages, layouts and components it was built from.
 
 Marketplace **plugins and add-ons** work differently: those install once for the
 whole organization and apply to every site, and a site can override the

@@ -55,7 +55,7 @@ export function hostNavTabItems(
     },
     {
       id: 'nav-tab-screens',
-      label: 'Screens',
+      label: 'Pages',
       href: buildRoute(Route.HOST_SCREENS, { orgSlug, host }),
     },
     {

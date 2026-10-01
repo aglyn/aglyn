@@ -27,7 +27,7 @@ elsewhere and it collapses again.
 
 ## Dropdown menu
 
-Insert **Dropdown Menu**, set its **Label**, and drop screen links (or
+Insert **Dropdown Menu**, set its **Label**, and drop page links (or
 anything else) inside. Its only attribute is **Label** — how the menu
 opens is not an attribute:
 
@@ -61,7 +61,7 @@ automatically.
 ## Drawer & menu button
 
 The **Drawer** slides in from the page edge and holds any canvas
-children — typically a vertical stack of screen links. It opens three
+children — typically a vertical stack of page links. It opens three
 ways:
 
 1. A **Menu Button** element. **Clicking it toggles the page's first
@@ -88,7 +88,7 @@ you get a working responsive pattern immediately:
 - an inline **link row** — hidden on mobile and tablet,
 - a **Drawer** with a vertical link stack, already answering the button.
 
-Swap the placeholder links for your screens and you're done. The
+Swap the placeholder links for your pages and you're done. The
 show/hide wiring is plain [visibility styling](#responsive-visibility),
 so you can retune the breakpoints per element afterwards.
 
@@ -201,4 +201,4 @@ breakpoint-scoped styles behave on the canvas.
 - [Walkthrough: build a mega menu with hover interactions](../../guides/mega-menu-with-interactions.md)
 - [Interactions & custom HTML](../besigner/interactions-and-custom-html.md)
 - [Responsive styling & custom CSS](../besigner/responsive-styling.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

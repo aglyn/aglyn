@@ -254,7 +254,7 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
             : null,
         hrefReason: versionId
           ? 'This site’s console URL has not resolved yet'
-          : 'This screen has no saved version yet',
+          : 'This page has no saved version yet',
         campaigns: readCampaignIds(row).length,
       }
     },
@@ -318,8 +318,8 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
             'above, from the links its emails carried.'}
         </Typography>
         <MemberTable
-          heading="Screens"
-          noun="screen"
+          heading="Pages"
+          noun="page"
           collectionName="screens"
           hostId={hostId}
           campaignId={campaignId}
@@ -335,16 +335,16 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
           page that does both is linked instead.
          */}
         <Typography variant="caption" color="text.secondary">
-          {'Page views are not shown here. A screen keeps no running total ' +
+          {'Page views are not shown here. A page keeps no running total ' +
             'on its own record — traffic is stored a day at a time — so ' +
             'counting it would be a fresh read of the site’s history every ' +
-            'time this page opens. '}
+            'time this view opens. '}
           {analyticsHref ? (
             <AppLink href={analyticsHref}>
-              {'The site’s analytics measures it by screen.'}
+              {'The site’s analytics measures it by page.'}
             </AppLink>
           ) : (
-            'The site’s analytics page measures it by screen.'
+            'The site’s analytics view measures it by page.'
           )}
         </Typography>
         <MemberTable

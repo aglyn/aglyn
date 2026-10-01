@@ -384,8 +384,8 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
           help={docsHelp('layouts', {
             anchor: '#what-a-layout-is',
             excerpt:
-              'A layout is the shared frame a screen renders inside — the ' +
-              'header, footer and chrome many screens have in common.',
+              'A layout is the shared frame a page renders inside — the ' +
+              'header, footer and chrome many pages have in common.',
           })}
           contentGutterX
           contentGutterY
@@ -442,7 +442,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
               ))}
             </TextField>
             <Typography variant="caption" color="text.secondary">
-              {`ID ${layoutId} — persisted in screen documents, so it never changes`}
+              {`ID ${layoutId} — persisted in page documents, so it never changes`}
             </Typography>
             {/* Save stays with the fields it saves. Open-besigner moved to
                 the hero, and "Back to layouts" is dropped — the breadcrumb
@@ -470,7 +470,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
           help={docsHelp('versionsAndPublishing', {
             anchor: '#publish--roll-back',
             excerpt:
-              'Publishing a layout version changes every screen bound to it. ' +
+              'Publishing a layout version changes every page bound to it. ' +
               'Saving does not — a save is not a publish.',
           })} contentGutterX contentGutterY>
           {versions.length === 0 ? (

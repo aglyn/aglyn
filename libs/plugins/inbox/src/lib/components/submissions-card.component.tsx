@@ -717,7 +717,7 @@ export function SubmissionsCard({
               : hostId == null
                   ? 'No form submissions on any site yet.'
                   : 'No form submissions yet. Add a Contact Form element to a ' +
-                    'screen — visitor messages arrive here.'}
+                    'page — visitor messages arrive here.'}
           </Typography>
         ) : (
           <>
@@ -789,7 +789,7 @@ export function SubmissionsCard({
               (hostId == null && readerSite
                 ? ` · ${orgSiteName(orgMount, readerSite)}`
                 : '') +
-              (reader?.screenId ? ` · screen ${reader.screenId}` : '')}
+              (reader?.screenId ? ` · page ${reader.screenId}` : '')}
             {/*
               THE PAGE THE FORM WAS ON. Stored by the submit route since the
               form existed and rendered by nothing, which is also the field

@@ -7,7 +7,7 @@ description: "An AI landing page generator built into the canvas: describe a pag
 # Generate a page from a prompt
 
 Describe the page you want, and an AI build job builds it for the site you have open: a new
-screen in your layout, made from your theme and the components and forms your site already
+page in your layout, made from your theme and the components and forms your site already
 has. It arrives as an unpublished draft, and nothing on your live site changes until you
 publish it.
 
@@ -18,8 +18,8 @@ workspace.
 
 ## Describe the page
 
-Open **Screens** for the site and choose **Describe it**, beside **Templates** and **Create
-New Screen**. You can also start one from **AI jobs** in the Assist panel, with **Describe a
+Open **Pages** for the site and choose **Describe it**, beside **Templates** and **Create
+New Page**. You can also start one from **AI jobs** in the Assist panel, with **Describe a
 page**.
 
 Write what the page is for in one box: who it is for, what it should say and what visitors
@@ -52,7 +52,7 @@ collecting submissions into your inbox like any form.
 The job first builds anything the plan creates, one at a time: a layout, a form or a reusable
 component, each as a draft, the same way a layout, form or component job builds one. Then it
 builds the page one section at a time, top to bottom, in the background, so you can leave the
-Screens page while it works. Each section is checked against
+Pages list while it works. Each section is checked against
 [the building rules](../../ai/how-aglyn-ai-builds.md) as part of the whole page: one top-level
 heading and headings in order, your theme's colors, spacing and type, and your components
 placed as instances instead of copied.
@@ -66,12 +66,12 @@ placed as instances instead of copied.
 
 ## The draft
 
-When the job is done, the page is a new screen in **Screens**, and **Open draft** on the job
+When the job is done, the page is a new draft in **Pages**, and **Open draft** on the job
 opens it in the Besigner.
 
-- **It is not live.** The screen has no address on your site until you publish it, so it is
+- **It is not live.** The page has no address on your site until you publish it, so it is
   not in your navigation, sitemap or site search, and visitors cannot reach it. Publish it
-  from the Besigner like any other screen; see
+  from the Besigner like any other page; see
   [versions and publishing](versions-and-publishing.md).
 - **It is ready to publish.** It renders in the layout the plan chose, and it has an address,
   a search title and a search description written from the page's own text.
@@ -81,8 +81,8 @@ opens it in the Besigner.
   **Layouts**, **Forms** or **Components**, and **AI jobs** links to each. The page renders in
   the new layout and places the new component and form; nothing else on your site uses them
   until you do.
-- **It counts like a screen you create.** The draft counts against your plan's screen
-  allowance. When the site has no screen to spare, the job says so before it spends anything.
+- **It counts like a page you create.** The draft counts against your plan's page
+  allowance. When the site has no page to spare, the job says so before it spends anything.
 
 ## What a page job uses
 
@@ -101,6 +101,6 @@ Page jobs need the **Generate with AI** permission. See
 ## Related
 
 - [How Aglyn AI builds](../../ai/how-aglyn-ai-builds.md)
-- [Screens](screens.md)
+- [Pages](screens.md)
 - [Layouts](layouts.md#generate-a-layout-with-aglyn-ai)
 - [Versions and publishing](versions-and-publishing.md)

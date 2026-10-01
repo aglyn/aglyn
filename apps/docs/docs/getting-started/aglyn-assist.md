@@ -7,7 +7,7 @@ description: Ask the built-in AI helper how to do anything in Aglyn — it answe
 # Aglyn Assist
 
 **Aglyn Assist** is the chat helper in the bottom-right corner of every console
-page. Ask it how to do something — publish a screen, connect a domain, set up
+page. Ask it how to do something — publish a page, connect a domain, set up
 shipping, invite a teammate — and it answers from this documentation, linking
 the exact docs section and the console page where you do it.
 
@@ -19,7 +19,7 @@ the exact docs section and the console page where you do it.
   naming the documentation sections it drew on, each one a link straight to
   that section. See [Where an answer came from](#where-an-answer-came-from).
 - **Guide you on the page you're on** (Pro plans and up) — the assistant knows
-  which console screen you're viewing and answers about *that* screen, rather
+  which console page you're viewing and answers about *that* page, rather
   than giving you a general answer you then have to translate.
 - **Offer to take you to the right page** (Pro plans and up) — when what you
   asked for starts somewhere else, it can show a card that opens that page for
@@ -62,20 +62,20 @@ The main answer is in plain words: what to click, in the order you'll click
 it, with nothing assumed about what you already know.
 
 Underneath, when there's something technical worth adding — the URL of the
-page, the identifier in it, the field or API behind the screen — there's a
+page, the identifier in it, the field or API behind it — there's a
 collapsed **Under the hood** line. Open it if you want that detail; ignore it
 entirely if you don't. Nothing is hidden from you and nothing is explained at
 you.
 
 ## Offers to open a page
 
-Sometimes the thing you asked about starts on a different screen. When the
+Sometimes the thing you asked about starts on a different page. When the
 assistant knows which one, it shows a small card offering to take you there —
 with the values to use, when it has worked them out from your question.
 
 **The card only opens the page.** It never fills in a form for you, never
 saves anything, and never makes a change on your behalf. You land on the
-normal screen, fill it in yourself, and press the button yourself — with all
+normal page, fill it in yourself, and press the button yourself — with all
 the usual permission checks in place. If you'd rather stay where you are,
 choose **No thanks** and the card goes away.
 
@@ -100,7 +100,7 @@ it could not match to your canvas is listed under **Left out**.
   the open canvas as unsaved edits, all in one step, so a single **Undo** takes
   the whole change back. Nothing is saved or published until you do that
   yourself. A proposed search title or description is filled into
-  **Screen Properties**, where **Save SEO** stores it.
+  **Page Properties**, where **Save SEO** stores it.
 - **The live version is never edited in place.** When the version open is the
   one your live site shows, the card offers **Make a new version** instead —
   the same **New version** you would use yourself. Once the new version opens,

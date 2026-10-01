@@ -36,13 +36,6 @@ const mockReads: Array<{ path: string; constraints: any[] }> = []
 const mockFailing = new Set<string>()
 /** Rows returned per collection name. */
 let mockRowsByCollection: Record<string, Array<Record<string, any>>> = {}
-/**
- * Rows returned for one exact path, which the fan-out needs: an org-level
- * leads read asks the SAME collection name of several sites, and a fixture
- * keyed only by that name would hand every site the same people — hiding
- * both the merge and the stamp that says which site a row came from.
- */
-let mockRowsByPath: Record<string, Array<Record<string, any>>> = {}
 
 jest.mock('firebase/firestore', () => ({
   collection: (_firestore: unknown, ...segments: string[]) => ({
@@ -74,8 +67,7 @@ jest.mock('firebase/firestore', () => ({
     if (mockFailing.has(name)) throw Object.assign(new Error('denied'), {
       code: 'permission-denied',
     })
-    const rows =
-      mockRowsByPath[String(builtQuery.__path)] ?? mockRowsByCollection[name] ?? []
+    const rows = mockRowsByCollection[name] ?? []
     const cursor = builtQuery.constraints.find((c: any) => c.type === 'startAfter')
     const cap = builtQuery.constraints.find((c: any) => c.type === 'limit')
     const from = cursor
@@ -94,7 +86,6 @@ import useGlobalSearch, {
   matchesIn,
   rowBelongsTo,
   SEARCH_ESCALATION_WINDOW,
-  SEARCH_ORG_HOST_FANOUT,
   SEARCH_WINDOW,
 } from './use-global-search'
 import {
@@ -102,9 +93,59 @@ import {
   type GlobalSearchEntityDef,
 } from './global-search-scope'
 
+/**
+ * Groups as plugins contribute them (AGL-3080): records in the organization's
+ * shared data, read through the viewer's tokens. The hook names no plugin, so
+ * these stand in for every declared `orgData` source — the CRM's shapes,
+ * because they are the ones that exercise the fallback label and the extra
+ * fields.
+ */
+const orgDataGroup = (
+  id: string,
+  fields: Pick<
+    GlobalSearchEntityDef,
+    'nameField' | 'fallbackNameField' | 'extraFields'
+  > & { collection?: string },
+): GlobalSearchEntityDef => ({
+  id,
+  group: id,
+  noun: id,
+  scopeKind: 'orgData',
+  collection: id,
+  order: 40,
+  ...fields,
+})
+
+const PLUGIN_GROUPS: GlobalSearchEntityDef[] = [
+  orgDataGroup('contacts', {
+    nameField: 'name',
+    fallbackNameField: 'email',
+    extraFields: ['email', 'phone', 'companyName'],
+  }),
+  orgDataGroup('leads', {
+    nameField: 'name',
+    fallbackNameField: 'email',
+    extraFields: ['email'],
+  }),
+  orgDataGroup('companies', { nameField: 'name', extraFields: ['domain'] }),
+  orgDataGroup('deals', { nameField: 'title' }),
+  orgDataGroup('tasks', {
+    collection: 'crmTasks',
+    nameField: 'title',
+    extraFields: ['notes'],
+  }),
+  orgDataGroup('activities', {
+    collection: 'crmActivities',
+    nameField: 'subject',
+    fallbackNameField: 'body',
+    extraFields: ['body', 'outcome'],
+  }),
+]
+
 const entity = (id: string) =>
-  GLOBAL_SEARCH_ENTITIES.find((definition) => definition.id === id) as
-    GlobalSearchEntityDef
+  [...GLOBAL_SEARCH_ENTITIES, ...PLUGIN_GROUPS].find(
+    (definition) => definition.id === id,
+  ) as GlobalSearchEntityDef
 
 const base = {
   firestore: {} as any,
@@ -119,7 +160,6 @@ const readsFor = (collectionName: string) =>
 beforeEach(() => {
   mockReads.length = 0
   mockFailing.clear()
-  mockRowsByPath = {}
   mockRowsByCollection = {
     screens: [
       { $id: 's1', displayName: 'Home' },
@@ -336,11 +376,11 @@ describe('how the reads are scoped', () => {
   })
 
   /**
-   * The three CRM groups that joined under AGL-2622: leads are the site's
-   * own collection and read as host data, companies and deals sit under the
-   * org's data root and carry the viewer's tokens exactly as contacts do.
+   * Leads are one org document per person, scoped by `visibleTo` (AGL-3275),
+   * so they read exactly as contacts do: under the org's data root, with the
+   * viewer's tokens.
    */
-  it('reads leads under the host and finds one by address, labelled by it', async () => {
+  it("reads leads under the org's data root and finds one by address, labeled by it", async () => {
     mockRowsByCollection.leads = [{ $id: 'l1', email: 'grace@example.test' }]
     const { result } = renderHook(() =>
       useGlobalSearch({
@@ -351,10 +391,13 @@ describe('how the reads are scoped', () => {
       }),
     )
     await waitFor(() => expect(readsFor('leads')).toHaveLength(1))
-    expect(readsFor('leads')[0].path).toBe('hosts/host-1/leads')
-    expect(
-      readsFor('leads')[0].constraints.some((c: any) => c.type === 'where'),
-    ).toBe(false)
+    expect(readsFor('leads')[0].path).toBe('orgs/org-1/leads')
+    expect(readsFor('leads')[0].constraints).toContainEqual({
+      type: 'where',
+      field: 'visibleTo',
+      op: 'array-contains-any',
+      value: ['org', 'host:host-1'],
+    })
     await waitFor(() => expect(result.current.groups[0]?.rows).toHaveLength(1))
     expect(result.current.groups[0].rows[0].$label).toBe('grace@example.test')
   })
@@ -448,7 +491,7 @@ describe('how the reads are scoped', () => {
   })
 })
 
-describe('the CRM at the organization hub (AGL-2662)', () => {
+describe('org data at the organization level (AGL-2662)', () => {
   /** No site: the org-level mount, where a consent group cannot be resolved. */
   const atOrg = { ...base, hostId: null as string | null }
 
@@ -465,7 +508,7 @@ describe('the CRM at the organization hub (AGL-2662)', () => {
       useGlobalSearch({
         ...atOrg,
         entities: [entity('tasks')],
-        crmOrgWide: true,
+        orgWide: true,
         text: 'call',
       }),
     )
@@ -528,159 +571,6 @@ describe('the CRM at the organization hub (AGL-2662)', () => {
     expect(result.current.groups[0].rows[0].$label).toBe(
       'Left a voicemail about renewal',
     )
-  })
-})
-
-describe('the org-level leads window, read a site at a time (AGL-2662)', () => {
-  const atOrg = { ...base, hostId: null as string | null, crmOrgWide: true }
-
-  const withSites = (ids: string[]) => {
-    mockRowsByCollection.hostMemberships = ids.map((id) => ({
-      $id: id,
-      displayName: id,
-      subdomain: id,
-    }))
-  }
-
-  /**
-   * The fan-out is bounded by the site list the `sites` group has already
-   * read, which is what makes it cost no membership query of its own. It
-   * holds until that window lands rather than opening one.
-   */
-  it('reads one window per site, over the sites window it already holds', async () => {
-    withSites(['host-a', 'host-b'])
-    mockRowsByPath['hosts/host-a/leads'] = [
-      { $id: 'l1', name: 'Grace Hopper' },
-    ]
-    mockRowsByPath['hosts/host-b/leads'] = [
-      { $id: 'l1', name: 'Grace Murray' },
-    ]
-    const { result } = renderHook(() =>
-      useGlobalSearch({
-        ...atOrg,
-        entities: [entity('sites'), entity('leads')],
-        text: 'grace',
-      }),
-    )
-    await waitFor(() => expect(readsFor('leads')).toHaveLength(2))
-    expect(readsFor('leads').map((read) => read.path).sort()).toEqual([
-      'hosts/host-a/leads',
-      'hosts/host-b/leads',
-    ])
-    // One membership read, spent on the Sites group and reused here.
-    expect(readsFor('hostMemberships')).toHaveLength(1)
-    const group = result.current.groups.find(
-      (entry) => entry.definition.id === 'leads',
-    )
-    await waitFor(() => expect(group ?? result.current.groups).toBeTruthy())
-    const leads = result.current.groups.find(
-      (entry) => entry.definition.id === 'leads',
-    )
-    expect(leads?.rows).toHaveLength(2)
-    // The same person key on two sites is two rows, each naming its site —
-    // without the stamp neither could be addressed.
-    expect(leads?.rows.map((row) => row.$hostId).sort()).toEqual([
-      'host-a',
-      'host-b',
-    ])
-  })
-
-  it('reads nothing at all until the sites window has landed', async () => {
-    withSites(['host-a'])
-    mockRowsByPath['hosts/host-a/leads'] = [{ $id: 'l1', name: 'Grace Hopper' }]
-    renderHook(() =>
-      useGlobalSearch({ ...atOrg, entities: [entity('leads')], text: 'grace' }),
-    )
-    await act(async () => undefined)
-    // The Sites group was not offered, so no window ever lands and the
-    // fan-out stays where it is rather than paying for a site list.
-    expect(readsFor('leads')).toHaveLength(0)
-  })
-
-  it('does not fan out again as the query grows', async () => {
-    withSites(['host-a', 'host-b'])
-    const { rerender } = renderHook(
-      (props: { text: string }) =>
-        useGlobalSearch({
-          ...atOrg,
-          entities: [entity('sites'), entity('leads')],
-          ...props,
-        }),
-      { initialProps: { text: 'gr' } },
-    )
-    await waitFor(() => expect(readsFor('leads')).toHaveLength(2))
-    for (const text of ['gra', 'grac', 'grace']) {
-      rerender({ text })
-      await act(async () => undefined)
-    }
-    expect(readsFor('leads')).toHaveLength(2)
-  })
-
-  /**
-   * The cap is the cost control: a group read per site multiplies by the
-   * org's site count rather than staying flat. The sites beyond it are
-   * reported as truncation, never silently dropped.
-   */
-  it('caps the fan-out and says the group was only partly searched', async () => {
-    withSites(
-      Array.from({ length: SEARCH_ORG_HOST_FANOUT + 3 }, (_, index) => `host-${index}`),
-    )
-    for (let index = 0; index < SEARCH_ORG_HOST_FANOUT + 3; index += 1) {
-      mockRowsByPath[`hosts/host-${index}/leads`] = [
-        { $id: `l${index}`, name: 'Grace Hopper' },
-      ]
-    }
-    const { result } = renderHook(() =>
-      useGlobalSearch({
-        ...atOrg,
-        entities: [entity('sites'), entity('leads')],
-        text: 'grace',
-      }),
-    )
-    await waitFor(() =>
-      expect(readsFor('leads')).toHaveLength(SEARCH_ORG_HOST_FANOUT),
-    )
-    const leads = result.current.groups.find(
-      (entry) => entry.definition.id === 'leads',
-    )
-    expect(leads?.truncated).toBe(true)
-  })
-
-  it('says a refused site FAILED rather than reporting no leads', async () => {
-    withSites(['host-a'])
-    mockFailing.add('leads')
-    const { result } = renderHook(() =>
-      useGlobalSearch({
-        ...atOrg,
-        entities: [entity('sites'), entity('leads')],
-        text: 'grace',
-      }),
-    )
-    await waitFor(() =>
-      expect(
-        result.current.groups.find((entry) => entry.definition.id === 'leads')
-          ?.failed,
-      ).toBe(true),
-    )
-  })
-
-  it('reports a complete, empty group for an org with no sites', async () => {
-    withSites([])
-    const { result } = renderHook(() =>
-      useGlobalSearch({
-        ...atOrg,
-        entities: [entity('sites'), entity('leads')],
-        text: 'grace',
-      }),
-    )
-    await waitFor(() => expect(readsFor('hostMemberships')).toHaveLength(1))
-    await act(async () => undefined)
-    expect(readsFor('leads')).toHaveLength(0)
-    // Nothing to say: no rows, no failure, no caveat, so the group is
-    // dropped rather than rendered as a partial answer.
-    expect(
-      result.current.groups.some((entry) => entry.definition.id === 'leads'),
-    ).toBe(false)
   })
 })
 

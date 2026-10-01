@@ -166,7 +166,7 @@ const ADMIN_ERROR_PAGES =
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/admin/(sections)/error-pages/page.tsx'
 
 const MAINTENANCE_LABEL =
-  'Maintenance mode — show the 503 screen on every page'
+  'Maintenance mode — show the 503 page at every address'
 
 /** The Error pages section, mounted inside the layout that guards it. */
 const openTheSection = () =>

@@ -42,4 +42,4 @@ This is **multilingual v1**.
 ## Related
 
 - [SEO toolkit](../seo/overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

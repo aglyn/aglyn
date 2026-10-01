@@ -34,29 +34,12 @@
       "lane": "crm"
     },
     {
-      "path": "apps/console/app/api/_lib/org-cogs.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "apps/console/app/api/_lib/site-export.ts",
       "rules": [
         "plugin-id"
       ],
       "lane": "stays",
       "why": "`'marketplace'` here is a FIELD NAME, not a plugin id: the component document's install stamp from before AGL-1015 (`{ listingId, profileId, version }`), which core's own provenance reader (`app-utils/artifact-provenance.ts`, `resolveProvenance`, argued stays) still reads as the listing an installed component came from, and which the component install still writes beside `installedFrom`. This list is the round trip of a live component document, so leaving the key out would restore every legacy installed component with its origin stripped; renaming it is a data migration of every installed component on every site."
-    },
-    {
-      "path": "apps/console/app/api/admin/margin-utilization/route.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "domain-declares:ai",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
     },
     {
       "path": "apps/console/app/api/admin/org-usage/route.ts",
@@ -114,16 +97,6 @@
         "domain-declares:forms"
       ],
       "lane": "forms"
-    },
-    {
-      "path": "apps/console/app/api/crm/export/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "plugin-collection:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
     },
     {
       "path": "apps/console/app/api/hosts/export/route.ts",
@@ -203,28 +176,6 @@
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "apps/console/components/global-search/global-search-dialog.component.tsx",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/components/global-search/global-search-scope.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/global-search/use-global-search.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
     },
     {
       "path": "apps/console/components/interactions-provider.component.tsx",
@@ -516,13 +467,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/contact-holder.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
       "rules": [
         "domain-name",
@@ -538,14 +482,6 @@
         "plugin-id",
         "domain-exports:crm",
         "domain-declares:bookings",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
-      "rules": [
-        "domain-name",
         "domain-declares:crm"
       ],
       "lane": "crm"
@@ -713,15 +649,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/margin-utilization.ts",
-      "rules": [
-        "domain-declares:ai",
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
       "rules": [
         "domain-exports:marketing",
@@ -733,13 +660,11 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
       "rules": [
-        "domain-declares:ai",
         "domain-declares:commerce",
         "domain-declares:crm",
         "domain-declares:data",
         "domain-declares:forms",
-        "domain-declares:marketplace",
-        "domain-declares:workflows"
+        "domain-declares:marketplace"
       ],
       "lane": "ai"
     },

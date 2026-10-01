@@ -18,14 +18,9 @@
 import {
   checkEntitlement,
   consentGroupForHost,
-  contactCsvRowFromDoc,
-  contactPrimaryGroup,
   CRM_COLLECTIONS,
-  crmExportCells,
-  crmExportHeader,
   csvCell,
   hostScopeToken,
-  isCrmExportResource,
   isOrgWideMember,
   MAX_SCOPE_HOSTS,
   memberCanSee,
@@ -33,8 +28,6 @@ import {
   scopeTokensForHost,
   planLabelGrantingFeature,
   pluginRequestFromWeb,
-  type CrmExportOptions,
-  type CrmExportResource,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -46,8 +39,17 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  contactCsvRowFromDoc,
+  crmExportCells,
+  crmExportHeader,
+  type CrmExportOptions,
+  type CrmExportResource,
+  isCrmExportResource,
+} from '../model/crm-csv'
+import { contactPrimaryGroup } from '../model/contact-holder'
 
 /**
  * Documents read per round trip. Not a cap — the stream keeps paging until
@@ -116,10 +118,8 @@ const FILE_BASE: Record<CrmExportResource, string> = {
  *
  * ## The columns are the client's columns
  *
- * `crmExportHeader` and `crmExportCells` are the writers each section's
- * Export button uses, moved into `@aglyn/aglyn` for this route to reach —
- * the console app may not import a feature plugin. One feature, one file
- * format.
+ * `crmExportHeader` and `crmExportCells` (`model/crm-csv.ts`) are the
+ * writers each section's Export button uses. One feature, one file format.
  *
  * ## The order is by document id, deliberately
  *
@@ -136,7 +136,7 @@ const FILE_BASE: Record<CrmExportResource, string> = {
  * the rules would have evaluated. Leads are host data by path, so the
  * equivalent check is whether the caller reaches the site.
  */
-async function handler(request: Request): Promise<Response> {
+export async function crmExportRoute(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } =
     await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -531,5 +531,3 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-export const dynamic = 'force-dynamic'
-export { handler as GET }

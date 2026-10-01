@@ -226,7 +226,7 @@ What this protects:
   password-reset mailbombing, identifier resolution, storefront member login and
   member recovery.
 - **Provisioning throttles** — organization creation (the bot-farm control), site
-  creation, screen-password unlock, form submission, newsletter signup, booking
+  creation, page-password unlock, form submission, newsletter signup, booking
   creation, visitor plugin writes, the pre-auth REST budget.
 - **Unauthenticated beacons** — the console and tenant error collectors, CSP
   reports, attribution, analytics collection.
@@ -589,7 +589,7 @@ configured), `webhook` when only `AGLYN_MAIL_WEBHOOK_URL` is, and otherwise
 `resend`, unconfigured, so every send is skipped with a log line naming
 `RESEND_API_KEY`. A value that names no built-in and no registered provider is
 **refused, not replaced**: every send is skipped with an error naming the
-value, and the staff email-health screen shows it as a blocker. Falling back to
+value, and the staff email-health page shows it as a blocker. Falling back to
 another provider would hand your recipients and message bodies to a vendor you
 did not choose because a name was misspelled.
 
@@ -779,7 +779,7 @@ your own.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_ADS_CONVERSION_ID` | Aglyn-only / your own | Build | Google Ads conversion id, `AW-` plus digits. Google Ads → **Goals** → *Conversions* → the tag's id. |
-| `NEXT_PUBLIC_ADS_SIGNUP_LABEL` | Aglyn-only / your own | Build | The opaque conversion **label** for the signup action, from the same screen. Fires only when the id is also set. |
+| `NEXT_PUBLIC_ADS_SIGNUP_LABEL` | Aglyn-only / your own | Build | The opaque conversion **label** for the signup action, from the same page. Fires only when the id is also set. |
 | `NEXT_PUBLIC_ADS_SUBSCRIBE_LABEL` | Aglyn-only / your own | Build | The conversion label for the subscribe action. |
 | `NEXT_PUBLIC_META_PIXEL_ID` | Aglyn-only / your own | Build | Meta (Facebook/Instagram) Pixel id — digits only. Loads the pixel **in the console**, and only for a visitor whose recorded consent grants the advertising category. Blank loads nothing. |
 | `NEXT_PUBLIC_LINKEDIN_PARTNER_ID` | Aglyn-only / your own | Build | LinkedIn Insight Tag partner id — digits only, from LinkedIn Campaign Manager → **Analytics** → *Insight Tag*. Same consent gate as the pixel above. Blank loads nothing. |
@@ -1225,7 +1225,7 @@ which is what makes it worth knowing.
 
 Several endpoints send `s-maxage` with little or no browser `max-age`, on the
 assumption that a shared cache honors it — the per-host manifest and `robots.txt`
-at 5 minutes to an hour, sitemaps and feeds at 5 minutes, screen-node and
+at 5 minutes to an hour, sitemaps and feeds at 5 minutes, page-node and
 commerce endpoints at 60–300 seconds. Behind a proxy that caches nothing they are
 simply recomputed per request: correct, slower, and several of them hit Firestore
 each time.

@@ -31,6 +31,7 @@ import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { WORKFLOW_USAGE_ZONE } from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsRecordRoutes } from './model/workflows-record-routes'
+import { WORKFLOWS_SEARCH_SOURCES } from './model/workflows-search-sources'
 
 /** Code-split: the Automation console page only loads when opened. */
 const WorkflowsConsolePage = lazy(
@@ -92,6 +93,7 @@ export function registerWorkflowsConsole(): void {
     pluginId: BUNDLE_ID,
     displayName: 'Automation',
     featureFlag: 'workflows',
+    searchSources: WORKFLOWS_SEARCH_SOURCES,
     navItems: [
       {
         label: 'Automation',

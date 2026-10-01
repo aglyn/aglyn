@@ -219,7 +219,7 @@ describe('artifact delete copy respects what the scan actually read', () => {
     // reader infers safety from a scan that never happened.
     const note = deleteConfirmationNote(null, 'screen')
     expect(note).toMatch(/could not check/i)
-    expect(note).toMatch(/loses them until another screen is picked/i)
+    expect(note).toMatch(/loses them until another page is picked/i)
     expect(note).not.toMatch(/nothing goes down/i)
   })
 

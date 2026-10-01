@@ -27,7 +27,7 @@
  * site for the same row.
  */
 
-import { CONTACT_FACETS_FIELD } from './contacts'
+import { CONTACT_FACETS_FIELD } from '@aglyn/aglyn/app-utils/contacts'
 import { contactPrimaryGroup, leadPrimaryGroup, NO_HOLDER_GROUP } from './contact-holder'
 
 /** Two brands the org has declared to be one sender. */

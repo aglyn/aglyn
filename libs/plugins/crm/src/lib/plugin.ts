@@ -23,6 +23,7 @@ import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
+import { CRM_SEARCH_SOURCES } from './model/crm-search-sources'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
 import { CRM_RECORD_BOOKING_ZONE } from './components/crm-booking-zone'
@@ -130,6 +131,8 @@ export function registerCrmConsole(): void {
      * (`server/suite-gate.ts`).
      */
     featureFlag: 'crm',
+    // What the console's search finds here, under the two gates above.
+    searchSources: CRM_SEARCH_SOURCES,
     /*
      * Dashboard cards (AGL-2599, AGL-2604): the site dashboard's `hostDashboard`
      * slot composes this extension's permission over each, so a card appears

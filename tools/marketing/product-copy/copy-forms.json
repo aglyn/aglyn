@@ -48,7 +48,7 @@
       "items": [
         {
           "title": "Forms on the canvas",
-          "body": "Drop a form onto any screen in Besigner and pick your fields — text, email, dropdowns, multiple choice, and star ratings — to build contact forms, surveys, and polls.",
+          "body": "Drop a form onto any page in Besigner and pick your fields — text, email, dropdowns, multiple choice, and star ratings — to build contact forms, surveys, and polls.",
           "meta": null
         },
         {
@@ -87,7 +87,7 @@
       "heading": "Build any form right on the page.",
       "subheading": null,
       "body": [
-        "Drop a Form element onto any screen in Besigner, add the fields you need, set what happens after submit, and point it at a dataset — all without code."
+        "Drop a Form element onto any page in Besigner, add the fields you need, set what happens after submit, and point it at a dataset — all without code."
       ],
       "actions": [],
       "items": [

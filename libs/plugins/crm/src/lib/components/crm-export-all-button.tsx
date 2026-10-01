@@ -18,7 +18,6 @@
 
 import {
   countCsvDataRows,
-  type CrmExportResource,
 } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -26,6 +25,7 @@ import { Button } from '@mui/material'
 import { useSnackbar } from 'notistack'
 import { useCallback, useState } from 'react'
 import { downloadTextFile } from '../model/contacts-csv'
+import type { CrmExportResource } from '../model/crm-csv'
 
 /** The header the export route promises its row count in. */
 const EXPORT_ROWS_HEADER = 'X-Aglyn-Export-Rows'

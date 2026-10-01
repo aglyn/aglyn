@@ -16,14 +16,14 @@ uses on its own site.
 
 ```mermaid
 flowchart LR
-  Build["Coming-soon screen<br/>(+ notify form)"] --> Home["Slug '/'<br/>(old home moved aside)"]
+  Build["Coming-soon page<br/>(+ notify form)"] --> Home["Slug '/'<br/>(old home moved aside)"]
   Home --> Hide["Discourage search engines<br/>(site-wide switch)"]
   Hide --> Collect["Signups → Inbox<br/>+ dataset"]
   Collect --> Launch["Launch day:<br/>reverse every step"]
 ```
 
 :::info Plan availability
-Everything here works on **Free**: screens, forms, the inbox, per-screen visibility,
+Everything here works on **Free**: pages, forms, the inbox, per-page visibility,
 and the site-wide search switch. Writing signups into a **dataset** (step 4) needs the
 data store, which unlocks on **Starter** and above — the inbox copy is always kept
 either way.
@@ -31,9 +31,9 @@ either way.
 
 ## 1. Build the coming-soon page
 
-Create the screen first; you'll point your domain at it in step 2.
+Create the page first; you'll point your domain at it in step 2.
 
-1. Go to **Screens** → **New screen**. Title it `Coming soon`. Give it any slug for
+1. Go to **Pages** → **New page**. Title it `Coming soon`. Give it any slug for
    now — `coming-soon` is fine — you'll change it to `/` in the next step.
 2. Open it in the **Besigner** and put the essentials on it. A coming-soon page that
    only says "coming soon" wastes the visit. Aim for:
@@ -45,7 +45,7 @@ Create the screen first; you'll point your domain at it in step 2.
    - **Links out** — your documentation, your changelog, your social accounts,
      wherever you already post. These give an early visitor somewhere to go instead
      of bouncing.
-3. **Publish** the screen.
+3. **Publish** the page.
 
 ### The notify-me form
 
@@ -58,24 +58,24 @@ you give the field a **Field name** you'll recognize later, such as `email`.
 
 ## 2. Make it the home page
 
-A screen's **Slug** decides the path it's served at, and the slug `/` means the home
+A page's **Slug** decides the path it's served at, and the slug `/` means the home
 page. So swapping your home page is two slug edits.
 
-:::caution Change the slug, don't delete the screen
+:::caution Change the slug, don't delete the page
 Move your existing home page aside rather than deleting it. Its design, its content,
 and its version history are all worth keeping, and you'll want it back in step 5.
 :::
 
-1. Open your **current** home screen (**Sites** → your site → **Screens** → click the
+1. Open your **current** home page (**Sites** → your site → **Pages** → click the
    row). In the **Publishing** card, change **Slug** from `/` to something you'll
-   recognize — `home` works — and choose **Update route**. The screen stays published,
+   recognize — `home` works — and choose **Update route**. The page stays published,
    just at `/home` now.
-2. Open the **Coming soon** screen. Change its **Slug** to `/` and choose
+2. Open the **Coming soon** page. Change its **Slug** to `/` and choose
    **Update route** (or **Publish**, if you haven't published it yet).
 3. Load your site. The coming-soon page is now what visitors get.
 
-A screen can be the home page or have a parent, but not both — if the slug won't take,
-check that the screen sits at the top level of your screens list.
+A page can be the home page or have a parent, but not both — if the slug won't take,
+check that the page sits at the top level of your pages list.
 
 :::caution Changing a slug does not create a redirect
 Aglyn rewrites its own routing map when you change a slug, so links *within* your site
@@ -102,7 +102,7 @@ One switch, whole site:
   `<meta name="robots" content="noindex">`
 
 This is the right choice while the site is a building site. It also covers pages you
-haven't created yet, which per-screen visibility can't: a screen you publish next
+haven't created yet, which per-page visibility can't: a page you publish next
 Tuesday is indexable by default, so a site hidden page-by-page slowly un-hides itself
 as it grows.
 
@@ -110,10 +110,10 @@ While the switch is on, a warning banner follows you through the console on ever
 of that site. That's deliberate, and it's the answer to the most common support
 question this feature creates — see step 5.
 
-### Once you're launching page by page: per-screen visibility
+### Once you're launching page by page: per-page visibility {#once-youre-launching-page-by-page-per-screen-visibility}
 
 When the site is mostly ready and you're releasing sections, turn the site-wide switch
-**off** and hide the stragglers individually. Open a screen (**Screens** → pick it) and
+**off** and hide the stragglers individually. Open a page (**Pages** → pick it) and
 use the **Visibility** dropdown in its **Page Access** card:
 
 | Visibility | Reachable by | In search |
@@ -132,7 +132,7 @@ Unlisted and the site-wide switch ask search engines not to list a page. Well-be
 crawlers honor that; nothing stops a person with the URL from opening it, and nothing
 stops a badly-behaved crawler either. If a page must be genuinely inaccessible, protect
 it properly — see [Site protection](../building-sites/site-protection/overview.md) and
-[Password-protect a screen](../building-sites/site-protection/password-a-screen.md).
+[Password-protect a page](../building-sites/site-protection/password-a-screen.md).
 :::
 
 ## 4. Collect the signups
@@ -175,20 +175,20 @@ work down it, then verify with step 6.
 1. **Allow search engines again.** **Setup → SEO** → turn **Discourage search engines
    from indexing this site** off. The console banner disappears, and `robots.txt`, the
    sitemap and the page meta all return within about a minute.
-2. **Set the hidden screens back to Public.** The site-wide switch and per-screen
+2. **Set the hidden pages back to Public.** The site-wide switch and per-page
    visibility are independent — turning the switch off does **not** promote an
-   Unlisted screen. Go through **Screens** and set each one's **Visibility** back to
+   Unlisted page. Go through **Pages** and set each one's **Visibility** back to
    **Public** in its **Page Access** card. Anything you leave Unlisted stays out of
    search, silently and indefinitely.
 3. **Swap the home page back.** Open **Coming soon**, change its **Slug** to something
    else (`coming-soon`) and **Update route** — or **Unpublish** it if you're done with
-   it. Then open your real home screen and set its **Slug** back to `/`.
+   it. Then open your real home page and set its **Slug** back to `/`.
 4. **Verify** — step 6. Don't skip it. Every step above is a setting that can be half
    applied, and the failure is silent.
 
 :::caution "Why is my site not on Google?"
 Nine times out of ten it's this feature, left on. Check, in order: the **Setup → SEO**
-switch, then each screen's **Visibility**. Then remember that re-indexing is the search
+switch, then each page's **Visibility**. Then remember that re-indexing is the search
 engine's schedule, not yours — a site that was `noindex` for a month does not come back
 the afternoon you fix it. Allow days, and use Google Search Console to request
 indexing if you're in a hurry.
@@ -243,7 +243,7 @@ curl -s https://your-site/sitemap.xml \
 ```
 
 It should be `0` while the site-wide switch is on, and after launch it should match your
-public pages. Any page you expect to see and don't is a screen still set to Unlisted.
+public pages. Any page you expect to see and don't is a page still set to Unlisted.
 
 :::tip Give it a few minutes
 These three files are cached for about five minutes. If a change hasn't shown up, wait a

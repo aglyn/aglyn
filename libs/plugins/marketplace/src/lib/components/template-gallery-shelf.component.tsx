@@ -212,7 +212,7 @@ export function TemplateGalleryShelf(props: ConsoleTemplateGalleryZoneProps) {
                   component="div"
                   sx={{ mt: 1 }}
                 >
-                  {`${listing.screenCount ?? '?'} screens · v${listing.latestVersion}` +
+                  {`${listing.screenCount ?? '?'} pages · v${listing.latestVersion}` +
                     (Number(listing.priceUsd ?? 0) > 0
                       ? ` · $${listing.priceUsd}`
                       : ' · free')}

@@ -106,8 +106,8 @@ export const schema: Aglyn.ComponentSchema<PaginationElementProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Pagination',
   description:
-    'Page picker. It highlights the chosen page; wire an interaction to ' +
-    'make it change what the page shows.',
+    'Page-number picker. It highlights the chosen number; wire an ' +
+    'interaction to make it change what the page shows.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiFormatListNumbered.path, sx: { color: '#2196f3' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
@@ -231,7 +231,7 @@ export const presets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Pagination',
     pluginId: BUNDLE_ID,
-    description: 'Page picker with previous/next arrows',
+    description: 'Page-number picker with previous/next arrows',
     category: Aglyn.ComponentCategory.NAVIGATION,
     icon: schema.icon,
     data: {

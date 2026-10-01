@@ -430,7 +430,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
               fullWidth
               multiline
               minRows={2}
-              helperText="Carried onto the screen this template creates"
+              helperText="Carried onto the page this template creates"
             />
             <Typography variant="caption" color="text.secondary">
               {`ID ${templateId} — provenance is server-managed and cannot be edited here`}
@@ -452,7 +452,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
             </Stack>
             <Typography variant="caption" color="text.secondary">
               {'Templates have no publish step — the besigner edits this ' +
-                'template directly, and screens made from it are unaffected.'}
+                'template directly, and pages made from it are unaffected.'}
             </Typography>
           </Stack>
         </CardDisplay>

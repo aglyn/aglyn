@@ -89,7 +89,7 @@
       "heading": "Add a head start in a click.",
       "subheading": null,
       "body": [
-        "Install a template, layout, email pack, or dataset schema and it drops into your org as editable screens, layouts, or data — ready to rework in Besigner."
+        "Install a template, layout, email pack, or dataset schema and it drops into your org as editable pages, layouts, or data — ready to rework in Besigner."
       ],
       "actions": [],
       "items": [
@@ -110,7 +110,7 @@
         }
       ],
       "image": {
-        "describe": "Marketplace listing detail. Breadcrumb 'Marketplace / Studio — Portfolio'. Left: large blue-to-indigo gradient cover image. Right panel: title 'Studio — Portfolio', 'by Northwind Studio', a 'Template' chip, 5 gold stars and '4.9 (32)', a green 'Free' price and a blue INSTALL button. Below a divider: description 'A clean, editorial portfolio for studios and freelancers. Installs as editable screens you can rework in Besigner.' Then a WHAT'S INCLUDED checklist with green ticks — '12 responsive screens', 'Light & dark theme tokens', 'Blog & work layouts', 'Contact form wired to the Inbox'.",
+        "describe": "Marketplace listing detail. Breadcrumb 'Marketplace / Studio — Portfolio'. Left: large blue-to-indigo gradient cover image. Right panel: title 'Studio — Portfolio', 'by Northwind Studio', a 'Template' chip, 5 gold stars and '4.9 (32)', a green 'Free' price and a blue INSTALL button. Below a divider: description 'A clean, editorial portfolio for studios and freelancers. Installs as editable pages you can rework in Besigner.' Then a WHAT'S INCLUDED checklist with green ticks — '12 responsive pages', 'Light & dark theme tokens', 'Blog & work layouts', 'Contact form wired to the Inbox'.",
         "figmaNodeId": "123:2777"
       },
       "notes": "Combined deep-dive + canvas/visual. 440px copy column left (eyebrow, 32px heading on ONE line, body, three check-icon bullets of uneven height — the first bullet runs to four lines, the second to one); 768x580 mockup right. LIGHT GREY background (#f8f9fa)."
@@ -131,7 +131,7 @@
         },
         {
           "title": "Install in a click",
-          "body": "Add any listing to your org — it drops in as editable screens, layouts, or data you can rework.",
+          "body": "Add any listing to your org — it drops in as editable pages, layouts, or data you can rework.",
           "meta": "02"
         },
         {

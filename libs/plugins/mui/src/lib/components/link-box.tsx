@@ -170,17 +170,17 @@ export const schema: Aglyn.ComponentSchema<LinkBoxProps> = {
     {
       name: 'screenId',
       description:
-        'Screen this box navigates to. The address is generated from the ' +
+        'Page this box navigates to. The address is generated from the ' +
         'published path at render time, so it keeps working when the ' +
-        "screen's slug or parent changes.",
+        "page's slug or parent changes.",
       component: Aglyn.FieldComponentType.SCREEN_SELECT,
-      label: 'Screen',
+      label: 'Page',
     },
     {
       name: 'href',
       description:
         'Where the whole container goes when it points off this site. ' +
-        'Ignored while Screen names one. Everything inside the box becomes ' +
+        'Ignored while Page names one. Everything inside the box becomes ' +
         'part of this one link, so it should hold no other link.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
@@ -191,7 +191,7 @@ export const schema: Aglyn.ComponentSchema<LinkBoxProps> = {
       name: 'newTab',
       description:
         'Open in a new tab. Applies to external URLs only — a link to one ' +
-        'of your own screens stays in the tab so the visitor keeps their ' +
+        'of your own pages stays in the tab so the visitor keeps their ' +
         'history.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Open in a new tab',

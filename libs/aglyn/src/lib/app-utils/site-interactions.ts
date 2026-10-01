@@ -867,7 +867,7 @@ function clientStepProblem(step: ClientInteractionStep, label: string): string |
     return `${label}: enter the JavaScript`
   }
   if (step.type === 'redirect' && !step.url?.trim() && !step.screenId) {
-    return `${label}: pick a screen or enter the destination URL`
+    return `${label}: pick a page or enter the destination URL`
   }
   if (step.type === 'trackGaEvent') {
     if (!step.eventName?.trim()) {

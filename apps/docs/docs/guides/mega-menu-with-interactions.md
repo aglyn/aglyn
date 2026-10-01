@@ -26,14 +26,14 @@ overlays, custom JS, server actions) require Pro+. See
 ## What you'll build
 
 - A **Mega Menu** nav item with a wide panel.
-- Three **columns** of screen links inside the panel.
+- Three **columns** of page links inside the panel.
 - A **hover interaction** so the panel opens when a visitor points at the
   nav item — and closes itself when they move away.
 
-Put the menu in your **layout** (not a single screen) so it shows on every
+Put the menu in your **layout** (not a single page) so it shows on every
 page. Open your **Main Layout** in the Besigner to follow along; if you
 don't have a layout yet, see
-[Screens & layouts](../building-sites/screens-and-layouts/layouts.md).
+[Pages & layouts](../building-sites/screens-and-layouts/layouts.md).
 
 ## 1. Insert the Mega Menu
 
@@ -71,15 +71,15 @@ section:
 1. The starter preset gives you three **Stacks** side by side — one per
    column. Select a column and set a heading (e.g. *Coffee*, *Learn*, *Get
    in touch*).
-2. Inside each column, drop **Screen Link** elements from the
-   **Navigation** group and point each at a screen. Screen links store the
-   **screen id**, not the URL, so renaming or re-slugging a page never
+2. Inside each column, drop **Page Link** elements from the
+   **Navigation** group and point each at a page. Page links store the
+   **page id**, not the URL, so renaming or re-slugging a page never
    breaks the menu.
 3. Add as many columns, links, images, or promo cards as you like — a mega
    menu panel takes any content.
 
 :::tip Menu links should render as links
-A Screen Link ships as a **button** by default, which is right for a call
+A Page Link ships as a **button** by default, which is right for a call
 to action but wrong for navigation: it picks up button typography and the
 theme's uppercase transform, and it announces itself as a button to screen
 readers. Set **Render as** to **Text link** on the links inside a menu
@@ -143,7 +143,7 @@ slide-in drawer:
    **Menu Button** (hidden on desktop), an inline link row (hidden on
    mobile), and a **Drawer** already wired to the button — clicking the
    button toggles the drawer with **zero configuration**.
-2. Swap the drawer's placeholder links for your screens, and design the
+2. Swap the drawer's placeholder links for your pages, and design the
    drawer panel however you like — it's a normal canvas slot.
 3. Under **Styles → Visibility**, confirm the mega menu's nav cluster is
    **hidden on mobile** and the menu button is **hidden on desktop**.
@@ -201,4 +201,4 @@ never metered.
 - [Menus & navigation](../building-sites/menus-and-navigation/overview.md)
 - [Interactions & custom HTML](../building-sites/besigner/interactions-and-custom-html.md)
 - [The Besigner](../building-sites/besigner/overview.md)
-- [Screens & layouts](../building-sites/screens-and-layouts/overview.md)
+- [Pages & layouts](../building-sites/screens-and-layouts/overview.md)

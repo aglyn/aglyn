@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Build a blog
-description: Create a collection, publish rich entries, and design the list and entry pages with template screens.
+description: Create a collection, publish rich entries, and design how its list and entries look with template pages.
 ---
 
 # Build a blog
@@ -9,7 +9,7 @@ description: Create a collection, publish rich entries, and design the list and 
 Aglyn's blog is built on **collections** — a collection holds your entries, and its pages
 are **first-class designed pages**: the list at `/{collection}` and each entry at
 `/{collection}/{entry}` render through your site's theme and shared layout, and can be
-fully designed in the besigner via **template screens**.
+fully designed in the Besigner via **template pages**.
 
 ![The Content page's Collections & Entries section, with the Blog collection picked, Categories and New entry beside it, and its published entries in a table with the grid's own toolbar](/img/content/content-page.png)
 
@@ -39,18 +39,18 @@ check reads your role on *this site*. Ask a site admin, or have one raise your r
 Aglyn refuses the delete while anything still depends on the collection, and the dialog
 tells you which of these it is before you can type anything:
 
-- **A template screen still points at it.** The message names the screen and which picker
+- **A template page still points at it.** The message names the page and which picker
   holds it — *"Blog" is still the source for "Blog index" (list template)*. Set that
-  collection's **List screen** or **Entry screen**, under **Template screens**, back to the
+  collection's **List page** or **Entry page**, under **Template pages**, back to the
   built-in option first. Deleting it while a published page renders from it would leave that
   page with nothing to draw.
 - **It still has entries.** The message gives the count — *"Blog" still has 12 entries*.
   Delete them from the entries table first, one at a time; deleting a collection never
   removes published entries for you.
 
-The dialog also names the published screens, layouts and components that **link to the
-collection's listing page** — any Button, Screen Link, Tabs link or other link pointed at the
-listing with the **Screen** picker, a component's **Link** property default included. A link
+The dialog also names the published pages, layouts and components that **link to the
+collection's listing page** — any Button, Page link, Tabs link or other link pointed at the
+listing with the **Page** picker, a component's **Link** property default included. A link
 does not block the delete: the page holding it keeps rendering, but the link stops working, so
 point it somewhere else before or after you delete. The dialog reads *Checking where it is
 used…* until that check finishes, and says so if the check could not run rather than
@@ -59,8 +59,8 @@ counted, because nothing records which collection it meant.
 
 Once nothing depends on it, type the collection's **display name** exactly — the name, not
 the slug, and capitalization counts — and confirm. Deleting removes the collection, its
-**category list**, and its template pointers. Your **screens are not deleted** (they keep
-their design and simply stop being template screens) and nothing in the media library is
+**category list**, and its template pointers. Your **pages are not deleted** (they keep
+their design and simply stop being template pages) and nothing in the media library is
 touched. The `/{collection}` and `/{collection}/{entry}` routes stop resolving on the live
 site within about a minute; there is no publish step.
 
@@ -256,11 +256,11 @@ Author pages are also submitted in your sitemap, one URL per author.
 
 Left alone, an author page renders a built-in themed page inside your site's shared
 layout — portrait, name, role, bio, links, then their posts. To design your own, build
-a screen and pick it under **Author page screen** on the Authors tab. It applies to
+a page and pick it under **Author page template** on the Authors tab. It applies to
 every author, because a masthead whose design changed as a reader clicked between
 colleagues would be a strange thing to build on purpose.
 
-On that screen:
+On that page:
 
 - the **Author Profile** block draws the person — portrait, name, role, bio and links —
   filled from whichever author's page is being rendered;
@@ -274,7 +274,7 @@ On that screen:
   `{{pagination.nextUrl}}` are the same four a collection list template uses, so a
   pager you have already built works here unchanged.
 
-The screen you pick stops serving at its own address, exactly like a collection's
+The page you pick stops serving at its own address, exactly like a collection's
 entry template — it renders `/author/…` instead.
 
 The page publishes `ProfilePage` structured data with the author as its
@@ -353,26 +353,26 @@ them: `#` becomes the larger one and `####` or deeper become the smaller one, so
 document pasted from elsewhere keeps its structure instead of leaving a literal `#`
 in the text.
 
-## 3. Design the pages with template screens
+## 3. Design the list and entry pages {#3-design-the-pages-with-template-screens}
 
 Each collection has two template pickers in **Content**:
 
-- **List template screen** — renders `/{collection}`. Drop the **Collection Entries**
+- **List page** — renders `/{collection}`. Drop the **Collection Entries**
   block on it: its children repeat once per published entry, with `{{entry.*}}` tokens
   substituted per entry. The default card ships title, date, excerpt, and a Read more
   link, so dropping it in works instantly.
-- **Entry template screen** — renders `/{collection}/{entry}`. Use `{{entry.*}}` bindings
+- **Entry page** — renders `/{collection}/{entry}`. Use `{{entry.*}}` bindings
   and the **Entry Body** block, which renders the entry's markdown as themed headings,
   paragraphs, lists, links, and images.
 
-Template screens go through the **normal published pipeline** — site theme, shared
-layout, reusable components, variables — exactly like any other screen (the same
+Template pages go through the **normal published pipeline** — site theme, shared
+layout, reusable components, variables — exactly like any other page (the same
 mechanism as commerce product/collection templates).
 
 A second collection whose entries should look like the first one's starts from a copy:
-choose **Duplicate…** on the first collection's entry template in **Screens**, then pick
-the copy as the new collection's **Entry screen**, under **Template screens**. See
-[Duplicate a screen](../screens-and-layouts/screens.md#duplicate-a-screen).
+choose **Duplicate…** on the first collection's entry template in **Pages**, then pick
+the copy as the new collection's **Entry page**, under **Template pages**. See
+[Duplicate a page](../screens-and-layouts/screens.md#duplicate-a-screen).
 
 ### Blog blocks
 
@@ -445,7 +445,7 @@ nothing at all.
 - **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
   URL. Attribute: **Heading** (default "Share").
 - **Category Pills** — the collection's categories as a row of links: **All** plus one
-  pill per category. Drop it on the **list template screen**, above the Collection
+  pill per category. Drop it on the **list template page**, above the Collection
   Entries block. Attributes: **Collection slug** (blank = the collection from the URL)
   and **All label** — the text of the unfiltered pill, default "All". Clear the All
   label box to drop that pill and leave only the category pills; the box then reads
@@ -527,7 +527,7 @@ on the empty listing above. Prefer linking with the pills.
 | `{{pagination.nextUrl}}` | Link to the next page (empty on the last page) |
 
 :::tip Recent posts anywhere
-The Collection Entries block also works on **any** screen — set its **Collection slug**
+The Collection Entries block also works on **any** page — set its **Collection slug**
 attribute (e.g. `blog`) and an **Entries limit** to build a "Latest posts" section on
 your home page. Its **Filter by category** / **Filter by tag** attributes narrow the
 list (e.g. a "Guides only" rail), so filtered landing pages are built as filtered
@@ -537,8 +537,8 @@ id, so it keeps working across renames.
 
 ### No template? Still designed
 
-When no template screen is set, the built-in list and article render **inside your site
-theme and default shared layout** (the home screen's layout), so blog pages never look
+When no template page is set, the built-in list and article render **inside your site
+theme and default shared layout** (the home page's layout), so blog pages never look
 detached from the rest of the site. The built-in article includes the entry meta line
 under the title, the cover image (or the [featured video](#video-collection) in its place),
 the body, related posts, and a share bar. The built-in list is **paginated** (see below).
@@ -550,7 +550,7 @@ Long collections split into pages. The built-in list shows a page of entries wit
 `/{collection}/page/3`, and so on (page 1 is the bare `/{collection}`). A page past the
 end returns 404.
 
-On your own **list template screen**, turn on pagination by setting the **Collection
+On your own **list template page**, turn on pagination by setting the **Collection
 Entries** block's **Entries per page** attribute; it then renders the page from the URL
 (the **Page** attribute overrides it for a fixed page). Without **Entries per page**, the
 block shows the top **Entries limit** entries as before. The same applies inside a
@@ -558,7 +558,7 @@ category: `/{collection}/category/{category}/page/2`.
 
 #### Build your own pager
 
-One list template screen serves every one of those URLs, so a pager built from
+One list template page serves every one of those URLs, so a pager built from
 hardcoded links would read the same on all of them. Bind the `{{pagination.*}}` tokens
 instead: a **Text** block with `Page {{pagination.page}} of {{pagination.totalPages}}`,
 and two **Link** blocks whose **URL** is `{{pagination.prevUrl}}` and
@@ -568,7 +568,7 @@ Both URLs **keep the category you are inside**, so "next" never drops the reader
 onto the unfiltered list. And both are **empty where there is nowhere to go** — no
 previous page, no `{{pagination.prevUrl}}` — which makes a link with no target render as
 inert text rather than a link to a page that doesn't exist. That is why you can bind them
-on every route without building a variant of the screen for each.
+on every route without building a variant of the page for each.
 
 ## 4. Publish & syndicate
 
