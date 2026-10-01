@@ -27,6 +27,7 @@
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import OrderDetailDialog from './order-detail-dialog.component'
+import { standInCrmRecordRoutes } from '../../testing/stand-in-crm-record-routes'
 
 jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
@@ -71,6 +72,8 @@ const show = (subject: Record<string, unknown>) =>
   )
 
 beforeEach(() => {
+  // The Contacts list is the CRM's (AGL-3080).
+  standInCrmRecordRoutes()
   params = { orgSlug: 'acme', host: 'shop' }
 })
 

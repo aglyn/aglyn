@@ -21,6 +21,7 @@ import {
   type HostEventListener,
   registerHostEventListener,
 } from '@aglyn/tenant-runtime/host-event-listeners'
+import { registerVariableComputer } from '@aglyn/aglyn/plugin-manager/computed-variables'
 import { registerPluginDependentsSource } from '@aglyn/aglyn/plugin-manager/plugin-dependents'
 import {
   registerPluginRecordIndex,
@@ -71,8 +72,9 @@ export const workflowsHostEventListener: HostEventListener = {
  *
  * The indexes of the site's workflows, webhooks and actions, so another
  * surface — an AI job — reads them without reaching for this plugin's
- * collections; and the workflows that call a function, which the "Used by"
- * scan asks this plugin for.
+ * collections; the workflows that call a function, which the "Used by"
+ * scan asks this plugin for; and the site variables a workflow computes,
+ * which every published page's compose asks for.
  *
  * Also called from the plugin's own API register functions, so a process
  * whose boot did not run it still registers the listener the first time a
@@ -89,6 +91,13 @@ export function registerWorkflowsServerDeclarations(): void {
       kinds: ['function'],
       find: async (request) =>
         (await import('./server/workflow-dependents')).findFunctionDependents(request),
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerVariableComputer(
+    {
+      prepare: async (hostId) =>
+        (await import('./server/workflow-variables')).prepareWorkflowVariables(hostId),
     },
     { pluginId: BUNDLE_ID },
   )

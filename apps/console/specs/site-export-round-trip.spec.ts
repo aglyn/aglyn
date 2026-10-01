@@ -266,6 +266,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import { GET as EXPORT_GET } from '../app/api/hosts/export/route'
 import { POST as IMPORT_POST } from '../app/api/hosts/import/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
+import { listDeclaredSiteBundleSections } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import {
   EXPORT_COLLECTION_LIMITS,
   IMPORTABLE_FIELDS,
@@ -1000,6 +1002,16 @@ const mutateEveryDocument = (bundle: any, mutate: (doc: any) => void) => {
   return bundle
 }
 
+/**
+ * The datasets are the data plugin's section of the bundle, carried and
+ * restored through the answers it registers from its declarations — the
+ * step the console's boot runs, so the round trip below is the one a real
+ * process makes.
+ */
+beforeAll(async () => {
+  await registerPluginServerDeclarations()
+})
+
 beforeEach(() => {
   jest.clearAllMocks()
   resetStore()
@@ -1500,11 +1512,14 @@ describe("the SITE's own media library survives the round trip (AGL-1392)", () =
     // Generic on purpose, so the NEXT array is covered without anyone
     // remembering this file. An undeclared one falls through `bundleItems`'
     // `?? 100` and restores short and silently — AGL-1382's media bug exactly,
-    // and a site library can hold more than 100 assets.
+    // and a site library can hold more than 100 assets. A plugin's section is
+    // capped by the limit it declares.
+    const sections = listDeclaredSiteBundleSections().map((section) => section.key)
     const bundle = await runExport()
     for (const [key, value] of Object.entries(bundle)) {
       if (!Array.isArray(value)) continue
-      expect({ key, capped: key in EXPORT_COLLECTION_LIMITS }).toEqual({
+      const capped = key in EXPORT_COLLECTION_LIMITS || sections.includes(key)
+      expect({ key, capped }).toEqual({
         key,
         capped: true,
       })
@@ -1758,7 +1773,9 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
 
   it('rejects a collection with no declared allow-list rather than storing it', async () => {
     // Fail-closed would be silent total data loss for that collection, so an
-    // undeclared name is a 500, not an empty write.
+    // undeclared name is a 500, not an empty write. The datasets and their
+    // records are not here: the data plugin restores them through its own
+    // lists, held by its own spec.
     const declared = Object.keys(IMPORTABLE_FIELDS)
     for (const name of [
       'screens',
@@ -1772,8 +1789,6 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
       'services',
       'collections',
       'entries',
-      'datasets',
-      'records',
       'media',
       // The collection that was in neither list at all (AGL-1392).
       'mediaFolders',

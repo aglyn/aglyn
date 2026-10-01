@@ -27,7 +27,7 @@ import type {
   OutreachMailboxStatus,
 } from '../model/outreach.types'
 import { createGmailClient } from '../transport/gmail-client'
-import { GmailTransportError } from '../transport/gmail-errors'
+import { GmailTransportError, googleFailureAnswer } from '../transport/gmail-errors'
 import {
   buildGoogleAuthorizationUrl,
   exchangeGoogleAuthorizationCode,
@@ -122,8 +122,11 @@ import {
  * expired, already used or superseded; a code Google refuses; a grant with no
  * refresh token; a grant missing `gmail.send` or `gmail.readonly` (the consent
  * screen lets a person untick them); an ID token that is not about this
- * exchange or whose address Google has not verified; a Gmail profile whose
- * address is not the ID token's; and a member at their mailbox limit.
+ * exchange or whose address Google has not verified; an account with no Gmail
+ * service (a Workspace user whose Gmail is off, or not yet provisioned) or one
+ * Google bars from the Gmail API; a Gmail profile whose address is not the ID
+ * token's; and a member at their mailbox limit. Each is a 4xx: only a Google
+ * outage, or a request Google calls malformed, answers 502.
  *
  * A grant refused after the code exchange is dropped, not revoked. Google's
  * revocation ends the whole grant this client holds for the account, and the
@@ -388,7 +391,14 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       if (error instanceof GmailTransportError && error.code === 'client_misconfigured') {
         return refusal(503, 'not-configured', "Google refused this deployment's OAuth client.")
       }
-      return googleUnavailable(error)
+      if (error instanceof GmailTransportError && error.code === 'insufficient_scope') {
+        return refusal(
+          422,
+          'scopes-missing',
+          'Sequences needs permission to send and to read your mail. Connect again and allow both.',
+        )
+      }
+      return googleFailure(error, 'connect/complete token exchange')
     }
     if (!grant.refreshToken) {
       return refusal(
@@ -439,7 +449,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
           'Sequences needs permission to send and to read your mail. Connect again and allow both.',
         )
       }
-      return googleUnavailable(error)
+      return googleFailure(error, 'connect/complete Gmail profile')
     }
     if (profileEmail !== identity.identity.email) {
       return refusal(422, 'account-mismatch', 'The Gmail account and the Google sign-in did not match. Connect again.')
@@ -735,7 +745,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       if (error instanceof Rfc5322MessageError) {
         return refusal(400, 'invalid-settings', `The test could not be written: ${error.message}`)
       }
-      return googleUnavailable(error)
+      return googleFailure(error, 'test send')
     }
   }
 
@@ -791,11 +801,8 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
   return { availability, connect, oauthCallback, connectComplete, settings, status, test, disconnect, readiness }
 }
 
-function googleUnavailable(error: unknown): Response {
-  if (!(error instanceof GmailTransportError)) throw error
-  return refusal(
-    502,
-    'google-unavailable',
-    error.retryable ? 'Google did not answer. Try again in a moment.' : `Google refused the request: ${error.message}`,
-  )
+/** A Google failure the route could not handle itself, as the refusal {@link googleFailureAnswer} decides. */
+function googleFailure(error: unknown, route: string): Response {
+  const answer = googleFailureAnswer(error, route)
+  return refusal(answer.status, answer.reason, answer.error)
 }

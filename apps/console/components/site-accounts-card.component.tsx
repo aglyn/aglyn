@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { crmContactByEmailHref } from '@aglyn/aglyn/app-utils/console-record-links'
+import { pluginRecordByEmailHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { mdiAccountArrowRight } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -32,7 +32,7 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import { Box, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { docsHelp } from '../constants/docs-links'
@@ -122,8 +122,8 @@ export function SiteAccountsCard(props: { hostId: string }) {
    * record on one match. Offered under the CRM's own gate — released for
    * the viewer, and with the permission its rules read for — because a row
    * action that lands on a hub the shell refuses is a link to a 404. The
-   * app may not import the plugin, so the address comes from the shared
-   * builder the plugin's own routes are pinned against.
+   * app may not import the plugin, so the address is the one the plugin
+   * that keeps contacts publishes on the record-route seam.
    */
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
@@ -135,6 +135,29 @@ export function SiteAccountsCard(props: { hostId: string }) {
     contactsFlag.visible &&
     permissions.loaded &&
     permissions.can('data.manage')
+
+  /**
+   * The row's "Open in CRM": the person's contact by the account's address,
+   * or the reason there is none to open.
+   */
+  const contactLink = useCallback(
+    (row: any): { href: string } | { disabled: true; disabledReason: string } => {
+      if (!row.email) {
+        return {
+          disabled: true,
+          disabledReason: 'This account has no email address, so no contact was updated.',
+        }
+      }
+      const href =
+        orgSlug && host
+          ? pluginRecordByEmailHref('contact', { orgSlug, host: String(host) }, String(row.email))
+          : null
+      return href
+        ? { href }
+        : { disabled: true, disabledReason: 'Contacts are not available in this workspace.' }
+    },
+    [orgSlug, host],
+  )
 
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const memberColumns: GridColDef[] = useMemo(
@@ -208,18 +231,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
                             key: 'crm',
                             label: 'Open in CRM',
                             icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-                            ...(row.email
-                              ? {
-                                  href: crmContactByEmailHref(
-                                    { orgSlug, host: String(host) },
-                                    String(row.email),
-                                  ),
-                                }
-                              : {
-                                  disabled: true,
-                                  disabledReason:
-                                    'This account has no email address, so no contact was updated.',
-                                }),
+                            ...contactLink(row),
                           },
                         ]}
                       />
@@ -233,7 +245,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
         SITE_MEMBER_LIST_FILTER_OPTIONS,
         SITE_MEMBER_LIST_FILTER_HEADERS,
       ),
-    [crmReachable, orgSlug, host],
+    [crmReachable, contactLink],
   )
 
   // Resolved from the live docs so the drawer reflects rule-side updates.

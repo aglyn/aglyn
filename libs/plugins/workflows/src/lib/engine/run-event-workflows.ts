@@ -24,15 +24,14 @@ import {
   type HostEventType,
   type HostFunction,
   type HostVariable,
-  type HostWorkflow,
   resolveOrgEntitlements,
-  runWorkflow,
 } from '@aglyn/aglyn/server'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
+import { type HostWorkflow, runWorkflow } from '../model/workflows'
 import { eventRunSuspension } from './site-suspension'
 import {
   deferFlowEnrollment,

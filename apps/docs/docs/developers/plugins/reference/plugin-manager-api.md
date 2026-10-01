@@ -511,9 +511,45 @@ and a restore writes them back by id and counts the result against the
 `resource` — its `quotaKey`, or its `platformCap` — before the first write,
 so a `siteExport` on a collection with no `resource` is refused. A collection
 may not take a key the platform's bundle already uses (`screens`, `media`,
-`datasets`, …). Compiled like `resource`, and refused at runtime:
+…) or another plugin's. Compiled like `resource`, and refused at runtime:
 `listPluginSiteExportCollections()`
 (`@aglyn/aglyn/plugin-manager/plugin-site-export`) reads them.
+
+## Site backup sections — `plugin-site-bundle` (`/server`)
+
+Some plugin data a backup must carry is not a plain host collection: it lives
+under the organization and is narrowed to the site, it has documents beneath
+it, a restore checks it against its own model, or its count is sold as an
+add-on. The plugin declares a SECTION of the bundle in `plugins.config.json`
+and answers for it from its `serverDeclarations` entry:
+
+```json
+"siteBundleSections": [{ "key": "cellarLogs", "limit": 50 }]
+```
+
+```ts
+registerPluginSiteBundleSection(
+  'cellarLogs',
+  {
+    export: async (request) => (await import('./server/backup')).exportLogs(request),
+    refusal: async (request) => (await import('./server/backup')).logsRefusal(request),
+    import: async (request) => (await import('./server/backup')).importLogs(request),
+  },
+  { pluginId: 'acme-cellar' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `export({ hostId, orgId, limit })` | The site's share, at most `limit` items, each a document with its `$id` and whatever it carries beneath it. Read whole or throw: a short list is a backup that lies. `orgId` is `null` for a site with no organization. |
+| `refusal({ …, org, items })` | Optional. Asked before the restore writes anything, with the bundle's items already capped at `limit`; answers the sentence the restore refuses with (403), or `null`. Sections are asked before the platform's own caps. |
+| `import({ …, write, stamps, loadPluginSurfaces })` | Writes the items back through `write(documentPath, data)` — whole documents, on the restore's batches and in its count, and only under the site's or its organization's tree — dated with `stamps()`. `loadPluginSurfaces()` loads every plugin's console server surface, for a check against something other plugins register there (a custom field type). Answers the rows the restore reports without refusing. |
+| `listDeclaredSiteBundleSections()` / `resolveSiteBundleSections()` | The declarations, and the declarations joined to their registered answers. A section declared and not registered runs the app's declarations step once; still missing, `resolveSiteBundleSections` throws, and the export or restore fails rather than leaving the section out. |
+
+One owner per key, never one the platform's bundle or a host collection's
+`siteExport` already uses, a `limit` from 1 to 1000, and a plugin with a
+`serverDeclarations` entry — the generator refuses anything else. The data
+plugin's `datasets` is the first.
 
 ## Sitemap sections — `plugin-sitemap-sections`
 
@@ -634,10 +670,13 @@ plugin publishes the kind, or the owner has no address at that scope. Render
 text, which is what these surfaces already do while their route params settle.
 A link is not access: the page at the far end applies its own gates.
 
-The first-party kinds: `contact`, `lead`, `company` and `deal` (CRM),
-`product` (Commerce), `campaign` (Marketing), `emailMessage`, `emailTemplate`
-and `sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
-`webhook` (Workflows). A plugin that links to another plugin's page asks for
+The first-party kinds: `contact`, `lead`, `company`, `deal` and `task` (CRM),
+`product` and `order` (Commerce), `booking` (Bookings), `formSubmission`
+(Inbox), `campaign` (Marketing), `emailMessage`, `emailTemplate` and
+`sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
+`webhook` (Workflows). The console's activity feeds link any of them the same
+way: an entry whose target type is a published kind opens at its owner's
+address. A plugin that links to another plugin's page asks for
 one of these; `check:plugin-domain-in-core` refuses one that spells the other
 plugin's slug or core route itself.
 
@@ -769,19 +808,23 @@ value without either plugin importing the other.
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The
-plugin that keeps it answers what a flat rate adds to a charge and which regime
-a settled payment was taxed under; any other plugin that charges asks here
-instead of importing the owner's model.
+plugin that keeps it answers the merchant's rate for a kind of charge, what a
+flat rate adds to a charge and which regime a settled payment was taxed under;
+any other plugin that charges asks here instead of importing the owner's model
+or reading the owner's settings.
 
 ```ts
 // the owner, from each of its server registrars
 registerPluginTaxProfile({
+  flatRate: (hostId, charge) => readStoredRate(hostId, charge),
   flatTax: (rate, chargeCents, fallbackLabel) => resolveFlatTax(rate, chargeCents, fallbackLabel),
   taxModeOf: (settledPayment, manualTaxCents) => modeOf(settledPayment, manualTaxCents),
 })
 
 // a plugin that charges
-const tax = pluginTaxProfile().flatTax(settings.service, chargeCents, 'Service tax')
+const profile = pluginTaxProfile()
+const rate = await profile.flatRate(hostId, 'service')
+const tax = profile.flatTax(rate, chargeCents, 'Service tax')
 const total = chargeCents + tax.taxCents
 ```
 
@@ -789,6 +832,7 @@ const total = chargeCents + tax.taxCents
 | --- | --- |
 | `registerPluginTaxProfile(profile, { pluginId? })` | A slot: a workspace has one tax profile, so a second plugin's is refused and the incumbent keeps serving. |
 | `pluginTaxProfile()` | The rule — and it **throws** when no plugin registered one. |
+| `flatRate(hostId, charge)` | The merchant's flat rate for one kind of charge on a site (`service` for an appointment), read where the owner keeps it, to be handed to `flatTax`. `undefined` for a rate nobody set or a kind the owner keeps none for. The contract's one read; a caller never reads the owner's settings itself. |
 | `flatTax(rate, chargeCents, fallbackLabel)` | `{ taxCents, label, pct }`, exclusive and rounded to the cent. `rate` is the merchant's stored setting passed as read; an absent, zero, negative or out-of-range one answers all-zero and never throws. |
 | `taxModeOf(settledPayment, manualTaxCents?)` | The regime as the owner records it. `manualTaxCents` is tax the caller added as a line of its own, which the processor reports as none. |
 | `pluginTaxProfileOwner()` | The owner's plugin id, or `null` — for a caller that only wants to know who it is. |
@@ -1227,6 +1271,68 @@ in `plugins.config.json`, not from code:
 | `validateInteraction(interaction, { validateStep? })` | The name, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
 | `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
 | `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
+
+## Host events — `host-events`
+
+A host event is what happened on a site that an automation can start on: a
+form submitted, a booking made, a contact moved stage. A server door raises one
+with `emitHostEvent(hostId, type, payload, { actor })` beside the write it
+performed; nothing watches the database. The platform raises `pageView` itself.
+A plugin whose doors raise others declares them in `plugins.config.json`, so
+the trigger pickers, the run history and every validator know them with no
+plugin loaded:
+
+```json
+"hostEvents": [
+  {
+    "type": "booking",
+    "order": 70,
+    "label": "New booking",
+    "payloadKeys": ["serviceName", "email", "startsAtMs"]
+  }
+]
+```
+
+- `type` is what a stored trigger names: never rename it. One plugin declares
+  each type, and none may take the platform's `pageView`.
+- `order` places it in every picker; `pageView` is 20.
+- `payloadKeys` (optional) lists what the event puts in scope for a filter or a
+  condition; leave it out when the door documents none.
+
+The declarations compile into `app-utils/plugin-host-events.generated.ts`.
+
+| API | Semantics |
+| --- | --- |
+| `HOST_EVENTS` / `HOST_EVENT_TYPES` | Every event, the platform's and the plugins', in `order`. `HostEventType` is their union. |
+| `hostEventLabel(type)` / `hostEventPayloadHint(type)` | The picker's words, falling back to the type itself for a custom event; the "In scope: …" line, or `null` where nothing is documented. |
+
+## Computed variables — `computed-variables` (`/server`)
+
+A site variable is bound into a page with `{{var:id}}` and resolved when the
+page is composed. A COMPUTED variable takes its value from a record a plugin
+keeps, with its stored value as the fallback. The plugin that computes it
+registers a variable computer, in two halves so its reads overlap the page's
+own:
+
+```ts
+// your plugin's serverDeclarations entry
+registerVariableComputer(
+  {
+    prepare: async (hostId) => (await import('./server/rates')).prepareRates(hostId),
+  },
+  { pluginId: 'cellar' },
+)
+
+// prepareRates reads what it needs for the site, then answers a computation:
+// ({ variables, functions }) => variables, with the computed ones' values filled in
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerVariableComputer(computer, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. Registering again replaces the plugin's own. |
+| `prepareComputedVariables(hostId)` | What the compose pipeline calls beside its variable and function reads: every computer's `prepare`, resolved to their computations applied in registration order. A computer that fails, or none registered, leaves each variable its stored value; with none registered, the app's declarations step is run once more first. |
+
+Workflows registers one: a variable that names a workflow takes its result.
 
 ## Platform events — `plugin-events` (`/server`)
 

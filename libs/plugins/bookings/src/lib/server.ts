@@ -379,13 +379,15 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     let serviceTax: PluginResolvedFlatTax = { taxCents: 0, label: '', pct: 0 }
     if (paid) {
       const ownerUid = (ownerOrg as { ownerUid?: unknown } | null)?.ownerUid
-      const [ownerProfile, storeSnapshot] = await Promise.all([
+      const [ownerProfile, serviceRate] = await Promise.all([
         ownerUid
           ? firestore.collection('profiles').doc(String(ownerUid)).get()
           : Promise.resolve(null),
         // The merchant's own service rate (AGL-2028), in the SAME round trip
-        // as the connected-account read this path already makes.
-        hostRef.collection('settings').doc('store').get(),
+        // as the connected-account read this path already makes — asked of
+        // the plugin that keeps the merchant's tax settings, which reads them
+        // where it stores them.
+        pluginTaxProfile().flatRate(hostId, 'service'),
       ])
       chargeAccountId = String(ownerProfile?.get('stripeAccountId') ?? '')
       if (
@@ -469,15 +471,12 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // DEFAULT OFF, and load-bearing: an absent, zero, negative or
       // out-of-range rate resolves to zero, so no existing merchant's charge
       // moves because this shipped.
-      const taxSettings = ((storeSnapshot?.data() as any)?.tax ?? {}) as {
-        service?: unknown
-      }
       const chargeCents = Math.round(priceUsd * 100)
       // Asked of the plugin that owns the merchant's tax rule, which throws
       // rather than answer zero if none is loaded: an untaxed charge recorded
       // as untaxed is the failure nobody sees until the merchant owes it.
       serviceTax = pluginTaxProfile().flatTax(
-        taxSettings.service,
+        serviceRate,
         chargeCents,
         'Service tax',
       )

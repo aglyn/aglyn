@@ -17,6 +17,13 @@
 
 import { within } from '@testing-library/dom'
 
+// A registry of its own in production mode re-evaluates React, MUI and the
+// whole component graph before the first keystroke. On a loaded two-worker CI
+// shard that ran past the 30 s default (the sequence editor's spec of the same
+// failure, 2026-09-30), so the budget is set for that load; the keystrokes
+// themselves are a fraction of it.
+const TYPING_BURST_TIMEOUT_MS = 120_000
+
 /**
  * "Maximum update depth exceeded" while editing a component's properties
  * (AGL-3423).
@@ -116,5 +123,5 @@ describe('typing in the Properties dialog beside a multi-answer Choice (AGL-3423
       env['NODE_ENV'] = environment
       scope.IS_REACT_ACT_ENVIRONMENT = actEnvironment
     }
-  }, 60000)
+  }, TYPING_BURST_TIMEOUT_MS)
 })

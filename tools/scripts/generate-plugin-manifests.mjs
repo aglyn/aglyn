@@ -1120,6 +1120,7 @@ function catalogRows() {
  * descriptions are staff copy, and the catalog rides on every published page.
  */
 const RELEASE_FLAGS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-release-flags.generated.ts'
+const HOST_EVENTS_FILE = 'libs/aglyn/src/lib/app-utils/plugin-host-events.generated.ts'
 const RELEASE_FLAG_KEY = /^release_[a-z0-9_]+$/
 
 function releaseFlagRows() {
@@ -1164,6 +1165,88 @@ function releaseFlagsContent(flags) {
     `export type PluginReleaseFlagKey =\n${keys || "  never"}\n\n` +
     `export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = ` +
     `${JSON.stringify(flags, null, 2)}\n`
+  )
+}
+
+/**
+ * The events a site's server doors raise, that the platform itself does not
+ * (`pageView` is core's own, in core `host-events.ts`). Mirrored here so a
+ * declaration cannot take one over: the type is what every stored trigger
+ * names, and a plugin claiming `pageView` would redirect every automation
+ * that starts on a page view.
+ */
+const CORE_HOST_EVENTS = [{ type: 'pageView', order: 20 }]
+
+/**
+ * The host events (AGL-3080): each plugin whose server doors call
+ * `emitHostEvent` declares the events they raise under `hostEvents` — the
+ * `type` a trigger stores, its `order` in every trigger picker, the `label`
+ * a picker and a run row show, and the `payloadKeys` it puts in scope. They
+ * are compiled into a file of their own beside `host-events.ts`, the one
+ * module that reads them, because the event bus, the pickers and the
+ * validators read them with no plugin loaded and a catalog reader has no use
+ * for them.
+ *
+ * Checked here: a plain type a trigger can store (a custom event's grammar,
+ * so the validator takes it) that no other plugin and not the core declares,
+ * a whole-number order no other event holds, a label, plain payload keys, and
+ * nothing else but a `$comment`.
+ */
+function hostEventRows() {
+  const plain = /^[a-z][A-Za-z0-9]{1,39}$/
+  const types = new Map(CORE_HOST_EVENTS.map((event) => [event.type, 'the core']))
+  const orders = new Map(CORE_HOST_EVENTS.map((event) => [event.order, `the core's "${event.type}"`]))
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.hostEvents
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" hostEvents`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the events the plugin raises`)
+    }
+    for (const event of declared) {
+      const { type, order, label, payloadKeys, $comment: _note, ...rest } = event ?? {}
+      if (typeof type !== 'string' || !plain.test(type)) {
+        throw new Error(`${where}: "type" is the plain name a trigger stores, 2 to 40 letters and digits`)
+      }
+      const what = `${where} "${type}"`
+      if (Object.keys(rest).length) throw new Error(`${what}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+      if (types.has(type)) throw new Error(`${what} is already declared by ${types.get(type)}`)
+      types.set(type, `"${plugin.id}"`)
+      if (!Number.isInteger(order) || order <= 0) throw new Error(`${what}: "order" is a whole number above 0`)
+      if (orders.has(order)) throw new Error(`${what}: "order" ${order} is already ${orders.get(order)}'s`)
+      orders.set(order, `"${plugin.id}"'s "${type}"`)
+      if (typeof label !== 'string' || !label.trim()) throw new Error(`${what}: "label" is how a picker names the event`)
+      const row = { pluginId: plugin.id, type, order, label }
+      if (payloadKeys !== undefined) {
+        if (
+          !Array.isArray(payloadKeys) ||
+          !payloadKeys.length ||
+          payloadKeys.some((key) => typeof key !== 'string' || !key.trim())
+        ) {
+          throw new Error(`${what}: "payloadKeys" lists what the event puts in scope, or is left out`)
+        }
+        row.payloadKeys = payloadKeys
+      }
+      rows.push(row)
+    }
+  }
+  return rows.sort((a, b) => a.order - b.order)
+}
+
+function hostEventsContent(events) {
+  const types = events.map((event) => `  | '${event.type}'`).join('\n')
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The host events plugins declare (AGL-3080): each plugin's \`hostEvents\`\n` +
+    ` * in plugins.config.json, in \`order\`. Core's \`host-events.ts\` folds them\n` +
+    ` * in beside the platform's own.\n */\n\n` +
+    `import type { HostEventDeclaration } from './host-events'\n\n` +
+    `/** Every host event a plugin declares. */\n` +
+    `export type PluginHostEventType =\n${types || '  never'}\n\n` +
+    `export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = ` +
+    `${JSON.stringify(events, null, 2)}\n`
   )
 }
 
@@ -1373,7 +1456,7 @@ function stampRecord(stamps, what, writable) {
 const CORE_SITE_EXPORT_KEYS = [
   'format', 'version', 'exportedAt', 'sourceHostId', 'host',
   'screens', 'layouts', 'versions', 'components', 'authors', 'collections', 'entries',
-  'datasets', 'records', 'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders',
+  'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders',
 ]
 
 /** The most documents one bundle may carry of one collection. */
@@ -1421,6 +1504,58 @@ function siteExportRow(siteExport, what, collection, resource) {
     if (never.includes(field)) throw new Error(`${what}: "${field}" is stamped or scoped by the restore, never read from a bundle`)
   }
   return { limit, fields: restored }
+}
+
+/**
+ * The sections of the whole-site backup plugins answer for themselves
+ * (AGL-3080): data a host collection's `siteExport` cannot describe —
+ * organization-owned, carrying a subcollection, checked against its own model
+ * on the way back in. Compiled, and read with the registered answers: a
+ * section declared and never registered fails the export rather than leaving
+ * the bundle short with nothing to say so.
+ *
+ * Checked here: a plain key no other section, host collection or platform
+ * key already uses in the bundle; a limit from 1 to the bundle ceiling; and a
+ * `serverDeclarations` entry to register the answers from.
+ */
+function siteBundleSectionRows() {
+  const rows = []
+  const taken = new Map(
+    hostCollectionRows()
+      .filter((row) => row.siteExport)
+      .map((row) => [row.name, `"${row.pluginId}" host collection`]),
+  )
+  for (const plugin of config.plugins) {
+    const declared = plugin.siteBundleSections
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" siteBundleSections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the section`)
+    }
+    if (!plugin.register?.serverDeclarations) {
+      throw new Error(
+        `${where}: a section's answers are registered from a "serverDeclarations" entry, and this plugin names none — ` +
+          'a declared section nothing registers fails every export',
+      )
+    }
+    for (const entry of declared) {
+      const { $comment: _note, ...section } = entry ?? {}
+      const { key, limit } = section
+      const what = `${where} "${key ?? ''}"`
+      const unknown = Object.keys(section).filter((field) => !['key', 'limit'].includes(field))
+      if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a section field`)
+      if (typeof key !== 'string' || !PLAIN_FIELD.test(key)) throw new Error(`${where}: a section's "key" is a plain bundle key`)
+      if (CORE_SITE_EXPORT_KEYS.includes(key)) throw new Error(`${what} is a key the platform's own bundle writes`)
+      const held = taken.get(key)
+      if (held) throw new Error(`${what} is already carried by the ${held} — one key has one owner`)
+      taken.set(key, `"${plugin.id}" section`)
+      if (!Number.isInteger(limit) || limit < 1 || limit > SITE_EXPORT_MAX_LIMIT) {
+        throw new Error(`${what}: "limit" is a whole number from 1 to ${SITE_EXPORT_MAX_LIMIT}`)
+      }
+      rows.push({ pluginId: plugin.id, key, limit })
+    }
+  }
+  return rows
 }
 
 /**
@@ -2157,7 +2292,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -2190,6 +2325,12 @@ ${hostCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`
 export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSection[] = [
 ${sitemapSectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
+
+/**
+ * Every section of the whole-site backup a first-party plugin answers for,
+ * declared by that plugin (AGL-3080), in the order the bundle carries them.
+ */
+export const PLUGIN_SITE_BUNDLE_SECTIONS_DECLARED: readonly ResolvedPluginSiteBundleSectionDeclaration[] = ${JSON.stringify(siteBundleSectionRows(), null, 2)}
 
 /**
  * Every org collection a first-party plugin owns whose documents the media
@@ -2439,6 +2580,7 @@ const ALL = [
     ),
   },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
+  { file: HOST_EVENTS_FILE, content: hostEventsContent(hostEventRows()) },
   { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },

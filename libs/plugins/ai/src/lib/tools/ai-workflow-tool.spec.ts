@@ -23,7 +23,7 @@ import {
   HOST_ACTION_STEP_LABELS,
 } from '@aglyn/aglyn/app-utils/actions'
 import { CRM_TASK_MAX_DUE_DAYS } from '@aglyn/aglyn/app-utils/crm'
-import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/workflows'
+import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
 import { AI_AUTOMATION_STEP_TYPES, AI_AUTOMATION_UNSUPPORTED } from '../model/ai-workflow-job'
 import {
   AI_AUTOMATION_NAME_MAX_CHARS,

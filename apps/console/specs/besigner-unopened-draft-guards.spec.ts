@@ -43,7 +43,17 @@ const PAGES = {
     'besigner',
     'page.tsx',
   ),
-  form: join(EDITOR, 'forms', '[formId]', 'versions', '[versionId]', 'besigner', 'page.tsx'),
+  // A form, and every other plugin-authored site document, opens in the one
+  // plugin-document editor (AGL-3080).
+  'plugin document': join(
+    EDITOR,
+    '[documentSegment]',
+    '[docId]',
+    'versions',
+    '[versionId]',
+    'besigner',
+    'page.tsx',
+  ),
 }
 
 /** Comments removed, so prose about a guard is never read as the guard. */

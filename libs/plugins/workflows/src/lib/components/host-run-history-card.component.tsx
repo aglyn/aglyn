@@ -23,7 +23,7 @@ import {
   runTriggeredByLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/workflows'
+import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
 import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'

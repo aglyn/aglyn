@@ -16,7 +16,6 @@
  */
 
 import type { HostAction } from '@aglyn/aglyn/app-utils/actions'
-import type { HostWorkflow } from '@aglyn/aglyn/app-utils/workflows'
 import { emptyAiAutomationRecords, type AiAutomationRecords } from './ai-automation-draft'
 import {
   AI_OUTLINE_RUN_ERRORS_MAX,
@@ -27,6 +26,7 @@ import {
   aiRunOutline,
   aiWorkflowExplanationText,
   aiWorkflowOutline,
+  type AiIndexedWorkflow,
 } from './ai-automation-outline'
 
 /**
@@ -131,7 +131,7 @@ describe('aiActionOutline', () => {
 
 describe('aiWorkflowOutline', () => {
   it('outlines each function call, whether the site still has the function, and what it returns', () => {
-    const workflow: HostWorkflow = {
+    const workflow: AiIndexedWorkflow = {
       name: 'Shipping quote',
       steps: [
         { functionId: 'fn-rate', functionName: 'rateFor', args: ['weight', ' '], resultName: 'rate' },

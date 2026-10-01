@@ -97,6 +97,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 // This file is about the lockdown, so whatever owns the tax rule adds nothing.
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-tax-profile', () => ({
   pluginTaxProfile: () => ({
+    flatRate: async () => undefined,
     flatTax: () => ({ taxCents: 0, label: '', pct: 0 }),
     taxModeOf: () => 'none',
   }),

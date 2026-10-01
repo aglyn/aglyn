@@ -18,7 +18,6 @@
 // Each from its own module, not the `@aglyn/aglyn` barrel: the server-side
 // person matcher builds its links here, and the barrel reaches the client
 // contexts no server graph may load.
-import { CRM_CONTACTS_EMAIL_PARAM } from '@aglyn/aglyn/app-utils/console-record-links'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { CrmConsoleSectionId } from '../components/crm-console-sections'
 import { CRM_VIEW_PARAM } from './crm-view-param'
@@ -103,13 +102,14 @@ export function crmRoutes(basePath: string) {
 export const CONTACTS_LIST_SOURCE_PARAM = 'source'
 export const CONTACTS_LIST_FORM_PARAM = 'formId'
 /**
- * The email key is the SHARED constant (AGL-2622): the console app — which
- * the module boundaries keep from importing this plugin — builds the same
- * address through `crmContactByEmailHref`, and `crm-routes.spec.ts` pins
- * `contactByEmail` against it so the plugin and the app cannot spell the
- * key two ways.
+ * The query key the Contacts list OPENS the one person with an address by
+ * (AGL-2612). A surface that holds only an email — an order, a booking, a
+ * site user — asks the record-route registry for `contact` by email
+ * (`crm-record-routes.ts`), which builds the list with this key; the list
+ * filters on the address and moves on to the record when exactly one
+ * matches.
  */
-export const CONTACTS_LIST_EMAIL_PARAM = CRM_CONTACTS_EMAIL_PARAM
+export const CONTACTS_LIST_EMAIL_PARAM = 'email'
 
 export type CrmRoutes = ReturnType<typeof crmRoutes>
 

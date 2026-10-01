@@ -17,6 +17,13 @@
 
 import { within } from '@testing-library/dom'
 
+// A registry of its own in production mode re-evaluates React, MUI and the
+// whole component graph before the first keystroke. On a loaded two-worker CI
+// shard that ran past the 30 s default (the sequence editor's spec of the same
+// failure, 2026-09-30), so the budget is set for that load; the keystrokes
+// themselves are a fraction of it.
+const TYPING_BURST_TIMEOUT_MS = 120_000
+
 /**
  * A multi-select beside a field being typed in, in a form that re-renders
  * its fields on every change (AGL-3423).
@@ -122,5 +129,5 @@ describe('a multi-select beside a field being typed in (AGL-3423)', () => {
       env['NODE_ENV'] = environment
       scope.IS_REACT_ACT_ENVIRONMENT = actEnvironment
     }
-  }, 60000)
+  }, TYPING_BURST_TIMEOUT_MS)
 })

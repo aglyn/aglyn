@@ -17,13 +17,13 @@
 
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import {
   type AglynOrgBilling,
   checkEntitlement,
   type CrmBookingRefKind,
   isHostPluginEnabled,
 } from '@aglyn/aglyn'
+import { bookingsPageHref } from '../model/bookings-record-routes'
 import { BOOKING_PATH_DEFAULT, bookingLinkFor } from '../model/bookings'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { mdiCalendarClock, mdiContentCopy } from '@aglyn/shared-data-mdi'
@@ -194,10 +194,7 @@ export function BookMeetingDialog(props: BookMeetingDialogProps) {
   const params = useParams<{ orgSlug?: string; host?: string }>()
   const bookingsHref =
     params?.orgSlug && params?.host
-      ? Aglyn.siteRecordLinks({
-          orgSlug: String(params.orgSlug),
-          host: String(params.host),
-        }).bookings()
+      ? bookingsPageHref({ orgSlug: String(params.orgSlug), host: String(params.host) })
       : null
 
   const site = {

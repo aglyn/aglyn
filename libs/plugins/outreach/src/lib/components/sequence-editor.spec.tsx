@@ -592,5 +592,8 @@ describe('the sequence editor: typing (AGL-3423)', () => {
       env['NODE_ENV'] = environment
       scope.IS_REACT_ACT_ENVIRONMENT = actEnvironment
     }
-  })
+    // The cost is the isolated registry: production React, MUI and the
+    // editor loaded a second time, which on a two-worker CI shard ran past
+    // the 30-second default twice in a row. The keystrokes are milliseconds.
+  }, 120_000)
 })

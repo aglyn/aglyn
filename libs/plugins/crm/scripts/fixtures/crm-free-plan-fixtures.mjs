@@ -65,8 +65,8 @@
 import { createHash } from 'node:crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { nameSearchFields } from './crm-fixtures.mjs'
-import { withCrmListFields } from './org-record-list-fields.mjs'
-import { readLegalDocumentVersion } from './legal-document-version.mjs'
+import { withCrmListFields } from '../../../../../tools/scripts/lib/org-record-list-fields.mjs'
+import { readLegalDocumentVersion } from '../../../../../tools/scripts/lib/legal-document-version.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

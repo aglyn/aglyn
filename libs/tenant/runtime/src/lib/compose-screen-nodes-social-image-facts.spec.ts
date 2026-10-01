@@ -31,7 +31,6 @@ const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
 const mockReadRepeatRows = jest.fn()
-const mockGetWorkflows = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetForms = jest.fn()
 const mockGetScreenVersion = jest.fn()
@@ -62,7 +61,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -155,7 +153,6 @@ describe("a page's social card is read with its placements (AGL-2850)", () => {
     mockGetVariables.mockResolvedValue([])
     mockGetFunctions.mockResolvedValue([])
     mockReadRepeatRows.mockResolvedValue([])
-    mockGetWorkflows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue([])
     mockGetForms.mockResolvedValue({ forms: {} })
     mockDocs.clear()
