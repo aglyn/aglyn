@@ -75,6 +75,7 @@ it, and the result names the values it could not keep, by field.
 | **Appears earlier in the file** | The same address is on an earlier row; the first row wins. |
 | **Contact limit reached** | Your plan's records band is full, on a plan whose band is a hard limit — see [CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records). |
 | **Could not be saved** | Something went wrong writing the record. Try that row again. |
+| **Not reached in time** | The batch ran out of time before it got to the row, so nothing was written for it. Import the skipped rows again; a row that did land is updated, never added twice. |
 
 A file the CRM itself exported — from the table's **Export CSV** or the
 [bulk bar's](./bulk-actions.md#the-contacts-file) — re-imports without a hand
