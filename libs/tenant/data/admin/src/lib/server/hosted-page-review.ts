@@ -52,6 +52,9 @@
  *   site's cache and the next render serves it) or mark it actioned to
  *   REJECT (it stays unserved; any later version carrying the same signals
  *   is refused without a new row).
+ * - A hold from a workspace in its first fortnight also asks for an
+ *   automatic `security` hold on the workspace, the site and the publishing
+ *   account (`page-security-hold.ts`, AGL-3450), which the console places.
  * - Keyed on the SIGNALS, as the send seam's rows are: a composed page
  *   carries per-render values (dates, collection rows) that no content hash
  *   would survive, while what makes it phishing does not change between
@@ -59,12 +62,16 @@
  *
  * ## Tiers
  *
- * `signalsThatHold`: a lookalike link or embed and an author-defined
- * credential field hold for EVERY workspace; a brand's call to action or
- * lure, and a call to action that leaves the site beside a lure, only for a
- * workspace in its first fortnight. The workspace's documents are read only
- * when the pure screen has found something, so a clean page costs no read
- * for this.
+ * `signalsThatHold`: a lookalike link or embed, an author-defined
+ * credential field and a link to a host Google Web Risk lists
+ * (`web-risk-link`, AGL-3451) hold for EVERY workspace; a brand's call to
+ * action or lure, and a call to action that leaves the site beside a lure,
+ * only for a workspace in its first fortnight. The workspace's documents are
+ * read only when something was found, so a clean page costs no read for
+ * this. The page's foreign hosts are looked up first, against a cache
+ * (`web-risk.ts`), and noted beside the version it serves so the daily
+ * re-check can look again: a harvester is often listed only after it is
+ * published. A lookup that fails finds nothing, so it never holds a page.
  *
  * Fails CLOSED, unlike the send path: a page the pure screen flagged whose
  * review cannot finish — the workspace read, the row write — is answered
@@ -82,7 +89,8 @@
  * {@link reviewSiteRedirect} before it serves one. Same screen
  * (`screenSiteRedirect`), same tiers, same row and the same staff decision:
  * a held rule does not fire, and is filed as a `page` hold on its rule's
- * document.
+ * document. Its destination is looked up against the reputation list too
+ * (AGL-3451), so a redirect to a listed site holds for every workspace.
  *=========================================*/
 
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
@@ -102,12 +110,18 @@ import {
   isYoungWorkspaceAge,
   signalsThatHold,
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
+import {
+  foreignHostsForReputation,
+  webRiskSignals,
+} from '@aglyn/shared-util-email/link-reputation'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 import { describeHeldPage, type HostedPageContext } from './held-page-subject'
 import { notifyRiskEvent } from './risk-notice'
 import { orgAgeDays } from './org-age'
+import { requestPageSecurityHold } from './page-security-hold'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
+import { lookupHostReputation, platformReputationExclusions } from './web-risk'
 import {
   canonicalJson,
   fileOutboundHold,
@@ -140,6 +154,13 @@ export interface HostedPageReviewRequest {
    * to name the page — never to decide whether it serves.
    */
   page?: HostedPageContext | null
+  /**
+   * Signals found about this page elsewhere, judged with the page's own
+   * (AGL-3451): the daily link re-check passes a link Web Risk has listed
+   * since the page went live, so the hold, its row and the young
+   * workspace's security hold all come from this one path.
+   */
+  extraSignals?: readonly PhishingScreenSignal[]
 }
 
 export type HostedPageReviewOutcome =
@@ -167,12 +188,46 @@ const servedMemo = new Map<string, string>()
 /** Lookalike hosts this process already flagged for an established page, and when. */
 const flaggedMemo = new Map<string, number>()
 const FLAGGED_MEMO_TTL_MS = 60 * 60_000
+/**
+ * The foreign hosts each reviewed page version links to (AGL-3451), for
+ * {@link recordServedPageVersion} to note beside the version it served, which
+ * is what the daily link re-check walks. Bounded: a process that reviews more
+ * pages than this starts again.
+ */
+const reviewedForeignHosts = new Map<string, string[]>()
+const REVIEWED_FOREIGN_HOSTS_MAX = 10_000
 
 /** Test seam: forget what this process learned. */
 export function resetHostedPageReviewMemoForTests(): void {
   pageMemo.clear()
   servedMemo.clear()
   flaggedMemo.clear()
+  reviewedForeignHosts.clear()
+}
+
+/**
+ * Every foreign host the page links to, and the ones Google Web Risk lists
+ * (AGL-3451). Foreign before the workspace is known: not the platform's
+ * own, not a brand's own domain, not a common social link. Never throws; a
+ * lookup that failed lists nothing.
+ */
+async function pageLinkReputation(
+  linkHosts: readonly string[],
+): Promise<{ hosts: string[]; signals: PhishingScreenSignal[] }> {
+  const hosts = foreignHostsForReputation(linkHosts, {
+    excludeDomains: platformReputationExclusions(),
+  })
+  if (!hosts.length) return { hosts, signals: [] }
+  const answer = await lookupHostReputation(hosts)
+  return { hosts, signals: webRiskSignals(answer.hits) }
+}
+
+/** Is this host one of the workspace's own? */
+function isOwnHost(host: string, ownDomains: readonly (string | null | undefined)[] | undefined): boolean {
+  return (ownDomains ?? []).some((own) => {
+    const domain = String(own ?? '').trim().toLowerCase()
+    return Boolean(domain) && (host === domain || host.endsWith(`.${domain}`))
+  })
 }
 
 /**
@@ -214,7 +269,14 @@ export async function reviewHostedPage(
   request: HostedPageReviewRequest,
 ): Promise<HostedPageReviewOutcome> {
   const found = screenHostedPage({ nodes: request.nodes })
-  if (!found.signals.length) return { outcome: 'serve' }
+  // Every foreign host it points at, against the reputation list
+  // (AGL-3451): a harvester known to be bad anywhere holds however plain the
+  // page around it is. Strong, so it holds at any workspace age.
+  const reputation = await pageLinkReputation(found.linkHosts)
+  if (reviewedForeignHosts.size >= REVIEWED_FOREIGN_HOSTS_MAX) reviewedForeignHosts.clear()
+  reviewedForeignHosts.set(`${request.hostId}/${request.screenId}/${request.versionId}`, reputation.hosts)
+  const listed = [...reputation.signals, ...(request.extraSignals ?? [])]
+  if (!found.signals.length && !listed.length) return { outcome: 'serve' }
 
   const nowMs = request.nowMs ?? Date.now()
   try {
@@ -230,6 +292,13 @@ export async function reviewHostedPage(
     // name or domain is its own, and a link to its own site is not away.
     const identity = workspaceScreenIdentity({ org, host })
     const verdict = screenHostedPage({ nodes: request.nodes, ...identity })
+    // A listing of the workspace's own host is not a link away from it.
+    const screened = [
+      ...verdict.signals,
+      ...listed.filter(
+        (signal) => !('host' in signal) || !isOwnHost(signal.host, identity.ownDomains),
+      ),
+    ]
     const ageDays = orgAgeDays((org as { createdAt?: unknown } | null)?.createdAt, nowMs)
     // Every workspace is screened, however old: an established account can
     // be compromised, and a compromised account publishing a lure is the
@@ -244,7 +313,7 @@ export async function reviewHostedPage(
     //   - content ALREADY LIVE keeps serving, and is flagged to staff as
     //     urgent, who lock the site if it is impersonation.
     if (!isYoungWorkspaceAge(ageDays)) {
-      const strong = signalsThatHold(verdict.signals, { ageDays })
+      const strong = signalsThatHold(screened, { ageDays })
       if (!strong.length) return { outcome: 'serve' }
       if (await isAlreadyLive(request.hostId, request.screenId, request.versionId, nowMs)) {
         await flagLivePage({
@@ -261,7 +330,7 @@ export async function reviewHostedPage(
         return { outcome: 'serve' }
       }
     }
-    const signals = signalsThatHold(verdict.signals, { ageDays })
+    const signals = signalsThatHold(screened, { ageDays })
     if (!signals.length) return { outcome: 'serve' }
 
     const reviewId = pageReviewId(request.hostId, request.screenId, signals)
@@ -323,6 +392,25 @@ export async function reviewHostedPage(
       url,
       reportedHostname: flagged,
     })
+    // A hold from a workspace in its first fortnight also holds the
+    // workspace, the site and the account that published it (AGL-3450).
+    if (state === 'held') {
+      await requestPageSecurityHold({
+        orgId: orgId ?? '',
+        org,
+        hostId: request.hostId,
+        screenId: request.screenId,
+        versionId: request.versionId,
+        reviewId,
+        reference,
+        signals,
+        ageDays,
+        pageLabel: label,
+        pageUrl: url,
+        siteName: typeof host?.['name'] === 'string' ? host['name'] : null,
+        nowMs,
+      })
+    }
     pageMemo.set(reviewId, { state, atMs: nowMs })
     return state === 'released'
       ? { outcome: 'serve' }
@@ -332,7 +420,7 @@ export async function reviewHostedPage(
     // review that could not finish has not cleared it. Not remembered, so
     // the next render reviews it again.
     console.error('[page-review] a flagged page could not be reviewed — holding it', error)
-    const reviewId = pageReviewId(request.hostId, request.screenId, found.signals)
+    const reviewId = pageReviewId(request.hostId, request.screenId, [...found.signals, ...listed])
     return { outcome: 'held', reviewId, reference: heldOutboundReference(reviewId) }
   }
 }
@@ -379,7 +467,10 @@ export async function reviewSiteRedirect(
   request: SiteRedirectReviewRequest,
 ): Promise<HostedPageReviewOutcome> {
   const found = screenSiteRedirect({ source: request.source, destination: request.destination })
-  if (!found.signals.length) return { outcome: 'serve' }
+  // Where it sends visitors, against the reputation list (AGL-3451): a
+  // listed destination holds for every workspace, as a listed link does.
+  const reputation = await pageLinkReputation(found.linkHosts)
+  if (!found.signals.length && !reputation.signals.length) return { outcome: 'serve' }
 
   const nowMs = request.nowMs ?? Date.now()
   try {
@@ -397,8 +488,14 @@ export async function reviewSiteRedirect(
       destination: request.destination,
       ...identity,
     })
+    const screened = [
+      ...verdict.signals,
+      ...reputation.signals.filter(
+        (signal) => !('host' in signal) || !isOwnHost(signal.host, identity.ownDomains),
+      ),
+    ]
     const ageDays = orgAgeDays((org as { createdAt?: unknown } | null)?.createdAt, nowMs)
-    const signals = signalsThatHold(verdict.signals, { ageDays })
+    const signals = signalsThatHold(screened, { ageDays })
     if (!signals.length) return { outcome: 'serve' }
 
     const reviewId = redirectReviewId(request.hostId, request.ruleId, signals)
@@ -448,7 +545,10 @@ export async function reviewSiteRedirect(
   } catch (error) {
     // Closed, as a page is: the screen found a signal and nothing cleared it.
     console.error('[page-review] a flagged redirect could not be reviewed — holding it', error)
-    const reviewId = redirectReviewId(request.hostId, request.ruleId, found.signals)
+    const reviewId = redirectReviewId(request.hostId, request.ruleId, [
+      ...found.signals,
+      ...reputation.signals,
+    ])
     return { outcome: 'held', reviewId, reference: heldOutboundReference(reviewId) }
   }
 }
@@ -615,14 +715,31 @@ export async function recordServedPageVersion(
   versionId: string,
 ): Promise<void> {
   const key = `${hostId}/${screenId}`
-  if (!versionId || servedMemo.get(key) === versionId) return
+  // The foreign hosts this version links to, as its review found them
+  // (AGL-3451): noted beside it so the daily link re-check can walk them.
+  const foreignHosts = reviewedForeignHosts.get(`${key}/${versionId}`)
+  const memoValue = foreignHosts ? `${versionId}|${foreignHosts.join(',')}` : versionId
+  if (!versionId || servedMemo.get(key) === memoValue) return
   try {
     const ref = pageReviewRef(hostId, screenId)
     const snapshot = await ref.get()
-    if (snapshot.get('servedVersionId') !== versionId) {
-      await ref.set({ servedVersionId: versionId, servedAtMs: Date.now() }, { merge: true })
+    const versionMoved = snapshot.get('servedVersionId') !== versionId
+    const stored = snapshot.get('foreignHosts')
+    const hostsMoved =
+      foreignHosts !== undefined &&
+      (Array.isArray(stored) ? stored.join(',') : '') !== foreignHosts.join(',')
+    if (versionMoved || hostsMoved) {
+      await ref.set(
+        {
+          ...(versionMoved ? { servedVersionId: versionId, servedAtMs: Date.now() } : {}),
+          ...(foreignHosts
+            ? { foreignHosts, foreignHostCount: foreignHosts.length }
+            : {}),
+        },
+        { merge: true },
+      )
     }
-    servedMemo.set(key, versionId)
+    servedMemo.set(key, memoValue)
   } catch (error) {
     console.warn('[page-review] the served version could not be noted', error)
   }

@@ -367,6 +367,15 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
    * operator digest once its hour has passed.
    */
   '/api/admin/operator-alerts/tick',
+  /*
+   * The automatic security holds (AGL-3450). The page screen runs where a
+   * page is composed — mostly the published-site runtime, which may not hold
+   * the lockdown path — so a held page from a young workspace only RECORDS
+   * the hold, and this places it: the workspace, the site and the account,
+   * as `security`. Fifteen minutes is how long a held phisher's account can
+   * keep working before it is locked; the page itself is already held.
+   */
+  '/api/admin/security-holds',
 ]
 
 /** What one POST to a cron route settled as. */
@@ -803,6 +812,18 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '15 * * * *',
     route: '/api/risk-notices/digests',
   },
+  /*
+   * Daily (AGL-3451): every live page's foreign links, looked up against
+   * Google Web Risk again, because a credential harvester is often listed
+   * only after the page linking to it went up. A page with a newly listed
+   * link is held through the page review, and a young workspace's security
+   * hold is placed in the same run. Chunked by site; the cache keeps a host
+   * answered in the last twelve hours from being asked again.
+   */
+  'web-risk-recheck': {
+    schedule: '30 9 * * *',
+    route: '/api/admin/web-risk-recheck',
+  },
 } as const
 
 /**
@@ -854,6 +875,7 @@ export const consoleAiInsightsDigest = consoleDailyCron('ai-insights-digest')
 export const consoleCrmTaskReminders = consoleDailyCron('crm-task-reminders')
 export const consoleRiskNoticeDigests = consoleDailyCron('risk-notice-digests')
 export const consoleUsageEmail = consoleDailyCron('usage-email')
+export const consoleWebRiskRecheck = consoleDailyCron('web-risk-recheck')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

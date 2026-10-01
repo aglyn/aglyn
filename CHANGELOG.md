@@ -15,6 +15,10 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **crm:** a Nurturing lead stage for leads automated email is reaching ([AGL-3446](https://linear.app/aglyn/issue/AGL-3446))
+- **billing:** every price and band holds its margin in Vercel's dearest region ([AGL-3444](https://linear.app/aglyn/issue/AGL-3444), [AGL-1879](https://linear.app/aglyn/issue/AGL-1879))
+- **billing:** every plan's included bandwidth stays above water past Vercel's 10M requests ([AGL-3444](https://linear.app/aglyn/issue/AGL-3444))
+- **security:** the media CDN rate limit enforces a 429 past 1,500 a minute per address ([AGL-2812](https://linear.app/aglyn/issue/AGL-2812))
 - **examples:** two consumer apps, and the proof builds and runs them ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
 - **plugins:** a plugin's band can be billed beside storage and bandwidth; the estimate, the invoice sweep, the summary and the staff rows read it from the declaration ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1688](https://linear.app/aglyn/issue/AGL-1688))
 - **plugins:** the CRM and the data plugin measure their own month in the usage sweep; plugin bands are summed from their host counters ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2399](https://linear.app/aglyn/issue/AGL-2399))
@@ -35,6 +39,16 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **abuse:** the phishing screen reads what a reader sees, and a prefilled sign-in link ([AGL-3453](https://linear.app/aglyn/issue/AGL-3453))
+- **abuse:** the phishing screen reads a document-share page whole, and off-site redirects ([AGL-3447](https://linear.app/aglyn/issue/AGL-3447))
+- **docs,ai:** claims match what ships ([AGL-3448](https://linear.app/aglyn/issue/AGL-3448))
+- **ai:** a copy whose source lacks what the plan adds is built from it ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **ai:** a template, layout or component job builds what its plan creates ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **ai:** a template prints no slug, timestamp or address in its copy ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **legal:** declare the npm registry the dist-tag tool reads ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **legal:** the npm registry entry names no brand literal ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **tools:** the emulator sweep runs the CRM plugin's alias spec ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** closed pinned abuse rows read closed; notice line says what landed ([AGL-3441](https://linear.app/aglyn/issue/AGL-3441))
 - **tools:** the emulator sweep runs the CRM plugin's member-alias spec ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **billing:** the usage sweep visits a workspace with no sites, so its org-level usage is metered ([AGL-3445](https://linear.app/aglyn/issue/AGL-3445))
 - **release:** the second dist-tag waits out the biggest packages ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
@@ -81,6 +95,7 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **crm:** a delivered campaign reaches the leads through the record seam ([AGL-3446](https://linear.app/aglyn/issue/AGL-3446))
 - **plugins:** the Forms and Automation page zones are declared by the plugins that draw them ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **plugins:** a deleted campaign comes off the CRM's leads and contacts through the detacher the CRM registers ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **marketing:** the automation editor lists a site's overlays through the source the marketing plugin publishes ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))

@@ -298,18 +298,22 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   > | null>(null)
   // const props = { data: exampleData }
   //
-  // The page ships its map packed (AGL-3401): each node's `$id` and
-  // `parentId` are left for its key and its parent's `nodes` list to state.
-  // Unpacked here, after the patch is merged — unpacking a full node is a
-  // no-op — so nothing below ever sees a node without them.
+  // The page ships its map packed (AGL-3401, AGL-3438): a tree that states
+  // each node's id once, with `$id`, `parentId` and `nodes` left for its
+  // position to state. Unpacked here, BEFORE the patch is merged — the patch
+  // is a flat map keyed by id, and so is what unpacking returns — and the
+  // merge unpacked again, which fills in any patch node the same way and
+  // leaves a full one as it is. Nothing below ever sees a packed node.
+  const shippedNodes = useMemo(
+    () => unpackWireNodes(props.nodes),
+    [props.nodes],
+  )
   const nodes = useMemo(
     () =>
-      unpackWireNodes(
-        deferredPatch && props.nodes
-          ? { ...props.nodes, ...deferredPatch }
-          : props.nodes,
-      ),
-    [props.nodes, deferredPatch],
+      deferredPatch && shippedNodes
+        ? unpackWireNodes({ ...shippedNodes, ...deferredPatch })
+        : shippedNodes,
+    [shippedNodes, deferredPatch],
   )
   // Unlocked content for password-protected screens (AGL-87).
   const [unlockedNodes, setUnlockedNodes] = useState<Record<

@@ -107,6 +107,11 @@ export interface HostedPageScreenInput {
 
 export interface HostedPageScreenVerdict {
   signals: PhishingScreenSignal[]
+  /**
+   * Every host the page (or the redirect) links, embeds or posts to, lowercased — what the
+   * link reputation lookup reads (AGL-3451), so the page is walked once.
+   */
+  linkHosts: string[]
 }
 
 /** A node as the walk finds it. */
@@ -425,7 +430,7 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
     })
   }
 
-  return { signals }
+  return { signals, linkHosts }
 }
 
 /**
@@ -513,7 +518,7 @@ export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageSc
   const signals: PhishingScreenSignal[] = []
   const destination = String(input.destination ?? '').trim()
   const hosts = linkHostsIn(destination.startsWith('//') ? `https:${destination}` : destination)
-  if (!hosts.length) return { signals }
+  if (!hosts.length) return { signals, linkHosts: hosts }
   const ownNames = squashScreenText((input.ownNames ?? []).filter(Boolean).join(' '))
   const ownHosts = (input.ownDomains ?? [])
     .map((domain) => String(domain ?? '').trim().toLowerCase().replace(/\.+$/, ''))
@@ -534,7 +539,7 @@ export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageSc
     !ownHosts.some((own) => host === own || host.endsWith(`.${own}`)) &&
     !isAnyOfficialBrandDomain(registrable) &&
     !isCommonLinkDomain(registrable)
-  if (!leaves) return { signals }
+  if (!leaves) return { signals, linkHosts: hosts }
 
   const source = String(input.source ?? '').trim()
   const words = pathWords(source)
@@ -552,7 +557,7 @@ export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageSc
       signals.push({ code: 'brand-lure-link', brand: brand.id, lure: anyLure.slice(0, 120), host })
     }
   }
-  return { signals }
+  return { signals, linkHosts: hosts }
 }
 
 /** A path read as words: `/secure-document_access` → `secure document access`. */

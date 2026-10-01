@@ -405,17 +405,21 @@ describe('every server door captures through the wrapper', () => {
   it('finds no door that names no stage', () => {
     const files = ROOTS.flatMap((root) => sourceFiles(join(REPO_ROOT, root)))
     const unstaged: string[] = []
-    let doors = 0
+    const doors = new Set<string>()
     for (const file of files) {
       for (const call of captureCalls(readFileSync(file, 'utf8'))) {
-        doors += 1
+        doors.add(file.slice(REPO_ROOT.length + 1))
         if (!/\b(initialLifecycleStage|lifecycleStage)\b/.test(call)) {
           unstaged.push(file.slice(REPO_ROOT.length + 1))
         }
       }
     }
-    // The same control as above: a walk that saw no door proves nothing.
-    expect(doors).toBeGreaterThan(10)
+    // The same control as above: a walk that saw no door proves nothing. It
+    // names the CRM's contact-capture door rather than counting doors: every
+    // other plugin's capture — a sale, a booking, a form — reaches the writer
+    // through that one call (AGL-3080), so a count measures how the doors
+    // happen to be split today, and reaching THIS call is the proof.
+    expect([...doors]).toContain('libs/plugins/crm/src/lib/server/capture-contact.ts')
     expect(unstaged).toEqual([])
   })
 })

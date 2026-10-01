@@ -2402,6 +2402,17 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Sends the one summary a workspace gets when more items were held or flagged in an hour than are sent one by one (AGL-3368). If it stops, a workspace whose attack ended hears nothing about the items folded into its digest until its next notice.',
   },
   {
+    id: 'web-risk-recheck',
+    label: 'Link re-check (Web Risk)',
+    // Daily on Cloud Scheduler (AGL-3451); the dailies' ninety-minute grace.
+    cron: '30 9 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/web-risk-recheck',
+    graceMinutes: 90,
+    drives:
+      'Looks up every live page’s outside links against Google Web Risk again, and holds a page whose link has been listed since it went live; a new workspace’s page also gets its security hold (AGL-3451, AGL-3450). If it stops, a page that linked to a harvester before the harvester was listed keeps serving until somebody publishes it again or a render after the cache expires catches it.',
+  },
+  {
     id: 'firestore-export',
     label: 'Weekly Firestore export',
     cron: '0 5 * * 1',
@@ -2565,6 +2576,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 45,
     drives:
       'Asks every health check on the install so a degraded one emails the operator even with no uptime monitor watching; flags support tickets past their response time; sends the daily operator digest (AGL-3377). If it stops, a check that goes red is only noticed by whoever reads it, overdue tickets say nothing, and digest alerts pile up unsent — while every immediate alert still goes out.',
+  },
+  {
+    id: 'security-holds',
+    label: 'Automatic security holds',
+    // The ninth route on the `consoleFastCrons` job (AGL-3450): the page
+    // screen records a young workspace's hold wherever it runs, and this is
+    // what places it.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons \u2192 console /api/admin/security-holds',
+    graceMinutes: 45,
+    drives:
+      'Places the security hold the page screen asks for when it holds a phishing page from a workspace in its first two weeks: the workspace, the site (as a takedown) and the publishing account are locked as security, and staff are alerted (AGL-3450). If it stops, the page itself stays held, but the account that published it keeps working — it can publish the next page and send mail — until somebody locks it by hand.',
   },
   {
     id: 'ai-jobs-beat',
