@@ -143,6 +143,9 @@ PROJECTS=(
   libs/plugins/workflows
   # The Data plugin proves a repeat's scoped sharing against the real rules.
   libs/plugins/data
+  # The CRM plugin files inbound email by a member's confirmed aliases; the
+  # spec moved here from libs/tenant/data/admin with the capture code.
+  libs/plugins/crm
 )
 
 # Projects whose specs exercise a cross-workspace job run their suites one at
