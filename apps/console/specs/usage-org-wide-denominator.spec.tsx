@@ -58,7 +58,7 @@ import {
 import { resolveOrgEntitlements } from '@aglyn/aglyn'
 
 /**
- * Pro: `hostLimit: 3`, `bandwidthGb: 125`, `totalSiteSizeMb: 5120`.
+ * Pro: `hostLimit: 3`, `bandwidthGb: 35`, `totalSiteSizeMb: 5120`.
  * Three sites, unequal, and none of them is the total.
  */
 const ORG = { $id: 'org-1', plan: 'pro' } as any
@@ -68,18 +68,18 @@ const HOSTS = [
   { $id: 'host-c', displayName: 'Site C' },
 ]
 const PAGE_VIEWS: Record<string, number> = {
-  'host-a': 100_000,
-  'host-b': 80_000,
-  'host-c': 60_000,
+  'host-a': 28_000,
+  'host-b': 22_400,
+  'host-c': 16_800,
 }
-const TOTAL_PAGE_VIEWS = 240_000
+const TOTAL_PAGE_VIEWS = 67_200
 /** Org-wide site size, as `report-usage` wrote it onto the monthly rollup. */
 const ROLLUP_SITE_SIZE_MB = 4_300
 const ROLLUP_DATA_STORAGE_MB = 12.5
 
-/** 240,000 × 1012.8 KB ÷ 1 GB = 231.81 GB — vs 96.59 for the largest site. */
-const EXPECTED_ORG_GB = '231.81'
-const LARGEST_HOST_GB = '96.59'
+/** 67,200 × 1012.8 KB ÷ 1 GB = 64.91 GB — vs 27.04 for the largest site. */
+const EXPECTED_ORG_GB = '64.91'
+const LARGEST_HOST_GB = '27.04'
 
 const mockFetchSeatCounts = jest.fn(async () => ({
   managerSeats: 2,
@@ -167,11 +167,11 @@ describe('the console meter measures the org, like the invoice does', () => {
     expect(screen.queryAllByText(/^Bandwidth/)).toHaveLength(1)
 
     const row = meterRow(label)
-    expect(row.textContent).toContain(`${EXPECTED_ORG_GB} / 125 GB`)
+    expect(row.textContent).toContain(`${EXPECTED_ORG_GB} / 35 GB`)
     // The old reading, explicitly excluded: the largest single site's share.
     expect(row.textContent).not.toContain(LARGEST_HOST_GB)
 
-    // 231.81 / 125 = 185.4% — past the 80% mark, so the meter warns and offers
+    // 64.91 / 35 = 185.4% — past the 80% mark, so the meter warns and offers
     // the upgrade. At the per-host reading it is 77.3% and says nothing, while
     // the cron emails the 100% warning off the org-wide figure. The customer
     // gets the email and sees a meter that has not warned.
@@ -227,10 +227,10 @@ describe('the meter, the cron and the invoice compute one figure', () => {
     // `meteredIncludedAllowance` that is NOT multiplied by `hostLimit`. That
     // asymmetry is the whole bug: storage and form submissions expand per
     // site, bandwidth does not, and the meter treated it as if it did.
-    expect(entitlements.bandwidthGb).toBe(125)
-    expect(estimate.included.pageViews).toBe(pageViewsFromBandwidthGb(125))
+    expect(entitlements.bandwidthGb).toBe(35)
+    expect(estimate.included.pageViews).toBe(pageViewsFromBandwidthGb(35))
     expect(estimate.included.pageViews).not.toBe(
-      pageViewsFromBandwidthGb(125 * entitlements.hostLimit),
+      pageViewsFromBandwidthGb(35 * entitlements.hostLimit),
     )
   })
 

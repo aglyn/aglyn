@@ -34,6 +34,8 @@ import {
 import { findContactByEmail, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { recordContactEmailEngagement } from './contact-email-engagement'
+import { nurtureReachedLeads } from './lead-nurturing'
 
 /**
  * THE CRM'S WRITER ON THE CORE'S RECORD EMAIL-STATE SEAM (AGL-3245).
@@ -185,6 +187,23 @@ export function createCrmRecordEmailStateWriter(deps: CrmRecordEmailStateDeps): 
         console.error('[crm] the leads could not be stamped with an email state', orgId, error)
       }
       return { records }
+    },
+    async engaged(request) {
+      try {
+        const records = await recordContactEmailEngagement({
+          hostId: request.hostId,
+          events: request.events,
+          firestore: deps.firestore(),
+        })
+        return { records }
+      } catch (error) {
+        console.error('[crm] the contacts could not be stamped with an engagement', request.hostId, error)
+        return NONE
+      }
+    },
+    // A delivered campaign moves the New leads it reached to Nurturing (AGL-3446).
+    async reached(request) {
+      return { records: await nurtureReachedLeads(deps.firestore(), request) }
     },
   }
 }

@@ -38,9 +38,9 @@ const source = (relative: string) =>
 
 describe('a dataset record write announces to the live pages', () => {
   it('the console record create and import both announce, the import ONCE', () => {
-    const route = source('apps/console/app/api/orgs/datasets/route.ts')
+    const route = source('libs/plugins/data/src/lib/server/datasets-route.ts')
     expect(route).toContain(
-      "import { announceDatasetChange } from '../../../../utils/server/announce-dataset-change'",
+      "import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'",
     )
     // Three: the create, the import's single post-loop call, and the leg the
     // browser's own client-direct edits reach. A fourth would mean the import
@@ -56,9 +56,10 @@ describe('a dataset record write announces to the live pages', () => {
   })
 
   it('every /v1 record write announces — create, update and delete', () => {
-    const resources = source('apps/console/utils/api-v1-resources.ts')
+    // The data plugin's `/v1/datasets`, served through the registry (AGL-3080).
+    const resources = source('libs/plugins/data/src/lib/server/api-v1/datasets.ts')
     expect(resources).toContain(
-      "import { announceDatasetChange } from './server/announce-dataset-change'",
+      "import { announceDatasetRecords as announceDatasetChange } from '../announce-dataset-records'",
     )
     // AGL-2462 recorded that a `/v1` write cannot publish and only the TTL
     // made it visible. All three legs answer that now: a deleted row is as
@@ -114,7 +115,7 @@ describe('a dataset record write announces to the live pages', () => {
     // The route's own leg, gated by the same membership and visibility the
     // create is — a drop grants nothing the rules withhold, but which
     // datasets exist is still not a stranger's to learn.
-    const route = source('apps/console/app/api/orgs/datasets/route.ts')
+    const route = source('libs/plugins/data/src/lib/server/datasets-route.ts')
     expect(route).toContain("action === 'announce-records'")
     const gateAt = route.indexOf('!memberCanSee(')
     const legAt = route.indexOf("if (action === 'announce-records') {")

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CrmReportPeriod } from '@aglyn/aglyn'
+import type { CrmReportPeriod } from '../../model/crm-reports'
 
 /**
  * The label under one week's bar — the day the week starts, as `Sep 1`.

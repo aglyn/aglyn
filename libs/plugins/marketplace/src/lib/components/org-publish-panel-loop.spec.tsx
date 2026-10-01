@@ -83,12 +83,18 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }),
   doc: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }),
+  documentId: () => '__name__',
   limit: () => ({}),
+  orderBy: () => ({}),
   query: (ref: any) => ref,
   where: () => ({}),
 }))
 
 import OrgPublishPanel from './org-publish-panel.component'
+import { standInDatasetList } from '../testing/stand-in-dataset-list'
+
+// The datasets these pages read are the data plugin's (AGL-3080).
+standInDatasetList()
 
 describe('OrgPublishPanel kind switching (AGL-788)', () => {
   beforeEach(() => {

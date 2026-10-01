@@ -88,7 +88,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
   useHostResourceApi: () => jest.fn().mockResolvedValue(undefined),
   // The Campaign filter's choices; no fixture here is filed under one.
-  useHostCampaigns: () => ({ options: [], truncated: false, ready: false }),
+  useSiteContainerOptions: () => ({ options: [], truncated: false, ready: false }),
   useLiveArtifactCount: () => mockLiveCount,
 }))
 

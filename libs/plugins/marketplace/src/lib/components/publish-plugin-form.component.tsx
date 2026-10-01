@@ -18,13 +18,15 @@
 
 import {
   formatMediaRef,
-  isBelowMarketplacePriceFloor,
-  marketplacePriceCostNote,
-  marketplacePriceFloorHint,
   offeredPluginVersion,
   useMediaPicker,
   type PluginRevocation,
 } from '@aglyn/aglyn'
+import {
+  isBelowMarketplacePriceFloor,
+  marketplacePriceCostNote,
+  marketplacePriceFloorHint,
+} from '../model/listing-price-floor'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {

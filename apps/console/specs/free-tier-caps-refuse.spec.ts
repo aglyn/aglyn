@@ -191,7 +191,7 @@ const DIMENSIONS: Record<string, Dimension> = {
   recordsPerDataset: quotaRow(
     'recordsPerDataset',
     0,
-    'apps/console/app/api/orgs/datasets/route.ts',
+    'libs/plugins/data/src/lib/server/datasets-route.ts',
   ),
   emailSendsPerMonth: quotaRow(
     'emailSendsPerMonth',
@@ -328,7 +328,7 @@ const DIMENSIONS: Record<string, Dimension> = {
     decide: (org, used) => checkDatasetQuota(org as never, used).allowed,
     refusedAt: 0,
     relax: raiseSeats('datasetsPerOrg', 'maxDatasetsPerOrg'),
-    enforcedIn: 'apps/console/app/api/orgs/datasets/route.ts',
+    enforcedIn: 'libs/plugins/data/src/lib/server/datasets-route.ts',
     decider: 'checkDatasetQuota',
   },
 }

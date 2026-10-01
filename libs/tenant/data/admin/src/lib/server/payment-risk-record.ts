@@ -41,7 +41,10 @@ import {
   settlePaymentRiskDispute,
 } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { AglynNotificationType } from '@aglyn/aglyn/app-utils/notifications'
-import type { RiskEventKind } from '@aglyn/shared-util-email/risk-notice-catalog'
+import {
+  RISK_PAYMENT_EVENTS,
+  type RiskEventKind,
+} from '@aglyn/shared-util-email/risk-notice-catalog'
 import type { RiskEventInput } from './risk-notice'
 
 /**
@@ -134,6 +137,7 @@ export async function recordPaymentRiskOnRecord(
         item: { label: input.subjectLabel, path: input.link },
         occurredAtMs: input.signal.atMs,
         amount: input.amount ?? null,
+        paymentEvent: RISK_PAYMENT_EVENTS[input.signal.kind] ?? null,
         evidenceDueByMs: input.evidenceDueByMs ?? null,
         dedupeKey: `sale:${input.signal.stripeObjectId}`,
         staffEvidence: input.signal.detail

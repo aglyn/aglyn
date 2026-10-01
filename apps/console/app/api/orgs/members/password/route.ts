@@ -218,10 +218,17 @@ async function handler(request: Request): Promise<Response> {
     // AGL-1131: an SSO admin's name lives in `firebase.sign_in_attributes`,
     // so this fell straight through to their email address in a mail that
     // tells someone their password was changed by a person.
-    const actorName =
-      resolveIdpDisplayName(decoded) ||
-      decoded.email ||
-      `An admin at ${orgSnapshot.get('name') ?? 'your organization'}`
+    //
+    // The workspace is named beside the admin (AGL-3432): someone in several
+    // workspaces, or a freelancer in a client's, cannot otherwise tell whose
+    // admin "Jane Smith" is.
+    const orgName = String(orgSnapshot.get('name') ?? '').trim()
+    const adminName = resolveIdpDisplayName(decoded) || decoded.email
+    const actorName = adminName
+      ? orgName
+        ? `${adminName} (an admin of ${orgName})`
+        : adminName
+      : `An admin at ${orgName || 'your organization'}`
     const targetName =
       memberSnapshot.get('displayName') ??
       memberSnapshot.get('email') ??

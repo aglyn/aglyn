@@ -24,16 +24,15 @@ import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/serv
  * pure function or a constant that lives in one leaf file.
  */
 import {
-  activeEmailTopics,
-  mergeEmailTopics,
-  normalizeEmailTopic,
+  activeSubscriptionTopics,
+  mergeSubscriptionTopics,
   readTopicSubscriptionState,
-  resolveCampaignTopic,
-  EMAIL_TOPICS_COLLECTION,
+  resolveSubscriptionTopic,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
-  type EmailTopic,
+  type SubscriptionTopic,
   type TopicSubscriptionEntry,
-} from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
+import { readOrgTopicCatalog, registerSubscriptionTopicIndex } from './server-topic-index'
 import {
   consentGroupOptOutHosts,
   soloConsentGroup,
@@ -809,7 +808,7 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
       loadHostBrand(hostId),
       groupRead,
     ])
-    const topics = activeEmailTopics(catalog)
+    const topics = activeSubscriptionTopics(catalog)
     const sender = pageSender(brand, group)
 
     if (method !== 'POST') {
@@ -1024,23 +1023,14 @@ async function loadTopicCatalog(
    * leave every custom stream mailable (`rejoinStreamForAccount`).
    */
   strict = false,
-): Promise<EmailTopic[]> {
+): Promise<SubscriptionTopic[]> {
   try {
     const orgId = await resolveOrgIdForHost(hostId)
-    if (!orgId) return mergeEmailTopics(null)
-    const snapshot = await firestore
-      .collection('orgs')
-      .doc(orgId)
-      .collection(EMAIL_TOPICS_COLLECTION)
-      .get()
-    const stored = (snapshot?.docs ?? [])
-      .map((doc: any) => normalizeEmailTopic(doc.id, doc.data()))
-      .filter((topic: EmailTopic | null): topic is EmailTopic => !!topic)
-    return mergeEmailTopics(stored)
+    return await readOrgTopicCatalog(firestore, orgId ?? '')
   } catch (error) {
     if (strict) throw error
     console.error('[email/preferences] topic catalog read failed', error)
-    return mergeEmailTopics(null)
+    return mergeSubscriptionTopics(null)
   }
 }
 
@@ -1412,7 +1402,7 @@ export async function rejoinStreamForAccount(
     await resumeTopicsAcrossGroup(firestore, group, key, [request.topicId])
     return { status: 'rejoined', releasedSuppression: false, keptLeft: 0 }
   }
-  const others = activeEmailTopics(await loadTopicCatalog(firestore, request.hostId, true))
+  const others = activeSubscriptionTopics(await loadTopicCatalog(firestore, request.hostId, true))
     .map((topic) => topic.id)
     .filter((id) => id !== request.topicId)
   await writeTopicOptOuts(firestore, request.hostId, key, {
@@ -1431,7 +1421,7 @@ export async function rejoinStreamForAccount(
 
 /** One topic row: a checkbox, its name and its description. */
 function topicRow(
-  topic: EmailTopic,
+  topic: SubscriptionTopic,
   checked: boolean,
   highlighted: boolean,
   /**
@@ -1520,7 +1510,7 @@ function cadenceFieldset(current: MarketingCadence): string {
 function preferencesFormBody(args: {
   email: string
   query: string
-  topics: EmailTopic[]
+  topics: SubscriptionTopic[]
   state: SubscriptionState
   topicId: string
   brand: EmailPageBrand
@@ -1534,7 +1524,7 @@ function preferencesFormBody(args: {
   // rather than beside it: a form whose submit cannot take effect is worse
   // than no form.
   if (state.protectedRecord) return protectedAddressBody()
-  const current = resolveCampaignTopic(topicId, topics)
+  const current = resolveSubscriptionTopic(topicId, topics)
   const action = `/api/email/preferences?${escapeHtml(query)}`
   return (
     heading('Email preferences') +
@@ -1605,8 +1595,8 @@ function preferencesFormBody(args: {
 function changeSummary(args: {
   email: string
   keep: string[]
-  drop: EmailTopic[]
-  topics: EmailTopic[]
+  drop: SubscriptionTopic[]
+  topics: SubscriptionTopic[]
   /** A declared group is named; a site alone is "this site". */
   sender: EmailPageSender
 }): string {
@@ -1672,7 +1662,7 @@ const confirmHandler: PluginApiHandler = async (req, res) => {
       loadTopicCatalog(firestore, hostId),
       loadHostBrand(hostId),
     ])
-    const topic = resolveCampaignTopic(topicId, catalog)
+    const topic = resolveSubscriptionTopic(topicId, catalog)
 
     if (method !== 'POST') {
       // SAFE. A prescanner lands here and confirms nothing.
@@ -1777,6 +1767,9 @@ function confirmationBody(
 
 /** Registers the email plugin's public API routes (AGL-396). */
 export function registerEmailApi(): void {
+  // The org's topic catalog, for a plugin that sends under a stream and has
+  // to ask what the org made of it (a newsletter's confirmation setting).
+  registerSubscriptionTopicIndex(() => firebaseAdmin.app().firestore())
   registerPluginApiRoute('email/unsubscribe', unsubscribeHandler)
   registerPluginApiRoute('email/resubscribe', resubscribeHandler)
   registerPluginApiRoute('email/preferences', preferencesHandler)

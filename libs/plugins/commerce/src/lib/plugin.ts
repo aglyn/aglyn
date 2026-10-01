@@ -25,9 +25,13 @@ const CommerceGlanceCard = lazy(
 const NewestSiteUsersCard = lazy(
   () => import('./components/console/newest-site-users-card.component'),
 )
+const SiteMemberPurchases = lazy(
+  () => import('./components/console/site-member-purchases.component'),
+)
 import { COMMERCE_CONSOLE_SECTIONS } from './components/commerce-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
+import { registerCommerceRecordLists } from './model/commerce-record-lists'
 import { registerCommerceRecordRoutes } from './model/commerce-record-routes'
 import { registerCommerceZones } from './components/console/product-zones'
 import { COMMERCE_SEARCH_SOURCES } from './model/commerce-search-sources'
@@ -49,6 +53,7 @@ const CommerceConsolePage = lazy(() => import('./components/commerce-console-pag
 export function registerCommerceConsole(): void {
   // Where a product is read, for surfaces outside this plugin (AGL-3080).
   registerCommerceRecordRoutes()
+  registerCommerceRecordLists()
   // The zones its product editor, products hub and CSV import dialog host,
   // with the props each hands a widget (AGL-2916, AGL-3080).
   registerCommerceZones()
@@ -70,6 +75,15 @@ export function registerCommerceConsole(): void {
         widgetId: 'commerce-glance',
         title: 'Commerce',
         Component: CommerceGlanceCard,
+      },
+      // What a site user bought — lifetime total, orders and subscriptions —
+      // in their drawer on the site's Users page: the orders and
+      // subscriptions are this plugin's.
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.siteMember,
+        widgetId: 'commerce-site-member-purchases',
+        title: 'Purchases',
+        Component: SiteMemberPurchases,
       },
     ],
     navItems: [

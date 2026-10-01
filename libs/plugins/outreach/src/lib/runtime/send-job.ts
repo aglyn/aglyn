@@ -68,6 +68,7 @@ import {
 } from './click-link'
 import { applyOutreachEvent } from './enrollment-events'
 import { outreachSiteHeld } from './host-suspension'
+import { markOutreachLeadNurturing } from './lead-records'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
@@ -1078,6 +1079,21 @@ async function runEmailStep(
   // campaigns, and the person's record credited to the first of them.
   // Judged on the enrollment as it was read, before this step's record.
   await creditOutreachFirstSend(deps, { enrollment, atMs: record.atMs })
+  await nurtureEnrolledLead(firestore, run, enrollment)
+}
+
+/**
+ * A lead an email step reached is no longer untouched (AGL-3446): New moves
+ * to Nurturing. Called only once a send is recorded, so an enrollment whose
+ * steps never go out leaves its lead where it stood.
+ */
+async function nurtureEnrolledLead(
+  firestore: Firestore,
+  run: MailboxRun,
+  enrollment: OutreachEnrollment,
+): Promise<void> {
+  if (enrollment.target !== 'lead' || !enrollment.leadId) return
+  await markOutreachLeadNurturing(firestore, { orgId: run.orgId, leadId: enrollment.leadId })
 }
 
 /**
@@ -1130,6 +1146,9 @@ async function recoverClaim(
     claimMessageId: claim.messageId,
   })
   // A recovered first email is still the first email (AGL-3254).
-  if (completed) await creditOutreachFirstSend(deps, { enrollment, atMs })
+  if (completed) {
+    await creditOutreachFirstSend(deps, { enrollment, atMs })
+    await nurtureEnrolledLead(firestore, run, enrollment)
+  }
   return completed
 }

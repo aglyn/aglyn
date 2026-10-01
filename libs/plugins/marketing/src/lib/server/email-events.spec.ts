@@ -384,14 +384,15 @@ jest.mock(
  * double in `tenant-data-admin`; what only this file can prove is which
  * events reach it and with which site.
  */
-const recordedStamps: Array<{ hostId: string; outcomes: unknown[] }> = []
+const recordedStamps: Array<{ hostId: string; events: unknown[] }> = []
 jest.mock(
-  '@aglyn/tenant-data-admin/server/contact-email-engagement',
+  '@aglyn/aglyn/plugin-manager/plugin-record-email-state',
   () => ({
-    recordContactEmailEngagement: jest.fn(
-      async (args: { hostId: string; outcomes: unknown[] }) => {
+    ...jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-record-email-state'),
+    stampRecordEmailEngagement: jest.fn(
+      async (args: { hostId: string; events: unknown[] }) => {
         recordedStamps.push(args)
-        return 0
+        return { records: 0 }
       },
     ),
   }),
@@ -2060,11 +2061,11 @@ describe('the contact engagement stamp', () => {
     expect(recordedStamps).toEqual([
       {
         hostId: HOST,
-        outcomes: [expect.objectContaining({ to: RECIPIENT, type: 'opened', firstOfType: true })],
+        events: [expect.objectContaining({ to: RECIPIENT, type: 'opened', firstOfType: true })],
       },
       {
         hostId: HOST,
-        outcomes: [expect.objectContaining({ to: RECIPIENT, type: 'clicked', firstOfType: true })],
+        events: [expect.objectContaining({ to: RECIPIENT, type: 'clicked', firstOfType: true })],
       },
     ])
   })
@@ -2075,7 +2076,7 @@ describe('the contact engagement stamp', () => {
 
     await deliver(event('email.opened', TAGS))
 
-    expect(recordedStamps[0].outcomes).toEqual([
+    expect(recordedStamps[0].events).toEqual([
       expect.objectContaining({ firstOfType: false }),
     ])
   })
@@ -2104,8 +2105,8 @@ describe('the contact engagement stamp', () => {
   it('cannot cost the campaign counters anything when it fails', async () => {
     docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
     const stamp = jest.requireMock(
-      '@aglyn/tenant-data-admin/server/contact-email-engagement',
-    ).recordContactEmailEngagement as jest.Mock
+      '@aglyn/aglyn/plugin-manager/plugin-record-email-state',
+    ).stampRecordEmailEngagement as jest.Mock
     stamp.mockRejectedValueOnce(new Error('stamp is down'))
 
     const result = await deliver(event('email.opened', TAGS))

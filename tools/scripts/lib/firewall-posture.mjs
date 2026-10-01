@@ -143,6 +143,36 @@
 // returned in the config. It is never asserted literally and never printed:
 // the expectation is `valueNonEmpty`, and `describeCondition` redacts. This
 // repository is public and Actions logs on a public repo are world-readable.
+//
+// ## Rate-limit rules: their POSITION is asserted, not only their shape
+//
+// A bypass ends custom-rule evaluation. Vercel's own wording: a request that
+// matches a custom bypass "is allowed through any custom or managed rules". So
+// a rate-limit rule that shares a path with a bypass counts NOTHING unless it
+// sits ahead of that bypass in the rule list. `rules.insert` appends, so a
+// freshly inserted rule reads back present, active and valid, and is inert
+// until it is moved. `evaluateRateLimitRule` therefore asserts where the rule
+// sits as well as its window, limit, key and what it does past the limit.
+//
+// A rate-limit rule that a request is UNDER, or one that only logs past its
+// limit, lets evaluation continue, so the bypass behind it still lifts the bot
+// challenge. That is how the two coexist on `/api/media/cdn` (AGL-2812). The
+// move is `PATCH rules.priority` with the rule's id and a 0-based index; it
+// shifts the rules below by one and reorders nothing else.
+//
+// ⛔ And the same ordering makes a past-the-limit `log` INVISIBLE. Vercel
+// reports a log "if no other rule matches and acts on the request", and the
+// bypass behind it always acts, so the request is reported as a bypass and the
+// log is dropped. MEASURED 2026-10-01 on the tenant: 1,650 and then 3,300
+// requests in one minute from one address against a 1,500 limit in log mode
+// appeared nowhere as logged, neither in the request logs (`wafAction:
+// bypass`, the asset bypass's rule id) nor in the dashboard's Logged count. A
+// temporary ENFORCING probe in the same position, scoped to one nonexistent
+// path and one test User-Agent with a limit of 10, passed requests 1 to 10 and
+// answered 11 to 30 with `429` and `x-vercel-mitigated: deny`, and was
+// removed. So the rule counts, and enforces where it sits; only its log is
+// unobservable. Judge false positives for a rule like this from per-address
+// request totals on its path, never from an empty Logged count.
 
 /** Vercel team scope — the same constant `verify-production-aliases.mjs` uses. */
 export const TEAM_SCOPE = 'team_JFfQodGE8VhCAZM6usYTu54M'
@@ -268,6 +298,94 @@ const SOCIAL_CRAWLER_BYPASS_RULE = Object.freeze({
 })
 
 /**
+ * The media CDN's edge rate limit (AGL-2812), named once so the tenant and
+ * console entries cannot drift apart by transcription. Both projects mount the
+ * same `serveMediaCdn`, and the per-caller limit inside it keeps one counter
+ * across both mounts.
+ *
+ * ## Why it exists
+ *
+ * `/api/media/cdn` is anonymous public delivery, and it skips the bot
+ * challenge on purpose: link-preview crawlers and Gmail's image proxy cannot
+ * solve one ("Public asset delivery bypass", which stays). The per-caller
+ * limit in `media-cdn-rate-limit.ts` bounds what one address is SERVED, but it
+ * runs inside the function, so every refusal is still an invocation plus a
+ * Firestore transaction, and a cache-busted flood is nothing but misses. This
+ * rule counts at the edge, before any function runs.
+ *
+ * ## Where it sits
+ *
+ * Directly ahead of the bypass, which it must precede: a matched bypass skips
+ * every later custom rule (see the header). Under the limit, and in log mode
+ * past it, evaluation continues into the bypass, so the challenge stays lifted
+ * for every caller the limit admits.
+ *
+ * It counts EVERY request on the path, the edge's own hits and 304s included,
+ * because the firewall runs in front of the cache. That is a wider count than
+ * the function's, which sees only misses, so the number is set against the
+ * full request stream, not against the function's ceilings.
+ *
+ * ## The number: 1,500 a minute per address, from measured traffic
+ *
+ * Measured 2026-10-01 from production request logs and a real browser, every
+ * request on the path, edge hits and 304s included:
+ *
+ * | measured | requests a minute |
+ * | -- | --: |
+ * | the heaviest public page (61 images, all `srcset`), scrolled end to end | 58, 56 of them inside 10 s |
+ * | the same page, every one of its four widths fetched for every image | 244, a bound no real visitor reaches |
+ * | the tenant mount, busiest minute, EVERY caller together, 7 days (4,991 requests) | 66 |
+ * | the tenant mount, busiest single client (GPTBot, from one network) | 53 |
+ * | the console mount, busiest minute, every caller together, 23 hours | 7 |
+ * | the busiest minute on 2026-09-11, whole route (AGL-2812's first pass) | 236 |
+ * | one ranged asset, one client | 5 |
+ *
+ * 1,500 is 25 times the heavy page, more than six times both the all-widths
+ * bound and the busiest minute either mount has ever been measured serving to
+ * every caller together, and above the 780 a minute the function will serve
+ * one address (600 images and 180 other files), so the edge never refuses a
+ * caller the function would still have served. A video is no burst here: the
+ * route answers a player's `bytes=0-` with the whole file, so a play is one
+ * request and each seek one more. No film is served from this path today; the
+ * one public film plays from Wistia, and tenant video uploads are paused
+ * (AGL-2830).
+ *
+ * Vercel counts per address, per region. The function's limit behind it folds
+ * an IPv6 address to its /64; Vercel does not document whether its `ip` key
+ * does, so a caller rotating addresses inside one /64 is the function's to
+ * bound, not this rule's.
+ *
+ * ## Logged first, enforcing since 2026-10-01; never `challenge` or `deny`
+ *
+ * `exceeded: 'log'` refuses nobody. It also records nobody: the bypass behind
+ * it acts on every request, which drops the log (see the header). So the log
+ * window is judged from per-address request totals on the path, and an
+ * address can only have crossed 1,500 in some minute if it sent at least
+ * 1,500 in the whole window. The enforcing value is `'rate_limit'`, a 429 a
+ * client can back off from: a `PATCH rules.update` on the live rule that
+ * changes only `rateLimit.action`, with this field changed to match in the
+ * same change. That switch was made on 2026-10-01, after a window in which no
+ * address but the burst test's reached 1,500 requests in a whole day on either
+ * project. `challenge` and `deny` are wrong for this path in either mode,
+ * because the callers it serves without a browser can answer neither.
+ */
+const MEDIA_CDN_RATE_LIMIT_RULE = Object.freeze({
+  name: 'Media CDN per-IP rate limit',
+  why: 'the media CDN skips the bot challenge for crawlers and mail image proxies, and without an edge limit one address flooding it is a function invocation per request',
+  conditions: Object.freeze([
+    Object.freeze({ type: 'path', op: 'pre', value: '/api/media/cdn' }),
+  ]),
+  rateLimit: Object.freeze({
+    algo: 'fixed_window',
+    window: 60,
+    limit: 1500,
+    keys: Object.freeze(['ip']),
+  }),
+  exceeded: 'rate_limit',
+  precedes: 'Public asset delivery bypass',
+})
+
+/**
  * ═══════════════════════════════════════════════════════════════════════════
  * EXPECTED POSTURE — the whole declaration. Adding a project or a bypass rule
  * is an edit to THIS TABLE, never to the logic below.
@@ -277,6 +395,9 @@ const SOCIAL_CRAWLER_BYPASS_RULE = Object.freeze({
  *
  *   'protected'    firewallEnabled, bot_protection = {active, challenge}, and
  *                  precisely the declared bypass rules — each still scoped.
+ *                  Optional `rateLimitRules`: each present with its declared
+ *                  window, limit, key and past-the-limit action, still scoped,
+ *                  and ahead of the bypass it `precedes`.
  *   'unprotected'  a KNOWN GAP. Requires a `gap` rationale. Still asserted:
  *                  the run fails if the project QUIETLY GAINS protection, so
  *                  the table can never silently describe a fiction. Reported
@@ -636,6 +757,7 @@ export const EXPECTED_POSTURE = Object.freeze([
       SOCIAL_CRAWLER_BYPASS_RULE,
       AI_AGENT_BYPASS_RULE,
     ]),
+    rateLimitRules: Object.freeze([MEDIA_CDN_RATE_LIMIT_RULE]),
   }),
   Object.freeze({
     project: 'aglyn-docs',
@@ -896,6 +1018,9 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
       }),
     ]),
+    // The console mount is the one mailed images resolve to, so Gmail's image
+    // proxy and every campaign image land on this copy of the rule.
+    rateLimitRules: Object.freeze([MEDIA_CDN_RATE_LIMIT_RULE]),
   }),
   Object.freeze({
     project: 'aglyn-plugins',
@@ -1016,10 +1141,66 @@ export function validatePostureTable(table) {
           }
         }
       }
+      if (Object.prototype.hasOwnProperty.call(entry, 'rateLimitRules')) {
+        if (!Array.isArray(entry.rateLimitRules)) {
+          problems.push(`"${name}": \`rateLimitRules\` must be an array`)
+        } else {
+          const bypassNames = new Set(entry.bypassRules.map((rule) => rule?.name))
+          for (const rule of entry.rateLimitRules) {
+            problems.push(...rateLimitDeclarationProblems(name, rule, bypassNames))
+          }
+        }
+      }
     }
     if (entry.expect === 'unprotected' && (typeof entry.gap !== 'string' || entry.gap.trim().length === 0)) {
       problems.push(`"${name}": an 'unprotected' entry must carry a \`gap\` rationale`)
     }
+    if (entry.expect === 'unprotected' && Object.prototype.hasOwnProperty.call(entry, 'rateLimitRules')) {
+      // Never read for an unprotected entry, so declaring one would be a
+      // promise the checker silently does not keep.
+      problems.push(`"${name}": an 'unprotected' entry cannot declare \`rateLimitRules\``)
+    }
+  }
+  return problems
+}
+
+/** The values Vercel accepts for what a rate-limit rule does past its limit. */
+const RATE_LIMIT_EXCEEDED_ACTIONS = Object.freeze(['log', 'rate_limit', 'challenge', 'deny'])
+
+/**
+ * One rate-limit declaration's shape problems. Each is a way for the
+ * declaration to assert less than it appears to: no conditions means no scope
+ * check, a window outside Vercel's 10 s to 10 min range can never match a live
+ * rule, and a `precedes` naming no declared bypass means the ordering check
+ * looks for a rule that is not there and passes vacuously.
+ */
+function rateLimitDeclarationProblems(projectName, rule, bypassNames) {
+  const problems = []
+  const label = `"${projectName}": rate-limit rule "${rule?.name ?? '?'}"`
+  if (typeof rule?.name !== 'string' || rule.name.length === 0) {
+    problems.push(`"${projectName}": a rate-limit rule has no \`name\``)
+  }
+  if (!Array.isArray(rule?.conditions) || rule.conditions.length === 0) {
+    problems.push(`${label} declares no conditions — a rule with none counts every request on the project`)
+  }
+  const limit = rule?.rateLimit
+  if (limit?.algo !== 'fixed_window' && limit?.algo !== 'token_bucket') {
+    problems.push(`${label} needs \`rateLimit.algo\` 'fixed_window' or 'token_bucket'`)
+  }
+  if (!Number.isInteger(limit?.window) || limit.window < 10 || limit.window > 600) {
+    problems.push(`${label} needs a whole-second \`rateLimit.window\` from 10 to 600`)
+  }
+  if (!Number.isInteger(limit?.limit) || limit.limit < 1) {
+    problems.push(`${label} needs a positive whole \`rateLimit.limit\``)
+  }
+  if (!Array.isArray(limit?.keys) || limit.keys.length === 0) {
+    problems.push(`${label} needs at least one \`rateLimit.keys\` entry`)
+  }
+  if (!RATE_LIMIT_EXCEEDED_ACTIONS.includes(rule?.exceeded)) {
+    problems.push(`${label} needs \`exceeded\` set to one of ${RATE_LIMIT_EXCEEDED_ACTIONS.join(', ')}`)
+  }
+  if (rule?.precedes !== undefined && !bypassNames.has(rule.precedes)) {
+    problems.push(`${label} \`precedes\` "${rule.precedes}", which is not a declared bypass rule of this project`)
   }
   return problems
 }
@@ -1105,6 +1286,31 @@ export function evaluateRule(expectedRule, liveRule) {
     return findings
   }
 
+  findings.push(
+    ...groupScopeFindings({ expectedRule, groups, label, widened: 'the bypass has widened', verb: 'bypasses' }),
+  )
+
+  findings.push(...uncoveredDeclarations(expectedRule, groups, label))
+
+  return findings
+}
+
+/**
+ * The SCOPE half, shared by bypass and rate-limit rules: every live group must
+ * carry every required condition, or match a declared alternate shape. Groups
+ * are OR'd, so one looser group appended beside a narrow one widens the whole
+ * rule without touching the group that was there.
+ *
+ * @param {object} args
+ * @param {object} args.expectedRule  a declared rule
+ * @param {object[]} args.groups      the live `conditionGroup` array, non-empty
+ * @param {string} args.label         the rule's name as findings print it
+ * @param {string} args.widened       what widening means for this kind of rule
+ * @param {string} args.verb          what an offending group does to a request
+ * @returns {string[]} findings; empty means every group is still in scope.
+ */
+function groupScopeFindings({ expectedRule, groups, label, widened, verb }) {
+  const findings = []
   groups.forEach((group, index) => {
     const conditions = Array.isArray(group?.conditions) ? group.conditions : []
     const where = groups.length > 1 ? ` (condition group ${index + 1} of ${groups.length})` : ''
@@ -1140,14 +1346,11 @@ export function evaluateRule(expectedRule, liveRule) {
       const matches = conditions.map((actual) => describeCondition(actual)).join(' AND ')
       findings.push(
         `${label}${where} NO LONGER REQUIRES ${describeCondition(required)} — ` +
-          'the bypass has widened; groups are OR\'d, so every group must carry ' +
-          `every condition. That group bypasses: ${matches || '(nothing — it matches every request)'}`,
+          `${widened}; groups are OR'd, so every group must carry ` +
+          `every condition. That group ${verb}: ${matches || '(nothing — it matches every request)'}`,
       )
     }
   })
-
-  findings.push(...uncoveredDeclarations(expectedRule, groups, label))
-
   return findings
 }
 
@@ -1213,6 +1416,115 @@ function uncoveredDeclarations(expectedRule, groups, label) {
         'group carries it. A declared shape is REQUIRED, not merely permitted: add the group ' +
         'to the live rule with `PATCH rules.update`, or delete the declaration if it was wrong.',
     )
+  }
+
+  return findings
+}
+
+/** A live rule's rate-limit settings, or null when it carries none. */
+export function rateLimitOf(rule) {
+  const settings = rule?.action?.mitigate?.rateLimit
+  return settings !== null && typeof settings === 'object' ? settings : null
+}
+
+/**
+ * Assert one declared rate-limit rule against the live rule list.
+ *
+ * Takes the whole list rather than one rule because POSITION is part of the
+ * assertion: a rate-limit rule behind the bypass it `precedes` is never
+ * reached on the path they share, and reads back exactly like a working one
+ * (see the header). Everything else is the rule's own shape — the window, the
+ * limit and the key it counts by, what it does past the limit, a persistent
+ * block nobody declared, and the same per-group scope a bypass is held to.
+ *
+ * @param {object} expectedRule  a `rateLimitRules` entry
+ * @param {object[]} liveRules   the live config's `rules`, in evaluation order
+ * @returns {string[]} findings; empty means present, shaped, scoped and placed.
+ */
+export function evaluateRateLimitRule(expectedRule, liveRules) {
+  const findings = []
+  const label = `rate-limit rule "${expectedRule.name}"`
+  const rules = Array.isArray(liveRules) ? liveRules : []
+  const index = rules.findIndex((rule) => rule?.name === expectedRule.name)
+  if (index === -1) return [`${label} is MISSING — ${expectedRule.why ?? 'declared in the posture table'}`]
+  const live = rules[index]
+
+  if (live.active !== true) findings.push(`${label} is present but INACTIVE`)
+  if (live.valid === false) findings.push(`${label} is marked invalid by Vercel`)
+
+  const action = ruleAction(live)
+  if (action !== 'rate_limit') {
+    findings.push(`${label} no longer mitigates with "rate_limit" (found ${JSON.stringify(action)})`)
+  }
+
+  const settings = rateLimitOf(live)
+  const declared = expectedRule.rateLimit
+  if (settings === null) {
+    findings.push(`${label} carries no rateLimit settings, so it counts nothing`)
+  } else {
+    for (const field of ['algo', 'window', 'limit']) {
+      if (settings[field] === declared[field]) continue
+      findings.push(
+        `${label} has ${field} ${JSON.stringify(settings[field])}, declared ${JSON.stringify(declared[field])}`,
+      )
+    }
+    const liveKeys = Array.isArray(settings.keys) ? [...settings.keys].sort() : []
+    if (JSON.stringify(liveKeys) !== JSON.stringify([...declared.keys].sort())) {
+      findings.push(
+        `${label} counts by ${JSON.stringify(settings.keys ?? null)}, declared ${JSON.stringify(declared.keys)}`,
+      )
+    }
+    const exceeded = settings.action ?? null
+    if (exceeded !== expectedRule.exceeded) {
+      const unanswerable =
+        exceeded === 'challenge' || exceeded === 'deny'
+          ? '. A challenge or a 403 past the limit is unanswerable for the crawlers and mail image proxies a path with a bypass behind it serves'
+          : ''
+      findings.push(
+        `${label} answers ${JSON.stringify(exceeded)} past the limit, declared ` +
+          `${JSON.stringify(expectedRule.exceeded)}${unanswerable}`,
+      )
+    }
+  }
+
+  // A persistent action blocks the ADDRESS, on every path, for its duration,
+  // from the platform firewall in front of every rule. That is a different
+  // control from a per-path limit, and it is not one anybody declared here.
+  const duration = live.action?.mitigate?.actionDuration ?? null
+  const declaredDuration = expectedRule.actionDuration ?? null
+  if (duration !== declaredDuration && !(duration === '' && declaredDuration === null)) {
+    findings.push(
+      `${label} carries a persistent action of ${JSON.stringify(duration)}, declared ` +
+        `${JSON.stringify(declaredDuration)}: an address past the limit is then blocked on every path for that long`,
+    )
+  }
+
+  const groups = Array.isArray(live.conditionGroup) ? live.conditionGroup : []
+  if (groups.length === 0) {
+    findings.push(`${label} has NO condition groups — it would count every request on the project`)
+  } else {
+    findings.push(
+      ...groupScopeFindings({
+        expectedRule,
+        groups,
+        label,
+        widened: 'the limit has widened to paths nobody measured it against',
+        verb: 'counts',
+      }),
+    )
+  }
+
+  if (expectedRule.precedes !== undefined) {
+    const bypassAt = rules.findIndex((rule) => rule?.name === expectedRule.precedes)
+    // A missing bypass is reported by the bypass's own assertion; there is
+    // nothing for this rule to be ahead of.
+    if (bypassAt !== -1 && index > bypassAt) {
+      findings.push(
+        `${label} is evaluated AFTER "${expectedRule.precedes}" (rule ${index + 1} of ${rules.length}, ` +
+          `the bypass is rule ${bypassAt + 1}). A matched bypass skips every later custom rule, so this ` +
+          `counts nothing on the path they share. Move it with PATCH rules.priority, value ${bypassAt}.`,
+      )
+    }
   }
 
   return findings
@@ -1299,6 +1611,9 @@ export function evaluateProject({ expected, config }) {
   for (const expectedRule of expected.bypassRules) {
     const live = liveRules.find((r) => r?.name === expectedRule.name) ?? null
     findings.push(...evaluateRule(expectedRule, live))
+  }
+  for (const expectedLimit of expected.rateLimitRules ?? []) {
+    findings.push(...evaluateRateLimitRule(expectedLimit, liveRules))
   }
 
   // An undeclared bypass rule is an undeclared hole. Report it even though

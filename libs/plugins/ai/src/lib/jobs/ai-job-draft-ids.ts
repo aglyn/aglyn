@@ -97,6 +97,11 @@ const UNIT_PLAN_KINDS: Readonly<Partial<Record<AiJobKind, { screens: boolean }>>
   // A page job's own screen is its kind's draft; its plan's creations are units.
   page: { screens: false },
   site: { screens: true },
+  // So are the components and forms a template, layout or component job
+  // builds before its own record (AGL-3143 §15).
+  template: { screens: false },
+  layout: { screens: false },
+  component: { screens: false },
 }
 
 /**

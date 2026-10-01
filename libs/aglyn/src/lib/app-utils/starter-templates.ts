@@ -20,11 +20,34 @@
 // it, the console's seed route materializes them, and the AI plugin's server
 // shows them to a model — and neither barrel works in both: the full
 // `@aglyn/aglyn` barrel breaks the RSC/server-route graph, while the server
-// entry drags `node:fs` into the client bundle. The canvas constants are a
-// leaf with no imports of their own, and `screen-route` imports only a TYPE
-// from foundation, so both are safe on either side.
-import { CANVAS_ROOT_ELEMENT_ID } from '../foundation/constants/canvas'
+// entry drags `node:fs` into the client bundle. The starter kit imports only
+// the canvas constants, a leaf with no imports of their own; the compiled
+// plugin starters are data behind a type-only import; and `screen-route`
+// imports only a TYPE from foundation — so all three are safe on either side.
+import { PLUGIN_STARTER_TEMPLATES } from './plugin-starter-templates.generated'
 import { normalizeScreenSlug, SCREEN_ROOT_PATH } from './screen-route'
+import {
+  buildStarterNodes as buildNodes,
+  starterHeroSection as heroSection,
+  starterSection as section,
+  starterText as text,
+  type StarterNodeSpec as NodeSpec,
+  type StarterTemplate,
+  type StarterTemplateScreen,
+} from './starter-template-nodes'
+
+export type {
+  StarterNodeSpec,
+  StarterSectionWidth,
+  StarterTemplate,
+  StarterTemplateScreen,
+} from './starter-template-nodes'
+export {
+  buildStarterNodes,
+  starterHeroSection,
+  starterSection,
+  starterText,
+} from './starter-template-nodes'
 
 /**
  * First-party starter definitions (AGL-78/79), SEED INPUT (AGL-687).
@@ -48,39 +71,6 @@ import { normalizeScreenSlug, SCREEN_ROOT_PATH } from './screen-route'
  * and every node id below appear in stored documents (seeded template doc
  * ids are derived from the first two). They must never be renamed.
  */
-export interface StarterTemplateScreen {
-  /**
-   * Stable, starter-local key. Part of the seeded document id, so it is a
-   * persisted identifier — never rename one.
-   */
-  key: string
-  displayName: string
-  description?: string
-  /**
-   * Routing-map slug. `SCREEN_ROOT_PATH` (`'/'`) asks for the site root — the
-   * home page — and anything else is a single path segment.
-   *
-   * It used to be `''` that meant home, which no normalizer agreed with: both
-   * the apply path and the seed below read an empty string as "no address
-   * authored" and derived one from the display name, so the shop starters'
-   * home page was published at `/home` and the site 404'd at its own URL
-   * (AGL-1575).
-   */
-  slug: string
-  seo?: { title?: string; description?: string }
-  /** Flat node map including the canvas root. */
-  nodes: Record<string, any>
-}
-
-export interface StarterTemplate {
-  id: string
-  displayName: string
-  description: string
-  category: string
-  screens: StarterTemplateScreen[]
-}
-
-/** A materialized starter template document, keyed by its deterministic id. */
 export interface StarterTemplateDoc {
   id: string
   /** Which starter this page belongs to — lets one starter be selected. */
@@ -153,138 +143,6 @@ export function buildAllStarterTemplateDocs(): StarterTemplateDoc[] {
   return STARTER_TEMPLATES.flatMap(buildStarterTemplateDocs)
 }
 
-type NodeSpec = {
-  id: string
-  componentId: string
-  /** Bundle owning the component; defaults to 'mui' (AGL-300). */
-  pluginId?: string
-  props?: Record<string, unknown>
-  /**
-   * Node-level styles — a SIBLING of props, never `props.sx` (AGL-1346).
-   *
-   * Both records render (`Leaf` composes `(sx, props.sx, node.sx)`, later
-   * wins), but the Styles panel edits `node.sx`. A starter that seeded its
-   * styling into `props.sx` handed the author a document full of values
-   * the panel could show but no click could change or clear.
-   */
-  sx?: Record<string, unknown>
-  children?: NodeSpec[]
-}
-
-/** Builds the flat, persisted node map from a nested spec. */
-function buildNodes(children: NodeSpec[]): Record<string, any> {
-  const map: Record<string, any> = {
-    [CANVAS_ROOT_ELEMENT_ID]: {
-      $id: CANVAS_ROOT_ELEMENT_ID,
-      componentId: 'div',
-      nodes: children.map((child) => child.id),
-    },
-  }
-  const walk = (spec: NodeSpec, parentId: string) => {
-    map[spec.id] = {
-      $id: spec.id,
-      componentId: spec.componentId,
-      pluginId: spec.pluginId ?? 'mui',
-      parentId,
-      props: spec.props ?? {},
-      ...(spec.sx ? { sx: spec.sx } : {}),
-      nodes: (spec.children ?? []).map((child) => child.id),
-    }
-    for (const child of spec.children ?? []) walk(child, spec.id)
-  }
-  for (const child of children) walk(child, CANVAS_ROOT_ELEMENT_ID)
-  return map
-}
-
-const text = (
-  id: string,
-  variant: string,
-  children: string,
-  extra?: Record<string, unknown>,
-): NodeSpec => ({
-  id,
-  componentId: 'muiTypography',
-  props: { variant, children, ...extra },
-})
-
-/**
- * The stock widths a starter band may be (AGL-1932, AGL-1298).
- *
- * Three cases, and only three, because the standard has three. There is no
- * pixel case: `1328` is a CONTENT width, not a breakpoint, and the ban on
- * bespoke numbers is the half of AGL-1298 these templates used to violate
- * four times over.
- */
-type SectionWidth = 'md' | 'lg' | 'xl'
-
-/**
- * One page band: a `Container` at a stock width, carrying the band's own
- * vertical rhythm (AGL-1932).
- *
- * The layout standard (AGL-1298): every section is a Container. Full-bleed is
- * the Container's own full-width attribute, never the absence of a Container,
- * and anything else is one of three stock widths. A template that seeds no
- * Container hands every customer a site that starts outside the standard.
- *
- * How the three widths are chosen here, stated so the next audit does not
- * have to guess:
- *
- * - `xl` — a marketing band: hero, feature row, product grid, gallery. The
- *   default width, and what an unremarkable page should be.
- * - `lg` — the deliberate middle case: wide but text-led and interactive.
- *   Cart and account are the honest instances, not decoration.
- * - `md` — long-form prose and narrow form columns, on READING grounds: at
- *   `xl` a paragraph runs 110–120 characters a line. This is the case the
- *   `Prose Container` preset exists for.
- *
- * Horizontal padding is the Container's own gutters, so bands no longer carry
- * horizontal padding at all. Only the vertical rhythm rides here, which is
- * rhythm rather than width.
- *
- * Written as the two longhands rather than MUI's `py` (AGL-2207/2208): the
- * Styles panel's Padding control is named for the four sides, so a band
- * seeded with `py` handed the customer a document whose padding the panel
- * showed as empty and no click could clear.
- */
-const section = (
-  id: string,
-  maxWidth: SectionWidth,
-  verticalPadding: number,
-  children: NodeSpec[],
-): NodeSpec => ({
-  id,
-  componentId: 'muiContainer',
-  props: { maxWidth },
-  sx: { paddingTop: verticalPadding, paddingBottom: verticalPadding },
-  children,
-})
-
-const heroSection = (prefix: string, headline: string, tagline: string) =>
-  // The Container is a NEW node (`…heroSection`); `…hero` keeps its id and
-  // stays the Stack. Node ids here are persisted identifiers, so bands are
-  // wrapped rather than re-pointed.
-  section(`${prefix}heroSection`, 'xl', 10, [
-    {
-      id: `${prefix}hero`,
-      componentId: 'muiStack',
-      props: { spacing: 2 },
-      sx: { alignItems: 'center' },
-      children: [
-        text(`${prefix}heroTitle`, 'h2', headline, { align: 'center' }),
-        text(`${prefix}heroSub`, 'h6', tagline, { align: 'center' }),
-        {
-          id: `${prefix}heroCta`,
-          componentId: 'muiButton',
-          props: {
-            variant: 'contained',
-            size: 'large',
-            children: 'Get in touch',
-          },
-        },
-      ],
-    },
-  ])
-
 const featureColumn = (id: string, title: string, body: string): NodeSpec => ({
   id,
   componentId: 'muiStack',
@@ -339,111 +197,6 @@ const contactForm = (prefix: string): NodeSpec => ({
 })
 
 
-const commerceBlock = (
-  id: string,
-  componentId: string,
-  props?: Record<string, unknown>,
-): NodeSpec => ({ id, componentId, pluginId: 'commerce', props })
-
-/** Shared screens for the shop starters (AGL-300). */
-function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] {
-  return [
-    {
-      key: 'home',
-      displayName: 'Home',
-      // The site root, spelled the way the routing map spells it. `''` here
-      // read as "no address" everywhere downstream and put the shop's home
-      // page at `/home` (AGL-1575).
-      slug: SCREEN_ROOT_PATH,
-      seo: {
-        title: digital ? 'Digital shop' : 'Shop',
-        description: 'Browse our products.',
-      },
-      nodes: buildNodes([
-        heroSection(
-          `${prefix}h_`,
-          digital ? 'Downloads that level you up' : 'Gear you can trust',
-          digital
-            ? 'Instant delivery. Lifetime updates.'
-            : 'Quality parts, shipped fast.',
-        ),
-        section(`${prefix}h_gridSection`, 'xl', 6, [
-          commerceBlock(`${prefix}h_grid`, 'product-grid', {
-            source: 'all',
-            sort: 'newest',
-            columns: 3,
-            maxItems: 6,
-          }),
-        ]),
-        // A newsletter capture is a short text-led band, not a gallery.
-        section(`${prefix}h_newsSection`, 'md', 6, [
-          commerceBlock(`${prefix}h_news`, 'newsletter-signup', {
-            heading: 'Get updates and offers',
-          }),
-        ]),
-      ]),
-    },
-    {
-      key: 'shop',
-      displayName: 'Shop',
-      slug: 'shop',
-      seo: { title: 'All products' },
-      nodes: buildNodes([
-        section(`${prefix}s_section`, 'xl', 6, [
-          text(`${prefix}s_title`, 'h3', 'All products'),
-          commerceBlock(`${prefix}s_grid`, 'product-grid', {
-            source: 'all',
-            columns: 4,
-            showFilters: true,
-          }),
-        ]),
-      ]),
-    },
-    {
-      key: 'product',
-      displayName: 'Product page',
-      slug: 'product',
-      seo: { title: 'Product' },
-      nodes: buildNodes([
-        section(`${prefix}p_section`, 'xl', 6, [
-          commerceBlock(`${prefix}p_detail`, 'product-detail', {}),
-        ]),
-      ]),
-    },
-    {
-      key: 'cart',
-      displayName: 'Cart',
-      slug: 'cart',
-      seo: { title: 'Your cart' },
-      // LG, the deliberate middle case: a cart is a wide table but it is read
-      // line by line, so a full XL band spreads it further than the eye
-      // tracks. Same for the account screen below.
-      nodes: buildNodes([
-        section(`${prefix}c_section`, 'lg', 6, [
-          text(`${prefix}c_title`, 'h3', 'Your cart'),
-          commerceBlock(`${prefix}c_cart`, 'cart', {
-            variant: 'inline',
-            showCoupon: true,
-          }),
-        ]),
-      ]),
-    },
-    {
-      key: 'account',
-      displayName: 'Account',
-      slug: 'account',
-      seo: { title: 'Your account' },
-      nodes: buildNodes([
-        section(`${prefix}a_section`, 'lg', 6, [
-          commerceBlock(`${prefix}a_account`, 'customer-account', {
-            signedOutHeading: 'Your account',
-          }),
-        ]),
-      ]),
-    },
-  ]
-}
-
 /**
  * The home page every new site is born with (AGL-3408).
  *
@@ -491,7 +244,8 @@ export function buildDefaultHomeScreen(siteName: string): StarterTemplateScreen 
   }
 }
 
-export const STARTER_TEMPLATES: StarterTemplate[] = [
+/** The platform's own starters, which name no plugin's elements. */
+const PLATFORM_STARTER_TEMPLATES: StarterTemplate[] = [
   {
     id: 'landing',
     displayName: 'Landing Page',
@@ -707,24 +461,17 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       },
     ],
   },
-  {
-    id: 'physical-shop',
-    displayName: 'Shop (physical products)',
-    description:
-      'Storefront starter: home with featured products, filterable shop, ' +
-      'product page, cart, and customer accounts. After applying, set the ' +
-      'Product page as the product template in Store settings.',
-    category: 'Commerce',
-    screens: shopScreens('ps_', false),
-  },
-  {
-    id: 'digital-shop',
-    displayName: 'Shop (digital products)',
-    description:
-      'Digital storefront starter: downloads-focused home, shop, product ' +
-      'page, cart, and accounts with a newsletter capture. Set the Product ' +
-      'page as the product template in Store settings after applying.',
-    category: 'Commerce',
-    screens: shopScreens('ds_', true),
-  },
+]
+
+/**
+ * Every starter in this build, in gallery order: the platform's own, then
+ * each plugin's in config order (AGL-3080). A plugin whose elements a starter
+ * is built around — a storefront's product grid and cart — declares it under
+ * `starterTemplates` in plugins.config.json, and the manifest generator
+ * compiles what it returns, so the gallery, the seed route and a model
+ * shown examples all read one list without loading any plugin.
+ */
+export const STARTER_TEMPLATES: StarterTemplate[] = [
+  ...PLATFORM_STARTER_TEMPLATES,
+  ...PLUGIN_STARTER_TEMPLATES,
 ]

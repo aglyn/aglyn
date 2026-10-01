@@ -320,6 +320,19 @@ describe('the merchant share of a LOST booking dispute (AGL-3363)', () => {
     expect(managerNotices.filter((notice) => /Payout adjusted/.test(notice.title))).toHaveLength(1)
   })
 
+  it('the payout notice names the booking, the site and what was taken back (AGL-3432)', async () => {
+    docs.set(BOOKING, { ...docs.get(BOOKING), name: 'Rhea Salt' })
+    await deliver('charge.dispute.closed', dispute)
+    const notice = managerNotices.find((n) => /Payout adjusted/.test(n.title))
+    expect(notice?.title).toBe('Payout adjusted — $85.00 recovered for a lost chargeback')
+    expect(notice?.body).toBe(
+      "Rhea Salt's payment for Deep tissue massage on {site} was charged back " +
+        'and the dispute was lost, so the $85.00 transferred to you for it has ' +
+        'been taken back. If your balance does not cover it, Stripe recovers ' +
+        'the rest from your future payouts.',
+    )
+  })
+
   it('a redelivery reverses nothing twice and tells nobody twice', async () => {
     await deliver('charge.dispute.closed', dispute)
     await deliver('charge.dispute.closed', dispute)

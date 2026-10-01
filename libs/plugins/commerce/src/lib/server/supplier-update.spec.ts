@@ -370,6 +370,17 @@ describe('a GET never moves the order (AGL-2268)', () => {
     expect(body).toContain('name="trackingNumber" value="1Z999"')
   })
 
+  /**
+   * The carrier and the number are fields the supplier fills in (AGL-3432),
+   * so the emailed link needs no placeholders to edit by hand.
+   */
+  it('asks for the carrier and tracking number in visible fields', async () => {
+    const body = String((await call('GET', {})).body)
+    expect(body).toContain('<input type="text" name="carrier" value="">')
+    expect(body).toContain('<input type="text" name="trackingNumber" value="">')
+    expect(body).not.toContain('type="hidden" name="carrier"')
+  })
+
   it('escapes what it echoes back', async () => {
     // `carrier` and `trackingNumber` arrive in a URL anyone can craft, and the
     // page is served from the tenant's own origin.

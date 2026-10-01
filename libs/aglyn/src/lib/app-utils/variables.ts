@@ -56,21 +56,21 @@ export const HOST_VARIABLE_TYPE_LABELS: Record<HostVariableType, string> = {
   collection: 'Collection list (values)',
 }
 
-/** `hosts/{hostId}/variables/{id}` doc. */
+/**
+ * `hosts/{hostId}/variables/{id}` doc, as far as binding reads it.
+ *
+ * A COMPUTED variable also carries the reference its computing plugin reads
+ * — which record produces its value — and `value` is then the fallback the
+ * page shows when that record is gone or fails. Binding never reads the
+ * reference; the plugin that computes the value types and reads its own
+ * (`plugin-manager/computed-variables`).
+ */
 export interface HostVariable {
   /** Binding identifier — `{{name}}`. */
   name: string
   type: HostVariableType
   /** Persisted as a string; formatted per type at resolve time. */
   value?: string
-  /**
-   * Workflow (by name) whose result becomes this variable's value at
-   * compose time (AGL-129); `value` acts as the fallback when the
-   * workflow is missing or fails.
-   */
-  workflowName?: string
-  /** Computed source by workflow doc id (AGL-261); wins over the name. */
-  workflowId?: string
 }
 
 export const VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]{0,39}$/

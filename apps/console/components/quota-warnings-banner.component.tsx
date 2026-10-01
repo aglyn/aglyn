@@ -24,7 +24,6 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
-import { assistBandRefuses } from '@aglyn/aglyn/app-utils/assist-credits'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
@@ -33,6 +32,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useFirestore, useScopeTokens, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
+import { updatePaymentMethodHref } from '../utils/update-payment-method-link'
 import { useHostId } from '../components/host-id-provider'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
@@ -79,6 +79,11 @@ interface QuotaState {
    * to keep adding" is wrong for a band that is sold past.
    */
   key?: 'assistCredits'
+  /**
+   * What happens at the band, as the AI plugin's credits route reports the
+   * reservation's own verdict: `true` stops, `false` sells past.
+   */
+  stopsAtBand?: boolean
 }
 
 /** The AI credits row's label, used to find it again among the others. */
@@ -384,7 +389,15 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         if (!active || !Number.isFinite(used) || !Number.isFinite(limit)) return
         setQuotas((previous) => [
           ...previous.filter((quota) => quota.key !== 'assistCredits'),
-          { key: 'assistCredits', label: ASSIST_CREDITS_LABEL, used, limit },
+          {
+            key: 'assistCredits',
+            label: ASSIST_CREDITS_LABEL,
+            used,
+            limit,
+            // A route that did not say reads as the wall: promising a charge
+            // the plan may not bill is the worse of the two sentences.
+            stopsAtBand: payload?.stopsAtBand !== false,
+          },
         ])
       } catch {
         // Network trouble: no AI credits row, and no stale one either.
@@ -518,13 +531,21 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         sx={{ borderRadius: 0 }}
         action={
           orgWideViewer ? (
+            // Past due, the sentence asks for a new payment method, so the
+            // button is named for that and lands on the Billing button that
+            // does it (AGL-3442). Lapsed, the plan has already stopped, and
+            // Billing's Outstanding card is where the unpaid invoice is paid.
             <AppLink
               componentVariant="button"
               color="inherit"
               size="small"
-              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+              href={
+                lapsed
+                  ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+                  : updatePaymentMethodHref(orgSlug)
+              }
             >
-              {lapsed ? 'Fix billing' : 'Fix payment'}
+              {lapsed ? 'Fix billing' : 'Update payment method'}
             </AppLink>
           ) : undefined
         }
@@ -562,10 +583,10 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const others = breached.filter((quota) => quota.key !== 'assistCredits')
   const names = others.map((quota) => quota.label).join(' and ')
   // What happens at the AI band is a fact about the plan and the org's own
-  // switch, and it is the same predicate the reservation refuses on — so the
-  // banner cannot promise a stop the assistant will not make, or a charge
-  // the plan cannot bill.
-  const assistStops = assistBandRefuses(org)
+  // switch, and the credits route answers it with the same predicate the
+  // reservation refuses on — so the banner cannot promise a stop the
+  // assistant will not make, or a charge the plan cannot bill.
+  const assistStops = assistRow?.stopsAtBand !== false
   const assistSentence = !assistRow
     ? ''
     : assistRow.used >= assistRow.limit

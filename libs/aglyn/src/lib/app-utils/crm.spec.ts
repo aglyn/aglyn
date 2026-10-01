@@ -117,6 +117,7 @@ import {
   effectiveCrmLeadSourcePicklist,
   judgeCrmLeadSource,
   normalizeCrmPicklist,
+  openLeadsFromCounts,
 } from './crm'
 
 describe('CRM collections', () => {
@@ -1640,5 +1641,13 @@ describe('the lead source picklist', () => {
   it('names the default only while it is active', () => {
     expect(crmPicklistDefaultLabel(list)).toBe('Website form')
     expect(crmPicklistDefaultLabel({ ...list, defaultValueId: 'old' })).toBeNull()
+  })
+})
+
+describe('openLeadsFromCounts', () => {
+  it('is the total less the closed, never below zero', () => {
+    expect(openLeadsFromCounts(12, 5)).toBe(7)
+    expect(openLeadsFromCounts(3, 5)).toBe(0)
+    expect(openLeadsFromCounts(Number.NaN, 2)).toBe(0)
   })
 })

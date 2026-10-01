@@ -207,6 +207,9 @@ jest.mock('firebase-admin/firestore', () => {
 })
 
 import { POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
+// The console's boot, which registers the data plugin's `/v1/datasets` (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 import {
   dataStorageEnforcementShape,
   PLAN_ENTITLEMENTS,

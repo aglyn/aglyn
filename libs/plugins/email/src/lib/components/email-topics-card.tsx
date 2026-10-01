@@ -18,11 +18,11 @@
 
 import {
   createResourceUid,
-  isEmailTopicId,
+  isSubscriptionTopicId,
   pluginDocsHelp,
-  DEFAULT_EMAIL_TOPICS,
-  EMAIL_TOPICS_COLLECTION,
+  DECLARED_SUBSCRIPTION_TOPICS,
 } from '@aglyn/aglyn'
+import { EMAIL_TOPICS_COLLECTION } from '../model/email-topic-catalog'
 import {
   mdiArchiveArrowUpOutline,
   mdiArchiveOutline,
@@ -79,7 +79,7 @@ export interface EmailTopicsCardProps {
  *
  * Every org that exists today has an empty `emailTopics` collection, and a
  * seeding migration would leave any org created while it ran with none. So
- * `DEFAULT_EMAIL_TOPICS` is the FLOOR of the catalog rather than its initial
+ * `DECLARED_SUBSCRIPTION_TOPICS` is the FLOOR of the catalog rather than its initial
  * contents: the four are present for every org with no write anywhere, and
  * saving one on its detail page writes a document at the same id that renames
  * or retires it. A built-in with no stored document is not a missing row, it
@@ -132,12 +132,12 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
       const name = String(values?.displayName ?? '').trim()
       if (!name) return
       // `createResourceUid` is nanoid's `A-Za-z0-9_-`, so the id it mints
-      // always satisfies `isEmailTopicId`. Checked anyway, because this id is
+      // always satisfies `isSubscriptionTopicId`. Checked anyway, because this id is
       // signed into every unsubscribe link the topic ever mints and the send
       // path refuses one that is not usable — a topic nothing can be sent
       // under is a row the merchant would have no way to diagnose.
       const id = createResourceUid()
-      if (!isEmailTopicId(id)) {
+      if (!isSubscriptionTopicId(id)) {
         return void enqueueSnackbar('Could not create the topic', {
           variant: 'error',
         })
@@ -322,7 +322,7 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
                             label="Retired"
                           />
                         ) : null}
-                        {DEFAULT_EMAIL_TOPICS.some(
+                        {DECLARED_SUBSCRIPTION_TOPICS.some(
                           (it) => it.id === topic.id,
                         ) ? (
                           <Typography

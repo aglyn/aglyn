@@ -16,10 +16,7 @@
  */
 
 import {
-  CRM_INBOUND_CEILING_ACTION,
-  CRM_INBOUND_UNMATCHED_ACTION,
-  crmInboundDomain,
-  crmInboundTokensIn,
+  inboundMailDomain,
   isReleaseFlagOnForOrg,
   parseOrgReleaseFlagOverrides,
   pluginRequestFromWeb,
@@ -35,14 +32,21 @@ import {
 // barrel is reached from the browser through the campaign model.
 import { verifySvixSignature } from '@aglyn/shared-util-email/svix-signature'
 import {
+  firebaseAdmin,
+  getServerReleaseFlagValues,
+  logOrgActivity,
+} from '@aglyn/tenant-data-admin'
+import { loadMemberAddressRoster } from '@aglyn/tenant-data-admin/server/member-email-aliases'
+import {
+  CRM_INBOUND_CEILING_ACTION,
+  CRM_INBOUND_UNMATCHED_ACTION,
+  crmInboundTokensIn,
+} from '../model/crm-inbound'
+import {
   crmInboundHostIds,
   fileCrmInboundEmail,
   findOrgByCrmInboundToken,
-  firebaseAdmin,
-  getServerReleaseFlagValues,
-  loadCrmInboundRoster,
-  logOrgActivity,
-} from '@aglyn/tenant-data-admin'
+} from './crm-inbound-email'
 
 // lockdown-423: exempt — a provider webhook (Svix-signed), no user caller; it files one received message on the record it was with and reads nothing a locked org could lose.
 
@@ -154,7 +158,7 @@ export async function crmInboundRoute(request: Request): Promise<Response> {
   const inbound = readInboundMailEvent(event)
   if (!inbound) return acknowledge(200, { ignored: true, reason: 'not-received-event' })
 
-  const domain = crmInboundDomain()
+  const domain = inboundMailDomain()
   const tokens = crmInboundTokensIn(inbound.recipients, domain)
   if (!tokens.length) return acknowledge(202, { filed: false, reason: 'no-token' })
 
@@ -202,7 +206,7 @@ export async function crmInboundRoute(request: Request): Promise<Response> {
     // they sign in with (AGL-2975), so a send from an outbound-domain alias
     // is read as the member's and filed on the person it was written to.
     const [members, hostIds] = await Promise.all([
-      loadCrmInboundRoster(firestore, orgId),
+      loadMemberAddressRoster(firestore, orgId),
       crmInboundHostIds(firestore, orgId),
     ])
     const result = await fileCrmInboundEmail(firestore, {

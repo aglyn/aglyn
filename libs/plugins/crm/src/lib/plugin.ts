@@ -221,5 +221,38 @@ export function registerCrmConsole(): void {
         Component: CrmConsolePage,
       },
     ],
+    /*
+     * The ORGANIZATION's CRM hub (AGL-2630), at `/[orgSlug]/crm`: the same
+     * sections over every site at once, mounted with no site and the org's
+     * sites as `orgMount`. Its listeners carry no scope clause, so the
+     * shell's org route refuses a site collaborator on REACH before it asks
+     * the `data.manage` declared above; a permission alone, which a
+     * collaborator's role can carry, never opens it.
+     *
+     * It carries the SITE tab's id on purpose: `release_contacts` names
+     * `nav-tab-contacts`, so one flag holds both halves of the CRM, and the
+     * org half cannot ship while the site half is switched off. First among
+     * the organization's plugin tabs, beside Data, the org's other shared
+     * collection of records. The help opens the docs heading about this
+     * mount. Its old address, `/[orgSlug]/contacts`, is a console redirect
+     * (`consoleRedirects`), so it needs no `legacyHrefs` here.
+     */
+    orgNavItems: [
+      {
+        label: 'CRM',
+        href: '/crm',
+        sections: CRM_CONSOLE_SECTIONS,
+        navTabId: 'nav-tab-contacts',
+        tabOrder: -100,
+        icon: { path: mdiCardAccountDetailsOutline.path },
+        header: {
+          title: 'CRM',
+          icon: { path: mdiCardAccountDetailsOutline.path },
+          docsTopic: 'crm',
+          docsAnchor: '#at-the-organization-level',
+        },
+        Component: CrmConsolePage,
+      },
+    ],
   })
 }

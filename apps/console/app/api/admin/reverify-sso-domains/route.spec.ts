@@ -51,7 +51,7 @@
 export {}
 
 const mockNotifyOrgAdmins = jest.fn(
-  async (_orgId: string, _payload: unknown) => undefined,
+  async (_orgId: string, _payload: unknown, _options?: unknown) => undefined,
 )
 const mockNotifyStaff = jest.fn(async (_payload: unknown) => undefined)
 const mockEmailOrgAdmins = jest.fn(async (_input: unknown) => ({
@@ -100,8 +100,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       typeof value === 'string' && value.trim().length > 0,
     probeChallengeTxt: (domain: string, token: string) =>
       mockProbe(domain, token),
-    notifyOrgAdmins: (orgId: string, payload: unknown) =>
-      mockNotifyOrgAdmins(orgId, payload),
+    notifyOrgAdmins: (orgId: string, payload: unknown, options?: unknown) =>
+      mockNotifyOrgAdmins(orgId, payload, options),
     notifyStaff: (payload: unknown) => mockNotifyStaff(payload),
     firebaseAdmin: {
       app: () => ({
@@ -119,9 +119,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
                 }),
               }
             }
+            // orgs/{id} (its name, for the staff mail) and
             // orgs/{id}/ssoDomains/{domain}
             return {
               doc: () => ({
+                get: async () => ({
+                  exists: true,
+                  get: (field: string) => (field === 'name' ? 'Acme Co' : undefined),
+                }),
                 collection: () => ({
                   doc: () => ({
                     get: async () => ({
@@ -295,6 +300,7 @@ describe('a genuinely changed record must be detected', () => {
     expect(mockNotifyOrgAdmins).toHaveBeenCalledWith(
       'org-1',
       expect.objectContaining({ type: 'system.ssoDomainUnverified' }),
+      { skipEmail: true },
     )
     const email = mockEmailOrgAdmins.mock.calls[0][0] as {
       orgId: string
@@ -315,6 +321,43 @@ describe('a genuinely changed record must be detected', () => {
     })
     // And the response still says, in words, that nothing was revoked.
     expect(body.revokes).toBe(false)
+  })
+
+  it('says what to do, once per channel, and names the domain and workspace to staff (AGL-3432)', async () => {
+    mockClaimSeed = { driftFailures: 2, driftFirstFailureAtMs: Date.now() - 20 * DAY }
+    await call('POST')
+
+    // The bell carries the action the "Action needed" title asks for, and
+    // only the bell: `emailOrgAdmins` mails every admin already, so an admin
+    // with system email on is not mailed a second time (RB21).
+    const [orgId, payload, options] = mockNotifyOrgAdmins.mock.calls[0] as [
+      string,
+      { body: string },
+      { skipEmail?: boolean } | undefined,
+    ]
+    expect(orgId).toBe('org-1')
+    expect(payload.body).toContain('Restore the TXT record, or remove the domain')
+    expect(options).toEqual({ skipEmail: true })
+    expect(mockEmailOrgAdmins).toHaveBeenCalledTimes(1)
+
+    // The email's opening paragraph says what happened and what to do.
+    const email = mockEmailOrgAdmins.mock.calls[0][0] as { text: string }
+    const opening = email.text.split('\n\n')[0]
+    expect(opening).toMatch(/still working/i)
+    expect(opening).toContain('the DNS record that proves your organization owns acme.com is missing')
+    expect(opening).toContain('restore it, or remove the domain')
+
+    // One domain is named alone, never "and 0 other(s)" (RB22).
+    const staff = mockNotifyStaff.mock.calls[0][0] as { title: string; body: string }
+    expect(staff.title).toBe('1 SSO domain no longer proves ownership')
+    expect(staff.body).toBe(
+      'acme.com no longer proves ownership by DNS. Routing is unchanged and ' +
+        'nothing was revoked; revoking is a human decision.',
+    )
+    const staffMail = mockEmailStaffAlert.mock.calls[0][0] as { subject: string; text: string }
+    expect(staffMail.subject).toBe('1 SSO domain no longer proves ownership')
+    expect(staffMail.text).toContain('acme.com (Acme Co, org org-1)')
+    expect(staffMail.text).not.toMatch(/\(s\)/)
   })
 
   it('NEVER writes `verified` — the field that would un-route the domain', async () => {

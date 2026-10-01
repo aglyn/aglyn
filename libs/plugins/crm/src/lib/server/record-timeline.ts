@@ -25,18 +25,18 @@ import {
   type PluginRecordWrite,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import {
-  buildCrmCapturedEmailActivity,
   checkEntitlement,
   consentGroupForHost,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
-  crmCapturedEmailKey,
   crmScopeTokens,
   crmTaskListFields,
   crmTaskReminderAfterEdit,
   isCrmActivityKind,
   isCrmTaskKind,
+  readContactFacet,
+  visibleToHost,
   type CrmActivity,
   type CrmActivityLink,
   type CrmTask,
@@ -46,13 +46,16 @@ import {
   createCrmEmailActivity,
   crmActivityRef,
   crmCapturedEmailActivityRef,
+  findContactByEmail,
   firebaseAdmin,
+  readLeadForHost,
   recomputeCrmNextTaskAt,
   recordCrmEmailDelivery,
 } from '@aglyn/tenant-data-admin'
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { buildCrmCapturedEmailActivity, crmCapturedEmailKey } from '../model/crm-inbound'
 import { CRM_SUITE_FEATURE } from './suite-gate'
 
 /**
@@ -82,6 +85,18 @@ import { CRM_SUITE_FEATURE } from './suite-gate'
  * Each entry names the plugin that filed it (`sourcePluginId`), and a task's
  * `nextTaskAtMs` is recomputed on the records it names, as every server
  * writer of a task does.
+ *
+ * ## A record found rather than named
+ *
+ * A caller that holds no id of the CRM's — a booking made through a link a
+ * rep dropped from a record, or one taken off the widget cold (AGL-2660) —
+ * hands back the record the link carried, or the booker's address, and the
+ * entry is filed where the CRM finds it: the record the reference names
+ * when this site may see it, otherwise the contact the address names
+ * through the org's address index, narrowed to the site. A deal carries its
+ * contact and company onto the entry; a contact its company, from the
+ * site's own facet. A task with no assignee of the caller's goes to whoever
+ * holds that record.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -109,11 +124,102 @@ function linkFields(link: PluginRecordEntryContext['link']): CrmActivityLink {
   return {
     ...(link?.contactId ? { contactId: String(link.contactId) } : {}),
     ...(link?.companyId ? { companyId: String(link.companyId) } : {}),
-    ...(link?.dealId ? { dealId: String(link.dealId) } : {}),
     // A lead (AGL-3234): host-scoped by path, so the entry carries the
     // site's scope like any record created from that site.
     ...(link?.leadId ? { leadId: String(link.leadId) } : {}),
   }
+}
+
+/** What a reference handed back by a caller may name: the records a booking link is dropped from. */
+const FOUND_RECORD_KINDS: ReadonlySet<string> = new Set(['contact', 'lead', 'deal'])
+/**
+ * A record id as the CRM mints them: Firestore's for a contact and a deal, a
+ * person key for a lead. A reference arrives on a public request, so one
+ * that could not be an id is passed over rather than read.
+ */
+const RECORD_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
+
+/** The record an entry lands on, and who holds it. */
+interface FoundRecord {
+  link: CrmActivityLink
+  holderUid?: string
+}
+
+/** A contact's link and holder, from this site's facet on it. */
+function contactRecord(
+  contact: FirebaseFirestore.DocumentSnapshot,
+  groupId: string,
+): FoundRecord {
+  const facet = readContactFacet(contact.data() ?? {}, groupId)
+  return {
+    link: { contactId: contact.id, ...(facet.companyId ? { companyId: facet.companyId } : {}) },
+    ...(facet.ownerUid ? { holderUid: facet.ownerUid } : {}),
+  }
+}
+
+/**
+ * The record a caller's reference names, then the contact its address does,
+ * as `hostId` may see them; `null` when neither finds one. See the module
+ * comment.
+ */
+async function findRecord(
+  orgRef: FirebaseFirestore.DocumentReference,
+  hostId: string,
+  groupId: string,
+  link: PluginRecordEntryContext['link'],
+): Promise<FoundRecord | null> {
+  const contacts = orgRef.collection('contacts')
+  const kind = String(link?.record?.kind ?? '')
+  const id = String(link?.record?.id ?? '')
+  if (FOUND_RECORD_KINDS.has(kind) && RECORD_ID_PATTERN.test(id)) {
+    if (kind === 'contact') {
+      const contact = await contacts.doc(id).get()
+      if (contact.exists && visibleToHost(contact.get('visibleTo'), hostId)) {
+        return contactRecord(contact, groupId)
+      }
+    } else if (kind === 'deal') {
+      const deal = await orgRef.collection(CRM_COLLECTIONS.deals).doc(id).get()
+      if (deal.exists && visibleToHost(deal.get('visibleTo'), hostId)) {
+        const contactId = String(deal.get('contactId') ?? '')
+        const companyId = String(deal.get('companyId') ?? '')
+        const ownerUid = String(deal.get('ownerUid') ?? '')
+        return {
+          link: { dealId: deal.id, ...(contactId ? { contactId } : {}), ...(companyId ? { companyId } : {}) },
+          ...(ownerUid ? { holderUid: ownerUid } : {}),
+        }
+      }
+    } else {
+      // A lead carries its own `visibleTo` (AGL-3275), and the site has to be
+      // allowed to see it, or one brand's booking would name another's lead.
+      const lead = await readLeadForHost(hostId, id)
+      if (lead && visibleToHost(lead.get('visibleTo'), hostId)) {
+        const ownerUid = String(lead.get('ownerUid') ?? '')
+        return { link: { leadId: lead.id }, ...(ownerUid ? { holderUid: ownerUid } : {}) }
+      }
+    }
+  }
+  const email = String(link?.email ?? '').trim()
+  if (!email) return null
+  const hit = await findContactByEmail(contacts, email, { hostId })
+  return hit ? contactRecord(hit, groupId) : null
+}
+
+/** Who holds a record a caller named by id: its contact's site facet, or its lead. */
+async function holderOf(
+  orgRef: FirebaseFirestore.DocumentReference,
+  hostId: string,
+  groupId: string,
+  link: CrmActivityLink,
+): Promise<string | undefined> {
+  if (link.contactId) {
+    const contact = await orgRef.collection('contacts').doc(link.contactId).get()
+    return contact.exists ? contactRecord(contact, groupId).holderUid : undefined
+  }
+  if (link.leadId) {
+    const lead = await readLeadForHost(hostId, link.leadId)
+    return String(lead?.get('ownerUid') ?? '') || undefined
+  }
+  return undefined
 }
 
 /** The document id a caller's key files under: its own namespace, never a raw key. */
@@ -122,21 +228,32 @@ function keyedId(sourcePluginId: string, key: string): string {
 }
 
 export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): PluginRecordTimelineWriter {
-  /** The org, its plan, the link and the scope an entry is stamped with. */
+  /**
+   * The org, its plan, the link and the scope an entry is stamped with — and,
+   * when `wantHolder`, who holds the record it lands on.
+   */
   async function admit(
     context: PluginRecordEntryContext,
+    wantHolder = false,
   ): Promise<
     | PluginRecordWrite
-    | { firestore: Firestore; orgRef: FirebaseFirestore.DocumentReference; link: CrmActivityLink; visibleTo: string[] }
+    | {
+        firestore: Firestore
+        orgRef: FirebaseFirestore.DocumentReference
+        link: CrmActivityLink
+        visibleTo: string[]
+        holderUid?: string
+      }
   > {
     const orgId = String(context.orgId ?? '').trim()
     const hostId = String(context.hostId ?? '').trim()
-    const link = linkFields(context.link)
+    const named = linkFields(context.link)
+    const isNamed = Boolean(named.contactId || named.companyId || named.leadId)
     if (!orgId || !hostId || !String(context.sourcePluginId ?? '').trim()) {
       return refuse(400, 'An entry names its organization, its site and the plugin filing it.')
     }
-    if (!link.contactId && !link.companyId && !link.dealId && !link.leadId) {
-      return refuse(400, 'An entry is filed on a contact, a company, a deal or a lead.')
+    if (!isNamed && !context.link?.record && !String(context.link?.email ?? '').trim()) {
+      return refuse(400, 'An entry is filed on a contact, a company or a lead, or names how to find one.')
     }
     const firestore = deps.firestore()
     const orgRef = firestore.collection('orgs').doc(orgId)
@@ -146,11 +263,23 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
     if (!checkEntitlement(org, CRM_SUITE_FEATURE)) {
       return refuse(403, "This workspace's plan doesn't include the CRM.")
     }
+    const group = consentGroupForHost(org, hostId)
+    let link = named
+    let holderUid: string | undefined
+    if (isNamed) {
+      if (wantHolder) holderUid = await holderOf(orgRef, hostId, group.groupId, named)
+    } else {
+      const found = await findRecord(orgRef, hostId, group.groupId, context.link)
+      if (!found) return refuse(404, 'Nothing this site keeps matches the record or the address.')
+      link = found.link
+      holderUid = found.holderUid
+    }
     return {
       firestore,
       orgRef,
       link,
-      visibleTo: crmScopeTokens(org, consentGroupForHost(org, hostId)),
+      visibleTo: crmScopeTokens(org, group),
+      ...(holderUid ? { holderUid } : {}),
     }
   }
 
@@ -237,12 +366,16 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       if (!title || !key) return refuse(400, 'A task has a title and the caller’s own key.')
       if (!isCrmTaskKind(request.kind)) return refuse(400, `"${String(request.kind)}" isn't a task.`)
       if (!Number.isFinite(request.dueAtMs)) return refuse(400, 'A task has a due time.')
-      const admitted = await admit(request)
+      const admitted = await admit(request, request.assigneeUid === null)
       if ('ok' in admitted) return admitted
       const { firestore, orgRef, link, visibleTo } = admitted
       const ref = orgRef.collection(CRM_COLLECTIONS.tasks).doc(keyedId(request.sourcePluginId, key))
       const notes = String(request.notes ?? '').trim().slice(0, NOTE_MAX)
-      const assigneeUid = String(request.assigneeUid ?? '').trim()
+      // `null` is "whoever holds the record", which admission read.
+      const assigneeUid =
+        request.assigneeUid === null
+          ? (admitted.holderUid ?? '')
+          : String(request.assigneeUid ?? '').trim()
       const task: CrmTask = {
         title,
         ...(notes ? { notes } : {}),

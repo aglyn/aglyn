@@ -330,8 +330,12 @@ describe('storefront subscription sale record (AGL-1732)', () => {
   it('puts the amount in the manager notification', async () => {
     await deliver(SUBSCRIPTION_SESSION)
     expect(notifications).toHaveLength(1)
-    expect(notifications[0].title).toBe('New subscriber — $98.25/month')
-    expect(notifications[0].body).toBe('boxer@example.com')
+    expect(notifications[0].title).toBe('New subscriber on {site} — $98.25/month')
+    // Who subscribed, to what, on which site (AGL-3432): the body was the
+    // bare address.
+    expect(notifications[0].body).toBe(
+      'boxer@example.com subscribed to Monthly box on {site} for $98.25/month.',
+    )
   })
 
   /**

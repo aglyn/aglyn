@@ -284,6 +284,11 @@ describe('per-scope, per-channel notification settings (AGL-3223)', () => {
     expect(
       NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.insightsDigest'),
     ).toBe(true)
+    // The reminder route sends its own email; the per-task notification
+    // beside it is never mailed a second time (AGL-3432).
+    expect(
+      NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.taskReminder'),
+    ).toBe(true)
     expect(NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.order')).toBe(false)
   })
 })

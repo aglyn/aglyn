@@ -25,7 +25,13 @@ import type { PluginUsageAxesDeclaration } from '@aglyn/aglyn/plugin-manager/plu
  * Priced at `perFormSubmission`, one of the three rates the customer is
  * billed at cost × 1.30 — the rate itself stays core's, beside the billed
  * table it is reconciled against. The band is per SITE, so the org-wide band
- * is the plan's figure times `hostLimit`.
+ * is the plan's figure times `hostLimit`, and it is measured by the per-site
+ * counter `/api/forms/submit` writes.
+ *
+ * Its overage is WITHHELD while `release_inbox` is off for the workspace
+ * (AGL-1688): submissions keep arriving and the API keeps serving them, but
+ * nobody is charged for a lead list the console gives them no way to read.
+ * The units are still counted, and what was forgone is recorded.
  */
 export function formsUsageAxes(): PluginUsageAxesDeclaration {
   return {
@@ -45,6 +51,16 @@ export function formsUsageAxes(): PluginUsageAxesDeclaration {
         fields: ['formSubmissions'],
         entitlement: 'formSubmissionsPerMonth',
         perHost: true,
+        hostCounter: 'formSubmissions',
+        // An infrastructure meter: what a workspace receives past its band is
+        // billed at cost × 1.30 beside storage and bandwidth — while the Inbox
+        // page, where submissions are read, is released to it.
+        metered: {
+          rate: 'perFormSubmission',
+          quotedPer: 1000,
+          noun: 'form submissions',
+          withheldUntil: 'release_inbox',
+        },
       },
     ],
   }

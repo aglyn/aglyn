@@ -267,6 +267,7 @@ beforeEach(() => {
 describe('paid reservation (AGL-1755)', () => {
   /** Unchanged behavior, pinned so the guard rewrite cannot quietly drop it. */
   it('confirms the hold and records what was charged', async () => {
+    docs.set('hosts/host-1/resources/cabin-1', { name: 'Lakeside Cabin' })
     await deliver(RESERVATION_SESSION)
     const reservation = storedReservation()
     expect(reservation.status).toBe('confirmed')
@@ -274,7 +275,13 @@ describe('paid reservation (AGL-1755)', () => {
     expect(reservation.checkoutSessionId).toBe('cs_res_1')
     expect(reservation.paymentIntentId).toBe('pi_res_1')
     expect(notifications).toHaveLength(1)
-    expect(notifications[0].title).toBe('New reservation')
+    expect(notifications[0].title).toBe('New reservation on {site}')
+    // Who, when, what was paid and what is still owed (AGL-3432): the body
+    // was the bare address.
+    expect(notifications[0].body).toBe(
+      'Paid@Example.com reserved Lakeside Cabin on {site}: check-in Fri, 24 Apr 2026, ' +
+        '7 nights. $210.00 was paid; $630.00 is still to collect at the property.',
+    )
   })
 
   /**
@@ -400,6 +407,11 @@ describe('paid reservation (AGL-1755)', () => {
     expect(sentEmails[0].to).toBe('Paid@Example.com')
     expect(sentEmails[0].text).toContain('Nights: 7')
     expect(sentEmails[0].text).toContain('Paid today: $210.00')
+    // The deposit is not the whole stay: what is still owed, and where it is
+    // paid, is part of the confirmation (AGL-3432).
+    expect(sentEmails[0].text).toContain(
+      'Still to pay: $630.00, at the property. It has not been charged.',
+    )
   })
 
   it('never calls Stripe', async () => {
@@ -562,6 +574,45 @@ describe('a stay that carried the merchant’s lodging tax (AGL-1969)', () => {
     expect(contactUpserts[0].purchaseCents).toBe(21000)
     expect(contactUpserts[0].interaction.summary).toBe(
       'Reserved a stay ($210.00)',
+    )
+  })
+
+  /*
+   * "Paid today" is what the guest's card was charged (AGL-3442). The tax
+   * stays out of `paidCents`, which is the stay's figure, and is named in the
+   * confirmation instead, so the guest is never told less than they paid.
+   */
+  it('tells the guest what was charged today, the lodging tax included', async () => {
+    const admin = jest.requireMock('@aglyn/tenant-data-admin')
+    const render = jest.spyOn(admin, 'renderHostEmailWithTokens')
+    try {
+      await deliver(TAXED_SESSION)
+      expect(sentEmails).toHaveLength(1)
+      expect(sentEmails[0].text).toContain(
+        'Paid today: $222.60, including $12.60 lodging tax',
+      )
+      // A site-designed confirmation gets the same figure through its token.
+      expect(render.mock.calls[0][2]).toBe('reservation-confirmed')
+      expect(render.mock.calls[0][3]).toMatchObject({
+        'reservation.paid': '$222.60, including $12.60 lodging tax',
+      })
+      // The balance is the stay's alone: the tax was charged with the deposit
+      // and none is computed on what is collected at the property.
+      expect(sentEmails[0].text).toContain(
+        'Still to pay: $630.00, at the property. It has not been charged.',
+      )
+    } finally {
+      render.mockRestore()
+    }
+  })
+
+  it('tells the merchant the same charge', async () => {
+    docs.set('hosts/host-1/resources/cabin-1', { name: 'Lakeside Cabin' })
+    await deliver(TAXED_SESSION)
+    expect(notifications[0].body).toBe(
+      'Paid@Example.com reserved Lakeside Cabin on {site}: check-in Fri, 24 Apr 2026, ' +
+        '7 nights. $222.60 was paid, including $12.60 lodging tax; ' +
+        '$630.00 is still to collect at the property.',
     )
   })
 

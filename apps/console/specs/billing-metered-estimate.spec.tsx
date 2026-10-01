@@ -144,13 +144,12 @@ function invoiceEstimate(options: Seed, withLibrary: boolean) {
     {
       storageBytes: options.hostMediaBytes ?? 0,
       pageViews: options.hostMonthViews ?? 0,
-      formSubmissions: options.hostFormSubmissions ?? 0,
+      meters: { formSubmissions: options.hostFormSubmissions ?? 0 },
     },
   ]
   const orgLibrary: HostUsageSnapshot = {
     storageBytes: options.orgLibraryBytes ?? 0,
     pageViews: 0,
-    formSubmissions: 0,
   }
   return estimateMonthlyUsageCost(
     withLibrary ? [...hosts, orgLibrary] : hosts,
@@ -293,7 +292,7 @@ describe('band boundaries (the boundary belongs to the customer)', () => {
     const atBand: Seed = {
       hostMediaBytes: included.storageGb * GB,
       hostMonthViews: Math.floor(included.pageViews),
-      hostFormSubmissions: included.formSubmissions,
+      hostFormSubmissions: included.meters.formSubmissions,
     }
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed(atBand)
@@ -397,20 +396,31 @@ describe('each metered dimension names its overage rate', () => {
   })
 
   it('quotes page views and form submissions PER 1,000', async () => {
-    // Per unit these are $0.00021 and $0.000065, which read as zero at any
+    // Per unit these are $0.0007 and $0.00007, which read as zero at any
     // precision a customer would trust — the reason the unit is 1,000 here
     // and a GB-month for storage.
     //
     // The page-view figure is also where `rateText` earns its trailing-zero
-    // strip: cost x 1.3 is $0.209999998 per 1,000, which four decimals round
-    // to $0.2100 and the strip renders as the $0.21 the published page states.
+    // strip, and its floor at the cent: a billed view's cost x 1.3 is
+    // $0.700000002 per 1,000, which four decimals round to $0.7000 and the
+    // strip renders as the $0.70 the published page states — never $0.7.
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMonthViews: 10, hostFormSubmissions: 3 })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
     await waitFor(() => {
-      expect(screen.getByText(/\$0\.21 per 1,000/)).toBeTruthy()
+      expect(screen.getByText(/\$0\.70 per 1,000/)).toBeTruthy()
     })
-    expect(screen.getByText(/\$0\.065 per 1,000/)).toBeTruthy()
+    expect(screen.queryByText(/\$0\.7 per 1,000/)).toBeNull()
+    expect(screen.queryByText(/\$0\.36 per 1,000/)).toBeNull()
+    expect(screen.getByText(/\$0\.07 per 1,000/)).toBeTruthy()
+    // The forms plugin's band is drawn under the label it declares, and named
+    // in the caption among the meters, in the order the card bills them.
+    expect(screen.getByText(/^Form submissions: 3 of [\d,]+$/)).toBeTruthy()
+    expect(
+      screen.getByText(
+        /included storage, bandwidth and form submissions is metered/,
+      ),
+    ).toBeTruthy()
   })
 
   it('shows the rate while still INSIDE the band', async () => {
@@ -442,9 +452,10 @@ describe('each metered dimension names its overage rate', () => {
     // of the three are zero.
     expect(byMeter.storage).toBeGreaterThan(0)
     expect(byMeter.pageViews).toBeGreaterThan(0)
-    expect(byMeter.formSubmissions).toBeGreaterThan(0)
+    expect(byMeter['formSubmissions']).toBeGreaterThan(0)
     // THE INVARIANT: the split is the total, not a second opinion about it.
-    const sum = byMeter.storage + byMeter.pageViews + byMeter.formSubmissions
+    const sum =
+      byMeter.storage + byMeter.pageViews + byMeter['formSubmissions']!
     expect(sum).toBeCloseTo(billed.billableCostUsd * METERED_MARKUP, 10)
     expect(Math.round(sum * 100)).toBe(billed.billedCents)
 
@@ -456,7 +467,7 @@ describe('each metered dimension names its overage rate', () => {
     for (const share of [
       byMeter.storage,
       byMeter.pageViews,
-      byMeter.formSubmissions,
+      byMeter['formSubmissions']!,
     ]) {
       expect(
         screen.getByText(new RegExp(`≈ \\$${share.toFixed(2)}\\b`)),
@@ -471,14 +482,14 @@ describe('each metered dimension names its overage rate', () => {
     // customer would correctly read as a broken number.
     const barelyOver: Seed = {
       hostMediaBytes: Math.round((included.storageGb + 5) * GB),
-      hostFormSubmissions: included.formSubmissions + 1,
+      hostFormSubmissions: included.meters.formSubmissions! + 1,
     }
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed(barelyOver)
     const billed = invoiceEstimate(barelyOver, true)
     // One form submission over: $0.00005 × 1.30 = $0.000065.
-    expect(billed.billableUsdByMeter.formSubmissions).toBeGreaterThan(0)
-    expect(billed.billableUsdByMeter.formSubmissions).toBeLessThan(0.005)
+    expect(billed.billableUsdByMeter['formSubmissions']).toBeGreaterThan(0)
+    expect(billed.billableUsdByMeter['formSubmissions']).toBeLessThan(0.005)
     // …while the month as a whole bills real money, off the storage overage.
     expect(billed.billedCents).toBeGreaterThan(0)
 

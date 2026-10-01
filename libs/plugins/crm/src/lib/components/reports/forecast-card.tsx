@@ -41,6 +41,12 @@ import {
   visibleToClause,
 } from './report-scope'
 import { useWindowRead } from './use-aggregate-read'
+import {
+  currencyOfDeals,
+  forecastByCloseMonth,
+  type ForecastCell,
+  type PipelineForecast,
+} from '../../model/crm-reports'
 
 /**
  * The same window the pipeline card reads, under the SAME cache key and
@@ -107,10 +113,10 @@ export function ForecastCard(props: ForecastCardProps) {
   )
 
   const forecast = useMemo(
-    () => Aglyn.forecastByCloseMonth(dealWindow.rows, pipelineWindow.rows, nowMs),
+    () => forecastByCloseMonth(dealWindow.rows, pipelineWindow.rows, nowMs),
     [dealWindow.rows, pipelineWindow.rows, nowMs],
   )
-  const currency = useMemo(() => Aglyn.currencyOfDeals(dealWindow.rows), [dealWindow.rows])
+  const currency = useMemo(() => currencyOfDeals(dealWindow.rows), [dealWindow.rows])
   const read = dealWindow.status === 'success' && pipelineWindow.status === 'success'
   const failed = dealWindow.status === 'error' || pipelineWindow.status === 'error'
 
@@ -119,7 +125,7 @@ export function ForecastCard(props: ForecastCardProps) {
   const columns = forecast.pipelines
   const manyColumns = columns.length > 1
 
-  const rows: Array<{ key: string; label: string; cellOf: (row: Aglyn.PipelineForecast) => Aglyn.ForecastCell; total: Aglyn.ForecastCell; muted?: boolean }> = [
+  const rows: Array<{ key: string; label: string; cellOf: (row: PipelineForecast) => ForecastCell; total: ForecastCell; muted?: boolean }> = [
     {
       key: 'overdue',
       label: 'Before this month',
@@ -130,7 +136,7 @@ export function ForecastCard(props: ForecastCardProps) {
     ...forecast.buckets.map((bucket, index) => ({
       key: bucket.key,
       label: monthLabel(bucket.start),
-      cellOf: (row: Aglyn.PipelineForecast) => row.months[index],
+      cellOf: (row: PipelineForecast) => row.months[index],
       total: forecast.months[index],
     })),
     {
@@ -149,7 +155,7 @@ export function ForecastCard(props: ForecastCardProps) {
     },
   ].filter((row) => row.key !== 'overdue' && row.key !== 'later' ? true : row.total.count > 0)
 
-  const cell = (value: Aglyn.ForecastCell, code: string) =>
+  const cell = (value: ForecastCell, code: string) =>
     value.count === 0 ? (
       <Typography variant="body2" color="text.disabled">
         {'—'}

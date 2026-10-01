@@ -22,10 +22,12 @@ import {
   linkHostsIn,
   lookalikeBrandForHost,
   OUTBOUND_REVIEW_YOUNG_DAYS,
+  PHISHING_SCREEN_BRANDS,
   phishingSignalTier,
   registrableDomain,
   screenOutboundEmail,
   signalsThatHold,
+  visibleTextOf,
 } from './outbound-phishing-screen'
 
 /**
@@ -105,6 +107,22 @@ describe('lookalike hosts', () => {
     ['apple.account-check.top', 'apple'],
     ['usps-redelivery.com', 'usps'],
     ['wellsfargo-alerts.co.uk', 'wellsfargo'],
+    // The document-share brands (AGL-3447).
+    ['sharepoint-files.example.top', 'microsoft'],
+    ['office-365-login.top', 'microsoft'],
+    ['onedrive.secure-view.top', 'microsoft'],
+    ['proofpoint-encrypt.com', 'proofpoint'],
+    ['secure-mimecast.net', 'mimecast'],
+    ['docs-google.com', 'google'],
+    ['drive.google.com.share-doc.top', 'google'],
+    ['g00gle-docs.top', 'google'],
+    ['dropbox-transfer.top', 'dropbox'],
+    ['wetransfer-files.top', 'wetransfer'],
+    ['box-com-share.top', 'boxcom'],
+    ['app.box.com.file-view.top', 'boxcom'],
+    ['adobe.document-share.top', 'adobe'],
+    ['adobesign.doc-view.top', 'adobe'],
+    ['sharefile-secure.top', 'sharefile'],
   ])('%s wears %s', (host, brand) => {
     expect(lookalikeBrandForHost(host)?.id).toBe(brand)
   })
@@ -124,6 +142,28 @@ describe('lookalike hosts', () => {
     'bookingengine.hotelsoft.com',
     'booking.harborviewhotel.com',
     'myoffice.com.au',
+    // The document-share brands' own hosts, and the businesses that share a
+    // word with one (AGL-3447).
+    'contoso.sharepoint.com',
+    'docs.google.com',
+    'www.google.co.uk',
+    'fonts.googleapis.com',
+    'www.google-analytics.com',
+    'www.googletagmanager.com',
+    'www.dropbox.com',
+    'dl.dropboxusercontent.com',
+    'app.box.com',
+    'acme.ent.box.com',
+    'urldefense.com',
+    'acme.sharefile.com',
+    'we.tl',
+    'use.typekit.net',
+    'adobe-rose-inn.com',
+    'adobehomes.com',
+    'lunchbox.com',
+    'thebox-gym.com',
+    'outlook-advisors.com',
+    'proof-point-coaching.com',
   ])('%s is not a lookalike', (host) => {
     expect(lookalikeBrandForHost(host)).toBeNull()
   })
@@ -253,6 +293,238 @@ describe('ordinary mail from a young workspace passes', () => {
   })
 })
 
+describe('document-share mail (AGL-3447)', () => {
+  const brandNamed = (text: string) =>
+    PHISHING_SCREEN_BRANDS.filter((brand) => brand.mention.test(text)).map((brand) => brand.id)
+
+  it('holds a Proofpoint "encrypted message" lure that links elsewhere', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'You have received an encrypted message',
+      bodies: [
+        'Proofpoint Encryption: a secure document was shared with you. ' +
+          'Continue to document: https://temps-juenes.com/',
+      ],
+      ...OWN,
+    })
+    expect(verdict.signals).toEqual([
+      {
+        code: 'brand-lure-link',
+        brand: 'proofpoint',
+        lure: 'secure document',
+        host: 'temps-juenes.com',
+      },
+    ])
+  })
+
+  it.each([
+    ['Shared a file with you on SharePoint', 'microsoft'],
+    ['Your Outlook Web App mailbox is full', 'microsoft'],
+    ['Open it in Google Drive', 'google'],
+    ['Sent with WeTransfer', 'wetransfer'],
+    ['Adobe Acrobat Sign: please sign', 'adobe'],
+    ['Files on box.com', 'boxcom'],
+    ['Mimecast secure message', 'mimecast'],
+    ['Share File portal', 'sharefile'],
+  ])('reads %s as naming %s', (text, brand) => {
+    expect(brandNamed(text)).toContain(brand)
+  })
+
+  it.each([
+    'Our 2026 market outlook',
+    'Leave payments in the drop box by the office door',
+    'We transfer your files to the new server overnight',
+    'A key proof point for investors',
+    'Order the lunch box special',
+    'Tour our adobe homes in Santa Fe',
+    'Find us on Google',
+    'Google Maps directions',
+  ])('does not read "%s" as naming a document-share brand', (text) => {
+    expect(brandNamed(text)).toEqual([])
+  })
+
+  it('lets a firm mail its clients about its own document portal', () => {
+    expect(
+      screenOutboundEmail({
+        subject: 'Your documents are ready for review',
+        bodies: [
+          'Hello, your engagement letter is in our secure document portal. We use Microsoft 365 ' +
+            'and Adobe Acrobat Sign: https://portal.harborviewhotel.com/docs',
+        ],
+        ...OWN,
+      }).hold,
+    ).toBe(false)
+  })
+})
+
+/**
+ * The 2026-10-01 "Google Workspace — Password Expired Notification" (AGL-3453),
+ * trimmed: every letter of the brand and the lure split by a tag, two
+ * buttons through a real click-tracker with the recipient's address as the
+ * fragment, a `<head>` of its own, and a hundred and fifty empty paragraphs
+ * before a pasted, unrelated thread. The recipient is `victim@example.com`.
+ */
+const split = (words: string) =>
+  [...words].map((letter) => (letter === ' ' ? ' ' : `${letter}<SPAN class=victim@example.com>`)).join('')
+const TRACKER = 'https://links.notification.intuit.com/ss/c/u001.AbCdEf123'
+const PASSWORD_EXPIRED_HTML = [
+  '<html><head><style>p{margin:0}</style><title>Notice</title></head><body>',
+  `<p><b>${split('Google Workspace')}</b></p>`,
+  `<h2>${split('Password Expired Notification')}</h2>`,
+  `<p>${split('Your password expires today.')} ${split('To keep using your account, choose an option below.')}</p>`,
+  `<a href="${TRACKER}/h1/Aa1#victim@example.com">${split('Keep Your Active Password')}</a>`,
+  `<a href="${TRACKER}/h1/Bb2#victim@example.com">${split('Change Password Settings')}</a>`,
+  '<p>&nbsp;</p>'.repeat(150),
+  '<blockquote>On Tue, the club secretary wrote: Training moves to Saturday at 9, ',
+  'bring the signed forms and the kit order.</blockquote>',
+  '</body></html>',
+].join('\n')
+
+describe('what a reader sees, not the raw HTML (AGL-3453)', () => {
+  it('rejoins a word a kit split letter by letter with tags', () => {
+    expect(visibleTextOf(split('Google Workspace'))).toBe('Google Workspace')
+    expect(visibleTextOf(`P<SPAN class=a>a<SPAN class=a>s<span>s</span>word E<i>x</i>pired`)).toBe(
+      'Password Expired',
+    )
+  })
+
+  it('drops what is never shown, comments and invisible characters, and decodes entities', () => {
+    expect(
+      visibleTextOf(
+        '<head><title>PayPal</title></head><style>.a{}</style><script>var x="verify your account"</script>' +
+          'Go<!-- x -->og\u200ble&nbsp;Docs &amp; Drive',
+      ),
+    ).toBe('Google Docs & Drive')
+  })
+
+  it('keeps two words in two paragraphs apart in its second reading', () => {
+    expect(visibleTextOf('<p>Your password</p><p>expires today</p>')).toContain('Your password expires today')
+  })
+
+  it('reads a body with a million unclosed tags in linear time', () => {
+    const started = Date.now()
+    for (const body of [
+      '<style'.repeat(200_000),
+      `${'<style>'.repeat(100_000)}x`,
+      `${'<head>'.repeat(100_000)}<body>x`,
+      '<a'.repeat(500_000),
+      '<!--'.repeat(250_000),
+    ]) {
+      visibleTextOf(body)
+    }
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('HOLDS the split-letter Google Workspace password email, for every workspace', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Google Workspace — Password Expired Notification',
+      fromName: 'Regional Football Association',
+      fromAddress: 'notices@regional-football.example',
+      bodies: [PASSWORD_EXPIRED_HTML],
+      ...OWN,
+    })
+    expect(verdict.signals).toEqual([
+      {
+        code: 'brand-lure-link',
+        brand: 'google',
+        lure: 'Password Expire',
+        host: 'links.notification.intuit.com',
+      },
+      {
+        code: 'recipient-prefill-link',
+        host: 'links.notification.intuit.com',
+        lure: 'Password Expire',
+        place: 'fragment',
+      },
+    ])
+    // The prefilled fragment is STRONG: it holds an established workspace's
+    // mail too, and mail that says it is owed.
+    expect(signalsThatHold(verdict.signals, { ageDays: 2 })).toHaveLength(2)
+    expect(signalsThatHold(verdict.signals, { ageDays: 900, owed: true })).toEqual([verdict.signals[1]])
+  })
+
+  it('still holds it with the brand split from the subject too, read from the body alone', () => {
+    const verdict = screenOutboundEmail({ subject: 'Notice', bodies: [PASSWORD_EXPIRED_HTML], ...OWN })
+    expect(verdict.signals.map((signal) => signal.code)).toEqual(['brand-lure-link', 'recipient-prefill-link'])
+  })
+
+  it('reads an address the kit base64-encoded into the fragment', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Your mailbox storage is full',
+      bodies: [`Keep your messages: https://box-relay.example.top/m#${btoa('victim@example.com')}`],
+      ...OWN,
+    })
+    expect(verdict.signals).toContainEqual(
+      expect.objectContaining({ code: 'recipient-prefill-link', place: 'fragment', lure: 'mailbox storage is full' }),
+    )
+  })
+
+  it.each([
+    ['Keep your active password', 'Keep your active password'],
+    ['Change password settings', 'Change password settings'],
+    ['Your mailbox is almost full', 'mailbox is almost full'],
+    ['Your account will be deactivated tonight', 'account will be deactivated'],
+    ['Your password has expired', 'password has expire'],
+  ])('reads "%s" as an account lure', (text, lure) => {
+    const verdict = screenOutboundEmail({
+      subject: text,
+      bodies: ['Act now: https://relay.example.top/x#victim@example.com'],
+      ...OWN,
+    })
+    expect(verdict.signals).toContainEqual(expect.objectContaining({ code: 'recipient-prefill-link', lure }))
+  })
+})
+
+describe('a link that carries the reader’s address, where it is ordinary (AGL-3453)', () => {
+  it('lets a workspace mail its own user a password reset on its own domain', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Your password expires today',
+      fromName: 'Harbor View Hotel',
+      fromAddress: 'no-reply@harborviewhotel.com',
+      bodies: [
+        '<p>Hi Dana, your password expires today. Change password settings here:</p>' +
+          '<a href="https://www.harborviewhotel.com/account/password?email=victim%40example.com#victim@example.com">Reset password</a>',
+      ],
+      ...OWN,
+    })
+    expect(verdict.signals).toEqual([])
+    expect(verdict.hold).toBe(false)
+  })
+
+  it('reads an address in a query, or in a hash route, as SOFT: a SaaS login link does it', () => {
+    for (const href of [
+      'https://app.example-saas.io/login?email=victim%40example.com',
+      'https://app.example-saas.io/#/login?email=victim@example.com',
+    ]) {
+      const verdict = screenOutboundEmail({
+        subject: 'Your account will be suspended',
+        bodies: [`Update your billing to keep it: ${href}`],
+        ...OWN,
+      })
+      expect(verdict.signals).toContainEqual(
+        expect.objectContaining({ code: 'recipient-prefill-link', place: 'parameter' }),
+      )
+      expect(signalsThatHold(verdict.signals, { ageDays: 400 })).toEqual([])
+    }
+  })
+
+  it('never counts the workspace’s own address in a link, or a link with no account lure', () => {
+    expect(
+      screenOutboundEmail({
+        subject: 'Your account will be suspended',
+        bodies: ['Questions? https://forms.example-crm.com/ask?reply=hello@harborviewhotel.com'],
+        ...OWN,
+      }).signals,
+    ).toEqual([])
+    expect(
+      screenOutboundEmail({
+        subject: 'Our new menu',
+        bodies: ['Book a table: https://tables.example.net/r#victim@example.com'],
+        ...OWN,
+      }).signals,
+    ).toEqual([])
+  })
+})
+
 describe('the staff wording', () => {
   it('describes each signal in a sentence', () => {
     const [line] = describePhishingScreenSignals([
@@ -260,6 +532,25 @@ describe('the staff wording', () => {
     ])
     expect(line).toContain('poshmark.id63835663.shop')
     expect(line).toContain('Poshmark')
+  })
+
+  it('names the page-wide, off-site and redirect signals (AGL-3447)', () => {
+    expect(
+      describePhishingScreenSignals([
+        { code: 'brand-lure-page', brand: 'proofpoint', lure: 'Secure Document', host: 'temps-juenes.com' },
+        {
+          code: 'offsite-action-page',
+          action: 'Continue to Document',
+          lure: 'Secure Document',
+          host: 'temps-juenes.com',
+        },
+        { code: 'offsite-redirect', source: '/secure-document', lure: 'secure document', host: 'temps-juenes.com' },
+      ]),
+    ).toEqual([
+      'Names Proofpoint on a page that asks visitors to act ("Secure Document") and links to temps-juenes.com, and this workspace is not Proofpoint.',
+      'Its call to action ("Continue to Document") sends visitors off the site to temps-juenes.com, on a page that reads "Secure Document".',
+      'Redirects /secure-document, a path that reads "secure document", off the site to temps-juenes.com.',
+    ])
   })
 })
 
@@ -304,6 +595,14 @@ describe('the tiers (every surface)', () => {
     expect(phishingSignalTier(sender)).toBe('soft')
     expect(phishingSignalTier(lure)).toBe('soft')
     expect(phishingSignalTier(page)).toBe('soft')
+    // The page-wide, off-site and redirect rules (AGL-3447): young only.
+    for (const code of ['brand-lure-page', 'offsite-action-page', 'offsite-redirect']) {
+      expect(phishingSignalTier({ code, host: 'temps-juenes.com' })).toBe('soft')
+    }
+    // A prefilled sign-in (AGL-3453): the whole fragment is strong, a
+    // parameter soft.
+    expect(phishingSignalTier({ code: 'recipient-prefill-link', host: 'x.top', place: 'fragment' })).toBe('strong')
+    expect(phishingSignalTier({ code: 'recipient-prefill-link', host: 'x.top', place: 'parameter' })).toBe('soft')
   })
 })
 
@@ -321,6 +620,15 @@ describe('a subdomain that wears a brand', () => {
     ['docusign-files', 'docusign'],
     ['wellsfargo', 'wellsfargo'],
     ['poshmark-2', 'poshmark'],
+    ['proofpoint', 'proofpoint'],
+    ['sharepoint-login', 'microsoft'],
+    ['google-docs', 'google'],
+    ['dropbox-share', 'dropbox'],
+    ['wetransfer', 'wetransfer'],
+    ['adobe', 'adobe'],
+    ['adobe-support', 'adobe'],
+    ['boxcom-files', 'boxcom'],
+    ['mimecast-secure', 'mimecast'],
   ])('%s is refused as %s', (label, brand) => {
     expect(brandForSubdomainLabel(label)?.id).toBe(brand)
   })
@@ -334,6 +642,15 @@ describe('a subdomain that wears a brand', () => {
     'amazonia-tours',
     'dhlfan',
     'my-id-photos',
+    // A common word one of the document-share brands also uses (AGL-3447).
+    'lunch-box-orders',
+    'tool-box-support',
+    'adobe-rose-inn',
+    'proof-point-coaching',
+    'market-outlook',
+    'drop-box-laundry',
+    'we-transfer-movers',
+    'share-files-studio',
   ])('%s is an ordinary name', (label) => {
     expect(brandForSubdomainLabel(label)).toBeNull()
   })

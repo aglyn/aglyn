@@ -21,3 +21,5 @@
  * other plugins/apps via `@aglyn/plugins-bookings/model`.
  */
 export * from './bookings'
+export * from './booking-record'
+export * from './booking-time'

@@ -9,7 +9,7 @@ description: Create a language variant of your site and translate its pages.
 Publish your site in another language by adding a **locale variant**.
 
 :::info Plan availability
-**Paid**. This is **multilingual v1**.
+**Business** and above. This is **multilingual v1**.
 :::
 
 ![The Languages card in Setup → Basic details, where a locale is added](/img/multilingual/setup-languages.png)

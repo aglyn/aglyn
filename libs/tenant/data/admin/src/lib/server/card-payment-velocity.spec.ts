@@ -30,6 +30,7 @@ import { CARD_PAYMENT_VELOCITY } from '@aglyn/aglyn/app-utils/card-payment-veloc
 import {
   cardPaymentAlarmReviewId,
   cardPaymentVelocityRefusal,
+  cardTestingItemLabel,
   resetCardPaymentAlarmsForTests,
 } from './card-payment-velocity'
 import { resetRateLimitDegradationForTests } from './rate-limit-store'
@@ -139,6 +140,7 @@ describe('cardPaymentVelocityRefusal', () => {
 
   it('never refuses a busy site, and files ONE staff row when it crosses the site window', async () => {
     const firestore = fakeFirestore()
+    firestore.docs.set('hosts/busy', { displayName: 'Harbor View', subdomain: 'harborview' })
     const notifyRisk = jest.fn(async (_input: Record<string, unknown>) => undefined)
     const { limit } = CARD_PAYMENT_VELOCITY.perSite
     // Every shopper a distinct address, each opening checkout once.
@@ -162,9 +164,22 @@ describe('cardPaymentVelocityRefusal', () => {
       orgId: 'org-1',
       reviewId: rowId,
       reference: expect.stringMatching(/^PV-/),
+      // The site by name (AGL-3432): the label rides on the row, so the
+      // closing notice and the staff alert say which store too.
+      item: { label: 'checkout on the site "Harbor View"', path: '/busy/products/orders' },
     })
-    const told = renderOwnerRiskNotice('card-testing', { 'item.label': 'your site' })
+    const told = renderOwnerRiskNotice('card-testing', {
+      'item.label': 'checkout on the site "Harbor View"',
+      'site.label': 'the site "Harbor View"',
+    })
+    expect(told.title).toBe('Unusual checkout activity on the site "Harbor View"')
+    expect(told.summary).toMatch(/^On a recent date, checkout on the site "Harbor View" saw an unusual burst/)
     expect(Object.values(told).flat().join(' ')).not.toMatch(/\d/)
+  })
+
+  it('names "your site" when the site has no name to give', () => {
+    expect(cardTestingItemLabel(null)).toBe('checkout on your site')
+    expect(cardTestingItemLabel(' Shop "One" ')).toBe('checkout on the site "Shop ”One”"')
   })
 
   it('files nothing for a site under its window', async () => {

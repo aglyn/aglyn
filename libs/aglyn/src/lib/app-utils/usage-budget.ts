@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-// The ONE unit conversion between our provider bill and what a customer is
-// shown. Imported here so `publicOrgMonthlySpend` cannot grow a second copy of
-// it — see that function, and the module header of `assist-credits.ts`.
-import { assistCreditsFromUsd } from './assist-credits'
+import {
+  pluginSpendLines,
+  type ResolvedPluginSpendLine,
+} from '../plugin-manager/plugin-usage-axes'
 
 /**
  * Per-org USAGE BUDGETS, modelled on a Google Cloud billing budget (AGL-1528).
@@ -46,9 +46,9 @@ import { assistCreditsFromUsd } from './assist-credits'
  *   - **threshold rules** as percentages of the amount (default 50/90/100 —
  *     GCP's own default trio);
  *   - one alert per threshold per **month**, which is our budget period
- *     because every meter underneath it (`orgs/{id}/usage/{month}`,
- *     `assistUsage/{month}`, the counters' `YYYY-MM` fields) already resets
- *     monthly. A budget period the meters do not share would silently compare
+ *     because every meter underneath it (`orgs/{id}/usage/{month}`, each
+ *     plugin's spend-line document, the counters' `YYYY-MM` fields) already
+ *     resets monthly. A budget period the meters do not share would silently compare
  *     a month of spend against a quarter of budget.
  *
  * ## WHY THIS IS NOT THE STORAGE CAP, AND MUST NOT BECOME IT
@@ -243,6 +243,25 @@ export function budgetAlertDue(input: {
 }
 
 /**
+ * One plugin's line of the month's spend, as its `spendLines` declaration
+ * names it (`plugin-usage-axes.ts`).
+ */
+export interface OrgSpendLine {
+  id: string
+  pluginId: string
+  label: string
+  /**
+   * The month's figure in dollars at the rates the plugin bills, read off the
+   * document the declaration names. For a line declared with a `unit` these
+   * dollars are the platform's cost and never cross to a customer's browser
+   * (see {@link publicOrgMonthlySpend}).
+   */
+  usd: number
+  /** Whether `usd` entered `totalUsd` — see {@link billsFromMonth}. */
+  billed: boolean
+}
+
+/**
  * What an org is spending this month, split by where it comes from.
  *
  * Every field is a figure some other module already owns; nothing here is
@@ -256,26 +275,21 @@ export interface OrgSpendBreakdown {
    */
   meteredUsd: number
   /**
-   * Aglyn Assist token spend for the month, at the serving model's list
-   * rates (`orgs/{id}/assistUsage/{month}.estCostUsd`).
+   * Each plugin's line, in catalog order.
    *
-   * ALWAYS REPORTED, and counted toward the budget only when
-   * {@link billsAssistTokens} says this month invoices for it — which today
-   * it does not, because Assist is a plan ENTITLEMENT (`aiAssist: true`) with
-   * no per-token price anywhere in the platform. Adding it to a customer's
-   * "you will owe" figure would be a surprise bill invented by a
-   * notification, which is precisely the thing this feature exists to stop.
+   * ALWAYS REPORTED, and counted toward the budget only once the line's own
+   * start month says this month is charged for it. Until then the plugin's
+   * usage is an entitlement with no price anywhere in the platform, and adding
+   * it to a customer's "you will owe" figure would be a surprise bill invented
+   * by a notification — precisely the thing this feature exists to stop.
    *
-   * It is nonetheless carried here rather than left out, for two reasons that
-   * both bite: the day Assist is priced this is a one-line switch instead of
-   * a new pipeline, and — live today — {@link assistMarginBreach} reads this
-   * same number as OUR cost, which is the margin-guard half of the job.
+   * Carried rather than left out for two reasons that both bite: the day a
+   * line is priced this is a deployment variable instead of a new pipeline,
+   * and a plugin's staff alert reads its own line as the platform's cost.
    */
-  assistUsd: number
-  /** What counts against the budget: metered, plus assist when it bills. */
+  lines: readonly OrgSpendLine[]
+  /** What counts against the budget: metered, plus every billed line. */
   totalUsd: number
-  /** Whether `assistUsd` entered `totalUsd`. */
-  assistBilled: boolean
   /**
    * FALSE when no rollup exists for this month yet, so `meteredUsd` is 0
    * because nothing has been computed rather than because nothing was spent.
@@ -291,17 +305,17 @@ export interface OrgSpendBreakdown {
 }
 
 /**
- * Whether `month`'s invoice charges for Assist tokens.
+ * Whether `month`'s invoice charges for a line whose deployment variable
+ * holds `configuredStart`.
  *
  * Same START-MONTH shape and the same fail-closed posture as
  * `billsOrgLibraryStorage`, and for the identical reason: a boolean flipped
  * mid-period would retroactively bill a re-run of an earlier month at that
- * month's accumulated tokens. A start month cannot reach backwards.
+ * month's accumulated usage. A start month cannot reach backwards.
  *
- * `BILL_ASSIST_TOKENS_FROM=YYYY-MM`. Anything else — `true`, `1`, a date, a
- * typo — bills nothing.
+ * Anything but a `YYYY-MM` — `true`, `1`, a date, a typo — bills nothing.
  */
-export function billsAssistTokens(
+export function billsFromMonth(
   month: string,
   configuredStart: string | null | undefined,
 ): boolean {
@@ -311,11 +325,18 @@ export function billsAssistTokens(
   return month >= start
 }
 
+/** A positive finite dollar figure, or 0. */
+function dollars(value: unknown): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
 /**
  * Builds the month's spend from figures already read elsewhere.
  *
  * `rollupMonth` is compared to `month` rather than trusted: see
- * {@link OrgSpendBreakdown.meteredFresh}.
+ * {@link OrgSpendBreakdown.meteredFresh}. Every declared spend line is
+ * reported, read as nothing when its document was not read.
  */
 export function orgMonthlySpend(input: {
   month: string
@@ -323,269 +344,109 @@ export function orgMonthlySpend(input: {
   rollupBilledCents: number | null | undefined
   /** The `month` field of that same document. */
   rollupMonth: string | null | undefined
-  /** `estCostUsd` off `orgs/{id}/assistUsage/{month}`. */
-  assistEstCostUsd: number | null | undefined
-  /** `BILL_ASSIST_TOKENS_FROM`, verbatim. */
-  assistBilledFrom?: string | null
+  /**
+   * Each declared spend line's figure, keyed by line id: the `live.field` of
+   * its month document, as read.
+   */
+  lineReadings?: Readonly<Record<string, unknown>>
+  /** The deployment's variables, holding each line's start month. */
+  env?: Readonly<Record<string, string | undefined>>
 }): OrgSpendBreakdown {
-  const { month, rollupBilledCents, rollupMonth, assistEstCostUsd } = input
+  const { month, rollupBilledCents, rollupMonth } = input
   const meteredFresh = Boolean(rollupMonth) && rollupMonth === month
   const cents = Number(rollupBilledCents)
   const meteredUsd =
     meteredFresh && Number.isFinite(cents) && cents > 0 ? cents / 100 : 0
-  const assistRaw = Number(assistEstCostUsd)
-  const assistUsd = Number.isFinite(assistRaw) && assistRaw > 0 ? assistRaw : 0
-  const assistBilled = billsAssistTokens(month, input.assistBilledFrom)
+  const lines = pluginSpendLines().map(
+    (line): OrgSpendLine => ({
+      id: line.id,
+      pluginId: line.pluginId,
+      label: line.label,
+      usd: dollars(input.lineReadings?.[line.id]),
+      billed: billsFromMonth(month, input.env?.[line.billedFromEnv]),
+    }),
+  )
   return {
     meteredUsd,
-    assistUsd,
-    assistBilled,
-    totalUsd: meteredUsd + (assistBilled ? assistUsd : 0),
+    lines,
+    totalUsd:
+      meteredUsd +
+      lines.reduce((sum, line) => sum + (line.billed ? line.usd : 0), 0),
     meteredFresh,
   }
 }
 
+/** A spend line as a customer's browser receives it. */
+export interface PublicOrgSpendLine {
+  id: string
+  label: string
+  billed: boolean
+  /**
+   * The month's figure in the line's declared unit (`ceil(dollars / unit
+   * cost)`), or `null` for a line declared without one.
+   */
+  units: number | null
+  /** What the unit is called, or `null` for a line without one. */
+  unitLabel: string | null
+  /** Dollars, only for a line declared WITHOUT a unit; `null` otherwise. */
+  usd: number | null
+}
+
 /**
  * The customer-facing half of {@link OrgSpendBreakdown} — dollars the customer
- * is charged, and Assist consumption in CREDITS.
+ * is charged, and each plugin's line in the unit it declared.
  */
 export interface PublicOrgSpend {
   /** Metered infrastructure and plan overages, from the invoice's own figure. */
   meteredUsd: number
-  /**
-   * Assist consumption this month, in credits. The stored figure is
-   * `estCostUsd` — our provider bill — and a credit is the unit that expresses
-   * it without publishing it.
-   */
-  assistCredits: number
+  lines: PublicOrgSpendLine[]
   /** What counts against the budget. */
   totalUsd: number
-  /** Whether Assist consumption entered `totalUsd`. */
-  assistBilled: boolean
   meteredFresh: boolean
+}
+
+/** Dollars in a unit of cost, rounded UP — spend already made never reads as less. */
+function unitsOf(usd: number, costUsd: number): number {
+  if (!Number.isFinite(usd) || usd <= 0) return 0
+  return Math.ceil(usd / costUsd)
 }
 
 /**
  * The projection that crosses the boundary to a customer's browser.
  *
- * `OrgSpendBreakdown.assistUsd` is `orgs/{id}/assistUsage/{month}.estCostUsd`
- * verbatim — our provider bill at the serving model's list rates, not a price
+ * A line declared with a `unit` stores the platform's own cost — for the AI
+ * plugin, its provider bill at the serving model's list rates, not a price
  * and not a rate the platform publishes. Serving it to an org-scoped caller
- * puts our model choice, our per-token rates and our margin on a billing page,
- * which is the boundary `publicAssistCredits` and `publicAssistQuota` already
- * exist to hold on the assist routes. This is the same boundary, one route
- * over, and it was the last place the dollar figure still crossed it.
- *
- * `assistCreditsFromUsd` is the ONE conversion between the two units, so this
- * cannot come to disagree with the credits meter about the same month's
- * consumption.
+ * would put a model choice, per-token rates and a margin on a billing page,
+ * so such a line crosses in its unit only, through the same rounding-up
+ * conversion the plugin's own meter uses, and its dollars never do.
  *
  * `meteredUsd` and `totalUsd` stay dollars: `billedCents` is what an invoice
- * charges, which is the customer's own money and the whole subject of a budget.
+ * charges, which is the customer's own money and the whole subject of a
+ * budget.
  *
- * The two units are deliberately not summed. A budget is a dollar rule, credits
- * are not dollars, and folding one into the other would republish the cost the
- * conversion just removed.
+ * Units and dollars are deliberately not summed. A budget is a dollar rule,
+ * a unit is not a dollar, and folding one into the other would republish the
+ * cost the conversion just removed.
  */
 export function publicOrgMonthlySpend(spend: OrgSpendBreakdown): PublicOrgSpend {
+  const declared = new Map<string, ResolvedPluginSpendLine>(
+    pluginSpendLines().map((line) => [line.id, line]),
+  )
   return {
     meteredUsd: spend.meteredUsd,
-    assistCredits: assistCreditsFromUsd(spend.assistUsd),
+    lines: spend.lines.map((line) => {
+      const unit = declared.get(line.id)?.unit
+      return {
+        id: line.id,
+        label: line.label,
+        billed: line.billed,
+        units: unit ? unitsOf(line.usd, unit.costUsd) : null,
+        unitLabel: unit ? unit.label : null,
+        usd: unit ? null : line.usd,
+      }
+    }),
     totalUsd: spend.totalUsd,
-    assistBilled: spend.assistBilled,
     meteredFresh: spend.meteredFresh,
   }
-}
-
-/**
- * The MARGIN GUARD (the other half of the ask, and the live half).
- *
- * A customer budget protects the customer. This protects us, from the one
- * meter on the platform whose unit cost is real money paid to a third party
- * and whose ceiling is a message count rather than a dollar figure:
- * `assistEntitledMonthlyLimit` caps an entitled org at 1,000 MESSAGES a
- * month, and a thousand long, cache-cold Opus-class exchanges is a
- * three-figure bill against a subscription that did not move.
- *
- * So one org's Assist COGS crossing this threshold notifies STAFF, not the
- * customer — the customer is not being charged and has done nothing wrong.
- * Returns the threshold crossed, or 0.
- *
- * `ASSIST_ORG_MONTHLY_COGS_ALERT_USD` overrides the default and FAILS TO THE
- * DEFAULT: a blank or malformed value that disabled the guard would be
- * another alert that cannot fire.
- */
-export const ASSIST_ORG_MONTHLY_COGS_ALERT_USD_DEFAULT = 25
-
-export function assistCogsAlertThresholdUsd(
-  configured?: string | null,
-): number {
-  const parsed = Number(String(configured ?? '').trim())
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return ASSIST_ORG_MONTHLY_COGS_ALERT_USD_DEFAULT
-  }
-  return parsed
-}
-
-/**
- * The repo default spend ceiling: **$40 per org per month** (AGL-2264).
- *
- * The number is arithmetic rather than pricing. After AGL-2441 the
- * 1,000-message entitled guard bounds roughly $28/org/month of worst-case
- * spend at Sonnet, and the staff margin alert already fires at $25. $40
- * therefore sits ABOVE anything the message cap can produce at the current
- * model, so it changes no charged amount and no plan's behaviour — it is a
- * ceiling on OUR cost, not a customer price, which is why it is outside the
- * Sept-1 pricing lock. It binds only when an assumption behind that
- * arithmetic has moved: an `ASSIST_MODEL` swap to an Opus-class tier, a
- * longer prompt, or a caller finding another way to inflate input. That is
- * the failure it exists for.
- *
- * It ships as a DEFAULT rather than as an environment variable someone must
- * remember, because an unset ceiling is the fail-open this issue was opened
- * about: a fresh deployment and a self-hoster both inherit a sane bound
- * without knowing the variable exists.
- *
- * The free tier gets no separate figure and needs none — its 10 messages a
- * UTC day bound it at roughly $0.28/day, so this is a backstop it cannot
- * reach rather than a cap it runs into.
- *
- * ⚠️ It applies only to an org whose plan sells NO assist band. Agency and
- * Enterprise include more assist than $40 of spend, so the meter's
- * `assistMonthlyCeilingUsd` keeps this default off every plan that sells a
- * band — see there for which figure binds when.
- */
-export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
-
-/**
- * The per-org monthly PROVIDER-SPEND ceiling in USD — the dollar half of
- * the cap (AGL-2264), from `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` as the caller
- * read it. Defaults to {@link ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD};
- * `off` removes it.
- *
- * Pure over the configured value, like {@link assistCogsAlertThresholdUsd}:
- * the meter that refuses at the ceiling and the cron that announces the
- * refusal read the one variable and must agree on what it means.
- *
- * The meter's message caps bound spend only through an assumed cost per
- * message, and that assumption is exactly what drifts: `ASSIST_MODEL` is an
- * env override, prompts grow, and a client controls how much history it
- * posts. The ceiling is measured against the real figure instead: the
- * running `estCostUsd` on the month's assist usage document, which the meter
- * increments at the SERVING model's rates. So it bounds the actual bill
- * rather than a forecast of it.
- *
- * The refusal is deliberately the same shape as the message refusal (a
- * reservation that did not move the counter), so an org at the ceiling
- * spends nothing at all rather than spending less. It refuses — it does
- * NOT quietly swap to a cheaper model. A silent quality drop is worse than
- * an honest stop, because nobody can tell it happened.
- *
- * ⚠️ **Fails to the DEFAULT, never to “no ceiling”.** An empty, negative or
- * unparseable value reads as unconfigured and takes the repo default, so a
- * typo cannot reopen the fail-open this exists to close. It cannot become a
- * ceiling of `$0` either — a value of zero is not “refuse everyone”, it is
- * “not a number I will honour” — because an outage across every workspace
- * would be worse than the overspend being guarded.
- *
- * Removing the ceiling therefore takes a WORD rather than a number:
- * `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD=off`. A deployment paying its own
- * provider bill may genuinely want none, and that is a decision someone
- * should have to write down rather than reach by mistyping a digit.
- */
-export function assistOrgMonthlyCostLimitUsd(
-  configured?: string | null,
-): number | null {
-  const operator = assistOperatorCeilingUsd(configured)
-  return operator === undefined
-    ? ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD
-    : operator
-}
-
-/**
- * The operator's ceiling exactly as CONFIGURED — three states, not two:
- * a number, `null` for the word `off`, and `undefined` for unset or
- * unparseable.
- *
- * `assistOrgMonthlyCostLimitUsd` collapses `undefined` onto the repo default
- * and is the reading every existing caller wants. The composition with a
- * plan's own band needs the third state, because "the operator wrote a
- * number" and "nobody configured anything" have to bind differently against a
- * band that was sold: an operator's figure is a decision, and the repo
- * default is a backstop for orgs that have no band of their own.
- */
-export function assistOperatorCeilingUsd(
-  configured?: string | null,
-): number | null | undefined {
-  const raw = String(configured ?? '').trim()
-  if (raw === '') return undefined
-  if (raw.toLowerCase() === 'off') return null
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-}
-
-/**
- * Whether this org's Assist spend has newly crossed the margin threshold.
- *
- * Dedupes through the same guard shape and the same month semantics as the
- * customer budget, under its own key, so a staff alert and a customer alert
- * can never suppress one another.
- */
-export function assistMarginBreach(input: {
-  assistUsd: number
-  thresholdUsd: number
-  guard: UsageAlertGuard | null | undefined
-  month: string
-}): boolean {
-  const { assistUsd, thresholdUsd, guard, month } = input
-  if (!Number.isFinite(assistUsd) || !Number.isFinite(thresholdUsd)) return false
-  if (thresholdUsd <= 0 || assistUsd < thresholdUsd) return false
-  // The guard records how many WHOLE multiples of the threshold have been
-  // announced, so an org at 1x is announced once and an org that climbs to 2x
-  // is announced again — an escalating cost must not go quiet because it
-  // already spoke.
-  const multiple = Math.floor(assistUsd / thresholdUsd)
-  if (guard?.month === month && Number(guard?.threshold ?? 0) >= multiple) {
-    return false
-  }
-  return true
-}
-
-/**
- * Whether this org has newly crossed the HARD spend ceiling — the one that
- * refuses (AGL-2264), as distinct from {@link assistMarginBreach}'s review
- * threshold, which only warns.
- *
- * It needs its own guard and its own announcement because the margin alert
- * cannot carry this news. That alert speaks in WHOLE MULTIPLES of its $25
- * threshold, so an org that climbs from $25 to the $40 ceiling is still at
- * 1x and stays silent — staff would learn that the assistant had stopped
- * answering for a customer only when someone complained. A ceiling that
- * refuses quietly is the same defect as a ceiling that does not refuse.
- *
- * Once per org per month: crossing is a state, not an escalating figure, and
- * the org is refused from here to the month boundary regardless of how far
- * past it the recorded spend sits.
- */
-export function assistCeilingBreach(input: {
-  assistUsd: number
-  ceilingUsd: number | null
-  guard: UsageAlertGuard | null | undefined
-  month: string
-}): boolean {
-  const { assistUsd, ceilingUsd, guard, month } = input
-  if (ceilingUsd === null) return false
-  if (!Number.isFinite(assistUsd) || !Number.isFinite(ceilingUsd)) return false
-  if (ceilingUsd <= 0 || assistUsd < ceilingUsd) return false
-  return guard?.month !== month
-}
-
-/** The multiple {@link assistMarginBreach} would record. */
-export function assistMarginMultiple(
-  assistUsd: number,
-  thresholdUsd: number,
-): number {
-  if (!Number.isFinite(assistUsd) || !Number.isFinite(thresholdUsd)) return 0
-  if (thresholdUsd <= 0) return 0
-  return Math.max(0, Math.floor(assistUsd / thresholdUsd))
 }

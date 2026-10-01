@@ -16,6 +16,7 @@
  */
 
 import type { PluginUsageAxesDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import { CRM_RECORDS_METER_ID } from './constants/bundle-common'
 
 /**
  * THE CRM'S METER (AGL-3080): the records band — contacts, companies and
@@ -56,5 +57,7 @@ export function crmUsageAxes(): PluginUsageAxesDeclaration {
         entitlement: 'contactsPerHost',
       },
     ],
+    // Measured in the monthly usage sweep by `server/crm-records-meter.ts`.
+    meters: [{ id: CRM_RECORDS_METER_ID }],
   }
 }

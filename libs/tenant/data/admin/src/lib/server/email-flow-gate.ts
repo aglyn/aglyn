@@ -67,7 +67,7 @@
 
 import {
   consentGroupForHost,
-  flowEmailTopicId,
+  flowSubscriptionTopicId,
   readMarketingBasis,
   marketingConsentDecision,
   resolveMarketingConsentPolicy,
@@ -238,7 +238,7 @@ export async function flowEmailRefusal(options: {
     return 'consent-withheld'
   }
 
-  const topicId = flowEmailTopicId(options.topicId, options.scope)
+  const topicId = flowSubscriptionTopicId(options.topicId, options.scope)
   if (!topicId) return null
   // Across the same group: a person who left this stream on a sibling site
   // left it from the sender this automation mails as — and, where the org

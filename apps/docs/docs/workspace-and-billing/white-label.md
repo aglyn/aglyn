@@ -184,6 +184,11 @@ out and wears yours instead.
 actually sent from stays the deployment's verified sending address, because
 that is what the receiving mail servers authenticate against.
 
+Mail a site sends to its own visitors and members, such as receipts, booking
+confirmations and gift cards, leaves under that site's business name instead,
+so the reader sees the business they dealt with. The from-name is used for a
+site that has no name set, and for mail to your organization's people.
+
 ## Known limitation: the custom console domain {#custom-console-domain}
 
 **Custom console domain** is saved but **does nothing yet**, and the field

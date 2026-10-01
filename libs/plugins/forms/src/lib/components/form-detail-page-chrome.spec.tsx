@@ -84,7 +84,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The campaign picker the Details card renders. This spec is about the
   // page's chrome, so the list is empty: an option here would put a control
   // in the card that none of the assertions below are about.
-  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useSiteContainerOptions: () => ({ options: [], truncated: false, ready: true }),
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({

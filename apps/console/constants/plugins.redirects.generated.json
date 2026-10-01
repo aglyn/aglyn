@@ -6,6 +6,12 @@
     "permanent": true
   },
   {
+    "pluginId": "crm",
+    "source": "/:orgSlug/contacts",
+    "destination": "/:orgSlug/crm/contacts",
+    "permanent": true
+  },
+  {
     "pluginId": "email",
     "source": "/:orgSlug/hosts/:host/emails/emails/:path*",
     "destination": "/:orgSlug/hosts/:host/emails/messages/:path*",

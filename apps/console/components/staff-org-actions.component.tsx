@@ -118,7 +118,8 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
  * That is exactly the AGL-549 bug, which was fixed for the feature booleans
  * by deriving them and never fixed here. `QUOTA_FIELDS` is now derived too,
  * and anything absent from this map falls back to the label the owning
- * plugin declares, then to a humanised key, rather than dropping out.
+ * plugin declares, then to a humanized key, rather than dropping out. A key
+ * a plugin owns has no row here: its plan declaration labels it.
  */
 const QUOTA_LABELS: Readonly<Record<string, string>> = {
   hostLimit: 'Sites',
@@ -130,13 +131,12 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   maxManagersPerOrg: 'Max team seats',
   maxMembersPerHost: 'Max member seats',
   bandwidthGb: 'Bandwidth GB',
-  formSubmissionsPerMonth: 'Form subs / mo',
-  // The catalog, not the traffic — the neighboring key is the traffic.
+  // The catalog, not the traffic: the submissions a month are the forms
+  // plugin's key, and its plan declaration labels them.
   formsPerHost: 'Saved forms / site',
   variablesPerHost: 'Variables',
   functionsPerHost: 'Functions',
   workflowsPerHost: 'Workflows',
-  workflowRunsPerMonth: 'Workflow runs / mo',
   servicesPerHost: 'Booking services',
   redirectsPerHost: 'Redirects',
   // Contacts + companies + deals (AGL-2611); the key keeps its persisted name.
@@ -155,7 +155,6 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   posRegisters: 'POS registers (base)',
   transactionFeePhysicalPct: 'Txn fee physical %',
   transactionFeeDigitalPct: 'Txn fee digital %',
-  marketplaceFeePct: 'Marketplace fee %',
 }
 
 /**
@@ -539,8 +538,8 @@ const StaffOrgActions = ({
   // The AI pause (AGL-2927): the same lockdown route, feature scope, with
   // the org named — so the entitlement, the plan and the add-on stay
   // exactly as the customer bought them, and lifting the pause restores
-  // them untouched. Two requests, one per feature key; each writes its
-  // own audit row.
+  // them untouched. ONE request naming both feature keys: the route writes
+  // an audit row per key and sends the owners one email naming both.
   const [aiPauser, setAiPauser] = useState<{
     id: string
     paused: boolean
@@ -551,31 +550,29 @@ const StaffOrgActions = ({
     if (!aiPauser) return
     try {
       const pausing = !aiPauser.paused
-      for (const feature of AI_PAUSE_FEATURES) {
-        const response = await authorizedFetch(user, '/api/admin/lockdown', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scope: 'feature',
-            targetId: feature,
-            orgId: aiPauser.id,
-            action: pausing ? 'lock' : 'unlock',
-            ...(pausing
-              ? {
-                  reason: aiPauser.reason,
-                  ...(aiPauser.message.trim()
-                    ? { message: aiPauser.message.trim() }
-                    : {}),
-                }
-              : {}),
-          }),
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) {
-          throw new Error(
-            payload?.error ?? `Lockdown failed (${response.status})`,
-          )
-        }
+      const response = await authorizedFetch(user, '/api/admin/lockdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'feature',
+          targetIds: AI_PAUSE_FEATURES,
+          orgId: aiPauser.id,
+          action: pausing ? 'lock' : 'unlock',
+          ...(pausing
+            ? {
+                reason: aiPauser.reason,
+                ...(aiPauser.message.trim()
+                  ? { message: aiPauser.message.trim() }
+                  : {}),
+              }
+            : {}),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ?? `Lockdown failed (${response.status})`,
+        )
       }
       enqueueSnackbar(
         pausing

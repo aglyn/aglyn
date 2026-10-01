@@ -24,6 +24,7 @@ import {
   crmTaskListFields,
   crmTaskReminderAfterEdit,
   crmTaskReminderPending,
+  crmTaskReminderWhen,
   isOrgWideMember,
   memberCanSee,
   type PluginApiHandler,
@@ -53,6 +54,7 @@ import {
   readCrmTaskFields,
 } from '../model/task-routes'
 import { CRM_ORG_TASK_SCOPE } from '../model/task-scope'
+import { digestTimeZone } from '../model/crm-digest'
 import {
   authorizeOrgCaller,
   type CrmRouteScope,
@@ -117,6 +119,8 @@ export interface Writer {
   uid: string
   /** The caller's address, for who set off the runs a write causes (AGL-3376). */
   email: string | null
+  /** The token's display name, `''` when it carries none — who an assignee is told assigned them. */
+  name?: string
   staff: boolean
   orgId: string
   org: Record<string, unknown>
@@ -175,6 +179,7 @@ export async function authorizeCrmWriter(
       ok: true,
       uid: caller.uid,
       email: caller.email ?? null,
+      name: caller.name,
       staff: caller.staff,
       orgId: caller.orgId,
       org: caller.org as Record<string, unknown>,
@@ -227,6 +232,7 @@ export async function authorizeCrmWriter(
     ok: true,
     uid: decoded.uid,
     email: typeof decoded.email === 'string' ? decoded.email : null,
+    name: typeof decoded['name'] === 'string' ? decoded['name'].trim().slice(0, 120) : '',
     staff,
     orgId,
     org: (org ?? {}) as Record<string, unknown>,
@@ -384,6 +390,36 @@ function rosterOf(orgId: string) {
   }
 }
 
+/**
+ * What an assignee is told: who handed them the task, in which workspace,
+ * and when it is due. It is mailed to anyone who turned that email on, and
+ * reads whole without its "Task assigned to you" title.
+ *
+ * The due time is printed in the zone the reminders and the digest use, with
+ * the zone named. A bare `toLocaleString()` here would print the server's
+ * UTC with no zone, five hours off a Chicago reader's clock and silent
+ * about it.
+ */
+function taskAssignedBody(
+  writer: Pick<Writer, 'member' | 'name' | 'email' | 'org'>,
+  fields: Pick<CrmTaskFields, 'title' | 'dueAtMs'>,
+  timeZone: string = digestTimeZone(),
+): string {
+  const who =
+    String(writer.member?.displayName ?? '').trim() ||
+    String(writer.name ?? '').trim() ||
+    String(writer.member?.email ?? '').trim() ||
+    String(writer.email ?? '').trim() ||
+    'Someone'
+  const workspace =
+    String(writer.org['name'] ?? '').trim() || String(writer.org['slug'] ?? '').trim()
+  const due =
+    typeof fields.dueAtMs === 'number'
+      ? `, due ${crmTaskReminderWhen(fields.dueAtMs, timeZone)}`
+      : ''
+  return `${who} assigned you a task${workspace ? ` in ${workspace}` : ''}: ${fields.title}${due}.`
+}
+
 /** Tell the assignee, when they are somebody new and somebody else. */
 async function notifyAssignee(
   writer: Writer,
@@ -396,14 +432,10 @@ async function notifyAssignee(
     assignee && assignee !== writer.uid && assignee !== previousAssignee,
   )
   if (!notified || !assignee) return false
-  const due =
-    typeof fields.dueAtMs === 'number'
-      ? ` · due ${new Date(fields.dueAtMs).toLocaleString()}`
-      : ''
   await notifyUsers([assignee], {
     type: 'content.taskAssigned',
     title: 'Task assigned to you',
-    body: `${fields.title}${due}`,
+    body: taskAssignedBody(writer, fields),
     link: assignmentLink(hostId, fields),
     orgId: writer.orgId,
     ...(hostId ? { hostId } : {}),

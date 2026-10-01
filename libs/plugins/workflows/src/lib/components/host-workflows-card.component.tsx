@@ -40,7 +40,6 @@ import {
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -100,7 +99,11 @@ import {
   summarizeDependents,
   type WhereUsedResult,
 } from '@aglyn/aglyn/app-utils/where-used'
-import { WORKFLOW_USAGE_ZONE } from './workflow-zones'
+import {
+  AUTOMATION_EDITOR_ZONE,
+  WORKFLOW_USAGE_ZONE,
+  type AutomationTarget,
+} from './workflow-zones'
 import {
   type HostWorkflowStep,
   runWorkflow,
@@ -409,7 +412,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   /** The saved workflow the editor has open, as the `automationEditor` zone names it. */
   const draftId = draft?.id ?? null
   const draftName = draft?.name ?? ''
-  const editorTarget = useMemo<ConsoleAutomationTarget | null>(
+  const editorTarget = useMemo<AutomationTarget | null>(
     () => (draftId ? { type: 'workflow', id: draftId, name: draftName } : null),
     // The name the editor opened with: the zone reads the workflow as it is
     // stored, so a rename being typed does not make it a different one.
@@ -771,7 +774,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         >
           {ExtensionZone && editorTarget ? (
             <ExtensionZone
-              slot="automationEditor"
+              slot={AUTOMATION_EDITOR_ZONE.id}
               hostId={hostId}
               orgId={org?.$id}
               target={editorTarget}

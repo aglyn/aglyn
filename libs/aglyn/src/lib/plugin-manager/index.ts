@@ -33,7 +33,6 @@ export * from './plugin-resource-drafts'
 export * from './plugin-activity-actions'
 export * from './plugin-entitlements'
 export * from './plugin-events'
-export * from './plugin-metered-lines'
 export * from './plugin-user-erasure'
 // `plugin-org-erasure` is server-only too: import it by its own path.
 export * from './plugin-styles'

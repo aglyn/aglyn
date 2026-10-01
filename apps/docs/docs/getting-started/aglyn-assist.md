@@ -18,10 +18,10 @@ the exact docs section and the console page where you do it.
 - **Link you to the source** — under each written answer is a **Sources** list
   naming the documentation sections it drew on, each one a link straight to
   that section. See [Where an answer came from](#where-an-answer-came-from).
-- **Guide you on the page you're on** (Pro plans and up) — the assistant knows
+- **Guide you on the page you're on** (Starter and up) — the assistant knows
   which console page you're viewing and answers about *that* page, rather
   than giving you a general answer you then have to translate.
-- **Offer to take you to the right page** (Pro plans and up) — when what you
+- **Offer to take you to the right page** (Starter and up) — when what you
   asked for starts somewhere else, it can show a card that opens that page for
   you. See [Offers to open a page](#offers-to-open-a-page).
 - **Propose edits in the Besigner** (with AI generation on your plan) — ask
@@ -166,8 +166,8 @@ If a quoted page did not cover what you meant, just ask again with more detail
   generation together, rising with the plan, and sell credits past the band rather
   than stopping at it — so the assistant keeps working and the month's overage is
   billed, unless you switch that off or set a ceiling in **Billing**.
-- **Pro and higher plans** also get page-aware guidance and the offers to open a
-  page described above.
+- **Every paid plan, Starter included,** also gets page-aware guidance and the offers
+  to open a page described above.
 
 When a free workspace reaches its daily limit, the assistant says so and the
 counter resets the next day (UTC).

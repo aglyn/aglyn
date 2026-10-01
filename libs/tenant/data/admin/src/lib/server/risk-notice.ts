@@ -58,8 +58,8 @@
  * short "more are arriving" note in-app; when the hour closes,
  * {@link flushRiskNoticeDigests} (hourly cron, and the next notice after the
  * window) sends ONE summary. A workspace under attack gets a digest, not
- * five hundred emails. Locks, lifts and cancellations (`neverDigest`) always
- * go out on their own.
+ * five hundred emails. Locks, lifts, cancellations, disputes and card-testing
+ * warnings (`neverDigest`) always go out on their own.
  *
  * ## Never throws
  *
@@ -71,6 +71,7 @@
 import { createHash } from 'crypto'
 import { ABUSE_REPORT_COLLECTION, abuseReportContactEmail } from '@aglyn/aglyn/app-utils/abuse-report'
 import { DOCS_BASE_URL } from '@aglyn/aglyn/app-utils/docs-help'
+import { PLATFORM_BRAND_MERGE_TOKENS } from '@aglyn/aglyn/app-utils/system-email-chrome'
 import {
   isRiskEventKind,
   renderOwnerRiskNotice,
@@ -83,11 +84,14 @@ import {
   RISK_NOTICE_HELP_PATH,
   RISK_NOTICE_WORKSPACE_BRANDED,
   riskNoticeEmailKey,
+  riskPayoutDelayText,
   type ResolvedRiskAction,
   type RiskActionParams,
   type RiskEventKind,
+  type RiskNoticeSeverity,
   type RiskNoticeValues,
 } from '@aglyn/shared-util-email/risk-notice-catalog'
+import type { NotificationLevel } from '@aglyn/aglyn/server'
 import {
   sendEmail as sendEmailImpl,
   type SendEmailOptions,
@@ -136,6 +140,16 @@ export const RISK_NOTICE_LEDGER_COLLECTION = 'riskNoticeLedger'
 export const RISK_NOTICE_NOTIFICATION_TYPE = 'system.riskNotice' as const
 
 /**
+ * The level an owner notice is drawn at (AGL-3437), from its kind's
+ * severity: a release or a lift is `info`, not the red of the hold it ends.
+ */
+export const RISK_NOTICE_LEVELS: Record<RiskNoticeSeverity, NotificationLevel> = {
+  urgent: 'critical',
+  warning: 'warning',
+  info: 'info',
+}
+
+/**
  * The burst allowance: how many notices one workspace's owners, and staff
  * about one workspace, receive one by one in {@link RISK_NOTICE_BURST.windowMs}
  * before the rest are folded into a digest.
@@ -179,7 +193,17 @@ export interface RiskEventInput {
   occurredAtMs?: number
   /** `$56.00 USD`. */
   amount?: string | null
+  /**
+   * What happened to the payment, finishing "the payment was …"
+   * (`RISK_PAYMENT_EVENTS`): a fraud report, a review, a dispute.
+   */
+  paymentEvent?: string | null
   evidenceDueByMs?: number | null
+  /**
+   * A new publisher's payout schedule: how many days each payout waits, and
+   * the workspace age it waits until.
+   */
+  payout?: { delayDays: number; untilWorkspaceAgeDays: number } | null
   /** Staff only: the Stripe Dashboard page for the charge, review or dispute. */
   stripeUrl?: string | null
   lock?: {
@@ -200,6 +224,11 @@ export interface RiskEventInput {
   staffEvidence?: string | null
   /** Overrides the default dedupe key. */
   dedupeKey?: string | null
+  /**
+   * A closing notice's opening kind. The closing goes to the people the
+   * opening went to: the site's managers too, when the opening told them.
+   */
+  openedAs?: RiskEventKind | null
   /**
    * `false` to send no owner EMAIL for this event (a lock placed under a
    * legal hold). The in-app notice and the record are still written.
@@ -426,15 +455,23 @@ async function readContext(
   orgName: string | null
   orgSlug: string | null
   hostSubdomain: string | null
+  /** `the site "Harbor View"`: a manager of several sites reads which one. */
+  siteLabel: string | null
   siteManagerUids: string[]
 }> {
   let orgId = input.orgId ?? null
   let hostSubdomain: string | null = null
+  let siteLabel: string | null = null
   let siteManagerUids: string[] = []
   if (input.hostId) {
     const host = await firestore.collection('hosts').doc(input.hostId).get().catch(() => null)
     if (host?.exists) {
       hostSubdomain = String(host.get('subdomain') ?? '') || null
+      const siteName =
+        [host.get('displayName'), host.get('name'), hostSubdomain]
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .find(Boolean) ?? ''
+      siteLabel = siteName ? `the site "${siteName.replace(/"/g, '”')}"` : null
       orgId = orgId ?? (String(host.get('orgId') ?? '') || null)
       const roles = (host.get('memberRoles') as Record<string, string> | undefined) ?? {}
       siteManagerUids = Object.entries(roles)
@@ -451,7 +488,7 @@ async function readContext(
       orgSlug = String(org.get('slug') ?? '') || null
     }
   }
-  return { orgId, orgName, orgSlug, hostSubdomain, siteManagerUids }
+  return { orgId, orgName, orgSlug, hostSubdomain, siteLabel, siteManagerUids }
 }
 
 /** What one notice email sends. */
@@ -476,6 +513,19 @@ export async function riskNoticeEmailBrand(
   return kind && RISK_NOTICE_WORKSPACE_BRANDED.has(kind)
     ? orgSystemEmailBrand(orgId)
     : systemEmailBrand(null)
+}
+
+/**
+ * The product name a notice's own words use (`your Aglyn account`): the one
+ * the email it rides in is branded with, so the sentence and the header
+ * never disagree — the platform's for platform mail, a white-label
+ * workspace's own for the notices sent in its brand.
+ */
+export function riskNoticeProductName(brand: SystemEmailBrand): string {
+  return (
+    String(brand.merge['brand.productName'] ?? '').trim() ||
+    String(PLATFORM_BRAND_MERGE_TOKENS['brand.productName'] ?? '').trim()
+  )
 }
 
 /**
@@ -630,7 +680,11 @@ async function ownerRecipients(
       if (owner.email) emails[owner.uid] = owner.email
     }
   }
-  if (definition.includeSiteManagers) for (const uid of siteManagerUids) uids.add(uid)
+  // A closing kind is shared by openings with different audiences, so it
+  // follows the one it closes: a site manager told a review opened is told
+  // it closed.
+  const audience = isRiskEventKind(input.openedAs) ? RISK_NOTICE_CATALOG[input.openedAs] : definition
+  if (audience.includeSiteManagers) for (const uid of siteManagerUids) uids.add(uid)
   return { uids: [...uids], emails }
 }
 
@@ -676,8 +730,12 @@ export async function notifyRiskEvent(
      * construction: the owner record and the owner channels never hold it.
      */
     const supportEmail = abuseReportContactEmail('support') ?? ''
+    // The brand the email is sent in, read once: its product name is also a
+    // word in the notice (an account lock says whose account it is).
+    const brand = await riskNoticeEmailBrand(input.kind, orgId)
     const ownerValues: RiskNoticeValues = {
       'workspace.name': context.orgName,
+      'site.label': context.siteLabel,
       'item.label': input.item?.label ?? null,
       occurredAt: formatRiskNoticeTime(occurredAtMs),
       reference: input.reference ?? null,
@@ -685,7 +743,11 @@ export async function notifyRiskEvent(
       'lock.message': input.lock?.message ?? null,
       'lock.affected': input.lock?.affected ?? null,
       amount: input.amount ?? null,
+      'payment.event': input.paymentEvent ?? null,
       'evidence.dueBy': input.evidenceDueByMs ? formatRiskNoticeTime(input.evidenceDueByMs) : null,
+      'payout.delay': input.payout ? riskPayoutDelayText(input.payout) : null,
+      'page.visitors': input.page ? heldPageVisitorSentence(input.page) : null,
+      'brand.productName': riskNoticeProductName(brand) || null,
     }
     const staffValues: RiskNoticeValues = {
       ...ownerValues,
@@ -784,6 +846,7 @@ export async function notifyRiskEvent(
             type: RISK_NOTICE_NOTIFICATION_TYPE,
             title: owner.title,
             body: `${owner.summary} ${owner.meaning}`.slice(0, 1000),
+            level: RISK_NOTICE_LEVELS[definition.severity],
             link: primary?.href ?? riskHoldsPath(noticeId),
             ...(orgId ? { orgId } : {}),
             ...(input.hostId ? { hostId: input.hostId } : {}),
@@ -811,11 +874,7 @@ export async function notifyRiskEvent(
           workspaceName: context.orgName,
           lockMessage: input.lock?.message ?? null,
         })
-        const rendered = await renderRiskNoticeEmail(
-          riskNoticeEmailKey(input.kind),
-          merge,
-          await riskNoticeEmailBrand(input.kind, orgId),
-        )
+        const rendered = await renderRiskNoticeEmail(riskNoticeEmailKey(input.kind), merge, brand)
         const delivery = await emailPeople(deps, recipients, rendered, supportEmail, {
           lockNotice: LOCK_NOTICE_KINDS.has(input.kind),
         })
@@ -833,6 +892,7 @@ export async function notifyRiskEvent(
           {
             type: RISK_NOTICE_NOTIFICATION_TYPE,
             title: 'More account notices are arriving',
+            level: 'warning',
             body:
               'Several items on your workspace were held or flagged in the last hour. ' +
               'We will send one summary instead of a message for each. Every item is listed on Holds & reviews.',
@@ -1035,17 +1095,19 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
     if (count > listed) lines.push(`• …and ${count - listed} more`)
     return lines.join('\n')
   }
+  // The workspace by name, for both halves: staff read a digest about
+  // `Harbor View`, not about a ledger key.
+  const context = orgId
+    ? await readContext(deps.firestore, { kind: 'email-held', orgId })
+    : { orgName: null, orgSlug: null }
   if (taken.ownerCount > 0) {
-    const context = orgId
-      ? await readContext(deps.firestore, { kind: 'email-held', orgId })
-      : { orgName: null, orgSlug: null, siteManagerUids: [], orgId: null, hostSubdomain: null }
     const recipients =
       scope === 'user'
         ? { uids: [id], emails: {} as Record<string, string | null> }
         : orgId
           ? await ownerRecipients(deps, { kind: 'email-held', orgId }, [])
           : { uids: [] as string[], emails: {} as Record<string, string | null> }
-    const title = `Summary: more items on ${context.orgName ?? 'your workspace'} were held or flagged`
+    const title = `Summary: more notices about ${context.orgName ?? 'your workspace'} in the last hour`
     const summary = summarize(taken.owners, taken.ownerCount)
     if (recipients.uids.length) {
       await deps.notifyUsers(
@@ -1054,6 +1116,7 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
           type: RISK_NOTICE_NOTIFICATION_TYPE,
           title,
           body: summary.slice(0, 1000),
+          level: 'warning',
           link: riskHoldsPath(),
           ...(orgId ? { orgId } : {}),
         },
@@ -1067,7 +1130,7 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
       const rendered = await renderRiskNoticeEmail(RISK_NOTICE_DIGEST_EMAIL_KEY, {
         'notice.title': title,
         'notice.summary': renderRiskNoticeText(
-          'In the last hour, more items on {{workspace.name}} were held or flagged than we send one by one:',
+          'In the last hour, {{workspace.name}} had more notices than we send one by one. Each one, with its status and anything that is due, is listed on Holds & reviews. By title:',
           { 'workspace.name': context.orgName },
         ),
         'notice.meaning': summary,
@@ -1085,10 +1148,21 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
     }
   }
   if (taken.staffCount > 0) {
+    const about = context.orgName
+      ? `workspace ${context.orgName} (${orgId})`
+      : scope === 'user'
+        ? `account ${id}`
+        : scope === 'host'
+          ? `site ${id}`
+          : ledgerId
     await deps.notifyStaff({
       type: 'system.abuseReportUrgent',
-      title: `Digest: ${taken.staffCount} more risk alerts on ${ledgerId}`,
-      body: summarize(taken.staff, taken.staffCount).slice(0, 1000),
+      title: `Digest: ${taken.staffCount} more risk alerts on ${context.orgName ?? ledgerId}`,
+      body: (
+        `${taken.staffCount} more risk alerts on ${about} arrived in the last hour ` +
+        `and were batched here instead of sent one by one:\n` +
+        summarize(taken.staff, taken.staffCount)
+      ).slice(0, 1000),
       link: '/admin/abuse-reports',
     })
   }
@@ -1156,6 +1230,7 @@ export async function closeRiskNotice(
         reference: (row.get('reference') as string | null) ?? null,
         item: stamp.itemLabel ? { label: stamp.itemLabel, path: stamp.itemPath ?? null } : null,
         dedupeKey: `${closing}:${input.reviewId}`,
+        openedAs: stamp.kind,
       },
       overrides,
     )
@@ -1245,25 +1320,52 @@ export async function requestRiskReview(
       error: 'We already have a request on this. You can add another in a few minutes.',
     }
   }
+  // What the request is about, by name, for staff and for the person who
+  // asked: the item in the owner's words and the workspace.
+  const itemLabel =
+    String((notice.get('ownerValues') as RiskNoticeValues | undefined)?.['item.label'] ?? '').trim() ||
+    null
+  const org = await deps.firestore
+    .collection('orgs')
+    .doc(input.orgId)
+    .get()
+    .catch(() => null)
+  const orgName = String(org?.get('name') ?? '').trim() || null
+  const orgSlug = String(org?.get('slug') ?? '').trim() || null
   await deps.notifyStaff({
     type: 'system.abuseReportUrgent',
     title: `Review requested${outcome.reference ? ` — ${outcome.reference}` : ''}`,
-    body: `A workspace owner or admin asked for a review: "${note.slice(0, 280)}"`,
+    body:
+      `An owner or admin of ${orgName ? `${orgName} (${input.orgId})` : `workspace ${input.orgId}`} ` +
+      `asked for a review of ${itemLabel ?? 'a held or flagged item'} (${kind}): "${note.slice(0, 280)}"`,
     link: staffAbuseRowPath(reviewId),
   })
   // The person who asked is told it arrived — account mail, platform brand.
   if (input.email) {
+    const holdsPath = emailPath(riskHoldsPath(input.noticeId), {
+      orgSlug,
+      hostId: null,
+      hostSubdomain: null,
+    })
+    const holdsUrl = holdsPath ? absolute(holdsPath) : ''
+    const about = `${itemLabel ?? 'the held or flagged item'}${orgName ? ` on ${orgName}` : ''}`
     const rendered = await renderRiskNoticeEmail(RISK_REVIEW_REQUESTED_EMAIL_KEY, {
       'notice.title': 'We received your review request',
       'notice.summary':
-        'Your request reached our review team' +
-        (outcome.reference ? ` under the reference ${outcome.reference}` : '') +
-        '. A person reads every request.',
-      'notice.meaning': 'Nothing changes until the review is done; you will get a notice either way.',
+        `We received your request to review ${about}` +
+        (outcome.reference ? ` (reference ${outcome.reference})` : '') +
+        '. A person on our review team reads every request.',
+      'notice.meaning':
+        'Nothing changes until the review is done, and you will get a notice either way.',
       'notice.steps': numbered([
         'Nothing more is needed.',
-        'You can follow the item\'s status on Holds & reviews.',
+        'You can follow its status on Holds & reviews.',
       ]),
+      'notice.actions': holdsUrl ? `View holds and reviews: ${holdsUrl}` : '',
+      'notice.primaryActionLabel': holdsUrl ? 'View holds and reviews' : '',
+      'notice.primaryActionUrl': holdsUrl,
+      'holds.url': holdsUrl,
+      'workspace.name': orgName ?? '',
       reference: outcome.reference ?? '',
       'help.url': riskNoticeHelpUrl('requesting-a-review'),
     })

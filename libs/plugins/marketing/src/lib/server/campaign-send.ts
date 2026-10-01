@@ -18,8 +18,8 @@
 import {
   checkQuota,
   contactMatchesSegment,
-  isEmailTopicId,
-  DEFAULT_CAMPAIGN_TOPIC_ID,
+  isSubscriptionTopicId,
+  DEFAULT_SUBSCRIPTION_TOPIC_ID,
   readMarketingBasis,
   resolveMarketingConsentPolicy,
   splitByMarketingConsent,
@@ -166,6 +166,7 @@ import {
   type EmailRampVerdict,
 } from '@aglyn/shared-util-email'
 import { campaignBatchPlan } from './campaign-batch-plan'
+import { stampRecordEmailReach } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 /*
  * The List-Unsubscribe setting sequences share (AGL-3307), from its LEAF
  * module: the specs that reach this file spread the real barrel under their
@@ -393,7 +394,7 @@ export interface CampaignSendOptions {
   /**
    * The stream this campaign belongs to, chosen in the composer.
    *
-   * Resolved to {@link DEFAULT_CAMPAIGN_TOPIC_ID} when absent, so every send
+   * Resolved to {@link DEFAULT_SUBSCRIPTION_TOPIC_ID} when absent, so every send
    * belongs to some topic: a campaign with none would mint an unsubscribe link
    * the preference page can render but not place, offering the recipient a
    * catalog without saying which entry the message in front of them was.
@@ -959,10 +960,10 @@ export async function performCampaignSend(
    * `unsubscribe-link.ts`. Refused at the point the topic ENTERS the send, so
    * the link that leaves it is unambiguous by construction.
    */
-  if (options.topicId && !isEmailTopicId(options.topicId)) {
+  if (options.topicId && !isSubscriptionTopicId(options.topicId)) {
     throw new CampaignSendError('Invalid topicId', 400)
   }
-  const topicId = options.topicId || DEFAULT_CAMPAIGN_TOPIC_ID
+  const topicId = options.topicId || DEFAULT_SUBSCRIPTION_TOPIC_ID
   /**
    * Whether this send ADDS to an email that already exists, rather than
    * starting one.
@@ -1803,7 +1804,20 @@ export async function performCampaignSend(
       // before it is reinstated (AGL-3377).
       await raiseOperatorAlert(MARKETING_REPUTATION_BREAKER, {
         dedupeKey: orgId,
-        context: { orgId, reason: reputation.reason },
+        // The findings in numbers, and the workspace by name off the org doc
+        // this send already holds. `reputation.reason` is the merchant's
+        // refusal, written to them, so it is not staff's copy.
+        context: {
+          orgId,
+          orgName: String(
+            (orgForHost?.org as Record<string, unknown> | undefined)?.['name'] ?? '',
+          ).trim(),
+          windowDays: reputation.windowDays,
+          detail: reputation.findings
+            .filter((finding) => finding.actionable)
+            .map((finding) => finding.detail)
+            .join(' '),
+        },
         orgId,
       })
       throw new CampaignSendError(reputation.reason, 409)
@@ -2856,6 +2870,10 @@ export async function performCampaignSend(
    */
   if (options.recordCampaign !== false) {
     await recordCampaignReach(sends.doc(campaignId), reached)
+    // The record system hears who it reached, so a lead nobody had touched
+    // moves to Nurturing (AGL-3446). A test send reached nobody's lead, so it
+    // is left out with the reach record. Never throws.
+    await stampRecordEmailReach({ orgId, hostId, emails: reached })
     /*
      * And who it decided NOT to mail, under a field of its own.
      *
@@ -3921,7 +3939,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * `performCampaignSend` resolves to the default topic.
    */
   const topicId = String(req.body?.topicId ?? '')
-  if (topicId && !isEmailTopicId(topicId)) {
+  if (topicId && !isSubscriptionTopicId(topicId)) {
     return res.status(400).json({ error: 'Unknown topic' })
   }
 

@@ -62,6 +62,21 @@ export interface PersonErasureRunOptions {
 }
 
 /**
+ * The workspace's name for a staff alert (AGL-3432). One read, taken only
+ * when an erasure failed. Blank when the read fails or finds no name, so the
+ * alert names the workspace by its id alone and is never held up by it.
+ */
+async function workspaceName(db: any, orgId: string): Promise<string> {
+  if (!orgId) return ''
+  try {
+    const name = (await db.collection('orgs').doc(orgId).get()).get('name')
+    return typeof name === 'string' ? name.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
  * Drain the person-erasure queue, oldest first (AGL-2623).
  *
  * Ordered on `pendingSinceMs` — a field only a waiting request carries —
@@ -138,6 +153,7 @@ export async function runPersonErasures(
         context: {
           requestId,
           orgId,
+          orgName: await workspaceName(db, orgId),
           attempt: Number(request.get('failureCount') ?? 0) + 1,
           error: (email ? reason.split(email).join('[address]') : reason).slice(0, 200),
         },

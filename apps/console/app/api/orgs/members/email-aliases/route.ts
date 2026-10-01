@@ -16,7 +16,7 @@
  */
 
 import {
-  crmInboundDomain,
+  inboundMailDomain,
   isVerifiedMemberEmailAlias,
   type MemberEmailAlias,
   memberEmailAliasRows,
@@ -218,7 +218,7 @@ async function handler(request: Request): Promise<Response> {
         uid: decoded.uid,
         address: payload['address'],
         signInEmail,
-        reservedDomains: [crmInboundDomain()],
+        reservedDomains: [inboundMailDomain()],
       })
       if (added.ok === false) return refusal(added)
       alias = added.alias

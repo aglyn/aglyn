@@ -484,3 +484,52 @@ describe('isExternalRedirectDestination (AGL-1881)', () => {
     expect(isExternalRedirectDestination(null as any)).toBe(true)
   })
 })
+
+describe('a destination that wears another brand (AGL-3447)', () => {
+  const { isLookalikeRedirectDestination, validateRedirectRule } =
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('./redirects')
+
+  it('is refused at save, whoever saves it', () => {
+    for (const destination of [
+      'https://sharepoint-files.example.top/',
+      'https://paypa1.com/login',
+      'https://docs.google.com.share-doc.top/d/1',
+    ]) {
+      expect(validateRedirectRule({ source: '/doc', destination })).toBe(
+        "That destination's address looks like another company's website, so it can't be used",
+      )
+      expect(isLookalikeRedirectDestination(destination)).toBe(true)
+    }
+  })
+
+  it('leaves ordinary, brand-owned and internal destinations alone', () => {
+    for (const destination of [
+      '/pricing',
+      'https://shop.example.net/menu',
+      'https://www.dropbox.com/s/abc/menu.pdf',
+      'https://app.box.com/s/abc',
+      'https://temps-juenes.com/',
+    ]) {
+      expect(validateRedirectRule({ source: '/doc', destination })).toBeNull()
+    }
+  })
+
+  it('never refuses a brand’s name on a vendor account subdomain, which only a young workspace is held for', () => {
+    // The soft tier: the serve path decides it with the workspace's age; the
+    // console, which does not know the age, does not.
+    expect(isLookalikeRedirectDestination('https://aglyn.zendesk.com/hc')).toBe(false)
+  })
+
+  it('reads the site’s own hosts as its own', () => {
+    expect(
+      validateRedirectRule(
+        { source: '/film', destination: 'https://aglyn.wistia.com/medias/abc' },
+        { ownDomains: ['aglyn.com', 'www.aglyn.app'] },
+      ),
+    ).toBeNull()
+    expect(
+      validateRedirectRule({ source: '/film', destination: 'https://aglyn.wistia.com/medias/abc' }),
+    ).not.toBeNull()
+  })
+})

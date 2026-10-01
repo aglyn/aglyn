@@ -16,6 +16,7 @@
  */
 
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { usageNotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin/server/email-metering'
@@ -29,11 +30,12 @@ import {
 import { aiAllotmentRef } from './ai-allotments'
 
 /**
- * A SOFT allotment's 80% and 100% (AGL-2942), through the alert pipeline's
- * two channels: the console notification every usage threshold writes
- * (`billing.usage`, to `users/{uid}/notifications`) and the email beside it,
- * sent past the platform suppression list and metered as platform mail —
- * the same primitives the usage-alert sweep composes.
+ * A SOFT allotment's 75, 80, 90 and 100% steps (AGL-2942, AGL-3431),
+ * through the alert pipeline's two channels: the console notification every
+ * usage threshold writes (`billing.usage`, to `users/{uid}/notifications`)
+ * and the email beside it, sent past the platform suppression list and
+ * metered as platform mail — the same primitives the usage-alert sweep
+ * composes.
  *
  * Told when the request that finds the subject at a threshold is admitted,
  * rather than on the next daily sweep: an allotment is a line a manager drew
@@ -44,8 +46,10 @@ import { aiAllotmentRef } from './ai-allotments'
  *
  * The workspace's owners and admins — the audience of every usage alert —
  * and, for a member's or a collaborator's allotment, the person it is for.
- * The person gets the words without the Billing link, which a collaborator
- * cannot open.
+ * The person gets their own words, in the second person and without the
+ * Billing link or the "make it hard" step, neither of which they can use.
+ * Both name the workspace, and a collaborator's the site, because an owner
+ * of two workspaces cannot tell from a figure which one it is about.
  *
  * ## Once per threshold per month
  *
@@ -112,6 +116,23 @@ interface Recipients {
   subjectUid: string | null
   subjectEmail: string | null
   subjectName: string
+  /** The workspace's name, for the copy. */
+  workspaceName: string
+  /** The site a collaborator's allotment is on, for the copy. */
+  siteName: string
+}
+
+/** The name a site's managers know it by, then its address, then its id. */
+async function siteName(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+): Promise<string> {
+  const host = await firestore.collection('hosts').doc(hostId).get()
+  return (
+    String(host.get('displayName') ?? '').trim() ||
+    String(host.get('subdomain') ?? '').trim() ||
+    hostId
+  )
 }
 
 async function recipientsFor(
@@ -121,7 +142,7 @@ async function recipientsFor(
   reachable: AiAllotmentAlertChannels['reachable'],
 ): Promise<Recipients> {
   const orgRef = firestore.collection('orgs').doc(orgId)
-  const members = await orgRef.collection('members').get()
+  const [org, members] = await Promise.all([orgRef.get(), orgRef.collection('members').get()])
   // A locked or disabled account is told nothing, by either channel; it is
   // still named when the alert is about it.
   const open = new Set(await reachable(members.docs.map((member) => member.id)))
@@ -141,12 +162,8 @@ async function recipientsFor(
       subjectName = String(member.get('displayName') ?? '').trim() || email
     }
   }
-  if (standing.scope === 'host' && standing.hostId) {
-    const host = await firestore.collection('hosts').doc(standing.hostId).get()
-    subjectName =
-      String(host.get('displayName') ?? '').trim() ||
-      String(host.get('subdomain') ?? '').trim()
-  }
+  const site = standing.hostId ? await siteName(firestore, standing.hostId) : ''
+  if (standing.scope === 'host') subjectName = site
   return {
     managerUids,
     managerEmails,
@@ -155,7 +172,12 @@ async function recipientsFor(
         ? null
         : standing.uid,
     subjectEmail: standing.scope === 'host' ? null : subjectEmail,
-    subjectName: subjectName || (standing.scope === 'host' ? 'this' : 'A member'),
+    subjectName: subjectName || (standing.scope === 'host' ? 'A site' : 'A member'),
+    workspaceName:
+      String(org.get('name') ?? '').trim() ||
+      String(org.get('slug') ?? '').trim() ||
+      'your workspace',
+    siteName: site,
   }
 }
 
@@ -181,13 +203,17 @@ export async function announceAiAllotmentAlerts(
       )
       if (!claimed) continue
       const recipients = await recipientsFor(firestore, input.orgId, standing, reachable)
-      const copy = aiAllotmentAlertCopy({
+      const words = {
         scope: standing.scope,
         threshold,
         used: standing.used,
         credits: standing.credits,
         name: recipients.subjectName,
-      })
+        workspace: recipients.workspaceName,
+        site: recipients.siteName,
+      }
+      const copy = aiAllotmentAlertCopy(words)
+      const ownCopy = aiAllotmentAlertCopy({ ...words, reader: 'subject' })
       const link = input.orgSlug
         ? `${buildRoute(Route.MANAGE_BILLING_USAGE, { orgSlug: input.orgSlug })}#ai-allotments`
         : null
@@ -200,6 +226,7 @@ export async function announceAiAllotmentAlerts(
           type: 'billing.usage',
           title: copy.title,
           body: copy.body,
+          level: usageNotificationLevel(threshold),
           orgId: input.orgId,
           ...(link ? { link } : {}),
         },
@@ -210,8 +237,9 @@ export async function announceAiAllotmentAlerts(
           [recipients.subjectUid],
           {
             type: 'billing.usage',
-            title: copy.title,
-            body: copy.body,
+            title: ownCopy.title,
+            body: ownCopy.body,
+            level: usageNotificationLevel(threshold),
             orgId: input.orgId,
           },
           { skipEmail: true },
@@ -237,8 +265,8 @@ export async function announceAiAllotmentAlerts(
       if (subjectAddress.length) {
         const result = await send({
           to: subjectAddress,
-          subject: copy.title,
-          text: copy.body,
+          subject: ownCopy.title,
+          text: ownCopy.body,
           context: 'ai-allotment-alert',
         })
         if (result.sent) await meter().catch(() => undefined)

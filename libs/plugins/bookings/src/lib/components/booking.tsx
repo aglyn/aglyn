@@ -21,13 +21,7 @@ import {
   trackEvent,
   trackEventBeforeNavigation,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
-import {
-  BOOKING_SERVICE_PARAM,
-  CRM_BOOKING_REF_PARAM,
-  formatCrmBookingRef,
-  parseCrmBookingRef,
-} from '@aglyn/aglyn/app-utils/crm-booking'
+import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -42,6 +36,12 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  BOOKING_RECORD_PARAM,
+  BOOKING_SERVICE_PARAM,
+  formatBookingRecordRef,
+  parseBookingRecordRef,
+} from '../model/booking-record'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useBookingPurchaseEvent } from '../utils/use-booking-purchase-event'
 
@@ -179,11 +179,11 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     if (!hostId || !serviceId || !slotMs || status === 'booking') return
     setStatus('booking')
     setErrorMessage(null)
-    // The CRM record a booking link was dropped from (AGL-2660), carried
-    // onto the request so the booking lands on that record even when the
-    // visitor books with a different address. Parsed here so a value that
-    // is not a reference is never sent.
-    const crmRef = parseCrmBookingRef(readLinkParam(CRM_BOOKING_REF_PARAM))
+    // The record a booking link was dropped from (AGL-2660), carried onto
+    // the request so the booking lands on that record even when the visitor
+    // books with a different address. Parsed here so a value that is not a
+    // reference is never sent.
+    const recordRef = parseBookingRecordRef(readLinkParam(BOOKING_RECORD_PARAM))
     try {
       const response = await siteFetch('/api/bookings/book', {
         method: 'POST',
@@ -194,12 +194,12 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           startsAtMs: slotMs,
           name,
           email,
-          ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
+          ...(recordRef ? { crmRef: formatBookingRecordRef(recordRef) } : {}),
           ...(marketingConsent ? { marketingConsent: true } : {}),
           // The campaign this visitor came from, when they came from one.
           // A booking is an identify moment like a form submission: the
           // visitor was anonymous until this request named them.
-          ...campaignTouchField(),
+          ...utmTouchField(),
         }),
       })
       const payload = await response.json().catch(() => ({}))

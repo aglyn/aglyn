@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CrmReportPeriod, CrmReportRange } from '@aglyn/aglyn'
+import type { CrmReportPeriod, CrmReportRange } from '../../model/crm-reports'
 import {
   collection,
   type CollectionReference,

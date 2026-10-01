@@ -72,8 +72,13 @@ with this plugin's server steps added. The `runWorkflow` step is declared under
 builder offers it and lists the site's workflows without naming this plugin.
 The events a trigger starts on are the platform's (`app-utils/host-events`):
 the page view is core's own, and every other event is declared under
-`hostEvents` by the plugin whose doors raise it. The automation vocabulary
-itself — server steps, flows, recipes, webhooks — is still in the core
+`hostEvents` by the plugin whose doors raise it. What only the engine reads
+is this plugin's: the run history's past-tense step phrases
+(`model/step-outcomes.ts`), a webhook's stored shape and its URL guard
+(`model/webhooks.ts`), the CRM steps' grouping (`engine/crm-action-steps.ts`)
+and the event-chaining depth (`model/workflows.ts`). The automation
+vocabulary the other plugins author against — the server steps, flows,
+recipes and their validation — is still in the core
 (`@aglyn/aglyn/app-utils/actions`), because the AI plugin drafts automations
 against it and the CRM plugin installs its recipes, and neither may import
 this plugin.

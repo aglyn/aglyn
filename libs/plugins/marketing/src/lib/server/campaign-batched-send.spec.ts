@@ -254,6 +254,20 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
 let orgCreatedAtMs: number | null = Date.UTC(2026, 6, 1)
 /** The workspace's reputation policy, as it would be stored on the org. */
 let orgReputationPolicy: string | undefined
+/** The workspace's name, as it would be stored on the org. */
+let orgName: string | undefined
+
+/** Operator alerts raised, by type and context. */
+const mockOperatorAlerts: Array<{ type: string; context: Record<string, string | number> }> = []
+jest.mock('@aglyn/tenant-data-admin/server/operator-alerts', () => ({
+  raiseOperatorAlert: async (
+    definition: { type: string },
+    options: { context?: Record<string, string | number> } = {},
+  ) => {
+    mockOperatorAlerts.push({ type: definition.type, context: options.context ?? {} })
+    return { outcome: 'delivered', type: definition.type }
+  },
+}))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   // The literal three call sites compare against — the unsubscribe writes
@@ -310,6 +324,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       ...(orgReputationPolicy
         ? { emailReputationPolicy: orgReputationPolicy }
         : {}),
+      ...(orgName ? { name: orgName } : {}),
     },
   }),
   resolveHostSendingIdentity: async () =>
@@ -389,8 +404,10 @@ import {
   EMAIL_MAX_RECIPIENTS_PER_SEND,
   EMAIL_RAMP_STEPS,
 } from '@aglyn/shared-util-email'
+import { renderOperatorAlertTemplate } from '@aglyn/aglyn/app-utils/operator-alerts'
 import { performCampaignSend } from './campaign-send'
 import { campaignProcessScheduledHandler } from './campaign-process-scheduled'
+import { MARKETING_REPUTATION_BREAKER } from '../constants/operator-alerts'
 
 const HOST = 'host-1'
 const SEND_ID = 'spring-2026'
@@ -422,6 +439,7 @@ function seed() {
   rejectedAddresses.clear()
   orgCreatedAtMs = Date.UTC(2026, 6, 1)
   orgReputationPolicy = undefined
+  orgName = undefined
   store.set(`hosts/${HOST}`, {
     subdomain: 'acme',
     memberRoles: { 'uid-1': 'admin' },
@@ -697,8 +715,20 @@ describe('the circuit breaker', () => {
   it('refuses a campaign when the complaint rate is over the line', async () => {
     seedLeads(10)
     seedComplaints(1000, 10)
+    orgName = 'Harbor Mail'
+    mockOperatorAlerts.length = 0
     await expect(firstSend()).rejects.toMatchObject({ status: 409 })
     expect(sent).toHaveLength(0)
+    // Staff get their own copy, in numbers, naming the workspace (AGL-3432)
+    // — not the merchant's refusal, which tells "you" to clean "your audience".
+    const alert = mockOperatorAlerts.find((entry) => entry.type === MARKETING_REPUTATION_BREAKER.type)
+    const body = renderOperatorAlertTemplate(MARKETING_REPUTATION_BREAKER.body, alert?.context)
+    expect(body).toMatch(
+      /^Campaign sending is blocked on workspace Harbor Mail \(org-1\) by the reputation breaker\. Its campaign mail over the last 7 days: /,
+    )
+    expect(body).toContain('10 spam complaints in 1,000 messages')
+    expect(body).toContain('Check its list before you reinstate it.')
+    expect(body).not.toMatch(/your audience|Remove the addresses/)
   })
 
   it('removes nobody and nothing when it refuses', async () => {

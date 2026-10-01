@@ -73,7 +73,7 @@ describe('AGL-1478 · every creator of a scoped collection stamps the scope', ()
       // required-argument gate for precisely the collections with no
       // document constructor of their own and named `datasets` first, and
       // then three of the four dataset creators bypassed it.
-      file: 'apps/console/app/api/orgs/datasets/route.ts',
+      file: 'libs/plugins/data/src/lib/server/datasets-route.ts',
       mustContain: ['defaultScopeForNewResource', 'newResourceScopeFields'],
       why: 'org Data page → new dataset',
     },

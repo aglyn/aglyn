@@ -25,8 +25,8 @@ import { buildRoute, Route } from './route-links'
  * `orgNavItems` (AGL-2974), already narrowed to the ones this reader may
  * open (or disabled, holding their place while the member read settles) by
  * `orgPluginNavTabItems`, and ordered by each item's `tabOrder`.
- * They sit after the CRM, the org's other plugin-served surface, and before
- * the administration tabs — Marketplace last among them, beside Plugins.
+ * They sit as one block after Data and before the administration tabs, each
+ * where its own `tabOrder` puts it.
  */
 export function orgNavTabItems(
   orgSlug: string,
@@ -59,37 +59,6 @@ export function orgNavTabItems(
       id: 'nav-tab-data',
       label: 'Data',
       href: buildRoute(Route.ORG_DATA, { orgSlug }),
-    },
-    /*
-     * The organization-level CRM (AGL-2630), beside Data because it is the
-     * org's other shared collection of records. The same hub the site tab
-     * opens — contacts, leads, companies, deals, tasks, reports, fields,
-     * settings — mounted over every site at once, which is why the label is
-     * the hub's and not the first section's.
-     *
-     * It carries the HOST tab's id on purpose, the way Data does: `release_
-     * contacts` names `nav-tab-contacts`, so sharing the id is what puts both
-     * halves of the CRM behind one flag. Two ids would let the org half ship
-     * to customers while the site half stayed hidden — a tab leading to a
-     * page whose per-site counterpart does not exist yet.
-     *
-     * Linked straight at the landing section rather than at the bare hub,
-     * for the reason the site strip links its plugin tabs that way: the bare
-     * address redirects, and the redirect can only be a client one. Contacts
-     * is the first section on every plan that opens the CRM, and on one that
-     * does not every section is the upgrade notice beside the rail
-     * (AGL-2851), so the tab names Contacts without a plan verdict.
-     * `resolveActiveTab` compares the first segment under the org, so the tab
-     * reads as active on every section of the hub.
-     *
-     * The strip itself is not rendered at all for a scoped collaborator
-     * (`useSecondaryNav`), and the page refuses them independently — the tab
-     * is a signpost, never a gate.
-     */
-    {
-      id: 'nav-tab-contacts',
-      label: 'CRM',
-      href: `${buildRoute(Route.ORG_CRM, { orgSlug })}/contacts`,
     },
     ...pluginTabs,
     // Plugins is its own section again (AGL-1011). It was folded into

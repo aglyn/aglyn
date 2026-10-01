@@ -124,10 +124,25 @@ async function recordAbuseCeilingTrip(
       { merge: true },
     )
     if (alreadyRefused === 0) {
+      // Every fact here is the route's own (AGL-3432): the refusal sits before
+      // every write, so a refused submission is neither stored nor counted
+      // toward the bill, and the counter is month-keyed, so forms accept
+      // again at the UTC month boundary — the same date the inbox notice
+      // prints. `{site}` is the site's name, filled by `notifyHostManagers`.
+      const reopens = Aglyn.formCeilingResetAt().toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'UTC',
+      })
       await notifyHostManagers(hostId, {
         type: 'system.formSubmissionsPaused',
-        title: 'Form submissions paused — unusual volume',
-        body: `This site reached ${ceiling} submissions this month, so further submissions are being refused. They are not being billed. Contact support if this is real traffic.`,
+        title: 'Form submissions paused on {site} — unusual volume',
+        body:
+          `Forms on {site} stopped accepting submissions: the site reached ` +
+          `${ceiling.toLocaleString()} this month, the safety limit for ` +
+          'unusual volume. Submissions sent now are refused and not saved, ' +
+          `and none of them are billed. Forms accept submissions again on ` +
+          `${reopens}. Contact support if this is real traffic.`,
         link: `/${hostId}/inbox`,
       })
     }
@@ -545,7 +560,7 @@ export async function POST(request: Request): Promise<Response> {
      * to none.
      */
     const formCampaignIds = form
-      ? Aglyn.readCampaignIds(form.data() as Record<string, unknown>)
+      ? Aglyn.readContainerIds(form.data() as Record<string, unknown>, 'campaign')
       : []
     /*
      * THE CUSTOM CONTACT FIELDS THIS FORM SAVES TO (AGL-2601).
@@ -612,7 +627,7 @@ export async function POST(request: Request): Promise<Response> {
        * A STAMP of what the form said at the moment this arrived, not a live
        * edge: nothing edits a submission's campaigns afterwards, and refiling
        * the form later does not rewrite the submissions it already produced.
-       * That is why this collection is not in
+       * That is why this collection is not in the Marketing plugin's
        * `CAMPAIGN_MEMBER_HOST_COLLECTIONS` — the deletion pass walks the
        * collections a PICKER writes, and a campaign's removal must not rewrite
        * an unbounded, billed history collection to tidy up a field that is
@@ -759,7 +774,9 @@ export async function POST(request: Request): Promise<Response> {
         // Filed under the form's campaigns, inside this site's own facet on a
         // row the whole org shares. Membership is not consent, and this passes
         // none: `marketingConsent` above is the only input that records one.
-        ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
+        ...(formCampaignIds.length
+          ? { containers: { campaign: formCampaignIds } }
+          : {}),
         // The mapped custom field values. Absent when nothing mapped, so the
         // owner adds no `custom` key for nothing.
         ...(Object.keys(mappedContactCustom).length
@@ -849,10 +866,16 @@ export async function POST(request: Request): Promise<Response> {
     // Event trigger (AGL-128/148): field values join the automation
     // scope; action-produced site alerts ride back to the visitor.
     // In-app notification to the site's managers (AGL-259).
+    // The body names the form and the site on its own (AGL-3432): a manager
+    // of several sites reads the email body, not always the subject, and
+    // "Page: /contact" said neither. `{site}` is filled by
+    // `notifyHostManagers` from the host doc it already reads.
     void notifyHostManagers(hostId, {
       type: 'content.formSubmission',
       title: `New form submission — ${resolvedFormName}`,
-      ...(typeof path === 'string' && path ? { body: `Page: ${path}` } : {}),
+      body:
+        `Someone submitted “${resolvedFormName}” on {site}` +
+        (typeof path === 'string' && path ? ` (page ${path.slice(0, 500)}).` : '.'),
       link: `/${hostId}/inbox`,
     })
     const submittedEmail =

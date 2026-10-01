@@ -142,7 +142,8 @@ describe('renderHostEmail (AGL-770)', () => {
       compose: COMPOSE,
     })
     expect(result?.subject).toBe('Booking confirmed: Consultation')
-    expect(result?.html).toContain('Hi Alex, your booking for')
+    // The business is named in the sentence (AGL-3432).
+    expect(result?.html).toContain('Hi Alex, your booking with')
   })
 
   it('renders a published designable template', async () => {

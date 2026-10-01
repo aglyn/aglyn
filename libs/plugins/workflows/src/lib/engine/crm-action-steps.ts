@@ -23,7 +23,6 @@ import {
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
-  type CrmActionStep,
   type CrmActivity,
   type CrmActivityLink,
   type CrmTask,
@@ -57,6 +56,38 @@ import {
   reassignContactOwner,
 } from '@aglyn/tenant-runtime/assign-contact-owner'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
+import type { HostActionStep, HostActionStepType } from '@aglyn/aglyn/app-utils/actions'
+
+/**
+ * The steps that act on the CRM (AGL-2605) — named as a set because the
+ * executor dispatches all five to one module and the docs list them as one
+ * group, and a step added to the union but not here would be a server step
+ * the executor silently skipped.
+ */
+export const CRM_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> = new Set([
+  'setContactStage',
+  'addContactTag',
+  'assignContactOwner',
+  'createCrmTask',
+  'logCrmActivity',
+] as const)
+
+/** The CRM steps, as the type the executor narrows to. */
+export type CrmActionStep = Extract<
+  HostActionStep,
+  {
+    type:
+      | 'setContactStage'
+      | 'addContactTag'
+      | 'assignContactOwner'
+      | 'createCrmTask'
+      | 'logCrmActivity'
+  }
+>
+
+export function isCrmActionStep(step: HostActionStep): step is CrmActionStep {
+  return CRM_ACTION_STEP_TYPES.has(step.type)
+}
 
 /**
  * The CRM steps of an action run (AGL-2605): what `setContactStage`,

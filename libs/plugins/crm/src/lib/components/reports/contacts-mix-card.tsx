@@ -36,6 +36,7 @@ import {
   visibleToClause,
 } from './report-scope'
 import { type AggregateRead, useWindowRead } from './use-aggregate-read'
+import { funnelFromStages, tally } from '../../model/crm-reports'
 
 /**
  * How many contacts the source mix and the funnel are read from.
@@ -101,7 +102,7 @@ export function ContactsMixCard(props: ContactsMixCardProps) {
     // A person captured two ways counts under both sources: the chart asks
     // "how many people came through each door", and a person who came
     // through two did.
-    const sources = Aglyn.tally(
+    const sources = tally(
       facets.flatMap((facet) =>
         (Object.keys(facet.sources) as Aglyn.ContactSource[]).filter(
           (source) => facet.sources[source],
@@ -119,7 +120,7 @@ export function ContactsMixCard(props: ContactsMixCardProps) {
         unstaged += 1
       }
     }
-    return { sources, funnel: Aglyn.funnelFromStages(stageCounts), unstaged }
+    return { sources, funnel: funnelFromStages(stageCounts), unstaged }
   }, [sample, groupId, org])
 
   // A sample only once the read has settled: while the window is empty

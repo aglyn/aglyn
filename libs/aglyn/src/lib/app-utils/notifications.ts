@@ -288,6 +288,13 @@ export interface AglynNotification {
    * `tools/scripts/backfill-notification-read.mjs` stamps.
    */
   read?: boolean
+  /**
+   * How urgently this one notification asks to be read (AGL-3437), stamped
+   * by its emitter. Absent on a notification whose emitter has no reason to
+   * say more than its type does, and on everything written before the field
+   * existed; read it through {@link notificationLevel}, never directly.
+   */
+  level?: NotificationLevel
 }
 
 export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
@@ -333,6 +340,157 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'staff.subscriptionCanceled': 'Subscription canceled',
   'staff.planChanged': 'Plan changed',
   'staff.paymentFailed': 'Payment failed (workspace)',
+}
+
+/**
+ * HOW LOUD A NOTIFICATION IS (AGL-3437), which the console draws as its
+ * color, icon and accent.
+ *
+ * - `critical` — something stopped, money is moving with nobody looking, or
+ *   fraud: a fraud signal, a failed payment, a form that stopped accepting.
+ * - `warning` — something degraded or is close to stopping: a health check
+ *   degraded, a limit reached, low stock.
+ * - `success` — good news: an account, a workspace or a subscription
+ *   started, an order or a booking arrived, a health check recovered.
+ * - `info` — worth reading, nothing wrong: an invite, a ticket reply, a
+ *   usage step on the way to a limit.
+ * - `neutral` — routine work arriving: a form submission, an assignment, a
+ *   digest.
+ *
+ * A level is a property of the NOTIFICATION, not only of its type: one
+ * `system.operatorAlert` says a check degraded and the next says it
+ * recovered, and a usage notice at 75% is not the one at 100%. The emitter
+ * stamps `level` when it knows more than the type; the type's default in
+ * {@link NOTIFICATION_TYPE_LEVELS} answers for everything else.
+ */
+export type NotificationLevel =
+  | 'critical'
+  | 'warning'
+  | 'success'
+  | 'info'
+  | 'neutral'
+
+/** Every level, loudest first — the order {@link loudestNotificationLevel} ranks by. */
+export const NOTIFICATION_LEVELS: readonly NotificationLevel[] = [
+  'critical',
+  'warning',
+  'success',
+  'info',
+  'neutral',
+]
+
+export const NOTIFICATION_LEVEL_LABELS: Record<NotificationLevel, string> = {
+  critical: 'Critical',
+  warning: 'Warning',
+  success: 'Good news',
+  info: 'Info',
+  neutral: 'Routine',
+}
+
+/**
+ * Each core type's level when its emitter stamps none. A plugin's types are
+ * not listed: a plugin emitter stamps `level` itself, and an unstamped one
+ * reads as `neutral`.
+ *
+ * A type the operator alert registry raises under its own notification type
+ * must agree with that alert's level, so the backlog written before `level`
+ * existed reads the same as what the registry writes today
+ * (`notification-levels.spec.ts` holds the two together).
+ */
+export const NOTIFICATION_TYPE_LEVELS: Record<
+  AglynNotificationType,
+  NotificationLevel
+> = {
+  'billing.invoice': 'neutral',
+  'billing.paymentFailed': 'critical',
+  'billing.subscriptionCanceled': 'critical',
+  // At a limit. A step on the way to it is stamped `info` by its emitter.
+  'billing.usage': 'warning',
+  'team.invite': 'info',
+  'team.roleChanged': 'info',
+  'team.hostAccessGranted': 'info',
+  'content.formSubmission': 'neutral',
+  'content.booking': 'success',
+  'content.order': 'success',
+  'content.lowStock': 'warning',
+  'content.taskAssigned': 'neutral',
+  'content.taskReminder': 'info',
+  'content.contactAssigned': 'neutral',
+  'content.leadAssigned': 'neutral',
+  'content.crmDailyDigest': 'neutral',
+  'content.insightsDigest': 'neutral',
+  'marketplace.review': 'info',
+  'support.ticketOpened': 'info',
+  'support.ticketReply': 'info',
+  'system.announcement': 'info',
+  'system.pluginVerifierRegression': 'warning',
+  'system.signInMethodRemoved': 'warning',
+  'system.scopeDrift': 'info',
+  'system.ssoDomainUnverified': 'warning',
+  'system.formSubmissionsPaused': 'critical',
+  'system.visitorRecordsPaused': 'critical',
+  'system.abuseReportUrgent': 'critical',
+  'system.riskNotice': 'critical',
+  'system.dmcaCounterNotice': 'critical',
+  'system.bandwidthCeilingTripped': 'warning',
+  // The site is serving the capped notice to its visitors.
+  'system.bandwidthCapEngaged': 'critical',
+  'system.billingWebhookHalfApplied': 'critical',
+  'system.disputeUnattributed': 'critical',
+  // The registry stamps each alert's own level; this answers only for one
+  // written before it did.
+  'system.operatorAlert': 'warning',
+  'staff.userSignedUp': 'success',
+  'staff.orgCreated': 'success',
+  'staff.subscriptionStarted': 'success',
+  'staff.subscriptionCanceled': 'warning',
+  'staff.planChanged': 'info',
+  'staff.paymentFailed': 'warning',
+}
+
+const LEVEL_SET: ReadonlySet<string> = new Set(NOTIFICATION_LEVELS)
+
+/** Whether a stored value is a level this build knows. */
+export function isNotificationLevel(value: unknown): value is NotificationLevel {
+  return typeof value === 'string' && LEVEL_SET.has(value)
+}
+
+/**
+ * A notification's level: what its emitter stamped, else its type's
+ * default, else `neutral`. A stamped value this build does not know — a
+ * level added later, read by an older console — falls back the same way
+ * rather than drawing nothing.
+ */
+export function notificationLevel(
+  notification: { type?: string; level?: unknown } | null | undefined,
+): NotificationLevel {
+  const stamped = notification?.level
+  if (isNotificationLevel(stamped)) return stamped
+  const byType = (NOTIFICATION_TYPE_LEVELS as Record<string, NotificationLevel>)[
+    notification?.type ?? ''
+  ]
+  return byType ?? 'neutral'
+}
+
+/**
+ * A usage notice's level at `percent` of its allowance: `info` on a step
+ * toward it, `warning` once it is reached. Every usage, budget and allotment
+ * notice says the same thing at the same step, so they share this.
+ */
+export function usageNotificationLevel(percent: number): NotificationLevel {
+  return percent >= 100 ? 'warning' : 'info'
+}
+
+/** The loudest of several levels, or `neutral` for none. */
+export function loudestNotificationLevel(
+  levels: Iterable<NotificationLevel>,
+): NotificationLevel {
+  let best = NOTIFICATION_LEVELS.length - 1
+  for (const level of levels) {
+    const rank = NOTIFICATION_LEVELS.indexOf(level)
+    if (rank >= 0 && rank < best) best = rank
+  }
+  return NOTIFICATION_LEVELS[best]
 }
 
 /**
@@ -724,9 +882,29 @@ export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
   new Set<AglynNotificationType>([
     'content.crmDailyDigest',
     'content.insightsDigest',
+    // The task-reminders route mails one reminder per member per run, listing
+    // every task due, and writes one notification per task; mailed again
+    // here, each task would arrive a second time as its own email (AGL-3432).
+    'content.taskReminder',
     // Emailed by `notifyRiskEvent` itself, as account mail (AGL-3368).
     'system.riskNotice',
   ])
+
+/**
+ * The tooltip on a self-sent type's disabled email switch: it names what
+ * DOES govern that mail, which differs by type (AGL-3432). Calling a task
+ * reminder a digest sent people looking for a Digests switch that is not it.
+ */
+export function selfSentEmailNote(type: string): string {
+  switch (type) {
+    case 'content.taskReminder':
+      return 'Task reminders send their own email, one per run listing every task due. Mute this category to stop them.'
+    case 'system.riskNotice':
+      return 'Risk and account notices are always emailed, whatever this switch says.'
+    default:
+      return 'This digest sends its own email, under its switch in Digests.'
+  }
+}
 
 /**
  * Whether a channel is on for one notification, at its own scope.

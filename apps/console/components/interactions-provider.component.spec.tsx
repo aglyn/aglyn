@@ -46,6 +46,27 @@ jest.mock('./interaction-builder-dialog.component', () => ({
   PickModeBanner: () => null,
 }))
 
+/**
+ * The `besignerInteractions` zone, filled by a stand-in for the plugin that
+ * runs section experiments: on a page it reports a way to start one, as that
+ * plugin does. Section experiments reach the section only this way.
+ */
+jest.mock('./plugin-widget-slot.component', () => {
+  const { useEffect } = jest.requireActual('react')
+  return {
+    __esModule: true,
+    default: function StandInZone(props: {
+      reportSectionExperiments?: (reporterId: string, report: unknown) => void
+    }) {
+      const report = props.reportSectionExperiments
+      useEffect(() => {
+        report?.('stand-in', { experiments: [], create: () => undefined })
+      }, [report])
+      return null
+    },
+  }
+})
+
 const buildQueries: Array<() => unknown> = []
 /**
  * Creating an action/entry is a SERVER call since AGL-2266, so this closed-world

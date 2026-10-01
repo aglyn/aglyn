@@ -814,10 +814,12 @@ describe('renderSystemEmail', () => {
     })
 
     it('is false for a white-label org that set no support URL', () => {
-      // The one field every white-label profile differs on (AGL-2428).
+      // The one field every white-label profile differs on (AGL-2428). A
+      // color alone leaves every NAME the platform's, which is what makes the
+      // support URL the only difference left to read.
       const branding = resolveBrandingProfile({
         plan: 'agency',
-        brandingProfile: {},
+        brandingProfile: { primaryColor: '#ff5a00' },
       } as never)
       expect(branding.productName).toBe(PLATFORM_BRANDING_PROFILE.productName)
       expect(
@@ -825,6 +827,24 @@ describe('renderSystemEmail', () => {
           brandLogoUrl: branding.emailLogoUrl,
         }),
       ).toBe(false)
+    })
+
+    it('is true for a white-label org that has set no brand at all (AGL-3440)', () => {
+      // Every Enterprise org carries the entitlement. One that never opened
+      // Branding mails as the platform, logo and footer included — it has
+      // no brand of its own to conceal the platform behind.
+      for (const org of [
+        { plan: 'enterprise' },
+        { plan: 'agency', brandingProfile: {} },
+        { plan: 'agency', brandingProfile: { productName: '  ', supportUrl: '' } },
+      ]) {
+        const branding = resolveBrandingProfile(org as never)
+        expect(
+          isPlatformBrandedSend(withDefaults(brandMergeTokens(branding)), {
+            brandLogoUrl: branding.emailLogoUrl,
+          }),
+        ).toBe(true)
+      }
     })
 
     it('is false for a white-label org with its own support URL', () => {

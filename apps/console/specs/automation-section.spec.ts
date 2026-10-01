@@ -74,6 +74,14 @@ const switchboardRow = (id: string) => {
 /** A route-table path as Next writes it in `redirects()`: `[x]` → `:x`. */
 const asNextSource = (route: string) => route.replace(/\[(\w+)]/g, ':$1')
 
+/**
+ * Where the automation section lived before it had a name of its own. Nothing
+ * links here any more — the route table has only `HOST_AUTOMATION` — but
+ * bookmarks and old emails hold it, so the workflows plugin redirects it, and
+ * this is the address that redirect has to rescue.
+ */
+const RETIRED_WORKFLOWS_ADDRESS = '/[orgSlug]/hosts/[host]/workflows'
+
 /** Every `id:` on the console page's `HubTabs` list, in order. */
 const tabIds = (source: string): string[] =>
   (() => {
@@ -113,17 +121,17 @@ describe('the automation section', () => {
 
   it('THE OLD ADDRESS still resolves', () => {
     /*
-     * `/…/hosts/…/workflows` is on the route table only so this rule can be
-     * checked against it. Both paths are read from the table rather than
-     * written out here: a redirect whose source drifts from the address it is
-     * meant to rescue rescues nothing, and it would look right doing it.
+     * The retired address is held here, beside the redirect that rescues it,
+     * and the destination is read from the route table: a redirect whose
+     * source drifts from the address it is meant to rescue rescues nothing,
+     * and it would look right doing it.
      */
     expect(readRepo(NEXT_CONFIG)).toContain(
       "require('./constants/plugins.redirects.generated.json')",
     )
     expect(JSON.parse(readRepo(REDIRECTS))).toContainEqual({
       pluginId: 'workflows',
-      source: asNextSource(Route.HOST_WORKFLOWS),
+      source: asNextSource(RETIRED_WORKFLOWS_ADDRESS),
       destination: asNextSource(Route.HOST_AUTOMATION),
       permanent: true,
     })
@@ -132,7 +140,8 @@ describe('the automation section', () => {
   it('THE CONTROL: the route table really moved', () => {
     // A redirect from a path to itself passes the test above while doing
     // nothing, which is what a half-finished rename would leave behind.
-    expect(Route.HOST_AUTOMATION).not.toBe(Route.HOST_WORKFLOWS)
+    expect(Route.HOST_AUTOMATION).not.toBe(RETIRED_WORKFLOWS_ADDRESS)
+    expect(Object.values(Route)).not.toContain(RETIRED_WORKFLOWS_ADDRESS)
     expect(Route.HOST_AUTOMATION.endsWith('/automation')).toBe(true)
     expect(readRepo(PLUGIN)).toContain(`href: '/automation'`)
   })

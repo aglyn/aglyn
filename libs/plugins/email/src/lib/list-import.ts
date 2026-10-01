@@ -24,7 +24,7 @@
  * abuse vector, so it ships WITH its controls or not at all. This module is
  * the pure half of those controls. It parses, it de-duplicates, and it
  * SCREENS. It decides nothing about consent and it enrolls nobody: the
- * consent question belongs to `list-assignment-policy`, which the one-address
+ * consent question belongs to `enrollment-basis`, which the one-address
  * add path already asks, and an import that answered it a second way would be
  * exactly the defect class the register has a P1 entry for.
  *
@@ -55,7 +55,7 @@
  */
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
-import { parseCsv } from '@aglyn/aglyn/app-utils/dataset-csv'
+import { parseCsv } from '@aglyn/aglyn/app-utils/csv'
 
 /**
  * The most addresses one uploaded file may name.

@@ -53,6 +53,12 @@ const mockSent: Array<Record<string, any>> = []
 let mockResults: Array<Record<string, any>> = []
 /** Rollups stamped `emailedAt`, so "not stamped" is checkable. */
 const mockStamped: string[] = []
+/**
+ * When `report-usage` last computed every rollup, or null for a rollup it
+ * never stamped. Defaults to now, which is after any month this file names,
+ * so every case outside AGL-3442's reads a closed-month figure.
+ */
+let mockComputedAt: Date | null = null
 
 jest.mock('@aglyn/shared-util-email', () => ({
   // The REAL module spread in: `rateLimitedRetryAtMs` is how the route
@@ -120,7 +126,9 @@ function mockFirestore(): any {
                   ? mockStamped.includes(id)
                     ? 'stamped'
                     : undefined
-                  : 0,
+                  : field === 'computedAt'
+                    ? mockComputedAt && { toDate: () => mockComputedAt }
+                    : 0,
               ref: {
                 set: async () => {
                   mockStamped.push(id)
@@ -143,6 +151,8 @@ function mockFirestore(): any {
 import {
   POST as usageEmailCron,
   USAGE_EMAIL_CHUNK_SIZE,
+  meteredUsageLine,
+  usageMonthLabel,
 } from '../app/api/billing/usage-email/route'
 
 const originalFetch = global.fetch
@@ -162,6 +172,7 @@ beforeEach(() => {
   mockStamped.length = 0
   mockResults = []
   mockOrgCount = 0
+  mockComputedAt = new Date()
   process.env.CRON_SECRET = 'cron-secret'
   global.fetch = (async (url: any) => {
     throw new Error(`Blocked outbound request in a spec: ${String(url)}`)
@@ -194,6 +205,47 @@ describe('every summary declares itself BULK', () => {
     const body = await (await post()).json()
     expect(mockSent).toHaveLength(3)
     expect(Object.keys(body.orgs)).toHaveLength(3)
+  })
+})
+
+/**
+ * THE SUMMARY WAITS FOR THE CLOSED-MONTH SWEEP (AGL-3442).
+ *
+ * This route fires hourly from 00:00 UTC on the 1st; `report-usage` sweeps the
+ * closed month at 02:00. Until then each rollup holds the running figure the
+ * in-progress sweep wrote at 07:00 on the month's last day, so the 00:00 and
+ * 01:00 runs mailed numbers the invoice would contradict. Measured on
+ * 2026-10-01: Aglyn LLC's September rollup was computed at 02:00:08 and
+ * mailed at 03:53, in the right order only because GitHub fired late.
+ */
+describe('the summary waits for the closed-month sweep', () => {
+  it('mails nothing from a rollup last computed while its month was open', async () => {
+    mockOrgCount = 3
+    mockComputedAt = new Date('2026-09-30T07:00:08.000Z')
+    const body = await (await post({ month: '2026-09' })).json()
+
+    expect(mockSent).toHaveLength(0)
+    // Unstamped, so the first hourly run after the sweep mails every one.
+    expect(mockStamped).toEqual([])
+    for (const result of Object.values(body.orgs)) {
+      expect(result).toEqual({ skipped: 'usage not final' })
+    }
+  })
+
+  it('mails nothing from a rollup the sweep never stamped', async () => {
+    mockOrgCount = 2
+    mockComputedAt = null
+    await post({ month: '2026-09' })
+    expect(mockSent).toHaveLength(0)
+  })
+
+  it('THE CONTROL: mails once the closed-month sweep has computed it', async () => {
+    // Without this, a route that mailed nobody would pass both cases above.
+    mockOrgCount = 3
+    mockComputedAt = new Date('2026-10-01T02:00:08.000Z')
+    await post({ month: '2026-09' })
+    expect(mockSent).toHaveLength(3)
+    expect(mockStamped).toEqual(['org-000', 'org-001', 'org-002'])
   })
 })
 
@@ -286,5 +338,41 @@ describe('a governor refusal', () => {
     expect(mockSent).toHaveLength(3)
     expect(body.deferred).toBeUndefined()
     expect(body.done).toBe(true)
+  })
+})
+
+describe('the summary says whose usage it is, and whether any of it is billed (AGL-3432)', () => {
+  it('names the month as a reader writes it', () => {
+    expect(usageMonthLabel('2026-08')).toBe('August 2026')
+    expect(usageMonthLabel('2027-01')).toBe('January 2027')
+  })
+
+  it('says a reported figure is on the next invoice, and promises nothing for one not yet reported', () => {
+    expect(meteredUsageLine(0, false)).toBe(
+      'Metered usage beyond your plan: none, so nothing extra is billed for it.',
+    )
+    expect(meteredUsageLine(4.2, true)).toBe(
+      'Metered usage beyond your plan: $4.20, added to your next invoice.',
+    )
+    expect(meteredUsageLine(4.2, false)).toBe(
+      'Metered usage beyond your plan: about $4.20. ' +
+        'Whatever is billed for it appears on your next invoice.',
+    )
+  })
+
+  it('opens with the workspace and the month, and its money line says what is billed', async () => {
+    mockOrgCount = 1
+    await post()
+    const text = String(mockSent[0]?.['text'])
+    // `post()` sends no month, so the route summarizes the previous one.
+    const now = new Date()
+    const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+      .toISOString()
+      .slice(0, 7)
+    expect(text.startsWith(`Here is how org-000 used Aglyn in ${usageMonthLabel(month)}.`)).toBe(true)
+    expect(mockSent[0]?.['subject']).toBe(`Your Aglyn usage summary for ${usageMonthLabel(month)}`)
+    expect(text).toContain('Plan: Starter')
+    expect(text).toContain('Metered usage beyond your plan: none, so nothing extra is billed for it.')
+    expect(text).not.toContain('Metered usage estimate')
   })
 })

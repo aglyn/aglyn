@@ -16,6 +16,7 @@
  */
 
 import {
+  describeResponseWindow,
   pluginRequestFromWeb,
   responseDueAt,
   supportForPlan,
@@ -118,6 +119,20 @@ async function managerCopyOutcome(
   const outcome = result as { sent: boolean; reason?: string }
   if (outcome.sent) return { email: manager.email, sent: true }
   return { email: manager.email, sent: false, reason: outcome.reason }
+}
+
+/**
+ * The workspace as a staff notice names it: its name and id, the id alone
+ * when the document carries no name (AGL-3432).
+ */
+function ticketWorkspace(
+  org: { name?: string } | null | undefined,
+  orgId: string | null | undefined,
+): string {
+  const name = typeof org?.name === 'string' ? org.name.trim() : ''
+  if (name && orgId) return `workspace ${name} (${orgId})`
+  if (name) return `workspace ${name}`
+  return orgId ? `workspace ${orgId}` : 'no workspace'
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -296,11 +311,17 @@ async function handler(request: Request): Promise<Response> {
         createdAt: now,
       })
       // Staff have no other signal a ticket exists (AGL-850) — land them on the
-      // exact ticket in the staff queue.
+      // exact ticket in the staff queue. The body says who opened it, for
+      // which workspace and what reply is owed (AGL-3432): in the daily digest
+      // it sits under a one-line title.
+      const owed = describeResponseWindow(commitment.firstResponse)
       await notifyStaff({
         type: 'support.ticketOpened',
         title: `New support ticket: ${subject}`,
-        body: decoded.email ? `From ${decoded.email}` : undefined,
+        body:
+          `${decoded.email ?? 'A subscriber'} opened a ${commitment.label} ` +
+          `support ticket for ${ticketWorkspace(resolved?.org, orgId)}.` +
+          (owed ? ` A first response is owed within ${owed}.` : ''),
         link: `/admin/support?ticketId=${ticketRef.id}`,
         orgId: orgId ?? undefined,
       })
@@ -359,7 +380,13 @@ async function handler(request: Request): Promise<Response> {
           await notifyStaff({
             type: 'support.ticketReply',
             title: `Ticket reply: ${String(ticket['subject'] ?? '')}`,
-            body: decoded.email ? `From ${decoded.email}` : undefined,
+            // Who replied, on which ticket, for which workspace (AGL-3432).
+            // A subscriber can only reply on their own workspace's ticket, so
+            // the org resolved for them is the ticket's.
+            body:
+              `${decoded.email ?? 'A subscriber'} replied on the ticket ` +
+              `“${String(ticket['subject'] ?? '').slice(0, 120)}” for ` +
+              `${ticketWorkspace(resolved?.org, (ticket['orgId'] as string | undefined) ?? null)}.`,
             link: `/admin/support?ticketId=${ticketId}`,
             orgId: (ticket['orgId'] as string | undefined) ?? undefined,
           })

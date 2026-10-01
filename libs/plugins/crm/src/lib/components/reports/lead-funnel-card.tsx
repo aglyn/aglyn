@@ -48,6 +48,7 @@ import {
   useWindowRead,
   type WindowRead,
 } from './use-aggregate-read'
+import { deltaPercent, leadFunnel } from '../../model/crm-reports'
 
 /**
  * How many of the period's leads the funnel is placed from — the Leads
@@ -101,7 +102,9 @@ const LEAD_FUNNEL_HELP = Aglyn.pluginDocsHelp('crmReports', {
  * `visibleTo` is the site's tokens under a site, and `null` at the
  * organization level where an org-wide member reads without a clause. The
  * range stays a single-field one; with the scope clause it composes with the
- * `visibleTo` + `firstSeenAtMs` entry in `cloud/firebase-firestore.indexes.json`.
+ * `visibleTo` + `firstSeenAtMs` entries in `cloud/firebase-firestore.indexes.json`
+ * — the descending one for the window, the ascending one for the counts,
+ * which name no order (AGL-3443).
  */
 function leadsBetween(
   firestore: Firestore,
@@ -235,7 +238,6 @@ function OrgLeadFunnelCard(props: { report: CrmReportScope }) {
     () => (mount?.hostsReady ? mount.hosts.map((host) => host.id) : null),
     [mount],
   )
-  const key = hostIds?.join('\n') ?? ''
 
   /*
    * ONE READ, not one per site (AGL-3275). The sites share a collection now,
@@ -322,7 +324,7 @@ function LeadFunnelBody(props: {
   const { period, routes } = report
   const status = window.status
 
-  const funnel = useMemo(() => Aglyn.leadFunnel(window.rows), [window])
+  const funnel = useMemo(() => leadFunnel(window.rows), [window])
   const read = status === 'success'
   const figures = captured.value
   const share = (count: number, of: number): string | null =>
@@ -377,7 +379,7 @@ function LeadFunnelBody(props: {
           <ReportStatTile
             label={'Leads captured'}
             value={figures ? figures.current.toLocaleString() : null}
-            deltaPct={figures ? Aglyn.deltaPercent(figures.current, figures.previous) : null}
+            deltaPct={figures ? deltaPercent(figures.current, figures.previous) : null}
             note={'first seen in the period'}
             href={routes.section('leads')}
           />

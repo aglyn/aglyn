@@ -50,6 +50,8 @@ import {
 import { sendEmail } from '@aglyn/shared-util-email'
 import { pluginTaxProfile } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
 import { fileBookingOnCrm } from './booking-crm'
+import { bookingTimeZoneFor } from './booking-time-zone'
+import { formatBookingWhen } from '../model/booking-time'
 
 /**
  * Paid-booking section of the platform Stripe webhook (AGL-170/418):
@@ -237,13 +239,18 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
       if (outcome !== 'lost') return { claimed: true, hostId }
       const recovered = await reverseBookingSellerShare(booking.ref, object)
       if (recovered.cents > 0 && hostId) {
+        const recoveredText = `$${(recovered.cents / 100).toFixed(2)}`
+        const guest = String(booking.get('name') ?? '').trim()
+        const service = String(booking.get('serviceName') ?? '').trim() || 'a service'
         await notifyHostManagers(hostId, {
           type: 'content.booking',
-          title: `Payout adjusted — $${(recovered.cents / 100).toFixed(2)} recovered for a lost chargeback`,
+          title: `Payout adjusted — ${recoveredText} recovered for a lost chargeback`,
           body:
-            `A booking deposit was charged back and the dispute was lost, so the amount ` +
-            `transferred to you for it has been reversed. If your balance does not cover ` +
-            `it, Stripe recovers the remainder from your future payouts.`,
+            `${guest ? `${guest}'s payment` : 'A payment'} for ${service} on ` +
+            `{site} was charged back and the dispute was lost, so ` +
+            `the ${recoveredText} transferred to you for it has been taken back. ` +
+            `If your balance does not cover it, Stripe recovers the rest from ` +
+            `your future payouts.`,
           link: `/${hostId}/bookings`,
         })
       }
@@ -562,16 +569,21 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
         // Confirmation email now that payment cleared (env-gated inside
         // sendEmail, which no-ops when Resend isn't configured).
         if (booking['email']) {
-          const when = new Date(
-            Number(booking['startsAtMs']),
-          ).toLocaleString('en-US', {
-            dateStyle: 'full',
-            timeStyle: 'short',
-          })
+          // In the booking's own zone, and named (AGL-3432): a formatter with
+          // no zone reads in the server's — UTC — and tells a paying guest the
+          // wrong hour, and an empty zone prints "()".
+          const timezone = await bookingTimeZoneFor(
+            firestore,
+            String(hostId),
+            booking,
+          )
+          const when = formatBookingWhen(Number(booking['startsAtMs']), timezone)
+          const paid = `$${(paidAmountCents / 100).toFixed(2)}`
           const fallbackText =
             `Hi ${booking['name'] ?? ''},\n\nPayment received — ` +
             `"${booking['serviceName'] ?? 'your booking'}" is ` +
-            `confirmed for ${when}.\n\nReference: ${bookingId}`
+            `confirmed for ${when} (${timezone}). You paid ${paid}.` +
+            `\n\nReference: ${bookingId}`
           // Site-owner-designed template when published (AGL-770); null keeps
           // the built-in copy.
           const designed = await renderHostEmailWithTokens(
@@ -582,7 +594,8 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
               name: String(booking['name'] ?? ''),
               'service.name': String(booking['serviceName'] ?? ''),
               when,
-              timezone: String(booking['timezone'] ?? ''),
+              timezone,
+              'booking.payment': `You paid ${paid}.`,
               'booking.ref': String(bookingId),
             },
           )

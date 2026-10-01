@@ -47,7 +47,7 @@
  * No Stripe path is reachable from this route and nothing here touches
  * `fetch`. The seeded listings carry no `profileId`, so the publisher
  * notification and email are out of the picture by construction rather than
- * by stubbing.
+ * by stubbing. The verdict-copy block at the end seeds one and captures both.
  */
 
 // A module, not a script — without this the const declarations below collide
@@ -70,6 +70,10 @@ let audit: Record<string, unknown>[] = []
 let onSet: ((path: string, data: Record<string, unknown>) => void) | null = null
 
 const mockVerifyIdToken = jest.fn()
+/** Every publisher notification, as `[orgId, payload]`. */
+let mockNotices: [string, { title: string; body: string }][] = []
+/** Every publisher email, as `[orgId, subject, body]`. */
+let mockEmails: [string, string, string][] = []
 
 function mockIsPlainObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -229,8 +233,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   updateExisting: (...args: unknown[]) => mockUpdateExisting(...args),
   listOrgMembers: async () => [],
   meterPlatformEmail: async () => undefined,
-  notifyOrgAdmins: async () => undefined,
+  notifyOrgAdmins: async (orgId: string, payload: { title: string; body: string }) => {
+    mockNotices.push([orgId, payload])
+  },
   findUserByUidAcrossPools: async () => null,
+}))
+
+// The fan-out is its own module with its own spec; here only the words matter.
+jest.mock('./publisher-review-email', () => ({
+  __esModule: true,
+  emailPublisher: async (orgId: string, subject: string, text: string) => {
+    mockEmails.push([orgId, subject, text])
+  },
 }))
 
 jest.mock('firebase-admin/firestore', () => ({
@@ -322,6 +336,8 @@ function seedListing(fields: Record<string, unknown> = {}): void {
 beforeEach(() => {
   docs = new Map()
   audit = []
+  mockNotices = []
+  mockEmails = []
   onSet = null
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({
@@ -1009,6 +1025,199 @@ describe('revoking a version does not un-review it', () => {
     // A row still shows the version's own verdict.
     expect(source).toContain(
       "latestReviewState: String(latest?.get('reviewState') ?? 'pending')",
+    )
+  })
+})
+
+/*
+ * THE PUBLISHER IS TOLD WHAT HAPPENED, TO WHICH PLUGIN (AGL-3432).
+ *
+ * The publisher email prints only its body, so a body that leans on its
+ * subject says nothing. Two of these were worse than vague: a listing
+ * rejection with no comment (allowed for every category but "Other") fell
+ * through to the DELIST sentence, "removed from the marketplace while we take
+ * another look", and a version rejection printed "Reason: " and nothing.
+ */
+describe('a verdict names the plugin and says what happened to it (AGL-3432)', () => {
+  const PUBLISHER = 'org-publisher'
+
+  /** The one email and the one notification the verdict produced. */
+  function told(): { subject: string; email: string; notice: string } {
+    expect(mockEmails).toHaveLength(1)
+    expect(mockNotices).toHaveLength(1)
+    expect(mockEmails[0][0]).toBe(PUBLISHER)
+    return {
+      subject: mockEmails[0][1],
+      email: mockEmails[0][2],
+      notice: mockNotices[0][1].body,
+    }
+  }
+
+  it('a listing rejected with no comment gets its category, not the delist sentence', async () => {
+    seedListing({ profileId: PUBLISHER })
+    seedVersion()
+    const response = await POST(
+      post({ listingId: LISTING, action: 'reject', category: 'readme' }),
+    )
+    expect(response.status).toBe(200)
+
+    const { subject, email, notice } = told()
+    expect(subject).toBe(
+      'Smoke Test Widget was rejected — Missing or inadequate README',
+    )
+    expect(email).toMatch(
+      /^Smoke Test Widget version 1\.2\.0 was rejected from the marketplace: Missing or inadequate README\. Describe what the plugin does/,
+    )
+    expect(email).toContain('To send it back for review, publish a new version.')
+    expect(email).not.toMatch(/another look/)
+    // The feed carries the same words, not a bare category label.
+    expect(notice).toBe(email)
+  })
+
+  it('a reviewer comment follows the category, and "Other" stands on the comment', async () => {
+    seedListing({ profileId: PUBLISHER })
+    seedVersion()
+    await POST(
+      post({
+        listingId: LISTING,
+        action: 'reject',
+        category: 'license',
+        reason: 'The LICENSE file is empty.',
+      }),
+    )
+    expect(told().email).toContain(
+      'Include a license file. It has to permit redistribution through the marketplace.\n\nReviewer’s comment: The LICENSE file is empty.',
+    )
+
+    mockEmails = []
+    mockNotices = []
+    await POST(
+      post({
+        listingId: LISTING,
+        action: 'reject',
+        category: 'other',
+        reason: 'The icon is a competitor’s logo.',
+      }),
+    )
+    expect(told().email).toMatch(
+      /^Smoke Test Widget version 1\.2\.0 was rejected from the marketplace: The icon is a competitor’s logo\./,
+    )
+  })
+
+  it('CONTROL: a delist still says it is a second look, and names the plugin', async () => {
+    seedListing({ profileId: PUBLISHER, reviewStatus: 'listed' })
+    seedVersion()
+    await POST(post({ listingId: LISTING, action: 'delist' }))
+    const { subject, email } = told()
+    expect(subject).toBe('Smoke Test Widget was removed from the marketplace')
+    expect(email).toBe(
+      'We removed Smoke Test Widget version 1.2.0 from the marketplace while ' +
+        'we review it again. Sites that already installed it keep working.',
+    )
+  })
+
+  it('a private plugin is never said to enter or leave the marketplace', async () => {
+    seedListing({
+      profileId: PUBLISHER,
+      visibility: 'private',
+      latestApprovedVersion: VERSION,
+    })
+    seedVersion()
+    await POST(post({ listingId: LISTING, action: 'list' }))
+    const { email } = told()
+    expect(email).toBe(
+      'Smoke Test Widget passed review. It is a private plugin, so it stays ' +
+        'out of the marketplace and only your workspace can install it. New ' +
+        'installs receive version 1.2.0.',
+    )
+  })
+
+  it('a version rejected with no comment names the plugin and the category, never a blank reason', async () => {
+    seedListing({ profileId: PUBLISHER })
+    seedVersion()
+    const response = await POST(
+      post({
+        listingId: LISTING,
+        action: 'reject-version',
+        version: VERSION,
+        category: 'verifier',
+      }),
+    )
+    expect(response.status).toBe(200)
+    const { subject, email, notice } = told()
+    expect(subject).toBe('Smoke Test Widget v1.2.0 was not approved')
+    expect(email).toMatch(
+      /^Smoke Test Widget version 1\.2\.0 was not approved: Fails the static verifier\. Resolve the findings/,
+    )
+    expect(email).not.toMatch(/Reason: \s*\n/)
+    expect(email).not.toMatch(/Your plugin/)
+    expect(notice).toBe(email)
+  })
+
+  it('a rejected version still running somewhere says so, without telling the publisher to uninstall it', async () => {
+    seedListing({ profileId: PUBLISHER })
+    seedVersion()
+    const path = `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`
+    docs.set(path, { ...(docs.get(path) as Record<string, unknown>), activeInstalls: 3 })
+    await POST(
+      post({
+        listingId: LISTING,
+        action: 'reject-version',
+        version: VERSION,
+        category: 'capabilities',
+      }),
+    )
+    const { email } = told()
+    expect(email).toContain(
+      'Version 1.2.0 is still running on 3 sites. A rejection stops new ' +
+        'installs; it does not remove the version from sites already running it.',
+    )
+  })
+
+  it('approving the first version names the plugin and says it is now listed', async () => {
+    seedListing({ profileId: PUBLISHER })
+    seedVersion()
+    await POST(
+      post({ listingId: LISTING, action: 'approve-version', version: VERSION }),
+    )
+    expect(told().email).toBe(
+      'Smoke Test Widget version 1.2.0 passed review. It is now the version ' +
+        'new installs of Smoke Test Widget receive. Sites already running it ' +
+        'stay on the version they have until their owners upgrade.\n\n' +
+        'Smoke Test Widget is now listed in the marketplace.',
+    )
+  })
+
+  it('approving an OLDER version does not claim it is what new installs receive', async () => {
+    seedListing({
+      profileId: PUBLISHER,
+      reviewStatus: 'listed',
+      latestVersion: '2.0.0',
+      latestApprovedVersion: '2.0.0',
+    })
+    seedVersion('1.2.0')
+    await POST(
+      post({ listingId: LISTING, action: 'approve-version', version: '1.2.0' }),
+    )
+    expect(told().email).toBe(
+      'Smoke Test Widget version 1.2.0 passed review. New installs still ' +
+        'receive version 2.0.0, the newest approved version.',
+    )
+  })
+
+  it('the kill switch names the plugin and version in the feed', async () => {
+    seedListing({
+      profileId: PUBLISHER,
+      latestApprovedVersion: VERSION,
+      reviewStatus: 'listed',
+    })
+    seedVersion()
+    await POST(
+      post({ listingId: LISTING, action: 'revoke-version', version: VERSION }),
+    )
+    expect(mockNotices).toHaveLength(1)
+    expect(mockNotices[0][1].body).toMatch(
+      /^Smoke Test Widget version 1\.2\.0 has been stopped on every site running it\./,
     )
   })
 })

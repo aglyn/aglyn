@@ -122,7 +122,7 @@ function destinationOf(tag: string): Destination | null {
   const expression = /\bhelp=\{([\s\S]*)/.exec(tag)
   if (!expression) return null
   const body = expression[1]
-  if (/resolveDocsHelpTopic\(/.test(body)) {
+  if (/resolveDocsHelp(?:Topic|Target)\(/.test(body)) {
     return { topic: '(runtime)', anchor: '', dynamic: true }
   }
   const topic = /\btopic:\s*'([A-Za-z0-9]+)'/.exec(body)

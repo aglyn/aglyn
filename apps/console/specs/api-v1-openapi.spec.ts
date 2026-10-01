@@ -126,9 +126,23 @@ describe('a plugin describes the resources it serves (AGL-3080)', () => {
 
   it('describes no plugin resource the build does not serve', () => {
     const paths = Object.keys(platformOnly().paths)
-    expect(paths).toContain('/v1/datasets')
+    expect(paths).toContain('/v1/sites')
     expect(paths).not.toContain('/v1/contacts')
+    // The data plugin's datasets are a plugin resource too (AGL-3080).
+    expect(paths).not.toContain('/v1/datasets')
     expect(platformOnly().components.schemas.ContactMerge).toBeUndefined()
+    expect(platformOnly().components.schemas.DatasetRecord).toBeUndefined()
+  })
+
+  it('describes the data plugin’s datasets once it has registered them', () => {
+    const paths = Object.keys(document.paths)
+    for (const path of ['/v1/datasets', '/v1/datasets/{datasetId}', '/v1/datasets/{datasetId}/records/{recordId}']) {
+      expect(paths).toContain(path)
+    }
+    // The record and the two write bodies are the description's own schemas.
+    expect(document.components.schemas.DatasetRecord.required).toEqual(['id', 'object', 'values'])
+    expect(document.components.schemas.DatasetWrite.properties.fields.type).toBe('array')
+    expect(document.components.schemas.DatasetRecordWrite.properties.values.type).toBe('object')
   })
 
   it('describes the CRM’s resources once the CRM has registered them', () => {

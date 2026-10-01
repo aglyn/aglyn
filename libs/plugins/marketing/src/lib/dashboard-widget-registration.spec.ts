@@ -78,6 +78,9 @@ describe('the marketing plugin registers the campaign glance', () => {
       'marketing-email-template-recipients',
       'marketing-inbox-campaigns',
       'marketing-inbox-record-attribution',
+      // The section experiments the besigner's Interactions section shows,
+      // in the zone the console hosts there (AGL-3080).
+      'marketing-besigner-section-experiments',
       // The staff organization page's sends and campaigns (AGL-3380).
       'marketing-staff-org-email',
     ])

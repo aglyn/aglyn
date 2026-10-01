@@ -224,7 +224,7 @@ jest.mock('@aglyn/shared-util-email', () => {
   }
 })
 
-import { DEFAULT_CAMPAIGN_TOPIC_ID } from '@aglyn/aglyn/app-utils/email-topics'
+import { DEFAULT_SUBSCRIPTION_TOPIC_ID } from '@aglyn/aglyn/app-utils/subscription-topics'
 import { enrollInFlow, type FlowEnrollment } from './flow-enrollments'
 import { resumeFlowEnrollment, runEventActions } from './run-event-actions'
 
@@ -585,7 +585,7 @@ describe('an email sent from a flow is still marketing mail', () => {
      * trying to leave.
      *
      * It is the SAME resolution the gate above filtered on, through the same
-     * `flowEmailTopicId`: a link naming a stream the gate did not check is
+     * `flowSubscriptionTopicId`: a link naming a stream the gate did not check is
      * what two spellings of that rule would produce.
      */
     await resumeOnce()
@@ -606,7 +606,7 @@ describe('an email sent from a flow is still marketing mail', () => {
     await resumeFlowEnrollment(enrollment, enrollmentRef(id), { nowMs: NOW })
 
     expect(sent.at(-1)?.marketing).toEqual(
-      expect.objectContaining({ topicId: DEFAULT_CAMPAIGN_TOPIC_ID }),
+      expect.objectContaining({ topicId: DEFAULT_SUBSCRIPTION_TOPIC_ID }),
     )
   })
 

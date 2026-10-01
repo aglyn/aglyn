@@ -23,6 +23,7 @@
 import { createElement, type ReactNode } from 'react'
 import DocsHelpExcerpt from '../components/docs-help-excerpt.component'
 import {
+  DOCS_HELP_ANCHORS,
   type DocsHelpAnchor,
   DOCS_HELP_TOPICS,
   type DocsHelpTopic,
@@ -87,6 +88,34 @@ export function resolveDocsHelpTopic(
   return topic && topic in DOCS_HELP_TOPICS
     ? (topic as DocsHelpTopicKey)
     : fallback
+}
+
+/**
+ * {@link resolveDocsHelpTopic}, deep-linked: the topic a plugin names, and
+ * the heading it names on that topic's page when the page carries it
+ * (`ConsoleNavItem.header.docsAnchor`).
+ *
+ * The anchor arrives as an untyped string for the topic's reason, so it is
+ * checked against the generated heading list rather than cast. One the page
+ * does not carry is dropped, and so is any anchor once the topic itself fell
+ * back: a heading of one page is not a heading of another, and a reader
+ * sent to a missing one lands at the top believing they are in the right
+ * place.
+ */
+export function resolveDocsHelpTarget(
+  topic: string | undefined,
+  anchor: string | undefined,
+  fallback: DocsHelpTopicKey,
+): DocsHelpTopicKey | DocsHelpTarget {
+  const resolved = resolveDocsHelpTopic(topic, fallback)
+  if (!anchor || resolved !== topic) return resolved
+  const anchors: readonly string[] =
+    (DOCS_HELP_ANCHORS as Partial<Record<DocsHelpTopicKey, readonly string[]>>)[
+      resolved
+    ] ?? []
+  return anchors.includes(anchor)
+    ? ({ topic: resolved, anchor } as DocsHelpTarget)
+    : resolved
 }
 
 /**

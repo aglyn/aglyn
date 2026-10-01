@@ -109,6 +109,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   resolveHostConsolePaths,
+  RISK_NOTICE_COLLECTION,
 } from '@aglyn/tenant-data-admin'
 import {
   heldPageConsolePath,
@@ -353,6 +354,68 @@ async function withHeldPageLinks<
 }
 
 /**
+ * What a risk notice's delivery record says reached the owners (AGL-3441).
+ * Null when the notice carries no record — one still sending, or one whose
+ * write failed — which the page renders as unknown, never as "told".
+ */
+function ownerDeliveryPayload(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const owners = value as Record<string, unknown>
+  const count = (key: string): number => {
+    const parsed = Number(owners[key] ?? 0)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return {
+    recipients: count('recipients'),
+    emailed: count('emailed'),
+    emailFailed: count('emailFailed'),
+    inApp: count('inApp'),
+    emailSkipped: asString(owners['emailSkipped']),
+    digested: owners['digested'] === true,
+  }
+}
+
+/**
+ * Each row's owner-notice delivery, read from the notices themselves in one
+ * batch (AGL-3441). The row's `ownersNotifiedAtMs` is stamped when the notice
+ * is RAISED, before anything is sent, so it cannot say whether an email
+ * landed: a banned owner's send is refused (AGL-3420) and the row is stamped
+ * all the same.
+ */
+async function withRiskNoticeDelivery<
+  T extends { riskNotice: ReturnType<typeof riskNoticePayload> },
+>(firestore: FirebaseFirestore.Firestore, rows: T[]): Promise<T[]> {
+  const noticeIds = [
+    ...new Set(rows.flatMap((row) => (row.riskNotice?.noticeId ? [row.riskNotice.noticeId] : []))),
+  ]
+  if (!noticeIds.length) return rows
+  const notices = firestore.collection(RISK_NOTICE_COLLECTION)
+  const snapshots = await firestore
+    .getAll(...noticeIds.map((noticeId) => notices.doc(noticeId)))
+    .catch((error: unknown): FirebaseFirestore.DocumentSnapshot[] => {
+      console.error('[abuse-reports] notice delivery unreadable', error)
+      return []
+    })
+  const delivered = new Map<string, ReturnType<typeof ownerDeliveryPayload>>(
+    snapshots.map((snapshot) => [
+      snapshot.id,
+      ownerDeliveryPayload(snapshot.get('delivery.owners')),
+    ]),
+  )
+  return rows.map((row) =>
+    row.riskNotice?.noticeId
+      ? {
+          ...row,
+          riskNotice: {
+            ...row.riskNotice,
+            ownersDelivery: delivered.get(row.riskNotice.noticeId) ?? null,
+          },
+        }
+      : row,
+  )
+}
+
+/**
  * The catalog's staff half for a row a risk source filed (AGL-3368): the
  * same title and summary the staff alert carried, and the actions — each a
  * deep link to the real control — so nobody has to hunt for where to act.
@@ -387,6 +450,8 @@ function riskNoticePayload(id: string, data: Record<string, unknown>) {
     kind,
     noticeId: asString(stamp?.['noticeId']),
     ownersNotifiedAtMs: asMillis(stamp?.['ownersNotifiedAtMs']),
+    /** Filled by {@link withRiskNoticeDelivery}. */
+    ownersDelivery: null as ReturnType<typeof ownerDeliveryPayload>,
     title: copy.title,
     summary: copy.summary,
     reviewable: RISK_NOTICE_CATALOG[kind].reviewable,
@@ -877,9 +942,12 @@ async function handler(request: Request): Promise<Response> {
         if (!snapshot.exists) {
           return Response.json({ error: 'No such report' }, { status: 404 })
         }
-        const [report] = await withHeldPageLinks(firestore, [
-          rowPayload(oneId, snapshot.data() as Record<string, unknown>, canSeeIdentity),
-        ])
+        const [report] = await withRiskNoticeDelivery(
+          firestore,
+          await withHeldPageLinks(firestore, [
+            rowPayload(oneId, snapshot.data() as Record<string, unknown>, canSeeIdentity),
+          ]),
+        )
         return Response.json(
           { report },
           { status: 200, headers: { 'Cache-Control': 'no-store' } },
@@ -1038,7 +1106,9 @@ async function handler(request: Request): Promise<Response> {
           ledger: ledger.rows,
         }
       }
-      const reports = (await withHeldPageLinks(firestore, page.rows)).map((report) => {
+      const reports = (
+        await withRiskNoticeDelivery(firestore, await withHeldPageLinks(firestore, page.rows))
+      ).map((report) => {
         const counted = report.category === 'dmca' && report.orgId
         return {
           ...report,
@@ -1481,9 +1551,12 @@ async function handler(request: Request): Promise<Response> {
     return Response.json(
       {
         report: (
-          await withHeldPageLinks(firestore, [
-            rowPayload(id, after.data() as Record<string, unknown>, canSeeIdentity),
-          ])
+          await withRiskNoticeDelivery(
+            firestore,
+            await withHeldPageLinks(firestore, [
+              rowPayload(id, after.data() as Record<string, unknown>, canSeeIdentity),
+            ]),
+          )
         )[0],
         strike: strikeEffect,
         // What closing the row did to the send it held (AGL-3356), or null.

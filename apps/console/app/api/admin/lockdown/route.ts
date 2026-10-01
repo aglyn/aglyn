@@ -155,6 +155,20 @@ function lockScopeOrgId(value: unknown): string | null | false {
 }
 
 /**
+ * The levers one feature request pulls: `targetIds` when the body names
+ * several — the staff org page's AI pause is `ai-assist` and `ai-generate`,
+ * one staff action — else `targetId` alone. Deduplicated, in the order
+ * given; an entry that is not a string comes back empty, so the caller's
+ * key check refuses it rather than dropping it.
+ */
+function featureTargetIds(body: any): string[] {
+  const listed: unknown[] = Array.isArray(body?.targetIds) ? body.targetIds : [body?.targetId]
+  return [
+    ...new Set(listed.map((value) => (typeof value === 'string' ? value.trim() : ''))),
+  ]
+}
+
+/**
  * The platform scope's server-side type-to-confirm. The UI asks the
  * operator to type it; requiring it HERE too means no script, console
  * mishap or replayed request can take the whole platform down with a
@@ -579,23 +593,28 @@ async function actionResponse(options: {
   firestore: AdminFirestore
   scope: string
   targetId: string
+  /** Every target the write moved, when it moved several; each is read back. */
+  targetIds?: readonly string[]
   action: 'lock' | 'unlock'
   orgId?: string
   extra?: object
 }): Promise<Response> {
-  const verified = await readLockState(
-    options.firestore,
-    options.scope,
-    options.targetId,
-    options.orgId,
+  const targets = options.targetIds?.length ? options.targetIds : [options.targetId]
+  const states = await Promise.all(
+    targets.map((targetId) =>
+      readLockState(options.firestore, options.scope, targetId, options.orgId),
+    ),
   )
+  const verified = states[0]
   return Response.json(
     {
       ok: true,
       scope: options.scope,
       action: options.action,
       verified,
-      confirmed: verified.locked === (options.action === 'lock'),
+      ...(states.length > 1 ? { verifiedTargets: states } : {}),
+      // Confirmed only when EVERY target reads back as asked.
+      confirmed: states.every((state) => state.locked === (options.action === 'lock')),
       ...options.extra,
     },
     { status: 200 },
@@ -627,6 +646,8 @@ async function ownerNoticeStep(options: {
   action: 'lock' | 'unlock'
   scope: string
   targetId: string
+  /** A feature request's levers, named together in one notice. */
+  targetIds?: readonly string[]
   orgId?: string | null
   emailOwners: boolean
   lock: LockRequest
@@ -638,6 +659,7 @@ async function ownerNoticeStep(options: {
     action: options.action,
     scope: options.scope,
     targetId: options.targetId,
+    ...(options.targetIds ? { targetIds: options.targetIds } : {}),
     orgId: options.orgId ?? null,
     emailOwners: options.emailOwners,
     lock: options.lock,
@@ -1094,9 +1116,12 @@ async function lockOwnedWorkspaces(options: {
     const slug = orgSnapshot.get('slug') ?? null
     const alreadyLocked = orgSnapshot.get('suspendedAt') != null
     let lockError: string | null = null
+    // Whether this lock signed the workspace's members out: a billing,
+    // maintenance or read-only lock does not, and the notice says so.
+    let tokensRevoked = 0
     if (!alreadyLocked) {
       try {
-        await lockOrgAndAudit({
+        const locked = await lockOrgAndAudit({
           firestore,
           actor,
           orgId,
@@ -1105,6 +1130,7 @@ async function lockOwnedWorkspaces(options: {
           lock,
           via: `user-lock:${uid}`,
         })
+        tokensRevoked = Number((locked as { tokensRevoked?: unknown }).tokensRevoked ?? 0)
       } catch (error) {
         lockError = (error as Error)?.message ?? String(error)
       }
@@ -1128,7 +1154,7 @@ async function lockOwnedWorkspaces(options: {
           emailOwners: options.emailOwners,
           lock,
           effects: {
-            sessionsRevoked: true,
+            sessionsRevoked: tokensRevoked > 0,
             subscriptionCanceled: stepConfirmed(subscriptionCancel),
           },
         })
@@ -1362,7 +1388,12 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const scope = String(body?.scope ?? '')
-    const targetId = String(body?.targetId ?? '').trim()
+    // A feature request may name several levers in `targetIds`; the first
+    // stands in as the target wherever one is needed.
+    const targetId =
+      scope === 'feature'
+        ? (featureTargetIds(body)[0] ?? '')
+        : String(body?.targetId ?? '').trim()
     if (action !== 'lock' && action !== 'unlock') {
       return Response.json({ error: 'Unknown action' }, { status: 400 })
     }
@@ -1586,7 +1617,14 @@ async function handler(request: Request): Promise<Response> {
       // the same blast-radius class as an org or host lock, which also
       // confirm by explicit target + super role + audit rather than typing.
       // Incident response wants the narrow lever fast; the wide one slow.
-      if (!isLockdownFeatureKey(targetId)) {
+      //
+      // One request may pull several levers (`targetIds`): each is written
+      // and audited on its own, exactly as if it had been asked for alone,
+      // and the owners get ONE notice naming every one of them — one email
+      // per staff action, not one per lever. Every key is checked before
+      // anything is written, so an unknown one moves nothing.
+      const features = featureTargetIds(body)
+      if (!features.every((feature) => isLockdownFeatureKey(feature))) {
         return Response.json(
           {
             error: `Unknown feature — one of: ${listLockdownFeatureKeys().join(', ')}`,
@@ -1604,51 +1642,54 @@ async function handler(request: Request): Promise<Response> {
       if (featureOrgId === false) {
         return Response.json({ error: 'Malformed orgId' }, { status: 400 })
       }
-      const featureDocId = featureOrgId
-        ? orgFeatureLockdownDocId(targetId, featureOrgId)
-        : featureLockdownDocId(targetId)
-      const ref = firestore.collection(LOCKDOWNS_COLLECTION).doc(featureDocId)
-      const before = (await ref.get()).data() ?? null
-      if (action === 'lock') {
-        await ref.set({
+      for (const feature of features) {
+        const featureDocId = featureOrgId
+          ? orgFeatureLockdownDocId(feature, featureOrgId)
+          : featureLockdownDocId(feature)
+        const ref = firestore.collection(LOCKDOWNS_COLLECTION).doc(featureDocId)
+        const before = (await ref.get()).data() ?? null
+        if (action === 'lock') {
+          await ref.set({
+            scope: 'feature',
+            feature,
+            ...(featureOrgId ? { orgId: featureOrgId } : {}),
+            // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
+            // a standard lock's document stays byte-identical to one written
+            // before the field existed, so absent keeps meaning fail-open.
+            ...(enforcement === 'takedown' ? { enforcement } : {}),
+            reason: lock.reason,
+            ...(message ? { message } : {}),
+            ...(untilMs !== undefined ? { untilMs } : {}),
+            atMs: Date.now(),
+            actorUid: decoded.uid,
+          })
+        } else {
+          await ref.delete()
+        }
+        // The process that flipped the switch enforces it NOW; other
+        // processes converge within the reader's 15s TTL.
+        invalidateFeatureLockdownCache()
+        await audit({
+          ...actor,
+          action: `lockdown.${action}`,
           scope: 'feature',
-          feature: targetId,
-          ...(featureOrgId ? { orgId: featureOrgId } : {}),
-          // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
-          // a standard lock's document stays byte-identical to one written
-          // before the field existed, so absent keeps meaning fail-open.
-          ...(enforcement === 'takedown' ? { enforcement } : {}),
-          reason: lock.reason,
-          ...(message ? { message } : {}),
-          ...(untilMs !== undefined ? { untilMs } : {}),
-          atMs: Date.now(),
-          actorUid: decoded.uid,
+          target: `lockdowns/${featureDocId}`,
+          before: { locked: before != null, ...auditLockShape(before ?? {}) },
+          after: {
+            locked: action === 'lock',
+            feature,
+            ...(featureOrgId ? { orgId: featureOrgId } : {}),
+            ...(action === 'lock' ? auditLockShape(lock) : {}),
+          },
         })
-      } else {
-        await ref.delete()
       }
-      // The process that flipped the switch enforces it NOW; other
-      // processes converge within the reader's 15s TTL.
-      invalidateFeatureLockdownCache()
-      await audit({
-        ...actor,
-        action: `lockdown.${action}`,
-        scope: 'feature',
-        target: `lockdowns/${featureDocId}`,
-        before: { locked: before != null, ...auditLockShape(before ?? {}) },
-        after: {
-          locked: action === 'lock',
-          feature: targetId,
-          ...(featureOrgId ? { orgId: featureOrgId } : {}),
-          ...(action === 'lock' ? auditLockShape(lock) : {}),
-        },
-      })
       const featureNotice = featureOrgId
         ? await ownerNoticeStep({
             firestore,
             action,
             scope,
             targetId,
+            ...(features.length > 1 ? { targetIds: features } : {}),
             orgId: featureOrgId,
             emailOwners,
             lock,
@@ -1658,10 +1699,12 @@ async function handler(request: Request): Promise<Response> {
         firestore,
         scope,
         targetId,
+        targetIds: features,
         action,
         orgId: featureOrgId ?? undefined,
         extra: {
           feature: targetId,
+          ...(features.length > 1 ? { features } : {}),
           ...(featureOrgId ? { orgId: featureOrgId } : {}),
           ...featureNotice,
         },

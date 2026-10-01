@@ -72,7 +72,11 @@ import {
   type RiskNoticeDeps,
   resolveHostConsolePaths,
   riskNoticeId,
+  riskNoticeProductName,
 } from './risk-notice'
+
+// Notice links are absolute in an email; the console origin makes them so.
+process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.example.com'
 
 function fakeFirestore() {
   const docs = new Map<string, Doc>()
@@ -259,11 +263,66 @@ describe('notifyRiskEvent', () => {
     h.advance(RISK_NOTICE_BURST.windowMs + 1)
     await notifyRiskEvent(held(999), h.deps)
     const digest = h.sent[RISK_NOTICE_BURST.owners]
-    expect(String(digest['subject'])).toMatch(/^Summary: more items on Harbor View/)
+    expect(String(digest['subject'])).toMatch(/^Summary: more notices about Harbor View/)
     expect(String(digest['text'])).toContain(`(${burst - RISK_NOTICE_BURST.owners})`)
     // …then the notice itself, in a fresh hour.
     expect(h.sent).toHaveLength(RISK_NOTICE_BURST.owners + 2)
-    expect(h.staff.some((alert) => String(alert['title']).startsWith('Digest:'))).toBe(true)
+    // Staff read the workspace by name, not its ledger key (AGL-3432).
+    const staffDigest = h.staff.find((alert) => String(alert['title']).startsWith('Digest:'))
+    expect(staffDigest?.['title']).toMatch(/ on Harbor View$/)
+    expect(String(staffDigest?.['body'])).toMatch(/^\d+ more risk alerts on workspace Harbor View \(org-1\) arrived in the last hour/)
+  })
+
+  it('never folds a dispute, whose evidence deadline a digest would drop (AGL-3432)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    for (let n = 1; n <= RISK_NOTICE_BURST.owners + 3; n += 1) await notifyRiskEvent(held(300 + n), h.deps)
+    const before = h.sent.length
+    const result = await notifyRiskEvent(
+      {
+        kind: 'sale-dispute',
+        orgId: null,
+        hostId: 'host-1',
+        item: { label: 'order 1042' },
+        amount: '$56.00',
+        evidenceDueByMs: Date.UTC(2026, 9, 12, 23, 59),
+      },
+      h.deps,
+    )
+    expect(result.owners.digested).toBe(false)
+    // The owner and the site's manager, each with the whole notice.
+    expect(h.sent.slice(before).map((email) => email['to'])).toEqual([
+      'avery@example.com',
+      'manager-1@example.com',
+    ])
+    const text = String(h.sent[h.sent.length - 1]['text'])
+    expect(text).toContain('Your evidence is due by Oct 12, 2026, 23:59 UTC.')
+    expect(text).toContain('the payment for order 1042 on the site "harborview" ($56.00)')
+  })
+
+  it('never folds a card-testing warning: its site and what to check always arrive (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    for (let n = 1; n <= RISK_NOTICE_BURST.owners + 3; n += 1) await notifyRiskEvent(held(400 + n), h.deps)
+    const before = h.sent.length
+    const result = await notifyRiskEvent(
+      {
+        kind: 'card-testing',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        reviewId: 'c'.repeat(40),
+        reference: 'PV-1',
+        item: { label: 'checkout on the site "harborview"', path: '/host-1/products/orders' },
+      },
+      h.deps,
+    )
+    expect(result.owners.digested).toBe(false)
+    // The owner and the site's manager, each with the whole notice.
+    expect(h.sent.slice(before).map((email) => email['to'])).toEqual([
+      'avery@example.com',
+      'manager-1@example.com',
+    ])
+    const email = h.sent[h.sent.length - 1]
+    expect(String(email['subject'])).toBe('Unusual checkout activity on the site "harborview"')
+    expect(String(email['text'])).toContain('Review your recent orders before you fulfill them.')
   })
 
   it('never folds a lock: every lock notice goes out on its own', async () => {
@@ -321,6 +380,112 @@ describe('notifyRiskEvent', () => {
     expect(h.sent.map((email) => email['to'])).toEqual(['user-9@example.com'])
   })
 
+  /*
+   * The account notices name the product the account is on (AGL-3432). The
+   * brand never reached the notice's values, so the catalog's fallback
+   * printed "our team locked your the platform account".
+   */
+  it('names the product in an account lock and its lift, never "your the platform account"', async () => {
+    const h = harness()
+    await notifyRiskEvent(
+      {
+        kind: 'account-locked',
+        orgId: null,
+        userUid: 'user-9',
+        reference: 'LK-0A1B2C3D4E',
+        lock: { message: 'Locked.', affected: 'You are signed out and cannot sign in.' },
+      },
+      h.deps,
+    )
+    await notifyRiskEvent(
+      { kind: 'account-unlocked', orgId: null, userUid: 'user-9', lock: { affected: 'You can sign in again.' } },
+      h.deps,
+    )
+    const [locked, lifted] = h.sent.map((email) => String(email['text']))
+    expect(locked).toContain('our team locked your Aglyn account.')
+    expect(lifted).toContain('our team lifted the lock on your Aglyn account.')
+    for (const text of [locked, lifted]) {
+      expect(text).not.toMatch(/\byour the\b/)
+      expect(text).not.toContain('the platform account')
+    }
+    // The appeal and its reference are exactly as they were.
+    expect(locked).toContain('reply to this email')
+    expect(locked).toContain('LK-0A1B2C3D4E')
+  })
+
+  it('takes the product name from the brand the email is sent in', () => {
+    expect(riskNoticeProductName({ merge: {}, options: {} })).toBe('Aglyn')
+    expect(
+      riskNoticeProductName({ merge: { 'brand.productName': 'Harbor Sites' }, options: {} }),
+    ).toBe('Harbor Sites')
+  })
+
+  it('says what visitors of a held page see, and on which site (AGL-3432)', async () => {
+    const h = harness()
+    await notifyRiskEvent(
+      {
+        kind: 'page-held',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        reviewId: 'c'.repeat(40),
+        item: { label: 'the "Video detail" template (/videos/:slug)' },
+        page: {
+          kind: 'entry-template',
+          screenId: 's1',
+          versionId: 'v1',
+          name: 'Video detail',
+          route: '/videos/:slug',
+          url: null,
+          entryUrl: null,
+          collectionName: 'Videos',
+          variantName: null,
+          source: null,
+          visitorView: 'built-in-design',
+        },
+      },
+      h.deps,
+    )
+    const text = String(h.sent[0]['text'])
+    expect(text).toContain('the "Video detail" template (/videos/:slug) on the site "harborview"')
+    expect(text).toContain('Visitors see the site’s built-in design for these pages until the review is done.')
+    expect(text).not.toContain('not-found page')
+  })
+
+  it('tells a disputed subscription payment apart from a fraud check (AGL-3432)', async () => {
+    const h = harness()
+    await notifyRiskEvent(
+      {
+        kind: 'billing-payment-flagged',
+        orgId: 'org-1',
+        reviewId: 'd'.repeat(40),
+        amount: '$56.00 USD',
+        paymentEvent: 'disputed by the cardholder with their bank',
+      },
+      h.deps,
+    )
+    expect(String(h.sent[0]['text'])).toContain(
+      'a subscription payment of $56.00 USD for Harbor View was disputed by the cardholder with their bank.',
+    )
+  })
+
+  it('fills a new publisher’s payout schedule into the notice it is sent (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    await notifyRiskEvent(
+      {
+        kind: 'publisher-payouts-held',
+        orgId: 'org-1',
+        item: { label: 'your marketplace payouts', path: '/org/marketplace/payouts' },
+        payout: { delayDays: 14, untilWorkspaceAgeDays: 30 },
+      },
+      h.deps,
+    )
+    expect(String(h.sent[0]['text'])).toContain(
+      'payouts for Harbor View\'s marketplace sales moved to an extended schedule: each payout reaches your bank ' +
+        '14 days after the sale, until your workspace is 30 days old.',
+    )
+    expect(String(h.inApp[0].payload['body'])).toContain('Nothing is withheld or charged.')
+  })
+
   it('reports an unticked "Email the owners" as a skip, and still writes the in-app notice', async () => {
     const h = harness()
     const result = await notifyRiskEvent(
@@ -356,6 +521,55 @@ describe('closeRiskNotice', () => {
     expect(h.inApp[h.inApp.length - 1].payload['title']).toBe('Your held email was released')
     // Once per decision.
     expect((await closeRiskNotice({ reviewId: input.reviewId, decision: 'released' }, h.deps))?.duplicate).toBe(true)
+  })
+
+  it('tells the people the opening told, the site’s managers included, that a review closed (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    const reviewId = 'd'.repeat(40)
+    h.firestore.docs.set(`abuseReports/${reviewId}`, {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      reference: 'PV-2',
+      status: 'dismissed',
+    })
+    await notifyRiskEvent(
+      {
+        kind: 'card-testing',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        reviewId,
+        reference: 'PV-2',
+        item: { label: 'checkout on the site "harborview"', path: '/host-1/products/orders' },
+      },
+      h.deps,
+    )
+    const opened = h.sent.map((email) => email['to'])
+    expect(opened).toEqual(['avery@example.com', 'manager-1@example.com'])
+
+    const closed = await closeRiskNotice({ reviewId, decision: 'released' }, h.deps)
+    expect(closed?.owners).toMatchObject({ recipients: 2, emailed: 2 })
+    const closing = h.sent.slice(opened.length)
+    expect(closing.map((email) => email['to'])).toEqual(opened)
+    expect(String(closing[1]['subject'])).toBe('Our review is complete')
+    expect(h.inApp[h.inApp.length - 1].uids).toEqual(['owner-1', 'manager-1'])
+  })
+
+  it('keeps a review the site’s managers were never told about between the owners (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    const reviewId = 'e'.repeat(40)
+    // A subscription payment's review, on a row that happens to name a site.
+    h.firestore.docs.set(`abuseReports/${reviewId}`, {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      reference: 'SF-1',
+      status: 'dismissed',
+    })
+    await notifyRiskEvent(
+      { kind: 'billing-payment-flagged', orgId: 'org-1', hostId: 'host-1', reviewId, reference: 'SF-1' },
+      h.deps,
+    )
+    await closeRiskNotice({ reviewId, decision: 'released' }, h.deps)
+    expect(h.sent.map((email) => email['to'])).toEqual(['avery@example.com', 'avery@example.com'])
   })
 })
 
@@ -394,8 +608,21 @@ describe('requestRiskReview', () => {
     expect(h.staff).toEqual([
       expect.objectContaining({ link: `/admin/abuse-reports?report=${reviewId}` }),
     ])
-    // The person who asked is told it arrived.
-    expect(h.sent[h.sent.length - 1]).toMatchObject({ to: 'avery@example.com', subject: 'We received your review request' })
+    // Staff read which workspace asked, and about what (AGL-3432).
+    expect(h.staff[0]['body']).toBe(
+      'An owner or admin of Harbor View (org-1) asked for a review of the campaign "Offer 8" ' +
+        '(email-held): "This is our own resale shop, really."',
+    )
+    // The person who asked is told it arrived: which item, which workspace,
+    // and a working link to follow it.
+    const ack = h.sent[h.sent.length - 1]
+    expect(ack).toMatchObject({ to: 'avery@example.com', subject: 'We received your review request' })
+    expect(String(ack['text'])).toContain(
+      'We received your request to review the campaign "Offer 8" on Harbor View (reference HS-8).',
+    )
+    expect(String(ack['text'])).toContain(
+      `View holds and reviews: https://app.example.com/harbor-view/settings/holds?notice=${noticeId}`,
+    )
   })
 
   it('refuses another workspace’s notice, a notice with nothing to review, and a flood', async () => {

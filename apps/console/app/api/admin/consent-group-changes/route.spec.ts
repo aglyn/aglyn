@@ -35,6 +35,8 @@ export {}
 const mockBeats: string[] = []
 const mockAdvanceDue = jest.fn()
 let mockDeclarationsFail = false
+const mockAlerts: Array<{ type: string; options: Record<string, any> }> = []
+const mockOrgNames: Record<string, string> = { 'org-1': 'Harbor View' }
 
 jest.mock('../../../../utils/cron-beat', () => ({
   __esModule: true,
@@ -53,6 +55,18 @@ jest.mock('../../../../constants/plugins.declarations.server.generated', () => (
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   advanceDueConsentGroupChanges: (...args: unknown[]) => mockAdvanceDue(...args),
+  getOrgDoc: async (orgId: string) => {
+    if (orgId === 'org-broken') throw new Error('read failed')
+    return mockOrgNames[orgId] ? { name: mockOrgNames[orgId] } : {}
+  },
+}))
+
+jest.mock('../../../../utils/server/raise-operator-alert', () => ({
+  __esModule: true,
+  raiseConsoleOperatorAlert: async (type: string, options: Record<string, any> = {}) => {
+    mockAlerts.push({ type, options })
+    return null
+  },
 }))
 
 import { GET, POST } from './route'
@@ -77,6 +91,7 @@ beforeEach(() => {
   process.env['CRON_SECRET'] = SECRET
   mockBeats.length = 0
   mockDeclarationsFail = false
+  mockAlerts.length = 0
   mockAdvanceDue.mockReset()
   mockAdvanceDue.mockResolvedValue([])
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -136,6 +151,32 @@ describe('POST /api/admin/consent-group-changes (AGL-3320)', () => {
     const response = await call('POST')
     expect(response.status).toBe(207)
     expect(await response.json()).toMatchObject({ ok: false })
+  })
+
+  it('tells the operator which workspace a stuck change holds, and that later changes wait on it (AGL-3432)', async () => {
+    mockAdvanceDue.mockResolvedValue([
+      { orgId: 'org-1', changeId: 'c1', phase: 'carry', outcome: 'advanced', error: 'boom.' },
+      {
+        orgId: 'org-broken',
+        changeId: 'c2',
+        phase: 'carry',
+        outcome: 'advanced',
+        status: { progress: { stalled: true } },
+      },
+    ])
+    expect((await call('POST')).status).toBe(207)
+    expect(mockAlerts.map((alert) => alert.type)).toEqual(['ops.pluginJobFailed', 'ops.pluginJobFailed'])
+    // The workspace by name and id; a read that fails still raises, by id.
+    expect(mockAlerts[0].options['context']).toEqual({
+      job: 'Consent group change c1 on workspace Harbor View (org-1)',
+      error:
+        'boom. Until it succeeds, every later consent group change on that workspace is refused, ' +
+        'and the runner retries this one every fifteen minutes',
+    })
+    expect(mockAlerts[1].options['context']['job']).toBe('Consent group change c2 on workspace org-broken')
+    expect(mockAlerts[1].options['context']['error']).toMatch(
+      /^it has stalled after repeated errors\. Until it finishes, every later consent group change/,
+    )
   })
 
   it('does not work a change when the plugins could not declare their participants', async () => {

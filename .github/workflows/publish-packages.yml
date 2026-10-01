@@ -145,3 +145,25 @@ jobs:
             exit 0
           fi
           node tools/scripts/dist-tags.mjs --set
+
+  # -------------------------------------------------------------------------
+  # WHAT A USER GETS (AGL-3201)
+  # -------------------------------------------------------------------------
+  # The promotion PR proved the tarballs this run built. This proves the
+  # REGISTRY: each example under `examples/consumers/` installed from npm at
+  # the version just published, built, checked and opened in Chrome. It runs
+  # after the publish because that is when there is something to install, and
+  # so it can only report — a version is out once it is out. A red here means
+  # cut a fixed release, not repair this one.
+  #
+  # It holds no credential: the job is read-only, so the reusable workflow it
+  # calls cannot request the OIDC token the publish job uses.
+  proof:
+    name: Consumer proof from the registry
+    needs: publish
+    if: ${{ github.event_name == 'push' || inputs.publish }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/consumer-proof.yml
+    with:
+      source: registry

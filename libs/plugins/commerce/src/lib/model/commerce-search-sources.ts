@@ -14,6 +14,7 @@
 
 import type { ConsoleSearchSource } from '@aglyn/aglyn'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { PRODUCTS_SLUG } from './commerce-record-routes'
 
 /**
  * What the console's search finds in a store (AGL-3080): its products, by
@@ -34,6 +35,8 @@ export const COMMERCE_SEARCH_SOURCES: readonly ConsoleSearchSource[] = [
     featureFlag: 'commerce',
     order: 160,
     href: (_row, { orgSlug, host }) =>
-      host ? buildRoute(Route.HOST_PRODUCTS, { orgSlug, host }) : null,
+      host
+        ? buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: PRODUCTS_SLUG })
+        : null,
   },
 ]

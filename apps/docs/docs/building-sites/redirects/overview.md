@@ -40,6 +40,12 @@ A rule with an external destination that nobody has confirmed shows a
 **not serving** badge on the redirects page and is skipped until an Editor or
 Admin opens it and saves. Internal destinations are never affected.
 
+An off-site destination also passes the same safety review as a published page.
+A destination whose address looks like another company's website can't be saved.
+A redirect that is held for review does not redirect until our review team
+releases it, and its owners get a notice that names it; see
+[Holds and reviews](/help/holds-and-reviews#page-held).
+
 ## Metrics
 
 Each rule tracks **hit metrics** (sampled), so you can see which redirects are actually

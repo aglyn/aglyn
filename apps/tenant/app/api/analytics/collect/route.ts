@@ -26,6 +26,7 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { pluginSiteBeaconFor } from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
 import { FieldValue } from 'firebase-admin/firestore'
 
 export const dynamic = 'force-dynamic'
@@ -412,6 +413,21 @@ const bandwidthTripped = new Map<string, string>()
  */
 const bandwidthCapMemo = new Map<string, string>()
 
+/**
+ * The day a `YYYY-MM` month key rolls over, as a site manager's notice prints
+ * it: "October 1". Both limits here are UTC months, so the date is the UTC
+ * one; read in the Americas the pause lifts on the evening before, never
+ * after the day named.
+ */
+function monthRolloverLabel(month: string): string {
+  const [year, monthIndex] = month.split('-').map(Number)
+  return new Date(Date.UTC(year, monthIndex, 1)).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 /** True on the instance's first beacon for a host, then every Nth. */
 function bandwidthSampleDue(hostId: string): boolean {
   if (bandwidthSeen.size > MAX_TRACKED_BANDWIDTH_HOSTS) bandwidthSeen.clear()
@@ -502,12 +518,21 @@ async function engageFreePlanBandwidthCap(options: {
     // bandwidth alert email — but the sweep is exactly what never ran for
     // these orgs, so without this the first a never-subscribed owner would
     // know of their site being paused is a visitor telling them.
+    //
+    // `{site}` is the site's name, filled by `notifyHostManagers` from the
+    // host doc it already reads (AGL-3432): a manager of several sites must
+    // learn from the body alone which one is down. "Nothing is charged" is
+    // the plan's own rule — the cap engages only on a plan that does not
+    // meter overage — and an upgrade releases it because
+    // `bandwidthCapEngaged` re-derives from the current plan on every read.
     await notifyHostManagers(hostId, {
       type: 'system.bandwidthCapEngaged',
-      title: 'Site paused — monthly traffic limit reached',
-      body: `This site has used the ${Math.round(
+      title: '{site} paused — monthly traffic limit reached',
+      body: `{site} has used the ${Math.round(
         Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
-      ).toLocaleString()} page views included with the free plan this month, so it is serving a temporary notice until the start of next month. Upgrade in Billing to bring it straight back.`,
+      ).toLocaleString()} page views its plan includes this month, so visitors see a temporary notice instead of its pages until ${monthRolloverLabel(
+        month,
+      )}. Nothing is charged for the extra traffic. The site comes back on its own then, or as soon as you upgrade in Billing.`,
       link: `/${hostId}`,
     })
   } catch (error) {
@@ -646,24 +671,59 @@ async function evaluateBandwidthLimits(hostId: string): Promise<void> {
     // month-over-month spike flag on /api/admin/overview — has a month of
     // latency and no action attached; this is the same signal at beacon
     // latency with containment already applied.
+    //
+    // Named, not only numbered (AGL-3432): staff see trips from every org,
+    // and a bare host id has to be looked up before anyone can act. One host
+    // read, on the beacon that trips the ceiling only — once per host per
+    // month per instance — and a failed read falls back to the id.
+    const hostDoc = await hostRef
+      .get()
+      .then((snapshot) => snapshot.data() ?? {})
+      .catch(() => ({}) as Record<string, unknown>)
+    const siteName = [hostDoc['displayName'], hostDoc['subdomain']].find(
+      (value): value is string => typeof value === 'string' && value.trim() !== '',
+    )
+    const site = siteName ? `${siteName.trim()} (${hostId})` : hostId
+    const orgName = typeof org?.['name'] === 'string' ? String(org['name']).trim() : ''
     await notifyStaff({
       type: 'system.bandwidthCeilingTripped',
-      title: `Bandwidth ceiling tripped — ${hostId}`,
-      body: `${hostId} served ${ceiling.used.toLocaleString()} page views in ${month}, past its ${ceiling.ceiling.toLocaleString()} ceiling. ${
+      title: `Bandwidth ceiling tripped — ${site}`,
+      body: `The site ${site}${
+        orgName ? ` on workspace ${orgName}` : ''
+      } served ${ceiling.used.toLocaleString()} page views in ${month}, past its ${ceiling.ceiling.toLocaleString()} ceiling. ${
         degraded
           ? 'The site is now serving the capped notice.'
-          : 'The plan meters the overage, so the site keeps serving and the traffic bills.'
+          : Aglyn.planMetersInfraOverage(org as never)
+            ? 'The plan meters the overage, so the site keeps serving and the traffic bills.'
+            : 'The site keeps serving: its price is contracted, so nothing meters this traffic.'
       }`,
       link: `/admin/hosts`,
     })
+    // The managers' half names the site through `{site}` (AGL-3432), and
+    // says only what is true of THIS trip. The ceiling is an abuse limit, not
+    // the plan's allowance: Free includes a few thousand views and its
+    // ceiling is the 100,000-view floor, so calling the ceiling "what the
+    // plan allows" would misstate the plan by two orders of magnitude.
+    // "Upgrading brings it straight back" holds because
+    // `bandwidthCeilingDegradesHost` re-derives from the org's current plan.
+    // A paid plan that does not meter overage (a contracted price) is not
+    // degraded either, and its traffic is not billed as overage, so the
+    // non-degraded copy claims a charge only when the plan meters one.
+    const used = ceiling.used.toLocaleString()
     await notifyHostManagers(hostId, {
       type: 'system.bandwidthCeilingTripped',
       title: degraded
-        ? 'Site paused — traffic past the free plan'
-        : 'Unusual traffic on this site',
+        ? '{site} paused — unusual traffic volume'
+        : 'Unusual traffic on {site}',
       body: degraded
-        ? `This site served ${ceiling.used.toLocaleString()} page views this month, past the ${ceiling.ceiling.toLocaleString()} the free plan allows. It is serving a temporary notice until next month. Upgrade to bring it straight back.`
-        : `This site served ${ceiling.used.toLocaleString()} page views this month, well past its plan's included bandwidth. It is still serving normally and the overage bills as usual — contact support if this is not real traffic.`,
+        ? `{site} served ${used} page views this month, past the ${ceiling.ceiling.toLocaleString()}-view safety ceiling for the month, so visitors see a temporary notice instead of its pages until ${monthRolloverLabel(
+            month,
+          )}. Nothing is charged. Upgrading brings it straight back. Contact support if this is not real traffic.`
+        : `{site} served ${used} page views this month, well past what its plan includes. It is still serving normally${
+            Aglyn.planMetersInfraOverage(org as never)
+              ? ', and the traffic past the plan is billed as overage, as usual'
+              : ''
+          }. Contact support if this is not real traffic.`,
       link: `/${hostId}`,
     })
   } catch (error) {
@@ -712,60 +772,18 @@ export async function POST(request: Request): Promise<Response> {
     const freeze = await beaconFreeze(hostId)
     if (freeze === 'all') return noContent()
 
-    // Overlay events (AGL-200): impressions/dismissals/clicks for the
-    // announcement bar and popup count into the same day doc under an
-    // `overlays` map — they are NOT pageviews, so return early.
-    const overlay = String(body.overlay ?? '')
-    if (overlay) {
-      const OVERLAY_EVENTS = [
-        'barImpression',
-        'popupImpression',
-        'popupDismiss',
-        'popupClick',
-        'barClick',
-        'barDismiss',
-      ]
-      if (OVERLAY_EVENTS.includes(overlay)) {
-        const day = new Date().toISOString().slice(0, 10)
-        await firebaseAdmin
-          .app()
-          .firestore()
-          .collection('hosts')
-          .doc(hostId)
-          .collection('analytics')
-          .doc(day)
-          .set(
-            {
-              overlays: { [overlay]: FieldValue.increment(1) },
-              // Retention (AGL-1844): a day doc created by overlay events
-              // alone must still carry its expiry stamp.
-              expiresAt: analyticsDayExpiresAt(day),
-            },
-            { merge: true },
-          )
-        // Per-overlay attribution (AGL-271): marketing-hub overlay docs
-        // carry their own lifetime counters so the console can show
-        // engagement per bar/popup, not just the host-wide totals.
-        const overlayId = String(body.overlayId ?? '')
-        if (overlayId && overlayId.length <= 64) {
-          const statKey = overlay.endsWith('Impression')
-            ? 'impressions'
-            : overlay.endsWith('Click')
-              ? 'clicks'
-              : 'dismissals'
-          // update(), not set(): beacons from stale cached pages must not
-          // resurrect a deleted overlay as a stats-only stray doc.
-          await firebaseAdmin
-            .app()
-            .firestore()
-            .collection('hosts')
-            .doc(hostId)
-            .collection('overlays')
-            .doc(overlayId)
-            .update({ [`stats.${statKey}`]: FieldValue.increment(1) })
-            .catch(() => undefined)
-        }
-      }
+    // A plugin's own beacon (an overlay's impression, click or dismissal):
+    // counted by the plugin that registered its field, after the host and
+    // lockdown gates above, and never a pageview — so it returns early. A
+    // counter that fails is logged and the visitor still gets the 204.
+    const pluginBeacon = pluginSiteBeaconFor(body)
+    if (pluginBeacon) {
+      const day = new Date().toISOString().slice(0, 10)
+      await pluginBeacon.beacon
+        .count({ hostId, day, dayExpiresAt: analyticsDayExpiresAt(day), body })
+        .catch((error) =>
+          console.error(`[analytics] ${pluginBeacon.pluginId} beacon failed`, error),
+        )
       return noContent()
     }
 
@@ -797,7 +815,7 @@ export async function POST(request: Request): Promise<Response> {
      *
      * ## Not a pageview
      *
-     * Returns early like the overlay and form branches. Folding it in would
+     * Returns early like the plugin-beacon and form branches. Folding it in would
      * double-count traffic on every page that places a video — and `total` is
      * the ONLY field `/api/billing/report-usage` reads out of a day doc, so
      * returning here is also what makes these counters structurally incapable
@@ -860,16 +878,16 @@ export async function POST(request: Request): Promise<Response> {
      * A form document carried counters for what ARRIVED and nothing for what
      * was offered, so completion, abandonment and conversion were all rates
      * over a population nobody had counted. They are counted here, on the
-     * beacon that already exists, in exactly the `overlays` shape one branch
-     * above: a per-form `update` keyed by the event, plus the same key under
+     * beacon that already exists, in exactly the shape the overlay counters use:
+     * a per-form `update` keyed by the event, plus the same key under
      * the month the submit route files submissions under, so a rate is taken
      * over months both counters were live for.
      *
      * ⛔ `update`, never `set`. A beacon from a stale cached page naming a
      * deleted form must not resurrect it as a stats-only stray document —
-     * the rule the overlay branch states and the submit route repeats.
+     * the rule the overlay counter states and the submit route repeats.
      *
-     * NOT a pageview, so it returns early like the overlay and dwell
+     * NOT a pageview, so it returns early like the plugin-beacon and dwell
      * branches: folding it in would double the site's traffic count on every
      * page that places a form.
      *

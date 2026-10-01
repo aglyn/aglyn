@@ -73,6 +73,26 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     countCrmActivitiesForRecord: jest.fn(async () => mockActivityCount),
     recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecompute(...args),
     firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
+    // The org's address index, narrowed to the site, over the same store.
+    findContactByEmail: async (
+      _contacts: unknown,
+      email: string,
+      options: { hostId?: string } = {},
+    ) => {
+      for (const [path, data] of mockDocs) {
+        if (!/^orgs\/[^/]+\/contacts\/[^/]+$/.test(path) || data['email'] !== email) continue
+        const visibleTo = (data['visibleTo'] as string[] | undefined) ?? []
+        if (options.hostId && !visibleTo.includes(`host:${options.hostId}`)) return null
+        const id = path.split('/').pop() as string
+        return { id, exists: true, data: () => data, get: (field: string) => data[field] }
+      }
+      return null
+    },
+    // The lead silo is org-scoped (AGL-3275); the double serves the same store.
+    readLeadForHost: async (_hostId: string, id: string) => {
+      const data = mockDocs.get(`orgs/org-1/leads/${id}`)
+      return data ? { id, exists: true, data: () => data, get: (field: string) => data[field] } : null
+    },
   }
 })
 
@@ -82,7 +102,8 @@ import {
   type PluginRecordTaskRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { CRM_ACTIVITY_LOG_FULL_MESSAGE, crmCapturedEmailKey } from '@aglyn/aglyn/server'
+import { CRM_ACTIVITY_LOG_FULL_MESSAGE } from '@aglyn/aglyn/server'
+import { crmCapturedEmailKey } from '../model/crm-inbound'
 import { crmCapturedEmailActivityRef } from '@aglyn/tenant-data-admin/server/crm-email-activity'
 import { createCrmRecordTimelineWriter, registerCrmRecordTimelineWriter } from './record-timeline'
 
@@ -299,5 +320,111 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     expect(await writer.createTask({ ...TASK, kind: 'linkedin' as never })).toMatchObject({ ok: false, status: 400 })
     expect(await writer.createTask({ ...TASK, dueAtMs: Number.NaN })).toMatchObject({ ok: false, status: 400 })
     expect([...mockDocs.keys()].some((key) => key.includes('/crmTasks/'))).toBe(false)
+  })
+})
+
+/**
+ * A caller that holds no id of the CRM's (AGL-2660): a booking hands back the
+ * record its link was dropped from, and the booker's address, and the entry
+ * lands where the CRM finds it on that site.
+ */
+describe('a record found rather than named', () => {
+  const FOUND: PluginRecordActivityRequest = {
+    orgId: ORG,
+    hostId: HOST,
+    link: { record: null, email: 'rhea@example.com' },
+    sourcePluginId: 'bookings',
+    kind: 'meeting',
+    atMs: 1_750_000_000_000,
+    body: 'Intro call',
+    byUid: '',
+    dedupeKey: 'booking:booking-1',
+  }
+  const SITE = [`host:${HOST}`]
+
+  function seedContact(id: string, email: string, extra: Data = {}) {
+    mockDocs.set(`orgs/${ORG}/contacts/${id}`, {
+      email,
+      visibleTo: SITE,
+      facets: { g1: { ownerUid: 'rep-1', companyId: 'company-1' } },
+      ...extra,
+    })
+  }
+  const filed = () =>
+    [...mockDocs.entries()].filter(([path]) => path.includes('/crmActivities/')).map(([, data]) => data)
+
+  it('lands on the contact the address names, with its company from the site facet', async () => {
+    seedContact('contact-rhea', 'rhea@example.com')
+    expect(await writer.logActivity(FOUND)).toMatchObject({ ok: true, created: true })
+    expect(filed()).toEqual([
+      expect.objectContaining({
+        kind: 'meeting',
+        contactId: 'contact-rhea',
+        companyId: 'company-1',
+        sourcePluginId: 'bookings',
+      }),
+    ])
+  })
+
+  it('the record the link named beats the address', async () => {
+    seedContact('contact-work', 'rhea@work.example.com')
+    seedContact('contact-rhea', 'rhea@example.com')
+    await writer.logActivity({ ...FOUND, link: { record: { kind: 'contact', id: 'contact-work' }, email: 'rhea@example.com' } })
+    expect(filed()[0]).toMatchObject({ contactId: 'contact-work' })
+  })
+
+  it('a deal carries its contact and company onto the entry', async () => {
+    mockDocs.set(`orgs/${ORG}/deals/deal-7`, {
+      visibleTo: SITE,
+      contactId: 'contact-9',
+      companyId: 'company-9',
+      ownerUid: 'rep-2',
+    })
+    await writer.logActivity({ ...FOUND, link: { record: { kind: 'deal', id: 'deal-7' } } })
+    expect(filed()[0]).toMatchObject({ dealId: 'deal-7', contactId: 'contact-9', companyId: 'company-9' })
+  })
+
+  it('a lead of this site', async () => {
+    mockDocs.set(`orgs/${ORG}/leads/lead-3`, { visibleTo: SITE, ownerUid: 'rep-3' })
+    await writer.logActivity({ ...FOUND, link: { record: { kind: 'lead', id: 'lead-3' } } })
+    expect(filed()[0]).toMatchObject({ leadId: 'lead-3' })
+    expect(filed()[0]).not.toHaveProperty('contactId')
+  })
+
+  it('passes over a record the site cannot see, or a kind the CRM does not keep, for the address', async () => {
+    seedContact('contact-other-brand', 'pat@example.com', { visibleTo: ['host:host-9'] })
+    seedContact('contact-rhea', 'rhea@example.com')
+    await writer.logActivity({ ...FOUND, link: { record: { kind: 'contact', id: 'contact-other-brand' }, email: 'rhea@example.com' } })
+    await writer.logActivity({
+      ...FOUND,
+      dedupeKey: 'booking:booking-2',
+      link: { record: { kind: 'company', id: 'company-1' }, email: 'rhea@example.com' },
+    })
+    expect(filed().map((entry) => entry['contactId'])).toEqual(['contact-rhea', 'contact-rhea'])
+  })
+
+  it('refuses, writing nothing, when neither finds a record', async () => {
+    seedContact('contact-other-brand', 'rhea@example.com', { visibleTo: ['host:host-9'] })
+    expect(await writer.logActivity(FOUND)).toMatchObject({ ok: false, status: 404 })
+    expect(filed()).toEqual([])
+  })
+
+  it('gives a task for nobody in particular to whoever holds the record', async () => {
+    seedContact('contact-rhea', 'rhea@example.com')
+    const { id } = (await writer.createTask({
+      ...TASK,
+      link: { email: 'rhea@example.com' },
+      assigneeUid: null,
+    })) as { id: string }
+    expect(mockDocs.get(`orgs/${ORG}/crmTasks/${id}`)).toMatchObject({
+      contactId: 'contact-rhea',
+      assigneeUid: 'rep-1',
+    })
+  })
+
+  it('and reads the holder of a record named by id', async () => {
+    seedContact('contact-1', 'pat@example.com')
+    const { id } = (await writer.createTask({ ...TASK, assigneeUid: null })) as { id: string }
+    expect(mockDocs.get(`orgs/${ORG}/crmTasks/${id}`)).toMatchObject({ assigneeUid: 'rep-1' })
   })
 })

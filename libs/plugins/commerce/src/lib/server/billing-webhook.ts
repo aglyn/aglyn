@@ -32,6 +32,11 @@ import {
 import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 import { formatOperatorAlertAmount } from '@aglyn/aglyn/app-utils/operator-alerts'
+import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
+import {
+  resolveHostToken,
+  type HostTokenSource,
+} from '@aglyn/aglyn/app-utils/host-tokens'
 import {
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_FEE_REPRICE_REFUSED,
@@ -160,11 +165,34 @@ async function assignLicenseKeys(
         .where('assignedAtMs', '==', null)
         .limit(6)
         .get()
-      if (remaining.size < 5) {
+      // Once per CROSSING (AGL-3432), as the low-stock alert is: this sale
+      // took the pool below five, or took its last key. Every later sale in a
+      // low pool stays quiet rather than repeating the same notice.
+      const left = remaining.size
+      const before = left + keys.length
+      if ((left < 5 && before >= 5) || left === 0) {
+        const productName = String(
+          (await hostRef
+            .collection('products')
+            .doc(productId)
+            .get()
+            .then((snapshot) => snapshot.get('name'))
+            .catch(() => '')) || 'a product',
+        )
         void notifyHostManagers(hostId, {
           type: 'content.lowStock',
-          title: 'License key pool running low',
-          body: `${remaining.size} keys left`,
+          title:
+            left === 0
+              ? `License keys used up — ${productName}`
+              : `License keys running low — ${productName}`,
+          body:
+            left === 0
+              ? `The last license key for ${productName} on {site} was just ` +
+                'assigned. A buyer who orders it now gets no key; add keys to ' +
+                'its pool under Products.'
+              : `Only ${left} license key${left === 1 ? ' is' : 's are'} left ` +
+                `for ${productName} on {site}. Every sale of it takes its ` +
+                'keys from this pool; add more under Products before it runs out.',
           link: `/${hostId}/products`,
         })
       }
@@ -435,6 +463,28 @@ async function reportUnresolvedDispute(
 }
 
 /**
+ * A site as an operator alert names it: its name and id, else the id alone
+ * (AGL-3432) — staff see faults from every org, and a bare host id has to be
+ * looked up before anyone can act. One host read, taken only when a money
+ * fault is being reported; a read that fails answers the id.
+ */
+async function operatorSiteLabel(hostId: string): Promise<string> {
+  if (!hostId) return 'unknown'
+  try {
+    const host =
+      (
+        await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
+      ).data() ?? {}
+    const name = [host['displayName'], host['subdomain']].find(
+      (value): value is string => typeof value === 'string' && value.trim() !== '',
+    )
+    return name ? `${name.trim()} (${hostId})` : hostId
+  } catch {
+    return hostId
+  }
+}
+
+/**
  * Tells the operator that a subscription cycle's sales tax stayed with the
  * merchant (AGL-3377): the platform files and remits it, so every one of
  * these is tax it may owe and does not hold. Once per invoice and outcome, so
@@ -453,6 +503,7 @@ async function reportTaxNotReversed(input: {
     context: {
       invoiceId: input.invoiceId,
       hostId: input.hostId,
+      site: await operatorSiteLabel(input.hostId),
       amount:
         input.taxCents === undefined
           ? 'An unknown amount'
@@ -807,11 +858,11 @@ async function recordDisputeClosed(
  * fulfilment path are untouched; what changes is that no FURTHER cycle is
  * billed.
  *
- * `cancel_at_period_end` rather than an outright cancel, for two reasons that
- * both matter: the subscriber keeps the period they just paid for, and the
- * flag is REVERSIBLE — the merchant has a full cycle to restore their Aglyn
- * plan before anything is actually lost. An immediate cancel would take
- * service away from a shopper who did nothing wrong.
+ * `cancel_at_period_end` rather than an outright cancel: the subscriber keeps
+ * the period they just paid for. An immediate cancel would take service away
+ * from a shopper who did nothing wrong. The flag is reversible in Stripe, but
+ * nothing here clears it when the merchant's plan comes back, so the notice
+ * says that restoring the plan does not restart the subscription (AGL-3432).
  *
  * ## Once-only
  *
@@ -826,6 +877,12 @@ async function stopLapsedStorefrontSubscription(
   hostId: string,
   subscriptionId: string,
   subscriptionRef: FirebaseFirestore.DocumentReference,
+  /** Who subscribed to what, and the workspace, for the merchant's notice. */
+  notice: {
+    subscriberEmail: string | null
+    productName: string
+    org: { timeZone?: string } | null
+  },
 ): Promise<void> {
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) {
@@ -900,12 +957,47 @@ async function stopLapsedStorefrontSubscription(
       { merge: true },
     )
     .catch(() => undefined)
+  // When it ends, from Stripe's own answer: `cancel_at` is the period end the
+  // flag just scheduled. Told as a date in the site's zone, and left out when
+  // Stripe did not say.
+  const stopped = (await response.json().catch(() => null)) as {
+    cancel_at?: unknown
+    current_period_end?: unknown
+  } | null
+  const endsAtSeconds = Number(stopped?.cancel_at ?? stopped?.current_period_end ?? 0)
+  let endsOn = ''
+  if (endsAtSeconds > 0) {
+    const host = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostId)
+      .get()
+      .then((snapshot) => snapshot.data() as { timeZone?: string } | undefined)
+      .catch(() => undefined)
+    endsOn = new Date(endsAtSeconds * 1000).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: resolveSiteTimeZone(notice.org, host),
+    })
+  }
+  const subscriber = notice.subscriberEmail
+    ? `${notice.subscriberEmail}'s subscription`
+    : 'A subscription'
   void notifyHostManagers(hostId, {
     type: 'content.order',
-    title: 'A subscription stopped renewing — your plan no longer includes storefront subscriptions',
+    title: 'A subscription on {site} stopped renewing',
+    // Restoring the plan does NOT restart it (AGL-3432): nothing clears
+    // Stripe's `cancel_at_period_end` when the plan comes back, so the notice
+    // promises no such remedy.
     body:
-      'This subscriber keeps the period they have already paid for. ' +
-      'Restore your plan before it ends to keep billing them.',
+      `${subscriber} to ${notice.productName} on {site} will end` +
+      `${endsOn ? ` on ${endsOn}` : ' at the end of its paid period'} ` +
+      'instead of renewing, because your plan no longer includes ' +
+      'storefront subscriptions. The subscriber keeps the period they ' +
+      'already paid for. Restoring your plan does not restart this ' +
+      'subscription.',
     link: `/${hostId}/products`,
   })
 }
@@ -1006,11 +1098,13 @@ async function repriceStorefrontSubscriptionFee(
       error?: { message?: string }
     } | null
     console.error(`Stripe refused the fee re-price for ${subscriptionId} (AGL-2289)`, refusal)
+    const repriceHostId = subscriptionRef.parent.parent?.id ?? ''
     await raiseOperatorAlert(COMMERCE_FEE_REPRICE_REFUSED, {
       dedupeKey: `${subscriptionId}:${desiredFeePct}`,
       context: {
         subject: `subscription ${subscriptionId}`,
-        hostId: subscriptionRef.parent.parent?.id ?? '',
+        hostId: repriceHostId,
+        site: await operatorSiteLabel(repriceHostId),
         reason: `Stripe refused to set the fee to ${desiredFeePct}% (${
           refusal?.error?.message ?? `HTTP ${response.status}`
         })`,
@@ -1035,7 +1129,12 @@ async function reportFeeNotCorrected(
 ): Promise<void> {
   await raiseOperatorAlert(COMMERCE_FEE_REPRICE_REFUSED, {
     dedupeKey: invoiceId,
-    context: { subject: `invoice ${invoiceId}`, hostId, reason },
+    context: {
+      subject: `invoice ${invoiceId}`,
+      hostId,
+      site: await operatorSiteLabel(hostId),
+      reason,
+    },
   })
 }
 
@@ -1974,6 +2073,7 @@ async function reportSellerShareNotReversed(
       disputeId,
       orderId: orderRef.id,
       hostId: orderRef.parent.parent?.id ?? '',
+      site: await operatorSiteLabel(orderRef.parent.parent?.id ?? ''),
       amount: formatOperatorAlertAmount(principalCents),
       reason,
     },
@@ -2325,18 +2425,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         })
         if (!recorded) return
         const subscriptionCents = Number(subTotals.totalCents ?? 0)
+        const subscriptionPrice = `$${(subscriptionCents / 100).toFixed(2)}${
+          liftedForSnapshot.subscription?.interval
+            ? `/${liftedForSnapshot.subscription.interval}`
+            : ''
+        }`
+        const subscriberEmail = object?.customer_details?.email
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
           // The amount rides the title exactly as the order notification's
           // does (AGL-1732) — "New subscriber" alone never said what for.
-          title: `New subscriber — $${(subscriptionCents / 100).toFixed(2)}${
-            liftedForSnapshot.subscription?.interval
-              ? `/${liftedForSnapshot.subscription.interval}`
-              : ''
-          }`,
-          ...(object?.customer_details?.email
-            ? { body: object.customer_details.email }
-            : {}),
+          title: `New subscriber on {site} — ${subscriptionPrice}`,
+          // Who subscribed, to what and where (AGL-3432).
+          body:
+            `${subscriberEmail || 'A shopper'} subscribed to ` +
+            `${String(productForSnapshot.get('name') ?? 'a product')} on ` +
+            `{site} for ${subscriptionPrice}.`,
           link: `/${hostId}/products`,
         })
         // AWAITED SINCE AGL-2473, here and at the five sibling call sites in
@@ -2876,6 +2980,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             invoiceHostId,
             subscriptionId,
             subscriptionRef,
+            {
+              subscriberEmail:
+                object?.customer_email ??
+                soldSnapshot.get('customerEmail') ??
+                null,
+              productName: snapshot.name || 'a subscription product',
+              org: (renewalOrg ?? null) as { timeZone?: string } | null,
+            },
           )
         } else if (renewalEntitled) {
           // RE-PRICE THE PLATFORM FEE (AGL-2289). `application_fee_percent` was
@@ -2977,12 +3089,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // still has no Subscriptions tab, so for a digital or service
           // subscription this notification remains the only place a merchant
           // learns the money arrived at all.
+          const renewalPrice = `$${(paidCents / 100).toFixed(2)}${
+            interval ? `/${interval}` : ''
+          }`
           void notifyHostManagers(invoiceHostId, {
             type: 'content.order',
-            title: `Subscription renewed — $${(paidCents / 100).toFixed(2)}${
-              interval ? `/${interval}` : ''
-            }`,
-            ...(renewalEmail ? { body: String(renewalEmail) } : {}),
+            title: `Subscription renewed on {site} — ${renewalPrice}`,
+            // Whose subscription, to what and where (AGL-3432).
+            body:
+              `${renewalEmail ? `${String(renewalEmail)}'s` : 'A'} ` +
+              `subscription to ${snapshot.name || 'a product'} on {site} ` +
+              `renewed for ${renewalPrice}.`,
             link: `/${invoiceHostId}/products`,
           })
           // RFM (AGL-328): a subscriber in month 12 has paid twelve times, and
@@ -3133,12 +3250,69 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         )
         if (confirmedNow) {
           const reservation = (reserved ?? {}) as Record<string, any>
+          // A day key, so its UTC date IS the check-in date.
+          const checkInShort = new Date(
+            Number(reservation['checkInDayMs']),
+          )
+            .toUTCString()
+            .slice(0, 16)
+          const nights = Number(reservation['nights'] ?? 0)
+          const nightsText = `${nights} night${nights === 1 ? '' : 's'}`
+          /*
+           * WHAT THE GUEST WAS CHARGED TODAY, tax included (AGL-3442).
+           *
+           * `paidCents` is the money applied to the STAY and leaves out the
+           * merchant's lodging tax, so a guest told only that figure is told
+           * less than their card was charged. The two together are Stripe's
+           * session total, and the tax is the figure `reserve.ts` charged as
+           * its own line, named so the guest can match it to their receipt.
+           * The balance below is the stay's alone: the tax is charged on what
+           * is collected at booking, and nothing computes one on what is
+           * collected at the property.
+           */
+          const charged = `$${((paidCents + taxCents) / 100).toFixed(2)}`
+          const taxIncluded =
+            taxCents > 0
+              ? `, including $${(taxCents / 100).toFixed(2)} lodging tax`
+              : ''
+          const paid = `${charged}${taxIncluded}`
+          // What the guest still owes for the stay: the console's
+          // reservations card collects `totalCents - paidCents` at the
+          // property, so the guest is told it too (AGL-3432).
+          const balanceCents = Math.max(
+            0,
+            Math.round(Number(reservation['totalCents'] ?? 0)) - paidCents,
+          )
+          const balance = `$${(balanceCents / 100).toFixed(2)}`
+          const reservedBy =
+            object?.customer_details?.email ??
+            reservation['guestEmail'] ??
+            'A guest'
+          // Which room or unit was reserved (AGL-3432): on a property with
+          // several, "a stay" does not say which one to get ready.
+          const resourceName = reservation['resourceId']
+            ? String(
+                (await firestore
+                  .collection('hosts')
+                  .doc(String(hostId))
+                  .collection('resources')
+                  .doc(String(reservation['resourceId']))
+                  .get()
+                  .then((snapshot) => snapshot.get('name'))
+                  .catch(() => '')) ?? '',
+              ).trim()
+            : ''
           void notifyHostManagers(String(hostId), {
             type: 'content.booking',
-            title: 'New reservation',
-            ...(object?.customer_details?.email
-              ? { body: object.customer_details.email }
-              : {}),
+            title: 'New reservation on {site}',
+            // Who, what, when, what was paid and what is still owed
+            // (AGL-3432).
+            body:
+              `${reservedBy} reserved ${resourceName || 'a stay'} on {site}: check-in ` +
+              `${checkInShort}, ${nightsText}. ${charged} was paid${taxIncluded}` +
+              (balanceCents > 0
+                ? `; ${balance} is still to collect at the property.`
+                : '.'),
             link: `/${hostId}/products`,
           })
           // Contacts ingestion (AGL-1755): this branch stored `paidCents` from
@@ -3193,15 +3367,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
           const guestEmail = object?.customer_details?.email
           if (guestEmail) {
-            const checkIn = new Date(
-              Number(reservation['checkInDayMs']),
-            ).toUTCString()
-            const paid = `$${(paidCents / 100).toFixed(2)}`
-            const checkInShort = checkIn.slice(0, 16)
+            // The balance as a whole line, empty when the stay is paid in
+            // full so the built-in copy leaves it out.
+            const balanceNote =
+              balanceCents > 0
+                ? `Still to pay: ${balance}, at the property. It has not been charged.`
+                : ''
             const fallbackText =
               `Your stay is confirmed!\n\nCheck-in: ${checkInShort}\n` +
               `Nights: ${reservation['nights']}\n` +
               `Paid today: ${paid}\n` +
+              (balanceNote ? `${balanceNote}\n` : '') +
               `Reference: ${reservationId}`
             // Site-owner-designed template when published (AGL-771).
             const designed = await renderHostEmailWithTokens(
@@ -3212,6 +3388,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 'reservation.checkIn': checkInShort,
                 'reservation.nights': String(reservation['nights'] ?? ''),
                 'reservation.paid': paid,
+                'reservation.balance': balanceNote,
                 'reservation.ref': String(reservationId),
               },
             )
@@ -3322,6 +3499,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           })
           .filter(Boolean) as CommerceModel.OrderLineItem[]
         const shipping = object?.shipping_details ?? object?.customer_details
+        // The number the merchant knows this order by, carried out of the
+        // transaction for the notices below (AGL-3432). The document id is
+        // the Stripe session id, which appears nowhere in the console.
+        let cartOrderNumber: number | undefined
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -3329,6 +3510,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           ])
           if (existing.exists) return false
           const number = Number(counter.get('next') ?? 1)
+          cartOrderNumber = number
           transaction.set(counterRef, { next: number + 1 }, { merge: true })
           // AGL-1698: reads all THREE of `total_details` — the shipping used
           // to be dropped here, storing `shippingCents: 0` on every online
@@ -3415,6 +3597,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // the non-idempotent effects below (inventory / coupon / gift-card
         // decrements) that would otherwise double-apply.
         if (!created) return
+        const cartOrderLabel = CommerceModel.formatOrderNumber(
+          { number: cartOrderNumber },
+          String(object.id),
+        )
         // AGL-2149: loud, not silent. Logged for the platform and pushed to the
         // merchant, once, behind the same `created` guard as every other
         // non-idempotent effect so a redelivery does not re-nag.
@@ -3428,10 +3614,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             type: 'content.order',
             title: 'A paid order is missing items',
             body:
-              `Order ${object.id} was charged in full but ` +
-              `${unresolvedLines.length} ${
-                unresolvedLines.length === 1 ? 'line' : 'lines'
-              } could not be recorded — the product was deleted during ` +
+              `Order ${cartOrderLabel} on {site} was charged in full, but ` +
+              `${unresolvedLines.length} of its lines could not be recorded ` +
+              'because the product was deleted during ' +
               'checkout. Refund the difference or fulfill it by hand.',
             link: `/${hostId}/products`,
           })
@@ -3558,6 +3743,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               'order.summary': orderSummary,
               'order.total': orderTotal,
               'order.ref': String(object.id),
+              // The store's own Receipt footer (AGL-3432), as a token: the
+              // built-in copy always renders (AGL-3370), so a footer that is
+              // only in the fallback text above never reaches a buyer.
+              'store.receiptFooter': receiptFooter,
             },
           )
           await sendEmail({
@@ -3639,12 +3828,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           hostRef,
           String(object.metadata?.stockHoldKey ?? ''),
         )
+        const cartOrderTotal = `$${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`
+        const cartUnits = lineItems.reduce((sum, line) => sum + line.quantity, 0)
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
-          title: `New order — $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`,
-          ...(object?.customer_details?.email
-            ? { body: `From ${object.customer_details.email}` }
-            : {}),
+          title: `New order on {site} — ${cartOrderTotal}`,
+          // What came in, from whom and where (AGL-3432).
+          body:
+            `Order ${cartOrderLabel} came in on {site}: ${cartUnits} ` +
+            `item${cartUnits === 1 ? '' : 's'}, ${cartOrderTotal}` +
+            (object?.customer_details?.email
+              ? `, from ${object.customer_details.email}.`
+              : '.'),
           link: `/${hostId}/products`,
         })
         await captureHostContact({
@@ -3843,9 +4038,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 type: 'content.order',
                 title: 'Gift card paid for but not issued',
                 body:
-                  `A $${(line.unitAmountCents / 100).toFixed(2)} gift card on ` +
-                  `order ${String(object.id)} could not be written, so no code ` +
-                  'was emailed to the buyer. Issue one by hand from Gift cards.',
+                  `A $${(line.unitAmountCents / 100).toFixed(2)} gift card ` +
+                  `bought on {site} (order ${cartOrderLabel}) could not be ` +
+                  'written, so no code was emailed to the buyer. Issue one by ' +
+                  'hand from Gift cards.',
                 link: `/${hostId}/products`,
               })
               continue
@@ -3857,12 +4053,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `Gift card code: ${code}\n` +
                 `Value: ${giftValue}\n\n` +
                 'Enter it at checkout to apply the balance.'
-              // Site-owner-designed template when published (AGL-771).
+              // Site-owner-designed template when published (AGL-771). A
+              // bought card carries no note; empty, so the built-in copy
+              // leaves that line out.
               const designed = await renderHostEmailWithTokens(
                 firebaseAdmin.app().firestore(),
                 String(hostId),
                 'gift-card',
-                { 'giftcard.code': code, 'giftcard.value': giftValue },
+                {
+                  'giftcard.code': code,
+                  'giftcard.value': giftValue,
+                  'giftcard.note': '',
+                },
               )
               await sendEmail({
                 to: giftTo,
@@ -3980,6 +4182,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // transaction below. Carried out so the money can be reported after
         // the transaction commits.
         let paidAfterCancel = false
+        // The canceled order's number, for the notice below (AGL-3432).
+        let canceledOrderLabel = ''
         const flipped = await firestore.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(orderRef)
           if (!snapshot.exists) return false
@@ -4006,6 +4210,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             )
             if (lifted.status === 'cancelled' && !alreadyNoted) {
               paidAfterCancel = true
+              canceledOrderLabel = CommerceModel.formatOrderNumber(
+                lifted,
+                String(orderId),
+              )
               // `set(..., { merge: true })`, the same call the paying branch
               // below makes on this document. Nothing here is a nested map, so
               // merge and replace agree, and the read above has just proven
@@ -4116,9 +4324,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             type: 'content.order',
             title: 'A canceled order was paid',
             body:
-              `Order ${orderId} was canceled, but its payment link was still ` +
-              'live and has been paid. The money is in Stripe and no sale was ' +
-              'recorded — refund it in Stripe or reconcile it by hand.',
+              `Order ${canceledOrderLabel || orderId} on {site} was canceled, ` +
+              'but its payment link was still live and has been paid. The ' +
+              'money is in Stripe and no sale was recorded — refund it in ' +
+              'Stripe or reconcile it by hand.',
             link: `/${hostId}/orders`,
           })
         }
@@ -4151,9 +4360,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 'against its limit.',
             })
           }
+          const draftLabel = CommerceModel.formatOrderNumber(
+            order,
+            String(orderId),
+          )
+          const draftPayer =
+            object?.customer_details?.email ?? order.customerEmail ?? null
+          const draftPaidCents =
+            Number(object?.amount_total ?? 0) ||
+            Number(order.totals?.totalCents ?? 0)
           void notifyHostManagers(String(hostId), {
             type: 'content.order',
-            title: `Draft order paid — ${CommerceModel.formatOrderNumber(order, String(orderId))}`,
+            title: `Draft order paid — ${draftLabel}`,
+            // Who paid what, and where (AGL-3432).
+            body:
+              `${draftPayer ?? 'The buyer'} paid draft order ${draftLabel} ` +
+              `on {site}: $${(draftPaidCents / 100).toFixed(2)}.`,
             link: `/${hostId}/products`,
           })
           // Contacts ingestion (AGL-1748): this branch flipped the order,
@@ -4377,6 +4599,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : {}),
           })
         const soldQuantity = buyNowLineItems[0]?.quantity ?? 1
+        // The number the merchant knows this order by, for the notices below
+        // (AGL-3432).
+        let buyNowOrderNumber: number | undefined
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -4384,6 +4609,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           ])
           if (existing.exists) return false
           const number = Number(counter.get('next') ?? 1)
+          buyNowOrderNumber = number
           transaction.set(counterRef, { next: number + 1 }, { merge: true })
           // With the fields the orders list queries by (AGL-3321).
           transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
@@ -4427,14 +4653,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // Redelivery guard (AGL-498): skip the notification + fulfilment side
         // effects when this order already existed.
         if (!created) return
+        const buyNowOrderLabel = CommerceModel.formatOrderNumber(
+          { number: buyNowOrderNumber },
+          String(object.id),
+        )
         // In-app order notification (wave v6): host managers see sales
-        // in the bell, not just the owner's email.
+        // in the bell, not just the owner's email: what came in, from whom
+        // and where (AGL-3432).
+        const buyNowTotal = `$${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
-          title: `New order — $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`,
-          ...(object?.customer_details?.email
-            ? { body: `From ${object.customer_details.email}` }
-            : {}),
+          title: `New order on {site} — ${buyNowTotal}`,
+          body:
+            `Order ${buyNowOrderLabel} came in on {site}: ${soldQuantity}× ` +
+            `${snapshotName}, ${buyNowTotal}` +
+            (object?.customer_details?.email
+              ? `, from ${object.customer_details.email}.`
+              : '.'),
           link: `/${hostId}/products`,
         })
         // Dropship routing (AGL-289): paid lines with a supplier notify
@@ -4495,6 +4730,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               },
               { merge: true },
             )
+            // Where the parcel goes (AGL-3432): the address the shopper gave
+            // at checkout. Buy-now asks for one only when the store ships, so
+            // it can be absent, and a billing address is never offered in its
+            // place.
+            const shipTo = object?.shipping_details?.address
+              ? object.shipping_details
+              : null
             const payload = {
               hostId: String(hostId),
               orderId: String(object.id),
@@ -4504,7 +4746,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               // the buyer paid for.
               quantity: soldQuantity,
               customerEmail: object?.customer_details?.email ?? null,
-              shippingName: object?.customer_details?.name ?? null,
+              shippingName:
+                shipTo?.name ?? object?.customer_details?.name ?? null,
+              shippingAddress: shipTo
+                ? {
+                    line1: shipTo.address.line1 ?? null,
+                    line2: shipTo.address.line2 ?? null,
+                    city: shipTo.address.city ?? null,
+                    state: shipTo.address.state ?? null,
+                    postalCode: shipTo.address.postal_code ?? null,
+                    country: shipTo.address.country ?? null,
+                  }
+                : null,
               updateUrl:
                 `https://${requestHost}/api/commerce/supplier-update` +
                 `?hostId=${hostId}&orderId=${object.id}&token=${supplierToken}`,
@@ -4530,13 +4783,55 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               })
             }
             if (supplier.email) {
+              // Which store is asking (AGL-3432): a supplier serves several,
+              // and this mail goes out with no site header to say so.
+              const storeName =
+                resolveHostToken(
+                  'businessName',
+                  (await hostRef
+                    .get()
+                    .then((snapshot) => snapshot.data())
+                    .catch(() => undefined)) as HostTokenSource | undefined,
+                ) ?? 'A store'
+              const recipient =
+                payload.shippingName ?? payload.customerEmail ?? 'the buyer'
+              const address = payload.shippingAddress
+                ? [
+                    payload.shippingAddress.line1,
+                    payload.shippingAddress.line2,
+                    [
+                      payload.shippingAddress.city,
+                      [
+                        payload.shippingAddress.state,
+                        payload.shippingAddress.postalCode,
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                    ]
+                      .filter(Boolean)
+                      .join(', '),
+                    payload.shippingAddress.country,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')
+                : ''
               await sendEmail({
                 to: supplier.email,
-                subject: `New order to fulfill: ${payload.productName}`,
+                subject: `New order to fulfill for ${storeName}: ${payload.productName}`,
+                // The tracking link opens a form for the carrier and the
+                // number, so it carries no placeholders: a link with
+                // `trackingNumber=TRACKING` in it, opened unedited, records
+                // that word as the tracking.
                 text:
-                  `${payload.quantity}× ${payload.productName}\n` +
-                  `Ship to: ${payload.shippingName ?? payload.customerEmail ?? 'see order'}\n\n` +
-                  `Add tracking: ${payload.updateUrl}&trackingNumber=TRACKING&carrier=CARRIER`,
+                  `${storeName} has a new order for you to ship: ` +
+                  `${payload.quantity}× ${payload.productName} ` +
+                  `(order ${buyNowOrderLabel}).\n\n` +
+                  (address
+                    ? `Ship to: ${recipient}, ${address}\n\n`
+                    : `Ship to: ${recipient}. No shipping address was ` +
+                      `collected at checkout; ask ${storeName} for it.\n\n`) +
+                  'When it ships, open this link to enter the carrier and ' +
+                  `tracking number:\n${payload.updateUrl}`,
                 fromName: (await brandFor(hostId)).fromName,
                 sendingIdentity: await hostSendingIdentity(String(hostId)),
                 audience: 'tenant',
@@ -4640,18 +4935,33 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const buyerEmail = object?.customer_details?.email
           const orderTotal = `$${amount}`
           if (buyerEmail) {
+            // The store's own Receipt footer, as the cart receipt carries it
+            // (AGL-3432).
+            const receiptFooter = String(
+              (await hostRef
+                .collection('settings')
+                .doc('store')
+                .get()
+                .then((snapshot) => snapshot.get('receiptFooter'))
+                .catch(() => '')) ?? '',
+            )
+            // The quantity with the name (AGL-3432), so a three-unit sale
+            // does not read as one item at the whole total.
+            const receiptLine = `${soldQuantity}× ${productName}`
             const fallbackText =
-              `Thanks for your purchase!\n\n${productName} — $${amount}` +
-              `\nOrder reference: ${object.id}`
+              `Thanks for your purchase!\n\n${receiptLine} — $${amount}` +
+              `\nOrder reference: ${object.id}` +
+              (receiptFooter ? `\n\n${receiptFooter}` : '')
             // Site-owner-designed template when published (AGL-771).
             const designed = await renderHostEmailWithTokens(
               firebaseAdmin.app().firestore(),
               String(hostId),
               'order-receipt',
               {
-                'order.summary': productName,
+                'order.summary': receiptLine,
                 'order.total': orderTotal,
                 'order.ref': String(object.id),
+                'store.receiptFooter': receiptFooter,
               },
             )
             await sendEmail({
@@ -4762,10 +5072,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         fullyRefunded: external.fullyRefunded,
       })
       if (outcome.kind === 'frozen-for-review') {
+        const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
         await notifyGiftCardHold(
           {
             hostId,
-            orderLabel: `order ${snapshot.id}`,
+            // The order number the merchant knows it by, never its document id.
+            orderLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
             orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
             orderId: snapshot.id,
             cards: outcome.cards,
@@ -4796,12 +5108,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     const snapshot = lookup.snapshot
     const hostId = String(snapshot.ref.parent.parent?.id ?? '')
     const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
+    const orderCents = Number(order.totals?.totalCents ?? order.amountCents ?? 0)
     await recordPaymentRiskOnRecord(
       {
         ref: snapshot.ref,
         signal: risk.signal,
         hostId,
         subjectLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        // The notice names the sum in question, as the dispute's does.
+        amount: orderCents > 0 ? `$${(orderCents / 100).toFixed(2)}` : null,
         // The Orders section of the Products hub, with this order's dialog
         // open — where Refund lives (`siteRecordLinks().order`).
         link: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
@@ -4894,10 +5209,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
       if (type === 'charge.dispute.created') {
         // A chargeback's gift cards are frozen while it is open (AGL-3363).
+        const disputed = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
         await notifyGiftCardHold(
           {
             hostId,
-            orderLabel: `order ${snapshot.id}`,
+            orderLabel: `order ${CommerceModel.formatOrderNumber(disputed, snapshot.id)}`,
             orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
             orderId: snapshot.id,
             cards: await applyOrderGiftCardRisk(snapshot, {
@@ -4943,13 +5259,30 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             : { kind: 'release', reason: 'dispute' },
         )
         const settled = await recordDisputeClosed(snapshot, dispute)
+        // The number the merchant knows the order by (AGL-3432), for both
+        // notices below; the Stripe session id is nowhere in the console.
+        const disputedOrderLabel = CommerceModel.formatOrderNumber(
+          CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never),
+          snapshot.id,
+        )
         if (settled.recorded && hostId) {
+          // What the shopper's bank took back left the PLATFORM's balance on
+          // a destination charge, not the merchant's: their own loss is the
+          // seller share in the "Payout adjusted" notice below. Told that way
+          // (AGL-3432), so the two are not read as two losses.
           await notifyHostManagers(hostId, {
             type: 'content.order',
             title: settled.lost
-              ? `Chargeback lost — $${(settled.reversedCents / 100).toFixed(2)} reversed`
+              ? `Chargeback lost — order ${disputedOrderLabel}`
               : 'Chargeback resolved in your favor',
-            body: `Order ${snapshot.id}`,
+            body: settled.lost
+              ? `The chargeback on order ${disputedOrderLabel} on {site} was ` +
+                'decided in the shopper\'s favor, and their bank took back ' +
+                `$${(settled.reversedCents / 100).toFixed(2)}. If part of the ` +
+                'sale had been paid out to you, a separate notice says what ' +
+                'is taken back from your balance.'
+              : `The chargeback on order ${disputedOrderLabel} on {site} ` +
+                'closed in your favor. Nothing is taken back from you for it.',
             link: `/${hostId}/orders`,
           })
           // The customer's side of the ledger (AGL-1754), through the same
@@ -5025,9 +5358,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               type: 'content.order',
               title: `Payout adjusted — $${(pulledBackCents / 100).toFixed(2)} recovered for a lost chargeback`,
               body:
-                `Order ${snapshot.id}: the amount transferred to you for this sale has been ` +
-                `reversed. If your balance does not cover it, Stripe recovers the remainder ` +
-                `from your future payouts.`,
+                `Because the chargeback on order ${disputedOrderLabel} on ` +
+                `{site} was lost, the $${(pulledBackCents / 100).toFixed(2)} ` +
+                'transferred to you for that sale has been taken back. If ' +
+                'your balance does not cover it, Stripe recovers the rest ' +
+                'from your future payouts.',
               link: `/${hostId}/orders`,
             })
           }

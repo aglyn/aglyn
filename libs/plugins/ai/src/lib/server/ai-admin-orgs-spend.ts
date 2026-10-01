@@ -25,7 +25,7 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
 import {
   ASSIST_PROVIDER_COST_FIELD,
   assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { assistUsageMonth } from '../usage/assist-usage'
 import {
   parseStaffOrgIds,

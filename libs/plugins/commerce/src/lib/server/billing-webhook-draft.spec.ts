@@ -903,7 +903,10 @@ describe('low-stock crossing alerts (AGL-1826)', () => {
         hostId: 'host-1',
         type: 'content.lowStock',
         title: 'Low stock — Monthly box',
-        body: '7 left across tracked variants',
+        // The product, the count, the threshold and the site (AGL-3432).
+        body:
+          'Monthly box on {site} is down to 7 in stock across its tracked ' +
+          'variants, at or below its low-stock threshold of 8.',
         link: '/host-1/products',
       },
     ])
@@ -1020,7 +1023,9 @@ describe('low-stock crossing alerts (AGL-1826)', () => {
           hostId: 'host-1',
           type: 'content.lowStock',
           title: 'Low stock — Beanie',
-          body: '10 left across tracked variants',
+          body:
+            'Beanie on {site} is down to 10 in stock across its tracked ' +
+            'variants, at or below its low-stock threshold of 10.',
           link: '/host-1/products',
         },
       ])
@@ -1037,7 +1042,10 @@ describe('low-stock crossing alerts (AGL-1826)', () => {
       trackBeanie(11)
       await deliver(POS_LOW_SESSION)
       expect(lowStockAlerts()).toHaveLength(1)
-      expect(lowStockAlerts()[0].body).toBe('11 left across tracked variants')
+      expect(lowStockAlerts()[0].body).toBe(
+        'Beanie on {site} is down to 11 in stock across its tracked ' +
+          'variants, at or below its low-stock threshold of 11.',
+      )
     })
 
     /** The pending-to-paid flip bounds the register's alert too. */

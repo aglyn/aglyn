@@ -31,7 +31,7 @@ import {
   resolveAssistCreditBudget,
   resolveAssistHardCap,
   resolveAssistOverageCapUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
   hasAiAddon,

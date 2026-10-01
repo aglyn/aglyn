@@ -59,8 +59,9 @@ const ERASURE_HOLD_DAYS = 7
  *
  * The same run also handles erasure-hold reminders: orgs whose GDPR
  * erasure request passed the 7-day hold are emailed to staff
- * (STAFF_ALERT_EMAIL, env-gated) — the erase script stays the only
- * deletion path.
+ * (STAFF_ALERT_EMAIL, env-gated). The reminder reports; it asks for nothing.
+ * `run-erasures` erases those orgs an hour later (04:00 UTC, five a run),
+ * and an erasure that fails raises `data.orgErasureFailed` on its own.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } =
@@ -234,9 +235,18 @@ async function handler(request: Request): Promise<Response> {
             `requested ${entry.requestedAt?.toISOString() ?? '?'}`,
         )
         .join('\n')
+      // What happens next, so the reminder asks for nothing (AGL-3432):
+      // `run-erasures` erases these same orgs an hour after this sends
+      // (`cloud/functions` schedules it at 04:00 UTC, five a run, oldest
+      // first). The exceptions are a failed erasure, which raises its own
+      // alert, and a queue longer than one run.
       const fallbackText =
-        'These organizations are past their GDPR erasure hold. Run ' +
-        'tools/scripts/erase-tenant.mjs to hard-delete. No copy is kept:\n\n' +
+        'These workspaces are past their 7-day erasure hold. The nightly ' +
+        'erasure job erases them at 04:00 UTC, five a run and oldest first, ' +
+        'and keeps no copy, so nothing is needed from you. A workspace still ' +
+        'listed here tomorrow either failed to erase, which raises its own ' +
+        '"could not be erased" alert, or is waiting behind a longer queue. ' +
+        'Pending erasures on Staff → Health can run the due ones sooner.\n\n' +
         orgsList
       // One send per run, so resolving the template here is a single
       // Firestore read (AGL-768): the staff design, else the catalog's

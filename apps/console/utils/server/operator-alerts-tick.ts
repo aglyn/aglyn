@@ -207,6 +207,31 @@ export async function runSupportSlaSweep(options: {
     .get()
   let breached = 0
   let raised = 0
+  /*
+   * The workspace's name for the alert (AGL-3432): the ticket stores only the
+   * id. Read once per workspace per run, and only for a ticket that is
+   * actually breaching. Blank when the read fails or finds no name, and the
+   * alert names the workspace by its id alone.
+   */
+  const workspaceNames = new Map<string, Promise<string>>()
+  const workspaceName = (orgId: string): Promise<string> => {
+    if (!orgId) return Promise.resolve('')
+    let known = workspaceNames.get(orgId)
+    if (!known) {
+      known = (async () => {
+        try {
+          const name = (
+            await firebaseAdmin.app().firestore().collection('orgs').doc(orgId).get()
+          ).get('name')
+          return typeof name === 'string' ? name.trim() : ''
+        } catch {
+          return ''
+        }
+      })()
+      workspaceNames.set(orgId, known)
+    }
+    return known
+  }
   for (const doc of snapshot.docs) {
     const ticket = doc.data() as Record<string, unknown>
     if (ticket['status'] !== 'open' || ticket['firstRespondedAt']) continue
@@ -214,15 +239,18 @@ export async function runSupportSlaSweep(options: {
     if (!dueMs) continue
     breached += 1
     if (options.dryRun) continue
+    const orgId = String(ticket['orgId'] ?? '')
     const result = await raiseOperatorAlert('support.slaBreached', {
       dedupeKey: doc.id,
       context: {
         ticketId: doc.id,
         subject: String(ticket['subject'] ?? '').slice(0, 120) || 'Untitled ticket',
         tier: String(ticket['supportTier'] ?? '') || 'support',
-        orgId: String(ticket['orgId'] ?? ''),
+        orgId,
+        orgName: await workspaceName(orgId),
         overdue: describeOverdue(now - dueMs),
       },
+      ...(orgId ? { orgId } : {}),
     })
     if (result.outcome === 'delivered' || result.outcome === 'queued' || result.outcome === 'console-only') {
       raised += 1

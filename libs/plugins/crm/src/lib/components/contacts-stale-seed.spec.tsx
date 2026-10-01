@@ -98,8 +98,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   // The site's campaigns, which fill the filing picker on the card beside
   // the one under test.
-  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
-  useOrgCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useSiteContainerOptions: () => ({ options: [], truncated: false, ready: true }),
+  useOrgContainerOptions: () => ({ options: [], truncated: false, ready: true }),
   // The ONE document the page reads, carrying the listener's verdict.
   useFirestoreDoc: () => ({
     data: contactDoc,
@@ -178,7 +178,7 @@ jest.mock('./crm-attribution-zone', () => ({
   useHasCrmRecordAttribution: () => false,
 }))
 jest.mock(
-  '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component',
+  '@aglyn/tenant-feature-instance/components/container-picker',
   () => ({ __esModule: true, default: () => null }),
 )
 // The roster, which the owner picker lists; nobody is needed here.

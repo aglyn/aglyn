@@ -31,7 +31,7 @@ import { personKeyInBrowser } from '../model/person-key-web'
  * console card named there ships to every published page.
  */
 import { CrmRecordAttributionZone } from './crm-attribution-zone'
-import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker from '@aglyn/tenant-feature-instance/components/container-picker'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -174,7 +174,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
         // that detaches a deleted campaign.
         () =>
           contactUpdate.updateOne(record.$id, {
-            campaignIds: Aglyn.campaignMembershipValue(campaigns),
+            campaignIds: Aglyn.containerMembershipValue(campaigns),
           }),
       )
       if (!verdict.ok) {
@@ -306,7 +306,8 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           </Typography>
         </Stack>
         <Divider />
-        <CampaignPicker
+        <ContainerPicker
+          kind="campaign"
           options={siteCampaigns.options}
           value={campaigns}
           onChange={setCampaigns}

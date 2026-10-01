@@ -43,6 +43,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { useContentStable } from '@aglyn/shared-ui-jsx/hooks/use-content-stable'
 
 import { MediaPickerContext } from '../contexts/media-picker-context'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
@@ -82,50 +83,6 @@ function serialize(values: unknown): string {
   } catch {
     return ''
   }
-}
-
-/** A stable token per function, so two keys agree only on the same function. */
-const functionTokens = new WeakMap<object, number>()
-let nextFunctionToken = 0
-let nextUnkeyable = 0
-
-/**
- * What a value HOLDS, as a string: plain data by value, a function by
- * identity, a Set by its members. A value it cannot write down — a cycle, a
- * React element's owner — gets a key of its own, so it only ever equals
- * itself.
- */
-function contentKey(value: unknown): string {
-  try {
-    return JSON.stringify(value, (_key, entry: unknown) => {
-      if (typeof entry === 'function') {
-        let token = functionTokens.get(entry)
-        if (token === undefined) {
-          nextFunctionToken += 1
-          token = nextFunctionToken
-          functionTokens.set(entry, token)
-        }
-        return `ƒ${token}`
-      }
-      if (entry instanceof Set) return { set: [...entry].sort() }
-      return entry
-    })
-  } catch {
-    nextUnkeyable += 1
-    return `unkeyable:${nextUnkeyable}`
-  }
-}
-
-/**
- * `value` itself while it holds the same content as last render, else the new
- * one — so a caller that builds its fields inline on every render hands the
- * form the SAME fields while they have not changed.
- */
-function useContentStable<T>(value: T): T {
-  const held = useRef<{ key: string; value: T } | undefined>(undefined)
-  const key = contentKey(value)
-  if (!held.current || held.current.key !== key) held.current = { key, value }
-  return held.current.value
 }
 
 /** Hands the parent every change, and the form API for writes from outside. */

@@ -24,7 +24,7 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
-import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { AUTOMATION_RUN_ZONE, type AutomationTarget } from './workflow-zones'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -58,7 +58,7 @@ export interface HostRunHistoryCardProps {
    * but not whether it is an action or a workflow, so the card that opened the
    * history says; without it, a failed run offers nothing beside its summary.
    */
-  targetType?: ConsoleAutomationTarget['type']
+  targetType?: AutomationTarget['type']
   targetName?: string
   header?: string
   /** Overrides the default help affordance on the card header. */
@@ -146,7 +146,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
    */
   const RunZone = useConsoleWidgetSlot()
   /** The automation a failed run belongs to, as the `automationRun` zone names it. */
-  const zoneTarget = useMemo<ConsoleAutomationTarget | null>(
+  const zoneTarget = useMemo<AutomationTarget | null>(
     () =>
       targetId && targetType
         ? { type: targetType, id: targetId, name: targetName }
@@ -281,7 +281,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
               */}
                 {RunZone && zoneTarget && row.result === 'failed' ? (
                   <RunZone
-                    slot="automationRun"
+                    slot={AUTOMATION_RUN_ZONE.id}
                     hostId={hostId}
                     orgId={orgId}
                     target={zoneTarget}

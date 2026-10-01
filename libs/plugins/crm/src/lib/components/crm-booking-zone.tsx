@@ -20,7 +20,6 @@
 import {
   type AglynOrgBilling,
   checkEntitlement,
-  type CrmBookingRefKind,
   isHostPluginEnabled,
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
@@ -38,6 +37,13 @@ import { doc } from 'firebase/firestore'
  * instead and hands it the record, and a plugin that takes bookings draws its
  * own control — or, where none runs on the site, nothing at all.
  */
+/**
+ * The records a booking link is dropped from. The kind and the id ride the
+ * link and come back on the booking unread, and the CRM's record-timeline
+ * writer files the meeting on the record they name (AGL-2660).
+ */
+export type CrmBookingRecordKind = 'contact' | 'lead' | 'deal'
+
 export interface CrmRecordBookingZoneProps {
   /**
    * The site whose services are offered — the mounted site, or at the
@@ -47,7 +53,7 @@ export interface CrmRecordBookingZoneProps {
   hostId: string | null
   org?: Partial<AglynOrgBilling> | null
   /** The record the link is dropped from. */
-  kind: CrmBookingRefKind
+  kind: CrmBookingRecordKind
   recordId: string
   /**
    * When given, the widget also offers to insert a link, and hands the chosen

@@ -654,9 +654,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // for it. AGL-3433 offered the library Video and took the catalog's
       // names that only spell an id again, a net cut on every surface; the
       // template's own line on third-party players and its video token puts it
-      // up 38 where the others came down.
+      // up 38 where the others came down. The template's up 16 more at
+      // AGL-3143 §16, which tells it copy never prints an address, a slug or
+      // a timestamp: a live build printed all three on every article.
       layout: { prefixTokens: 4_412, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_008, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_024, minimum: 1_024, caches: true, toolsStable: true },
       component: { prefixTokens: 5_024, minimum: 1_024, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate.

@@ -63,7 +63,7 @@ describe('a white-label org with no Support URL links nowhere', () => {
     // A caller that concatenated the newlines itself would leave two empty
     // lines at the end of the message for exactly the orgs this exists for:
     // the gap-that-reads-as-broken the email logo already avoids.
-    const body = `Usage summary${brandSupportLine(whiteLabel({}))}`
+    const body = `Usage summary${brandSupportLine(whiteLabel({ productName: 'Acme Sites' }))}`
     expect(body).toBe('Usage summary')
     expect(body.endsWith('\n')).toBe(false)
   })

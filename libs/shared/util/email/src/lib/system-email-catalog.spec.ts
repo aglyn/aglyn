@@ -204,6 +204,15 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       }
     })
 
+    it('the erasure-hold alert reports the scheduled erasure and orders no manual delete (AGL-3432)', () => {
+      // The built-in copy is what staff receive whenever no design is
+      // published. `run-erasures` erases the same workspaces an hour later,
+      // so it must not order the erase script by hand.
+      const text = JSON.stringify(getSystemEmailTemplate('erasure-hold-alert')?.defaultBody)
+      expect(text).toContain('The nightly erasure job erases them at 04:00 UTC')
+      expect(text).not.toContain('erase-tenant.mjs')
+    })
+
     it('marks the billing emails as Stripe-delivered and non-editable', () => {
       // Listed for visibility only (AGL-767); Stripe owns the copy, so an
       // editor here would silently do nothing — same guard as the auth rows.
@@ -259,6 +268,30 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       expect(html).toContain('invited to join Test Org as editor')
       // The Sign in button block made it through too.
       expect(html.toLowerCase()).toContain('sign in')
+    })
+
+    it('heads the pass-through notices with their subject, above the body (AGL-3432)', () => {
+      // These two print only what their caller wrote. With the subject as a
+      // heading, a body that leans on the subject line still has its topic.
+      const cases = [
+        ['workspace-notice', 'notice.subject', 'notice.body'],
+        ['staff-alert', 'alert.subject', 'alert.body'],
+      ] as const
+      for (const [key, subjectToken, bodyToken] of cases) {
+        const map = buildDefaultEmailNodeMap(getSystemEmailTemplate(key)!)
+        const { html } = renderEmailHtml({
+          nodes: map as never,
+          rootId: EMAIL_NODE_ROOT_ID,
+          merge: {
+            [subjectToken]: 'Northwind has used all 6 of its pages',
+            [bodyToken]: 'Northwind is using 6 of the 6 pages its plan includes.',
+          },
+          sanitize: (value) => value,
+        })
+        const heading = html.indexOf('Northwind has used all 6 of its pages')
+        expect(heading).toBeGreaterThanOrEqual(0)
+        expect(html.indexOf('Northwind is using 6 of the 6')).toBeGreaterThan(heading)
+      }
     })
 
     it('turns button blocks into emailButton nodes with the href', () => {

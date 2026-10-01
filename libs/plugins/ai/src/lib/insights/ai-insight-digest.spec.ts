@@ -246,6 +246,24 @@ describe('delivery', () => {
     expect(text).not.toMatch(/https?:|\s\/[a-z]/)
   })
 
+  // AGL-3432: the digest is an AI job metered against the workspace, and a
+  // member of two workspaces cannot tell from "this workspace" which one.
+  it('says what the digest drew and names the workspace it was asked for in', () => {
+    const text = aiInsightDigestEmailText({
+      siteName: 'Acme Roofing',
+      productName: 'Aglyn',
+      insights: [{ text: 'Page views rose 14.7%.' }],
+      analyticsUrl: null,
+      settingsUrl: null,
+      workspaceName: 'Acme Co',
+      creditsSpent: 4,
+    })
+    expect(text).toMatch(
+      /^Here is what Acme Roofing's figures showed this week\. Writing it used 4 of Acme Co’s AI credits\.\n/,
+    )
+    expect(text).toContain('You asked for weekly insights for Acme Co.')
+  })
+
   it('gives up a digest parked for credits, silently', async () => {
     mockJobs.set('job-1', { $id: 'job-1', status: 'needs_input' })
     const report = await runAiInsightDigestSweep(deps(MONDAY_AFTERNOON), { cursor: null })

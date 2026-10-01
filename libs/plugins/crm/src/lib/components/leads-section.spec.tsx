@@ -168,7 +168,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   // The campaigns placed on the site, for the Campaign filter and column
   // (AGL-3254) — and which site, and whether they were asked for at all.
-  useHostCampaigns: (hostId: string | undefined, options?: { enabled?: boolean }) => {
+  useSiteContainerOptions: (_kind: string, hostId: string | undefined, options?: { enabled?: boolean }) => {
     if (options?.enabled) mockCampaignReads.push(`site:${hostId}`)
     return {
       options: [
@@ -181,7 +181,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
   // Every campaign in the org, at the organization level: one more than any
   // one site carries, so an assertion can tell which list it was handed.
-  useOrgCampaigns: (orgId: string | null | undefined, options?: { enabled?: boolean }) => {
+  useOrgContainerOptions: (_kind: string, orgId: string | null | undefined, options?: { enabled?: boolean }) => {
     if (options?.enabled) mockCampaignReads.push(`org:${orgId}`)
     return {
       options: [
@@ -642,7 +642,7 @@ describe('a view saved with the old dropdowns', () => {
     expect(mockGrid.filterModel.items).toEqual([
       { id: 'list', field: 'leadSource', operator: 'is', value: 'Outbound · Apollo' },
     ])
-    expect(screen.getByText('Status is Open (new or working)')).toBeTruthy()
+    expect(screen.getByText('Status is Open (new, nurturing or working)')).toBeTruthy()
   })
 
   it('keeps "No lead source" as the isEmpty clause it stored', () => {
@@ -689,14 +689,14 @@ describe('the collection the section reads', () => {
     expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
   })
 
-  it('asks Open of the query as the two open statuses every lead stores', () => {
+  it('asks Open of the query as the three open statuses every lead stores', () => {
     mockFilters = []
     siteRows = [lead('l-fresh', 'fresh@example.com'), ...LEADS.slice(1)]
     renderSite()
     expect(lastListQueryPlan()?.filters).toContainEqual({
       path: 'status',
       op: 'in',
-      value: ['new', 'working'],
+      value: ['new', 'nurturing', 'working'],
     })
     expect(gridRows()).toEqual(['fresh@example.com', 'sam@example.com'])
   })

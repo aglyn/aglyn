@@ -818,8 +818,9 @@ export interface CrmActivity extends CrmScoped {
   deliveryDetail?: string
   /**
    * `hosts/{hostId}/bookings/{bookingId}` — the booking a `meeting` was
-   * filed from (AGL-2660), so a row the Bookings plugin wrote can be told
-   * from one a person logged, and a booking is never filed twice.
+   * filed from (AGL-2660), on the rows filed before a booking reached the
+   * record through the record-timeline seam. A booking's meeting is now an
+   * entry keyed by the booking, and `sourcePluginId` names who filed it.
    */
   bookingId?: string
   /**
@@ -2342,6 +2343,13 @@ export function findOrgMember<T extends { uid: string; email?: string | null }>(
 /**
  * Where a lead stands, in the order a person works one.
  *
+ * `nurturing` is the stage automated email holds a lead in: a sequence step
+ * or a campaign email has reached it and no person has engaged yet. It is
+ * open — the lead still needs somebody — but it is not untouched, so the
+ * digest's unworked list leaves it out. Automation writes it only over
+ * `new` (a person may also set it by hand), and a reply moves it on to
+ * `working`.
+ *
  * `qualified` is the CONVERTED state — a lead becomes a contact by being
  * qualified, and the conversion stamps `convertedContactId` beside it — and
  * `unqualified` is the closed-without-conversion state with its reason. A
@@ -2350,6 +2358,7 @@ export function findOrgMember<T extends { uid: string; email?: string | null }>(
  */
 export const CRM_LEAD_STATUSES = [
   'new',
+  'nurturing',
   'working',
   'qualified',
   'unqualified',
@@ -2360,6 +2369,7 @@ export type CrmLeadStatus = (typeof CRM_LEAD_STATUSES)[number]
 /** How a lead status reads on screen — typed so a status cannot ship unlabeled. */
 export const CRM_LEAD_STATUS_LABELS: Record<CrmLeadStatus, string> = {
   new: 'New',
+  nurturing: 'Nurturing',
   working: 'Working',
   qualified: 'Qualified',
   unqualified: 'Unqualified',
@@ -2370,7 +2380,11 @@ export const CRM_LEAD_STATUS_LABELS: Record<CrmLeadStatus, string> = {
  * section shows by default, so the list opens on the work rather than on
  * the history.
  */
-export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
+export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = [
+  'new',
+  'nurturing',
+  'working',
+]
 
 /**
  * The statuses that mean nobody needs to work the lead any more — the
@@ -2382,6 +2396,21 @@ export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = ['new', 'working
  */
 export const CRM_LEAD_CLOSED_STATUSES: readonly CrmLeadStatus[] =
   CRM_LEAD_STATUSES.filter((status) => !CRM_LEAD_OPEN_STATUSES.includes(status))
+
+/**
+ * The leads still needing somebody, from two server counts: every lead,
+ * less the ones closed one way or the other.
+ *
+ * Subtraction rather than a count of the open statuses because a lead
+ * nobody has touched carries NO status field — see `crmLeadStatus` — and
+ * Firestore cannot select a document by a field's absence. The closed
+ * statuses are always written, so they can be counted; what remains is
+ * open. Clamped at zero for the moment between the two counts in which a
+ * lead was closed.
+ */
+export function openLeadsFromCounts(total: number, closed: number): number {
+  return Math.max(0, Math.round(Number(total) || 0) - Math.round(Number(closed) || 0))
+}
 
 export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
   return (
@@ -2424,7 +2453,7 @@ export interface CrmLeadFields extends CrmLeadProfile {
   /**
    * The campaigns the lead is filed under (AGL-3254): container ids from
    * `orgs/{orgId}/emailCampaigns`, at the top of the document the way a
-   * form carries them (`campaign-membership.ts`), never names. Written by
+   * form carries them (`container-membership.ts`), never names. Written by
    * the New lead drawer, the import, the bulk bar and a sequence's enroll;
    * handed to the contact's facet when the lead converts.
    */

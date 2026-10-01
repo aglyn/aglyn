@@ -105,7 +105,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   checkEntitlement: (...args: unknown[]) => mockCheckEntitlement(...args),
 }))
-jest.mock('@aglyn/aglyn/app-utils/assist-credits', () => ({
+jest.mock('../usage/assist-credits', () => ({
   __esModule: true,
   // The allotment sentence names where the control lives (AGL-2942).
   ASSIST_HARD_CAP_CONTROL_LOCATION: 'Billing → Usage',

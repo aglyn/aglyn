@@ -18,26 +18,28 @@
 /**
  * Dataset CSV/JSON round-tripping (AGL-182) — the IMPORT half.
  *
- * Both the serialization half and the CSV parser live in `@aglyn/aglyn`'s
- * `dataset-csv` (AGL-2335) so that the server export route and the email
- * list importer can share one escaper and one parser; both are re-exported
- * here unchanged, so `@aglyn/plugins-data/model` remains the one import site
- * for everything dataset-io. What stays here is the part that is about
- * DATASETS — mapping a file's columns onto a `DatasetModel`.
+ * The serialization half is `dataset-csv.ts` beside this, and the CSV parser
+ * and the row-count check are the platform's `app-utils/csv` (AGL-2335), so
+ * the email, commerce and CRM imports read files with the same parser; all of
+ * them are re-exported here, so `@aglyn/plugins-data/model` remains the one
+ * import site for everything dataset-io. What stays here is the part that is
+ * about DATASETS — mapping a file's columns onto a `DatasetModel`.
  */
 
 import type { DatasetModel } from '@aglyn/aglyn'
-import { parseCsv } from '@aglyn/aglyn/app-utils/dataset-csv'
+import { parseCsv } from '@aglyn/aglyn/app-utils/csv'
 export {
   countCsvDataRows,
+  exportShortfall,
+  parseCsv,
+} from '@aglyn/aglyn/app-utils/csv'
+export {
   datasetCsvHeader,
   datasetCsvRow,
   datasetRecordToJson,
   datasetRecordsToCsv,
-  exportShortfall,
-  parseCsv,
   serializeDatasetValue,
-} from '@aglyn/aglyn/app-utils/dataset-csv'
+} from './dataset-csv'
 
 /**
  * Parses pasted/uploaded import text — a JSON array of objects or CSV

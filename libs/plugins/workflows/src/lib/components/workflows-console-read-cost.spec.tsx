@@ -52,6 +52,13 @@ import {
   WORKFLOWS_CONSOLE_SECTIONS,
   WORKFLOWS_ORG_CONSOLE_SECTIONS,
 } from './workflows-console-sections'
+import { standInDatasetList } from '../testing/stand-in-dataset-list'
+import { standInOverlayList } from '../testing/stand-in-overlay-list'
+
+// The datasets the pickers offer are the data plugin's, and the overlays
+// the marketing plugin's (AGL-3080).
+standInDatasetList()
+standInOverlayList()
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.

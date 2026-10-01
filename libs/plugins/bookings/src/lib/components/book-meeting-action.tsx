@@ -20,7 +20,6 @@
 import {
   type AglynOrgBilling,
   checkEntitlement,
-  type CrmBookingRefKind,
   isHostPluginEnabled,
 } from '@aglyn/aglyn'
 import { bookingsPageHref } from '../model/bookings-record-routes'
@@ -94,8 +93,11 @@ export interface BookMeetingButtonProps {
    */
   hostId: string | null
   org?: Partial<AglynOrgBilling> | null
-  /** The record the link is dropped from, carried as `?crm=kind:id`. */
-  kind: CrmBookingRefKind
+  /**
+   * The record the link is dropped from, by its kind in the record system's
+   * own words (`contact`), carried as `?crm=kind:id`.
+   */
+  kind: string
   recordId: string
   /**
    * When given, every service also offers **Insert into email** and the
@@ -160,7 +162,7 @@ interface BookMeetingDialogProps {
   /** The site document the door already read — its public naming. */
   host: Record<string, unknown> | null
   org?: Partial<AglynOrgBilling> | null
-  kind: CrmBookingRefKind
+  kind: string
   recordId: string
   onInsert?: (link: string) => void
 }
@@ -202,7 +204,7 @@ export function BookMeetingDialog(props: BookMeetingDialogProps) {
     subdomain: host?.['subdomain'] as string | null | undefined,
   }
   const path = configReady ? String(config['bookingPath'] ?? BOOKING_PATH_DEFAULT) : null
-  const crmRef = { kind, id: recordId }
+  const recordRef = { kind, id: recordId }
 
   const copy = useCallback(
     async (link: string) => {
@@ -240,7 +242,7 @@ export function BookMeetingDialog(props: BookMeetingDialogProps) {
             {services.map((service) => {
               const id = String(service['$id'])
               const name = String(service['name'] ?? '')
-              const link = bookingLinkFor({ site, service: { id }, path, crmRef })
+              const link = bookingLinkFor({ site, service: { id }, path, recordRef })
               const price = Number(service['priceUsd'] ?? 0)
               return (
                 <Stack key={id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>

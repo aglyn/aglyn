@@ -67,7 +67,7 @@
  * nowhere rather than discovering it weeks later.
  */
 
-import { CAMPAIGN_MEMBERSHIP_CAP } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { CONTAINER_MEMBERSHIP_CAP } from '@aglyn/aglyn/app-utils/container-membership'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_LEAD_STATUS_LABELS,
@@ -118,7 +118,7 @@ const NAME_MAX = 120
 /**
  * The statuses a file may set.
  *
- * The list's own status control offers exactly these three, and for the
+ * The list's own status control offers exactly these four, and for the
  * reason given above: `qualified` is written by the conversion, beside the
  * contact it produced.
  */
@@ -168,7 +168,7 @@ export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
   phone: 'Phone',
   website: 'Website',
   leadSource: 'Lead source',
-  status: 'Status (new, working, unqualified)',
+  status: 'Status (new, nurturing, working, unqualified)',
   ownerEmail: 'Owner (team member email)',
   addressLine1: 'Address line 1',
   addressLine2: 'Address line 2',
@@ -275,7 +275,7 @@ export const LEAD_IMPORT_SKIP_LABELS: Record<LeadImportSkipReason, string> = {
 }
 
 /** The most campaigns one row may name — the membership field's own cap. */
-export const LEAD_IMPORT_CAMPAIGNS_MAX = CAMPAIGN_MEMBERSHIP_CAP
+export const LEAD_IMPORT_CAMPAIGNS_MAX = CONTAINER_MEMBERSHIP_CAP
 
 /** One row, ready for the server to resolve and write. */
 export interface LeadImportRow {

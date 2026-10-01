@@ -10,30 +10,6 @@
       "why": "Aglyn's own plan checkout, not a tenant feature: it carries the operator's measurement client id and own-traffic flag to the operator's server-side revenue event, and the comment names how that stamp reaches the operator's tag. A self-host's operator identity replaces both."
     },
     {
-      "path": "apps/console/app/(app)/[orgSlug]/contacts/page.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/crm/[[...crmSlug]]/layout.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-id"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/crm/[[...crmSlug]]/page.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/app/api/_lib/site-export.ts",
       "rules": [
         "plugin-id"
@@ -42,111 +18,21 @@
       "why": "`'marketplace'` here is a FIELD NAME, not a plugin id: the component document's install stamp from before AGL-1015 (`{ listingId, profileId, version }`), which core's own provenance reader (`app-utils/artifact-provenance.ts`, `resolveProvenance`, argued stays) still reads as the listing an installed component came from, and which the component install still writes beside `installedFrom`. This list is the round trip of a live component document, so leaving the key out would restore every legacy installed component with its origin stripped; renaming it is a data migration of every installed component on every site."
     },
     {
-      "path": "apps/console/app/api/admin/org-usage/route.ts",
-      "rules": [
-        "domain-declares:ai",
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
-    },
-    {
-      "path": "apps/console/app/api/admin/overview/route.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/console/app/api/billing/report-usage/route.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "plugin-collection:crm",
-        "plugin-collection:data",
-        "plugin-collection:forms",
-        "domain-declares:ai",
-        "domain-declares:crm",
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
-    },
-    {
-      "path": "apps/console/app/api/billing/usage-alerts/route.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "plugin-collection:data",
-        "domain-declares:ai",
-        "domain-declares:data",
-        "domain-declares:marketing",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
-    },
-    {
-      "path": "apps/console/app/api/billing/usage-budget/route.ts",
-      "rules": [
-        "plugin-collection:ai",
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
-      "path": "apps/console/app/api/billing/usage-email/route.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/console/app/api/orgs/datasets/export/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/app/api/orgs/datasets/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/components/billing/billing-metered-estimate.component.tsx",
-      "rules": [
-        "plugin-collection:forms",
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/console/components/billing/billing-plan-cards.component.tsx",
       "rules": [
         "plugin-id"
       ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/billing/billing-usage-budget-card.component.tsx",
-      "rules": [
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
+      "lane": "stays",
+      "why": "The ids it trips on are FEATURE KEYS of the platform's own plan table, not reads of a plugin: `redirects`, `workflows`, `bookings`, `crm` and `commerce` are keys of `PLAN_ENTITLEMENTS.features`, the switch by which a plan includes that plugin at all, and the price list sells each by that key. A plugin declares its own sub-features through `planEntitlements` (commerce's subscriptions and gift cards are there); whether a plan includes the plugin is the platform's decision, made in its plan table. This grid must draw a row for every feature key (`billing-plan-feature-rows.spec.ts`, `FEATURE_ROW_EXCLUSIONS`), and each row's wording is the published compare table's, pinned by `published-pricing-table-parity.spec.ts`."
     },
     {
       "path": "apps/console/components/billing/billing-usage.component.tsx",
       "rules": [
         "plugin-id",
         "plugin-collection:crm",
-        "domain-declares:crm",
-        "domain-declares:workflows"
+        "domain-declares:crm"
       ],
-      "lane": "plugin-id"
+      "lane": "crm"
     },
     {
       "path": "apps/console/components/entity-picker-provider.component.tsx",
@@ -154,13 +40,6 @@
         "domain-declares:data"
       ],
       "lane": "data"
-    },
-    {
-      "path": "apps/console/components/interactions-provider.component.tsx",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "apps/console/components/notifications-menu.component.tsx",
@@ -173,11 +52,10 @@
     {
       "path": "apps/console/components/plugin-widget-slot.component.tsx",
       "rules": [
-        "domain-declares:commerce",
-        "domain-declares:forms",
-        "domain-declares:workflows"
+        "domain-declares:commerce"
       ],
-      "lane": "ai"
+      "lane": "stays",
+      "why": "The member it trips on is `commerceGlance`'s layout entry. That zone is a tile the console's own site dashboard and Analytics page draw (`hosts/[host]/page.tsx`, `hosts/[host]/analytics/page.tsx`), beside `hostDashboard` in the same grid, so the layout is the page's to state. Its id is a documented zone of the guaranteed `CONSOLE_WIDGET_SLOTS` catalog that any plugin may fill; renaming it would orphan every widget registered for it."
     },
     {
       "path": "apps/console/components/quota-warnings-banner.component.tsx",
@@ -185,38 +63,6 @@
         "domain-declares:ai"
       ],
       "lane": "data"
-    },
-    {
-      "path": "apps/console/components/site-accounts-card.component.tsx",
-      "rules": [
-        "plugin-id",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/components/site-member-drawer.component.tsx",
-      "rules": [
-        "plugin-collection:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
-      "path": "apps/console/components/staff-org-actions.component.tsx",
-      "rules": [
-        "domain-declares:forms",
-        "domain-declares:marketplace",
-        "domain-declares:workflows"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "apps/console/components/staff-org-usage-table.component.tsx",
-      "rules": [
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "forms"
     },
     {
       "path": "apps/console/components/staff-user-email-history-card.component.tsx",
@@ -245,45 +91,15 @@
       "why": "The subprocessor inventory discloses every vendor by name; naming them is its whole job, and a plugin-declared row still folds in through the subprocessor seam."
     },
     {
-      "path": "apps/console/utils/api-v1-openapi.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/utils/api-v1-resources.ts",
       "rules": [
         "plugin-id",
         "plugin-collection:commerce",
-        "plugin-collection:data",
         "plugin-collection:forms",
-        "domain-declares:data",
         "domain-declares:forms",
         "domain-declares:marketing"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/utils/org-counter-totals.ts",
-      "rules": [
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
-      "path": "apps/console/utils/server/announce-dataset-change.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/utils/usage-metering.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
     },
     {
       "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/advertising-tags.tsx",
@@ -292,13 +108,6 @@
       ],
       "lane": "stays",
       "why": "The published page's resolution of the operator's own advertising tags (see advertising-tags.ts): it installs nothing on a customer's site (`isPlatformMarketingHost`), and on the platform's marketing site hands the verdict to the shared mount."
-    },
-    {
-      "path": "apps/tenant/app/api/analytics/collect/route.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "apps/tenant/app/api/forms/submit/route.ts",
@@ -322,14 +131,8 @@
       "rules": [
         "domain-declares:marketing"
       ],
-      "lane": "marketing"
-    },
-    {
-      "path": "apps/tenant/utils/search-content.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
+      "lane": "stays",
+      "why": "The operator's own lead-funnel probe (AGL-2586) on the health board: can a prospect still reach the platform's marketing host through its contact, sales and demo forms. Not a tenant feature; a self-host points it at its own marketing host or leaves it unset. It reads a form's campaigns through the core's container seam by kind, as any non-owner does, and the word it trips on is `campaignCount`, the fact it grades: a lead form filed under no campaign is mailed by nobody."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/actions.ts",
@@ -368,15 +171,6 @@
       "why": "The install-provenance contract every installed document carries and every reader of installed content shares (the theme editor, a template's page, the site's theme resolution, the AI plugin); named for installed content, not its installer, since AGL-3080. The one marketplace word left is `publisherOrgId`, a PERSISTED field of the stamp on every installed document, named in the Firestore rules and their tests: renaming it is a data migration of every installed artifact on every site for a word, and the field means the org that authored the content whoever installed it."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/assist-credits.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:ai",
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/automation-placeholders.ts",
       "rules": [
         "domain-name",
@@ -385,42 +179,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/campaign-membership.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/campaign-touch.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/console-record-links.ts",
-      "rules": [
-        "plugin-id",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/console-routes.ts",
-      "rules": [
-        "plugin-collection:bookings",
-        "plugin-collection:commerce",
-        "plugin-collection:crm",
-        "plugin-collection:workflows"
-      ],
-      "lane": "bookings"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
@@ -439,30 +197,9 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-booking.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-exports:crm",
-        "domain-declares:bookings",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
       "rules": [
         "domain-name",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-inbound.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
         "domain-exports:crm",
         "domain-declares:crm"
       ],
@@ -479,14 +216,6 @@
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-next-activity.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-reports.ts",
       "rules": [
         "domain-name",
         "domain-declares:crm"
@@ -515,25 +244,7 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/dataset-csv.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/dataset-models.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/dataset-query.ts",
       "rules": [
         "domain-name",
         "domain-exports:data",
@@ -556,15 +267,6 @@
         "domain-exports:email",
         "domain-declares:email",
         "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/email-topics.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-declares:email"
       ],
       "lane": "marketing"
     },
@@ -605,13 +307,6 @@
       "why": "The operator's own-traffic stamp, not a tenant feature: the parameter the operator's property filters its own browsing out on, and the constant snippets that set it on the operator's property only (aglyn.com through the Google tag adapter, and a verbatim copy the docs site runs). A customer's property never receives it; a self-host's operator property replaces the target."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/list-assignment-policy.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
       "rules": [
         "domain-exports:marketing",
@@ -623,13 +318,11 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
       "rules": [
-        "domain-declares:commerce",
         "domain-declares:crm",
         "domain-declares:data",
-        "domain-declares:forms",
-        "domain-declares:marketplace"
+        "domain-declares:forms"
       ],
-      "lane": "ai"
+      "lane": "crm"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/platform-ad-conversions.ts",
@@ -656,28 +349,6 @@
       "why": "Aglyn's own console and docs surfaces, not a tenant feature: the consent default the operator's own tags start from (the console's analytics SDK, and a verbatim copy in the docs site), swapped with the operator identity on a self-host. Tenant sites answer to visitor-consent.ts and a vendor's adapter."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/starter-templates.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:commerce"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/usage-budget.ts",
-      "rules": [
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/variables.ts",
-      "rules": [
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
       "rules": [
         "domain-name"
@@ -690,30 +361,24 @@
       "rules": [
         "domain-declares:ai"
       ],
-      "lane": "ai"
+      "lane": "stays",
+      "why": "The member it trips on is `assistOverage`, a STORED field of `orgs/{orgId}`: the AI hard-cap switch and monthly ceiling, written only by the AI plugin's Admin-SDK route and denied to every client branch in `cloud/firebase-firestore.rules`. `org-write-deny-coverage.spec.ts` derives the org document's field set by reading this interface's source and fails on any declared field the rules do not deny; that is why the interface is not composed from plugin augmentations (AGL-3124, stated on `AglynOrgBilling`). Dropping the field from here would take it out of that sweep, so the rules could stop denying it with nothing red, and renaming it is a data migration of every org that set a cap. Its shape (`OrgAssistOverage`) names no plugin word and stays beside it."
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/feature-plugins.ts",
       "rules": [
-        "domain-declares:commerce",
-        "domain-declares:forms",
-        "domain-declares:workflows"
+        "domain-declares:commerce"
       ],
-      "lane": "ai"
+      "lane": "stays",
+      "why": "The member it trips on is `commerceGlance`, an id in the guaranteed `CONSOLE_WIDGET_SLOTS` catalog. The zone is a tile on the console's own site dashboard and Analytics page, which core pages mount beside `hostDashboard`; the commerce plugin fills it, as any plugin may. A zone a console page draws is the console's to name, and renaming a documented zone id would orphan every widget registered for it."
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/plugin-contact-capture.ts",
       "rules": [
         "domain-declares:marketing"
       ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/plugin-manager/plugin-record-timeline.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
+      "lane": "stays",
+      "why": "The person-capture contract every silo hands to the plugin that keeps people, not a Marketing feature. The one word it trips on is `marketingConsent`: the opt-in a capture surface carried, which is consent to the mail rail's MARKETING send purpose (the argued stay on marketing-consent.ts), asked by every marketing-purpose message whichever plugin sends it. What a capture surface is filed under is named by container kind (`containers`, plugin-containers.ts), never by campaign."
     },
     {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",
@@ -724,57 +389,7 @@
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
     },
     {
-      "path": "libs/plugins/ai/src/lib/insights/ai-figure-readers.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/jobs/ai-workflow-records.ts",
-      "rules": [
-        "plugin-collection:data",
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/runtime/site-inventory.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/deal-products-card.tsx",
-      "rules": [
-        "plugin-collection:commerce"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/server/campaign-filing-activity.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/crm/src/lib/server/contact-email-history.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/server/lead-create.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/server/leads-import.ts",
       "rules": [
         "plugin-collection:marketing"
       ],
@@ -810,21 +425,6 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/logic/src/lib/components/host-reference-health-card.component.tsx",
-      "rules": [
-        "plugin-collection:data",
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/components/host-variables-card.component.tsx",
-      "rules": [
-        "plugin-collection:workflows"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/marketing/src/lib/components/campaign-conversions-card.tsx",
       "rules": [
         "plugin-collection:bookings",
@@ -834,37 +434,9 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/marketing/src/lib/server/campaign-manage.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/marketing/src/lib/server/campaign-send.ts",
       "rules": [
         "plugin-collection:marketplace"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/components/listing-content.component.tsx",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/components/marketplace-browse.component.tsx",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/components/org-publish-panel.component.tsx",
-      "rules": [
-        "plugin-collection:data"
       ],
       "lane": "coupling"
     },
@@ -904,17 +476,9 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/outreach/src/lib/routes/curate-routes.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
       "rules": [
-        "plugin-collection:crm",
-        "plugin-collection:marketing"
+        "plugin-collection:crm"
       ],
       "lane": "coupling"
     },
@@ -926,39 +490,9 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/outreach/src/lib/runtime/lead-records.ts",
       "rules": [
         "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/workflows/src/lib/components/use-automation-step-pickers.ts",
-      "rules": [
-        "plugin-collection:data",
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/workflows/src/lib/components/use-org-automation-step-pickers.ts",
-      "rules": [
-        "plugin-collection:data",
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/workflows/src/lib/engine/run-event-actions.ts",
-      "rules": [
-        "plugin-collection:marketing"
       ],
       "lane": "coupling"
     },
@@ -971,15 +505,6 @@
       "why": "Generic field definitions for any data-driven form; nothing of the forms plugin."
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/components/campaign-picker.component.tsx",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-container.ts",
       "rules": [
         "domain-name",
@@ -989,25 +514,7 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-conversions.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-report.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-revenue.ts",
       "rules": [
         "domain-name",
         "domain-exports:marketing",
@@ -1064,13 +571,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/contact-email-engagement.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/contact-email-index.ts",
       "rules": [
         "domain-name"
@@ -1086,30 +586,9 @@
       "why": "`contact` here is the VERB, not the CRM's record: the operator's own do-not-contact list for the calls and texts it makes to its account holders (`contactSuppressions/{nationalKey}`, AGL-1592), the retained record Privacy Policy §11, the TSR and CCPA §1798.105(d) require to honor an opt-out. It is keyed by phone number across accounts and read by the SMS keyword handler, the user-profile erasure and the staff console; it reads and writes no CRM contact, and a self-host without the CRM still owes it."
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "plugin-collection:crm",
-        "domain-declares:bookings",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts",
       "rules": [
         "domain-name",
-        "domain-exports:crm",
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/crm-inbound-email.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:crm",
         "domain-exports:crm",
         "domain-declares:crm"
       ],
@@ -1175,13 +654,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/email-topic-confirmation.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/erase-person.ts",
       "rules": [
         "plugin-id",
@@ -1241,13 +713,6 @@
       ],
       "lane": "stays",
       "why": "The console's Firebase boot, not a tenant feature: its analytics is the platform Firebase project's own, under the operator's measurement id (NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID), and the comment names what the SDK's boot sends. Swapped with the operator's Firebase project on a self-host."
-    },
-    {
-      "path": "libs/tenant/feature/instance/src/lib/hooks/use-host-campaigns.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/tenant/runtime/src/lib/assign-contact-owner.ts",

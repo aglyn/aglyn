@@ -26,6 +26,8 @@ import {
   removeNodeInteraction,
   upsertNodeInteraction,
   validateInteraction,
+  type ConsoleBesignerInteractionsZoneProps,
+  type ConsoleBesignerSectionExperiments,
   type NodeInteraction,
 } from '@aglyn/aglyn'
 import {
@@ -33,7 +35,6 @@ import {
   nodeElementSelector,
   type InteractionsContextValue,
 } from '@aglyn/besigner-ui'
-import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { buildInteractionCandidate } from './interaction-builder-doc'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -50,6 +51,7 @@ import {
   useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import PluginWidgetSlot from './plugin-widget-slot.component'
 
 export interface InteractionsProviderProps {
   hostId: string
@@ -59,8 +61,8 @@ export interface InteractionsProviderProps {
    * Renders children with an empty interactions context (AGL-587): email
    * documents run no client JS, so the attributes panel must not offer
    * the Interactions section. The designer hides it when no creator
-   * callbacks are present; disabling here also skips the automations and
-   * experiments subscriptions and the builder dialog entirely.
+   * callbacks are present; disabling here also skips the automations
+   * subscription, the plugin zone and the builder dialog entirely.
    */
   disabled?: boolean
   children?: JSX.Children
@@ -68,10 +70,12 @@ export interface InteractionsProviderProps {
 
 /**
  * Feeds the designer's Interactions section (AGL-258) with the host's
- * element-scoped automations and section experiments. Creating or
- * editing an interaction opens the inline builder dialog (AGL-319) —
- * trigger, actions, and frequency configure right on the canvas and
- * save enabled. Section experiments still draft to the Marketing page.
+ * element-scoped automations, and with the section experiments a plugin
+ * reports through the `besignerInteractions` zone. Creating or editing an
+ * interaction opens the inline builder dialog (AGL-319) — trigger, actions,
+ * and frequency configure right on the canvas and save enabled. A section
+ * experiment is the reporting plugin's record, started through what it
+ * reported.
  */
 /**
  * An `observer`, because an interaction lives on the node and the node is a
@@ -101,17 +105,25 @@ export const InteractionsProvider = observer(function InteractionsProvider(
       [firestore, hostId, disabled],
       { idField: '$id' },
     )
-  const { data: experimentDocs } = useFirestoreCollection<any>(
-    () =>
-      disabled
-        ? null
-        : query(
-            collection(firestore, 'hosts', hostId, 'experiments'),
-            limit(50),
-          ),
-    [firestore, hostId, disabled],
-    { idField: '$id' },
-  )
+  /**
+   * What each plugin in the `besignerInteractions` zone reported, by the name
+   * it reports under. State rather than a ref, because a report is what the
+   * section renders: a badge appearing once a plugin's read lands is a
+   * re-render, and a ref would hold the experiments without drawing them.
+   */
+  const [sectionReports, setSectionReports] = useState<
+    Readonly<Record<string, ConsoleBesignerSectionExperiments>>
+  >({})
+  const reportSectionExperiments = useCallback<
+    ConsoleBesignerInteractionsZoneProps['reportSectionExperiments']
+  >((reporterId, report) => {
+    setSectionReports((current) => {
+      if (report) return { ...current, [reporterId]: report }
+      if (!(reporterId in current)) return current
+      const { [reporterId]: _withdrawn, ...rest } = current
+      return rest
+    })
+  }, [])
 
   /**
    * Write one interaction onto the node that owns it.
@@ -209,19 +221,13 @@ export const InteractionsProvider = observer(function InteractionsProvider(
         enabled: action.enabled !== false,
       }))
     const automations = [...nodeAutomations, ...legacyAutomations]
-    const sectionExperiments = (experimentDocs ?? [])
-      .filter(
-        (experiment: any) =>
-          !experiment.deletedAt &&
-          experiment.target === 'section' &&
-          experiment.nodeId,
-      )
-      .map((experiment: any) => ({
-        id: experiment.$id as string,
-        name: experiment.name as string | undefined,
-        nodeId: experiment.nodeId as string,
-        status: experiment.status as string | undefined,
-      }))
+    const reports = Object.values(sectionReports)
+    const sectionExperiments = reports.flatMap((report) => report.experiments)
+    // The first plugin that offers to start one; a page runs one plugin's
+    // experiments, and two offers for one element would be one too many.
+    const createSectionExperiment = screenId
+      ? reports.find((report) => report.create)?.create
+      : undefined
     return {
       automations,
       sectionExperiments,
@@ -352,49 +358,14 @@ export const InteractionsProvider = observer(function InteractionsProvider(
       onEditInteraction: ({ id, nodeId }) => {
         setBuilder({ id, nodeId, event: 'elementClick' })
       },
-      ...(screenId
-        ? {
-            onCreateSectionExperiment: ({ nodeId }: { nodeId: string }) => {
-              const id = createResourceUid()
-              void setDoc(
-                doc(firestore, 'hosts', hostId, 'experiments', id),
-                {
-                  // With the search keys the A/B testing list's filter and
-                  // search read (AGL-3321).
-                  ...nameSearchFields(`Section test — ${nodeId.slice(0, 8)}`),
-                  status: 'draft',
-                  target: 'section',
-                  screenId,
-                  nodeId,
-                  variants: [
-                    { id: 'a', name: 'A (control)', weight: 1 },
-                    { id: 'b', name: 'B', weight: 1 },
-                  ],
-                  goal: { event: 'formSubmission' },
-                  createdAt: Timestamp.now(),
-                },
-              )
-                .then(() =>
-                  enqueueSnackbar(
-                    'Draft experiment created — pin variant versions and ' +
-                      'start it from Marketing → Experiments',
-                    { variant: 'success', persist: false },
-                  ),
-                )
-                .catch((error) => {
-                  console.error(error)
-                  enqueueSnackbar('Could not create the experiment', {
-                    variant: 'error',
-                  })
-                })
-            },
-          }
+      ...(createSectionExperiment
+        ? { onCreateSectionExperiment: createSectionExperiment }
         : {}),
     }
   }, [
     nodeAutomations,
     actionDocs,
-    experimentDocs,
+    sectionReports,
     firestore,
     createResource,
     hostId,
@@ -458,6 +429,14 @@ export const InteractionsProvider = observer(function InteractionsProvider(
   return (
     <InteractionsContext.Provider value={value}>
       {children}
+      {disabled ? null : (
+        <PluginWidgetSlot
+          slot="besignerInteractions"
+          hostId={hostId}
+          screenId={screenId ?? null}
+          reportSectionExperiments={reportSectionExperiments}
+        />
+      )}
       {!disabled && builder ? (
         <InteractionBuilderDialog
           key={builder.id ?? 'new'}

@@ -38,7 +38,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "timezone",
         "description": "Timezone the time is shown in",
-        "sample": "UTC"
+        "sample": "America/Chicago"
+      },
+      {
+        "name": "booking.payment",
+        "description": "What a paid booking charged, as a sentence; empty for a free booking",
+        "sample": "You paid $95.00."
       },
       {
         "name": "booking.ref",
@@ -54,7 +59,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Hi {{name}}, your booking for \"{{service.name}}\" is confirmed for {{when}} ({{timezone}}).",
+        "text": "Hi {{name}}, your booking with {{host.businessName}} is confirmed: \"{{service.name}}\" on {{when}} ({{timezone}}).",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{booking.payment}}",
         "variant": "body"
       },
       {
@@ -87,13 +97,18 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "when",
         "description": "Formatted date and time of the booking",
-        "sample": "Tomorrow at 9:00 AM"
+        "sample": "Tuesday, June 2, 2026 at 9:00 AM"
+      },
+      {
+        "name": "timezone",
+        "description": "Timezone the time is shown in",
+        "sample": "America/Chicago"
       }
     ],
     "defaultBody": [
       {
         "block": "text",
-        "text": "Hi {{name}}, this is a reminder that \"{{service.name}}\" is coming up on {{when}}.",
+        "text": "Hi {{name}}, this is a reminder of your booking with {{host.businessName}}: \"{{service.name}}\" on {{when}} ({{timezone}}).",
         "variant": "body"
       }
     ],
@@ -122,6 +137,11 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
         "name": "order.ref",
         "description": "Order reference id",
         "sample": "cs_test_123"
+      },
+      {
+        "name": "store.receiptFooter",
+        "description": "The Receipt footer from the store settings; empty when none is set",
+        "sample": "Returns are accepted within 30 days."
       }
     ],
     "defaultBody": [
@@ -132,12 +152,22 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
+        "text": "Here is the receipt for your order from {{host.businessName}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
         "text": "{{order.summary}}",
         "variant": "body"
       },
       {
         "block": "text",
-        "text": "Total: {{order.total}}",
+        "text": "Total charged: {{order.total}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{store.receiptFooter}}",
         "variant": "body"
       },
       {
@@ -233,8 +263,13 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "name": "reservation.paid",
-        "description": "Amount paid today",
+        "description": "What the guest was charged today, lodging tax included; a charge that carried lodging tax names it, as in “$254.40, including $14.40 lodging tax”",
         "sample": "$240.00"
+      },
+      {
+        "name": "reservation.balance",
+        "description": "What is still owed for the stay and where it is paid, as a sentence; empty when the stay is paid in full",
+        "sample": "Still to pay: $360.00, at the property. It has not been charged."
       },
       {
         "name": "reservation.ref",
@@ -250,7 +285,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Your stay is confirmed!",
+        "text": "Your stay at {{host.businessName}} is confirmed.",
         "variant": "body"
       },
       {
@@ -270,6 +305,11 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
+        "text": "{{reservation.balance}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
         "text": "Reference: {{reservation.ref}}",
         "variant": "caption"
       }
@@ -283,7 +323,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "pluginId": "commerce",
     "plugin": "Commerce",
     "control": "besigner",
-    "defaultSubject": "Your gift card",
+    "defaultSubject": "Your gift card for {{host.businessName}}",
     "mergeTokens": [
       {
         "name": "giftcard.code",
@@ -294,6 +334,11 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
         "name": "giftcard.value",
         "description": "The gift card value",
         "sample": "$25.00"
+      },
+      {
+        "name": "giftcard.note",
+        "description": "The note written when the card was issued by hand; empty for a card bought at checkout",
+        "sample": "Happy birthday, Sam!"
       }
     ],
     "defaultBody": [
@@ -304,18 +349,28 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
+        "text": "You have a {{giftcard.value}} gift card for {{host.businessName}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{giftcard.note}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
         "text": "Gift card code: {{giftcard.code}}",
         "variant": "body"
       },
       {
         "block": "text",
-        "text": "Value: {{giftcard.value}}",
+        "text": "Enter the code at checkout on {{host.url}} to use its balance.",
         "variant": "body"
       },
       {
-        "block": "text",
-        "text": "Enter it at checkout to apply the balance.",
-        "variant": "body"
+        "block": "button",
+        "label": "Visit {{host.businessName}}",
+        "href": "{{host.url}}"
       }
     ],
     "footerReason": "You’re receiving this because a gift card from {{host.businessName}} was sent to this address."
@@ -345,13 +400,13 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "product.url",
         "description": "Link to the product page",
-        "sample": "/products/house-blend"
+        "sample": "https://shop.example.com/products/house-blend"
       }
     ],
     "defaultBody": [
       {
         "block": "text",
-        "text": "{{product.name}} is available again — grab it before it sells out.",
+        "text": "{{product.name}} is back in stock at {{host.businessName}}.",
         "variant": "body"
       },
       {
@@ -381,7 +436,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "defaultBody": [
       {
         "block": "text",
-        "text": "Your cart is still waiting — pick up where you left off.",
+        "text": "You left items in your cart at {{host.businessName}}. Pick up where you left off.",
         "variant": "body"
       },
       {
@@ -391,7 +446,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Your items are held but not reserved, so they may sell out.",
+        "text": "Nothing in your cart is held for you.",
         "variant": "caption"
       }
     ],
@@ -513,7 +568,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "An administrator of {{site.name}} set a new password on your account. You have been signed out on every device and will need the new password to sign back in.",
+        "text": "An administrator of {{site.name}} set a new password on your account and signed you out on every device. To sign back in, get the new password from them, or choose \"Forgot password?\" on the sign-in page to set your own.",
         "variant": "body"
       },
       {
@@ -541,7 +596,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "stream.name",
         "description": "What they signed up for",
-        "sample": "our newsletter"
+        "sample": "Newsletter"
       },
       {
         "name": "confirmUrl",
@@ -557,7 +612,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Please confirm that you want to receive {{stream.name}} at this address.",
+        "text": "Please confirm that you want to get {{stream.name}} emails from {{host.businessName}} at this address.",
         "variant": "body"
       },
       {

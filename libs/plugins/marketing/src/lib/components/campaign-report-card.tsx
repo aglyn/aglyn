@@ -43,11 +43,11 @@ import {
 import {
   campaignRevenueReport,
   type CampaignRevenueRollup,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-revenue'
+} from '../model/campaign-revenue'
 import {
   campaignConversionsReport,
   type CampaignConversionsRollup,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-conversions'
+} from '../model/campaign-conversions'
 /*
  * The three renderers every email report shares. Imported rather than kept
  * here, so "a rate prints its denominator" is one implementation and not a

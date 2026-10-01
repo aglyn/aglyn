@@ -50,6 +50,10 @@ const STARTS_AT = NOW + (REMINDER_WINDOW_START_HOURS + 0.5) * 60 * 60 * 1000
 let writes: string[] = []
 /** Every email the pass would have sent. */
 let emails: string[] = []
+/** The text of each, in the same order. */
+let texts: string[] = []
+/** The merge values each reminder's built-in copy was rendered with. */
+let merges: Array<Record<string, string>> = []
 /** Hosts the gate was asked about, in order. */
 let asked: string[] = []
 /** The set of hosts the gate answers LOCKED for. */
@@ -125,11 +129,18 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'NOW', delete: () => 'DELETE' },
 }))
 
-// No template published: the batch loader answers nothing, as the stubbed
-// `loadHostEmail` below always did (AGL-3370 moved the batch onto the leaf).
+// No template published: the batch loader hands back the built-in copy, and
+// rendering it answers nothing, so the send falls to the plain text — while
+// the merge values the copy would have been filled with are kept to read.
 jest.mock('@aglyn/tenant-data-admin/server/host-email-tokens', () => ({
-  loadHostEmailWithTokens: async () => null,
-  renderLoadedHostEmailWithTokens: () => null,
+  loadHostEmailWithTokens: async () => ({}),
+  renderLoadedHostEmailWithTokens: (
+    _loaded: unknown,
+    merge: Record<string, string>,
+  ) => {
+    merges.push(merge)
+    return null
+  },
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -139,8 +150,9 @@ jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => true,
   loadHostEmail: async () => null,
   renderLoadedHostEmail: () => ({ subject: 's', text: 't' }),
-  sendEmail: async (message: { to: string }) => {
+  sendEmail: async (message: { to: string; text?: string }) => {
     emails.push(message.to)
+    texts.push(String(message.text ?? ''))
     return { sent: true }
   },
 }))
@@ -254,6 +266,8 @@ const realFetch = global.fetch
 beforeEach(() => {
   writes = []
   emails = []
+  texts = []
+  merges = []
   asked = []
   lockedHosts = new Set()
   staleHolds = []
@@ -425,6 +439,61 @@ describe('AGL-3356 · the manual bookings/reminders door honours a lockdown', ()
     lockedHosts.delete('locked')
     expect((await callDoor()).body).toMatchObject({ sent: 1 })
     expect(emails).toEqual(['guest@example.com'])
+  })
+})
+
+/**
+ * The reminder states the time in the booking's own zone, and names it
+ * (AGL-3432). It formatted with no zone — the server's, UTC — and said
+ * nothing about which zone that was.
+ */
+describe('the reminder tells the time in the booking’s zone (AGL-3432)', () => {
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(NOW)
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('formats in the zone the booking stored, and names it', async () => {
+    upcoming = [
+      bookingDoc('healthy', 'b1', {
+        status: 'confirmed',
+        email: 'guest@example.com',
+        name: 'Guest',
+        serviceName: 'Massage',
+        startsAtMs: STARTS_AT,
+        timezone: 'America/Chicago',
+      }),
+    ]
+    await scanBookingReminders(gate)
+    const when = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      dateStyle: 'full',
+      timeStyle: 'short',
+    }).format(new Date(STARTS_AT))
+    expect(texts).toEqual([
+      expect.stringContaining(`scheduled for ${when} (America/Chicago).`),
+    ])
+    // The built-in copy is filled with the same time and its zone.
+    expect(merges).toEqual([
+      expect.objectContaining({ when, timezone: 'America/Chicago' }),
+    ])
+  })
+
+  it('names UTC when nothing says otherwise, never an empty zone', async () => {
+    upcoming = [
+      bookingDoc('healthy', 'b1', {
+        status: 'confirmed',
+        email: 'guest@example.com',
+        name: 'Guest',
+        serviceName: 'Massage',
+        startsAtMs: STARTS_AT,
+      }),
+    ]
+    await scanBookingReminders(gate)
+    expect(texts[0]).toContain('(UTC).')
+    expect(texts[0]).not.toContain('()')
   })
 })
 

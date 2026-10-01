@@ -76,7 +76,7 @@
  * `report-usage`, which takes `overageMonthlyUsd` and ignores `allowed`. This
  * table asserted them by naming them, which is the failure mode it should
  * least have had. They are enforced at real call sites now
- * (`apps/console/specs/dataset-storage-quota-enforced.spec.ts`,
+ * (`libs/plugins/data/src/lib/server/dataset-storage-quota-enforced.spec.ts`,
  * `apps/console/specs/api-v1-request-quota.spec.ts`), and both suites force
  * the branch through the route rather than checking a return value.
  *
@@ -222,7 +222,7 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     // `included.metered ?` ternary in `estimateMonthlyUsageCost` — the free
     // org was billed $8.45, which is the whole failure in one number.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 250 * GB, pageViews: 0, formSubmissions: 0 }],
+      [{ storageBytes: 250 * GB, pageViews: 0, meters: { formSubmissions: 0 } }],
       freeOrg(),
     )
     expect(estimate.billableStorageGb).toBeCloseTo(249.756, 2) // measured…
@@ -240,14 +240,15 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     // reverted or failed open — which they do on purpose, on every unreadable
     // org doc.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 0, pageViews: 1_000_000, formSubmissions: 0 }],
+      [{ storageBytes: 0, pageViews: 1_000_000, meters: { formSubmissions: 0 } }],
       freeOrg(),
     )
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
-    // $0.00016153846 × 1M — real COGS, and the figure the 2026-09-09 re-peg
-    // moved. What free costs the platform is the reason the cap exists; what
-    // it bills is zero either way, which is the line below.
-    expect(estimate.costUsd).toBeCloseTo(161.54, 2)
+    // $0.00035471473 × 1M — real COGS, its transfer at the CDN's dearest
+    // region, and the figure the 2026-09-09 re-peg and the 2026-10-01
+    // re-price moved. What free costs the platform is the reason the cap
+    // exists; what it bills is zero either way, which is the line below.
+    expect(estimate.costUsd).toBeCloseTo(354.71, 2)
     expect(estimate.billedCents).toBe(0)
   })
 
@@ -259,10 +260,21 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     expect(contained.ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
     expect(contained.exceeded).toBe(true)
     expect(bandwidthCeilingDegradesRender(freeOrg())).toBe(true)
-    // POSITIVE CONTROL: the paid plan is not contained at the same count —
-    // its overage bills, which is the whole difference.
-    expect(checkBandwidthAbuseCeiling(paidOrg(), 150_000).exceeded).toBe(false)
+    // POSITIVE CONTROL: at the count that contains a free site — the floor
+    // itself — a paid plan whose band sits above the floor is not contained,
+    // because its ceiling is three times that band, and its overage bills,
+    // which is the whole difference. Pro, because Starter's 20 GB is under
+    // the floor and shares Free's ceiling — where it is still not DEGRADED.
+    const proOrg = { plan: 'pro', subscription: { status: 'active' } } as any
+    expect(
+      checkBandwidthAbuseCeiling(freeOrg(), BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(true)
+    expect(
+      checkBandwidthAbuseCeiling(proOrg, BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(false)
+    expect(checkBandwidthAbuseCeiling(paidOrg(), 0).ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
     expect(bandwidthCeilingDegradesRender(paidOrg())).toBe(false)
+    expect(bandwidthCeilingDegradesRender(proOrg)).toBe(false)
     // …and free UNDER the ceiling is untouched: a hobby site with real
     // traffic must not meet a wall dressed up as an abuse control.
     expect(checkBandwidthAbuseCeiling(freeOrg(), 99_999).exceeded).toBe(false)
@@ -270,10 +282,10 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
 
   it('form submissions: 500× the band, still $0', () => {
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 0, pageViews: 0, formSubmissions: 10_000 }],
+      [{ storageBytes: 0, pageViews: 0, meters: { formSubmissions: 10_000 } }],
       freeOrg(),
     )
-    expect(estimate.billableFormSubmissions).toBe(10_000 - 20)
+    expect(estimate.billableMeters.formSubmissions).toBe(10_000 - 20)
     expect(estimate.billedCents).toBe(0)
   })
 
@@ -338,7 +350,7 @@ describe("THE INVOICE: every band blown at once, and it is exactly zero", () => 
           // meter far past every band.
           storageBytes: 250 * GB,
           pageViews: 1_000_000,
-          formSubmissions: 10_000,
+          meters: { formSubmissions: 10_000 },
         },
       ],
       org as never,
@@ -387,15 +399,21 @@ describe("THE INVOICE: every band blown at once, and it is exactly zero", () => 
     // So: assert the usage IS measured and IS past the band on the free org,
     // and that only the pricing step zeroes it.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 250 * GB, pageViews: 1_000_000, formSubmissions: 10_000 }],
+      [
+        {
+          storageBytes: 250 * GB,
+          pageViews: 1_000_000,
+          meters: { formSubmissions: 10_000 },
+        },
+      ],
       freeOrg(),
     )
     expect(estimate.storageGb).toBeCloseTo(250, 6)
     expect(estimate.pageViews).toBe(1_000_000)
-    expect(estimate.formSubmissions).toBe(10_000)
+    expect(estimate.meters.formSubmissions).toBe(10_000)
     expect(estimate.billableStorageGb).toBeGreaterThan(249)
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
-    expect(estimate.billableFormSubmissions).toBe(9_980)
+    expect(estimate.billableMeters.formSubmissions).toBe(9_980)
     // COGS is real and truthful — under-reporting our own cost is what makes
     // the discount guardrail too generous, so free's zero must NOT reach here.
     expect(estimate.costUsd).toBeGreaterThan(100)

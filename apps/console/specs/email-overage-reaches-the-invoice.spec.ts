@@ -210,7 +210,7 @@ jest.mock('../utils/org-counter-totals', () => ({
   __esModule: true,
   orgCounterTotals: async () => ({
     emailSends: mockEmailSends,
-    workflowRuns: 0,
+    counters: {},
     actionRuns: 0,
     orgLibraryBytes: 0,
   }),

@@ -60,6 +60,12 @@ import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 // a signed payload, an idempotency claim and a Firestore double standing
 // between a test and the question it is asking (AGL-118).
 import { subscriptionActivityEntry } from './subscription-activity'
+import {
+  billingNoticeWorkspace,
+  dunningCancellationNotice,
+  invoiceNotice,
+  invoiceNoticeLink,
+} from './customer-billing-notices'
 import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import {
   INTERNAL_TRAFFIC_PARAM,
@@ -82,7 +88,11 @@ import {
   stripeCallWithKey,
 } from '../../../../utils/server/immediate-charge'
 import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
-import { describeStripePaymentMethod } from '../../_lib/stripe-payment-method'
+import {
+  defaultPaymentMethodChange,
+  describeStripePaymentMethod,
+  moveSubscriptionsOntoDefault,
+} from '../../_lib/stripe-payment-method'
 // The annual-mix metric's only input (AGL-1640) — three-state on purpose, and
 // specced per branch, because a wrong `billing_interval` is indistinguishable
 // from a right one in every report that reads it.
@@ -1167,11 +1177,20 @@ async function handler(request: Request): Promise<Response> {
           // Fire-and-forget through `after()`, like every other notification
           // on this route: a notification failure must never 500 the webhook
           // into redelivering the mirrors above.
+          //
+          // The notice names the workspace and says what the cancellation
+          // means: which plan it is on now, that nothing was deleted, and that
+          // the last invoice is still owed (AGL-3432).
           if (object?.cancellation_details?.reason === 'payment_failed') {
             const canceledSlug = orgSnapshot.get('slug') as string | undefined
+            const notice = dunningCancellationNotice({
+              workspace: billingNoticeWorkspace(orgSnapshot),
+              previousPlan,
+              org: orgSnapshot.data(),
+            })
             after(() => notifyOrgAdmins(String(orgId), {
               type: 'billing.subscriptionCanceled',
-              title: 'Your subscription was canceled — payment kept failing',
+              ...notice,
               orgId: String(orgId),
               link: canceledSlug
                 ? buildRoute(Route.MANAGE_BILLING, { orgSlug: canceledSlug })
@@ -1529,9 +1548,8 @@ async function handler(request: Request): Promise<Response> {
           // Billing is org-scoped now (AGL-621/644). Links are frozen at write
           // time, so emit the canonical path; the reader normalizes anything
           // legacy that predates this.
-          const orgSlug = (
-            await observed().collection('orgs').doc(orgId).get()
-          ).get('slug') as string | undefined
+          const invoiceOrg = await observed().collection('orgs').doc(orgId).get()
+          const orgSlug = invoiceOrg.get('slug') as string | undefined
           // Tag the INVOICE itself with the workspace (AGL-941).
           //
           // Checkout cannot do this: `subscription_data[metadata]` reaches
@@ -1586,19 +1604,24 @@ async function handler(request: Request): Promise<Response> {
             type === 'invoice.payment_failed'
           ) {
             ledger.effect('org-admins-notified')
+            // Each event its own copy, naming the workspace (AGL-3432): a paid
+            // invoice announced as "available" read as money still owed.
+            const notice = invoiceNotice({
+              type,
+              workspace: billingNoticeWorkspace(invoiceOrg),
+              invoice: object,
+              org: invoiceOrg.data(),
+            })
             after(() => notifyOrgAdmins(orgId, {
               type:
                 type === 'invoice.payment_failed'
                   ? 'billing.paymentFailed'
                   : 'billing.invoice',
-              title:
-                type === 'invoice.payment_failed'
-                  ? `Payment failed for your $${dollars} invoice`
-                  : `Your $${dollars} invoice is available`,
+              ...notice,
               orgId,
-              link: orgSlug
-                ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
-                : '/org/billing',
+              // A failed payment lands on the Update payment method button
+              // its body names (AGL-3442).
+              link: invoiceNoticeLink(type, orgSlug),
             }))
           }
           // THE PLUGIN'S OWN INVOICE, ANSWERED (AGL-3011).
@@ -1680,6 +1703,9 @@ async function handler(request: Request): Promise<Response> {
               context: {
                 invoiceId: String(object?.id ?? ''),
                 orgId,
+                // Off the org document already read for the slug above
+                // (AGL-3432); blank when it has no name.
+                orgName: String(invoiceOrg.get('name') ?? '').trim(),
                 status: type === 'invoice.voided' ? 'voided' : 'uncollectible',
                 amount: formatOperatorAlertAmount(
                   Number(object?.amount_due ?? 0),
@@ -1736,6 +1762,40 @@ async function handler(request: Request): Promise<Response> {
       if (customerId) {
         const orgId = await findOrgIdByStripeCustomer(customerId)
         if (!orgId) ledger.skip('payment-method-customer-is-not-a-workspace')
+        // A NEW DEFAULT REACHES THE SUBSCRIPTION (AGL-3442).
+        //
+        // Stripe's portal payment-method flow, which Billing's "Update
+        // payment method" button opens, sets only the CUSTOMER's default. The
+        // subscription carries its own, which wins, so without this the
+        // customer is told the payment method is updated while the next retry
+        // charges the card that failed. Done here because every route to a
+        // new default arrives here, and before the plugins are told what the
+        // default is. Idempotent, so a redelivery is harmless.
+        const newDefault =
+          orgId && type === 'customer.updated'
+            ? defaultPaymentMethodChange(
+                object,
+                event?.data?.previous_attributes,
+              )
+            : null
+        const stripeSecret = process.env.STRIPE_SECRET_KEY
+        if (newDefault && stripeSecret) {
+          const outcome = await moveSubscriptionsOntoDefault(
+            stripeSecret,
+            customerId,
+            newDefault,
+          )
+          if (!outcome || outcome.failed.length) {
+            // LOUD: the customer believes the new card is the one billed.
+            console.error(
+              '[billing/webhook] subscription not moved onto the new default payment method',
+              { orgId, failed: outcome?.failed ?? 'subscriptions unreadable' },
+            )
+          }
+          if (outcome?.moved.length) {
+            ledger.effect('subscriptions-moved-onto-the-new-default')
+          }
+        }
         if (orgId) {
           const defaultType = await readDefaultPaymentMethodType(customerId)
           if (defaultType === undefined) {
@@ -1894,7 +1954,8 @@ async function handler(request: Request): Promise<Response> {
     // through to the plugins exactly as before.
     //
     // WHY `refundedCents` AND `chargedBackCents` BOTH. This mirrors the order
-    // model AGL-1787 already established (`utils/site-member-purchases.ts`):
+    // model AGL-1787 already established (the commerce plugin's
+    // `model/site-member-purchases.ts`):
     // the reversal lands in `refundedCents` because that is the field the
     // return reads and a lost dispute reverses money precisely as a refund
     // does, and `chargedBackCents` records how much of it the BANK took
@@ -2020,12 +2081,27 @@ async function handler(request: Request): Promise<Response> {
           }
           // Money taken back from a paying workspace, which keeps its plan
           // until a person decides otherwise (AGL-3377). Once per dispute.
+          // The workspace is named as well as numbered (AGL-3432): one read,
+          // on a lost dispute only. A failed read leaves the id alone, and a
+          // row attributed to no workspace says so.
+          const orgName = orgId
+            ? String(
+                (
+                  await observed()
+                    .collection('orgs')
+                    .doc(orgId)
+                    .get()
+                    .catch(() => null)
+                )?.get('name') ?? '',
+              ).trim()
+            : 'unknown'
           await raiseOperatorAlert('billing.platformDisputeLost', {
             dedupeKey: disputeId || chargeId || revenueDoc.id,
             context: {
               disputeId,
               invoiceId: revenueDoc.id,
               orgId,
+              orgName,
               reason: String(object?.reason ?? '') || 'no reason given',
               amount: formatOperatorAlertAmount(
                 disputedCents,

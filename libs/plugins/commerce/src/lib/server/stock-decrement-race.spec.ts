@@ -298,7 +298,11 @@ describe('AGL-2320 — concurrent stock decrements', () => {
       type: 'content.lowStock',
       title: 'Oversold — Widget',
     })
-    expect(notifications[0].body).toContain('1 unit')
+    // What was sold, on which site, and what is short (AGL-3432).
+    expect(notifications[0].body).toBe(
+      'An order on {site} was paid for 1× Widget, but none was in stock. ' +
+        '1 unit is short: restock it or refund the difference.',
+    )
   })
 
   it('says nothing about a backorder product selling past zero', async () => {

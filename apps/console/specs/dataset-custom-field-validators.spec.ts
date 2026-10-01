@@ -21,76 +21,33 @@
  *
  * `validateCustomFieldValue` answers "no error" for a custom type nobody
  * registered, and a type is registered only when its plugin's server entry
- * loads. The console's record write paths — `/api/orgs/datasets`, the `/v1`
- * record handlers and site import — validate records but do not load plugins,
- * so a marketplace `rating` of 9 could pass the validation those paths run.
+ * loads. The console-served record write paths — `/api/orgs/datasets`, the
+ * `/v1` dataset handlers and site import — are the data plugin's, and its
+ * helper (`loadCustomFieldTypes`, held by the plugin's own spec) asks the
+ * caller to load every plugin's console surface before validating.
  *
- * Two halves: the helper does what it says, and each write path calls it
- * between deriving the model and validating against it. Site import restores
- * records through the data plugin's section of the bundle, whose own helper
- * asks the restore to load the plugins — so the restore's half is that it
- * really does.
+ * Two halves are held here: each write path calls a loader between deriving
+ * the model and validating against it, and each CALLER the plugin asks — the
+ * `/v1` router's context and the site restore — really does load the plugins.
  */
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { CustomFieldType } from '@aglyn/aglyn'
-import {
-  registerCustomFieldType,
-  validateDocument,
-  type DatasetModel,
-} from '@aglyn/aglyn/server'
-
-const mockEnsureAll = jest.fn()
-
-jest.mock('../utils/server-plugin-loader', () => ({
-  __esModule: true,
-  serverPluginLoader: {
-    ensureAll: (...args: unknown[]) => mockEnsureAll(...args),
-  },
-}))
 
 /**
- * A custom field type shaped like the marketplace's `rating`, its reference
- * adopter. The console may not import an add-on library (module boundaries
- * keep `scope:app` off `aglyn:addons`), and the helper under test is
- * plugin-agnostic: it only has to make whatever a plugin registered run.
+ * The console-served paths that validate a record before writing it, from
+ * the repo root: the data plugin's console API, its `/v1` datasets and its
+ * section of a site restore.
  */
-const RATING_FIELD: CustomFieldType = {
-  name: 'rating',
-  pluginId: 'marketplace',
-  label: 'Rating (0–5)',
-  baseType: 'int32',
-  description: 'Whole-number rating between 0 and 5.',
-  validate: (value) => {
-    const rating = Number(value)
-    return Number.isInteger(rating) && rating >= 0 && rating <= 5
-      ? null
-      : 'must be a whole number from 0 to 5'
-  },
-}
-
-/** A dataset with one field of the `rating` type. */
-const RATED: DatasetModel = {
-  order: ['stars'],
-  fields: { stars: { name: 'Stars', type: 'int32', customType: 'rating' } },
-}
-
-const PLAIN: DatasetModel = {
-  order: ['title'],
-  fields: { title: { name: 'Title', type: 'text' } },
-}
-
-/** The console paths that validate a record before writing it. */
 const RECORD_WRITERS = [
-  'app/api/orgs/datasets/route.ts',
-  'utils/api-v1-resources.ts',
-  '../../libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts',
+  'libs/plugins/data/src/lib/server/datasets-route.ts',
+  'libs/plugins/data/src/lib/server/api-v1/datasets.ts',
+  'libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts',
 ]
 
 describe('every console record write loads custom field types first', () => {
   it.each(RECORD_WRITERS)('%s', (file) => {
-    const source = readFileSync(join(__dirname, '..', file), 'utf8')
+    const source = readFileSync(join(__dirname, '../../..', file), 'utf8')
     const validations = [...source.matchAll(/validateDocument\(/g)].map(
       (match) => match.index ?? 0,
     )
@@ -99,7 +56,11 @@ describe('every console record write loads custom field types first', () => {
     for (const at of validations) {
       const modelAt = source.lastIndexOf('effectiveDatasetModel(', at)
       expect(modelAt).toBeGreaterThan(-1)
-      expect(source.slice(modelAt, at)).toContain('ensureCustomFieldTypes(')
+      // The plugin's loader, or the platform's own repair step a route the
+      // dispatcher serves runs: either registers the types before the check.
+      expect(source.slice(modelAt, at)).toMatch(
+        /(?:loadCustomFieldTypes|ensureDeclaredCustomFieldTypes)\(/,
+      )
     }
   })
 })
@@ -118,39 +79,13 @@ describe('a site restore', () => {
   })
 })
 
-describe('ensureCustomFieldTypes', () => {
-  beforeEach(() => {
-    mockEnsureAll.mockReset()
-  })
-
-  it('loads nothing for a dataset with no custom field', async () => {
-    const { ensureCustomFieldTypes } = await import(
-      '../utils/ensure-custom-field-types'
+describe('the /v1 router', () => {
+  it('hands its handlers a loader for every plugin’s console API surface', () => {
+    const router = readFileSync(join(__dirname, '..', 'utils/api-v1.ts'), 'utf8')
+    const at = router.indexOf('loadPluginSurfaces:')
+    expect(at).toBeGreaterThan(-1)
+    expect(router.slice(at, router.indexOf('},', at))).toContain(
+      "serverPluginLoader.ensureAll(['consoleApi'])",
     )
-
-    await ensureCustomFieldTypes(PLAIN)
-
-    expect(mockEnsureAll).not.toHaveBeenCalled()
-  })
-
-  it('loads the plugins, so a custom validator refuses a bad value', async () => {
-    const { ensureCustomFieldTypes } = await import(
-      '../utils/ensure-custom-field-types'
-    )
-    // What the marketplace's console API registration does when it loads.
-    mockEnsureAll.mockImplementation(async () =>
-      registerCustomFieldType(RATING_FIELD),
-    )
-
-    // Before the load nothing has registered `rating`, so nothing refuses 9.
-    expect(validateDocument(RATED, { stars: 9 })).toEqual({})
-
-    await ensureCustomFieldTypes(RATED)
-
-    expect(mockEnsureAll).toHaveBeenCalledWith(['consoleApi'])
-    expect(validateDocument(RATED, { stars: 9 })).toEqual({
-      stars: expect.stringContaining('0 to 5'),
-    })
-    expect(validateDocument(RATED, { stars: 4 })).toEqual({})
   })
 })

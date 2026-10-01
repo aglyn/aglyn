@@ -59,7 +59,7 @@ import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type TopicSubscriptionEntry,
-} from '@aglyn/aglyn/app-utils/email-topics'
+} from '@aglyn/aglyn/app-utils/subscription-topics'
 import type { ConsentGroupCarry } from '@aglyn/aglyn/app-utils/consent-group-change'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { EMAIL_FREQUENCY_SUBCOLLECTION } from './email-marketing-gate'

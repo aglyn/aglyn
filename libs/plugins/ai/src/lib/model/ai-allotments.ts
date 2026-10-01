@@ -18,7 +18,7 @@
 import {
   ASSIST_HARD_CAP_CONTROL_LOCATION,
   type AssistRefusedBy,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { ORG_PERMISSIONS } from '@aglyn/aglyn/app-utils/org-permissions'
 
 /**
@@ -51,7 +51,7 @@ import { ORG_PERMISSIONS } from '@aglyn/aglyn/app-utils/org-permissions'
  *
  * A HARD allotment refuses the request that finds the subject at or past it.
  * A SOFT one admits it and tells the subject and the workspace's billing
- * contacts at 80% and again at 100%. Both are measured against what the
+ * contacts at 75, 80, 90 and 100%. Both are measured against what the
  * subject already drew this month, before the request — the same shape the
  * band is measured in, so a request that starts under the line may finish
  * past it, and the next one is the one refused.
@@ -379,33 +379,77 @@ export function aiAllotmentRefusalText(
 /**
  * The words a soft allotment's alert carries, for BOTH channels — the
  * console notification and the email — so the two cannot say different
- * things about one crossing. `name` is the member's name or the site's.
+ * things about one crossing.
+ *
+ * The email is plain text with no heading, so the body opens by saying whose
+ * AI credits, how many of how many, and in which workspace (and on which site,
+ * for a collaborator): a figure on its own reads as a bill. The managers'
+ * copy says how to stop the subject at the line; the person's own copy does
+ * not, because they cannot open Billing.
  */
 export function aiAllotmentAlertCopy(input: {
   scope: AiCreditAllotmentScope
   threshold: AiAllotmentThreshold
   used: number
   credits: number
+  /** The member's name, or the site's for a site allotment. */
   name: string
+  /** The workspace the allotment is drawn from. */
+  workspace: string
+  /** The site a collaborator's allotment is on. */
+  site?: string
+  /** The workspace's managers (the default), or the person it is for. */
+  reader?: 'managers' | 'subject'
 }): { title: string; body: string } {
-  const who =
-    input.scope === 'host' ? `The ${input.name} site` : input.name
-  const whose = input.scope === 'host' ? 'its' : 'their'
-  const where = input.scope === 'collab' ? ' on its site' : ''
-  const figures =
-    `${input.used.toLocaleString('en-US')} of ` +
-    `${input.credits.toLocaleString('en-US')} credits used this month.`
-  if (input.threshold >= 100) {
+  const { scope, threshold, name, workspace } = input
+  const used = input.used.toLocaleString('en-US')
+  const credits = input.credits.toLocaleString('en-US')
+  const reached = threshold >= 100
+  const onSite = scope === 'collab' && input.site ? ` on the ${input.site} site` : ''
+  const amount = reached
+    ? `all ${credits} AI credits`
+    : `${used} of the ${credits} AI credits`
+  const tail = reached ? ` this month (${used} so far).` : ` this month, past the ${threshold}% mark.`
+
+  if (input.reader === 'subject' && scope !== 'host') {
+    const where = scope === 'collab' ? onSite : ` in ${workspace}`
+    const whoCanChange =
+      scope === 'collab'
+        ? 'The site’s admin or a workspace admin can raise or change it.'
+        : 'A workspace admin can raise or change it.'
+    return {
+      title: reached
+        ? `You’ve used your whole AI allotment${where}`
+        : `You’re past ${threshold}% of your AI allotment${where}`,
+      body:
+        `You’ve used ${amount} ${workspace} allotted you${onSite}${tail} ` +
+        'It’s a soft allotment, so it does not stop your AI requests.' +
+        (reached ? ` ${whoCanChange}` : ''),
+    }
+  }
+
+  const who = scope === 'host' ? `The ${name} site` : name
+  const whose = scope === 'host' ? 'its' : 'their'
+  const them = scope === 'host' ? 'it' : 'them'
+  const requests = scope === 'host' ? 'AI requests on the site' : `${name}’s AI requests`
+  const where = scope === 'collab' ? onSite : scope === 'member' ? ` in ${workspace}` : ''
+  const opening =
+    `${who} has used ${amount} allotted to ${them}${onSite} in ${workspace}${tail}`
+  if (reached) {
     return {
       title: `${who} has used ${whose} whole AI allotment${where}`,
       body:
-        `${figures} The allotment is soft, so requests keep working and ` +
-        'draw on the workspace’s pool. Raise it or make it hard under ' +
-        `${ASSIST_HARD_CAP_CONTROL_LOCATION}.`,
+        `${opening} It’s a soft allotment, so it does not stop ${requests}; ` +
+        'they keep drawing on the workspace’s AI credits, and crossing it ' +
+        `charges nothing by itself. To stop ${them} at the line, make it hard ` +
+        `under ${ASSIST_HARD_CAP_CONTROL_LOCATION}; to give ${them} more, ` +
+        'raise it there.',
     }
   }
   return {
-    title: `${who} is past ${input.threshold}% of ${whose} AI allotment${where}`,
-    body: `${figures} The allotment is soft, so nothing stops at the line.`,
+    title: `${who} is past ${threshold}% of ${whose} AI allotment${where}`,
+    body:
+      `${opening} It’s a soft allotment, so it does not stop ${requests}; ` +
+      'they draw on the workspace’s AI credits like everyone else’s.',
   }
 }

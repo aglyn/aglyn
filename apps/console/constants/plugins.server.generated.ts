@@ -48,6 +48,11 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-outreach/server'),
   },
   {
+    id: 'data',
+    register: {"consoleApi":"registerDataConsoleApi"},
+    load: () => import('@aglyn/plugins-data/server'),
+  },
+  {
     id: 'email',
     apiPrefixes: ["email"],
     register: {"consoleApi":"registerEmailConsoleApi"},

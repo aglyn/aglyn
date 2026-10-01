@@ -892,8 +892,15 @@ describe('storefront subscription renewals (AGL-1743)', () => {
     expect(notifications).toHaveLength(1)
     // The cadence rides the title exactly as the *New subscriber* one does
     // (AGL-1732) — $90.00 a month and $90.00 a year are the same number.
-    expect(notifications[0].title).toBe('Subscription renewed — $90.00/month')
-    expect(notifications[0].body).toBe('boxer@example.com')
+    expect(notifications[0].title).toBe(
+      'Subscription renewed on {site} — $90.00/month',
+    )
+    // Whose subscription, to what, on which site (AGL-3432): the body was the
+    // bare address.
+    expect(notifications[0].body).toBe(
+      "boxer@example.com's subscription to Monthly box on {site} renewed " +
+        'for $90.00/month.',
+    )
   })
 
   /**
@@ -1040,7 +1047,9 @@ describe('storefront subscription renewals (AGL-1743)', () => {
       },
     })
     expect(storedSubscription().interval).toBe('year')
-    expect(notifications[0].title).toBe('Subscription renewed — $90.00/year')
+    expect(notifications[0].title).toBe(
+      'Subscription renewed on {site} — $90.00/year',
+    )
   })
 
   /**
@@ -1443,6 +1452,49 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
         String(entry.title).includes('stopped renewing'),
       ),
     ).toHaveLength(1)
+  })
+
+  /**
+   * THE MERCHANT IS TOLD WHAT IS TRUE (AGL-3432).
+   *
+   * The notice said "Restore your plan before it ends to keep billing them",
+   * and nothing clears `cancel_at_period_end` when the plan comes back, so the
+   * merchant was offered a remedy that does not exist. It also never said
+   * whose subscription, to what, or on which site.
+   */
+  it('names the subscriber, product, site and end date, and promises no remedy', async () => {
+    orgFixture = { ...LAPSED, timeZone: 'America/Chicago' }
+    fetchMock.mockImplementation(async (url: any) => {
+      if (String(url).includes('/v1/subscriptions/')) {
+        return {
+          ok: true,
+          status: 200,
+          // 2027-01-01T00:00:00Z: still December 31 in Chicago.
+          json: async () => ({
+            id: 'sub_1',
+            cancel_at_period_end: true,
+            cancel_at: 1_798_761_600,
+          }),
+        } as any
+      }
+      throw new Error(`Unexpected fetch to ${String(url)}`)
+    })
+
+    await deliver(RENEWAL_INVOICE)
+
+    const stopped = notifications.filter((entry) =>
+      String(entry.title).includes('stopped renewing'),
+    )
+    expect(stopped).toHaveLength(1)
+    expect(stopped[0].title).toBe('A subscription on {site} stopped renewing')
+    expect(stopped[0].body).toBe(
+      "boxer@example.com's subscription to Monthly box on {site} will end on " +
+        'December 31, 2026 instead of renewing, because your plan no longer ' +
+        'includes storefront subscriptions. The subscriber keeps the ' +
+        'period they already paid for. Restoring your plan does not restart ' +
+        'this subscription.',
+    )
+    expect(stopped[0].body).not.toMatch(/keep billing/i)
   })
 
   /**

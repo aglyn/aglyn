@@ -57,7 +57,6 @@ export * from './lineal-order'
 // a model generated both pass through it.
 export * from './node-definition-sanitizer'
 export * from './console-routes'
-export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the
 // where-used scan reads these on the server (AGL-703).
 export * from './screen-link-value'
@@ -79,29 +78,21 @@ export * from './crm'
 // the dialog fill it in by. Pure like `crm`, and beside it because a
 // template is scoped the way a task is.
 export * from './crm-email-templates'
-// The booking door's shared vocabulary (AGL-2660): the query keys a booking
-// link carries, the record reference inside it, and the wording and due
-// date of what a booking files back on the record.
-export * from './crm-booking'
 // A person's privacy erasure from one workspace (AGL-2623): the request's
 // shape and id, the marker a record carries while it waits, and the lists
 // the dialog and the docs share. Pure like `crm`; the sweep is server-side.
 export * from './person-erasure'
-// What the CRM's reports compute from what they read — periods, weekly
-// buckets, the lifecycle funnel, pipeline totals (AGL-2604). Pure like `crm`,
-// and beside it because it reads the stage list and the deal weighting from
-// there rather than restating either.
-export * from './crm-reports'
 // A task's reminder at its own time (AGL-2659): which reminder a save
 // leaves, whether one is owed, and the words the notification and the mail
-// say. Pure like `crm-reports`, read by the hourly route and by every
-// writer of the field.
+// say. Pure like `crm`, read by the hourly route and by every writer of the
+// field.
 export * from './crm-task-reminders'
-// Email capture (AGL-2657): the address's shape and token, which of a
-// message's addresses is the correspondent, the excerpt, and the row a
-// captured message becomes. Pure like `crm-reports`; the webhook route and
-// the address route are the readers with Firestore.
-export * from './crm-inbound'
+// Reading a received email (AGL-2657): the address in a header, the thread
+// a subject belongs to, the reply above the quoted history — and the domain
+// the platform receives mail on. Pure; every surface that reads mail it was
+// sent reads it this way.
+export * from './email-text'
+export * from './inbound-mail-domain'
 // A member's own addresses in a workspace (AGL-2975): the ones they have
 // confirmed count as theirs wherever the roster is asked who wrote a
 // message. Pure; the store and the confirmation link are server-side.
@@ -144,7 +135,7 @@ export * from './retained-refusals'
 // mail somebody, and this decides what basis putting them on a list may
 // record. Two enrollment surfaces import it — the Inbox assignment route and
 // the Emails console's audience card — and neither could import the other.
-export * from './list-assignment-policy'
+export * from './enrollment-basis'
 // Reading the FILE a merchant arrives with (`docs/specs/email-competitive-gaps.md`
 // G5/P4), directly after the policy it hands its addresses to: parsing and
 // mechanical screening only, so that an import asks the enrollment question
@@ -158,7 +149,7 @@ export * from './dynamic-list-rule'
 // sides of the feature: the composer picks one, the send path signs it into
 // the unsubscribe link, and the unauthenticated preference page renders the
 // catalog. No Node builtin, so it stays out of the `/server`-only group.
-export * from './email-topics'
+export * from './subscription-topics'
 export * from './compose-layout-nodes'
 // Layout properties applied through the chain (AGL-2893).
 export * from './compose-layout-props'
@@ -192,11 +183,12 @@ export * from './onboarding-deep-link'
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.
 export * from './utm-attribution'
-// The edge between a campaign and the forms, screens and contacts a push is
-// coordinated across. Beside the attribution above because the two answer
-// opposite questions about the same word: attribution records where somebody
-// CAME from, this records what a merchant DECLARED belongs together.
-export * from './campaign-membership'
+// What a record is filed under: the edge between a container a plugin keeps
+// (a campaign) and the forms, screens and contacts it gathers. Beside the
+// attribution above because the two answer opposite questions: attribution
+// records where somebody CAME from, this records what a merchant DECLARED
+// belongs together.
+export * from './container-membership'
 export * from './deployment-shape'
 // Which browser origins may complete a signed direct-to-GCS upload (AGL-1452).
 // GCS matches the origin list EXACTLY, so every serving console name needs its
@@ -304,10 +296,10 @@ export * from './author-css'
 // The isomorphic HTML rule (AGL-1901), after the CSS one it depends on.
 export * from './author-html'
 export * from './dataset-models'
-export * from './dataset-csv'
+export * from './csv'
 export * from './csv-upload'
 export * from './artifact-provenance'
-export * from './dataset-query'
+export * from './repeat-query'
 export * from './plugin-manifest'
 // After `plugin-manifest`, whose revocation predicates it asks the kill
 // question with, and after `media-ref`, whose grammar decides what counts as a

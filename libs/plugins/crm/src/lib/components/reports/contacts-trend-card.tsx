@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { deltaPercent, pluginDocsHelp, weekBuckets } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { Alert, Stack, Typography } from '@mui/material'
@@ -32,6 +32,7 @@ import {
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
 import { type AggregateRead, useAggregateRead } from './use-aggregate-read'
+import { deltaPercent, weekBuckets } from '../../model/crm-reports'
 
 export interface ContactsTrendCardProps {
   report: CrmReportScope

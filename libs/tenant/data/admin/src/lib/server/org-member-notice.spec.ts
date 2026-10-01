@@ -86,9 +86,24 @@ describe('sendOrgMemberNotice (AGL-3244)', () => {
   it('emails the members named, one send each, off the roster, and meters the organization', async () => {
     expect(await notice()).toEqual({ sent: 1 })
     expect(sends).toEqual([
-      { to: 'rep@example.com', subject: 'Sequences paused your mailbox', text: 'Paused.', context: 'outreach-mailbox-notice' },
+      {
+        to: 'rep@example.com',
+        subject: 'Sequences paused your mailbox',
+        text: 'Sequences paused your mailbox\n\nPaused.',
+        context: 'outreach-mailbox-notice',
+      },
     ])
     expect(metered).toEqual(['org:org-1'])
+  })
+
+  it('opens its last-resort text with the subject, as the built-in copy does (AGL-3432)', async () => {
+    // The renderer is mocked away here, so this is the caller's own copy: a
+    // reader who skips the subject line still learns what the notice is.
+    await notice({ subject: 'Northwind has used all 6 of its pages', text: '6 of 6 used.' })
+    expect(String(sends[0]['text']).split('\n\n')).toEqual([
+      'Northwind has used all 6 of its pages',
+      '6 of 6 used.',
+    ])
   })
 
   it('adds the owners and admins when asked, never twice, never anyone else', async () => {

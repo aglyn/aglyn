@@ -269,6 +269,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
     sendEmail(...(args as [Record<string, unknown>])),
 }))
 
+import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { notifyRestockHandler } from './notify-restock'
 import { processRestockHandler } from './process-restock'
 
@@ -532,6 +533,26 @@ describe('the ordinary restock alert still works', () => {
     expect(sendEmail).toHaveBeenCalledTimes(1)
     expect(meterHostEmail).toHaveBeenCalledWith(HOST)
     expect(pendingAlerts()).toEqual([])
+  })
+
+  /**
+   * The only button in the email went to a RELATIVE `/products/…` path,
+   * which is a dead link in every inbox, and the copy pressed "before it sells
+   * out" about stock nobody counted (AGL-3432). The link is the site's own
+   * absolute address now, and the copy says what happened.
+   */
+  it('links the product on the site’s own origin, with no scarcity claim', async () => {
+    seedAlert('alert-1', PRODUCT)
+    docs.set(`hosts/${HOST}`, { subdomain: 'kettles' })
+    docs.set(`hosts/${HOST}/products/${PRODUCT}`, { ...IN_STOCK })
+
+    await runCron()
+
+    const text = String(sendEmail.mock.calls[0][0]['text'])
+    const origin = hostPublicOrigin({ subdomain: 'kettles' })
+    expect(origin).toMatch(/^https:\/\//)
+    expect(text).toBe(`Kettle is back in stock:\n\n${origin}/products/kettle`)
+    expect(text).not.toContain('sells out')
   })
 
   it('leaves an alert pending while the product is still sold out', async () => {

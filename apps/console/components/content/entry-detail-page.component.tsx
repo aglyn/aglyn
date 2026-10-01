@@ -21,6 +21,7 @@ import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 // The leaf module, not the barrel: the entry specs mock the barrel as a closed
 // world, and a search key derivation is nothing they have reason to stage.
 import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/content-query-fields'
+import { planLabelGrantingFeature } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_PRIMARY_KEY,
@@ -174,6 +175,17 @@ const ENTRY_PAGE_HELP = {
 
 const CARD_WIDE = { xs: 12, md: 6, lg: 8 } as const
 const CARD_NARROW = { xs: 12, md: 6, lg: 4 } as const
+
+/**
+ * What the "Write with AI" door says to a plan without `aiAssist`. The plan
+ * is the cheapest one the plan table gives the flag to — the same answer the
+ * AI plugin's own doors and its route give — so a pricing change cannot
+ * leave this page naming a tier above the one that would let the writer in.
+ */
+const AI_ASSIST_PLAN = planLabelGrantingFeature('aiAssist')
+const AI_ASSIST_NOT_ON_PLAN = AI_ASSIST_PLAN
+  ? `AI assist starts on the ${AI_ASSIST_PLAN} plan — see Billing to upgrade`
+  : 'AI assist is not on this plan — see Billing to upgrade'
 
 /**
  * The entry editor's buffer (AGL-2498).
@@ -1845,7 +1857,7 @@ export function EntryDetailPage() {
                             }
                             if (!hasEntitlement('aiAssist', org)) {
                               return void enqueueSnackbar(
-                                'AI assist requires a Pro plan — see Billing to upgrade',
+                                AI_ASSIST_NOT_ON_PLAN,
                                 { variant: 'warning', persist: false },
                               )
                             }

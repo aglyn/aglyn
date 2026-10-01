@@ -100,21 +100,29 @@ jest.mock('./firebase-admin', () => ({
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
-        collection: (name: string) => ({
-          doc: (id: string) => makeRef(`${name}/${id}`),
-          where: (_field: string, _op: string, value: unknown) => ({
-            get: async () => ({
-              docs: [...docs.keys()]
-                .filter(
-                  (key) =>
-                    key.startsWith(`${name}/`) &&
-                    key.split('/').length === 2 &&
-                    docs.get(key)?.['stripeAccountId'] === value,
-                )
-                .map((key) => makeSnap(key)),
+        collection: (name: string) => {
+          const matching = (field: string, value: unknown) =>
+            [...docs.keys()]
+              .filter(
+                (key) =>
+                  key.startsWith(`${name}/`) &&
+                  key.split('/').length === 2 &&
+                  docs.get(key)?.[field] === value,
+              )
+              .map((key) => makeSnap(key))
+          return {
+            doc: (id: string) => ({
+              ...makeRef(`${name}/${id}`),
+              get: async () => makeSnap(`${name}/${id}`),
             }),
-          }),
-        }),
+            where: (field: string, _op: string, value: unknown) => ({
+              get: async () => ({ docs: matching(field, value) }),
+              limit: (max: number) => ({
+                get: async () => ({ docs: matching(field, value).slice(0, max) }),
+              }),
+            }),
+          }
+        },
       }),
     }),
     firestore: {
@@ -188,12 +196,33 @@ describe('recordConnectPayoutFailure', () => {
             kind: 'payout',
             stripeId: 'po_1',
             account: 'acct_1',
-            reason: 'The bank account has been closed.',
+            // No workspace to name: nothing in this store is owned by owner-1.
+            merchant: '',
+            // The alert's template closes the sentence itself.
+            reason: 'The bank account has been closed',
             amount: '$420.00',
           },
         },
       },
     ])
+  })
+
+  it('names the workspaces behind the account, not only acct_… (AGL-3432)', async () => {
+    // A profile keyed by its owner: the workspaces that person owns.
+    docs.set('orgs/org-a', { name: 'Harbor View', ownerUid: 'owner-1' })
+    await recordConnectPayoutFailure('profiles', { kind: 'payout', object: payout, accountId: 'acct_1' })
+    expect(mockAlerts[0].options['context']['merchant']).toBe('Harbor View')
+
+    // A profile keyed by its workspace: that workspace.
+    mockAlerts.length = 0
+    docs.set('publisherProfiles/org-p', { stripeAccountId: 'acct_2' })
+    docs.set('orgs/org-p', { name: 'Plugin Co' })
+    await recordConnectPayoutFailure('publisherProfiles', {
+      kind: 'transfer',
+      object: { ...payout, id: 'tr_1' },
+      accountId: 'acct_2',
+    })
+    expect(mockAlerts[0].options['context']['merchant']).toBe('Plugin Co')
   })
 
   it('mirrors the latest failure onto the profile the surfaces already read', async () => {

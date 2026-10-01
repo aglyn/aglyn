@@ -110,28 +110,6 @@ export enum Route {
   ORG_MEDIA = '/[orgSlug]/media',
   ORG_DATA = '/[orgSlug]/data',
   /*
-   * The organization's address book.
-   *
-   * Org-scoped rather than a section of a site, because it answers the one
-   * question a site page cannot: which of the organization's sites know a
-   * given person. A contact document is shared by every site in the org — one
-   * human who touched two of them is one row — and until this route there was
-   * no surface anywhere that showed the deduped person, so the dedupe the
-   * shared address book exists for was invisible and the billing unit
-   * (unique people per org) had nothing standing behind it.
-   *
-   * It shows identity, which sites hold the person, and consent per site. The
-   * per-site CRM — notes, tags, timeline, order history — stays on the site's
-   * own Contacts surface, because those are the holder's business records and
-   * this is the one route designed to cross between holders.
-   *
-   * A LEGACY ADDRESS since AGL-2630: the page behind it redirects, permanently,
-   * to the org-level CRM hub's contacts section. It stays declared so a link
-   * kept from before — a bookmark, a docs page, an email — still resolves,
-   * and so the redirect has a constant to be built from rather than a string.
-   */
-  ORG_CONTACTS = '/[orgSlug]/contacts',
-  /*
    * The organization-level CRM hub (AGL-2630): the same sections the site hub
    * has — `/[orgSlug]/crm/<section>[/<recordId>]` — mounted with an ORG scope,
    * for an org-wide member who works every site's people at once. A bare
@@ -139,7 +117,8 @@ export enum Route {
    * does. What this route adds over the site hub is the cross-site fact the
    * old address book carried — which sites know a person — and what it takes
    * from it is the site every create must name, since a record is always
-   * captured BY a site.
+   * captured BY a site. Served by `ORG_PLUGIN` below, from the CRM's own
+   * `orgNavItems`; the constant is the address its links are built from.
    */
   ORG_CRM = '/[orgSlug]/crm',
   /*
@@ -400,7 +379,6 @@ export enum Route {
   // are open-ended, so this is the one route whose leaf segment is data.
   HOST_PLUGIN = '/[orgSlug]/hosts/[host]/[pluginSlug]',
   HOST_INBOX = '/[orgSlug]/hosts/[host]/inbox',
-  HOST_CONTACTS = '/[orgSlug]/hosts/[host]/contacts',
   HOST_MEDIA = '/[orgSlug]/hosts/[host]/media',
   HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',
   /*
@@ -470,22 +448,8 @@ export enum Route {
    * name with the section that contains it.
    */
   HOST_AUTOMATION = '/[orgSlug]/hosts/[host]/automation',
-  /**
-   * The address the automation section answered to before it had a name of
-   * its own. Nothing links here — `HOST_AUTOMATION` is what the nav, the
-   * search results and the activity feed build — but the console redirects it
-   * permanently, so a held bookmark still lands on the section (and keeps its
-   * `?tab=`, which never changed).
-   *
-   * Kept on the table rather than as a bare literal in the redirect
-   * because the redirect and the address it serves are one fact:
-   * `automation-section.spec.ts` reads this entry and fails if the rule for
-   * it goes missing.
-   */
-  HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
   HOST_DATA = '/[orgSlug]/hosts/[host]/data',
   HOST_LOGIC = '/[orgSlug]/hosts/[host]/logic',
-  HOST_PRODUCTS = '/[orgSlug]/hosts/[host]/products',
   HOST_COMPONENTS = '/[orgSlug]/hosts/[host]/components',
   // Component detail (AGL-693): the listing links here, and the besigner is
   // reached from here — matching SCREEN_DETAILS rather than jumping a row
@@ -504,7 +468,6 @@ export enum Route {
   // publish, so there is no "current" pointer to route through.
   TEMPLATE_DETAILS = '/[orgSlug]/hosts/[host]/templates/[templateId]',
   HOST_MARKETING = '/[orgSlug]/hosts/[host]/marketing',
-  HOST_BOOKINGS = '/[orgSlug]/hosts/[host]/bookings',
   // Events now come from the events-calendar plugin, served by the generic
   // `[orgSlug]/hosts/[host]/[pluginSlug]` route (AGL-394).
   HOST_REDIRECTS = '/[orgSlug]/hosts/[host]/redirects',
@@ -615,7 +578,6 @@ export interface RoutePayload {
   }
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
-  [Route.ORG_CONTACTS]: { orgSlug: string }
   [Route.ORG_CRM]: { orgSlug: string }
   [Route.ORG_PLUGIN]: { orgSlug: string; pluginSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
@@ -684,7 +646,6 @@ export interface RoutePayload {
   [Route.BILLING_ENTRY]: undefined
   [Route.SUPPORT_ENTRY]: undefined
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
-  [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_DETAILS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_SEO]: { orgSlug: string; host: string }
@@ -705,10 +666,8 @@ export interface RoutePayload {
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }
   [Route.HOST_THEME]: { orgSlug: string; host: string }
   [Route.HOST_AUTOMATION]: { orgSlug: string; host: string }
-  [Route.HOST_WORKFLOWS]: { orgSlug: string; host: string }
   [Route.HOST_DATA]: { orgSlug: string; host: string }
   [Route.HOST_LOGIC]: { orgSlug: string; host: string }
-  [Route.HOST_PRODUCTS]: { orgSlug: string; host: string }
   [Route.HOST_COMPONENTS]: { orgSlug: string; host: string }
   [Route.COMPONENT_DETAILS]: {
     orgSlug: string
@@ -728,7 +687,6 @@ export interface RoutePayload {
     templateId: string
   }
   [Route.HOST_MARKETING]: { orgSlug: string; host: string }
-  [Route.HOST_BOOKINGS]: { orgSlug: string; host: string }
   [Route.HOST_REDIRECTS]: { orgSlug: string; host: string }
   [Route.HOST_USERS]: { orgSlug: string; host: string }
   [Route.HOST_ANALYTICS]: { orgSlug: string; host: string }

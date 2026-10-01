@@ -68,7 +68,7 @@ import {
   campaignTouchLabel,
   type CampaignConversionKind,
   type CampaignConversionRecord,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-conversions'
+} from '../model/campaign-conversions'
 
 /**
  * WHAT THE CAMPAIGNS CAUSED, from the conversions' end.

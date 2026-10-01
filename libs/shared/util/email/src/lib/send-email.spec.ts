@@ -20,6 +20,7 @@ import {
   applyFromName,
   contextTag,
   isEmailConfigured,
+  messageFromName,
   sendEmail,
 } from './send-email'
 
@@ -591,6 +592,119 @@ describe('sendEmail', () => {
       await sendEmail({ to: 'a@b.com', subject: 'Hi', text: 'Hi' })
 
       expect(lastBody(fetchMock).from).toBe(FROM)
+    })
+  })
+
+  /*==========================================
+   * A SITE'S MAIL LEAVES UNDER THE SITE'S NAME (AGL-3442).
+   *
+   * `hostSendingIdentity` stamps the site's name, and the org default it
+   * replaces, on the identity. Every site sender passes that org default as
+   * `fromName`, which to a visitor reads as "Aglyn" or as the agency rather
+   * than the business they dealt with.
+   *=========================================*/
+  describe('the display name a site’s mail leaves under', () => {
+    const siteIdentity = {
+      from: 'notifications@mail1.aglyn.app',
+      source: 'shared' as const,
+      domain: 'mail1.aglyn.app',
+      summary: 'Sending as notifications@mail1.aglyn.app.',
+      refusal: null,
+      fromName: 'Lakeside Cabins',
+      brandFromName: 'Aglyn',
+    }
+
+    it('sends under the site’s name where the sender passed the org default', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'guest@example.com',
+        subject: 'Reservation confirmed',
+        text: 'Your stay is confirmed.',
+        fromName: 'Aglyn',
+        sendingIdentity: siteIdentity,
+        audience: 'tenant',
+      })
+
+      // Only the display name moved; the address is the identity's.
+      expect(lastBody(fetchMock).from).toBe(
+        '"Lakeside Cabins" <notifications@mail1.aglyn.app>',
+      )
+    })
+
+    it('sends under the site’s name when the sender passed none', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'guest@example.com',
+        subject: 'Confirm your subscription',
+        text: 'Confirm it.',
+        sendingIdentity: siteIdentity,
+        audience: 'tenant',
+      })
+
+      expect(lastBody(fetchMock).from).toBe(
+        '"Lakeside Cabins" <notifications@mail1.aglyn.app>',
+      )
+    })
+
+    it('keeps a name of the sender’s own, such as the person writing', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'guest@example.com',
+        subject: 'Following up',
+        text: 'Hi.',
+        fromName: 'Jamie Reed',
+        sendingIdentity: siteIdentity,
+        audience: 'tenant',
+      })
+
+      expect(lastBody(fetchMock).from).toBe(
+        '"Jamie Reed" <notifications@mail1.aglyn.app>',
+      )
+    })
+
+    it('replaces a white-label org’s default the same way', async () => {
+      // An agency's brand is not the business its client's visitor dealt
+      // with either.
+      expect(
+        messageFromName({
+          fromName: 'Northwind Agency',
+          sendingIdentity: {
+            ...siteIdentity,
+            brandFromName: 'Northwind Agency',
+          },
+        }),
+      ).toBe('Lakeside Cabins')
+    })
+
+    it('keeps the caller’s name on an identity that names no site', async () => {
+      // A campaign resolves its identity without the host stamp and records
+      // the name its composer chose.
+      expect(
+        messageFromName({
+          fromName: 'Aglyn',
+          sendingIdentity: { ...siteIdentity, fromName: null, brandFromName: null },
+        }),
+      ).toBe('Aglyn')
+    })
+
+    it('leaves platform mail under the platform’s brand', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'owner@example.com',
+        subject: 'Your usage',
+        text: 'Usage.',
+        fromName: 'Aglyn',
+      })
+
+      expect(lastBody(fetchMock).from).toBe('"Aglyn" <noreply@aglyn.com>')
     })
   })
 

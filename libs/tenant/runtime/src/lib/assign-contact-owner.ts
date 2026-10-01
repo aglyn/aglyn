@@ -29,7 +29,9 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
+  getHostDocAdmin,
   getOrgForHost,
+  hostDisplayName,
   notifyUsers,
   restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
@@ -221,10 +223,26 @@ export async function notifyRecordAssigned(input: {
 }): Promise<boolean> {
   if (!input.ownerUid || input.ownerUid === (input.actorUid ?? '')) return false
   const lead = input.record.kind === 'lead'
+  /*
+   * THE BODY SAYS WHAT HAPPENED, AND ON WHICH SITE (AGL-3432).
+   *
+   * It was the bare name, so a member who owns records on several sites read
+   * "Ada" in an email body and could not tell what Ada was or where. The
+   * site's name is one request-cached read of a document most callers have
+   * already paid for, taken only when somebody is actually notified; a read
+   * that fails drops the "on {site}" clause rather than the notification.
+   */
+  let site = ''
+  try {
+    const host = await getHostDocAdmin(input.hostId)
+    if (host) site = ` on ${hostDisplayName(host, input.hostId)}`
+  } catch {
+    // The clause goes, never the notification.
+  }
   await notifyUsers([input.ownerUid], {
     type: lead ? 'content.leadAssigned' : 'content.contactAssigned',
     title: lead ? 'Lead assigned to you' : 'Contact assigned to you',
-    body: input.who,
+    body: `${input.who} was assigned to you as a ${lead ? 'lead' : 'contact'}${site}.`,
     link: recordLink(input.hostId, input.record),
     orgId: input.orgId,
     hostId: input.hostId,

@@ -28,10 +28,10 @@
  * of Email-plugin code, and nothing anywhere fails. The switchboard is simply
  * bypassed, silently.
  *
- * The shapes both plugins read — the campaign container, the rate math, the
- * revenue rollup, the message record and the figure renderers — live in
- * `@aglyn/shared-ui-email-campaigns`, which both depend on as peers. This
- * guard is what keeps them there.
+ * The shapes both plugins read — the campaign container, the rate math and
+ * the message record — live in `@aglyn/shared-ui-email-campaigns`, which both
+ * depend on as peers; what a campaign earned and caused is Marketing's own
+ * model. This guard is what keeps them there.
  *
  * It is a SOURCE assertion, not a render or import test, because the defect
  * is which modules end up in the graph. A rendered campaign card passes
@@ -92,7 +92,6 @@ const MOVED_ENTRY_POINTS = [
 const SHARED_SOURCES = [
   'model/campaign-container.ts',
   'model/campaign-report.ts',
-  'model/campaign-revenue.ts',
   'model/email-record.ts',
 ]
 
@@ -109,9 +108,9 @@ function sourceFiles(dir: string): string[] {
  * The names a module exports.
  *
  * Two forms cover this library: a declaration carrying `export`, and an
- * `export { … }` block (which `campaign-revenue` uses to pass a symbol
- * through from another library — those are shared definitions too, and
- * reaching them through the Email plugin is the same mistake). `as` renames
+ * `export { … }` block (a symbol passed through from another library is a
+ * shared definition too, and reaching it through the Email plugin is the
+ * same mistake). `as` renames
  * export under the NEW name, which is the name an importer would write.
  */
 function exportedNames(source: string): string[] {
@@ -218,7 +217,7 @@ describe('the boundary this guard is reading', () => {
 
   it('found the shared library and read real symbols out of it', () => {
     expect(OWNED_BY_SHARED_LIB.size).toBeGreaterThan(40)
-    // One from each source module, and both export forms. The figure
+    // One from each source module. The figure
     // primitives are no longer among them: they are `@aglyn/shared-ui-jsx`'s
     // (AGL-3080), which is where every surface can reach them.
     expect([...OWNED_BY_SHARED_LIB]).toEqual(
@@ -226,7 +225,6 @@ describe('the boundary this guard is reading', () => {
         'CAMPAIGN_SEND_CONTAINER_FIELD',
         'campaignReport',
         'CampaignStats',
-        'campaignRevenueReport',
         'emailSendTimeMs',
       ]),
     )

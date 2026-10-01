@@ -37,7 +37,7 @@ import { orgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
 import {
   assistCogsAlertThresholdUsd,
   assistMarginMultiple,
-} from '@aglyn/aglyn/app-utils/usage-budget'
+} from '../usage/assist-spend-guards'
 import {
   composeStaffOrgAiAddon,
   composeStaffOrgAiMargin,

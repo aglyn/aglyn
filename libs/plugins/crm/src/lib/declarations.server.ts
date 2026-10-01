@@ -29,8 +29,13 @@ import {
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
+import {
+  registerPluginRecordTimelineWriter,
+  type PluginRecordTimelineWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
-import { BUNDLE_ID } from './constants/bundle-common'
+import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
+import { BUNDLE_ID, CRM_RECORDS_METER_ID } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
 /**
@@ -61,6 +66,28 @@ export const crmPipelineRecordIndex: PluginRecordIndex = {
   async get(request) {
     const { pipelineRecordIndex } = await import('./server/pipeline-record-index')
     return pipelineRecordIndex.get(request)
+  },
+}
+
+/**
+ * The CRM's writer on the record-timeline seam (AGL-2981), deferred: the
+ * writer and the Admin SDK it brings load with the first entry filed.
+ */
+export const crmRecordTimelineWriter: PluginRecordTimelineWriter = {
+  async logActivity(request) {
+    const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
+      await import('./server/record-timeline')
+    return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).logActivity(request)
+  },
+  async createTask(request) {
+    const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
+      await import('./server/record-timeline')
+    return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).createTask(request)
+  },
+  async recordEmailDelivery(request) {
+    const { createCrmRecordTimelineWriter, defaultCrmRecordTimelineDeps } =
+      await import('./server/record-timeline')
+    return createCrmRecordTimelineWriter(defaultCrmRecordTimelineDeps()).recordEmailDelivery!(request)
   },
 }
 
@@ -136,9 +163,28 @@ export function registerCrmServerDeclarations(): void {
           await import('./server/record-email-state')
         return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).stamp(request)
       },
+      // A send's first opens and clicks, stamped on the contacts they name
+      // (AGL-2616) — the campaign webhook's courtesy, deferred like the rest.
+      async engaged(request) {
+        const { createCrmRecordEmailStateWriter, defaultCrmRecordEmailStateDeps } =
+          await import('./server/record-email-state')
+        return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).engaged!(request)
+      },
+      // A delivered campaign's leads, moved to Nurturing (AGL-3446).
+      async reached(request) {
+        const { createCrmRecordEmailStateWriter, defaultCrmRecordEmailStateDeps } =
+          await import('./server/record-email-state')
+        return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).reached!(request)
+      },
     },
     { pluginId: BUNDLE_ID },
   )
+  // The record timeline writer (AGL-2981), here as well as in the API
+  // surfaces so a door in either app reaches it: a booking confirmed on the
+  // tenant, or by the payment webhook, files its meeting and follow-up
+  // through it (AGL-2660). Deferred like the rest; an API registration
+  // replaces this one with the same writer, loaded eagerly.
+  registerPluginRecordTimelineWriter(crmRecordTimelineWriter, { pluginId: BUNDLE_ID })
   // Sharing rules (AGL-3336), re-evaluated after every server write of a
   // lead, a contact, a company or a deal: the core tells its record-written
   // listeners from the list-field restamp every such writer ends with, in
@@ -169,5 +215,17 @@ export function registerCrmServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // The records band in the monthly usage sweep, a core cron that never
+  // loads a CRM door; declared in `usageAxes` so the sweep refuses to bill a
+  // month without it. Deferred like the rest: the counts load with the
+  // first sweep.
+  registerPluginUsageMeter({
+    pluginId: BUNDLE_ID,
+    id: CRM_RECORDS_METER_ID,
+    measure: async (context) => {
+      const { measureCrmRecords } = await import('./server/crm-records-meter')
+      return measureCrmRecords(context)
+    },
+  })
 }
 

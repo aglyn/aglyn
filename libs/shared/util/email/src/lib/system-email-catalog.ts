@@ -266,12 +266,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Monthly per-organization usage and metered-cost summary, sent by ' +
         'the scheduled job.',
       deliveredBy: 'resend',
-      defaultSubject: 'Your {{brand.productName}} usage summary for {{month}}',
+      defaultSubject: 'Your {{brand.productName}} usage summary for {{month.label}}',
       mergeTokens: [
         {
           name: 'month',
           description: 'Billing month as YYYY-MM',
           sample: '2026-06',
+        },
+        {
+          name: 'month.label',
+          description: 'Billing month as a reader writes it',
+          sample: 'June 2026',
         },
         {
           name: 'org.name',
@@ -281,7 +286,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'usage.summary',
           description: 'Pre-formatted usage lines',
-          sample: 'Page views: 12,400',
+          sample:
+            'Plan: Starter\nPage views: 12,400\n' +
+            'Metered usage beyond your plan: none, so nothing extra is billed for it.',
         },
       ],
       // Mirrors the summary lines assembled in usage-email/route.ts.
@@ -289,7 +296,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'Usage summary for {{org.name}}', variant: 'heading' },
         {
           block: 'text',
-          text: 'Here is your {{brand.productName}} usage summary for {{month}}.',
+          text: 'Here is how {{org.name}} used {{brand.productName}} in {{month.label}}.',
           variant: 'body',
         },
         { block: 'text', text: '{{usage.summary}}', variant: 'body' },
@@ -319,13 +326,20 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: '- Test Org (org_123), requested 2026-07-01',
         },
       ],
-      // Mirrors the staff-alert text in audit-archive/route.ts.
+      // Mirrors the staff-alert text in audit-archive/route.ts. It reports
+      // and asks for nothing: `run-erasures` erases these orgs at 04:00 UTC,
+      // an hour after this sends, and a failure raises its own alert.
       defaultBody: [
         {
           block: 'text',
           text:
-            'These organizations are past their GDPR erasure hold. Run ' +
-            'tools/scripts/erase-tenant.mjs to hard-delete. No copy is kept:',
+            'These workspaces are past their 7-day erasure hold. The nightly ' +
+            'erasure job erases them at 04:00 UTC, five a run and oldest ' +
+            'first, and keeps no copy, so nothing is needed from you. A ' +
+            'workspace still listed here tomorrow either failed to erase, ' +
+            'which raises its own "could not be erased" alert, or is waiting ' +
+            'behind a longer queue. Pending erasures on Staff → Health can ' +
+            'run the due ones sooner.',
           variant: 'body',
         },
         { block: 'text', text: '{{orgs.list}}', variant: 'body' },
@@ -579,7 +593,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           block: 'text',
           text:
-            '{{actor.name}} set a new password on your account. You have ' +
+            '{{actor.name}} set a new password on your {{brand.productName}} ' +
+            'account. You have ' +
             'been signed out everywhere and will need the new password to ' +
             'sign back in.',
           variant: 'body',
@@ -938,7 +953,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Free-tier AI spend for 2026-09-28 (UTC) is at $40.00 of the $50.00 ceiling.',
         },
       ],
-      defaultBody: [{ block: 'text', text: '{{alert.body}}', variant: 'body' }],
+      // The subject heads the body (AGL-3432): a reader who skips the
+      // subject line still sees what the alert is about.
+      defaultBody: [
+        { block: 'text', text: '{{alert.subject}}', variant: 'heading' },
+        { block: 'text', text: '{{alert.body}}', variant: 'body' },
+      ],
       footerReason:
         'You’re receiving this because this address gets ' +
         '{{brand.productName}}’s staff alerts.',
@@ -993,8 +1013,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'for review, and any type staff moved there — in one email. Goes to ' +
         'the same inbox as the operator alert.',
       deliveredBy: 'resend',
-      defaultSubject: '{{digest.count}} operator alerts on {{digest.date}}',
+      defaultSubject: '{{digest.title}}',
       mergeTokens: [
+        {
+          name: 'digest.title',
+          description: 'The count and the day, in one line, “alert” or “alerts” as the count needs',
+          sample: '3 operator alerts on 2026-09-28',
+        },
         {
           name: 'digest.date',
           description: 'The day the digest covers, UTC',
@@ -1021,11 +1046,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       defaultBody: [
-        {
-          block: 'text',
-          text: '{{digest.count}} operator alerts on {{digest.date}}',
-          variant: 'heading',
-        },
+        { block: 'text', text: '{{digest.title}}', variant: 'heading' },
         { block: 'text', text: '{{digest.body}}', variant: 'body' },
         { block: 'button', label: 'Open the staff console', href: '{{digest.url}}' },
       ],
@@ -1110,7 +1131,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Test Org',
         },
       ],
-      defaultBody: [{ block: 'text', text: '{{notice.body}}', variant: 'body' }],
+      // The subject heads the body (AGL-3432): a reader who skips the
+      // subject line still sees what the notice is about.
+      defaultBody: [
+        { block: 'text', text: '{{notice.subject}}', variant: 'heading' },
+        { block: 'text', text: '{{notice.body}}', variant: 'body' },
+      ],
       footerReason:
         'You’re receiving this because you’re a member of {{org.name}} on ' +
         '{{brand.productName}}.',

@@ -392,6 +392,7 @@ export async function notifyStaff(payload: NotificationPayload): Promise<void> {
       await raiseOperatorAlert(alert, {
         subject: payload.title,
         ...(payload.body ? { body: payload.body } : {}),
+        ...(payload.level ? { level: payload.level } : {}),
         ...(payload.link ? { url: payload.link } : {}),
         ...(payload.orgId ? { orgId: payload.orgId } : {}),
         ...(payload.hostId ? { hostId: payload.hostId } : {}),
@@ -457,6 +458,32 @@ export async function notifyOrgAdmins(
 }
 
 /**
+ * The name a site's managers know it by: the name they gave it, then its
+ * address, then — for a doc with neither — its id.
+ */
+export function hostDisplayName(
+  host: Record<string, unknown> | undefined,
+  hostId: string,
+): string {
+  for (const value of [host?.['displayName'], host?.['subdomain']]) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return hostId
+}
+
+/**
+ * Fills `{site}` in a host notification's title or body (AGL-3432).
+ *
+ * A manager of ten storefronts reads "New order — $42.00" and cannot tell
+ * which store it came from, and the email shows only the body to someone who
+ * skips the subject. `notifyHostManagers` already reads the host doc, so a
+ * caller writes "New order on {site}" and pays no read of its own.
+ */
+export function withSiteName(text: string, site: string): string {
+  return text.includes('{site}') ? text.split('{site}').join(site) : text
+}
+
+/**
  * Notifies everyone who manages a host (admin/editor in the host doc's
  * `memberRoles` projection) — the audience for form submissions and
  * bookings on that site.
@@ -488,8 +515,13 @@ export async function notifyHostManagers(
       .filter(([, role]) => role === 'admin' || role === 'editor')
       .map(([uid]) => uid)
     const orgId = payload.orgId ?? (host.get('orgId') as string | undefined)
+    const site = hostDisplayName(host.data(), hostId)
     await notifyUsers(managers, {
       ...payload,
+      title: withSiteName(payload.title, site),
+      ...(payload.body !== undefined
+        ? { body: withSiteName(payload.body, site) }
+        : {}),
       hostId,
       ...(orgId ? { orgId } : {}),
     })

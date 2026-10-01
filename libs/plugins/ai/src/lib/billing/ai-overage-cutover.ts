@@ -46,15 +46,6 @@
  * channels and bill part of it twice.
  */
 
-import { registerPluginMeteredLine } from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
-import { AI_PLUGIN_ID } from '../constants'
-
-/**
- * Core's own name for the AI overage line in the monthly usage sweep. The
- * sweep asks the registry by this id; the plugin answers.
- */
-export const AI_OVERAGE_METER_LINE_ID = 'assist-overage'
-
 /** The environment variable that starts mid-period charging. */
 export const AI_OVERAGE_INVOICED_FROM_ENV = 'AI_OVERAGE_INVOICED_FROM'
 
@@ -102,27 +93,4 @@ export function aiOverageBillsByInvoice(month: string): boolean {
  */
 export function aiOverageGuardsApply(month: string): boolean {
   return aiOverageBillsByInvoice(month)
-}
-
-/**
- * Claims the meter line, so the monthly sweep leaves AI overage out of the
- * figure it meters from the cutover month on.
- *
- * Registered from the plugin's server declarations, at boot, because the
- * sweep is a core cron that never loads an AI door. Idempotent by the
- * registry's own rule: the same plugin re-claiming replaces its claim.
- */
-export function registerAiOverageMeteredLine(): void {
-  registerPluginMeteredLine({
-    lineId: AI_OVERAGE_METER_LINE_ID,
-    pluginId: AI_PLUGIN_ID,
-    billsFrom: aiOverageInvoicedFrom,
-    // Loaded on the first closed month rather than at boot, so the console's
-    // every process does not carry the Stripe path for a sweep that runs
-    // once a day in one of them.
-    closeMonth: async (context) => {
-      const { closeAiOverageMonth } = await import('./ai-overage-close')
-      await closeAiOverageMonth(context)
-    },
-  })
 }

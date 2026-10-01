@@ -117,6 +117,7 @@ jest.mock('../app/api/_lib/render-system-email', () => ({
 }))
 
 import { registerPluginEventHandler } from '@aglyn/aglyn/server'
+import { notifyUsers } from '@aglyn/tenant-data-admin'
 import { POST } from '../app/api/orgs/members/route'
 
 beforeAll(() => {
@@ -320,5 +321,44 @@ describe('POST /api/orgs/members upsert — an AI key that moved is an activity 
     await post({ action: 'upsert', uid: SSO_AUTH_RECORD.uid, role: 'editor' })
     expect(mockResolveMemberAiPermissionsOnOrg).toHaveBeenCalledTimes(2)
     expect(mockPermissionEvents).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/orgs/members upsert — the member is told which workspace (AGL-3432)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'actor', email_verified: true })
+    mockResolveOrgMembership.mockResolvedValue({ role: 'admin', member: {} })
+    mockUpsertOrgMember.mockResolvedValue(undefined)
+    mockFindUserByUidAcrossPools.mockResolvedValue({ record: SSO_AUTH_RECORD })
+    mockResolveMemberAiPermissionsOnOrg.mockResolvedValue({})
+  })
+
+  const told = () => (notifyUsers as jest.Mock).mock.calls.at(-1)?.[1] as Record<string, unknown>
+
+  it('names the workspace in the title and body, and the sites granted', async () => {
+    mockMemberExists.mockReturnValue(true)
+    const response = await post({
+      action: 'upsert',
+      uid: SSO_AUTH_RECORD.uid,
+      role: 'editor',
+      allHosts: false,
+      hostAccess: { 'host-a': 'editor', 'host-b': 'viewer' },
+    })
+    expect(response.status).toBe(200)
+    expect(told()['title']).toBe('Your role in Aglyn is now editor')
+    // The host double carries no display name or subdomain, so each site is
+    // named by id, the last resort.
+    expect(told()['body']).toBe(
+      'Your access in Aglyn was updated: your role is editor. You can work on host-a and host-b.',
+    )
+  })
+
+  it('names the workspace a new member was added to, with no bare site count', async () => {
+    mockMemberExists.mockReturnValue(false)
+    await post({ action: 'upsert', uid: SSO_AUTH_RECORD.uid, role: 'viewer' })
+    expect(told()['title']).toBe('You were added to Aglyn as viewer')
+    expect(told()['body']).toBe('You were added to Aglyn as viewer.')
+    expect(String(told()['body'])).not.toMatch(/site\(s\)|an organization/)
   })
 })

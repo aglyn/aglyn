@@ -1116,6 +1116,21 @@ export interface SendingIdentityVerdict {
    * from a host.
    */
   workspace?: SendingWorkspace | null
+  /**
+   * The display name the site's mail leaves under, stamped by
+   * `hostSendingIdentity` (AGL-3442): the site's business name, else its
+   * display name, else the org's branding default. A visitor reading the
+   * `From:` line sees the business they dealt with, not the platform or the
+   * agency behind it. `sendEmail` applies it (see `messageFromName`). Absent
+   * on a platform identity.
+   */
+  fromName?: string | null
+  /**
+   * The org's branding default display name, stamped beside
+   * {@link fromName}. It is what a site sender passes as `fromName` when it
+   * has no name of its own, and `sendEmail` puts the site's name in its place.
+   */
+  brandFromName?: string | null
 }
 
 /**

@@ -49,7 +49,7 @@
  *==========================================*/
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
-import { crmThreadSubject, emailAddressOf, htmlToPlainText } from '@aglyn/aglyn/app-utils/crm-inbound'
+import { emailAddressOf, htmlToPlainText, threadSubject } from '@aglyn/aglyn/app-utils/email-text'
 import { readOutreachDeliveryReport, isMailerDaemonMessage } from './delivery-status'
 import { detectOutreachOptOutIntent, detectOutreachOptOutSubject } from './opt-out-intent'
 import { outreachHeader, type OutreachThreadMessage } from './thread-message'
@@ -205,8 +205,8 @@ export function classifyOutreachMessage(
   // A subject is read only on a message that starts fresh — no `Re:`, and
   // not the thread's own — and only when it says nothing but stop.
   const subject = String(message.subject ?? '').replace(/\s+/g, ' ').trim()
-  const fresh = crmThreadSubject(subject) === subject
-  if (subject && fresh && subject !== crmThreadSubject(context.threadSubject)) {
+  const fresh = threadSubject(subject) === subject
+  if (subject && fresh && subject !== threadSubject(context.threadSubject)) {
     const subjectIntent = detectOutreachOptOutSubject(subject)
     if (subjectIntent.optOut) {
       return { ...base, kind: 'opt_out', evidence: `Subject: ${subjectIntent.matched}` }

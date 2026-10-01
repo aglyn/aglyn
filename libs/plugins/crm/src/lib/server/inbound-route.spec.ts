@@ -142,7 +142,6 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/crm-inbound-email'),
   firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
   getServerReleaseFlagValues: async () => ({
     release_crm: mockFlagOn ? { enabled: true } : { enabled: false },
@@ -154,7 +153,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 // ---------------------------------------------------------------------------
 
-import { CRM_INBOUND_UNMATCHED_ACTION, personKey } from '@aglyn/aglyn/server'
+import { personKey } from '@aglyn/aglyn/server'
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
 import { signSvixPayload } from '@aglyn/shared-util-email/svix-signature'
 import {
@@ -162,6 +161,7 @@ import {
   inboundWebhookSecrets,
   setInboundReaderForTesting,
 } from './inbound-route'
+import { CRM_INBOUND_UNMATCHED_ACTION } from '../model/crm-inbound'
 
 const URL = 'https://app.aglyn.com/api/crm/inbound'
 const SECRET = `whsec_${Buffer.from('capture-endpoint-secret-for-the-spec').toString('base64')}`

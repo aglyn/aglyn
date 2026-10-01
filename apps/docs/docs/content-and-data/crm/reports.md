@@ -96,7 +96,7 @@ stands now, and why the ones closed without converting were closed.
 - **Qualified** and **Unqualified** — how many of those captured have been
   converted, or closed without converting, each with its share of the leads
   captured.
-- **Still open** — leads that are *New* or *Working*.
+- **Still open** — leads that are *New*, *Nurturing* or *Working*.
 - **Where they stand** — one bar per status. A lead nobody has touched yet is
   *New*.
 - **Why leads were unqualified** — the reasons given when leads were

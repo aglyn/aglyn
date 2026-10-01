@@ -70,7 +70,7 @@ export function campaignFilingBody(action: CampaignFilingAction, campaignName: s
 /**
  * The membership a save changed, as the entries it owes: one `filed` per
  * id the save added, one `removed` per id it dropped. Order-insensitive,
- * like `campaignMembershipUnchanged`; a reorder owes nothing.
+ * like `containerMembershipUnchanged`; a reorder owes nothing.
  */
 export function campaignFilingChanges(
   before: readonly string[],

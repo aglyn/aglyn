@@ -30,6 +30,7 @@ import type {
   SiteBundleRestoreRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import { firebaseAdmin, scopedToHost } from '@aglyn/tenant-data-admin'
+import { loadCustomFieldTypes } from '../server/custom-field-types'
 
 /**
  * A site's datasets in its whole-site backup (AGL-163), answered by the plugin
@@ -202,7 +203,7 @@ export async function importSiteDatasets(
     const path = `orgs/${orgId}/datasets/${String(item.$id)}`
     await write(path, { ...restorable(DATASET_RESTORE_FIELDS, item), ...stamps(), ...scope })
     const model = effectiveDatasetModel(item)
-    await ensureCustomFieldTypes(model, request)
+    await loadCustomFieldTypes(model, request.loadPluginSurfaces)
     const records: SiteBundleItem[] = Array.isArray(item['records']) ? item['records'] : []
     for (const record of records.slice(0, DATASET_BUNDLE_RECORD_LIMIT)) {
       if (!record?.$id) continue
@@ -224,21 +225,4 @@ export async function importSiteDatasets(
     }
   }
   return report
-}
-
-/**
- * Loads the plugins that register custom field types before a record is
- * validated against `model` (AGL-434). A type is registered when its plugin's
- * server surface loads, and `validateDocument` answers "no error" for a type
- * nobody registered — right for a plugin that is absent, wrong for one not yet
- * loaded. Only a model that names a custom type pays for the load.
- */
-async function ensureCustomFieldTypes(
-  model: ReturnType<typeof effectiveDatasetModel>,
-  request: Pick<SiteBundleImportRequest, 'loadPluginSurfaces'>,
-): Promise<void> {
-  const usesCustomType = (model?.order ?? []).some((fieldId) =>
-    Boolean(model?.fields?.[fieldId]?.customType),
-  )
-  if (usesCustomType) await request.loadPluginSurfaces()
 }

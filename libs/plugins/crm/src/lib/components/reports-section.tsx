@@ -16,7 +16,6 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { mdiRefresh } from '@aglyn/shared-data-mdi'
 import {
@@ -52,6 +51,12 @@ import {
 } from './reports/report-scope'
 import { TasksCard } from './reports/tasks-card'
 import { invalidateAggregateReads, useAggregateRead } from './reports/use-aggregate-read'
+import {
+  CRM_REPORT_PERIOD_LABELS,
+  CRM_REPORT_PERIODS,
+  type CrmReportPeriod,
+  crmReportRange,
+} from '../model/crm-reports'
 
 /**
  * `/crm/reports` — the CRM in aggregate (AGL-2604, AGL-2624).
@@ -108,11 +113,11 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
    * per render, which would rebuild every query on every pass.
    */
   const [view, setView] = useState<{
-    period: Aglyn.CrmReportPeriod
+    period: CrmReportPeriod
     nowMs: number
   }>(() => ({ period: '30d', nowMs: Date.now() }))
   const range = useMemo(
-    () => Aglyn.crmReportRange(view.period, view.nowMs),
+    () => crmReportRange(view.period, view.nowMs),
     [view],
   )
   const routes = useMemo(() => crmRoutes(basePath ?? ''), [basePath])
@@ -184,14 +189,14 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
             value={view.period}
             onChange={(_event, next) => {
               if (next) {
-                setView({ period: next as Aglyn.CrmReportPeriod, nowMs: Date.now() })
+                setView({ period: next as CrmReportPeriod, nowMs: Date.now() })
               }
             }}
             aria-label="Report period"
           >
-            {Aglyn.CRM_REPORT_PERIODS.map((period) => (
+            {CRM_REPORT_PERIODS.map((period) => (
               <ToggleButton key={period} value={period}>
-                {Aglyn.CRM_REPORT_PERIOD_LABELS[period]}
+                {CRM_REPORT_PERIOD_LABELS[period]}
               </ToggleButton>
             ))}
           </ToggleButtonGroup>

@@ -318,7 +318,9 @@ export interface RiskNoticeDefinition {
   /**
    * Whether the notice always goes out, even while the workspace is over its
    * burst allowance. Locks, lifts and cancellations are never folded into a
-   * digest: each one changes what the owner can do.
+   * digest: each one changes what the owner can do. Nor is a dispute, whose
+   * evidence deadline a digest's one-line tally would drop, or a card-testing
+   * warning, whose site and orders to check it would drop.
    */
   neverDigest: boolean
   /**
@@ -328,7 +330,11 @@ export interface RiskNoticeDefinition {
   reviewable: boolean
   /** The kinds staff decisions on this kind's row close it with. */
   closesWith?: { released: RiskEventKind; rejected: RiskEventKind }
-  /** Also tell the managers of the site the event is on, not just the workspace's. */
+  /**
+   * Also tell the managers of the site the event is on, not just the
+   * workspace's. A closing notice sent for a decided row goes to whoever
+   * its opening went to, so for it the opening kind's answer is the one read.
+   */
   includeSiteManagers: boolean
   /** The help page section that explains it. */
   helpAnchor: string
@@ -351,6 +357,7 @@ export const RISK_NOTICE_HELP_PATH = '/help/holds-and-reviews'
  */
 export const RISK_NOTICE_TOKENS = {
   'workspace.name': 'The workspace name, or "your workspace".',
+  'site.label': 'The site the notice is about, as `the site "Harbor View"`, or "your site".',
   'item.label': 'What the notice is about, in the owner\'s words: the campaign "Spring sale", the page /pricing, order 1042.',
   'item.url': 'The absolute console link to the item.',
   occurredAt: 'When it happened, in UTC.',
@@ -361,11 +368,45 @@ export const RISK_NOTICE_TOKENS = {
   'lock.message': 'The message staff wrote when they applied the lock.',
   'lock.affected': 'What the lock or pause covers: sites, sessions, billing.',
   amount: 'The payment amount, when there is one.',
+  'payment.event':
+    'What happened to a payment, finishing "the payment was …": flagged for a fraud check, disputed by the cardholder with their bank.',
+  'page.visitors': 'What visitors see while a held page waits, as one sentence.',
   'evidence.dueBy': 'The date dispute evidence is due, when Stripe gave one.',
+  'payout.delay':
+    'A new publisher\'s payout schedule, finishing "moved to an extended schedule:": each payout reaches your bank 14 days after the sale, until your workspace is 30 days old.',
   'staff.evidence': 'Staff only: what the screen or Stripe reported.',
 } as const
 
 export type RiskNoticeToken = keyof typeof RISK_NOTICE_TOKENS
+
+/**
+ * `{{payment.event}}` for each card signal a payment can draw, in the owner's
+ * words. The early warning and the review are told apart, because only one
+ * of them has held the money; a dispute is the bank's, and says so.
+ */
+export const RISK_PAYMENT_EVENTS = {
+  'early-fraud-warning': 'reported by the card issuer as possibly not made by the cardholder',
+  'radar-review': 'held for a fraud review',
+  dispute: 'disputed by the cardholder with their bank',
+} as const satisfies Record<string, string>
+
+/** `14 days`, `1 day`. */
+function dayCount(days: number): string {
+  return `${days} ${days === 1 ? 'day' : 'days'}`
+}
+
+/**
+ * `{{payout.delay}}`: how long a new publisher's payouts wait, and until
+ * when. The numbers are the marketplace's own payout terms, passed in by the
+ * caller, and the notice states them: the schedule is money the publisher is
+ * owed and when it lands, not how anything was detected.
+ */
+export function riskPayoutDelayText(payout: { delayDays: number; untilWorkspaceAgeDays: number }): string {
+  return (
+    `each payout reaches your bank ${dayCount(payout.delayDays)} after the sale, ` +
+    `until your workspace is ${dayCount(payout.untilWorkspaceAgeDays)} old`
+  )
+}
 
 const ASK_FOR_REVIEW =
   'If you think this is a mistake, choose Request a review and tell us about it. A person reads every request.'
@@ -405,7 +446,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       summary:
         'Our automated safety review held {{item.label}} from {{workspace.name}} on {{occurredAt}} before it was sent.',
       meaning:
-        'This email was not sent. Nobody on your list received it, and nothing else on your account has changed.',
+        'This email was not delivered to anyone. Other emails with the same links or wording are stopped too while it is under review. Nothing else on your account has changed.',
       steps: [
         'Open the email and check its links, its sender name and its wording.',
         'If you change it, it is checked again when it next sends.',
@@ -440,7 +481,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       title: 'Your held email was released',
       summary: 'Our review team released {{item.label}} on {{occurredAt}}.',
       meaning:
-        'A held campaign goes back on the schedule and sends shortly. An automated email sends the next time it runs.',
+        'A held campaign that is still waiting goes back on the schedule and sends shortly; one you edited or canceled meanwhile stays as you left it. An automated email sends the next time it runs. A single email that was stopped, such as a receipt or a form reply, is not sent again, and the next one like it sends normally.',
       steps: [
         'Nothing to do. If you edit the email before it sends, the edited version is checked on its own.',
       ],
@@ -463,9 +504,9 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'email-held',
     owner: {
       title: 'A held email will not be sent',
-      summary: 'After review, {{item.label}} was not approved on {{occurredAt}}.',
+      summary: 'After review, {{item.label}} from {{workspace.name}} was not approved on {{occurredAt}}.',
       meaning:
-        'This email will not be sent in its current form. A held campaign is canceled; an automated email step stays stopped.',
+        'This email will not be sent in its current form, and other emails with the same links or wording are stopped too until they are changed. A held campaign that was still waiting is canceled; an automated email step stays stopped.',
       steps: [
         'Read our acceptable use rules before you send similar mail again.',
         'If you think the decision is wrong, choose Request a review and explain what the email is for.',
@@ -491,9 +532,8 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'A published page is on hold for review',
       summary:
-        'Our automated safety review held the latest version of {{item.label}} on {{occurredAt}}.',
-      meaning:
-        'Visitors still see the previous version of this page. If it has never been published before, visitors see a not-found page until the review is done.',
+        'On {{occurredAt}}, our automated safety review held the latest version of {{item.label}} on {{site.label}}.',
+      meaning: '{{page.visitors}} Nothing else on the site has changed.',
       steps: [
         'Open the page and check its links, embeds and any fields that ask visitors for information.',
         'If you change and publish it again, the new version is checked on its own.',
@@ -527,7 +567,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'page-held',
     owner: {
       title: 'Your held page is live',
-      summary: 'Our review team released {{item.label}} on {{occurredAt}}.',
+      summary: 'On {{occurredAt}}, our review team released {{item.label}} on {{site.label}}.',
       meaning: 'Visitors now see the version that was held.',
       steps: ['Nothing to do. Open the page to confirm it looks right.'],
       actions: ['view-details'],
@@ -551,7 +591,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'A live page is being reviewed',
       summary:
-        'Our automated safety review flagged {{item.label}} on {{occurredAt}}. The page is still live.',
+        'On {{occurredAt}}, our automated safety review flagged {{item.label}} on {{site.label}}. The page is still live.',
       meaning:
         'Visitors still see the page while a person looks. If you did not publish what is on it, someone else may have access to your account.',
       steps: [
@@ -586,7 +626,8 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'page-held',
     owner: {
       title: 'A held page will not be published',
-      summary: 'After review, the held version of {{item.label}} was not approved on {{occurredAt}}.',
+      summary:
+        'On {{occurredAt}}, after review, our team did not approve the held version of {{item.label}} on {{site.label}}.',
       meaning:
         'Visitors keep seeing the previous version, or a not-found page if there is none. Publishing the same content again is held again.',
       steps: [
@@ -647,9 +688,10 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     includeSiteManagers: false,
     helpAnchor: 'listing-held',
     owner: {
-      title: 'Your marketplace submission was released',
-      summary: 'Our review team released {{item.label}} on {{occurredAt}}.',
-      meaning: 'It was not published automatically.',
+      title: 'Your marketplace submission was cleared',
+      summary:
+        'On {{occurredAt}}, our review team cleared {{item.label}} from {{workspace.name}}. It is not listed yet: submit it again and it will go through.',
+      meaning: 'It was not published automatically, so buyers cannot see it until you submit it again.',
       steps: ['Submit it again; it will go through this time.'],
       actions: ['view-details'],
     },
@@ -696,9 +738,10 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'domain-flagged',
     owner: {
       title: 'A domain you added is being reviewed',
-      summary: '{{item.label}} was added to {{workspace.name}} on {{occurredAt}} and is waiting on a routine review.',
+      summary:
+        'On {{occurredAt}}, {{item.label}} was added to {{workspace.name}}, and it is waiting on a routine review by our team.',
       meaning:
-        'The domain stays connected while we look. Email sent from it may wait for the review to finish.',
+        'The domain stays connected while we look, and nothing is charged. If you send email from it, that email is stopped and held for its own review, whatever this review decides.',
       steps: [
         'Nothing is needed if the domain and the name on it are yours.',
         'To speed it up, choose Request a review and tell us who owns the domain and what it is for.',
@@ -730,8 +773,9 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'domain-flagged',
     owner: {
       title: 'Your domain review is complete',
-      summary: '{{item.label}} was reviewed and cleared on {{occurredAt}}.',
-      meaning: 'The domain works as normal. Email that was waiting on it sends on its next attempt.',
+      summary: 'On {{occurredAt}}, our team reviewed {{item.label}} on {{workspace.name}} and cleared it.',
+      meaning:
+        'The domain stays connected. If you send email from it, clearing the domain does not release that email: an email that was stopped is not sent again, and new email from it still goes through its own review.',
       steps: ['Nothing to do.'],
       actions: ['view-details'],
     },
@@ -752,9 +796,9 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'domain-flagged',
     owner: {
       title: 'A domain on your workspace was not approved',
-      summary: 'After review, {{item.label}} was not approved on {{occurredAt}}.',
+      summary: 'On {{occurredAt}}, after review, our team did not approve {{item.label}} on {{workspace.name}}.',
       meaning:
-        'Email from this domain will not be sent, and pages served on it may be restricted.',
+        'This decision by itself does not disconnect the domain or change your sites. If you send email from it, that email keeps being stopped.',
       steps: [
         'Remove the domain from your workspace, or show us that it is yours.',
         'If you think the decision is wrong, choose Request a review with proof of ownership.',
@@ -780,7 +824,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'A payment on your subscription needs attention',
       summary:
-        'On {{occurredAt}}, a subscription payment of {{amount}} for {{workspace.name}} was flagged for a fraud check.',
+        'On {{occurredAt}}, a subscription payment of {{amount}} for {{workspace.name}} was {{payment.event}}.',
       meaning:
         'The payment may be reversed by the cardholder\'s bank. If it is, your subscription may need a new payment method, and your plan can change.',
       steps: [
@@ -815,13 +859,14 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     includeSiteManagers: true,
     helpAnchor: 'link-blocked',
     owner: {
-      title: 'A link on your store was blocked',
+      title: 'A link on {{site.label}} was blocked',
       summary:
-        'On {{occurredAt}}, we stopped sending anyone to {{item.label}}, because the address looks like another company\'s website.',
-      meaning: 'Nobody who follows that link is sent there. Everything else on your store works as normal.',
+        'On {{occurredAt}}, we blocked {{item.label}} on {{site.label}}, because the address looks like another company\'s website.',
+      meaning:
+        'Nobody who follows that link is sent there. Everything else on the site works as normal, and nothing is charged.',
       steps: [
-        'Replace it with a file from your media library or a link on your own domain.',
-        'If the address really is yours, choose Request a review and tell us about it.',
+        'Replace it with a file from your media library or a link on your own domain. The link stays blocked whatever a review decides, so replacing it is the way to make it work again.',
+        'If the address really is yours, you can still tell us with Request a review.',
       ],
       actions: ['view-details', 'request-review', 'contact-support'],
     },
@@ -843,15 +888,17 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     severity: 'urgent',
     emailOwners: true,
     alertStaff: true,
-    neverDigest: false,
+    // Which site, and that its orders need checking before they ship, is the
+    // point of the notice; a digest would drop both.
+    neverDigest: true,
     reviewable: true,
     closesWith: { released: 'review-cleared', rejected: 'review-upheld' },
     includeSiteManagers: true,
     helpAnchor: 'card-testing',
     owner: {
-      title: 'Unusual checkout activity on your site',
+      title: 'Unusual checkout activity on {{site.label}}',
       summary:
-        'On {{occurredAt}}, the checkout on {{item.label}} saw an unusual burst of payment attempts, which can be someone testing stolen cards.',
+        'On {{occurredAt}}, checkout on {{site.label}} saw an unusual burst of payment attempts, which can be someone testing stolen cards.',
       meaning:
         'Checkout is still open. Repeated attempts from one source are being slowed. Payments from stolen cards may be reversed by the cardholder\'s bank later.',
       steps: [
@@ -864,7 +911,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     staff: {
       title: 'Card-testing velocity on a site',
       summary:
-        '{{item.label}} of {{workspace.name}}. {{staff.evidence}} Nothing has been refused site-wide or refunded. Reference {{reference}}.',
+        'Unusual burst of card payments: {{item.label}}, workspace {{workspace.name}}. {{staff.evidence}} Nothing has been refused site-wide or refunded. Reference {{reference}}.',
       actions: [
         'staff-open-row',
         'staff-lock-site',
@@ -887,7 +934,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'Gift cards from an order are on hold',
       summary:
-        'On {{occurredAt}}, the gift cards bought with {{item.label}} were put on hold because the payment for it is in question.',
+        'On {{occurredAt}}, we put on hold the gift cards bought with {{item.label}} on {{site.label}}, because the payment for that order is in question.',
       meaning:
         'They cannot be redeemed for now. Their balance is kept. If the payment is refunded or the dispute is lost, the balance is voided for you.',
       steps: [
@@ -899,7 +946,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     },
     staff: {
       title: 'Gift cards frozen on a questioned payment',
-      summary: '{{item.label}} on {{workspace.name}}. {{staff.evidence}}',
+      summary: 'Gift cards bought with {{item.label}} on {{workspace.name}} were frozen. {{staff.evidence}}',
       actions: ['staff-view-workspace', 'staff-lock-site'],
     },
   },
@@ -915,12 +962,12 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'A payment you received may be fraudulent',
       summary:
-        'On {{occurredAt}}, the card issuer reported the payment for {{item.label}} ({{amount}}) as possibly not made by the cardholder.',
+        'On {{occurredAt}}, the card issuer reported the payment for {{item.label}} on {{site.label}} ({{amount}}) as possibly not made by the cardholder.',
       meaning:
         'This payment may be reversed by the cardholder\'s bank. It is not a chargeback yet. Nothing has been refunded or canceled.',
       steps: [
         'Hold anything not yet shipped or delivered until you are sure the buyer is genuine.',
-        'Refunding now usually prevents a chargeback and its fee.',
+        'Refunding now usually prevents a chargeback. If a chargeback is decided for the cardholder, the payment is taken back from you.',
         'If you know the buyer and the sale is genuine, you can keep the order.',
       ],
       actions: ['refund-order', 'keep-order', 'view-details', 'contact-support'],
@@ -942,7 +989,8 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'sale-payment-review',
     owner: {
       title: 'A payment you received is on hold for review',
-      summary: 'On {{occurredAt}}, the payment for {{item.label}} ({{amount}}) was held for a fraud review.',
+      summary:
+        'On {{occurredAt}}, the payment for {{item.label}} on {{site.label}} ({{amount}}) was held for a fraud review.',
       meaning:
         'The payment has not reached your balance yet and may be refunded if it is not approved. Nothing has been refunded or canceled.',
       steps: [
@@ -963,14 +1011,15 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     severity: 'urgent',
     emailOwners: true,
     alertStaff: false,
-    neverDigest: false,
+    // Its evidence deadline is the point of the notice; a digest would drop it.
+    neverDigest: true,
     reviewable: false,
     includeSiteManagers: true,
     helpAnchor: 'sale-dispute',
     owner: {
       title: 'A customer disputed a payment',
       summary:
-        'On {{occurredAt}}, the cardholder disputed the payment for {{item.label}} ({{amount}}) with their bank.',
+        'On {{occurredAt}}, the cardholder disputed the payment for {{item.label}} on {{site.label}} ({{amount}}) with their bank.',
       meaning:
         'The payment may be reversed by the cardholder\'s bank. An unanswered dispute is decided for the cardholder. Your evidence is due by {{evidence.dueBy}}.',
       steps: [
@@ -1035,7 +1084,8 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'marketplace-sale-review',
     owner: {
       title: 'A marketplace sale is under review',
-      summary: 'On {{occurredAt}}, our team opened a routine review of {{item.label}} ({{amount}}).',
+      summary:
+        'On {{occurredAt}}, our team opened a routine review of {{item.label}} ({{amount}}) for {{workspace.name}}.',
       meaning:
         'The sale is recorded as usual, and its payout may take longer than normal. Nothing has been refunded.',
       steps: [
@@ -1071,7 +1121,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'A marketplace sale may be reversed',
       summary:
-        'On {{occurredAt}}, the payment for {{item.label}} was reported as possibly not made by the cardholder, or held for a fraud check.',
+        'On {{occurredAt}}, the payment for {{item.label}} ({{amount}}) to {{workspace.name}} was {{payment.event}}.',
       meaning:
         'This payment may be reversed by the cardholder\'s bank. If it is, your share of it is taken back from your payouts. Nothing has been refunded yet.',
       steps: [
@@ -1097,9 +1147,10 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'marketplace-payouts',
     owner: {
       title: 'Your marketplace payouts are on an extended schedule',
-      summary: 'On {{occurredAt}}, payouts for {{workspace.name}}\'s marketplace sales moved to an extended schedule.',
+      summary:
+        'On {{occurredAt}}, payouts for {{workspace.name}}\'s marketplace sales moved to an extended schedule: {{payout.delay}}.',
       meaning:
-        'Payouts to new publishers wait for a period before they reach your bank. Your sales are recorded as usual and pay out automatically when the period ends.',
+        'Nothing is withheld or charged. Your sales are recorded as usual, and each one pays out automatically when its wait ends.',
       steps: ['Nothing to do. You will get a notice when payouts return to the standard schedule.'],
       actions: ['view-marketplace-sales', 'contact-support'],
     },
@@ -1142,7 +1193,8 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'requesting-a-review',
     owner: {
       title: 'Our review is complete',
-      summary: 'On {{occurredAt}}, our team finished reviewing {{item.label}} and closed it with no action.',
+      summary:
+        'On {{occurredAt}}, our team finished reviewing {{item.label}} on {{workspace.name}} and closed it with no action.',
       meaning: 'Nothing on your account changes because of it.',
       steps: ['Nothing to do.'],
       actions: ['view-holds'],
@@ -1164,11 +1216,12 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'requesting-a-review',
     owner: {
       title: 'Our review found a problem',
-      summary: 'On {{occurredAt}}, our team finished reviewing {{item.label}} and took action on it.',
+      summary:
+        'On {{occurredAt}}, our team finished reviewing {{item.label}} on {{workspace.name}} and did not clear it.',
       meaning:
-        'You may receive a separate notice about what changed on your account, such as a lock or a canceled subscription.',
+        'This decision by itself does not lock anything, take anything down or change your billing. If we take any further step, you will get a separate notice saying exactly what changed.',
       steps: [
-        'Read any other notices you received today; they say what changed.',
+        'If another notice arrives, it says what changed. If none does, nothing else has changed.',
         'If you think the decision is wrong, choose Request a review or contact support with the reference {{reference}}.',
       ],
       actions: ['request-review', 'view-holds', 'contact-support'],
@@ -1193,7 +1246,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       summary: 'On {{occurredAt}}, our team locked {{workspace.name}}. The message from our team: {{lock.message}}',
       meaning: 'While it is locked: {{lock.affected}}',
       steps: [
-        'Read the message above; it says what we need from you.',
+        'Nothing is needed from you unless the message above asks for something, or you believe this is a mistake.',
         CANNOT_SIGN_IN,
         'Tell us who you are, what the workspace is for, and anything that explains what happened. A person reads every appeal.',
       ],
@@ -1244,7 +1297,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       summary: 'On {{occurredAt}}, our team locked {{item.label}}. The message from our team: {{lock.message}}',
       meaning: 'While it is locked: {{lock.affected}}',
       steps: [
-        'Read the message above; it says what we need from you.',
+        'Nothing is needed from you unless the message above asks for something, or you believe this is a mistake.',
         'Contact support to appeal, with the reference {{reference}}. A person reads every appeal.',
         CANNOT_SIGN_IN,
       ],
@@ -1292,7 +1345,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       summary: 'On {{occurredAt}}, our team locked {{item.label}}. The message from our team: {{lock.message}}',
       meaning: 'While it is locked: {{lock.affected}}',
       steps: [
-        'Read the message above; it says what we need from you.',
+        'Nothing is needed from you unless the message above asks for something, or you believe this is a mistake.',
         'Contact support to appeal, with the reference {{reference}}.',
       ],
       actions: ['contact-support'],
@@ -1337,9 +1390,9 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'Your account has been locked',
       summary: 'On {{occurredAt}}, our team locked your {{brand.productName}} account. The message from our team: {{lock.message}}',
-      meaning: 'While it is locked: {{lock.affected}}',
+      meaning: 'What this means: {{lock.affected}}',
       steps: [
-        'Read the message above; it says what we need from you.',
+        'Nothing is needed from you unless the message above asks for something, or you believe this is a mistake.',
         APPEAL_BY_REPLY,
       ],
       actions: ['contact-support'],
@@ -1382,18 +1435,19 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     includeSiteManagers: false,
     helpAnchor: 'locked',
     owner: {
-      title: '{{item.label}} is paused on {{workspace.name}}',
-      summary: 'On {{occurredAt}}, our team paused {{item.label}} for {{workspace.name}}. The message from our team: {{lock.message}}',
+      title: 'Paused on {{workspace.name}}: {{item.label}}',
+      summary:
+        'On {{occurredAt}}, our team paused {{item.label}} on {{workspace.name}}. The message from our team: {{lock.message}}',
       meaning: 'Everything else on your workspace keeps working. {{lock.affected}}',
       steps: [
-        'Read the message above; it says what we need from you.',
+        'Nothing is needed from you unless the message above asks for something, or you believe this is a mistake.',
         'Contact support with the reference {{reference}} if you have questions.',
       ],
       actions: ['contact-support'],
     },
     staff: {
       title: 'Workspace feature paused',
-      summary: '{{item.label}} was paused for {{workspace.name}} on {{occurredAt}}.',
+      summary: 'Paused for {{workspace.name}} on {{occurredAt}}: {{item.label}}.',
       actions: ['staff-unlock', 'staff-view-workspace'],
     },
   },
@@ -1407,7 +1461,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     includeSiteManagers: false,
     helpAnchor: 'locked',
     owner: {
-      title: '{{item.label}} is back on {{workspace.name}}',
+      title: 'Back on for {{workspace.name}}: {{item.label}}',
       summary: 'On {{occurredAt}}, our team turned {{item.label}} back on for {{workspace.name}}.',
       meaning: 'What happens now: {{lock.affected}}',
       steps: ['Nothing to do.'],
@@ -1415,7 +1469,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     },
     staff: {
       title: 'Workspace feature restored',
-      summary: '{{item.label}} was restored for {{workspace.name}} on {{occurredAt}}.',
+      summary: 'Restored for {{workspace.name}} on {{occurredAt}}: {{item.label}}.',
       actions: ['staff-view-workspace'],
     },
   },
@@ -1433,7 +1487,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       summary: 'On {{occurredAt}}, our team canceled the subscription for {{workspace.name}}.',
       meaning: 'What changes: {{lock.affected}}',
       steps: [
-        'Export anything you need from your workspace.',
+        'Nothing is deleted. Your sites and data stay when the workspace moves to the Free plan.',
         'Contact support if you believe this was a mistake, with the reference {{reference}}.',
       ],
       actions: ['view-billing', 'contact-support'],
@@ -1489,6 +1543,7 @@ export type RiskNoticeValues = Partial<Record<RiskNoticeToken | 'brand.productNa
  */
 const TOKEN_FALLBACKS: Partial<Record<RiskNoticeToken | 'brand.productName', string>> = {
   'workspace.name': 'your workspace',
+  'site.label': 'your site',
   'item.label': 'an item on your workspace',
   occurredAt: 'a recent date',
   reference: 'shown on this notice',
@@ -1496,7 +1551,11 @@ const TOKEN_FALLBACKS: Partial<Record<RiskNoticeToken | 'brand.productName', str
   'lock.message': 'None was given.',
   'lock.affected': 'see your account for details.',
   amount: 'an amount shown on the payment',
+  'payment.event': 'flagged for a fraud check',
+  'page.visitors':
+    'Visitors see the previous version of this page, or a not-found page if it was never published, until the review is done.',
   'evidence.dueBy': 'the date shown on the order',
+  'payout.delay': 'each payout waits a set number of days after the sale before it reaches your bank',
   'staff.evidence': '',
   'brand.productName': 'the platform',
 }

@@ -67,8 +67,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG, plan: mockPlan } : null),
   resolveOrgMembership: async () => ({ member: mockMember }),
   memberHasOrgPermission: async () => mockPermitted,
-  ensureCrmInboundToken: (...args: unknown[]) => (mockEnsure as any)(...args),
   logOrgActivity: (...args: unknown[]) => (mockLogOrgActivity as any)(...args),
+}))
+jest.mock('./crm-inbound-email', () => ({
+  ensureCrmInboundToken: (...args: unknown[]) => (mockEnsure as any)(...args),
 }))
 
 import {

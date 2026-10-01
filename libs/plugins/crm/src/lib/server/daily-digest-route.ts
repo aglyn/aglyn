@@ -37,7 +37,6 @@ import {
   composeCrmDigestEmailText,
   composeCrmDigestSubject,
   composeCrmDigestSummary,
-  CRM_DIGEST_DEFAULT_TIME_ZONE,
   CRM_DIGEST_LEAD_AGE_MS,
   CRM_DIGEST_LEAD_WINDOW,
   CRM_DIGEST_TASK_CEILING,
@@ -47,6 +46,8 @@ import {
   type CrmDigestTask,
   crmDigestWindow,
   type CrmMemberDigest,
+  digestTimeZone,
+  isNurturingLead,
   isUnworkedLead,
   utcDayKey,
 } from '../model/crm-digest'
@@ -187,27 +188,9 @@ export const CRM_DIGEST_MARKER_COLLECTION = 'crmDigests'
  */
 export const CRM_DIGEST_EMAIL_MAX_UID_LOOKUPS = 5
 
-/**
- * The zone the digest's "today" is drawn in.
- *
- * `CRM_DIGEST_TIME_ZONE` overrides the default for a self-hosted console
- * whose team wakes up elsewhere; a value `Intl` does not know falls back to
- * the default with a warning rather than throwing the whole run away.
- */
-export function digestTimeZone(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = String(env['CRM_DIGEST_TIME_ZONE'] ?? '').trim()
-  if (!configured) return CRM_DIGEST_DEFAULT_TIME_ZONE
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: configured })
-    return configured
-  } catch {
-    console.warn(
-      `crm-daily-digest: CRM_DIGEST_TIME_ZONE "${configured}" is not a zone — ` +
-        `using ${CRM_DIGEST_DEFAULT_TIME_ZONE}`,
-    )
-    return CRM_DIGEST_DEFAULT_TIME_ZONE
-  }
-}
+// The zone lives with the digest's other pure judgments, where the task
+// routes read it too; re-exported for the callers that name it here.
+export { digestTimeZone }
 
 type Firestore = FirebaseFirestore.Firestore
 type Snapshot = FirebaseFirestore.QueryDocumentSnapshot
@@ -250,6 +233,7 @@ interface MemberReport {
   overdue?: number
   today?: number
   leads?: number
+  nurturing?: number
   notified?: boolean
   emailed?: boolean
   emailReason?: string
@@ -343,6 +327,8 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   const hostById = new Map(hosts.docs.map((doc) => [doc.id, doc]))
   const leadCutoff = nowMs - CRM_DIGEST_LEAD_AGE_MS
   const leads: CrmDigestLead[] = []
+  // Read from the same window, and counted, not listed (AGL-3446).
+  const nurturing: CrmDigestLead[] = []
   for (const host of hosts.docs) {
     /*
      * Still per site, but over the ORG collection narrowed to what that site
@@ -362,8 +348,14 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
       .get()
     for (const doc of page.docs) {
       const data = doc.data() as Record<string, unknown>
-      if (!isUnworkedLead(data as Parameters<typeof isUnworkedLead>[0], nowMs)) continue
-      leads.push({
+      const fields = data as Parameters<typeof isUnworkedLead>[0]
+      const into = isUnworkedLead(fields, nowMs)
+        ? leads
+        : isNurturingLead(fields, nowMs)
+          ? nurturing
+          : null
+      if (!into) continue
+      into.push({
         id: doc.id,
         hostId: host.id,
         email: String(data['email'] ?? ''),
@@ -389,6 +381,7 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   const digests = buildMemberDigests({
     tasks,
     leads,
+    nurturing,
     window,
     members: members.map((member) => ({
       uid: member.$id,
@@ -411,6 +404,7 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
 
   const branding = resolveBrandingProfile(org)
   const orgSlug = String(org['slug'] ?? '')
+  const workspaceName = String(org['name'] ?? '').trim() || orgSlug
   const hostName = (hostId: string): string => {
     const host = hostById.get(hostId)
     return String(host?.get('name') || host?.get('subdomain') || hostId)
@@ -500,13 +494,14 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
         nowMs,
         timeZone,
         productName: branding.productName,
+        workspaceName,
         tasksUrl: hub ? `${hub}/tasks` : ctx.origin,
         leadsUrl: (hostId: string) => `${hubUrl(hostId) ?? ctx.origin}/leads`,
         settingsUrl,
         hostName,
         supportLine,
       }
-      const subject = composeCrmDigestSubject(counts)
+      const subject = composeCrmDigestSubject(counts, workspaceName)
       // The `crm-daily-digest` system email (AGL-3367), in the org's brand,
       // read once per org and rendered per member.
       digestEmail ??= loadSystemEmail('crm-daily-digest').catch(() => null)

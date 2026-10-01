@@ -47,7 +47,7 @@
  * counts when it is the whole answer.
  *==========================================*/
 
-import { stripQuotedHistory } from '@aglyn/aglyn/app-utils/crm-inbound'
+import { stripQuotedHistory } from '@aglyn/aglyn/app-utils/email-text'
 
 export interface OutreachOptOutIntent {
   /** The reply asks not to be emailed again. */

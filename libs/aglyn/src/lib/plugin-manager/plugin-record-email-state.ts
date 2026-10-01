@@ -73,9 +73,66 @@ export interface PluginRecordEmailStateReport {
   records: number
 }
 
+/**
+ * One delivery event a send's webhook recorded, as the delivery log
+ * answered it: who it is about, what happened, when, and whether it is the
+ * first event of its type for its message.
+ */
+export interface PluginRecordEmailEvent {
+  /** The recipient, lowercased. */
+  to: string
+  /** `opened`, `clicked`, `delivered`, `bounced`, … */
+  type: string
+  /** When it happened, epoch ms. */
+  at: number
+  /** No event of this type had been recorded against this message before. */
+  firstOfType: boolean
+}
+
+/**
+ * The events one webhook delivery recorded for a send from a site — what
+ * the record system reads a person's engagement off (AGL-2616).
+ */
+export interface PluginRecordEmailEngagementRequest {
+  /**
+   * The site the send went out from: the `hostId` tag the send stamped,
+   * which is the only tenant identity a delivery event carries.
+   */
+  hostId: string
+  events: readonly PluginRecordEmailEvent[]
+}
+
+/**
+ * The people a marketing send was delivered to (AGL-3446), so the record
+ * system can say automated email is reaching them — a lead's Nurturing
+ * stage. Only what was actually accepted for delivery: a refused or
+ * deferred address reached nobody.
+ */
+export interface PluginRecordEmailReachRequest {
+  /** The organization whose records the send reached. */
+  orgId: string
+  /** The site the send went out as; only records it holds are moved. */
+  hostId: string
+  /** The addresses delivered to, as the send addressed them. */
+  emails: readonly string[]
+}
+
 export interface PluginRecordEmailStateWriter {
   /** Never throws: a list is the control, the stamp is what a person reads. */
   stamp(request: PluginRecordEmailStateRequest): Promise<PluginRecordEmailStateReport>
+  /**
+   * Stamps when each person these events name last engaged with a send from
+   * the site, on the records the site may see. Optional: a record system
+   * that keeps no engagement answers nothing. Never throws, for the reason
+   * `stamp` does not: the webhook's acknowledgement must not depend on it.
+   */
+  engaged?(request: PluginRecordEmailEngagementRequest): Promise<PluginRecordEmailStateReport>
+  /**
+   * Notes that a marketing send reached these people. Optional: a record
+   * system with no stage for it answers nothing. Never throws: the mail has
+   * already gone.
+   */
+  reached?(request: PluginRecordEmailReachRequest): Promise<PluginRecordEmailStateReport>
 }
 
 export const PLUGIN_RECORD_EMAIL_STATE = definePluginServiceContract<PluginRecordEmailStateWriter>(
@@ -124,6 +181,46 @@ export async function stampRecordEmailState(
     return await resolved.writer.stamp(request)
   } catch (error) {
     console.error('[record-email-state] the record system could not stamp the address', error)
+    return null
+  }
+}
+
+/**
+ * Hands a send's delivery events to whichever plugin keeps the records, so
+ * it can stamp the people who engaged (AGL-2616). Answers `null` when no
+ * plugin keeps records, or the one that does keeps no engagement. Never
+ * throws: the caller is a webhook whose acknowledgement must not hang on a
+ * courtesy stamp.
+ */
+export async function stampRecordEmailEngagement(
+  request: PluginRecordEmailEngagementRequest,
+): Promise<PluginRecordEmailStateReport | null> {
+  const resolved = pluginRecordEmailStateWriter()
+  if (!resolved?.writer.engaged) return null
+  try {
+    return await resolved.writer.engaged(request)
+  } catch (error) {
+    console.error('[record-email-state] the record system could not stamp an engagement', error)
+    return null
+  }
+}
+
+/**
+ * Hands the addresses a marketing send was delivered to to whichever plugin
+ * keeps the records (AGL-3446). Answers `null` when no plugin keeps
+ * records, or the one that does keeps no such stage. Never throws: the
+ * send has already delivered, and its bookkeeping must not fail it.
+ */
+export async function stampRecordEmailReach(
+  request: PluginRecordEmailReachRequest,
+): Promise<PluginRecordEmailStateReport | null> {
+  if (!request.emails.length) return null
+  const resolved = pluginRecordEmailStateWriter()
+  if (!resolved?.writer.reached) return null
+  try {
+    return await resolved.writer.reached(request)
+  } catch (error) {
+    console.error('[record-email-state] the record system could not note a delivered send', error)
     return null
   }
 }

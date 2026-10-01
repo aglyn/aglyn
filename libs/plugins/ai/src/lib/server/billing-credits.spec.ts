@@ -169,6 +169,8 @@ describe('the assist credit odometer', () => {
     // which would arrive as the same `null` with nothing saying so.
     expect(JSON.parse(wire)).toEqual({
       credits: { used: 250_000, limit: null, remaining: null },
+      // No band, so nothing to stop at.
+      stopsAtBand: false,
       unlimited: true,
     })
     expect(wire).not.toContain('Infinity')
@@ -183,6 +185,8 @@ describe('the assist credit odometer', () => {
     const capped = await (await GET(get())).json()
     expect(capped).toEqual({
       credits: { used: 250_000, limit: 116_000, remaining: 0 },
+      // A comp sells nothing past its band, so the band is a wall.
+      stopsAtBand: true,
     })
   })
 

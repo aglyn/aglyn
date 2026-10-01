@@ -21,7 +21,7 @@ import type {
 } from '@aglyn/aglyn/server'
 import {
   resolveTransactionFeeCents,
-  storefrontProcessingCostCents,
+  saleProcessingCostCents,
 } from '@aglyn/aglyn'
 import { reserveHandler } from './reserve'
 
@@ -953,7 +953,7 @@ describe('a merchant-set lodging rate is charged and recorded (AGL-1969)', () =>
     // real pricing function rather than a copied constant, so a rate change
     // moves the expectation with it.
     expect(feeWithTax - feeWithoutTax).toBe(
-      storefrontProcessingCostCents(31800) - storefrontProcessingCostCents(30000),
+      saleProcessingCostCents(31800) - saleProcessingCostCents(30000),
     )
     // NEGATIVE CONTROL. The business plan takes 2% on a service, so a fee
     // computed on the TAX-INCLUSIVE base is a different, larger number. If

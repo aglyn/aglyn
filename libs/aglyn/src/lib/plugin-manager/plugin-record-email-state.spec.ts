@@ -20,7 +20,11 @@ import {
   PLUGIN_RECORD_EMAIL_STATE,
   pluginRecordEmailStateWriter,
   registerPluginRecordEmailStateWriter,
+  stampRecordEmailEngagement,
+  stampRecordEmailReach,
   stampRecordEmailState,
+  type PluginRecordEmailEngagementRequest,
+  type PluginRecordEmailReachRequest,
   type PluginRecordEmailStateRequest,
   type PluginRecordEmailStateWriter,
 } from './plugin-record-email-state'
@@ -85,5 +89,93 @@ describe('the record email-state writer (AGL-3245)', () => {
 
   it('refuses a writer with no owner', () => {
     expect(() => registerPluginRecordEmailStateWriter(writer('records'))).toThrow(/no owner/)
+  })
+})
+
+describe('a send’s engagement, stamped by the record system (AGL-2616)', () => {
+  const ENGAGEMENT: PluginRecordEmailEngagementRequest = {
+    hostId: 'host-1',
+    events: [{ to: 'pat@example.com', type: 'opened', at: 5, firstOfType: true }],
+  }
+
+  it('answers null while no plugin keeps records', async () => {
+    expect(await stampRecordEmailEngagement(ENGAGEMENT)).toBeNull()
+  })
+
+  it('answers null for a record system that keeps no engagement', async () => {
+    registerPluginRecordEmailStateWriter(writer('records'), { pluginId: 'records' })
+    expect(await stampRecordEmailEngagement(ENGAGEMENT)).toBeNull()
+  })
+
+  it('hands the site and its events to the record system that keeps one', async () => {
+    const seen: PluginRecordEmailEngagementRequest[] = []
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async engaged(request) {
+          seen.push(request)
+          return { records: 1 }
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailEngagement(ENGAGEMENT)).toEqual({ records: 1 })
+    expect(seen).toEqual([ENGAGEMENT])
+  })
+
+  it('never throws at the webhook: a failing stamp is logged and answered as null', async () => {
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async engaged() {
+          throw new Error('storage down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailEngagement(ENGAGEMENT)).toBeNull()
+  })
+})
+
+describe('a delivered marketing send, told to the record system (AGL-3446)', () => {
+  const REACH: PluginRecordEmailReachRequest = { orgId: 'org-1', hostId: 'host-1', emails: ['pat@example.com'] }
+
+  it('answers null while no plugin keeps records, or for one with no such stage', async () => {
+    expect(await stampRecordEmailReach(REACH)).toBeNull()
+    registerPluginRecordEmailStateWriter(writer('records'), { pluginId: 'records' })
+    expect(await stampRecordEmailReach(REACH)).toBeNull()
+  })
+
+  it('hands the organization, the site and the addresses to the record system', async () => {
+    const seen: PluginRecordEmailReachRequest[] = []
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async reached(request) {
+          seen.push(request)
+          return { records: 1 }
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailReach(REACH)).toEqual({ records: 1 })
+    expect(seen).toEqual([REACH])
+    // A send that reached nobody asks nothing.
+    expect(await stampRecordEmailReach({ ...REACH, emails: [] })).toBeNull()
+    expect(seen).toHaveLength(1)
+  })
+
+  it('never throws at the sender: a failing note is logged and answered as null', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async reached() {
+          throw new Error('storage down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailReach(REACH)).toBeNull()
   })
 })

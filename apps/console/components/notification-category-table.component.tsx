@@ -19,6 +19,7 @@
 import {
   NOTIFICATION_CATEGORY_DESCRIPTIONS,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
+  selfSentEmailNote,
   NOTIFICATION_TYPE_LABELS,
   notificationTypesInCategory,
   STAFF_NOTIFICATION_CATEGORIES,
@@ -269,7 +270,7 @@ export function NotificationCategoryTable(props: NotificationCategoryTableProps)
                         return (
                           <TableCell key={channel.key} align="center">
                             {disabled ? (
-                              <Tooltip title="This digest sends its own email, under its switch in Digests.">
+                              <Tooltip title={selfSentEmailNote(type)}>
                                 {/* A disabled control fires no events, so the
                                     tooltip needs an element that does. */}
                                 <Box component="span">{control}</Box>

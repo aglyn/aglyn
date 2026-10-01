@@ -244,14 +244,18 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
         { 'site.name': siteName, signInUrl: siteBase },
         siteBase ? { origin: siteBase } : {},
       ).catch(() => null)
+      // How to get back in (AGL-3432): the member does not know the password
+      // the administrator chose, so the email says to ask for it or to set
+      // their own through "Forgot password?".
       const result = await sendEmail({
         to: email,
         subject: designed?.subject || `Your ${siteName} password was changed`,
         text:
           designed?.text ||
           `An administrator of ${siteName} set a new password on your ` +
-            'account. You have been signed out on every device and will need ' +
-            `the new password to sign back in at ${siteBase}.\n\n` +
+            'account and signed you out on every device. To sign back in at ' +
+            `${siteBase}, get the new password from them, or choose ` +
+            '"Forgot password?" on the sign-in page to set your own.\n\n' +
             'If you did not expect this, contact the site owner.',
         ...(designed?.html ? { html: designed.html } : {}),
         fromName: branding.fromName,

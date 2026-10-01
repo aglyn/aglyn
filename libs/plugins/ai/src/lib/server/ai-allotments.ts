@@ -19,7 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   assistCreditsFromUsd,
   resolveAssistCreditBudget,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { hostRoleFor, isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'

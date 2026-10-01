@@ -29,6 +29,11 @@ import {
   rateLimitHeaders,
   withResponseHeaders,
 } from './api-http'
+import {
+  PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
+  SELF_SERVE_PLANS,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 describe('api-http', () => {
   describe('error envelope', () => {
@@ -76,11 +81,20 @@ describe('api-http', () => {
       expect(absent.error).not.toHaveProperty('fields')
     })
 
-    it('names both plans that carry API access (AGL-899)', async () => {
+    it('names the cheapest plan carrying API access, and every plan above it has it (AGL-3448)', async () => {
+      const first = SELF_SERVE_PLANS.findIndex(
+        (plan) => PLAN_ENTITLEMENTS[plan].features.apiAccess,
+      )
+      expect(first).toBeGreaterThanOrEqual(0)
       const body = await ApiErrors.planRequired().json()
       expect(body.error.message).toBe(
-        'API access requires the Business or Advanced plan',
+        `API access requires the ${PLAN_LABELS[SELF_SERVE_PLANS[first]]} plan or above`,
       )
+      // "or above" is only true if no plan above the named one lacks it.
+      const above = [...SELF_SERVE_PLANS.slice(first), 'enterprise' as const]
+      expect(
+        above.filter((plan) => !PLAN_ENTITLEMENTS[plan].features.apiAccess),
+      ).toEqual([])
     })
 
     it('rateLimited sets Retry-After (min 1s) and merges headers', () => {

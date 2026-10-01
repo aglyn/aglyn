@@ -27,6 +27,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
+  rearmVisitorRecordCeilingNotice,
   recordVisitorRecordCeilingTrip,
   resolveCampaignTouch,
 } from '@aglyn/tenant-data-admin'
@@ -120,10 +121,13 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
      * A refusal is returned as DATA and rendered outside: a body that can run
      * several times must not be the place a response is built.
      */
+    // The count the new account was judged against, for the notice re-arm.
+    let usedBeforeCreate = 0
     const refusal = await firestore.runTransaction(async (tx) => {
       const existing = await tx.get(membersRef.where('email', '==', email).limit(1))
       if (!existing.empty) return { duplicate: true, ceiling: 0 }
       const used = (await tx.get(membersRef.count())).data().count
+      usedBeforeCreate = used
       // Live documents only, so removing a member in the inbox frees the slot.
       const verdict = checkVisitorRecordCeiling(used, SITE_MEMBERS_MAX_PER_HOST)
       if (verdict.exceeded) return { duplicate: false, ceiling: verdict.ceiling }
@@ -203,6 +207,14 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
         ...(contact ? { contact } : {}),
       })
     }
+    // The account took a slot below the ceiling. When it took the last one,
+    // the next refusal is a new crossing and is announced again (AGL-3442).
+    await rearmVisitorRecordCeilingNotice({
+      hostRef,
+      kind: 'siteMembers',
+      used: usedBeforeCreate,
+      ceiling: SITE_MEMBERS_MAX_PER_HOST,
+    })
     // Sign-ups double as leads for the site owner (AGL-109), through the one
     // writer that enforces `LEADS_MAX_PER_HOST` (AGL-1529). A refused lead
     // never fails the sign-up: the visitor asked for an account, not for a

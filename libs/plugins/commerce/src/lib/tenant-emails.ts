@@ -58,11 +58,23 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           description: 'Order reference id',
           sample: 'cs_test_123',
         },
+        {
+          name: 'store.receiptFooter',
+          description:
+            'The Receipt footer from the store settings; empty when none is set',
+          sample: 'Returns are accepted within 30 days.',
+        },
       ],
       defaultBody: [
         { block: 'text', text: 'Thanks for your purchase!', variant: 'heading' },
+        {
+          block: 'text',
+          text: 'Here is the receipt for your order from {{host.businessName}}.',
+          variant: 'body',
+        },
         { block: 'text', text: '{{order.summary}}', variant: 'body' },
-        { block: 'text', text: 'Total: {{order.total}}', variant: 'body' },
+        { block: 'text', text: 'Total charged: {{order.total}}', variant: 'body' },
+        { block: 'text', text: '{{store.receiptFooter}}', variant: 'body' },
         {
           block: 'text',
           text: 'Order reference: {{order.ref}}',
@@ -142,8 +154,18 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
         {
           name: 'reservation.paid',
-          description: 'Amount paid today',
+          description:
+            'What the guest was charged today, lodging tax included; a ' +
+            'charge that carried lodging tax names it, as in “$254.40, ' +
+            'including $14.40 lodging tax”',
           sample: '$240.00',
+        },
+        {
+          name: 'reservation.balance',
+          description:
+            'What is still owed for the stay and where it is paid, as a ' +
+            'sentence; empty when the stay is paid in full',
+          sample: 'Still to pay: $360.00, at the property. It has not been charged.',
         },
         {
           name: 'reservation.ref',
@@ -153,7 +175,11 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
       ],
       defaultBody: [
         { block: 'text', text: 'Reservation confirmed', variant: 'heading' },
-        { block: 'text', text: 'Your stay is confirmed!', variant: 'body' },
+        {
+          block: 'text',
+          text: 'Your stay at {{host.businessName}} is confirmed.',
+          variant: 'body',
+        },
         {
           block: 'text',
           text: 'Check-in: {{reservation.checkIn}}',
@@ -165,6 +191,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           text: 'Paid today: {{reservation.paid}}',
           variant: 'body',
         },
+        { block: 'text', text: '{{reservation.balance}}', variant: 'body' },
         {
           block: 'text',
           text: 'Reference: {{reservation.ref}}',
@@ -181,7 +208,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
       pluginId: 'commerce',
       plugin: 'Commerce',
       control: 'besigner',
-      defaultSubject: 'Your gift card',
+      defaultSubject: 'Your gift card for {{host.businessName}}',
       mergeTokens: [
         {
           name: 'giftcard.code',
@@ -193,19 +220,36 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           description: 'The gift card value',
           sample: '$25.00',
         },
+        {
+          name: 'giftcard.note',
+          description:
+            'The note written when the card was issued by hand; empty for a ' +
+            'card bought at checkout',
+          sample: 'Happy birthday, Sam!',
+        },
       ],
       defaultBody: [
         { block: 'text', text: 'Your gift card', variant: 'heading' },
         {
           block: 'text',
+          text: 'You have a {{giftcard.value}} gift card for {{host.businessName}}.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{giftcard.note}}', variant: 'body' },
+        {
+          block: 'text',
           text: 'Gift card code: {{giftcard.code}}',
           variant: 'body',
         },
-        { block: 'text', text: 'Value: {{giftcard.value}}', variant: 'body' },
         {
           block: 'text',
-          text: 'Enter it at checkout to apply the balance.',
+          text: 'Enter the code at checkout on {{host.url}} to use its balance.',
           variant: 'body',
+        },
+        {
+          block: 'button',
+          label: 'Visit {{host.businessName}}',
+          href: '{{host.url}}',
         },
       ],
       footerReason:
@@ -236,14 +280,13 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         {
           name: 'product.url',
           description: 'Link to the product page',
-          sample: '/products/house-blend',
+          sample: 'https://shop.example.com/products/house-blend',
         },
       ],
       defaultBody: [
         {
           block: 'text',
-          text:
-            '{{product.name}} is available again — grab it before it sells out.',
+          text: '{{product.name}} is back in stock at {{host.businessName}}.',
           variant: 'body',
         },
         { block: 'button', label: 'View product', href: '{{product.url}}' },
@@ -272,14 +315,15 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
       defaultBody: [
         {
           block: 'text',
-          text: 'Your cart is still waiting — pick up where you left off.',
+          text:
+            'You left items in your cart at {{host.businessName}}. Pick up ' +
+            'where you left off.',
           variant: 'body',
         },
         { block: 'button', label: 'Return to cart', href: '{{cart.url}}' },
         {
           block: 'text',
-          text:
-            'Your items are held but not reserved, so they may sell out.',
+          text: 'Nothing in your cart is held for you.',
           variant: 'caption',
         },
       ],
@@ -373,8 +417,9 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           block: 'text',
           text:
             'An administrator of {{site.name}} set a new password on your ' +
-            'account. You have been signed out on every device and will need ' +
-            'the new password to sign back in.',
+            'account and signed you out on every device. To sign back in, ' +
+            'get the new password from them, or choose "Forgot password?" on ' +
+            'the sign-in page to set your own.',
           variant: 'body',
         },
         { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
@@ -402,7 +447,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         {
           name: 'stream.name',
           description: 'What they signed up for',
-          sample: 'our newsletter',
+          sample: 'Newsletter',
         },
         {
           name: 'confirmUrl',
@@ -414,7 +459,9 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         { block: 'text', text: 'Confirm your subscription', variant: 'heading' },
         {
           block: 'text',
-          text: 'Please confirm that you want to receive {{stream.name}} at this address.',
+          text:
+            'Please confirm that you want to get {{stream.name}} emails from ' +
+            '{{host.businessName}} at this address.',
           variant: 'body',
         },
         { block: 'button', label: 'Confirm my subscription', href: '{{confirmUrl}}' },

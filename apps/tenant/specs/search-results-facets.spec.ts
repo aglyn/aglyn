@@ -42,7 +42,6 @@
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: jest.fn() },
-  orgDataQueryForHost: jest.fn(),
 }))
 jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
   __esModule: true,
@@ -87,7 +86,7 @@ jest.mock('@aglyn/aglyn/server', () => {
   }
 })
 
-import { firebaseAdmin, orgDataQueryForHost } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { SearchResult } from '../utils/search-content'
 import searchContent, {
   filterSearchResults,
@@ -151,7 +150,7 @@ describe('searchResultFacets — the count tabs (AGL-1525)', () => {
     )
   })
 
-  it('files pages and dataset rows under one Pages tab', () => {
+  it('files pages and repeated rows under one Pages tab', () => {
     // They belong to no collection but they are still results. Left out,
     // "All" would exceed the tabs beneath it and the row would stop adding
     // up — which is worse than an extra tab.
@@ -276,9 +275,6 @@ const seed = (collections: CollectionSeed[]) => {
   }
   ;(firebaseAdmin.app as jest.Mock).mockReturnValue({
     firestore: () => ({ collection: () => ({ doc: () => hostRef }) }),
-  })
-  ;(orgDataQueryForHost as jest.Mock).mockResolvedValue({
-    query: { limit: () => ({ get: async () => ({ docs: [] }) }) },
   })
   return { host: { $id: HOST_ID, screens: {} } as any }
 }

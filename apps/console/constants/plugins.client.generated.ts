@@ -42,7 +42,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
     register: {"site":"registerCommercePlugin","console":"registerCommerceConsole"},
-    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard","siteMember"]}},
     load: () => import('@aglyn/plugins-commerce'),
     loads: {
       site: () => import('@aglyn/plugins-commerce/site'),
@@ -59,7 +59,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'crm',
     apiPrefixes: ["crm"],
     register: {"console":"registerCrmConsole"},
-    contributes: {"console":{"shell":true,"routes":["/crm"],"slots":["consoleSearch","formContactFields","hostDashboard","orgDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/crm"],"orgRoutes":["/crm"],"slots":["consoleSearch","formContactFields","hostDashboard","orgDashboard"]}},
     load: () => import('@aglyn/plugins-crm'),
   },
   {
@@ -112,7 +112,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"console":"registerMarketingConsole","staff":"registerMarketingConsole","site":"registerMarketingPlugin"},
-    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["adminOrgDetail","crmRecordAttribution","emailMessages","emailTemplateRecipients","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
+    contributes: {"console":{"shell":true,"routes":["/marketing"],"orgRoutes":["/marketing"],"slots":["adminOrgDetail","besignerInteractions","crmRecordAttribution","emailMessages","emailTemplateRecipients","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
     load: () => import('@aglyn/plugins-marketing'),
     loads: {
       site: () => import('@aglyn/plugins-marketing/site'),

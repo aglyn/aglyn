@@ -276,6 +276,20 @@ without loading any plugin. A key declared twice, an entry that names another
 plugin, or an `external` entry with no `authoredIn` is refused. Regenerate
 after changing an entry; `--check` refuses a stale catalog.
 
+A **starterTemplates** entry names a function in
+`@aglyn/plugins-x/starter-templates` that returns the starter sites a plugin
+offers — starters built around its own elements, such as a shop around a
+product grid and a cart — each with its id, name, description, category and
+pages, built with the kit in `@aglyn/aglyn/app-utils/starter-template-nodes`.
+The generator compiles them into core's `STARTER_TEMPLATES`, after the
+platform's own, because the template gallery, the seed route and the examples
+a model is shown read the list without loading any plugin. A starter id
+declared twice, a starter with no pages or two pages under one key, or a page
+placing an element of another plugin than its own or mui is refused. The ids,
+the page keys and the node ids are persisted in every site that used the
+starter, so they are never renamed. Regenerate after changing a starter;
+`--check` refuses a stale list.
+
 The **titles manifest** (`apps/console/constants/plugins.titles.generated.ts`)
 is read from a plugin's source rather than from an entry: each console nav
 item's `label` and `href` in its `plugin.ts`, and the `*-console-sections.ts`

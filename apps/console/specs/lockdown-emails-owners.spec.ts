@@ -237,6 +237,117 @@ describe('a lock emails the people it locked', () => {
     expect(mockNotices[0]['lock']['message']).toMatch(/security concern/)
   })
 
+  /*
+   * A feature pause is a staff decision that holds until it is lifted, so
+   * the member-facing "please try again shortly" is not what its owners are
+   * told; nor is the pause written as "Media uploads is paused" (AGL-3432).
+   */
+  it('tells the owners what a feature pause stops, and that it holds until it is lifted', async () => {
+    await post({ action: 'lock', scope: 'feature', targetId: 'checkout', orgId: 'org-fraud', reason: 'manual' })
+    expect(mockNotices).toEqual([
+      expect.objectContaining({
+        kind: 'feature-locked',
+        orgId: 'org-fraud',
+        // The customer's name for the lever, never the checklist label
+        // "Checkout (new subscriptions)" (AGL-3442).
+        item: expect.objectContaining({ label: 'new purchases' }),
+        lock: expect.objectContaining({
+          message: 'Checkout is temporarily unavailable.',
+          affected: 'The pause holds until our team lifts it.',
+        }),
+      }),
+    ])
+    expect(mockNotices[0]['lock']['message']).not.toMatch(/try again/i)
+  })
+
+  /*
+   * The staff org page's AI pause is two levers and one staff action, so it
+   * is one request and one email (AGL-3442): each lever is still written
+   * and audited on its own.
+   */
+  it('sends ONE notice for a pause of several levers, naming each by its customer name', async () => {
+    const { status, body } = await post({
+      action: 'lock',
+      scope: 'feature',
+      targetIds: ['ai-assist', 'ai-generate'],
+      orgId: 'org-fraud',
+      reason: 'billing',
+    })
+    expect(status).toBe(200)
+    expect(Object.keys(mockStore).filter((path) => path.startsWith('lockdowns/')).sort()).toEqual([
+      'lockdowns/feature--ai-assist--org--org-fraud',
+      'lockdowns/feature--ai-generate--org--org-fraud',
+    ])
+    expect(body).toMatchObject({ confirmed: true, features: ['ai-assist', 'ai-generate'] })
+    expect(body.verifiedTargets.map((state: any) => [state.targetId, state.locked])).toEqual([
+      ['ai-assist', true],
+      ['ai-generate', true],
+    ])
+    expect(mockNotices).toEqual([
+      expect.objectContaining({
+        kind: 'feature-locked',
+        orgId: 'org-fraud',
+        item: expect.objectContaining({ label: 'AI assist and AI generation' }),
+        lock: expect.objectContaining({
+          message: 'AI assist is temporarily unavailable. AI generation is temporarily unavailable.',
+          affected: 'The pause holds until our team lifts it.',
+        }),
+      }),
+    ])
+    expect(body.ownerNotice).toMatchObject({ kind: 'feature-locked', confirmed: true })
+
+    // The lift is one request and one "back on" email too.
+    mockNotices.length = 0
+    const lifted = await post({
+      action: 'unlock',
+      scope: 'feature',
+      targetIds: ['ai-assist', 'ai-generate'],
+      orgId: 'org-fraud',
+    })
+    expect(lifted.body.confirmed).toBe(true)
+    expect(Object.keys(mockStore).filter((path) => path.startsWith('lockdowns/'))).toEqual([])
+    expect(mockNotices).toEqual([
+      expect.objectContaining({
+        kind: 'feature-unlocked',
+        item: expect.objectContaining({ label: 'AI assist and AI generation' }),
+        lock: expect.objectContaining({ affected: 'Everything the pause stopped works again.' }),
+      }),
+    ])
+  })
+
+  it('says a feature pause with an end ends on its own, rather than that it holds until lifted', async () => {
+    const untilMs = Date.now() + 3_600_000
+    await post({ action: 'lock', scope: 'feature', targetId: 'uploads', orgId: 'org-fraud', reason: 'manual', untilMs })
+    expect(mockNotices[0]['lock']['affected']).toBe(
+      `The pause ends on its own at ${new Date(untilMs).toUTCString()}, or sooner if our team lifts it.`,
+    )
+  })
+
+  it('refuses a pause naming any lever nothing declared, and writes none of them', async () => {
+    const { status } = await post({
+      action: 'lock',
+      scope: 'feature',
+      targetIds: ['ai-assist', 'everything'],
+      orgId: 'org-fraud',
+      reason: 'billing',
+    })
+    expect(status).toBe(400)
+    expect(Object.keys(mockStore).filter((path) => path.startsWith('lockdowns/'))).toEqual([])
+    expect(mockNotices).toEqual([])
+  })
+
+  it('keeps a feature pause’s own message when staff wrote one', async () => {
+    await post({
+      action: 'lock',
+      scope: 'feature',
+      targetId: 'uploads',
+      orgId: 'org-fraud',
+      reason: 'manual',
+      message: 'Uploads are off while we look at your storage use.',
+    })
+    expect(mockNotices[0]['lock']['message']).toBe('Uploads are off while we look at your storage use.')
+  })
+
   it('records an unticked box as a verified "not sent", never as silence', async () => {
     const { body } = await post({
       action: 'lock',
@@ -372,7 +483,8 @@ describe('resend owner notice', () => {
     expect(mockNotices).toHaveLength(2)
     const toPerson = mockNotices.find((notice) => notice['recipients'][0].email === 'user-fraud@example.com')
     expect(toPerson).toMatchObject({ kind: 'account-locked' })
-    expect(toPerson?.['item']['label']).toBe('your account and your workspace')
+    // Each lock by name (AGL-3432): the workspace is not "your workspace".
+    expect(toPerson?.['item']['label']).toBe('your account and the workspace "Fraud Co"')
   })
 
   it('is idempotent per lock and person, unless staff send again', async () => {
@@ -416,3 +528,30 @@ describe('resend owner notice', () => {
 
 // A module, so its doubles do not collide with other specs in the type program.
 export {}
+
+describe('what a lock or lift says it did (AGL-3432)', () => {
+  const { lockdownAffectedText } = require('../utils/server/lockdown-owner-notice') as {
+    lockdownAffectedText: (input: Record<string, unknown>) => string
+  }
+
+  it('never says everything is back as it was, and names a canceled subscription only as a condition', () => {
+    const lifted = lockdownAffectedText({ action: 'unlock', scope: 'org' })
+    expect(lifted).not.toMatch(/back as it was/)
+    expect(lifted).toContain('if the lock canceled your subscription, it stays canceled')
+  })
+
+  it('never tells a lifted site to sign in again: a site lock signs nobody out', () => {
+    const lifted = lockdownAffectedText({ action: 'unlock', scope: 'host' })
+    expect(lifted).toBe('The site works as normal again, and it can be changed.')
+    expect(lifted).not.toMatch(/sign in/)
+  })
+
+  it('reports the sign-out a lock actually made, not one it did not', () => {
+    expect(lockdownAffectedText({ action: 'lock', scope: 'org', effects: { sessionsRevoked: false } })).not.toMatch(
+      /signed out/,
+    )
+    expect(lockdownAffectedText({ action: 'lock', scope: 'org', effects: { sessionsRevoked: true } })).toMatch(
+      /everyone was signed out/,
+    )
+  })
+})

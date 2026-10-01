@@ -595,7 +595,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         flex: 1,
         minWidth: 150,
         valueGetter: (_value: unknown, row: LeadRow) =>
-          Aglyn.readCampaignIds(row).map(campaignName).join(', '),
+          Aglyn.readContainerIds(row, 'campaign').map(campaignName).join(', '),
       } satisfies GridColDef,
       {
         field: 'lastSeenAtMs',
@@ -919,6 +919,9 @@ function InlineStatus(props: {
         sx={{ width: '100%' }}
       >
         <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
+        <MenuItem value="nurturing">
+          {Aglyn.CRM_LEAD_STATUS_LABELS.nurturing}
+        </MenuItem>
         <MenuItem value="working">
           {Aglyn.CRM_LEAD_STATUS_LABELS.working}
         </MenuItem>

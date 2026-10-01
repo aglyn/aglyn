@@ -44,7 +44,11 @@ import {
   describeAutomationPlaceholder,
 } from '@aglyn/aglyn/app-utils/automation-placeholders'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import {
+  AUTOMATION_EDITOR_ZONE,
+  HOST_AUTOMATIONS_ZONE,
+  type AutomationTarget,
+} from './workflow-zones'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -347,7 +351,7 @@ export function HostActionsCard(props: {
   /** The saved action the editor has open, as the `automationEditor` zone names it. */
   const draftId = draft?.id ?? null
   const draftName = draft?.name ?? ''
-  const editorTarget = useMemo<ConsoleAutomationTarget | null>(
+  const editorTarget = useMemo<AutomationTarget | null>(
     () => (draftId ? { type: 'action', id: draftId, name: draftName } : null),
     // The name the editor opened with: the zone reads the automation as it is
     // stored, so a rename being typed does not make it a different one.
@@ -808,7 +812,7 @@ export function HostActionsCard(props: {
           */}
           {ExtensionZone ? (
             <ExtensionZone
-              slot="hostAutomations"
+              slot={HOST_AUTOMATIONS_ZONE.id}
               hostId={hostId}
               orgId={org?.$id}
               openAction={openAction}
@@ -858,7 +862,7 @@ export function HostActionsCard(props: {
         >
           {ExtensionZone && editorTarget ? (
             <ExtensionZone
-              slot="automationEditor"
+              slot={AUTOMATION_EDITOR_ZONE.id}
               hostId={hostId}
               orgId={org?.$id}
               target={editorTarget}

@@ -16,14 +16,17 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
-  LAG_ATTEMPTS,
-  LAG_WAIT_MS,
+  LAG_DEADLINE_MS,
+  LAG_RECHECK_MS,
   TAG,
   probeWriteAccess,
   readTags,
   repoVersion,
   tagsFor,
   verdictFor,
+  currentVerdict,
+  settleAll,
+  versionExists,
 } from '../dist-tags.mjs'
 
 /** What `npm view <pkg> dist-tags versions --json` actually answers. */
@@ -217,12 +220,73 @@ describe('proving this runner may move a tag at all (AGL-3201)', () => {
 })
 
 describe('waiting out the registry rather than skipping past it (AGL-3201)', () => {
-  it('waits long enough to matter, and not forever', () => {
-    // The publish step runs this within minutes of publishing, and npm's read
-    // path lagged by more than five minutes on a 24 MB package. A single
-    // retry would not have covered it; an unbounded one would hang a release.
-    assert.ok(LAG_ATTEMPTS >= 3, 'more than one retry')
-    assert.ok((LAG_ATTEMPTS - 1) * LAG_WAIT_MS >= 60_000, 'at least a minute of patience')
-    assert.ok((LAG_ATTEMPTS - 1) * LAG_WAIT_MS <= 10 * 60_000, 'never long enough to hang a release')
+  it('gives the RUN long enough for the biggest package, and not forever', () => {
+    // beta.219: `@aglyn/aglyn` published at 13:38:48, its package document
+    // changed at 13:45:03, and that document is cached at the edge for five
+    // more minutes. 75 seconds per package gave up on it, release after
+    // release. An unbounded wait would hang a release instead.
+    assert.ok(LAG_DEADLINE_MS >= 11 * 60_000, 'processing plus the five-minute edge cache')
+    assert.ok(LAG_DEADLINE_MS <= 20 * 60_000, 'never long enough to hang a release')
+    assert.ok(LAG_RECHECK_MS >= 15_000 && LAG_RECHECK_MS <= 60_000)
+  })
+
+  it("asks the version's own document, which the edge does not cache", async () => {
+    const asked = []
+    const fetchImpl = async (url) => {
+      asked.push(url)
+      return { status: 200, ok: true, json: async () => ({ version: '1.0.0-beta.219' }) }
+    }
+    assert.equal(await versionExists('@aglyn/aglyn', '1.0.0-beta.219', { fetchImpl, registry: 'https://r.example' }), true)
+    assert.deepEqual(asked, ['https://r.example/@aglyn%2faglyn/1.0.0-beta.219'])
+  })
+
+  it('tells "not there" from "no answer"', async () => {
+    const status = (code) => async () => ({ status: code, ok: code < 400, json: async () => ({}) })
+    assert.equal(await versionExists('@aglyn/x', '1.0.0', { fetchImpl: status(404), registry: 'r' }), false)
+    assert.equal(await versionExists('@aglyn/x', '1.0.0', { fetchImpl: status(503), registry: 'r' }), null)
+    const offline = async () => {
+      throw new Error('ECONNRESET')
+    }
+    assert.equal(await versionExists('@aglyn/x', '1.0.0', { fetchImpl: offline, registry: 'r' }), null)
+  })
+
+  it('moves a package the package document has not caught up with yet', async () => {
+    // The document still lists only beta.218, but the version is there: the
+    // tag can point at it now, which is all a move needs.
+    const read = () => ({ tags: { latest: '1.0.0-beta.219', beta: '1.0.0-beta.218' }, versions: ['1.0.0-beta.218'] })
+    const v = await currentVerdict('@aglyn/aglyn', '1.0.0-beta.219', true, { read, exists: async () => true })
+    assert.equal(v.state, 'move')
+    assert.deepEqual(v.tags, ['beta'])
+  })
+
+  it('still waits when neither answer has the version', async () => {
+    const read = () => ({ tags: {}, versions: ['1.0.0-beta.218'] })
+    const v = await currentVerdict('@aglyn/aglyn', '1.0.0-beta.219', true, { read, exists: async () => null })
+    assert.equal(v.state, 'missing')
+  })
+
+  it('settles what is visible at once, and only looks again at the rest', async () => {
+    let clock = 0
+    const appearsAt = { early: 0, late: 60_000, never: Infinity }
+    const settled = []
+    const waits = []
+    await settleAll(
+      Object.keys(appearsAt),
+      async (name) => (clock >= appearsAt[name] ? { state: 'ok' } : { state: 'missing', why: 'not yet' }),
+      (name, verdict) => settled.push(`${name}:${verdict.state}@${clock}`),
+      {
+        deadlineMs: 120_000,
+        recheckMs: 30_000,
+        now: () => clock,
+        wait: async (ms) => {
+          waits.push(ms)
+          clock += ms
+        },
+      },
+    )
+    // `early` is not held up by the others; `late` is moved the pass after it
+    // appears; `never` is reported, once, when the run's budget is spent.
+    assert.deepEqual(settled, ['early:ok@0', 'late:ok@60000', 'never:missing@120000'])
+    assert.deepEqual(waits, [30_000, 30_000, 30_000, 30_000])
   })
 })

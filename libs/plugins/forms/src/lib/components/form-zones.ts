@@ -16,7 +16,18 @@
  */
 
 import type { FormFieldDecl } from '@aglyn/aglyn'
+import type { ConsoleHostScreensZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+
+/**
+ * The Forms page of a site, beside its Create Form action (AGL-3043): another
+ * way to start a form. A widget here is handed the site and its org — the
+ * `hostScreens` contract a site's pages, templates and components hand too —
+ * and opens its own way to a new form; it writes nothing through the page.
+ */
+export type HostFormsZoneProps = ConsoleHostScreensZoneProps
+
+export const HOST_FORMS_ZONE = definePluginZone<HostFormsZoneProps>('hostForms')
 
 /**
  * What the forms plugin hands a widget that reads ONE form's submissions.

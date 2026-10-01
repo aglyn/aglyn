@@ -398,6 +398,64 @@ describe('a paid dropship order outlives the webhook (AGL-2473)', () => {
   })
 
   /**
+   * THE SUPPLIER CAN ACT ON THE EMAIL ALONE (AGL-3432).
+   *
+   * It opened on a bare "1× Monthly box", never named the store asking (a
+   * supplier serves several, and this mail has no site header), gave a NAME
+   * as the ship-to with no address, and asked the supplier to edit
+   * `TRACKING`/`CARRIER` placeholders in a URL — which, opened unedited,
+   * recorded those words as the tracking.
+   */
+  it('names the store, gives the full ship-to address and a clean tracking link', async () => {
+    docs.set('hosts/host-1/suppliers/supplier-1', {
+      name: 'Northwind Fulfillment',
+      email: 'orders@northwind.example',
+    })
+    await deliver({
+      ...SUPPLIER_SESSION,
+      shipping_details: {
+        name: 'Ada Cartwright',
+        address: {
+          line1: '12 Analytical Way',
+          line2: 'Unit 3',
+          city: 'Springfield',
+          state: 'IL',
+          postal_code: '62701',
+          country: 'US',
+        },
+      },
+    })
+    const mail = sentEmails.find(
+      (email) => email.to === 'orders@northwind.example',
+    )
+    expect(mail.subject).toBe('New order to fulfill for Acme Boxes: Monthly box')
+    expect(mail.text).toBe(
+      'Acme Boxes has a new order for you to ship: 1× Monthly box (order #1).\n\n' +
+        'Ship to: Ada Cartwright, 12 Analytical Way, Unit 3, Springfield, ' +
+        'IL 62701, US\n\n' +
+        'When it ships, open this link to enter the carrier and tracking ' +
+        `number:\nhttps://acme.aglyn.app/api/commerce/supplier-update?hostId=host-1` +
+        `&orderId=cs_dropship_1&token=${order().supplierToken}`,
+    )
+    expect(mail.text).not.toContain('TRACKING')
+  })
+
+  it('says no address was collected rather than offering the billing one', async () => {
+    docs.set('hosts/host-1/suppliers/supplier-1', {
+      name: 'Northwind Fulfillment',
+      email: 'orders@northwind.example',
+    })
+    await deliver()
+    const mail = sentEmails.find(
+      (email) => email.to === 'orders@northwind.example',
+    )
+    expect(mail.text).toContain(
+      'Ship to: Ada Cartwright. No shipping address was collected at ' +
+        'checkout; ask Acme Boxes for it.',
+    )
+  })
+
+  /**
    * A supplier with no webhook URL queues nothing — an empty queue row would
    * dead-letter on a delivery nobody ever asked for and alarm the merchant
    * about a supplier they deliberately configured as email-only.

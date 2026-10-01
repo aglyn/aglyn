@@ -32,7 +32,7 @@ The plugin is console-only and declares one registrar, `registerDataConsole` (th
 
 | import | contents |
 | -- | -- |
-| `@aglyn/plugins-data` | `BUNDLE_ID`, `registerDataConsole`, `HostDatasetsCard`, and the import/export model: `parseImportRows`, `mapImportColumns`, plus the CSV helpers re-exported from the core (`parseCsv`, `datasetRecordsToCsv`, `datasetCsvHeader`, `datasetCsvRow`, `datasetRecordToJson`, `serializeDatasetValue`, `countCsvDataRows`, `exportShortfall`) |
+| `@aglyn/plugins-data` | `BUNDLE_ID`, `registerDataConsole`, `HostDatasetsCard`, and the import/export model: `parseImportRows`, `mapImportColumns`, the dataset CSV/JSON writers (`datasetRecordsToCsv`, `datasetCsvHeader`, `datasetCsvRow`, `datasetRecordToJson`, `serializeDatasetValue`), and the platform's CSV helpers re-exported from the core (`parseCsv`, `countCsvDataRows`, `exportShortfall`) |
 | `@aglyn/plugins-data/*` | any module under `src/lib/`, for example `@aglyn/plugins-data/model/dataset-record-view` (`datasetRecordFields`, `describeDatasetValue`) |
 
 ## Usage

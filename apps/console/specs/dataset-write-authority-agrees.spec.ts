@@ -66,7 +66,7 @@ const FIXTURE = join(
 )
 const ROUTE = join(
   __dirname,
-  '../app/api/orgs/datasets/route.ts',
+  '../../../libs/plugins/data/src/lib/server/datasets-route.ts',
 )
 
 const principals: Principal[] = JSON.parse(

@@ -41,6 +41,7 @@ import { openLeadsForScope } from './reports/lead-counts'
 import { scopedCollection, visibleToClause } from './reports/report-scope'
 import { ReportStatTile } from './reports/report-stat-tile'
 import { useAggregateRead } from './reports/use-aggregate-read'
+import { localDayBounds } from '../model/crm-reports'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -139,7 +140,7 @@ export function CrmGlanceCard(props: CrmGlanceCardProps) {
     const contacts = scopedCollection(firestore, scope, 'contacts')
     const deals = scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.deals)
     const tasks = scopedCollection(firestore, scope, Aglyn.CRM_COLLECTIONS.tasks)
-    const day = Aglyn.localDayBounds(nowMs)
+    const day = localDayBounds(nowMs)
     const countOf = (target: ReturnType<typeof query>) =>
       getCountFromServer(target).then((snapshot) => snapshot.data().count)
     return Promise.all([

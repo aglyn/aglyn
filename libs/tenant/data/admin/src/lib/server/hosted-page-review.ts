@@ -60,15 +60,29 @@
  * ## Tiers
  *
  * `signalsThatHold`: a lookalike link or embed and an author-defined
- * credential field hold for EVERY workspace; a brand's call to action only
- * for a workspace in its first fortnight. The workspace's documents are read
- * only when the pure screen has found something, so a clean page costs no
- * read for this.
+ * credential field hold for EVERY workspace; a brand's call to action or
+ * lure, and a call to action that leaves the site beside a lure, only for a
+ * workspace in its first fortnight. The workspace's documents are read only
+ * when the pure screen has found something, so a clean page costs no read
+ * for this.
  *
- * Fails CLOSED, unlike the send path. Composition itself reads the store, so
- * an outage here is an outage on the render already, and the only cost of
- * not serving a page the screen flagged is a false positive's wait; serving
- * it is the phishing page this exists to stop.
+ * Fails CLOSED, unlike the send path: a page the pure screen flagged whose
+ * review cannot finish — the workspace read, the row write — is answered
+ * `held`, and the composer serves its last clean version or nothing. The
+ * answer is not remembered, so the next render reviews it again. Composition
+ * itself reads the store, so an outage here is an outage on the render
+ * already, and the only cost of not serving a page the screen flagged is a
+ * false positive's wait; serving it is the phishing page this exists to
+ * stop. A page the screen found nothing on never reaches this.
+ *
+ * ## Site redirects
+ *
+ * A redirect rule that sends a path off the site is a page whose one call to
+ * action fires on arrival, so the redirects plugin asks
+ * {@link reviewSiteRedirect} before it serves one. Same screen
+ * (`screenSiteRedirect`), same tiers, same row and the same staff decision:
+ * a held rule does not fire, and is filed as a `page` hold on its rule's
+ * document.
  *=========================================*/
 
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
@@ -79,7 +93,7 @@ import {
   heldPageVisitorSentence,
   type HeldPageSubject,
 } from '@aglyn/shared-util-email/held-page'
-import { screenHostedPage } from '@aglyn/shared-util-email/hosted-page-screen'
+import { screenHostedPage, screenSiteRedirect } from '@aglyn/shared-util-email/hosted-page-screen'
 import {
   lookalikeBrandForHost,
   phishingScreenBrandLabel,
@@ -314,10 +328,128 @@ export async function reviewHostedPage(
       ? { outcome: 'serve' }
       : { outcome: state === 'rejected' ? 'rejected' : 'held', reviewId, reference }
   } catch (error) {
-    // Open: a review that could not run must not take a live page down —
-    // the screen failing is not evidence about the page.
-    console.error('[page-review] a flagged page could not be reviewed — serving it', error)
-    return { outcome: 'serve' }
+    // Closed: the screen has already found a signal on this page, and a
+    // review that could not finish has not cleared it. Not remembered, so
+    // the next render reviews it again.
+    console.error('[page-review] a flagged page could not be reviewed — holding it', error)
+    const reviewId = pageReviewId(request.hostId, request.screenId, found.signals)
+    return { outcome: 'held', reviewId, reference: heldOutboundReference(reviewId) }
+  }
+}
+
+export interface SiteRedirectReviewRequest {
+  hostId: string
+  /** The rule's document id under `hosts/{hostId}/redirects`. */
+  ruleId: string
+  /** The path, or the pattern, the rule answers. */
+  source: string
+  /** Where it sends the visitor, after any `$n` substitution. */
+  destination: string
+  /** The host and org documents, when the caller already holds them. */
+  host?: Record<string, unknown> | null
+  org?: Record<string, unknown> | null
+  orgId?: string | null
+  nowMs?: number
+}
+
+/** The review row's id for a redirect rule and the signals that held. */
+export function redirectReviewId(
+  hostId: string,
+  ruleId: string,
+  signals: readonly PhishingScreenSignal[],
+): string {
+  const key = signals
+    .map((signal) => canonicalJson(signal))
+    .sort()
+    .join('\n')
+  return heldOutboundReviewId(`hosts/${hostId}/redirects/${ruleId}`, outboundContentHash([key]))
+}
+
+/**
+ * Screen one redirect rule before it sends a visitor off the site
+ * (AGL-3447), and say whether it may fire. See the module header.
+ *
+ * Every workspace is screened and the tiers decide, as for a page: a
+ * destination that wears a brand holds for all of them, a lure path sent
+ * off the site only for a workspace in its first fortnight. A held rule is
+ * filed once per (rule, signal set) and decided by staff on that row:
+ * dismissed, it fires; actioned, it never does with those signals.
+ */
+export async function reviewSiteRedirect(
+  request: SiteRedirectReviewRequest,
+): Promise<HostedPageReviewOutcome> {
+  const found = screenSiteRedirect({ source: request.source, destination: request.destination })
+  if (!found.signals.length) return { outcome: 'serve' }
+
+  const nowMs = request.nowMs ?? Date.now()
+  try {
+    const [host, owner] = await Promise.all([
+      request.host !== undefined ? request.host : getHostDocAdmin(request.hostId),
+      request.org !== undefined
+        ? { orgId: request.orgId ?? null, org: request.org }
+        : getOrgForHost(request.hostId),
+    ])
+    const org = (owner?.org as Record<string, unknown> | null | undefined) ?? null
+    const orgId = owner?.orgId ?? null
+    const identity = workspaceScreenIdentity({ org, host })
+    const verdict = screenSiteRedirect({
+      source: request.source,
+      destination: request.destination,
+      ...identity,
+    })
+    const ageDays = orgAgeDays((org as { createdAt?: unknown } | null)?.createdAt, nowMs)
+    const signals = signalsThatHold(verdict.signals, { ageDays })
+    if (!signals.length) return { outcome: 'serve' }
+
+    const reviewId = redirectReviewId(request.hostId, request.ruleId, signals)
+    const reference = heldOutboundReference(reviewId)
+    const memo = pageMemo.get(reviewId)
+    if (memo && nowMs - memo.atMs < PAGE_MEMO_TTL_MS) {
+      return memo.state === 'released'
+        ? { outcome: 'serve' }
+        : { outcome: memo.state === 'rejected' ? 'rejected' : 'held', reviewId, reference }
+    }
+    const source = request.source.slice(0, 200)
+    const destination = request.destination.slice(0, 500)
+    const label = `the redirect from ${source}`
+    const siteName =
+      typeof host?.['name'] === 'string' && host['name'] ? `"${host['name']}"` : 'a site'
+    const [subdomainHost, customDomain] = identity.ownDomains ?? []
+    const siteHost = customDomain || subdomainHost
+    const state = await fileOutboundHold({
+      reviewId,
+      heldSend: {
+        kind: 'page',
+        path: `hosts/${request.hostId}/redirects/${request.ruleId}`,
+        hostId: request.hostId,
+        orgId,
+        contentHash: outboundContentHash([signals]),
+        subject: label.slice(0, 300),
+        fromName: null,
+        signals,
+        state: 'held',
+        heldAtMs: nowMs,
+        ageDays,
+      },
+      headline:
+        `Held ${label} of ${siteName}, which sends visitors to ${destination}, from a ` +
+        `workspace ${ageDays ?? '?'} day(s) old. The rule does not fire until this is decided.`,
+      alertTitle: 'Site redirect held for review — possible phishing',
+      alertBody: `The redirect from ${source} was held before it sent anyone off the site.`,
+      // Where the owners fix it: the site's Redirects page.
+      item: { label, path: `/${request.hostId}/redirects` },
+      url: siteHost && source.startsWith('/') ? `https://${siteHost}${source}` : destination,
+      reportedHostname: flaggedHostOf(signals),
+    })
+    pageMemo.set(reviewId, { state, atMs: nowMs })
+    return state === 'released'
+      ? { outcome: 'serve' }
+      : { outcome: state === 'rejected' ? 'rejected' : 'held', reviewId, reference }
+  } catch (error) {
+    // Closed, as a page is: the screen found a signal and nothing cleared it.
+    console.error('[page-review] a flagged redirect could not be reviewed — holding it', error)
+    const reviewId = redirectReviewId(request.hostId, request.ruleId, found.signals)
+    return { outcome: 'held', reviewId, reference: heldOutboundReference(reviewId) }
   }
 }
 

@@ -18,9 +18,10 @@
 import {
   ASSIST_CREDIT_COST_USD,
   ASSIST_PROVIDER_COST_FIELD,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './usage/assist-credits'
 import {
   pluginCostAxes,
+  pluginSpendLines,
   pluginUsageBands,
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { aiUsageAxes } from './usage-axes'
@@ -34,6 +35,20 @@ describe('provider spend is the AI plugin’s meter to declare (AGL-3080)', () =
     expect(pluginUsageBands().filter((band) => band.pluginId === 'ai')).toEqual(
       (declared.bands ?? []).map((band) => ({ pluginId: 'ai', ...band })),
     )
+    expect(pluginSpendLines().filter((line) => line.pluginId === 'ai')).toEqual(
+      (declared.spendLines ?? []).map((line) => ({ pluginId: 'ai', ...line })),
+    )
+  })
+
+  /*
+   * The budget shows the BILLED figure, in credits and never in dollars, and
+   * counts it only once `BILL_ASSIST_TOKENS_FROM` names the month.
+   */
+  it('puts the billed figure on the budget, in credits, from its own start month', () => {
+    const [line] = aiUsageAxes().spendLines ?? []
+    expect(line?.live).toEqual({ collection: 'assistUsage', field: 'estCostUsd' })
+    expect(line?.billedFromEnv).toBe('BILL_ASSIST_TOKENS_FROM')
+    expect(line?.unit?.costUsd).toBe(ASSIST_CREDIT_COST_USD)
   })
 
   /*

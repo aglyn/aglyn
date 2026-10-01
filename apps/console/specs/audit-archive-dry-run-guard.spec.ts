@@ -259,6 +259,18 @@ describe('audit-archive: a GET reports, a POST archives (AGL-2084)', () => {
     expect(mockSendEmail).toHaveBeenCalledTimes(1)
   })
 
+  it('the erasure-hold email reports the scheduled erasure and asks for no manual delete (AGL-3432)', async () => {
+    // `run-erasures` erases every workspace past its hold at 04:00 UTC, an
+    // hour after this route sends, so the email must not order the erase
+    // script by hand: that is an irreversible step the job already takes.
+    await load().POST(request('POST'))
+    const sent = mockSendEmail.mock.calls[0][0] as { text: string }
+    expect(sent.text).toContain('The nightly erasure job erases them at 04:00 UTC')
+    expect(sent.text).toContain('nothing is needed from you')
+    expect(sent.text).not.toContain('erase-tenant.mjs')
+    expect(sent.text).toContain('- Overdue Ltd (org-due), requested')
+  })
+
   it('an explicit flag beats the method in both directions', async () => {
     await load().GET(request('GET', '?dryRun=0'))
     expect(mockDeleted).toEqual(['audit-0', 'audit-1', 'audit-2'])

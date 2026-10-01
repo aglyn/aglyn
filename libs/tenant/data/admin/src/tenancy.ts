@@ -64,7 +64,7 @@ export * from './lib/server/email-suppression'
 // The double opt-in quarantine, after the module whose keying it shares and
 // whose `filterTopicSendable` is the reader that makes it a quarantine rather
 // than a stored fact.
-export * from './lib/server/email-topic-confirmation'
+export * from './lib/server/topic-subscriptions'
 export * from './lib/server/email-unsubscribe-link'
 export * from './lib/server/email-flow-gate'
 // Side-effecting on purpose, for the reason `email-send-rate` below is:
@@ -166,12 +166,6 @@ export * from './lib/server/crm-next-activity'
 // Where a one-to-one email's activity row lives and how the delivery
 // webhook advances it (AGL-2615).
 export * from './lib/server/crm-email-activity'
-// What a confirmed booking files on the CRM record — the meeting and the
-// follow-up (AGL-2660).
-export * from './lib/server/crm-booking-activity'
-// The org's email capture token and the filing of one received message
-// on the record it was with (AGL-2657).
-export * from './lib/server/crm-inbound-email'
 // A member's own addresses in a workspace, and the signed link that
 // confirms one (AGL-2975).
 export * from './lib/server/member-email-aliases'

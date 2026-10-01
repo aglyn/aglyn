@@ -47,6 +47,7 @@ import {
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
 import { useAggregateRead, useWindowRead } from './use-aggregate-read'
+import { bucketByWeek, currencyOfDeals } from '../../model/crm-reports'
 
 /**
  * How many closed deals of each outcome the weekly chart reads.
@@ -132,13 +133,13 @@ export function ClosedDealsCard(props: ClosedDealsCardProps) {
   const lostStatus = lostWindow.status
 
   const chart = useMemo(() => {
-    const wonWeeks = Aglyn.bucketByWeek(
+    const wonWeeks = bucketByWeek(
       wonWindow.rows,
       (deal) => deal.closedAtMs,
       range.from,
       range.to,
     )
-    const lostWeeks = Aglyn.bucketByWeek(
+    const lostWeeks = bucketByWeek(
       lostWindow.rows,
       (deal) => deal.closedAtMs,
       range.from,
@@ -154,7 +155,7 @@ export function ClosedDealsCard(props: ClosedDealsCardProps) {
         ),
       ),
       lost: lostWeeks.map((week) => week.items.length),
-      currency: Aglyn.currencyOfDeals(wonWindow.rows).currency,
+      currency: currencyOfDeals(wonWindow.rows).currency,
     }
   }, [wonWindow, lostWindow, range])
 

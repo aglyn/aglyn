@@ -24,6 +24,7 @@ import {
   notifyHostManagers,
 } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import { formatOrderNumber } from '../model/commerce-orders'
 import { createHmac } from 'crypto'
 
 /**
@@ -282,6 +283,29 @@ async function stampOrderRoutingFailure(
     .catch(() => undefined)
 }
 
+/**
+ * The number the merchant knows an order by ("#1042"), for a notice about it
+ * (AGL-3432). The queued row carries only the document id, which is the Stripe
+ * session id and appears nowhere in the console. A read that fails falls back
+ * to the id, so the notice still goes out.
+ */
+async function orderLabelFor(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  orderId: string,
+): Promise<string> {
+  if (!isDocumentId(hostId) || !isDocumentId(orderId)) return orderId
+  const number = await firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('orders')
+    .doc(orderId)
+    .get()
+    .then((snapshot) => snapshot.get('number') as number | undefined)
+    .catch(() => undefined)
+  return formatOrderNumber({ number: number ?? undefined }, orderId)
+}
+
 type DeliveryOutcome = 'delivered' | 'retried' | 'dead-lettered' | 'cancelled'
 
 /**
@@ -454,10 +478,16 @@ async function recordFailure(
   )
   // The bell as well as the timeline: nobody opens an order they have no
   // reason to suspect.
+  // The consequence and the action (AGL-3432): the supplier has not been
+  // asked to ship this order, so the merchant has to.
   await notifyHostManagers(hostId, {
     type: 'content.order',
     title: `Order not routed to ${supplierName}`,
-    body: `Order ${orderId} could not be sent after ${attempts} attempts.`,
+    body:
+      `Order ${await orderLabelFor(firestore, hostId, orderId)} on {site} ` +
+      `never reached ${supplierName}: ${attempts} delivery attempts failed ` +
+      `(${reason}). They have not been asked to ship it; send it to them ` +
+      'yourself or fulfill it by hand.',
     link: `/${hostId}/products`,
   }).catch(() => undefined)
   return 'dead-lettered'

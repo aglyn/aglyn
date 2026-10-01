@@ -48,6 +48,7 @@ import {
   readAiWorkflowTarget,
 } from './ai-workflow-records'
 import { removeStandInAutomationIndexes, standInAutomationIndexes } from '../testing/stand-in-automation-index'
+import { removeStandInDatasetIndex, standInDatasetIndex } from '../testing/stand-in-dataset-index'
 
 // ── Firestore double ─────────────────────────────────────────────────────
 
@@ -93,16 +94,20 @@ const firestore = { collection: (name: string) => collectionRef(name) } as unkno
 
 const readOf = (path: string) => mockReads.find((read) => read.path === path)
 
-/** The collections the workflows plugin keeps, read here only through its indexes. */
-const INDEXED = ['hosts/host-1/workflows', 'hosts/host-1/webhooks', 'hosts/host-1/actions']
+/** The collections the workflows and data plugins keep, read here only through their indexes. */
+const INDEXED = ['hosts/host-1/workflows', 'hosts/host-1/webhooks', 'hosts/host-1/actions', 'orgs/org-1/datasets']
 
 beforeEach(() => {
   mockReads.length = 0
   mockDocs.clear()
   standInAutomationIndexes(firestore)
+  standInDatasetIndex(firestore)
 })
 
-afterEach(() => removeStandInAutomationIndexes())
+afterEach(() => {
+  removeStandInAutomationIndexes()
+  removeStandInDatasetIndex()
+})
 
 describe('readAiAutomationRecords', () => {
   let pipelines: StoodInPipelineIndex
@@ -114,7 +119,7 @@ describe('readAiAutomationRecords', () => {
     })
     mockDocs.set('hosts/host-1/forms/form-b', { slug: 'quote', fields: 'not a list' })
     mockDocs.set('hosts/host-1/forms/form-c', { displayName: 'Retired', archivedAt: 1_700_000_000_000 })
-    mockDocs.set('orgs/org-1/datasets/ds-a', { displayName: 'Leads' })
+    mockDocs.set('orgs/org-1/datasets/ds-a', { displayName: 'Leads', visibleTo: ['org'] })
     mockDocs.set('orgs/org-1/datasets/ds-b', { name: 'Old', deletedAt: 1 })
     mockDocs.set('orgs/org-1/lists/list-a', { name: 'Newsletter' })
     mockDocs.set('orgs/org-1/lists/list-b', { name: '  ' })
@@ -180,12 +185,6 @@ describe('readAiAutomationRecords', () => {
         limit: AI_WORKFLOW_RECORDS_WINDOW,
         scopedTo: null,
       },
-      {
-        path: 'orgs/org-1/datasets',
-        fields: ['displayName', 'name', 'deletedAt'],
-        limit: AI_WORKFLOW_RECORDS_WINDOW,
-        scopedTo: 'host-1',
-      },
       // Campaign containers are the org's; placement narrows them in memory.
       {
         path: 'orgs/org-1/emailCampaigns',
@@ -217,11 +216,13 @@ describe('readAiAutomationRecords', () => {
     ])
   })
 
-  it('names no workflow or webhook, and reads neither collection, where no plugin keeps them', async () => {
+  it('names no workflow, webhook or dataset, and reads none of their collections, where no plugin keeps them', async () => {
     removeStandInAutomationIndexes()
+    removeStandInDatasetIndex()
     const records = await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })
     expect(records.workflows).toEqual([])
     expect(records.webhooks).toEqual([])
+    expect(records.datasets).toEqual([])
     expect(mockReads.filter((read) => INDEXED.includes(read.path))).toEqual([])
   })
 

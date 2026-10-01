@@ -189,7 +189,11 @@ export async function POST(request: Request): Promise<Response> {
       for (const failure of failures) {
         await raiseOperatorAlert('ops.pluginJobFailed', {
           dedupeKey: `plugin-job:${failure.key}`,
-          context: { job: failure.key, error: String(failure.error ?? 'unknown').slice(0, 200) },
+          // A noun phrase, so "{{job}} failed" reads as a sentence (AGL-3432).
+          context: {
+            job: `The scheduled job ${failure.key}`,
+            error: String(failure.error ?? 'unknown').slice(0, 200),
+          },
         })
       }
     } catch (error) {

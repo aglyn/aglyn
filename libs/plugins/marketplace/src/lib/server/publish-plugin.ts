@@ -665,13 +665,17 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     // visiting the queue, and an UPDATE to an already-listed plugin
     // produced no row at all. Persistent per-user notifications, so it
     // survives a refresh and stays until someone acts on it.
+    // The body names the plugin itself (AGL-3432): in the daily digest it
+    // sits under a one-line title.
     await notifyStaff({
       type: 'marketplace.review',
       title: `${displayName.trim()} v${manifest.version} needs review`,
       body: existing.empty
-        ? 'A new plugin was submitted to the marketplace.'
-        : 'A new version was published. The previously approved version ' +
-          'keeps installing until this one is reviewed.',
+        ? `${displayName.trim()} v${manifest.version} was submitted to the ` +
+          'marketplace and is waiting for review.'
+        : `${displayName.trim()} v${manifest.version} was published and is ` +
+          'waiting for review. The previously approved version keeps ' +
+          'installing until this one is reviewed.',
       link: `/admin/plugin-reviews/${listingRef.id}`,
     }).catch(() => undefined)
 

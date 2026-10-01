@@ -187,6 +187,12 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         dataStorageMb: 2048,
         apiRequests: 50_000,
         contactsCount: 400,
+        // The CRM's records band and its parts, which this rollup predates:
+        // NULL, not zero, so a client pricing the row falls back to
+        // `contactsCount` as the sweep did, rather than reading no records.
+        crmRecordsCount: null,
+        companiesCount: null,
+        dealsCount: null,
         // AGL-2280 — the same argument one meter along, and this one is
         // dollars rather than fractions of a cent, so a dropped projection
         // here is the difference between a discount refused and approved.
@@ -194,18 +200,27 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         // AGL-2930 — the two AI columns on the staff usage table.
         assistCredits: 18_750,
         assistOverageUsd: 6.25,
+        // Priced since 2026-09-07 (`perRun`), so served beside the other
+        // priced meters as well as on the table's meter line below.
+        workflowRuns: 87,
+        actionRuns: 219,
         // AGL-2321 — the history a rate gets derived from. Asserted as a
         // whole object rather than field by field, so a projection that ADDS
         // a field without a reader, or silently drops one, both fail here.
         recorded: {
           emailSends: 4321,
           emailSendsOverage: 321,
-          workflowRuns: 87,
+          // The workflows plugin's runs, counted by their host counter and
+          // served under the band's id.
+          counted: { workflowRuns: 87 },
           actionRuns: 219,
           billableCostUsd: 3.0625,
           apiOverageUsd: 6.5,
-          formSubmissionsBilled: false,
-          formSubmissionsOverageWithheldUsd: 4.25,
+          // The forms plugin's metered band waits behind a release flag, so
+          // its verdict pair is served under the band's id.
+          meteredVerdicts: {
+            formSubmissions: { billed: false, withheldUsd: 4.25 },
+          },
           contactsOverageBilled: true,
           contactsOverageUsd: 7.75,
           contactsOverageWithheldUsd: 0,
@@ -253,12 +268,11 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
     expect(payload.months[0].recorded).toEqual({
       emailSends: 0,
       emailSendsOverage: 0,
-      workflowRuns: 0,
+      counted: { workflowRuns: 0 },
       actionRuns: 0,
       billableCostUsd: 0,
       apiOverageUsd: 0,
-      formSubmissionsBilled: null,
-      formSubmissionsOverageWithheldUsd: 0,
+      meteredVerdicts: { formSubmissions: { billed: null, withheldUsd: 0 } },
       contactsOverageBilled: null,
       contactsOverageUsd: 0,
       contactsOverageWithheldUsd: 0,
@@ -303,19 +317,19 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
     // Hand-computed, NOT snapshotted — a snapshot would happily record a
     // wrong number. All USD/month:
     //   storage           10 GB      × $0.026        = $0.26
-    //   page views        200,000    × $0.00016153846 = $32.307692
-    //   form submissions  1,000      × $0.00005       = $0.05
-    //   dataset storage   10,240 MB  = 10 GB × $0.18  = $1.80   ← MB, per-GB rate
-    //   API requests      1,000,000  × $0.000002      = $2.00
-    //   contacts          5,000      × $0.0002        = $1.00
-    //                                                  ----------
-    //                                                  $37.417692
+    //   page views        200,000    × $0.00035471473  = $70.942946
+    //   form submissions  1,000      × $0.000053846154 = $0.053846
+    //   dataset storage   10,240 MB  = 10 GB × $0.18   = $1.80   ← MB, per-GB rate
+    //   API requests      1,000,000  × $0.000002       = $2.00
+    //   contacts          5,000      × $0.0002         = $1.00
+    //                                                   ----------
+    //                                                   $76.056792
     expect(payload.latest.month).toBe('2026-07')
-    expect(payload.latest.measuredCogsUsd).toBeCloseTo(37.417692, 6)
+    expect(payload.latest.measuredCogsUsd).toBeCloseTo(76.056792, 6)
     // The MEASURED half only — the per-site floor belongs to the caller, and
     // `checkDiscountMargin` applies it itself. Returning a floored figure
     // here would charge the floor twice.
-    expect(payload.latest.measuredCogsUsd).not.toBeCloseTo(37.417692 + 2, 6)
+    expect(payload.latest.measuredCogsUsd).not.toBeCloseTo(76.056792 + 2, 6)
   })
 
   it('reports no rollup as null rather than a zero cost', async () => {

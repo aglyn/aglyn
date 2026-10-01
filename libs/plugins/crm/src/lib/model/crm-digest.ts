@@ -56,6 +56,29 @@ import { type CrmLeadFields, type CrmTask, crmLeadStatus } from '@aglyn/aglyn/ap
  */
 export const CRM_DIGEST_DEFAULT_TIME_ZONE = 'America/Chicago'
 
+/**
+ * The zone the digest's "today" is drawn in, and the zone every CRM mail
+ * and notification prints a task's time in.
+ *
+ * `CRM_DIGEST_TIME_ZONE` overrides the default for a self-hosted console
+ * whose team wakes up elsewhere; a value `Intl` does not know falls back to
+ * the default with a warning rather than throwing the whole run away.
+ */
+export function digestTimeZone(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = String(env['CRM_DIGEST_TIME_ZONE'] ?? '').trim()
+  if (!configured) return CRM_DIGEST_DEFAULT_TIME_ZONE
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: configured })
+    return configured
+  } catch {
+    console.warn(
+      `crm-daily-digest: CRM_DIGEST_TIME_ZONE "${configured}" is not a zone — ` +
+        `using ${CRM_DIGEST_DEFAULT_TIME_ZONE}`,
+    )
+    return CRM_DIGEST_DEFAULT_TIME_ZONE
+  }
+}
+
 /** How long a `new` lead may sit untouched before the digest names it. */
 export const CRM_DIGEST_LEAD_AGE_MS = 2 * 24 * 60 * 60 * 1000
 
@@ -151,6 +174,11 @@ export interface CrmDigestCounts {
   overdue: number
   today: number
   leads: number
+  /**
+   * The member's leads automated email is reaching (AGL-3446) — open, but
+   * not owed, so a figure the email states and never a reason to send one.
+   */
+  nurturing: number
 }
 
 /** One member's morning. */
@@ -158,6 +186,8 @@ export interface CrmMemberDigest {
   overdue: CrmDigestTask[]
   today: CrmDigestTask[]
   leads: CrmDigestLead[]
+  /** Leads in `nurturing`, by the same owner-or-site rule as `leads`. */
+  nurturing: CrmDigestLead[]
 }
 
 /**
@@ -185,8 +215,26 @@ export function isUnworkedLead(
   ageMs: number = CRM_DIGEST_LEAD_AGE_MS,
 ): boolean {
   if (crmLeadStatus(lead) !== 'new') return false
+  return seenBefore(lead, nowMs - ageMs)
+}
+
+/**
+ * Whether a lead is one the digest counts as being nurtured (AGL-3446):
+ * a sequence step or a campaign email has reached it and no person has
+ * engaged yet. The same age as an unworked lead, so the two figures are
+ * read over the same leads — the old ones that would otherwise be owed.
+ */
+export function isNurturingLead(
+  lead: Pick<CrmLeadFields, 'status'> & { firstSeenAtMs?: unknown },
+  nowMs: number,
+  ageMs: number = CRM_DIGEST_LEAD_AGE_MS,
+): boolean {
+  return crmLeadStatus(lead) === 'nurturing' && seenBefore(lead, nowMs - ageMs)
+}
+
+function seenBefore(lead: { firstSeenAtMs?: unknown }, cutoffMs: number): boolean {
   const firstSeen = Number(lead.firstSeenAtMs)
-  return Number.isFinite(firstSeen) && firstSeen > 0 && firstSeen <= nowMs - ageMs
+  return Number.isFinite(firstSeen) && firstSeen > 0 && firstSeen <= cutoffMs
 }
 
 /**
@@ -224,20 +272,22 @@ export function crmDigestEntitled(
  * is a task nobody owes. A lead goes to its owner, or to every member who
  * reaches the site when it has none. Members with nothing owed are simply
  * absent from the result, which is what makes "per member with open work"
- * cost nothing for everyone else.
+ * cost nothing for everyone else — and a nurturing lead is not owed, so it
+ * joins a digest that exists and never starts one.
  */
 export function buildMemberDigests(input: {
   tasks: readonly CrmDigestTask[]
   leads: readonly CrmDigestLead[]
+  nurturing?: readonly CrmDigestLead[]
   members: ReadonlyArray<{ uid: string; reachesHost: (hostId: string) => boolean }>
   window: CrmDigestWindow
 }): Map<string, CrmMemberDigest> {
-  const { tasks, leads, members, window } = input
+  const { tasks, leads, nurturing = [], members, window } = input
   const digests = new Map<string, CrmMemberDigest>()
   const digestFor = (uid: string): CrmMemberDigest => {
     let digest = digests.get(uid)
     if (!digest) {
-      digest = { overdue: [], today: [], leads: [] }
+      digest = { overdue: [], today: [], leads: [], nurturing: [] }
       digests.set(uid, digest)
     }
     return digest
@@ -254,6 +304,12 @@ export function buildMemberDigests(input: {
       if (leadIsForMember(lead, member)) digestFor(member.uid).leads.push(lead)
     }
   }
+  for (const lead of nurturing) {
+    for (const member of members) {
+      const digest = digests.get(member.uid)
+      if (digest && leadIsForMember(lead, member)) digest.nurturing.push(lead)
+    }
+  }
   for (const digest of digests.values()) {
     digest.overdue.sort((a, b) => a.dueAtMs - b.dueAtMs)
     digest.today.sort((a, b) => a.dueAtMs - b.dueAtMs)
@@ -267,7 +323,19 @@ export function crmDigestCounts(digest: CrmMemberDigest): CrmDigestCounts {
     overdue: digest.overdue.length,
     today: digest.today.length,
     leads: digest.leads.length,
+    nurturing: digest.nurturing.length,
   }
+}
+
+/**
+ * The line that says the nurturing figure (AGL-3446), or empty when there
+ * is none: the leads the unworked list leaves out, and why.
+ */
+export function composeCrmDigestNurturingLine(counts: Pick<CrmDigestCounts, 'nurturing'>): string {
+  if (counts.nurturing <= 0) return ''
+  return counts.nurturing === 1
+    ? '1 lead is in sequences or campaigns.'
+    : `${counts.nurturing} leads are in sequences or campaigns.`
 }
 
 const plural = (count: number, noun: string): string =>
@@ -278,7 +346,9 @@ const plural = (count: number, noun: string): string =>
  * unworked leads". Segments that are zero are left out rather than read as
  * "0 overdue" — the line is what is owed, and nothing owed is no segment.
  */
-export function composeCrmDigestSummary(counts: CrmDigestCounts): string {
+export function composeCrmDigestSummary(
+  counts: Pick<CrmDigestCounts, 'overdue' | 'today' | 'leads'>,
+): string {
   const segments: string[] = []
   if (counts.today > 0) segments.push(`${plural(counts.today, 'task')} due today`)
   if (counts.overdue > 0) {
@@ -290,8 +360,17 @@ export function composeCrmDigestSummary(counts: CrmDigestCounts): string {
   return segments.join(', ')
 }
 
-export function composeCrmDigestSubject(counts: CrmDigestCounts): string {
-  return `Your CRM today: ${composeCrmDigestSummary(counts)}`
+/**
+ * The digest's subject. It names the workspace when it has one: the digest
+ * is sent per workspace, and a member of two would otherwise get two mails
+ * that read the same.
+ */
+export function composeCrmDigestSubject(
+  counts: Pick<CrmDigestCounts, 'overdue' | 'today' | 'leads'>,
+  workspaceName?: string,
+): string {
+  const workspace = workspaceName?.trim()
+  return `Your ${workspace ? `${workspace} ` : ''}CRM today: ${composeCrmDigestSummary(counts)}`
 }
 
 /** What the digest email needs from the route besides the digest itself. */
@@ -301,6 +380,11 @@ export interface CrmDigestEmailInput {
   timeZone: string
   /** The product name the mail reads as — the org's brand when white-labeled. */
   productName: string
+  /**
+   * The workspace the digest is for. The system email shows only the body,
+   * so the body names it: a member of two workspaces gets one digest each.
+   */
+  workspaceName?: string
   /** The Tasks section, on the site the member's first task belongs to. */
   tasksUrl: string
   /** The Leads section of a site, for the sites that have unworked leads. */
@@ -319,6 +403,7 @@ export interface CrmDigestEmailInput {
   omitClosing?: boolean
 }
 
+/** A task's due time, with the zone named: it is the digest's, not the reader's. */
 function whenInZone(ms: number, timeZone: string): string {
   return new Date(ms).toLocaleString('en-US', {
     timeZone,
@@ -327,6 +412,7 @@ function whenInZone(ms: number, timeZone: string): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZoneName: 'short',
   })
 }
 
@@ -364,12 +450,18 @@ export function composeCrmDigestEmailText(input: CrmDigestEmailInput): string {
     month: 'long',
     day: 'numeric',
   })
+  const workspace = input.workspaceName?.trim()
   const lines: string[] = [
-    `Here is your ${productName} CRM for ${day}: ${composeCrmDigestSummary(counts)}.`,
+    `Here is your ${productName} CRM${workspace ? ` in ${workspace}` : ''} for ${day}: ` +
+      `${composeCrmDigestSummary(counts)}.`,
     '',
   ]
+  // A task's site, as the lead lines name theirs; an organization task
+  // (AGL-2637) has none.
   const taskLine = (task: CrmDigestTask) =>
-    `${task.title} · ${whenInZone(task.dueAtMs, timeZone)}`
+    [task.title, task.hostId ? input.hostName(task.hostId) : '', whenInZone(task.dueAtMs, timeZone)]
+      .filter(Boolean)
+      .join(' · ')
   if (digest.overdue.length) {
     lines.push(...section('Overdue', digest.overdue.map(taskLine)))
   }
@@ -390,6 +482,8 @@ export function composeCrmDigestEmailText(input: CrmDigestEmailInput): string {
       ),
     )
   }
+  const nurturingLine = composeCrmDigestNurturingLine(counts)
+  if (nurturingLine) lines.push(nurturingLine, '')
   if (counts.overdue + counts.today > 0) lines.push(`Open your tasks: ${input.tasksUrl}`)
   const leadHosts = [...new Set(digest.leads.map((lead) => lead.hostId))].slice(0, 3)
   for (const hostId of leadHosts) {

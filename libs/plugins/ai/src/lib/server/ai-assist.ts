@@ -23,8 +23,9 @@ import {
 import {
   assistCreditsFromUsd,
   assistFreeTasteRefusalText,
+  assistNotOnPlanText,
   assistOwnControlRefusalText,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { resolveAiModelChoice } from '../providers/model-choice'
@@ -296,7 +297,7 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
 
     const entitled = checkEntitlement(org, 'aiAssist')
     if (!entitled) {
-      return res.status(403).json({ error: 'AI assist requires a Pro plan' })
+      return res.status(403).json({ error: assistNotOnPlanText() })
     }
 
     // Org-scoped lockdown. The dispatcher already evaluates platform and user

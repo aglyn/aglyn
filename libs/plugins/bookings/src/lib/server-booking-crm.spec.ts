@@ -26,8 +26,9 @@
  * is filed — to the filing after a FREE booking lands. A value that is not
  * a reference is neither stored nor forwarded: this is a public door.
  *
- * The filing itself is doubled here; what it writes is held in
- * `crm-booking-activity.spec.ts` in the admin library.
+ * The filing itself is doubled here; what it asks the record system for is
+ * held in `server/booking-crm.spec.ts`, and what the CRM files for it in the
+ * CRM's record-timeline spec.
  */
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -70,6 +71,7 @@ jest.mock('./server/booking-crm', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const bookings = new Map<string, Record<string, unknown>>()
+  const notices: Array<Record<string, unknown>> = []
   let autoId = 0
   /** A FREE service, open around the clock: no Stripe leg, confirmed on landing. */
   const service = {
@@ -112,7 +114,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
           },
   }
   return {
-    __state: { bookings, service },
+    __state: { bookings, service, notices },
     firebaseAdmin: {
       app: () => ({
         firestore: () => ({
@@ -131,7 +133,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     getOrgForHost: async () => ({ orgId: 'org-1', org: { id: 'org-1', plan: 'pro' } }),
     resolveOrgIdForHost: async () => 'org-1',
     meterHostEmail: async () => undefined,
-    notifyHostManagers: async () => undefined,
+    notifyHostManagers: async (hostId: string, payload: Record<string, unknown>) => {
+      notices.push({ hostId, ...payload })
+    },
     hostSendingIdentity: async () => ({ from: 'hello@shop.example.com' }),
     resolveCampaignTouch: async () => null,
     attributeCampaignConversion: async () => null,
@@ -148,7 +152,11 @@ import { bookHandler } from './server'
 
 const state = (
   jest.requireMock('@aglyn/tenant-data-admin') as {
-    __state: { bookings: Map<string, Record<string, unknown>>; service: any }
+    __state: {
+      bookings: Map<string, Record<string, unknown>>
+      service: any
+      notices: Array<Record<string, unknown>>
+    }
   }
 ).__state
 
@@ -198,6 +206,7 @@ let captured: PluginContactCaptureRequest[] = []
 
 beforeEach(() => {
   state.bookings.clear()
+  state.notices.length = 0
   fileBookingOnCrm.mockClear()
   captured = standInRecordSystem()
 })
@@ -275,5 +284,45 @@ describe('a free booking made through a CRM booking link', () => {
     expect(res.statusCode).toBe(200)
     expect(writtenRow().row).not.toHaveProperty('crmRef')
     expect(fileBookingOnCrm).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * THE BOOKING CARRIES ITS ZONE (AGL-3432).
+ *
+ * The paid confirmation and the reminder read the booking, never the service,
+ * and the booking stored no zone: both formatted in the server's zone (UTC)
+ * and the confirmation printed an empty "()". The managers' notice was a bare
+ * server-side `toLocaleString()`. The route now stores the zone it told the
+ * time in, and the notice says who booked what, when, in that zone.
+ */
+describe('a booking is told and stored in its service’s zone (AGL-3432)', () => {
+  afterEach(() => {
+    state.service.timezone = 'UTC'
+  })
+
+  it('stores the zone on the row and names it in the managers’ notice', async () => {
+    state.service.timezone = 'America/Chicago'
+    const startsAtMs = nextBookableStart()
+    const res = makeRes()
+    await bookHandler(makeReq({ startsAtMs }), res)
+    expect(res.statusCode).toBe(200)
+    expect(writtenRow().row).toMatchObject({ timezone: 'America/Chicago' })
+
+    const when = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      dateStyle: 'full',
+      timeStyle: 'short',
+    }).format(new Date(startsAtMs))
+    expect(state.notices).toEqual([
+      expect.objectContaining({
+        hostId: 'host-1',
+        type: 'content.booking',
+        title: 'New booking on {site}',
+        body:
+          `Dana (dana@example.com) booked Intro call on {site} for ${when} ` +
+          '(America/Chicago).',
+      }),
+    ])
   })
 })

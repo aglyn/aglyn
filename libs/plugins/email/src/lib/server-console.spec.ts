@@ -61,7 +61,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // their own paths keeps the client-side barrel — and its React surface —
   // out of a suite that is testing a request handler.
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/list-assignment-policy'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/enrollment-basis'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/person-key'),

@@ -85,7 +85,10 @@ import {
 } from '../../_lib/usage-alert-email'
 import {
   driftOrgEmailText,
+  driftOrgNotificationBody,
   driftStaffAlertText,
+  driftStaffNotificationBody,
+  driftStaffTitle,
   summariseSsoDrift,
   type SsoDomainDriftEntry,
 } from '../../../../utils/server/sso-domain-drift'
@@ -253,17 +256,22 @@ async function handler(request: Request): Promise<Response> {
       for (const entry of summary.drifted) {
         const title = `Action needed: ${entry.domain} no longer proves domain ownership`
         const text = driftOrgEmailText(entry, origin)
-        // Both channels, with one hoisted title/body — the console bell and
-        // the mail must not disagree about what happened (AGL-2052).
-        await notifyOrgAdmins(entry.orgId, {
-          type: 'system.ssoDomainUnverified',
-          title,
-          body:
-            `Single sign-on for ${entry.domain} still works and nothing has ` +
-            `been turned off. Its DNS verification record is missing.`,
-          orgId: entry.orgId,
-          link: '/settings/sso',
-        })
+        // Both channels, with one hoisted title — the console bell and the
+        // mail must not disagree about what happened (AGL-2052). The bell
+        // only: `emailOrgAdmins` below mails every admin regardless, and an
+        // admin with system email on was otherwise mailed twice under one
+        // subject (AGL-3432).
+        await notifyOrgAdmins(
+          entry.orgId,
+          {
+            type: 'system.ssoDomainUnverified',
+            title,
+            body: driftOrgNotificationBody(entry),
+            orgId: entry.orgId,
+            link: '/settings/sso',
+          },
+          { skipEmail: true },
+        )
         const sent = await emailOrgAdmins({
           firestore,
           orgId: entry.orgId,
@@ -281,18 +289,27 @@ async function handler(request: Request): Promise<Response> {
         })
       }
 
-      const staffTitle = `${summary.drifted.length} SSO domain(s) no longer prove ownership`
+      const staffTitle = driftStaffTitle(summary)
       await notifyStaff({
         type: 'system.ssoDomainUnverified',
         title: staffTitle,
-        body:
-          `${summary.drifted[0].domain} and ${summary.drifted.length - 1} other(s). ` +
-          `Routing is unchanged — revoking is a human decision.`,
+        body: driftStaffNotificationBody(summary),
         link: '/admin/orgs',
       })
+      // Each workspace by name beside its id in the staff mail (AGL-3432). A
+      // failed read leaves that row with the id alone.
+      const orgNames = new Map<string, string>()
+      for (const orgId of new Set(summary.drifted.map((entry) => entry.orgId))) {
+        try {
+          const name = (await firestore.collection('orgs').doc(orgId).get()).get('name')
+          if (typeof name === 'string' && name.trim()) orgNames.set(orgId, name.trim())
+        } catch {
+          // Named by id.
+        }
+      }
       const staffMail = await emailStaffAlert({
         subject: staffTitle,
-        text: driftStaffAlertText(summary, origin),
+        text: driftStaffAlertText(summary, origin, orgNames),
         context: 'sso-domain-drift',
       })
 

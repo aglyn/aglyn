@@ -26,7 +26,6 @@ import {
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
   type OrgBandwidthCap,
-  checkDatasetQuota,
   checkDataStorageQuota,
   planMetersInfraOverage,
   priceEmailSendOverage,
@@ -52,15 +51,6 @@ import {
   type UsageAlertGuardEntry,
 } from '../../../../utils/usage-alert-notice'
 import {
-  ASSIST_HARD_CAP_CONTROL_LABEL,
-  ASSIST_HARD_CAP_CONTROL_LOCATION,
-  assistBandRefuses,
-  assistCreditsFromUsd,
-  resolveAssistCreditBudget,
-  resolveAssistHardCap,
-  resolveAssistOverageRateUsdPer1k,
-} from '@aglyn/aglyn/app-utils/assist-credits'
-import {
   measureScreenCaps,
   screenCapReading,
 } from '../../../../utils/screen-cap-reconciliation'
@@ -68,6 +58,7 @@ import {
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/server'
+import { usageNotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import {
   firebaseAdmin,
   notifyOrgAdmins,
@@ -91,7 +82,16 @@ import {
 // From the seam's own module, not the server barrel: the cron specs stub that
 // barrel wholesale, and a stubbed registry would evaluate no contributor while
 // the sweep still read green.
-import { listUsageAlertContributors } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
+import {
+  listUsageAlertContributors,
+  type UsageQuotaCheck,
+} from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
+// The same rule for each capacity, plan figure and band a plugin declares,
+// from their own modules for the reason above.
+import { checkPluginOrgCapacityQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
+import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
+import { pluginUsageBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import {
   consoleOrigin,
@@ -99,6 +99,7 @@ import {
   emailOrgAdmins,
   emailStaffAlert,
 } from '../../_lib/usage-alert-email'
+import { readPluginSpendLines } from '../../_lib/plugin-spend-readings'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller — and it HOSTS
@@ -212,6 +213,53 @@ export async function hostsForOrg(
     }
     cursor = page.docs[page.docs.length - 1].id
   }
+}
+
+/** One quota the sweep warns a workspace about, core's own or a plugin's. */
+interface QuotaAlertCheck {
+  key: string
+  /** The quota's name in the TITLE ("sites", "pages on a site"). */
+  label: string
+  used: number
+  limit: number
+  /**
+   * How often one threshold may be announced (AGL-3431) — see
+   * {@link usageAlertGuardDecision}. `crossing` for what a workspace
+   * HAS, `monthly` for a meter that resets on the 1st.
+   */
+  cadence: UsageAlertCadence
+  /**
+   * `false` when today's figure could not be read, so a `crossing`
+   * guard is held rather than re-armed on a reading of 0.
+   */
+  measured?: boolean
+  /**
+   * What happens at the band, which the notice has to say because the
+   * three call for different actions (2026-08-18, AGL-3431):
+   *
+   *   stops:     new use is refused; what exists keeps working and
+   *              nothing is charged. Upgrading is how to ADD more.
+   *   bills:     the product keeps working and starts charging; the
+   *              action is "cap it or upgrade", never "upgrade to
+   *              raise the limit", which implies you are stuck.
+   *   continues: nothing is refused and nothing is charged.
+   */
+  outcome: 'stops' | 'bills' | 'continues'
+  /**
+   * The first sentence of the body: WHAT the limit is on, WHICH site
+   * when the limit is per site, and in WHICH workspace, with the figures
+   * (AGL-3431). The body must stand on its own — a client who read only
+   * "6 of 6 used" asked "6 of 6 what? And now I have to pay?". A thunk,
+   * so a name that costs a read is only looked up for a notice that is
+   * actually going out.
+   */
+  lead: () => string | Promise<string>
+  /** What is true now, at or past the band. */
+  reached: string
+  /** What will happen at the band, said while approaching it. */
+  approach: string
+  /** Replaces the generic 100% title (AGL-2898). */
+  reachedTitle?: string
 }
 
 /**
@@ -476,22 +524,31 @@ async function handler(request: Request): Promise<Response> {
       const entitlements = resolveOrgEntitlements(orgData as any)
 
       // Monthly email (AGL-1438). TWO figures, because the plan's cap and
-      // the org's cost are no longer the same number. `campaignEmailSends` is
-      // the discretionary volume `emailSendsPerMonth` may refuse;
+      // the org's cost are no longer the same number. `cappedEmailSends` is
+      // the refusable send tier the mail rail counts as `campaignEmailSends`
+      // — the discretionary volume `emailSendsPerMonth` may refuse;
       // `emailSends` is everything the org sent, including transactional mail
       // that is counted and never blocked. Alerting on the first tells an
-      // owner why a campaign was refused; alerting on the second tells them
+      // owner why a bulk send was refused; alerting on the second tells them
       // about an overage before the invoice does.
       // Paged, ordered and cursor-resumed (AGL-2421) — see `hostsForOrg`.
       const hosts = await hostsForOrg(firestore, org.id)
       if (hosts.truncated) truncatedOrgs.push(org.id)
       let emailSends = 0
-      let campaignEmailSends = 0
-      // Run caps (AGL-477): the runtime silently stops workflow/action
-      // automation at the monthly cap; surface it here so the owner learns
-      // why automations went quiet, once per threshold per month.
-      let workflowRuns = 0
+      let cappedEmailSends = 0
+      // Run caps (AGL-477): the runtime silently stops automation at the
+      // monthly cap; surface it here so the owner learns why automations
+      // went quiet, once per threshold per month.
       let actionRuns = 0
+      // Each plugin band declared with an alert (`usageAxes` → `bands[].alert`),
+      // read from the host counter it is measured by and summed across the
+      // sites.
+      const alertBands = pluginUsageBands().filter(
+        (band) => band.alert && band.hostCounter,
+      )
+      const bandUsed: Record<string, number> = Object.fromEntries(
+        alertBands.map((band) => [band.id, 0]),
+      )
       // Media storage (AGL-484): total bytes stored across the org's hosts,
       // to warn when a downgrade leaves an org over its media allowance.
       //
@@ -509,15 +566,14 @@ async function handler(request: Request): Promise<Response> {
       for (const host of hosts.docs) {
         const [
           emailCounter,
-          campaignEmailCounter,
-          workflowCounter,
+          cappedEmailCounter,
           actionCounter,
           mediaCounter,
           analytics,
+          bandCounters,
         ] = await Promise.all([
           host.ref.collection('counters').doc('emailSends').get(),
           host.ref.collection('counters').doc('campaignEmailSends').get(),
-          host.ref.collection('counters').doc('workflowRuns').get(),
           host.ref.collection('counters').doc('actionRuns').get(),
           host.ref.collection('counters').doc('media').get(),
           host.ref
@@ -533,11 +589,18 @@ async function handler(request: Request): Promise<Response> {
               `${month}-31`,
             )
             .get(),
+          Promise.all(
+            alertBands.map((band) =>
+              host.ref.collection('counters').doc(band.hostCounter!).get(),
+            ),
+          ),
         ])
         emailSends += Number(emailCounter.get(month) ?? 0)
-        campaignEmailSends += Number(campaignEmailCounter.get(month) ?? 0)
-        workflowRuns += Number(workflowCounter.get(month) ?? 0)
+        cappedEmailSends += Number(cappedEmailCounter.get(month) ?? 0)
         actionRuns += Number(actionCounter.get(month) ?? 0)
+        alertBands.forEach((band, index) => {
+          bandUsed[band.id]! += Number(bandCounters[index]?.get(month) ?? 0)
+        })
         mediaBytes += Number(mediaCounter.get('bytes') ?? 0)
         pageViews += analytics.docs.reduce(
           (sum, day) => sum + Number(day.get('total') ?? 0),
@@ -570,12 +633,20 @@ async function handler(request: Request): Promise<Response> {
       // and the meter is what moved to match it.
       const bandwidthGb = bandwidthGbFromPageViews(pageViews)
 
-      // Org datasets: count + approximate storage from the rollup the
-      // monthly report writes (fresh enough for an alert).
-      const datasetCount = Number(
-        (await org.ref.collection('datasets').count().get()).data().count ??
-          0,
+      // Each org capacity a plugin backs (`plugin-org-capacity.ts`), counted
+      // where its declaration says it is stored — the count its create gate
+      // refuses at, measured against the same included-plus-bought limit.
+      const capacities = pluginOrgCapacities()
+      const capacityCounts = await Promise.all(
+        capacities.map(async (capacity) =>
+          Number(
+            (await org.ref.collection(capacity.collection).count().get()).data()
+              .count ?? 0,
+          ),
+        ),
       )
+      // Data storage, approximated from the rollup the monthly report writes
+      // (fresh enough for an alert).
       const latestUsage = await org.ref
         .collection('usage')
         .orderBy('computedAt', 'desc')
@@ -704,38 +775,31 @@ async function handler(request: Request): Promise<Response> {
       // ORDER of two schedules is not a control, it is a coincidence. An id
       // is a property.
       //
-      // Read HERE, ahead of the quota loop, because the AI credits band below
-      // (AGL-2898) measures the same `assistUsage/{month}` document the budget
-      // reads further down; one read serves both.
-      const [thisMonthRollup, assistUsageDoc] = await Promise.all([
+      // Read HERE, ahead of the quota loop, because a plugin's quota check
+      // reads the month's spend the budget below is measured with — the AI
+      // plugin's credits band is its own spend line — so one read serves both.
+      const [thisMonthRollup, spendLineReadings] = await Promise.all([
         org.ref.collection('usage').doc(month).get(),
-        org.ref.collection('assistUsage').doc(month).get(),
+        readPluginSpendLines(org.ref, month),
       ])
-
-      // The AI credits band (AGL-2898). Measured in CREDITS — the unit the
-      // customer was sold and the meter shows — from the month's `estCostUsd`
-      // through the one conversion, so this alert and the Billing meter
-      // cannot disagree about how far into the band the org is. A plan with
-      // no band resolves `null` and is skipped by the `limit > 0` guard, the
-      // same way Free's zero-quota dimensions are.
-      const assistBandCredits = resolveAssistCreditBudget(orgData as never)
-      const assistUsedCredits = assistCreditsFromUsd(
-        Number(assistUsageDoc.get('estCostUsd') ?? 0),
-      )
-      // Whether crossing the band produces an invoice line or a stop. The
-      // same predicate the reservation refuses on, so the words and the
-      // behavior cannot drift: a band that refuses — the org's own switch,
-      // or a plan with no rate — is a wall, and everything else is sold past.
-      const assistBandIsWall = assistBandRefuses(orgData as never)
-      // Through the same resolver `assistBandRefuses` asks, so the alert's
-      // rate and its wall/sold verdict cannot disagree about one org. Read
-      // straight off `PLAN_PRICING` they did: Starter's listed rate is null
-      // and the add-on's is added by the resolver, so a Starter workspace
-      // with the add-on was told "sold past the band" at "$0.00 per 1,000"
-      // in the same sentence (AGL-3014).
-      const assistRateUsdPer1k = resolveAssistOverageRateUsdPer1k(
-        orgData as never,
-      )
+      // `orgMonthlySpend` still compares `month` against itself, so this is
+      // belt and braces on purpose: a document fetched by id cannot carry a
+      // different month, and if one ever does the mismatch must win.
+      const spend = orgMonthlySpend({
+        month,
+        rollupBilledCents: thisMonthRollup.get('billedCents'),
+        // COMPARED, not trusted. A missing document reads as `meteredFresh:
+        // false` rather than as $0 — the difference between a budget that has
+        // nothing to say yet and one that is broken, and the distinction
+        // AGL-2219 turned out to hinge on: for months NOTHING wrote this
+        // document during the month it names, so this guard was correctly
+        // refusing an input that never arrived.
+        rollupMonth: thisMonthRollup.exists
+          ? (thisMonthRollup.get('month') ?? month)
+          : null,
+        lineReadings: spendLineReadings,
+        env: process.env,
+      })
 
       // Frozen once per org, and used by BOTH channels. Billing is org-scoped
       // now (AGL-621/644); links are frozen at write time, so emit canonical
@@ -785,51 +849,34 @@ async function handler(request: Request): Promise<Response> {
         includedBandwidthGb: entitlements.bandwidthGb,
       })
 
-      const checks: Array<{
-        key: string
-        /** The quota's name in the TITLE ("sites", "pages on a site"). */
-        label: string
-        used: number
-        limit: number
-        /**
-         * How often one threshold may be announced (AGL-3431) — see
-         * {@link usageAlertGuardDecision}. `crossing` for what a workspace
-         * HAS, `monthly` for a meter that resets on the 1st.
-         */
-        cadence: UsageAlertCadence
-        /**
-         * `false` when today's figure could not be read, so a `crossing`
-         * guard is held rather than re-armed on a reading of 0.
-         */
-        measured?: boolean
-        /**
-         * What happens at the band, which the notice has to say because the
-         * three call for different actions (2026-08-18, AGL-3431):
-         *
-         *   stops:     new use is refused; what exists keeps working and
-         *              nothing is charged. Upgrading is how to ADD more.
-         *   bills:     the product keeps working and starts charging; the
-         *              action is "cap it or upgrade", never "upgrade to
-         *              raise the limit", which implies you are stuck.
-         *   continues: nothing is refused and nothing is charged.
-         */
-        outcome: 'stops' | 'bills' | 'continues'
-        /**
-         * The first sentence of the body: WHAT the limit is on, WHICH site
-         * when the limit is per site, and in WHICH workspace, with the figures
-         * (AGL-3431). The body must stand on its own — a client who read only
-         * "6 of 6 used" asked "6 of 6 what? And now I have to pay?". A thunk,
-         * so a name that costs a read is only looked up for a notice that is
-         * actually going out.
-         */
-        lead: () => string | Promise<string>
-        /** What is true now, at or past the band. */
-        reached: string
-        /** What will happen at the band, said while approaching it. */
-        approach: string
-        /** Replaces the generic 100% title (AGL-2898). */
-        reachedTitle?: string
-      }> = [
+      /**
+       * A band a plugin declares, as the sweep words and sends it: the lead
+       * sentence is built here from the plugin's noun, so every notice opens
+       * the same way whoever measured the band.
+       */
+      const pluginCheck = (check: UsageQuotaCheck): QuotaAlertCheck => ({
+        key: check.key,
+        label: check.label,
+        used: check.used,
+        limit: check.limit,
+        cadence: check.cadence,
+        outcome: check.outcome,
+        lead: () =>
+          `${workspace.subject} has ${check.cadence === 'monthly' ? 'used ' : ''}` +
+          usagePhrase({
+            used: check.used,
+            limit: check.limit,
+            usedText: formatCount(check.used),
+            limitText: formatCount(check.limit),
+            noun: check.noun,
+            ...(check.cadence === 'monthly' ? { suffix: 'this month' } : {}),
+          }) +
+          '.',
+        reached: check.reached,
+        approach: check.approach,
+        ...(check.reachedTitle ? { reachedTitle: check.reachedTitle } : {}),
+      })
+      const checks: QuotaAlertCheck[] = [
         {
           // AGL-484: a downgrade can leave an org over its site/storage
           // caps; these persist and keep serving, so surface them here.
@@ -999,16 +1046,16 @@ async function handler(request: Request): Promise<Response> {
           // campaign limit because their store had a busy week of orders.
           key: 'emailSends',
           label: 'monthly campaign email sends',
-          used: campaignEmailSends,
+          used: cappedEmailSends,
           limit: entitlements.emailSendsPerMonth,
           cadence: 'monthly',
           outcome: 'stops',
           lead: () =>
             `${workspace.subject} has sent ` +
             usagePhrase({
-              used: campaignEmailSends,
+              used: cappedEmailSends,
               limit: entitlements.emailSendsPerMonth,
-              usedText: formatCount(campaignEmailSends),
+              usedText: formatCount(cappedEmailSends),
               limitText: formatCount(entitlements.emailSendsPerMonth),
               noun: 'campaign emails',
               suffix: 'this month',
@@ -1058,35 +1105,29 @@ async function handler(request: Request): Promise<Response> {
               'billed on your monthly invoice.'
             : 'Nothing is stopped and nothing is charged.',
         },
-        {
-          key: 'datasets',
-          label: 'datasets',
-          used: datasetCount,
-          // The limit a create is refused at: included plus bought, clamped
-          // to the plan's maximum — the number the console banner shows too.
-          limit: checkDatasetQuota(orgData as never, datasetCount).limit,
-          cadence: 'crossing',
-          outcome: 'stops',
-          lead: () =>
-            `${workspace.subject} has ` +
-            usagePhrase({
-              used: datasetCount,
-              limit: checkDatasetQuota(orgData as never, datasetCount).limit,
-              usedText: formatCount(datasetCount),
-              limitText: formatCount(
-                checkDatasetQuota(orgData as never, datasetCount).limit,
-              ),
-              noun: 'datasets',
-            }) +
-            '.',
-          reached:
-            'Every dataset already there keeps working and nothing is ' +
-            'charged — you only need to upgrade in Billing, or add datasets ' +
-            'there, to create another.',
-          approach:
-            'Nothing changes and nothing is charged — at the limit, creating ' +
-            'another dataset will need an upgrade in Billing.',
-        },
+        // Each org capacity a plugin backs, measured against the limit its
+        // create is refused at: included plus bought, clamped to the plan's
+        // maximum — the number the console banner shows too.
+        ...capacities.map((capacity, index) => {
+          const used = capacityCounts[index] ?? 0
+          return pluginCheck({
+            key: capacity.kind,
+            label: capacity.nouns.many,
+            noun: capacity.nouns.many,
+            used,
+            limit: checkPluginOrgCapacityQuota(orgData as never, capacity.kind, used)
+              .limit,
+            cadence: 'crossing',
+            outcome: 'stops',
+            reached:
+              `Every ${capacity.nouns.one} already there keeps working and ` +
+              'nothing is charged — you only need to upgrade in Billing, or ' +
+              `add ${capacity.nouns.addon} there, to create another.`,
+            approach:
+              'Nothing changes and nothing is charged — at the limit, creating ' +
+              `another ${capacity.nouns.one} will need an upgrade in Billing.`,
+          })
+        }),
         {
           key: 'dataStorage',
           label: 'data storage',
@@ -1120,31 +1161,24 @@ async function handler(request: Request): Promise<Response> {
               'amount, new records will need more room or an upgrade in ' +
               'Billing.',
         },
-        {
-          key: 'workflowRuns',
-          label: 'monthly workflow runs',
-          used: workflowRuns,
-          limit: entitlements.workflowRunsPerMonth,
-          cadence: 'monthly',
-          outcome: 'stops',
-          lead: () =>
-            `${workspace.subject} has used ` +
-            usagePhrase({
-              used: workflowRuns,
-              limit: entitlements.workflowRunsPerMonth,
-              usedText: formatCount(workflowRuns),
-              limitText: formatCount(entitlements.workflowRunsPerMonth),
-              noun: 'workflow runs',
-              suffix: 'this month',
-            }) +
-            '.',
-          reached:
-            'Workflows pause until next month and nothing is charged — ' +
-            'upgrade in Billing to keep them running.',
-          approach:
-            'Nothing changes and nothing is charged — at the included amount, ' +
-            'workflows pause until next month unless you upgrade in Billing.',
-        },
+        // Each plugin band declared with an alert, against what the plan
+        // includes of the entitlement it names — per site where it says so —
+        // in the words the declaration gives it.
+        ...alertBands.map((band) =>
+          pluginCheck({
+            key: band.id,
+            label: band.alert!.label,
+            noun: band.alert!.noun,
+            used: bandUsed[band.id] ?? 0,
+            limit:
+              planQuotaOf(entitlements, band.entitlement) *
+              (band.perHost ? Math.max(1, entitlements.hostLimit) : 1),
+            cadence: 'monthly',
+            outcome: band.alert!.outcome,
+            reached: band.alert!.reached,
+            approach: band.alert!.approach,
+          }),
+        ),
         {
           key: 'actionRuns',
           label: 'monthly automation runs',
@@ -1216,58 +1250,6 @@ async function handler(request: Request): Promise<Response> {
                 'next month unless you upgrade in Billing.'
               : 'Nothing changes and nothing extra is charged.',
         },
-        {
-          // The AI credits band (AGL-2898). Approaching it is the generic
-          // warning; reaching it says what happens next, which differs by
-          // plan and by the org's own controls: metered at a rate unless a
-          // stop is set, or stopped until next month with no charge ever.
-          // Telling a Free org to "set a monthly cap" on a charge it can
-          // never incur would be the surprise bill in reverse.
-          key: 'assistCredits',
-          label: 'AI assist credits',
-          used: assistUsedCredits,
-          limit: assistBandCredits ?? 0,
-          cadence: 'monthly',
-          outcome: assistBandIsWall ? 'stops' : 'bills',
-          lead: () =>
-            `${workspace.subject} has used ` +
-            usagePhrase({
-              used: assistUsedCredits,
-              limit: assistBandCredits ?? 0,
-              usedText: formatCount(assistUsedCredits),
-              limitText: formatCount(assistBandCredits ?? 0),
-              noun: 'AI assist credits',
-              suffix: 'this month',
-            }) +
-            '.',
-          reachedTitle: assistBandIsWall
-            ? "You've used your included AI assist credits"
-            : "You've used your included AI assist credits — extra credits " +
-              'are now billed',
-          reached: assistBandIsWall
-            ? 'AI assist stops here until next month — nothing past the band ' +
-              'is ever billed. Upgrade in Billing to add credits' +
-              (resolveAssistHardCap(orgData as never) &&
-              assistRateUsdPer1k !== null
-                ? `, or turn off "${ASSIST_HARD_CAP_CONTROL_LABEL}" ` +
-                  `under ${ASSIST_HARD_CAP_CONTROL_LOCATION} to keep ` +
-                  `going at your plan’s rate.`
-                : '.')
-            : 'The assistant keeps answering, and the extra credits are ' +
-              'metered on your monthly invoice at ' +
-              `$${(assistRateUsdPer1k ?? 0).toFixed(2)} per 1,000 — unless ` +
-              `you set a stop under ${ASSIST_HARD_CAP_CONTROL_LOCATION}: stop ` +
-              'at the included band, or stop once this month’s overage ' +
-              'reaches a figure you choose.',
-          approach: assistBandIsWall
-            ? 'Nothing changes and nothing is charged — at the included band, ' +
-              'AI assist stops until next month, and nothing past it is ever ' +
-              'billed.'
-            : 'Nothing is charged yet — past the included band, extra credits ' +
-              'are metered on your monthly invoice at ' +
-              `$${(assistRateUsdPer1k ?? 0).toFixed(2)} per 1,000 unless you ` +
-              `set a stop under ${ASSIST_HARD_CAP_CONTROL_LOCATION}.`,
-        },
         // No `siteSize` check (AGL-1370). It was added in AGL-1107 and could
         // never fire: `measure-node-map.ts` refuses any node map over 900 KB
         // (AGL-678) and the rollup sweep is bounded per host, so the measured
@@ -1275,6 +1257,29 @@ async function handler(request: Request): Promise<Response> {
         // never the 75% this loop first alerts at. The measurement stays on
         // the rollup as an internal signal; the dead alert does not.
       ]
+      // Each plugin's own bands, after the platform's (`quotaChecks` on its
+      // usage alert contributor), through the same thresholds, guards and
+      // senders. Isolated like the staff rules below: a contributor that
+      // throws is logged and costs only its own checks.
+      for (const contributor of usageAlertContributors) {
+        if (!contributor.quotaChecks) continue
+        try {
+          const declared = await contributor.quotaChecks({
+            orgId: org.id,
+            org: orgData,
+            month,
+            spend,
+          })
+          checks.push(...declared.map(pluginCheck))
+        } catch (error) {
+          console.error(
+            '[usage-alerts] usage quota checks failed',
+            `${contributor.pluginId}:${contributor.id}`,
+            org.id,
+            error,
+          )
+        }
+      }
 
       for (const check of checks) {
         const limited = check.limit !== UNLIMITED && check.limit > 0
@@ -1339,6 +1344,7 @@ async function handler(request: Request): Promise<Response> {
             type: 'billing.usage',
             title: alertTitle,
             body: alertBody,
+            level: usageNotificationLevel(threshold),
             orgId: org.id,
             // Billing is org-scoped now (AGL-621/644); links are frozen at
             // write time, so emit canonical and let the reader repair the
@@ -1392,26 +1398,8 @@ async function handler(request: Request): Promise<Response> {
        * failure mode AGL-1529 rejected on arrival was a spend ceiling that
        * takes a site down to save $2.
        *=========================================*/
-      // `thisMonthRollup` was read by document id above the quota loop —
-      // see the note there. `orgMonthlySpend` still compares `month` against
-      // itself, so this is belt and braces on purpose: a document fetched by
-      // id cannot carry a different month, and if one ever does the mismatch
-      // must win.
-      const spend = orgMonthlySpend({
-        month,
-        rollupBilledCents: thisMonthRollup.get('billedCents'),
-        // COMPARED, not trusted. A missing document reads as `meteredFresh:
-        // false` rather than as $0 — the difference between a budget that has
-        // nothing to say yet and one that is broken, and the distinction
-        // AGL-2219 turned out to hinge on: for months NOTHING wrote this
-        // document during the month it names, so this guard was correctly
-        // refusing an input that never arrived.
-        rollupMonth: thisMonthRollup.exists
-          ? (thisMonthRollup.get('month') ?? month)
-          : null,
-        assistEstCostUsd: assistUsageDoc.get('estCostUsd'),
-        assistBilledFrom: process.env.BILL_ASSIST_TOKENS_FROM,
-      })
+      // `spend` was built above the quota loop, from `thisMonthRollup` read
+      // by document id — see the note there.
       const budget = resolveUsageBudget(orgData)
       const budgetThreshold = budgetAlertDue({
         spendUsd: spend.totalUsd,
@@ -1431,12 +1419,16 @@ async function handler(request: Request): Promise<Response> {
                 0,
               )} monthly usage budget`
         // The split, because a figure with no breakdown invites the support
-        // ticket asking what the figure was. Assist is named only when it
-        // counts toward the total — quoting a cost the customer is not being
-        // charged would be a surprise bill invented by a notification.
-        const split = spend.assistBilled
-          ? ` ($${spend.meteredUsd.toFixed(2)} metered usage, ` +
-            `$${spend.assistUsd.toFixed(2)} Assist)`
+        // ticket asking what the figure was. A plugin's line is named only
+        // when it counts toward the total — quoting a cost the customer is not
+        // being charged would be a surprise bill invented by a notification.
+        const billedLines = spend.lines.filter((line) => line.billed)
+        const split = billedLines.length
+          ? ` ($${spend.meteredUsd.toFixed(2)} metered usage` +
+            billedLines
+              .map((line) => `, $${line.usd.toFixed(2)} ${line.label}`)
+              .join('') +
+            ')'
           : ''
         // Names the workspace and the budget in its first sentence, like every
         // notice here (AGL-3431): the body is read on its own.
@@ -1453,6 +1445,7 @@ async function handler(request: Request): Promise<Response> {
             type: 'billing.usage',
             title,
             body,
+            level: usageNotificationLevel(budgetThreshold),
             orgId: org.id,
             link: billingLink,
           },
@@ -1504,6 +1497,7 @@ async function handler(request: Request): Promise<Response> {
        * other org's pass.
        *=========================================*/
       for (const contributor of usageAlertContributors) {
+        if (!contributor.evaluate) continue
         /** Guards recorded for alerts not yet delivered, with the entry each replaced. */
         const undelivered = new Map<
           string,
@@ -1530,6 +1524,7 @@ async function handler(request: Request): Promise<Response> {
               body,
               link,
               emailContext,
+              level,
             }) => {
               // The first sweep of an org sends nothing, whoever asks.
               if (seedOnly) return
@@ -1537,6 +1532,7 @@ async function handler(request: Request): Promise<Response> {
                 type: 'billing.usage',
                 title,
                 body,
+                ...(level ? { level } : {}),
                 orgId: org.id,
                 link,
               })

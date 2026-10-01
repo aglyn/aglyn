@@ -40,6 +40,7 @@
 
 import { createHash } from 'crypto'
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
+import { RISK_PAYMENT_EVENTS } from '@aglyn/shared-util-email/risk-notice-catalog'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { RiskEventInput } from './risk-notice'
 
@@ -303,6 +304,9 @@ export async function recordPaymentFraudSignal(
         reference,
         item: { label: 'your subscription payment', path: '/org/billing/invoices' },
         amount: formatSignalAmount(signal.amountCents, signal.currency),
+        // A dispute is the bank's, already opened; a warning or a review is
+        // a fraud check. The notice says which.
+        paymentEvent: RISK_PAYMENT_EVENTS[signal.kind] ?? null,
         stripeUrl: stripeSignalDashboardUrl(signal),
         staffEvidence:
           `${KIND_LABEL[signal.kind]} (${signal.stripeObjectId}) on charge ` +

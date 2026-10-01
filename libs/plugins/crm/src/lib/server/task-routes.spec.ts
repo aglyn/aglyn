@@ -360,6 +360,8 @@ describe('crm/task-save', () => {
   })
 
   it('notifies a teammate the task is handed to, with a link to its record', async () => {
+    roster[WRITER] = { role: 'editor', displayName: 'Alex' }
+    org = { plan: 'starter', name: 'Acme Co' }
     const { body } = await call(crmTaskSaveHandler, {
       body: {
         hostId: HOST_ID,
@@ -377,7 +379,21 @@ describe('crm/task-save', () => {
       orgId: ORG_ID,
       hostId: HOST_ID,
     })
-    expect(payload.body).toMatch(/^Call back about the quote · due /)
+    // Who assigned it, in which workspace, and the due time in the CRM's
+    // zone with the zone named — never the server's UTC (AGL-3432).
+    expect(payload.body).toBe(
+      'Alex assigned you a task in Acme Co: Call back about the quote, due Fri, Sep 5, 4:00 AM CDT.',
+    )
+  })
+
+  it('a task with no due date says so by saying nothing about one, and names the caller from the token', async () => {
+    verifyIdToken.mockResolvedValue({ uid: WRITER, name: 'Alex Rivera' })
+    await call(crmTaskSaveHandler, {
+      body: { hostId: HOST_ID, task: task({ assigneeUid: TEAMMATE }) },
+    })
+    expect(notifyUsers.mock.calls[0][1].body).toBe(
+      'Alex Rivera assigned you a task: Call back about the quote.',
+    )
   })
 
   it('links the notification to the tasks list when the task is about nobody', async () => {

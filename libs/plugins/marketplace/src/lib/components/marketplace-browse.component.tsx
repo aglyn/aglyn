@@ -34,16 +34,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  doc,
-  documentId,
-  getDoc,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore'
+import { collection, doc, getDoc } from 'firebase/firestore'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -71,6 +62,10 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import {
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import {
   LISTING_CATEGORIES,
   listingArtifactType,
@@ -392,11 +387,10 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   // (AGL-789): a dataset schema becomes an org dataset, an email template a
   // draft version. Both installers stamp the source listing, so read those.
   /*
-   * `documentId()` rather than a field, for the reason the audience sweep in
-   * `campaign-send.ts` gives: Firestore's automatic single-field index for an
-   * array member is keyed on the value and the document name, so
-   * `array-contains-any` plus `orderBy(__name__)` is served by it. Ordering on
-   * anything else would need a composite index per scope shape.
+   * The datasets are the data plugin's, listed through the source it
+   * publishes (AGL-3080) — narrowed, for a member who is not org-wide, to the
+   * ones they may see, which the rules require of them — each with the
+   * listing it was installed from.
    *
    * The ceiling is the shared one. It is not sized for the dataset
    * collection: it is sized for the number of LISTINGS whose install state a
@@ -406,23 +400,21 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
       orgId && scopeLoaded
-        ? query(
-            collection(firestore, 'orgs', orgId, 'datasets'),
-            ...(needsScope
-              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-              : []),
-            orderBy(documentId()),
-            limit(INSTALL_STATE_CEILING + 1),
-          )
+        ? pluginRecordListQuery('dataset', firestore, {
+            orgId,
+            memberScope: needsScope ? scopeTokens : null,
+            limit: INSTALL_STATE_CEILING + 1,
+          })
         : null,
     [firestore, orgId, scopeLoaded, needsScope, scopeTokens],
-    // `visibleTo` is MUTABLE — every scope edit rewrites it — so this query
-    // can tombstone a dataset the way AGL-827 tombstoned a host. The rule
-    // requires the constraint for anyone who is not org-wide, so unlike the
-    // listings query above the predicate cannot simply be dropped (AGL-1196).
+    // The member's narrowing reads `visibleTo`, which is MUTABLE — every
+    // scope edit rewrites it — so this query can tombstone a dataset the way
+    // AGL-827 tombstoned a host. The rule requires the constraint for anyone
+    // who is not org-wide, so unlike the listings query above the predicate
+    // cannot simply be dropped (AGL-1196).
     { idField: '$id', confirmDisappearances: true },
   )
-  const { rows: datasetDocs, truncated: datasetsTruncated } = useMemo(
+  const { rows: datasetRows, truncated: datasetsTruncated } = useMemo(
     () => ceilingedWindow<any>(datasetRead, INSTALL_STATE_CEILING),
     [datasetRead],
   )
@@ -460,9 +452,9 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
       const seen = map[id]?.version
       if (!seen || (next && next > seen)) map[id] = { version: next }
     }
-    for (const dataset of datasetDocs ?? []) {
-      if (dataset.deletedAt) continue
-      note(dataset.source?.listingId, dataset.source?.version)
+    for (const dataset of pluginRecordsFromRows('dataset', datasetRows)) {
+      const origin = dataset.facts['installedFrom'] as { listingId?: unknown; version?: unknown } | null
+      note(origin?.listingId, origin?.version)
     }
     for (const template of emailDocs ?? []) {
       if (template.deletedAt) continue
@@ -470,7 +462,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     }
     note(hostDoc?.themeInstalledFrom?.listingId, hostDoc?.themeInstalledFrom?.version)
     return map
-  }, [datasetDocs, emailDocs, hostDoc])
+  }, [datasetRows, emailDocs, hostDoc])
 
   const hostPins = useMemo(() => {
     const map: Record<string, any> = {}

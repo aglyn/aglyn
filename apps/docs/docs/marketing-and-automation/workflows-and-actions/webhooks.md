@@ -19,7 +19,7 @@ something in Aglyn.
 ## Outbound webhooks
 
 Send an HTTP request to a URL you control when a site event fires — for example, post to a
-Slack endpoint or your own API when an order is placed.
+Slack endpoint or your own API when a form is submitted or a new booking comes in.
 
 1. Add an **outbound webhook** and paste the destination URL.
 2. Choose the **event** that should fire it.

@@ -514,6 +514,69 @@ describe('a paid digital order and its license keys (AGL-2149)', () => {
   })
 })
 
+/**
+ * THE POOL'S LOW-WATER NOTICE (AGL-3432).
+ *
+ * It asked "fewer than five left?" after every sale, so once the pool was
+ * low every sale re-sent the same notice, and it read "3 keys left" without
+ * saying which product's pool. It fires on the sale that crosses below five,
+ * and on the sale that takes the last key, naming the product and the site.
+ */
+describe('the license key pool notice (AGL-3432)', () => {
+  const poolNotices = () =>
+    managerNotices.filter((notice) =>
+      String(notice.title).startsWith('License keys'),
+    )
+
+  it('says nothing while the pool stays at five or more', async () => {
+    seedPool(7)
+    await deliver(cartSession('cs_1', 'cart-1'))
+    expect(poolNotices()).toHaveLength(0)
+  })
+
+  it('tells the managers once, on the sale that crosses below five', async () => {
+    seedPool(8)
+    docs.set('hosts/host-1/carts/cart-2', {
+      lines: [{ productId: 'ebook', variantId: 'pdf', quantity: 2 }],
+    })
+    await deliver(cartSession('cs_1', 'cart-1'))
+    expect(poolNotices()).toHaveLength(0)
+    await deliver(cartSession('cs_2', 'cart-2'))
+    expect(poolNotices()).toEqual([
+      expect.objectContaining({
+        hostId: 'host-1',
+        type: 'content.lowStock',
+        title: 'License keys running low — The Compleat Widget',
+        body:
+          'Only 4 license keys are left for The Compleat Widget on {site}. ' +
+          'Every sale of it takes its keys from this pool; add more under ' +
+          'Products before it runs out.',
+      }),
+    ])
+
+    // The next sale, still low, does not re-send it.
+    docs.set('hosts/host-1/carts/cart-3', {
+      lines: [{ productId: 'ebook', variantId: 'pdf', quantity: 2 }],
+    })
+    await deliver(cartSession('cs_3', 'cart-3'))
+    expect(poolNotices()).toHaveLength(1)
+  })
+
+  it('says so when a sale takes the last key', async () => {
+    seedPool(2)
+    await deliver(cartSession('cs_1', 'cart-1'))
+    expect(poolNotices()).toEqual([
+      expect.objectContaining({
+        title: 'License keys used up — The Compleat Widget',
+        body:
+          'The last license key for The Compleat Widget on {site} was just ' +
+          'assigned. A buyer who orders it now gets no key; add keys to its ' +
+          'pool under Products.',
+      }),
+    ])
+  })
+})
+
 describe('two orders claiming the same pool (AGL-2149)', () => {
   beforeEach(() => {
     docs.set('hosts/host-1/carts/cart-2', {

@@ -34,6 +34,8 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
+import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
+import { countedPluginBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { UsageMeter as SharedUsageMeter } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
@@ -120,6 +122,13 @@ function capacityMeterLabel(many: string): string {
   return `${many.charAt(0).toUpperCase()}${many.slice(1)} (organization)`
 }
 
+/**
+ * The plugin bands counted per site each month (`countedPluginBands`) — the
+ * workflows plugin's runs today — each metered per site from its host
+ * counter, under the label its declaration gives.
+ */
+const COUNTED_BANDS = countedPluginBands()
+
 function HostUsageMeters(props: {
   host: any
   showName: boolean
@@ -136,7 +145,8 @@ function HostUsageMeters(props: {
     members: number | null
     forms: number | null
     storageMb: number | null
-    workflowRuns: number | null
+    /** Each counted band's month on this site, by band id. */
+    counted: Readonly<Record<string, number>> | null
   }>({
     screens: null,
     layouts: null,
@@ -145,7 +155,7 @@ function HostUsageMeters(props: {
     members: null,
     forms: null,
     storageMb: null,
-    workflowRuns: null,
+    counted: null,
   })
   const entitlements = resolveOrgEntitlements(org)
 
@@ -184,11 +194,16 @@ function HostUsageMeters(props: {
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
       ),
-      // Event-triggered workflow runs this month (AGL-165).
-      getDoc(
-        doc(firestore, 'hosts', host.$id, 'counters', 'workflowRuns'),
-      ).catch(() => null),
-    ]).then(([screens, layouts, variables, functions, members, forms, media, runs]) => {
+      // Each counted band's month — the workflows plugin's event-triggered
+      // runs (AGL-165) — off the per-site counter it declares.
+      Promise.all(
+        COUNTED_BANDS.map((band) =>
+          getDoc(
+            doc(firestore, 'hosts', host.$id, 'counters', band.hostCounter),
+          ).catch(() => null),
+        ),
+      ),
+    ]).then(([screens, layouts, variables, functions, members, forms, media, counters]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       const monthKey = new Date().toISOString().slice(0, 7)
@@ -200,9 +215,15 @@ function HostUsageMeters(props: {
         members: members?.data().count ?? null,
         forms: forms?.data().count ?? null,
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
-        workflowRuns: runs?.exists()
-          ? Number(runs.data()?.[monthKey] ?? 0)
-          : 0,
+        counted: Object.fromEntries(
+          COUNTED_BANDS.map((band, index) => {
+            const counter = counters[index]
+            return [
+              band.id,
+              counter?.exists() ? Number(counter.data()?.[monthKey] ?? 0) : 0,
+            ]
+          }),
+        ),
       })
     })
     return () => {
@@ -266,11 +287,14 @@ function HostUsageMeters(props: {
         limit={entitlements.storagePerHostMb}
         unit="MB"
       />
-      <UsageMeter
-        label="Workflow runs (this month)"
-        used={counts.workflowRuns}
-        limit={entitlements.workflowRunsPerMonth}
-      />
+      {COUNTED_BANDS.map((band) => (
+        <UsageMeter
+          key={band.id}
+          label={`${band.label} (this month)`}
+          used={counts.counted?.[band.id] ?? null}
+          limit={planQuotaOf(entitlements, band.entitlement)}
+        />
+      ))}
       {/* Campaign emails are NOT a per-site meter either — the entitlement is
           org-wide and the claim is taken against the org's counter, so the
           meter renders once in `BillingUsageComponent`. Rendering it per site

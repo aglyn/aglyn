@@ -18,6 +18,7 @@
 import {
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP as MARKUP_FROM_LIB,
+  PAGE_VIEW_CDN_REQUEST_COST_USD,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
@@ -25,16 +26,23 @@ import {
   billsOrgLibraryStorage,
   ESTIMATED_PAGE_TRANSFER_BYTES,
   estimateMonthlyUsageCost,
+  hostMeterReadings,
+  METERED_BILLED_RATES_USD,
   METERED_MARKUP,
+  METERED_OVERAGE_COST_USD,
   METERED_UNIT_RATES_USD,
+  meteredBands,
+  meteredBilledRateUsd,
   meteredIncludedAllowance,
+  meteredOverageCostUsd,
+  meteredUnitRateUsd,
   pageViewsFromBandwidthGb,
 } from './usage-metering'
 
 const GB = 1024 * 1024 * 1024
 
 /**
- * Starter: 1 site × 2048 MB storage, 50 GB bandwidth, 200 form submissions.
+ * Starter: 1 site × 2048 MB storage, 20 GB bandwidth, 200 form submissions.
  * Pro is the multi-site case (3 × 10240 MB, 3 × 1000 submissions), which is
  * what proves the org-wide expansion rather than assuming it.
  */
@@ -61,7 +69,9 @@ describe('meteredIncludedAllowance', () => {
     expect(included.pageViews).toBeCloseTo(
       (starterBands.bandwidthGb * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
     )
-    expect(included.formSubmissions).toBe(starterBands.formSubmissionsPerMonth)
+    expect(included.meters.formSubmissions!).toBe(
+      starterBands.formSubmissionsPerMonth,
+    )
     // Pro allows 3 sites, so its org-wide bands are three times the per-site
     // figures — bandwidth excepted, which is already an org-level number.
     const multi = meteredIncludedAllowance(pro)
@@ -69,7 +79,7 @@ describe('meteredIncludedAllowance', () => {
     expect(multi.storageGb).toBeCloseTo(
       (proBands.hostLimit * proBands.storagePerHostMb) / 1024,
     )
-    expect(multi.formSubmissions).toBe(
+    expect(multi.meters.formSubmissions).toBe(
       proBands.hostLimit * proBands.formSubmissionsPerMonth,
     )
     expect(multi.pageViews).toBeCloseTo(
@@ -84,14 +94,14 @@ describe('meteredIncludedAllowance', () => {
   })
 
   it('sizes enterprise bands at the finite fallback, unmetered', () => {
-    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 3,080 GB of
+    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 970 GB of
     // views, 200 × 50,000 submissions — and `metered` false, so nothing past
     // them bills: an agreement sets the terms, and a per-org override the
     // figures.
     const included = meteredIncludedAllowance({ plan: 'enterprise' } as any)
     expect(included.storageGb).toBe(24_000)
-    expect(included.pageViews).toBe(pageViewsFromBandwidthGb(3_080))
-    expect(included.formSubmissions).toBe(10_000_000)
+    expect(included.pageViews).toBe(pageViewsFromBandwidthGb(970))
+    expect(included.meters.formSubmissions!).toBe(10_000_000)
     expect(included.metered).toBe(false)
     // A contracted UNLIMITED still subtracts to zero billable usage.
     const contracted = meteredIncludedAllowance({
@@ -224,14 +234,14 @@ describe('estimateMonthlyUsageCost', () => {
           // Exactly the band → free, and it must not drag storage down
           pageViews: included.pageViews,
           // 200 past the 200 band → 200 × $0.00005 = $0.01
-          formSubmissions: included.formSubmissions + 200,
+          meters: { formSubmissions: included.meters.formSubmissions! + 200 },
         },
       ],
       starter,
     )
     expect(estimate.billableStorageGb).toBeCloseTo(10)
     expect(estimate.billablePageViews).toBe(0)
-    expect(estimate.billableFormSubmissions).toBe(200)
+    expect(estimate.billableMeters.formSubmissions).toBe(200)
     // Pinned as LITERALS, deliberately: recomputing from
     // `METERED_UNIT_RATES_USD` would assert only that multiplication works,
     // and these rates are the numbers a customer is billed against. Corrected
@@ -243,6 +253,42 @@ describe('estimateMonthlyUsageCost', () => {
     expect(estimate.costUsd).toBeGreaterThan(estimate.billableCostUsd)
   })
 
+  /**
+   * A page view past the band bills its weight AND its CDN requests, both at
+   * the CDN's dearest region (AGL-1879, AGL-3444) — $0.70 per 1,000 — while
+   * `costUsd`, the COGS figure the cost model shares, prices every view on
+   * weight alone.
+   */
+  it('bills page views past the band at $0.70 per 1,000', () => {
+    const included = meteredIncludedAllowance(starter)
+    const estimate = estimateMonthlyUsageCost(
+      [
+        {
+          storageBytes: 0,
+          // Rounded up so the band subtracts to a whole 100,000 past it.
+          pageViews: Math.ceil(included.pageViews) + 100_000,
+        },
+      ],
+      starter,
+    )
+    expect(estimate.billablePageViews).toBeCloseTo(
+      Math.ceil(included.pageViews) - included.pageViews + 100_000,
+      6,
+    )
+    // Pinned as LITERALS: 100,000 views × $0.70 / 1,000 = $70.00, from a
+    // cost of 100,000 × $0.000538462 = $53.85.
+    const views = estimate.billablePageViews
+    expect(estimate.billableCostUsd).toBeCloseTo(views * 0.00053846154, 8)
+    expect(estimate.billedCents).toBe(Math.round(views * 0.0007 * 100))
+    expect(estimate.billedCents).toBe(7000)
+    expect(estimate.billableUsdByMeter.pageViews).toBeCloseTo(views * 0.0007, 6)
+    // COGS stays on weight: every view, at the shared unit rate.
+    expect(estimate.costUsd).toBeCloseTo(
+      estimate.pageViews * ORG_COGS_UNIT_RATES_USD.perPageView,
+      8,
+    )
+  })
+
   it('charges nothing at exactly the included amount', () => {
     const included = meteredIncludedAllowance(starter)
     const estimate = estimateMonthlyUsageCost(
@@ -250,35 +296,49 @@ describe('estimateMonthlyUsageCost', () => {
         {
           storageBytes: included.storageGb * GB,
           pageViews: included.pageViews,
-          formSubmissions: included.formSubmissions,
+          meters: { formSubmissions: included.meters.formSubmissions! },
         },
       ],
       starter,
     )
     expect(estimate.billableStorageGb).toBe(0)
     expect(estimate.billablePageViews).toBe(0)
-    expect(estimate.billableFormSubmissions).toBe(0)
+    expect(estimate.billableMeters.formSubmissions).toBe(0)
     expect(estimate.billedCents).toBe(0)
   })
 
   it('sums the counters across sites before subtracting the band', () => {
     const included = meteredIncludedAllowance(starter)
-    const half = included.formSubmissions / 2
+    const half = included.meters.formSubmissions! / 2
     const estimate = estimateMonthlyUsageCost(
       [
-        { storageBytes: 0, pageViews: 0, formSubmissions: half + 100 },
-        { storageBytes: 0, pageViews: 0, formSubmissions: half + 100 },
+        {
+          storageBytes: 0,
+          pageViews: 0,
+          meters: { formSubmissions: half + 100 },
+        },
+        {
+          storageBytes: 0,
+          pageViews: 0,
+          meters: { formSubmissions: half + 100 },
+        },
       ],
       starter,
     )
     // Two sites each over their own share, but the BAND is org-wide.
-    expect(estimate.formSubmissions).toBe(included.formSubmissions + 200)
-    expect(estimate.billableFormSubmissions).toBe(200)
+    expect(estimate.meters.formSubmissions).toBe(
+      included.meters.formSubmissions! + 200,
+    )
+    expect(estimate.billableMeters.formSubmissions).toBe(200)
   })
 
   it('bills a free or unknown org nothing, however much it uses', () => {
     const heavy = [
-      { storageBytes: 500 * GB, pageViews: 5_000_000, formSubmissions: 90_000 },
+      {
+        storageBytes: 500 * GB,
+        pageViews: 5_000_000,
+        meters: { formSubmissions: 90_000 },
+      },
     ]
     expect(estimateMonthlyUsageCost(heavy, free).billedCents).toBe(0)
     expect(estimateMonthlyUsageCost(heavy).billedCents).toBe(0)
@@ -290,7 +350,13 @@ describe('estimateMonthlyUsageCost', () => {
     expect(estimateMonthlyUsageCost([], starter).billedCents).toBe(0)
     expect(
       estimateMonthlyUsageCost(
-        [{ storageBytes: -5, pageViews: NaN as any, formSubmissions: 0 }],
+        [
+          {
+            storageBytes: -5,
+            pageViews: NaN as any,
+            meters: { formSubmissions: -3 },
+          },
+        ],
         starter,
       ).billedCents,
     ).toBe(0)
@@ -333,7 +399,7 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   })
 
   /**
-   * The published rate set: $0.0338/GB-mo, $0.21/1k page views, $0.065/1k form
+   * The published rate set: $0.0338/GB-mo, $0.70/1k page views, $0.07/1k form
    * submissions. Those are the CUSTOMER-facing figures, so they are asserted
    * post-markup — the form the published page states and the form a customer
    * can check. `published-pricing-table-parity.spec.ts` pins the same three
@@ -342,10 +408,13 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
    * half-applied rate correction can move what a customer is billed without a
    * red.
    *
-   * Two of the three are where the Sept-1 lock put them. The page-view rate
-   * was re-pegged on 2026-09-09 (AGL-2711) when the weight reduction the
-   * standing decision preferred landed and the page still measured far above
-   * the 627 KB the rate was calibrated for.
+   * Storage is where the Sept-1 lock put it. The page-view rate was
+   * re-pegged on 2026-09-09 (AGL-2711) when the weight reduction the standing
+   * decision preferred landed and the page still measured far above the
+   * 627 KB the rate was calibrated for; a billed view took on its CDN requests
+   * on 2026-10-01 (AGL-1879), $0.21 → $0.36; and the same day every
+   * Vercel-billed input was priced at the dearest region (AGL-3444): page
+   * views $0.70, form submissions $0.065 → $0.07.
    */
   it('prices the published rate set after markup', () => {
     const per1k = (rate: number) =>
@@ -355,13 +424,131 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
         METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP * 10_000,
       ) / 10_000,
     ).toBe(0.0338)
-    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.21)
-    expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.065)
+    expect(per1k(METERED_OVERAGE_COST_USD.perPageView)).toBe(0.7)
+    expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.07)
+    // The page-view price is the weight term plus the request term; the
+    // weight term alone, marked up, is a figure no surface publishes.
+    expect(METERED_OVERAGE_COST_USD.perPageView).toBe(
+      METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
+    )
+    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.4611)
+    // And the billed table is that sum marked up, the figure the Billing
+    // card prints.
+    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.7)
+    // Storage and form submissions carry no second term.
+    expect(METERED_OVERAGE_COST_USD.storagePerGbMonth).toBe(
+      METERED_UNIT_RATES_USD.storagePerGbMonth,
+    )
+    expect(METERED_OVERAGE_COST_USD.perFormSubmission).toBe(
+      METERED_UNIT_RATES_USD.perFormSubmission,
+    )
   })
 
   /** The re-export is the same binding, not a second 1.3 that can drift. */
   it('re-exports the one markup constant', () => {
     expect(METERED_MARKUP).toBe(MARKUP_FROM_LIB)
     expect(METERED_MARKUP).toBe(1.3)
+  })
+})
+
+/**
+ * A plugin's metered band (AGL-3080). The estimate names no plugin meter: it
+ * prices every band a plugin declares `metered`, at the rate its declaration
+ * names in the table above. These hold the declarations to that table and the
+ * estimate to the declarations.
+ */
+describe('the metered bands plugins declare', () => {
+  it('names a rate this table carries for every band, and prices at it', () => {
+    expect(meteredBands().length).toBeGreaterThan(0)
+    for (const band of meteredBands()) {
+      expect([band.id, Object.keys(METERED_UNIT_RATES_USD)]).toEqual([
+        band.id,
+        expect.arrayContaining([band.metered.rate]),
+      ])
+      expect(meteredUnitRateUsd(band)).toBe(
+        METERED_UNIT_RATES_USD[
+          band.metered.rate as keyof typeof METERED_UNIT_RATES_USD
+        ],
+      )
+      expect(meteredOverageCostUsd(band)).toBe(
+        METERED_OVERAGE_COST_USD[
+          band.metered.rate as keyof typeof METERED_OVERAGE_COST_USD
+        ],
+      )
+      expect(meteredBilledRateUsd(band)).toBe(
+        METERED_BILLED_RATES_USD[
+          band.metered.rate as keyof typeof METERED_BILLED_RATES_USD
+        ],
+      )
+    }
+  })
+
+  it('refuses a band whose rate the table does not carry, rather than pricing it at zero', () => {
+    const [band] = meteredBands()
+    expect(() =>
+      meteredUnitRateUsd({
+        ...band!,
+        metered: { ...band!.metered, rate: 'perNothing' },
+      }),
+    ).toThrow(/perNothing/)
+  })
+
+  it("is the forms plugin's submissions today, billed per 1,000 once the Inbox is released", () => {
+    expect(
+      meteredBands().map((band) => ({
+        pluginId: band.pluginId,
+        id: band.id,
+        hostCounter: band.hostCounter,
+        metered: band.metered,
+      })),
+    ).toEqual([
+      {
+        pluginId: 'forms',
+        id: 'formSubmissions',
+        hostCounter: 'formSubmissions',
+        metered: {
+          rate: 'perFormSubmission',
+          quotedPer: 1000,
+          noun: 'form submissions',
+          withheldUntil: 'release_inbox',
+        },
+      },
+    ])
+  })
+
+  it("reads each band's month off the host counter it names", () => {
+    const read = jest.fn((counter: string) =>
+      counter === 'formSubmissions' ? 42 : undefined,
+    )
+    expect(hostMeterReadings(read)).toEqual({ formSubmissions: 42 })
+    expect(read.mock.calls.map(([counter]) => counter)).toEqual(
+      meteredBands().map((band) => band.hostCounter),
+    )
+  })
+
+  it("splits the charge into storage, page views and each band's share, which add up to it", () => {
+    const included = meteredIncludedAllowance(starter)
+    const estimate = estimateMonthlyUsageCost(
+      [
+        {
+          storageBytes: (included.storageGb + 3) * GB,
+          pageViews: included.pageViews + 4_000,
+          meters: { formSubmissions: included.meters.formSubmissions! + 900 },
+        },
+      ],
+      starter,
+    )
+    expect(Object.keys(estimate.billableUsdByMeter).sort()).toEqual(
+      ['pageViews', 'storage', ...meteredBands().map((band) => band.id)].sort(),
+    )
+    const shares = Object.values(estimate.billableUsdByMeter).reduce(
+      (sum, usd) => sum + usd,
+      0,
+    )
+    expect(shares).toBeCloseTo(estimate.billableCostUsd * METERED_MARKUP, 10)
+    expect(estimate.billableUsdByMeter['formSubmissions']).toBeCloseTo(
+      900 * METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP,
+      10,
+    )
   })
 })

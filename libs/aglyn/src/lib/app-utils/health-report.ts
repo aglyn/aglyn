@@ -2237,9 +2237,8 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
- * the weekly jobs and the month-boundary usage-email sweep, for which hours
- * of drift cost nothing — and the rows
+ * Five GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
+ * the weekly jobs, for which hours of drift cost nothing — and the rows
  * driven by Cloud Scheduler out of
  * `cloud/functions/src/index.ts`: `pluginJobsBeat` and `consoleAiJobsBeat`
  * (every minute), the routes the `consoleFastCrons` job carries every
@@ -2366,11 +2365,14 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     label: 'Monthly usage summaries',
     // Hourly across the FIRST TWO DAYS only (AGL-2409). The idle-period case
     // this whole check had to get right: for twenty-nine days a month this
-    // job is correctly doing nothing, and must read green while it does.
+    // job is correctly doing nothing, and must read green while it does. On
+    // Cloud Scheduler since GitHub fired the hourly entry twice in the first
+    // ten hours of 2026-10-01 (AGL-3439); ninety minutes is the dailies'
+    // grace, one missed fire plus half an hour.
     cron: '0 * 1-2 * *',
-    runner: 'github-actions',
+    runner: 'cloud-scheduler',
     target: '/api/billing/usage-email',
-    graceMinutes: 360,
+    graceMinutes: 90,
     drives:
       "Mails each org last month's usage summary, chunked across 48 hourly windows. If it stops, the month's summaries are simply never sent.",
   },

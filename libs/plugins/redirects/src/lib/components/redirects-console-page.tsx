@@ -18,6 +18,7 @@
 
 import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import { isExternalRedirectDestination, isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -357,12 +358,23 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     if (!draft) return
     const kind = draft.kind || 'exact'
     // Shared v2 validation (AGL-375): regex patterns must compile; path
-    // kinds keep the v1 normalization.
-    const problem = validateRedirectRule({
-      kind,
-      source: draft.source,
-      destination: draft.destination,
-    })
+    // kinds keep the v1 normalization. A destination that wears another
+    // brand is refused (AGL-3447); the site's own hosts never do.
+    const problem = validateRedirectRule(
+      {
+        kind,
+        source: draft.source,
+        destination: draft.destination,
+      },
+      {
+        ownDomains: [
+          typeof host?.cname === 'string' ? host.cname : null,
+          typeof host?.subdomain === 'string' && host.subdomain
+            ? `${host.subdomain}.${TENANT_APEX}`
+            : null,
+        ],
+      },
+    )
     if (problem) {
       return void enqueueSnackbar(problem, {
         variant: 'warning',

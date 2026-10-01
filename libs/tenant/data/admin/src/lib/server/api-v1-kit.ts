@@ -58,6 +58,13 @@ export interface ApiV1Context {
   firestore: FirebaseFirestore.Firestore
   /** Rate-limit headers to echo on every response for this request. */
   headers: Record<string, string>
+  /**
+   * Loads every plugin's console server surface, for a handler that checks
+   * a write against something other plugins register there — a custom field
+   * type. Absent where the caller has no plugin loader, and then nothing
+   * beyond what is already registered is loaded.
+   */
+  loadPluginSurfaces?: () => Promise<void>
 }
 
 /** Return a 403 unless the key carries `scope`; otherwise `null` (proceed). */

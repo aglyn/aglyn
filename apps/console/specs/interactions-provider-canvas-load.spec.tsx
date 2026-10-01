@@ -81,15 +81,29 @@ jest.mock('@aglyn/besigner-ui', () => {
 })
 
 /**
- * The legacy `hosts/{host}/actions` and `experiments` listeners, held at a
- * STABLE empty result on purpose. A listener that emits again rebuilds the
- * context memo as a side effect and hides the defect — which is exactly how
- * this survived in production, where the panel did eventually populate
- * whenever an unrelated snapshot happened to land after the canvas.
+ * The legacy `hosts/{host}/actions` listener, held at a STABLE empty result
+ * on purpose. A listener that emits again rebuilds the context memo as a side
+ * effect and hides the defect — which is exactly how this survived in
+ * production, where the panel did eventually populate whenever an unrelated
+ * snapshot happened to land after the canvas.
  */
 jest.mock('../hooks/use-firestore-collection', () => ({
   __esModule: true,
   default: () => ({ data: undefined, fromCache: false }),
+}))
+
+/**
+ * The `besignerInteractions` zone, as the plugin in it sees it: the props the
+ * provider hands over, kept so a case can report through them. Its gates are
+ * `PluginWidgetSlot`'s, held by `plugin-widget-slot-zones.spec.tsx`.
+ */
+let mockZoneProps: Record<string, any> | null = null
+jest.mock('../components/plugin-widget-slot.component', () => ({
+  __esModule: true,
+  default: (props: Record<string, any>) => {
+    mockZoneProps = props
+    return null
+  },
 }))
 
 /** The builder dialog only ever renders on a click; nothing here clicks. */
@@ -134,6 +148,30 @@ function Consumer() {
         <li key={automation.id}>{automation.selector}</li>
       ))}
     </ul>
+  )
+}
+
+/** What the section lists of section experiments, and whether it offers one. */
+function ExperimentsConsumer() {
+  const interactions = useContext(InteractionsContext)
+  return (
+    <div>
+      <ul data-testid="experiments">
+        {(interactions.sectionExperiments ?? []).map((experiment) => (
+          <li key={experiment.id}>{`${experiment.id}@${experiment.nodeId}`}</li>
+        ))}
+      </ul>
+      {interactions.onCreateSectionExperiment ? (
+        <button
+          type="button"
+          onClick={() =>
+            interactions.onCreateSectionExperiment?.({ nodeId: NODE_ID })
+          }
+        >
+          start
+        </button>
+      ) : null}
+    </div>
   )
 }
 
@@ -193,5 +231,79 @@ describe('InteractionsProvider over a canvas that fills after mount', () => {
     })
 
     expect(listed()).toEqual([])
+  })
+})
+
+describe('InteractionsProvider and the plugin that runs section experiments', () => {
+  beforeEach(() => {
+    mockZoneProps = null
+  })
+
+  const experiments = () =>
+    [...screen.getByTestId('experiments').children].map((item) => item.textContent)
+
+  it('hosts the zone with the site and the page, and lists what a plugin reports', () => {
+    render(
+      <InteractionsProvider hostId="host-1" screenId="screen-1">
+        <ExperimentsConsumer />
+      </InteractionsProvider>,
+    )
+    expect(mockZoneProps).toMatchObject({
+      slot: 'besignerInteractions',
+      hostId: 'host-1',
+      screenId: 'screen-1',
+    })
+    // Nothing reported yet: no experiment, and nothing offered to start one.
+    expect(experiments()).toEqual([])
+    expect(screen.queryByRole('button', { name: 'start' })).toBeNull()
+
+    const create = jest.fn()
+    act(() => {
+      mockZoneProps?.['reportSectionExperiments']('runner', {
+        experiments: [{ id: 'exp-1', nodeId: NODE_ID, status: 'draft' }],
+        create,
+      })
+    })
+    expect(experiments()).toEqual([`exp-1@${NODE_ID}`])
+
+    act(() => {
+      screen.getByRole('button', { name: 'start' }).click()
+    })
+    expect(create).toHaveBeenCalledWith({ nodeId: NODE_ID })
+
+    // A withdrawn report takes its experiments and its offer with it.
+    act(() => {
+      mockZoneProps?.['reportSectionExperiments']('runner', null)
+    })
+    expect(experiments()).toEqual([])
+    expect(screen.queryByRole('button', { name: 'start' })).toBeNull()
+  })
+
+  it('offers no experiment to start where the document is not a page', () => {
+    render(
+      <InteractionsProvider hostId="host-1">
+        <ExperimentsConsumer />
+      </InteractionsProvider>,
+    )
+    expect(mockZoneProps).toMatchObject({ screenId: null })
+    act(() => {
+      mockZoneProps?.['reportSectionExperiments']('runner', {
+        experiments: [{ id: 'exp-1', nodeId: NODE_ID }],
+        create: jest.fn(),
+      })
+    })
+    // The badge still shows — the element is the same node on every page —
+    // but a layout is no page for an experiment to run on.
+    expect(experiments()).toEqual([`exp-1@${NODE_ID}`])
+    expect(screen.queryByRole('button', { name: 'start' })).toBeNull()
+  })
+
+  it('hosts no zone on a document that runs no client code', () => {
+    render(
+      <InteractionsProvider hostId="host-1" screenId="screen-1" disabled>
+        <ExperimentsConsumer />
+      </InteractionsProvider>,
+    )
+    expect(mockZoneProps).toBeNull()
   })
 })

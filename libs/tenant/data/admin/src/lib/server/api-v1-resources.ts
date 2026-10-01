@@ -30,8 +30,7 @@ import type { ApiV1Context } from './api-v1-kit'
  *
  * The console's `/v1` router owns the pipeline — the API key, the
  * `apiAccess` entitlement, the request quota, the rate limit, the error
- * envelope — and the platform's own resources (datasets, sites, the media
- * library). A resource a plugin models is the plugin's: it registers a
+ * envelope — and the platform's own resources (sites, the media library). A resource a plugin models is the plugin's: it registers a
  * handler under the resource's first path segment, and the router hands it
  * every request under that segment once the key is authenticated, with the
  * context the pipeline resolved. The handler asks for its own scopes
@@ -107,7 +106,6 @@ export const API_V1_RESOURCES = definePluginServiceContract<ApiV1Resource>(
 
 /** The resources the router answers itself, which no plugin may take. */
 export const PLATFORM_API_V1_RESOURCES: ReadonlySet<string> = new Set([
-  'datasets',
   'sites',
   'media',
   'usage',

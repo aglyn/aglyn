@@ -5,7 +5,7 @@ import {
   CRM_LEAD_TEXT_MAX,
   type CrmCustomValue,
   type CrmLeadStatus,
-  campaignMembershipValue,
+  containerMembershipValue,
   crmPicklistDefaultLabel,
   normalizeCrmLeadTags,
   normalizeContactEmail,
@@ -24,7 +24,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker from '@aglyn/tenant-feature-instance/components/container-picker'
 import { useEffect, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
@@ -226,7 +226,7 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
       status,
       ownerUid,
       tags: patch.tags ?? [],
-      campaignIds: campaignMembershipValue(campaignIds),
+      campaignIds: containerMembershipValue(campaignIds),
       address: patch.address ?? null,
       notes: notes.trim().slice(0, NOTES_MAX),
       custom: crmCustomDraftDocument(custom),
@@ -378,7 +378,8 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
             form's page picks them. Grouping, not consent: it decides which
             campaign pages list the lead, never whether anything mails them.
            */}
-          <CampaignPicker
+          <ContainerPicker
+            kind="campaign"
             options={campaigns.options}
             value={campaignIds}
             onChange={setCampaignIds}

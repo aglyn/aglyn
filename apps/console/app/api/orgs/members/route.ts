@@ -89,6 +89,43 @@ function sanitizeHostAccess(
   return access
 }
 
+/** Sites named in a grant notice, at most this many; the rest are counted. */
+const GRANT_NOTICE_SITE_NAMES = 3
+
+/**
+ * The granted sites as a notice names them: each site's display name, else
+ * its subdomain, else its id; past {@link GRANT_NOTICE_SITE_NAMES}, a count.
+ * A failed read names the site by id rather than dropping the notice.
+ */
+async function grantedSiteNames(
+  firestore: {
+    collection(path: string): {
+      doc(id: string): { get(): Promise<{ get(field: string): unknown }> }
+    }
+  },
+  hostIds: readonly string[],
+): Promise<string> {
+  const named = await Promise.all(
+    hostIds.slice(0, GRANT_NOTICE_SITE_NAMES).map(async (hostId) => {
+      try {
+        const host = await firestore.collection('hosts').doc(hostId).get()
+        for (const field of ['displayName', 'subdomain']) {
+          const value = host.get(field)
+          if (typeof value === 'string' && value.trim()) return value.trim()
+        }
+      } catch {
+        // Named by id below.
+      }
+      return hostId
+    }),
+  )
+  const rest = hostIds.length - named.length
+  if (rest > 0) return `${hostIds.length} sites, including ${named.join(', ')}`
+  return named.length > 1
+    ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
+    : named[0]
+}
+
 /**
  * Org membership management (AGL-234). GET lists members (any member of
  * the org, or staff); POST upserts/removes (org admin+, or staff).
@@ -428,21 +465,31 @@ async function handler(request: Request): Promise<Response> {
           })
         }
       }
-      // In-app notification to the affected account (AGL-259).
+      // In-app notification to the affected account (AGL-259). It names the
+      // workspace, and the sites when specific ones were granted, because a
+      // person can belong to several (AGL-3432).
       const grantedHosts = Object.keys(
         sanitizeHostAccess(body?.hostAccess),
       )
+      const memberOrgName =
+        String(orgSnapshot.get('name') ?? '').trim() || 'the workspace'
+      const siteNames =
+        grantedHosts.length && body?.allHosts !== true
+          ? await grantedSiteNames(firestore, grantedHosts)
+          : ''
       void notifyUsers([targetUid], {
         type:
           !existedAlready || body?.allHosts === true
             ? 'team.roleChanged'
             : 'team.hostAccessGranted',
         title: existedAlready
-          ? `Your organization role is now ${role}`
-          : `You were added to an organization as ${role}`,
-        ...(grantedHosts.length && body?.allHosts !== true
-          ? { body: `Access to ${grantedHosts.length} site(s)` }
-          : {}),
+          ? `Your role in ${memberOrgName} is now ${role}`
+          : `You were added to ${memberOrgName} as ${role}`,
+        body:
+          (existedAlready
+            ? `Your access in ${memberOrgName} was updated: your role is ${role}.`
+            : `You were added to ${memberOrgName} as ${role}.`) +
+          (siteNames ? ` You can work on ${siteNames}.` : ''),
         orgId,
         // The sites list is org-scoped now (AGL-621/644); bare `/hosts` is a
         // dead route. Links are frozen at write time, so emit canonical here

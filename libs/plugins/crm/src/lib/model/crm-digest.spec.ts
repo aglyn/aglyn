@@ -27,6 +27,8 @@ import {
   crmDigestWindow,
   type CrmDigestLead,
   type CrmDigestTask,
+  composeCrmDigestNurturingLine,
+  isNurturingLead,
   isUnworkedLead,
   leadIsForMember,
   startOfDayInZone,
@@ -106,6 +108,19 @@ describe('what a digest counts', () => {
     expect(isUnworkedLead({}, now)).toBe(false)
   })
 
+  /**
+   * A lead automated email is reaching (AGL-3446) is not unworked — the
+   * sequence or campaign is working it — and is counted on its own.
+   */
+  it('leaves a nurturing lead out of the unworked list and counts it instead', () => {
+    const old = now - CRM_DIGEST_LEAD_AGE_MS
+    expect(isUnworkedLead({ status: 'nurturing', firstSeenAtMs: old }, now)).toBe(false)
+    expect(isNurturingLead({ status: 'nurturing', firstSeenAtMs: old }, now)).toBe(true)
+    expect(isNurturingLead({ status: 'nurturing', firstSeenAtMs: old + 1 }, now)).toBe(false)
+    expect(isNurturingLead({ firstSeenAtMs: old }, now)).toBe(false)
+    expect(isNurturingLead({ status: 'working', firstSeenAtMs: old }, now)).toBe(false)
+  })
+
   it('gives an owned lead to its owner and an unowned one to whoever reaches the site', () => {
     const me = { uid: 'me', reachesHost: (hostId: string) => hostId === 'site-a' }
     expect(leadIsForMember({ ownerUid: 'me', hostId: 'site-b' }, me)).toBe(true)
@@ -171,6 +186,19 @@ describe('buildMemberDigests', () => {
     expect(bob?.leads.map((row) => row.id)).toEqual(['l-bobs'])
   })
 
+  it('counts nurturing leads by the same reach, but never starts a digest for them', () => {
+    const digests = buildMemberDigests({
+      window,
+      members,
+      tasks: [task('t', now, 'ann')],
+      leads: [],
+      nurturing: [lead('n-a', 'site-a'), lead('n-b', 'site-b'), lead('n-bobs', 'site-a', 'bob')],
+    })
+    expect(digests.get('ann')?.nurturing.map((row) => row.id)).toEqual(['n-a', 'n-b'])
+    // Bob is owed nothing, so his nurturing leads start no digest.
+    expect(digests.has('bob')).toBe(false)
+  })
+
   it('has no entry for a member with nothing owed', () => {
     const digests = buildMemberDigests({
       window,
@@ -196,6 +224,10 @@ describe('what the digest says', () => {
     expect(composeCrmDigestSubject({ today: 0, overdue: 0, leads: 2 })).toBe(
       'Your CRM today: 2 unworked leads',
     )
+    // Sent per workspace, so a member of two can tell the mails apart (AGL-3432).
+    expect(composeCrmDigestSubject({ today: 0, overdue: 0, leads: 2 }, 'Acme Co')).toBe(
+      'Your Acme Co CRM today: 2 unworked leads',
+    )
   })
 
   it('writes the email with every section, its links and the way out', () => {
@@ -204,6 +236,7 @@ describe('what the digest says', () => {
       nowMs: now,
       timeZone: 'America/Chicago',
       productName: 'Aglyn',
+      workspaceName: 'Acme Co',
       tasksUrl: 'https://app.example/acme/hosts/main/crm/tasks',
       leadsUrl: (hostId) => `https://app.example/acme/hosts/${hostId}/crm/leads`,
       settingsUrl: 'https://app.example/manage/notifications',
@@ -239,13 +272,16 @@ describe('what the digest says', () => {
             firstSeenAtMs: Date.parse('2026-09-02T12:00:00.000Z'),
           },
         ],
+        nurturing: [],
       },
     })
-    expect(text).toContain(
-      'Here is your Aglyn CRM for Saturday, September 5: 1 task due today, 1 overdue, 1 unworked lead.',
+    // The system email shows only this body, so it names the workspace
+    // (AGL-3432), and each task line names its site as a lead line does.
+    expect(text).toMatch(
+      /^Here is your Aglyn CRM in Acme Co for Saturday, September 5: 1 task due today, 1 overdue, 1 unworked lead\.\n/,
     )
-    expect(text).toContain('Overdue (1)\n- Call Jane · Tue, Sep 1, 9:00 AM')
-    expect(text).toContain('Due today (1)\n- Send proposal · Sat, Sep 5, 3:30 PM')
+    expect(text).toContain('Overdue (1)\n- Call Jane · Site main · Tue, Sep 1, 9:00 AM CDT\n')
+    expect(text).toContain('Due today (1)\n- Send proposal · Site main · Sat, Sep 5, 3:30 PM CDT\n')
     expect(text).toContain(
       'Unworked leads (1)\n- Jane Doe <jane@acme.com> · Site main · first seen Sep 2',
     )
@@ -297,11 +333,44 @@ describe('what the digest says', () => {
             firstSeenAtMs: Date.parse('2026-09-02T12:00:00.000Z'),
           },
         ],
+        nurturing: [],
       },
     })
     expect(text).not.toContain('You get this each morning')
     expect(text).not.toContain('https://help.example')
     expect(text).toMatch(/https:\/\/app\.example\/acme\/hosts\/\w+\/crm\/leads$/)
+  })
+
+  it('says how many leads sequences or campaigns are reaching, and nothing when none are', () => {
+    expect(composeCrmDigestNurturingLine({ nurturing: 0 })).toBe('')
+    expect(composeCrmDigestNurturingLine({ nurturing: 1 })).toBe('1 lead is in sequences or campaigns.')
+    expect(composeCrmDigestNurturingLine({ nurturing: 123 })).toBe(
+      '123 leads are in sequences or campaigns.',
+    )
+    const now = Date.parse('2026-09-05T13:00:00.000Z')
+    const nurtured: CrmDigestLead = { id: 'n1', hostId: 'main', email: 'n@acme.com', firstSeenAtMs: now - 3 * DAY }
+    const text = composeCrmDigestEmailText({
+      nowMs: now,
+      timeZone: 'America/Chicago',
+      productName: 'Aglyn',
+      tasksUrl: 'https://app.example/tasks',
+      leadsUrl: () => '',
+      settingsUrl: 'https://app.example/manage/notifications',
+      hostName: (hostId) => hostId,
+      omitClosing: true,
+      digest: {
+        overdue: [],
+        today: [
+          { id: 't', title: 'Call', kind: 'call', dueAtMs: now + HOUR, assigneeUid: 'ann', hostId: 'main' },
+        ],
+        leads: [],
+        nurturing: [nurtured, { ...nurtured, id: 'n2' }],
+      },
+    })
+    // Not owed, so not in the summary line, and the leads are not listed.
+    expect(text).toMatch(/: 1 task due today\.\n/)
+    expect(text).toContain('2 leads are in sequences or campaigns.')
+    expect(text).not.toContain('n@acme.com')
   })
 
   it('caps each section and says how many it left out', () => {
@@ -322,7 +391,7 @@ describe('what the digest says', () => {
       leadsUrl: () => '',
       settingsUrl: 'https://app.example/manage/notifications',
       hostName: (hostId) => hostId,
-      digest: { overdue, today: [], leads: [] },
+      digest: { overdue, today: [], leads: [], nurturing: [] },
     })
     expect(text).toContain(`Overdue (${CRM_DIGEST_LIST_MAX + 5})`)
     expect(text).toContain('  and 5 more')

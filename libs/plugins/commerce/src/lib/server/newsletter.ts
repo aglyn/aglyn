@@ -18,12 +18,13 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import {
-  mergeEmailTopics,
-  normalizeEmailTopic,
+  mergeSubscriptionTopics,
+  normalizeSubscriptionTopic,
   topicRequiresDoubleOptIn,
-  EMAIL_TOPICS_COLLECTION,
-  type EmailTopic,
-} from '@aglyn/aglyn/app-utils/email-topics'
+  type SubscriptionTopic,
+} from '@aglyn/aglyn/app-utils/subscription-topics'
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { NEWSLETTER_TOPIC_ID } from '../model/commerce-topics'
 import {
   enrollListMember,
   firebaseAdmin,
@@ -44,14 +45,22 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/**
- * The stream a newsletter signup joins.
- *
- * The built-in id, not the campaign default: somebody typing their address
- * into a footer box is asking for the newsletter, and attributing it to
- * "Promotions and offers" would confirm them for a stream they did not name.
+/*
+ * The stream a newsletter signup joins is `NEWSLETTER_TOPIC_ID`, the built-in
+ * id and not the default stream: somebody typing their address into a footer
+ * box is asking for the newsletter, and attributing it to "Promotions and
+ * offers" would confirm them for a stream they did not name.
  */
-const NEWSLETTER_TOPIC_ID = 'newsletter'
+
+/**
+ * The record kind an org's topic catalog is read as: its keeper publishes it
+ * through the core's record-index seam, facts `{ description, archived,
+ * doubleOptIn? }`.
+ */
+const SUBSCRIPTION_TOPIC_KIND = 'subscriptionTopic'
+
+/** How many of an org's topics the signup reads; the catalog is a handful. */
+const TOPIC_CATALOG_SCAN = 100
 
 /**
  * Enrolls one address into an org list's members (AGL-2499).
@@ -148,7 +157,7 @@ async function enrollInList(options: {
 async function requestConfirmation(options: {
   hostId: string
   email: string
-  topics: EmailTopic[]
+  topics: SubscriptionTopic[]
   /** The host document the setting was read from — see {@link loadHostGate}. */
   host: { cname?: unknown; subdomain?: unknown }
 }): Promise<boolean> {
@@ -184,7 +193,7 @@ async function requestConfirmation(options: {
       )
       return true
     }
-    const stream = topic?.name ?? 'our newsletter'
+    const stream = topic?.name ?? 'Newsletter'
     // The `newsletter-confirmation` site email (AGL-3370): the site's design,
     // or the built-in copy in its header and footer.
     const designed = await renderHostEmailWithTokens(
@@ -199,7 +208,7 @@ async function requestConfirmation(options: {
       subject: designed?.subject || `Confirm your subscription`,
       text:
         designed?.text ||
-        `Please confirm that you want to receive ${stream} at this ` +
+        `Please confirm that you want to get ${stream} emails at this ` +
           `address:\n\n${url}\n\nThe link works for three days. If you did ` +
           'not sign up, ignore this message — nothing will be sent.',
       ...(designed?.html ? { html: designed.html } : {}),
@@ -227,29 +236,26 @@ async function requestConfirmation(options: {
 /**
  * The site's topic catalog, for the one question the signup asks of it.
  *
- * Fails soft to the built-ins, like the preference page's read: a site whose
- * org cannot be resolved still gets the four defaults, so the decision is
- * made against a catalog rather than against nothing.
+ * Asked of the plugin that keeps the catalog, through its record index, and
+ * never read from its collection. Fails soft to the declared built-ins, like
+ * the preference page's read: a site whose org cannot be resolved, or a
+ * process where nothing keeps the catalog, still gets the built-in streams,
+ * so the decision is made against a catalog rather than against nothing.
  */
-async function loadTopics(hostId: string): Promise<EmailTopic[]> {
+async function loadTopics(hostId: string): Promise<SubscriptionTopic[]> {
   try {
-    const orgId = await resolveOrgIdForHost(hostId)
-    if (!orgId) return mergeEmailTopics(null)
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .collection(EMAIL_TOPICS_COLLECTION)
-      .get()
-    return mergeEmailTopics(
-      (snapshot?.docs ?? [])
-        .map((doc: any) => normalizeEmailTopic(doc.id, doc.data()))
-        .filter((topic: EmailTopic | null): topic is EmailTopic => !!topic),
-    )
+    const keeper = pluginRecordIndex(SUBSCRIPTION_TOPIC_KIND)
+    const orgId = keeper ? await resolveOrgIdForHost(hostId) : null
+    if (!keeper || !orgId) return mergeSubscriptionTopics(null)
+    const { records } = await keeper.index.list({ orgId, limit: TOPIC_CATALOG_SCAN })
+    return records
+      .map((record) =>
+        normalizeSubscriptionTopic(record.id, { name: record.name, ...record.facts }),
+      )
+      .filter((topic): topic is SubscriptionTopic => !!topic)
   } catch (error) {
     console.error('[newsletter] topic catalog read failed', error)
-    return mergeEmailTopics(null)
+    return mergeSubscriptionTopics(null)
   }
 }
 
@@ -271,7 +277,7 @@ async function loadTopics(hostId: string): Promise<EmailTopic[]> {
  * on a site whose owner never asked for confirmations.
  */
 async function loadHostGate(hostId: string): Promise<{
-  topics: EmailTopic[]
+  topics: SubscriptionTopic[]
   siteDefault: boolean
   host: { cname?: unknown; subdomain?: unknown }
 }> {

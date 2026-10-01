@@ -1071,6 +1071,11 @@ jobs:
       # and which enrollments are owed nothing.
       - run: npm run test:enrollment-activity-backfill
 
+      # AGL-3446. The Nurturing backfill's decisions — which leads still in
+      # New a sequence email or a campaign email already reached, and the
+      # lead statuses it restates, held to the TypeScript that owns them.
+      - run: npm run test:lead-nurturing-backfill
+
       # AGL-3235. The one-record migration's decisions — which contact is a
       # duplicate of a lead and which a relationship, what a fold writes onto
       # the lead and never clears, what follows the person between records —
@@ -1233,6 +1238,11 @@ jobs:
       # and a plugin importing a plugin, the two edges the map exists for.
       - run: npm run test:lib-boundaries
       - run: npm run test:publish-packages
+      # AGL-3201 — what the consumer proof installs and refuses: the version
+      # an example asks for must admit the one being proved, every packed
+      # sibling is installed from its tarball, every example has a story. The
+      # proof itself needs npm and a browser and runs in consumer-proof.yml.
+      - run: npm run test:consumer-proof
       - run: npm run check:lib-boundaries
 
       # AGL-3201 — the set `trust:packages` points at npm's trusted publishing

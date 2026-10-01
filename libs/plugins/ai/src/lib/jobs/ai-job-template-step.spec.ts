@@ -89,6 +89,7 @@ import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_JOB_TEMPLATE_INSTRUCTIONS,
   aiJobTemplatePrompt,
+  aiTemplateBindingCheck,
   aiTemplateDraftName,
   aiTemplateDraftSlug,
   createAiJobTemplateStep,
@@ -319,6 +320,8 @@ describe('the template step', () => {
     registerAiTemplateJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('template', runAiJobTemplateStep, {
       minimumMs: AI_JOB_TEMPLATE_STEP_MINIMUM_MS,
+      // A pass that builds a creation of its plan first needs that step's time (AGL-3143 §15).
+      minimumMsFor: expect.any(Function),
     })
     const ask = (inputs: Record<string, unknown>, org: object = STARTER_ORG, hostId: string | null = 'host-1') =>
       aiJobAdmissionRefusal('template', { firestore, orgId: 'org-1', hostId, inputs, org })
@@ -640,6 +643,41 @@ describe('the template step', () => {
         templates: [{ id: 'tpl-post', name: 'Blog post', kind: 'page' }],
       })
 
+    it('builds from a source that binds none of the tokens the plan named, rather than copy it (AGL-3143 §14)', async () => {
+      inventoryWithSource()
+      mockDocs.set('orgs/org-1', { plan: 'pro', billingStatus: 'active' })
+      mockDocs.set('hosts/host-1/templates/tpl-post', {
+        displayName: 'Blog post',
+        nodes: {
+          [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['h', 'note'] },
+          h: { componentId: 'muiTypography', props: { variant: 'h1', component: 'h1', children: '{{entry.title}}' } },
+          note: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Written by the Harborline team.' } },
+        },
+      })
+      const duplicate = copies()
+      const excerpt = {
+        ...ENTRY_TREE,
+        nodes: {
+          ...ENTRY_TREE.nodes,
+          stack: { ...ENTRY_TREE.nodes.stack, nodes: ['title', 'lede', 'meta', 'cover', 'body', 'related'] },
+          lede: { componentId: 'muiTypography', props: { variant: 'h6', component: 'p', children: '{{entry.excerpt}}' } },
+        },
+      }
+      mockRunAiRequest.mockResolvedValueOnce(treeAnswer(excerpt))
+      const outcome = await createAiJobTemplateStep({
+        duplicate: duplicate as unknown as typeof duplicateResource,
+      })(context({ plan: promises(['{{entry.excerpt}}']) }))
+      // Before, this copied the source and stopped for review: a copy of a
+      // template that never bound the excerpt could only fail to bind it.
+      expect(duplicate).not.toHaveBeenCalled()
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'template', id: TEMPLATE_ID })])
+      const [request] = mockRunAiRequest.mock.calls[0]
+      const content = String(request.messages[0].content)
+      expect(content).toContain('The plan starts from a copy of the template "Blog post"')
+      expect(content).toContain('Written by the Harborline team.')
+    })
+
     it('stops for a person rather than reporting a copy that binds none of the tokens the plan named', async () => {
       inventoryWithSource()
       // The generate path already held a built template to its plan's tokens.
@@ -706,5 +744,59 @@ describe('the template’s name and address', () => {
     expect(aiTemplateDraftSlug(entry, blog)).toBe('blog-entry-template')
     expect(aiTemplateDraftSlug(entry, { ...blog, slug: '' })).toBe('col-blog-entry-template')
     expect(aiTemplateDraftSlug(AI_TEMPLATE_SUBJECT_DEFINITIONS.product, null)).toBe('product-page-template')
+  })
+})
+
+describe('copy that prints a token no reader reads (AGL-3143 §16)', () => {
+  const check = aiTemplateBindingCheck(AI_TEMPLATE_SUBJECT_DEFINITIONS.entry)
+  const tree = (nodes: Record<string, unknown>) =>
+    ({
+      rootId: 'r',
+      nodes: {
+        r: { componentId: 'div', nodes: ['h', ...Object.keys(nodes)] },
+        h: { componentId: 'muiTypography', props: { variant: 'h1', component: 'h1', children: '{{entry.title}}' } },
+        ...nodes,
+      },
+      sourceIds: {},
+    }) as unknown as Parameters<ReturnType<typeof aiTemplateBindingCheck>>[0]
+
+  it('refuses the line the 2026-10-01 live build printed on every article', () => {
+    // Stored tree hosts/demo-legal/templates/AYjsowFqBG, node JQlMlKs21t.
+    const found = check(
+      tree({
+        line: {
+          componentId: 'muiTypography',
+          props: {
+            variant: 'body2',
+            component: 'p',
+            children:
+              'From {{collection.name}} ({{collection.slug}}) — entry slug: {{entry.slug}} — published {{entry.publishedAt}} — permalink {{entry.url}}',
+          },
+        },
+      }),
+    )
+    expect(found.map((violation) => [violation.rule, violation.code])).toEqual([[8, 'printed-token']])
+    expect(found[0].message).toContain('{{collection.slug}}')
+    // The collection's name is copy a reader reads, so it is not named.
+    expect(found[0].message).not.toContain('{{collection.name}}')
+  })
+
+  it('refuses an address shown as an element’s whole text', () => {
+    const found = check(tree({ link: { componentId: 'muiTypography', props: { children: '{{entry.url}}' } } }))
+    expect(found.map((violation) => violation.code)).toEqual(['printed-token'])
+  })
+
+  it('lets a link or picture hold its token, a block take one whole, and a markdown link follow one', () => {
+    expect(
+      check(
+        tree({
+          cover: { componentId: 'image', props: { src: '{{entry.coverImage}}', href: '{{entry.url}}', alt: 'Cover for {{entry.title}}' } },
+          meta: { componentId: 'collectionEntryMeta', props: { author: '{{entry.author}}', avatarImage: '{{entry.authorImage}}' } },
+          film: { componentId: 'video', props: { src: '{{entry.coverVideo}}', uploadDate: '{{entry.publishedAt}}' } },
+          more: { componentId: 'collectionEntryBody', props: { markdown: 'Read [the whole story]({{entry.url}}).' } },
+          back: { componentId: 'muiButton', props: { children: 'Back to {{collection.name}}', href: '{{entry.collectionUrl}}' } },
+        }),
+      ),
+    ).toEqual([])
   })
 })

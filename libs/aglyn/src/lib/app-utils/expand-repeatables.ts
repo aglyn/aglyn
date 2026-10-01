@@ -17,10 +17,10 @@
 
 import type { AglynNodeSchema, NodeId } from '../foundation'
 import {
-  applyDatasetQuery,
-  parseDatasetFilter,
-  parseDatasetSort,
-} from './dataset-query'
+  applyRepeatQuery,
+  parseRepeatFilter,
+  parseRepeatSort,
+} from './repeat-query'
 
 /** Namespaces cloned template ids per container/record. */
 export const REPEAT_NODE_ID_PREFIX = 'rep__'
@@ -242,10 +242,10 @@ export function repeatedRecords(
     string,
     unknown
   >
-  const where = parseDatasetFilter(String(props['repeatFilter'] ?? ''))
-  const orderBy = parseDatasetSort(String(props['repeatSort'] ?? ''))
+  const where = parseRepeatFilter(String(props['repeatFilter'] ?? ''))
+  const orderBy = parseRepeatSort(String(props['repeatSort'] ?? ''))
   const limit = Number(props['repeatLimit'])
-  return applyDatasetQuery(dataset?.model, dataset?.records ?? [], {
+  return applyRepeatQuery(dataset?.records ?? [], {
     ...(where ? { where: [where] } : {}),
     ...(orderBy ? { orderBy } : {}),
   }).slice(

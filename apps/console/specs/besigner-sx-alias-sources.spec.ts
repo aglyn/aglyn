@@ -53,15 +53,20 @@ const tracked = (): string[] =>
 /** Files named outright because they author documents without presets. */
 const NAMED_SOURCES = [
   'libs/aglyn/src/lib/app-utils/starter-templates.ts',
+  'libs/aglyn/src/lib/app-utils/starter-template-nodes.ts',
   'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts',
 ]
 
+/** A plugin's `starterTemplates` entry: the starter sites built on its elements. */
+const PLUGIN_STARTERS = /^libs\/plugins\/[^/]+\/src\/lib\/starter-templates\.ts$/
+
 /**
  * Every source that authors a besigner node `sx`: the plugin bundles'
- * element presets (what a drag from the elements drawer inserts), plus the
- * two named above (the starter sites a customer's first site is built from,
- * and the collection fallbacks the tenant renders when a site has no screen
- * document of its own).
+ * element presets (what a drag from the elements drawer inserts), each
+ * plugin's starter sites, plus those named above (the platform's starter
+ * sites and the kit they are built with, which a customer's first site is
+ * seeded from, and the collection fallbacks the tenant renders when a site
+ * has no screen document of its own).
  */
 function documentSources(): Array<{ path: string; source: string }> {
   const files = tracked()
@@ -75,6 +80,7 @@ function documentSources(): Array<{ path: string; source: string }> {
     const source = readFileSync(join(REPO_ROOT, path), 'utf8')
     if (
       NAMED_SOURCES.includes(path) ||
+      PLUGIN_STARTERS.test(path) ||
       source.includes('NodeType.PRESET') ||
       source.includes('PresetSchema')
     ) {
@@ -141,6 +147,8 @@ describe('besigner document sources speak one spelling (AGL-2210)', () => {
     // the files the fix actually touched, and enough of them to be real.
     const paths = sources.map((entry) => entry.path)
     expect(paths).toContain('libs/aglyn/src/lib/app-utils/starter-templates.ts')
+    expect(paths).toContain('libs/aglyn/src/lib/app-utils/starter-template-nodes.ts')
+    expect(paths).toContain('libs/plugins/commerce/src/lib/starter-templates.ts')
     expect(paths).toContain(
       'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts',
     )

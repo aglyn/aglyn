@@ -80,18 +80,6 @@
       "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
     },
     {
-      "site": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts: activities.add(…)",
-      "class": "RESOURCE",
-      "issue": "AGL-3083",
-      "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
-    },
-    {
-      "site": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
-      "class": "RESOURCE",
-      "issue": "AGL-3083",
-      "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
-    },
-    {
       "site": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts: firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.activities).doc()",
       "class": "RESOURCE",
       "issue": "AGL-3083",

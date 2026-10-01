@@ -51,6 +51,7 @@ import {
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
 import { useAggregateRead, useWindowRead } from './use-aggregate-read'
+import { localDayBounds } from '../../model/crm-reports'
 
 /**
  * How many open tasks the by-assignee table is grouped from.
@@ -102,7 +103,7 @@ export function TasksCard(props: TasksCardProps) {
   const { report } = props
   const { scope, tokens, nowMs, routes } = report
   const firestore = useFirestore()
-  const day = useMemo(() => Aglyn.localDayBounds(nowMs), [nowMs])
+  const day = useMemo(() => localDayBounds(nowMs), [nowMs])
 
   const openTasks = () =>
     query(

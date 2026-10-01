@@ -19,6 +19,7 @@ import {
   composeCrmTaskReminderBody,
   composeCrmTaskReminderEmailText,
   composeCrmTaskReminderSubject,
+  crmTaskReminderLine,
   type CrmReminderTask,
   crmTaskReminderAfterEdit,
   crmTaskReminderDue,
@@ -126,12 +127,24 @@ describe('the words', () => {
   })
 
   it('says the title and the due time, in the zone it is given', () => {
-    expect(composeCrmTaskReminderBody(task, 'America/Chicago')).toBe(
-      'Call Jane · due Thu, Sep 10, 10:00 AM',
+    expect(crmTaskReminderLine(task, 'America/Chicago')).toBe(
+      'Call Jane · due Thu, Sep 10, 10:00 AM CDT',
     )
-    expect(composeCrmTaskReminderBody({ ...task, dueAtMs: null }, 'UTC')).toBe('Call Jane')
+    expect(crmTaskReminderLine({ ...task, dueAtMs: null }, 'UTC')).toBe('Call Jane · no due date')
     expect(composeCrmTaskReminderSubject([task])).toBe('Reminder: Call Jane')
-    expect(composeCrmTaskReminderSubject([task, task])).toBe('Reminder: 2 tasks are due')
+    // Never "are due": a reminder can fire ahead of the due time (AGL-3432).
+    expect(composeCrmTaskReminderSubject([task, task])).toBe('Reminder: 2 tasks')
+  })
+
+  // AGL-3432: the notification body reads whole without its title, and names
+  // the workspace a member of several is being reminded in.
+  it('the notification says it is a reminder, for which workspace, and when the task is due', () => {
+    expect(composeCrmTaskReminderBody(task, 'America/Chicago', 'Acme Co')).toBe(
+      'Reminder for your task in Acme Co: Call Jane, due Thu, Sep 10, 10:00 AM CDT.',
+    )
+    expect(composeCrmTaskReminderBody({ ...task, dueAtMs: null }, 'UTC', 'Acme Co')).toBe(
+      'Reminder for your task in Acme Co: Call Jane (no due date).',
+    )
   })
 
   it('writes one mail for every task due, soonest first, with the way out last', () => {
@@ -148,17 +161,18 @@ describe('the words', () => {
       tasks: [later, task],
       timeZone: 'America/Chicago',
       productName: 'Aglyn',
+      workspaceName: 'Acme Co',
       taskUrl: (each) => `https://app.aglyn.com/acme/hosts/main/crm/tasks#${each.id}`,
       settingsUrl: 'https://app.aglyn.com/manage/notifications',
       supportLine: '\n\nSupport: help@aglyn.com',
     })
     expect(text).toBe(
       [
-        'A reminder from Aglyn: 2 tasks are due.',
+        'A reminder from Aglyn about 2 of your tasks in Acme Co:',
         '',
-        '- Call Jane · due Thu, Sep 10, 10:00 AM',
+        '- Call Jane · due Thu, Sep 10, 10:00 AM CDT',
         '  https://app.aglyn.com/acme/hosts/main/crm/tasks#t-1',
-        '- Send the deck · due Sat, Sep 12, 10:00 AM',
+        '- Send the deck · due Sat, Sep 12, 10:00 AM CDT',
         '  https://app.aglyn.com/acme/hosts/main/crm/tasks#t-2',
         '',
         'You get task reminders because the Forms & bookings category is on in ' +
@@ -173,7 +187,19 @@ describe('the words', () => {
         taskUrl: () => 'https://x',
         settingsUrl: 'https://s',
       }),
-    ).toMatch(/^A reminder from Acme: this task is due\./)
+    ).toMatch(/^A reminder from Acme about your task:\n/)
+    // A reminder set ahead of the due date, or on a task with none, is
+    // never told "this task is due".
+    expect(
+      composeCrmTaskReminderEmailText({
+        tasks: [{ ...task, dueAtMs: null }],
+        timeZone: 'UTC',
+        productName: 'Aglyn',
+        workspaceName: 'Acme Co',
+        taskUrl: () => 'https://x',
+        settingsUrl: 'https://s',
+      }),
+    ).toMatch(/^A reminder from Aglyn about your task in Acme Co:\n\n- Call Jane · no due date\n/)
     // Inside a system email the footer says why and where to get help, so
     // the body stops at the last task (AGL-3367).
     expect(

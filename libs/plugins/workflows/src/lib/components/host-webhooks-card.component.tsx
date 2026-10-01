@@ -22,7 +22,6 @@ import {
   createResourceUid,
   pluginDocsHelp,
   WEBHOOK_MAX_PER_HOST,
-  WEBHOOK_URL_PATTERN,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
@@ -58,6 +57,7 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { WEBHOOK_URL_PATTERN } from '../model/webhooks'
 
 /**
  * How many webhook documents the card reads.

@@ -18,7 +18,7 @@
 import {
   assistProviderCostUsd,
   ASSIST_PROVIDER_COST_FIELD,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import type { AiUsage } from '../providers/contract'
 
 /**

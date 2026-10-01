@@ -634,6 +634,30 @@ describe('charge.dispute.created — flag, reverse nothing (AGL-1787)', () => {
     expect(disputeEvents()).toHaveLength(1)
     expect(riskNotices).toHaveLength(1)
   })
+
+  /**
+   * A fraud warning names the sum in question, as the dispute does: the
+   * notice printed "(an amount shown on the payment)" because none was
+   * passed (AGL-3432).
+   */
+  it('tells the merchant the amount of a payment the issuer reported', async () => {
+    await deliver('radar.early_fraud_warning.created', {
+      id: 'issfr_1',
+      object: 'radar.early_fraud_warning',
+      charge: 'ch_1',
+      payment_intent: 'pi_dispute_1',
+      fraud_type: 'made_with_stolen_card',
+      created: OPENED_AT_S,
+    })
+    expect(riskNotices).toEqual([
+      expect.objectContaining({
+        kind: 'sale-fraud-warning',
+        hostId: 'host-1',
+        amount: '$62.00',
+        paymentEvent: 'reported by the card issuer as possibly not made by the cardholder',
+      }),
+    ])
+  })
 })
 
 describe('charge.dispute.closed — the only event that moves money', () => {
@@ -722,11 +746,22 @@ describe('charge.dispute.closed — the only event that moves money', () => {
     expect(contact().sources).toEqual({ order: true })
   })
 
-  /** The merchant is told the outcome, either way. */
+  /**
+   * The merchant is told the outcome, either way — by the order number they
+   * know, on which site, with what the shopper's bank took back stated as
+   * that and not as the merchant's own loss, which the payout notice carries
+   * (AGL-3432). The order here has no number, so the label is the id's tail.
+   */
   it('tells the merchant the dispute was lost', async () => {
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(managerNotices).toHaveLength(1)
-    expect(managerNotices[0].title).toContain('$62.00')
+    expect(managerNotices[0].title).toBe('Chargeback lost — order #RDER-1')
+    expect(managerNotices[0].body).toBe(
+      "The chargeback on order #RDER-1 on {site} was decided in the " +
+        "shopper's favor, and their bank took back $62.00. If part of the sale " +
+        'had been paid out to you, a separate notice says what is taken back ' +
+        'from your balance.',
+    )
   })
 })
 
@@ -1670,7 +1705,9 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
         String(notice.title).includes('Chargeback lost'),
       ),
     ).toHaveLength(1)
-    expect(payout[0].body).toContain('order-1')
+    // The order by the number the merchant knows it by, and the site
+    // (AGL-3432); this fixture's order has no number, so the id's tail.
+    expect(payout[0].body).toContain('order #RDER-1 on {site}')
     // The negative-balance consequence, in the merchant's own words.
     expect(payout[0].body).toContain('future payouts')
     expect(payout[0].link).toBe('/host-1/orders')

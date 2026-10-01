@@ -45,9 +45,10 @@ import type {
   PluginRecordTaskRequest,
   PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
-import { EMAIL_TOPIC_SALES, readTopicSubscriptionState } from '@aglyn/aglyn/app-utils/email-topics'
+import { readTopicSubscriptionState } from '@aglyn/aglyn/app-utils/subscription-topics'
+import { SALES_TOPIC_ID } from '../model/sales-topic'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
-import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-confirmation'
+import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/topic-subscriptions'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEnrollment, OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import { FakeGmail } from './fixtures/fake-gmail'
@@ -146,7 +147,7 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
       filed.feed.push({ action, target })
     },
     optOutOfSalesTopic: async ({ hostId, email }) => {
-      await recordTopicOptOut(hostId, email, EMAIL_TOPIC_SALES, { firestore })
+      await recordTopicOptOut(hostId, email, SALES_TOPIC_ID, { firestore })
     },
     suppressBouncedEmail: async ({ email, hostId }) => {
       await suppressEmail({ email, reason: 'bounce', context: 'outreach', hostId, firestore })
@@ -313,6 +314,36 @@ async function enroll(n: number, overrides: Partial<OutreachEnrollment> = {}): P
   }
   await org().collection('outreachEnrollments').doc(enrollment.id).set(enrollment)
   return enrollment
+}
+
+/**
+ * A lead — the org's own record, captured by a form — and its enrollment,
+ * due now (AGL-3234). The lead's stage is what a send and a reply move.
+ */
+async function enrollLead(n: number, lead: Record<string, unknown> = {}): Promise<OutreachEnrollment> {
+  const leadId = `lead-${n}`
+  const email = `person${n}@example.org`
+  await org()
+    .collection('leads')
+    .doc(leadId)
+    .set({
+      email,
+      name: `Pat${n} Example`,
+      company: `Company ${n}`,
+      sources: ['form:contact'],
+      address: { country: 'US' },
+      ...lead,
+    })
+  return enroll(n, {
+    id: `${SEQUENCE.id}_${leadId}`,
+    target: 'lead',
+    contactId: '',
+    leadId,
+  })
+}
+
+async function leadStatus(n: number): Promise<unknown> {
+  return (await org().collection('leads').doc(`lead-${n}`).get()).get('status')
 }
 
 async function enrollment(id: string): Promise<OutreachEnrollment> {
@@ -655,6 +686,69 @@ describeEmulated('the send job (AGL-2981)', () => {
   })
 })
 
+describeEmulated('the lead stage a sequence moves (AGL-3446)', () => {
+  it('moves a New lead to Nurturing when a step is sent to it, and not before', async () => {
+    await seedOrg()
+    await enrollLead(1)
+    expect(await leadStatus(1)).toBeUndefined()
+
+    const report = await tick()
+
+    expect(report).toMatchObject({ sent: 1 })
+    expect(await leadStatus(1)).toBe('nurturing')
+  })
+
+  it('leaves a lead alone when nothing was sent to it', async () => {
+    await seedOrg()
+    const one = await enrollLead(1)
+    await org()
+      .collection('outreachDoNotContact')
+      .doc(String(outreachDoNotContactKey(one.email)))
+      .set({ key: 'k', reason: 'manual', source: 'member', addedByUid: REP, addedAtMs: 1 })
+
+    await tick()
+
+    expect(gmail.sent).toHaveLength(0)
+    expect(await leadStatus(1)).toBeUndefined()
+  })
+
+  it('never moves a Working or closed lead back to Nurturing', async () => {
+    await seedOrg()
+    await enrollLead(1, { status: 'working' })
+    await enrollLead(2, { status: 'unqualified', unqualifiedReason: 'Not a fit' })
+
+    await tick()
+
+    // The Working lead was mailed; whatever the closed one met, it stays closed.
+    expect(gmail.sentHeaders(0)['To']).toBe('person1@example.org')
+    expect(await leadStatus(1)).toBe('working')
+    expect(await leadStatus(2)).toBe('unqualified')
+  })
+
+  it('moves a Nurturing lead to Working when it replies', async () => {
+    await seedOrg()
+    const one = await enrollLead(1)
+    await tick()
+    expect(await leadStatus(1)).toBe('nurturing')
+    const sent = await enrollment(one.id)
+    clock += 3_600_000
+    gmail.deliver({
+      threadId: String(sent.gmailThreadId),
+      from: 'Pat1 Example <person1@example.org>',
+      to: MAILBOX_EMAIL,
+      subject: 'Re: A question about Company 1',
+      text: 'Sure, send me more.',
+      atMs: clock - 60_000,
+      messageId: '<reply-lead-1@mail.example.org>',
+      headers: { 'In-Reply-To': sent.messageIds[0] },
+    })
+
+    await sync()
+
+    expect(await leadStatus(1)).toBe('working')
+  })
+})
+
 describeEmulated('the sync job (AGL-2981)', () => {
   async function sentTo(n: number) {
     const person = await enroll(n)
@@ -968,7 +1062,7 @@ describeEmulated('the sync job (AGL-2981)', () => {
       source: 'runtime',
     })
     const topics = (await firestore.collection('hosts').doc(HOST).collection('topicOptOuts').doc(key).get()).get('topics')
-    expect(readTopicSubscriptionState(topics?.[EMAIL_TOPIC_SALES])).toBe('opted-out')
+    expect(readTopicSubscriptionState(topics?.[SALES_TOPIC_ID])).toBe('opted-out')
   })
 })
 
@@ -985,7 +1079,7 @@ describeEmulated('the one-click unsubscribe (AGL-2981)', () => {
       enrollmentId: person.id,
     })
     const topics = (await firestore.collection('hosts').doc(HOST).collection('topicOptOuts').doc(key).get()).get('topics')
-    expect(readTopicSubscriptionState(topics?.[EMAIL_TOPIC_SALES])).toBe('opted-out')
+    expect(readTopicSubscriptionState(topics?.[SALES_TOPIC_ID])).toBe('opted-out')
   }
 
   it('GET stops the enrollment and suppresses the address, and says so on a plain page', async () => {

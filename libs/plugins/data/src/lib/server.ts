@@ -1,0 +1,59 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  registerPluginApiRoute,
+  type PluginApiSubjectResolver,
+} from '@aglyn/aglyn/server'
+import { datasetsExportHandler } from './server/datasets-export-route'
+import { datasetsHandler } from './server/datasets-route'
+
+/**
+ * The organization a datasets request is for, read from the request the way
+ * each handler reads it — the JSON body's `orgId` on a write, `?orgId=` on an
+ * export. Datasets belong to the organization and name no site, so without
+ * this the dispatcher's release gate would read the request as anonymous and
+ * refuse it under a partial rollout of the data store.
+ */
+const orgSubject: PluginApiSubjectResolver = async (request) => {
+  const fromQuery = new URL(request.url).searchParams.get('orgId')
+  if (fromQuery) return { orgId: fromQuery }
+  if (request.method === 'GET' || request.method === 'HEAD') return null
+  const body = (await request.json().catch(() => null)) as {
+    orgId?: unknown
+  } | null
+  return typeof body?.orgId === 'string' && body.orgId
+    ? { orgId: body.orgId }
+    : null
+}
+
+/**
+ * Console API: the organization's datasets — creating a dataset and its
+ * records within the plan (`POST /api/orgs/datasets`), and the complete export
+ * of one (`GET /api/orgs/datasets/export`). Served by the console's plugin
+ * dispatcher, at the addresses the console always answered them on.
+ */
+export function registerDataConsoleApi(): void {
+  registerPluginApiRoute('orgs/datasets', { web: datasetsHandler }, {
+    subject: orgSubject,
+  })
+  registerPluginApiRoute(
+    'orgs/datasets/export',
+    { web: datasetsExportHandler },
+    { subject: orgSubject },
+  )
+}

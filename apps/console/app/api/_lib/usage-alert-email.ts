@@ -285,7 +285,9 @@ export async function emailOrgAdmins(
         'org.name': brand.orgName ?? '',
       },
       brand,
-      { subject: input.subject, text: input.text },
+      // The template's last resort opens with the subject too, as the
+      // designed default does (AGL-3432).
+      { subject: input.subject, text: `${input.subject}\n\n${input.text}` },
     )
     const result = await sendEmail({
       to,

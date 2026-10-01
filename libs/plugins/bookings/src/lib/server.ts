@@ -36,7 +36,8 @@ import {
   renderLoadedHostEmailWithTokens,
   type LoadedHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin/server/host-email-tokens'
-import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
+import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingTimeZone, computeOpenSlots, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
+import { bookingTimeZoneFor } from './server/booking-time-zone'
 import {
   registerBillingWebhookHandler,
   registerPluginApiRoute,
@@ -52,15 +53,13 @@ import { bookingsBillingWebhookHandler } from './server/billing-webhook'
 import { bookingAnalyticsHandler } from './server/booking-analytics'
 import { registerBookingFigureReader } from './server/booking-figures'
 import { bookingRefundHandler } from './server/refund'
-// The booking's way back to the CRM record (AGL-2660): the reference a
-// booking link carried, and the meeting a free booking files on landing.
-// The leaf, not the barrel: this library's specs substitute the barrel
-// wholesale, and a parser that vanished under them would fail every
-// booking they take.
+// The booking's way back to the record it was booked from (AGL-2660): the
+// reference a booking link carried, and the meeting a free booking files on
+// landing.
 import {
-  formatCrmBookingRef,
-  parseCrmBookingRef,
-} from '@aglyn/aglyn/app-utils/crm-booking'
+  formatBookingRecordRef,
+  parseBookingRecordRef,
+} from './model/booking-record'
 import { fileBookingOnCrm } from './server/booking-crm'
 
 // Settings schema (AGL-428): registered here too so server-only loads
@@ -291,10 +290,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
   // consent to be emailed marketing, so this is only set when the visitor
   // checked it.
   const marketingConsent = req.body?.marketingConsent === true
-  // The CRM record the booking link named (AGL-2660), kept on the row so
-  // the booking can be attributed to it even when the visitor books with
-  // a different address. Parsed, never stored raw: this is a public door.
-  const crmRef = parseCrmBookingRef(req.body?.crmRef)
+  // The record the booking link named (AGL-2660), kept on the row so the
+  // booking can be attributed to it even when the visitor books with a
+  // different address. Parsed, never stored raw: this is a public door.
+  const crmRef = parseBookingRecordRef(req.body?.crmRef)
   if (!hostId || !serviceId || !Number.isFinite(startsAtMs) || !startsAtMs) {
     return res.status(400).json({ error: 'Invalid booking request' })
   }
@@ -345,6 +344,16 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       Math.max(5, Math.round(service.durationMinutes || 30)) * 60_000
     const endsAtMs = startsAtMs + durationMs
     const bookingsRef = hostRef.collection('bookings')
+    // The zone this booking's time is told in (AGL-3432), stored on the
+    // booking so the paid confirmation and the reminder — which read the
+    // booking and not the service — state the same wall-clock time as the
+    // free confirmation below, and name the zone it is in.
+    const timezone = bookingTimeZone({
+      service,
+      host: hostSnapshot.data?.() as { timeZone?: string } | undefined,
+      org: ownerOrg as { timeZone?: string } | null | undefined,
+    })
+    const when = formatBookingWhen(startsAtMs, timezone)
 
     // Paid services (AGL-170): the slot is HELD pending payment — the
     // booking lands as `pendingPayment` with a 15-minute expiry (expired
@@ -529,9 +538,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         email,
         startsAtMs,
         endsAtMs,
+        timezone,
         status: paid ? 'pendingPayment' : 'confirmed',
         ...(paid && { expiresAtMs: Date.now() + 15 * 60_000 }),
-        ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
+        ...(crmRef ? { crmRef: formatBookingRecordRef(crmRef) } : {}),
         createdAt: FieldValue.serverTimestamp(),
       })
       return bookingRef.id
@@ -748,11 +758,14 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Event trigger (AGL-128/148/159).
-    // In-app notification to the site's managers (AGL-259).
+    // In-app notification to the site's managers (AGL-259): who booked what,
+    // and when, in the booking's own zone and naming it (AGL-3432).
     void notifyHostManagers(hostId, {
       type: 'content.booking',
-      title: 'New booking',
-      body: new Date(startsAtMs).toLocaleString(),
+      title: 'New booking on {site}',
+      body:
+        `${name} (${email}) booked ${String(service.name ?? 'a service')} ` +
+        `on {site} for ${when} (${timezone}).`,
       link: `/${hostId}/bookings`,
     })
     const { alerts } = await emitHostEvent(
@@ -765,12 +778,6 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
 
     // Env-gated confirmation email (same provider as AGL-98).
     if (isEmailConfigured()) {
-      const timezone = service.timezone || 'UTC'
-      const when = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        dateStyle: 'full',
-        timeStyle: 'short',
-      }).format(new Date(startsAtMs))
       const fallbackText =
         `Hi ${name},\n\nYour booking for "${service.name}" is ` +
         `confirmed for ${when} (${timezone}).\n\n` +
@@ -786,6 +793,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           'service.name': String(service.name ?? ''),
           when,
           timezone,
+          // A free booking charged nothing: empty, so the line is left out.
+          'booking.payment': '',
           'booking.ref': String(bookingId),
         },
       )
@@ -829,7 +838,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         email,
         startsAtMs,
         endsAtMs,
-        ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
+        ...(crmRef ? { crmRef: formatBookingRecordRef(crmRef) } : {}),
       },
       service,
     })
@@ -909,6 +918,9 @@ export async function scanBookingReminders(
     string,
     Awaited<ReturnType<typeof hostSendingIdentity>>
   >()
+  // The zone for a booking that predates storing one (AGL-3432), resolved
+  // once per service for the whole run.
+  const zoneByService = new Map<string, Promise<string>>()
   for (const doc of upcoming.docs) {
     const data = doc.data()
     // The shared predicate, not a local copy of it (AGL-2431): the console
@@ -918,10 +930,6 @@ export async function scanBookingReminders(
       skipped += 1
       continue
     }
-    const when = new Date(Number(data['startsAtMs'])).toLocaleString(
-      'en-US',
-      { dateStyle: 'full', timeStyle: 'short' },
-    )
     // bookings live at hosts/{hostId}/bookings/{id}, so the grandparent is
     // the host.
     const hostId = doc.ref.parent.parent?.id ?? ''
@@ -944,6 +952,15 @@ export async function scanBookingReminders(
       skippedLocked += 1
       continue
     }
+    // The booking's own zone, named beside the time (AGL-3432). A formatter
+    // with no zone reads in the server's — UTC — and states the wrong hour.
+    const timezone = await bookingTimeZoneFor(
+      firestore,
+      hostId,
+      data,
+      zoneByService,
+    )
+    const when = formatBookingWhen(Number(data['startsAtMs']), timezone)
     let loaded = templateCache.get(hostId)
     if (loaded === undefined) {
       loaded = hostId
@@ -970,6 +987,7 @@ export async function scanBookingReminders(
             name: String(data['name'] ?? ''),
             'service.name': serviceName,
             when,
+            timezone,
           },
         )
       : null
@@ -979,7 +997,7 @@ export async function scanBookingReminders(
       text:
         designed?.text ||
         `Hi ${data['name'] ?? ''},\n\nA reminder that "${serviceName}" is ` +
-          `scheduled for ${when}.\n\nReference: ${doc.id}`,
+          `scheduled for ${when} (${timezone}).\n\nReference: ${doc.id}`,
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostId)?.fromName,
       sendingIdentity: await hostSendingIdentity(hostId, identityByHost),

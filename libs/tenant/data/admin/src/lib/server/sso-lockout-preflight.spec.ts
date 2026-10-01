@@ -45,6 +45,8 @@ const auditAdd = jest.fn(async () => undefined)
 let poolUsers: Array<{ uid: string; email: string; providerData: Array<{ providerId: string }> }> = []
 /** The `sso` map on the org document for one test. */
 let orgSso: Record<string, unknown> = {}
+/** The org document's `name` for one test; unset is a nameless org. */
+let orgName: string | undefined
 /**
  * What the owner resolver answers (AGL-1888 option (a)). BOTH worlds are
  * arranged below — a double that reported an owner unconditionally could not
@@ -85,7 +87,8 @@ jest.mock('./firebase-admin', () => ({
                 doc: () => ({
                   get: async () => ({
                     exists: true,
-                    get: (field: string) => (field === 'sso' ? orgSso : undefined),
+                    get: (field: string) =>
+                      field === 'sso' ? orgSso : field === 'name' ? orgName : undefined,
                   }),
                 }),
               },
@@ -130,6 +133,7 @@ const OUTSIDE_OWNER = {
 beforeEach(() => {
   jest.clearAllMocks()
   orgSso = { ...baseSso }
+  orgName = undefined
   poolUsers = []
   // The default is the world where NOBODY qualifies, so every existing case
   // below still proves what it claims to prove.
@@ -187,6 +191,27 @@ describe('the SSO enforcement pre-flight', () => {
     expect(
       result.accounts.find((a) => a.uid === 'owner')?.skipped,
     ).toBe('break-glass')
+  })
+
+  it('tells each changed account which organization, and that they were signed out (AGL-3432)', async () => {
+    orgName = 'Acme'
+    orgSso = { ...baseSso, breakGlassUids: ['owner'] }
+    poolUsers = [
+      account('owner', [SAML, 'password']),
+      account('member', [SAML, 'google.com']),
+    ]
+    await enforceSsoSignInMethods(ORG)
+    expect(notifyUsers).toHaveBeenCalledWith(
+      ['member'],
+      expect.objectContaining({
+        type: 'system.signInMethodRemoved',
+        title: 'Acme now requires single sign-on',
+        body:
+          'Acme now requires single sign-on, so the other sign-in methods on ' +
+          'your account were removed and you were signed out. Sign in with ' +
+          "Acme's single sign-on from now on.",
+      }),
+    )
   })
 
   it('refuses a designation that holds nothing but the IdP', async () => {

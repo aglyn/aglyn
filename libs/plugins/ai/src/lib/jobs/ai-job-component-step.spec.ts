@@ -305,6 +305,8 @@ describe('the component step', () => {
     registerAiComponentJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('component', runAiJobComponentStep, {
       minimumMs: AI_JOB_COMPONENT_STEP_MINIMUM_MS,
+      // A pass that builds a creation of its plan first needs that step's time (AGL-3143 §15).
+      minimumMsFor: expect.any(Function),
     })
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('component', { firestore, orgId: 'org-1', hostId, inputs: {}, org })
@@ -587,6 +589,23 @@ describe('the component step', () => {
       jest
         .fn()
         .mockResolvedValue({ ok: true, id: 'cmp-copy', versionId: 'v-copy', name: 'Testimonial card' })
+
+    it('builds from the plan when the source lacks a property it names, rather than copy it (AGL-3143 §14)', async () => {
+      mockDocs.set('hosts/host-1/components/cmp-avatar', {
+        displayName: 'Avatar',
+        props: [{ name: 'picture' }, { name: 'caption' }],
+      })
+      const duplicate = copies()
+      mockRunAiRequest.mockResolvedValueOnce(componentAnswer(TESTIMONIAL.answer.tree, TESTIMONIAL.answer.props))
+      const outcome = await createAiJobComponentStep({
+        duplicate: duplicate as unknown as typeof duplicateResource,
+      })(context({ plan }))
+      // Before, this copied the Avatar and stopped for review: a copy of a
+      // component with no quote, name, role or photo could only lack them.
+      expect(duplicate).not.toHaveBeenCalled()
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'reusableComponent', id: COMPONENT_ID })])
+    })
 
     it('stops for a person rather than reporting a copy that lacks a property the plan named', async () => {
       // MEASURED live: practice-area-link-card came out byte-identical to the

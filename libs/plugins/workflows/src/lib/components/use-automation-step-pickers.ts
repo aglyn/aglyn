@@ -26,7 +26,8 @@
  * both surfaces against this one set.
  */
 
-import { datasetPickerOptions, scopeTokensForHost } from '@aglyn/aglyn'
+import { scopeTokensForHost } from '@aglyn/aglyn'
+import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -42,14 +43,11 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { collection, query, where } from 'firebase/firestore'
 import {
-  collection,
-  documentId,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore'
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useMemo } from 'react'
 import type { AutomationStepPickers } from './automation-step-fields.component'
 
@@ -114,54 +112,46 @@ export function useAutomationStepPickers(
   )
   const { rows: workflowDocs, truncated: workflowsTruncated } =
     ceilingedWindow<any>(workflowRead, EDITOR_OPTION_CEILING)
-  // Scoped (AGL-1044): the AGL-1041 rules reject a scoped member's
-  // UNFILTERED list outright, so without this the picker errors rather than
-  // offering fewer datasets.
-  // Scoped to the HOST, not the viewer (AGL-1044): an action runs ON this host, so it may only reach datasets THIS host can use — an org-wide
-  // admin would otherwise be offered datasets that resolve to nothing at
-  // render time. Filtering by the host's tokens also satisfies the
-  // AGL-1041 rules, since they are a subset of any viewer's who can reach
-  // this host at all.
+  // Scoped to the HOST, not the viewer (AGL-1044): an action runs ON this
+  // host, so it may only reach org records THIS host can use — an org-wide
+  // admin would otherwise be offered ones that resolve to nothing at render
+  // time. Filtering by the host's tokens also satisfies the AGL-1041 rules,
+  // which reject a scoped member's UNFILTERED list outright, since they are a
+  // subset of any viewer's who can reach this host at all.
   // Memoised: this is a listener DEPENDENCY, and a fresh array each
   // render tears the subscription down and clears its data every time.
   const scopeTokens = useMemo(() => scopeTokensForHost(hostId), [hostId])
-  // Unconditional now: the only scope this hook yields is an org one, and
-  // every org dataset carries `visibleTo` (AGL-1041). The filter used to be
-  // conditional for the host fallback's sake, whose rows had no scope.
-  /*
-   * `documentId()` rather than a field, for the reason the audience sweep in
-   * `campaign-send.ts` gives: Firestore's automatic single-field index for an
-   * array member is keyed on the value and the document name, so
-   * `array-contains-any` plus `orderBy(__name__)` is served by it. Ordering on
-   * anything else here would need a composite index that does not exist.
-   */
+  // The datasets are the data plugin's, listed through the source it
+  // publishes (AGL-3080), which applies the same host scoping.
+  const datasetOrgId = dataScope?.[1] ?? null
   const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
-      editorOpened && dataScope
-        ? query(
-            collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-            where('visibleTo', 'array-contains-any', scopeTokens),
-            orderBy(documentId()),
-            limit(EDITOR_OPTION_CEILING + 1),
-          )
+      editorOpened && datasetOrgId
+        ? pluginRecordListQuery('dataset', firestore, {
+            orgId: datasetOrgId,
+            hostId,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
         : null,
-    [firestore, dataScope, scopeTokens, editorOpened],
+    [firestore, datasetOrgId, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { rows: datasetDocs, truncated: datasetsTruncated } =
+  const { rows: datasetRows, truncated: datasetsTruncated } =
     ceilingedWindow<any>(datasetRead, EDITOR_OPTION_CEILING)
+  // The site's overlays are the marketing plugin's, listed through the
+  // source it publishes (AGL-3080); none where no plugin keeps them here.
   const { data: overlayRead } = useFirestoreCollection<any>(
     () =>
       editorOpened
-        ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'overlays'),
-            EDITOR_OPTION_CEILING,
-          )
+        ? pluginRecordListQuery('overlay', firestore, {
+            hostId,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
         : null,
     [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { rows: overlayDocs, truncated: overlaysTruncated } =
+  const { rows: overlayRows, truncated: overlaysTruncated } =
     ceilingedWindow<any>(overlayRead, EDITOR_OPTION_CEILING)
   // Lists live on the org (AGL-254), and so do campaigns.
   const { data: listRead } = useFirestoreCollection<any>(
@@ -180,29 +170,31 @@ export function useAutomationStepPickers(
     EDITOR_OPTION_CEILING,
   )
   /*
-   * The campaign CONTAINERS, `emailCampaigns`: the collection the executor
-   * resolves an "Assign to a campaign" step's `campaignId` against when it
-   * runs (AGL-3052). `campaigns` beside it holds the individual email sends,
-   * and a send's id names no container, so a step pointed at one fails every
-   * run with "unknown campaign".
+   * The campaign CONTAINERS — the `campaign` container kind, read where its
+   * declaration says they are stored — which the executor resolves an
+   * "Assign to a campaign" step's `campaignId` against when it runs
+   * (AGL-3052). A send's id names no container, so a step pointed at one
+   * fails every run with "unknown campaign". Nothing is read where no plugin
+   * keeps the kind.
    *
    * The org's, narrowed to the ones placed on THIS site by the same host
    * tokens the datasets use — an automation runs on this site, so it may
    * only file under a campaign the site offers, and the clause is what
    * makes the list provable for a collaborator scoped to the site.
    */
+  const campaignCollection = pluginContainerKind('campaign')?.orgCollection
   const { data: campaignRead } = useFirestoreCollection<any>(
     () =>
-      editorOpened && dataScope
+      editorOpened && dataScope && campaignCollection
         ? collectionCeiling(
             query(
-              collection(firestore, dataScope[0], dataScope[1], 'emailCampaigns'),
+              collection(firestore, dataScope[0], dataScope[1], campaignCollection),
               where('visibleTo', 'array-contains-any', scopeTokens),
             ),
             EDITOR_OPTION_CEILING,
           )
         : null,
-    [firestore, dataScope, scopeTokens, editorOpened],
+    [firestore, dataScope, scopeTokens, editorOpened, campaignCollection],
     { idField: '$id' },
   )
   const { rows: campaignDocs, truncated: campaignsTruncated } =
@@ -244,18 +236,13 @@ export function useAutomationStepPickers(
       name: workflow.name as string,
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
-  // Labeled by `displayName`, which every create path writes; the legacy
-  // `name` only covers pre-migration documents.
-  const datasetOptions = datasetPickerOptions(datasetDocs)
-  const overlayOptions = (overlayDocs ?? [])
-    .filter((overlay: any) => !overlay.deletedAt)
-    .map((overlay: any) => ({
-      id: overlay.$id as string,
-      name: (overlay.name ||
-        overlay.bar?.text ||
-        overlay.popup?.headline ||
-        overlay.$id) as string,
-    }))
+  // Named as the Data page names them, by their owner.
+  const datasetOptions = pluginRecordsFromRows('dataset', datasetRows)
+    .map((dataset) => ({ id: dataset.id, name: dataset.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  // Named as the Marketing page names them, by their owner.
+  const overlayOptions = pluginRecordsFromRows('overlay', overlayRows)
+    .map((overlay) => ({ id: overlay.id, name: overlay.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
   const listOptions = (listDocs ?? [])
     .filter((list: any) => !list.deletedAt && list.name)

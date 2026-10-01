@@ -609,6 +609,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                   }}
                 >
                   <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
+                  <MenuItem value="nurturing">{Aglyn.CRM_LEAD_STATUS_LABELS.nurturing}</MenuItem>
                   <MenuItem value="working">{Aglyn.CRM_LEAD_STATUS_LABELS.working}</MenuItem>
                   <MenuItem value="unqualified">
                     {`${Aglyn.CRM_LEAD_STATUS_LABELS.unqualified}…`}

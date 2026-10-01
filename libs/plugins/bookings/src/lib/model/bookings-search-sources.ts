@@ -14,6 +14,7 @@
 
 import type { ConsoleSearchSource } from '@aglyn/aglyn'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { BOOKINGS_SLUG } from './bookings-record-routes'
 
 /**
  * What the console's search finds in a site's bookings (AGL-3080): its
@@ -30,6 +31,8 @@ export const BOOKINGS_SEARCH_SOURCES: readonly ConsoleSearchSource[] = [
     entitlementKey: 'servicesPerHost',
     order: 180,
     href: (_row, { orgSlug, host }) =>
-      host ? buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }) : null,
+      host
+        ? buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: BOOKINGS_SLUG })
+        : null,
   },
 ]

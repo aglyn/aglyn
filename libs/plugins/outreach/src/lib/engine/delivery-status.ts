@@ -44,7 +44,7 @@
  * permanent or temporary — soft when it says it will retry, hard otherwise.
  *==========================================*/
 
-import { emailAddressOf } from '@aglyn/aglyn/app-utils/crm-inbound'
+import { emailAddressOf } from '@aglyn/aglyn/app-utils/email-text'
 import { outreachHeader, type OutreachThreadMessage } from './thread-message'
 
 export type OutreachBounceKind = 'hard' | 'soft'

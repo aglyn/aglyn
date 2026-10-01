@@ -369,7 +369,13 @@ describe('the monthly usage-summary cron', () => {
             get: async () => ({
               exists: true,
               get: (field: string) =>
-                field === 'emailedAt' ? undefined : 0,
+                field === 'emailedAt'
+                  ? undefined
+                  : // Swept after its month closed, so the summary is due
+                    // (AGL-3442).
+                    field === 'computedAt'
+                    ? { toDate: () => new Date() }
+                    : 0,
               ref: { set: async () => undefined },
             }),
           }),

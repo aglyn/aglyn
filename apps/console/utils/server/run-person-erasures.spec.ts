@@ -62,8 +62,18 @@ function applyPatch(existing: Record<string, any>, patch: Record<string, any>) {
   return next
 }
 
+/** Workspace documents, for the name a failure alert carries (AGL-3432). */
+const orgs = new Map<string, Record<string, any>>([['org1', { name: 'Harbor View' }]])
+
 const store = {
   collection: (name: string) => {
+    if (name === 'orgs') {
+      return {
+        doc: (id: string) => ({
+          get: async () => ({ get: (key: string) => orgs.get(id)?.[key] }),
+        }),
+      }
+    }
     if (name !== 'personErasures') throw new Error(`unexpected collection ${name}`)
     return {
       orderBy: (field: string, direction: string) => ({
@@ -174,7 +184,11 @@ describe('runPersonErasures', () => {
     // The operator hears, once per request per day, without the address.
     expect(mockOperatorAlerts.at(-1)).toMatchObject({
       type: 'data.personErasureFailed',
-      options: { dedupeKey: 'a', context: { requestId: 'a', attempt: 1, error: 'recursiveDelete exploded' } },
+      options: {
+        dedupeKey: 'a',
+        // The workspace by name as well as id, so staff need not look it up.
+        context: { requestId: 'a', orgId: 'org1', orgName: 'Harbor View', attempt: 1, error: 'recursiveDelete exploded' },
+      },
     })
     expect(JSON.stringify(mockOperatorAlerts)).not.toContain('a@example.com')
     expect(requests.get('a')).toMatchObject({

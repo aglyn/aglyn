@@ -181,7 +181,7 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
   it('writes the console notification and emails the operator once, from the registry copy', async () => {
     const result = await raiseOperatorAlert('billing.usageNotReported', {
       dedupeKey: 'o1:2026-08',
-      context: { orgId: 'o1', month: '2026-08', amount: '$12.40', reason: 'no-customer' },
+      context: { orgId: 'o1', orgName: 'Acme', month: '2026-08', amount: '$12.40', reason: 'no-customer' },
     })
     expect(result.outcome).toBe('delivered')
     expect(consoleWrites).toHaveLength(1)
@@ -200,6 +200,8 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
       }),
     ])
     expect(String(operatorEmails[0]['body'])).toContain('$12.40')
+    // The workspace by name as well as id (AGL-3432).
+    expect(String(operatorEmails[0]['body'])).toContain('on workspace Acme (o1)')
   })
 
   it('tells a flapping condition once per window, and counts the repeats it held back', async () => {
@@ -290,6 +292,26 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
     expect(consoleWrites[0].options).toEqual({})
   })
 
+  it('stamps each alert with its level on the console notification (AGL-3437)', async () => {
+    await raiseOperatorAlert('billing.usageNotReported', { context: { orgId: 'o1' } })
+    await raiseOperatorAlert('system.healthDegraded', { context: { check: 'Ways in' } })
+    await raiseOperatorAlert('system.healthRecovered', { context: { check: 'Ways in' } })
+    await raiseOperatorAlert('system.healthRecovered', {
+      context: { check: 'Ways in' },
+      level: 'info',
+    })
+    expect(consoleWrites.map((write) => write.payload['level'])).toEqual([
+      // A must-know with no level of its own is red…
+      'critical',
+      // …a degraded check is amber, not red…
+      'warning',
+      // …a recovery is good news…
+      'success',
+      // …and a caller's own judgement wins.
+      'info',
+    ])
+  })
+
   it('an unregistered type is still told, never dropped', async () => {
     const result = await raiseOperatorAlert('nobody.registeredThis', { subject: 'Something broke', body: 'details' })
     expect(result.outcome).toBe('delivered')
@@ -320,6 +342,51 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
   it('drops a link whose token is missing rather than opening the wrong page', async () => {
     await raiseOperatorAlert('billing.autoLocked', { context: { reason: 'budget' } })
     expect(consoleWrites[0].payload['link']).toBeUndefined()
+  })
+})
+
+describe('each alert body stands on its own (AGL-3432)', () => {
+  it('a failed payout prints the amount the caller passed, and who it was for', async () => {
+    // The caller passes `amount`; the sum that did not arrive must print.
+    await raiseOperatorAlert('billing.connectPayoutFailed', {
+      context: {
+        kind: 'payout',
+        stripeId: 'po_1',
+        account: 'acct_1',
+        merchant: 'Harbor View',
+        reason: 'The bank account has been closed',
+        amount: '$420.00',
+      },
+    })
+    expect(String(operatorEmails[0]['body'])).toBe(
+      'A $420.00 Stripe payout (po_1) to connected account acct_1 (Harbor View) failed: The bank account has been closed. The merchant’s funds are not where the ledger says.',
+    )
+  })
+
+  it('an SLA breach opens the ticket itself, not the queue', async () => {
+    await raiseOperatorAlert('support.slaBreached', {
+      context: { ticketId: 't1', subject: 'Checkout broken', tier: 'priority', orgId: 'o1', orgName: 'Acme', overdue: '3 h' },
+    })
+    expect(consoleWrites[0].payload['link']).toBe('/admin/support?ticketId=t1')
+    expect(operatorEmails[0]['url']).toBe('https://console.example.com/admin/support?ticketId=t1')
+    expect(String(operatorEmails[0]['body'])).toContain('from workspace Acme (o1)')
+  })
+
+  it('a failed job reads as one sentence, not "The scheduled job The … failed"', async () => {
+    await raiseOperatorAlert('ops.pluginJobFailed', {
+      context: { job: 'The publish outbox drain', error: '2 failed' },
+    })
+    expect(String(operatorEmails[0]['body'])).toBe('The publish outbox drain failed: 2 failed')
+  })
+
+  it('a full sending-domain allowance is its own alert, and does not read as a failure', async () => {
+    await raiseOperatorAlert('deliverability.sendingDomainCapacityFull', {
+      context: { held: 50, capacity: 50 },
+    })
+    expect(operatorEmails[0]['title']).toBe('Sending-domain allowance full (50/50)')
+    const body = String(operatorEmails[0]['body'])
+    expect(body).toContain('No mail is lost')
+    expect(body).not.toMatch(/fail/i)
   })
 })
 
