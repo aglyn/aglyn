@@ -16,10 +16,9 @@
  */
 'use client'
 
-import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import {
   isStaleBuildError,
-  shouldReloadForStaleBuild,
+  recoverStaleBuildOrReport,
 } from '@aglyn/aglyn/app-utils/stale-build-error'
 import { PLATFORM_DEFAULT_LOCALE } from '@aglyn/aglyn/app-utils/seo-locale'
 import { useEffect } from 'react'
@@ -62,11 +61,7 @@ export default function RootError({
    */
   const stale = isStaleBuildError(error)
   useEffect(() => {
-    if (shouldReloadForStaleBuild(error)) {
-      window.location.reload()
-      return
-    }
-    redispatchCaughtError(error)
+    recoverStaleBuildOrReport(error)
   }, [error])
 
   return (
