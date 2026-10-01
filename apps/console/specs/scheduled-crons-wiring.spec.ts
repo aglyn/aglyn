@@ -145,12 +145,12 @@ describe('scheduled-crons.yml wiring', () => {
   it('parses the workflow at all', () => {
     // A regex that silently matched nothing would make every assertion
     // below vacuously true — the exact shape this file exists to catch.
-    // Six schedules remain here — the weeklies plus the month-boundary
-    // usage-email sweep — and the daily CRM digest (AGL-2619) joined them
-    // on purpose; see `UNWATCHED_BY_DECISION` below. The five DAILY entries
-    // moved to Cloud Scheduler after GitHub dropped a whole day of them; the
-    // `workflow_dispatch` list still carries them all, which is why its floor
-    // is higher.
+    // Six schedules remain here — the five weeklies, and the daily CRM
+    // digest (AGL-2619), which is here on purpose; see
+    // `UNWATCHED_BY_DECISION` below. The DAILY entries moved to Cloud
+    // Scheduler after GitHub dropped a whole day of them, and the hourly
+    // usage-email sweep followed (AGL-3439); the `workflow_dispatch` list
+    // still carries them all, which is why its floor is higher.
     expect(scheduled.length).toBeGreaterThanOrEqual(6)
     expect(caseArms.size).toBeGreaterThanOrEqual(6)
     expect(dispatchOptions.size).toBeGreaterThanOrEqual(10)
