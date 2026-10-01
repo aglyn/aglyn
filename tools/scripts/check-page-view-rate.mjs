@@ -65,11 +65,9 @@ const COGS_PATH = join(
 
 const args = process.argv.slice(2)
 /*
- * Eight decimals, not six. The weight rate is pinned so its marked-up figure is
- * round — $0.21 per 1,000 views, before the CDN request term a billed view
- * adds — which makes the per-view cost a long decimal, and six places round
- * $0.00016153846 to $0.000162, a figure that appears in no file and would send
- * a reader looking for it.
+ * Eight decimals, not six. The weight rate is pinned at eleven decimals —
+ * $0.00035471473 a view — and six places round it to $0.000355, a figure that
+ * appears in no file and would send a reader looking for it.
  */
 const usd = (n) => `$${n.toFixed(8)}`
 const pct = (n) => `${(n * 100).toFixed(1)}%`
@@ -186,7 +184,7 @@ function main() {
         `(${usd(meteredRate)} per view)\n` +
         `  the conversion assumes   ${verdict.convertedBasisKb} KB ` +
         `(${transferBytes} bytes per view)\n\n` +
-        `  one GB of included bandwidth costs  $${verdict.costPerGbUsd.toFixed(5)}\n` +
+        `  one GB of included bandwidth costs  $${verdict.costPerGbUsd.toFixed(5)} in weight\n` +
         `  paired, it would cost               $${verdict.pairedCostPerGbUsd.toFixed(5)}\n\n` +
         'These are one physical measurement written in two units, and only ' +
         'their QUOTIENT is a price: a `bandwidthGb` band is sized against the ' +
@@ -259,7 +257,8 @@ function main() {
         `the basis, accepted ${calibration.acceptedWeightRatio}, would imply ` +
         `${usd(verdict.rateForMeasured)}); paired with ` +
         `${transferBytes} bytes per view, so one GB of included bandwidth ` +
-        `costs $${verdict.costPerGbUsd.toFixed(5)}; graph within ` +
+        `costs $${verdict.costPerGbUsd.toFixed(5)} in weight, before its CDN ` +
+        `requests; graph within ` +
         `${pct(Math.abs(verdict.drift))} of the review point ` +
         `(tolerance ±${pct(calibration.sourceGraphTolerance)})`,
     )

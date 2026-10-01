@@ -667,10 +667,10 @@ const rate = (v: number): string => {
  * Carried as a multiplier rather than folded into `costUsd` so that BOTH
  * columns are computed from the unrounded rate. Rounding the cost to six
  * decimals and then applying the markup to the rounded figure loses the
- * published price when the cost is not a clean decimal: the page-view weight
- * cost is pinned so that cost × 1.3 is exactly $0.21 per 1,000 views, and
- * $0.161538 × 1.3 rounds to $0.209999, which is the right number rendered as
- * the wrong one.
+ * published price when the cost is not a clean decimal: a billed page view's
+ * cost is pinned so that cost × 1.3 is exactly $0.70 per 1,000 views, and a
+ * cost rounded to $0.538462 first would be ×1.3 = $0.700001, the right
+ * number rendered as the wrong one.
  */
 const METERED_ROWS: Array<{
   label: string
@@ -1206,18 +1206,17 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
 const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
 /**
- * The bandwidth bands re-sized past the CDN's request allowance (AGL-3444):
- * every paid band is cut to what the annual price carries once an included
- * gigabyte bears its CDN requests at the dearest region. The four Figma
- * frames and the live `/pricing` still carry the bands sold until
- * 2026-10-01; they are redrawn and republished with the promotion that ships
- * these bands, and then these entries come out.
+ * The bandwidth bands re-sized at the CDN's dearest region (AGL-3444): every
+ * paid band is cut to what the annual price carries once an included
+ * gigabyte's transfer and requests are priced where the CDN is dearest. The
+ * four Figma frames still carry the bands sold until 2026-10-01; when they
+ * are redrawn and re-extracted, these entries come out.
  */
 const BANDWIDTH_RESIZE_WHY =
   'the paid bandwidth bands were re-sized so every tier holds the margin ' +
-  'rule once an included gigabyte carries its CDN requests at the dearest ' +
-  'region (AGL-3444). Redraw the four frames, re-extract, and this entry ' +
-  'comes out.'
+  "rule with an included gigabyte's transfer and CDN requests priced at the " +
+  'dearest region (AGL-3444). Redraw the four frames, re-extract, and this ' +
+  'entry comes out.'
 for (const [plan, frame] of [
   ['Starter', '50 GB'],
   ['Pro', '125 GB'],
@@ -1340,9 +1339,19 @@ const FRAME_STALE_METERED: Record<
     why:
       'a billed page view now carries the CDN per-request charge past the ' +
       "hosting plan's allowance (`PAGE_VIEW_CDN_REQUEST_COST_USD`, AGL-1879), " +
-      'so the published figure is $0.276923 / $0.36 per 1k views. The four ' +
-      'Figma frames still draw the weight-only cost. Redraw them, re-extract, ' +
-      'and this entry comes out.',
+      "and both it and the view's transfer are priced at the CDN's dearest " +
+      'region (AGL-3444), so the published figure is $0.538462 / $0.70 per 1k ' +
+      'views. The four Figma frames still draw the cheapest-region weight-only ' +
+      'cost. Redraw them, re-extract, and this entry comes out.',
+  },
+  'Form submissions': {
+    ourCost: '$0.05 / 1k',
+    youPay: '$0.065 / 1k',
+    why:
+      "a submission's function invocation is priced at Vercel's dearest region " +
+      '(AGL-3444), so the published figure is $0.053846 / $0.07 per 1k. The ' +
+      'four Figma frames still draw the cheapest-region figure. Redraw them, ' +
+      're-extract, and this entry comes out.',
   },
 }
 

@@ -21,16 +21,16 @@ until the start of the next month.
 | Plan | Included bandwidth per month | Past the allowance |
 |---|---|---|
 | Free | 2 GB | Sites are **paused** until the start of next month |
-| Starter | 35 GB | Keeps serving; the extra is billed |
-| Pro | 60 GB | Keeps serving; the extra is billed |
-| Business | 90 GB | Keeps serving; the extra is billed |
-| Scale | 145 GB | Keeps serving; the extra is billed |
-| Advanced | 175 GB | Keeps serving; the extra is billed |
-| Agency | 790 GB | Keeps serving; the extra is billed |
-| Enterprise | 1,580 GB by default; more by agreement | Keeps serving; not billed — your agreement sets the terms |
+| Starter | 20 GB | Keeps serving; the extra is billed |
+| Pro | 35 GB | Keeps serving; the extra is billed |
+| Business | 55 GB | Keeps serving; the extra is billed |
+| Scale | 90 GB | Keeps serving; the extra is billed |
+| Advanced | 105 GB | Keeps serving; the extra is billed |
+| Agency | 485 GB | Keeps serving; the extra is billed |
+| Enterprise | 970 GB by default; more by agreement | Keeps serving; not billed — your agreement sets the terms |
 
 The allowance is per **organization**, across every site in it — not per site. If you run
-four sites on one Business plan, they share the 90 GB.
+four sites on one Business plan, they share the 55 GB.
 
 ## Where to see your usage {#where-to-see-it}
 
@@ -124,7 +124,7 @@ Bandwidth is derived from page views rather than measured byte-for-byte at the e
 platform uses a fixed accounting figure of **1,012.8 KB per page view** and converts in both
 directions, so the meter you read in GB and the counters the analytics pipeline writes are
 the same number expressed differently. On Free, 2 GB works out to roughly **2,070 page
-views** a month; on Starter, 35 GB is roughly **36,200**, and the same division gives every
+views** a month; on Starter, 20 GB is roughly **20,700**, and the same division gives every
 other band.
 
 ### Which views are counted

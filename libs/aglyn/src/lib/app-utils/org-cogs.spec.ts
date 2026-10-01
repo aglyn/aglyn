@@ -79,9 +79,11 @@ describe('orgMonthlyCogsUsd', () => {
      *
      * The table above is the measurement AS TAKEN, priced at the $0.0001 per
      * view the meter carried on 2026-08-24. The 2026-09-09 re-peg (AGL-2711)
-     * moved that rate, not the usage: the busiest org's 2,169 views cost
-     * $0.1335 more, so its measured total is $0.35280 and its floor is 5.7x
-     * rather than 9.1x. The other rows move the same way and their view
+     * moved that rate, not the usage, and the 2026-10-01 re-price (AGL-3444)
+     * moved it again — page-view transfer and a submission's invocation at
+     * Vercel's dearest region: the busiest org's 2,169 views cost $0.5528
+     * more than they did, so its measured total is $0.77182 and its floor is
+     * 2.6x rather than 9.1x. The other rows move the same way and their view
      * counts were not recorded, so they are left at the figures the
      * measurement produced rather than restated at a rate they were not read
      * under.
@@ -97,7 +99,7 @@ describe('orgMonthlyCogsUsd', () => {
       1,
     )
     expect(busiestRealOrg.basis).toBe('floor')
-    expect(busiestRealOrg.measuredUsd).toBeCloseTo(0.3528, 4)
+    expect(busiestRealOrg.measuredUsd).toBeCloseTo(0.7718, 4)
     const gap = INFRA_COGS_PER_SITE_USD / busiestRealOrg.measuredUsd
     expect(gap).toBeGreaterThan(1)
     expect(gap).toBeLessThan(100)
@@ -110,17 +112,18 @@ describe('orgMonthlyCogsUsd', () => {
     // rollups — so the thresholds cannot be calibrated against measurement
     // until at least one org crosses this line.
     //
-    // One site, page views alone: $2.00 / $0.00016153846 = 12,381 views/month.
-    // The busiest real org is at 2,169 — 18% of the way. It was 20,000 views
-    // until the 2026-09-09 re-peg raised what a view costs; the line moved
-    // toward the traffic rather than the traffic toward the line, which is
-    // the one direction that makes this threshold reachable sooner.
+    // One site, page views alone: $2.00 / $0.00035471473 = 5,638 views/month.
+    // The busiest real org is at 2,169 — 38% of the way. It was 20,000 views
+    // until the 2026-09-09 re-peg and 12,381 until the 2026-10-01 dearest-
+    // region re-price raised what a view costs; the line moved toward the
+    // traffic rather than the traffic toward the line, which is the one
+    // direction that makes this threshold reachable sooner.
     //
     // Derived from the rate rather than restated, so the boundary probes
     // below cannot drift from the constant that sets them.
     const breakEvenViews =
       INFRA_COGS_PER_SITE_USD / ORG_COGS_UNIT_RATES_USD.perPageView
-    expect(Math.round(breakEvenViews)).toBe(12_381)
+    expect(Math.round(breakEvenViews)).toBe(5_638)
     expect(orgMonthlyCogsUsd({ pageViews: Math.floor(breakEvenViews) }, 1).basis).toBe('floor')
     expect(orgMonthlyCogsUsd({ pageViews: Math.ceil(breakEvenViews) }, 1).basis).toBe('measured')
     // Assist is the one input that can clear the floor without any traffic at
@@ -160,12 +163,13 @@ describe('orgMonthlyCogsUsd', () => {
       { pageViews: 5_000_000, storageGb: 50, apiRequests: 2_000_000 },
       1,
     )
-    // 5M views × $0.00016153846 = $807.69 (AGL-2711 re-pegged the rate from
-    // $0.0001), plus 50 GB × $0.026 = $1.30 storage (AGL-1280 corrected that
-    // one from $0.03), plus $4 API.
-    expect(result.measuredUsd).toBeCloseTo(807.6923 + 1.3 + 4, 4)
+    // 5M views × $0.00035471473 = $1,773.57 (AGL-2711 re-pegged the rate
+    // from $0.0001; AGL-3444 priced its transfer at the dearest region), plus
+    // 50 GB × $0.026 = $1.30 storage (AGL-1280 corrected that one from
+    // $0.03), plus $4 API.
+    expect(result.measuredUsd).toBeCloseTo(1773.57365 + 1.3 + 4, 4)
     expect(result.basis).toBe('measured')
-    expect(result.cogsUsd).toBeCloseTo(812.9923, 4)
+    expect(result.cogsUsd).toBeCloseTo(1778.87365, 4)
   })
 
   it('prices the three meters the old costUsd ignored', () => {
@@ -296,10 +300,11 @@ describe('orgMonthlyCogsUsd', () => {
       { ...priced, workflowRuns: 900_000, actionRuns: 600_000 },
       2,
     )
-    // 1,500,000 × $0.000012 = $18.00, on one line.
-    expect(ORG_COGS_UNIT_RATES_USD.perRun).toBe(0.000012)
-    expect(withRuns.breakdown.runs).toBeCloseTo(18, 6)
-    expect(withRuns.measuredUsd - without.measuredUsd).toBeCloseTo(18, 6)
+    // 1,500,000 × $0.000013 = $19.50, on one line — the compute in a run
+    // priced at Vercel's dearest region (AGL-3444).
+    expect(ORG_COGS_UNIT_RATES_USD.perRun).toBe(0.000013)
+    expect(withRuns.breakdown.runs).toBeCloseTo(19.5, 6)
+    expect(withRuns.measuredUsd - without.measuredUsd).toBeCloseTo(19.5, 6)
     // Every OTHER breakdown line is untouched.
     for (const key of Object.keys(without.breakdown)) {
       if (key === 'runs') continue
@@ -307,14 +312,14 @@ describe('orgMonthlyCogsUsd', () => {
     }
     // Either counter alone reaches the line — a model that read only one of
     // the two would price half the automations an org runs.
-    expect(orgMonthlyCogsUsd({ workflowRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(12, 6)
-    expect(orgMonthlyCogsUsd({ actionRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(12, 6)
+    expect(orgMonthlyCogsUsd({ workflowRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(13, 6)
+    expect(orgMonthlyCogsUsd({ actionRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(13, 6)
     // …and the rate is really read: the same rollup moves with it.
     const rates = ORG_COGS_UNIT_RATES_USD as unknown as Record<string, number>
     const original = rates.perRun
     try {
       rates.perRun = original * 2
-      expect(orgMonthlyCogsUsd({ workflowRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(24, 6)
+      expect(orgMonthlyCogsUsd({ workflowRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(26, 6)
     } finally {
       rates.perRun = original
     }

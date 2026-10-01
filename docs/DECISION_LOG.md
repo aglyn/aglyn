@@ -92,6 +92,100 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-01 — Every price and band holds its margin in Vercel's dearest region: page views $0.70 and form submissions $0.07 per 1k, bands re-sized again (AGL-3444, AGL-1879)
+
+- **Decided by:** the account owner, 2026-10-01, after the band re-size earlier the same day priced an included gigabyte's CDN requests at Vercel's dearest region and its transfer at the cheapest: price every Vercel-billed cost at the dearest region — transfer, requests, and the function invocation inside any metered rate — raise the page-view overage so "at cost + 30%" holds in every region, and re-size the bands on that cost, each the largest multiple of 5 GB that clears the floor at the annual price after Stripe's fee. GCP-billed inputs stay as they are. This entry supersedes the two 2026-10-01 entries below it on the page-view rate and the bands.
+- **Scope:** pricing, packaging
+- **Evidence:** `ORG_COGS_UNIT_RATES_USD` and `METERED_UNIT_RATES_USD` — `perPageView` 0.00016153846 → **0.00035471473**, `perFormSubmission` 0.00005 → **0.000053846154** (identical in both tables), and `ORG_COGS_UNIT_RATES_USD.perRun` 0.000012 → **0.000013**; `PAGE_VIEW_CDN_REQUEST_COST_USD` 0.00011538462 → **0.00018374681**; `PLAN_ENTITLEMENTS[*].bandwidthGb` Starter **20**, Pro **35**, Business **55**, Scale **90**, Advanced **105**, Agency **485**, Enterprise fallback **970**; the transfer re-price named in `tools/scripts/lib/page-view-rate-calibration.mjs` (`TRANSFER_USD_PER_GB`), which `check:page-view-rate` reads; the Sept-1 `LOCKED` pin in `tools/scripts/check-pricing-drift.mjs` ($0.70, $0.07); `apps/console/specs/tier-margin-floor.spec.ts`; `published-pricing-table-parity.spec.ts`, transcribed from `/pricing` version `ZqxHI66ATZ`; `tools/marketing/pricing-copy/tables.json` (regenerated); `apps/docs/.../billing-and-plans/bandwidth.md`, `overview.md`; `docs/STRIPE_GO_LIVE.md`, `docs/PRICING_SURFACES.md`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-3444, AGL-1879.
+
+**Two charged prices move, and the bands move again.** Every 1,000 page views
+past a plan's band bills **$0.70** instead of $0.36, and every 1,000 form
+submissions **$0.07** instead of $0.065. Storage stays $0.0338 per GB-month. No
+plan price moves, and no Stripe object changes: the `aglyn_metered_usage`
+meter carries the month's billed cents, and no Stripe object carries a band.
+
+**Why the dearest region.** Vercel bills the CDN in the region that SERVES a
+visitor — transfer $0.15–$0.35 per GB, requests past the 10M allowance
+$2.00–$3.20 per million — and functions in their region at $0.128–$0.221 per
+hour of active CPU and $0.0106–$0.0183 per GB-hour of memory. A plan cannot
+choose where its visitors are, so the margin rule ("no plan under water at
+any utilization", 2026-09-09) and the published "infrastructure cost plus a
+30% margin" are both held at the dearest end.
+
+**The Vercel-billed inputs, and what each became.**
+
+| Input | Inside | Was | Now |
+|---|---|---|---|
+| CDN transfer | `perPageView` | $0.15/GB on the 1012.8 KB basis: $0.00016153846 a view | $0.35/GB: **$0.00035471473** (+$0.00019317627) |
+| CDN requests | `PAGE_VIEW_CDN_REQUEST_COST_USD` | 57.7 at $2.00/M: $0.00011538462 | 57.42 at $3.20/M: **$0.00018374681** (the measured 57, pinned up to land on the cent) |
+| Function invocation | `perFormSubmission` | $0.00005 (cheapest-region ledger $0.0000406) | 0.4 s all billed as active CPU at $0.221/hr, 2 GB at $0.0183/GB-hr, $0.60/M invocations, + the Firestore side: $0.0000526, ×1.3 = $0.0684/1k → **$0.07**: **$0.000053846154** |
+| Fluid compute | `perRun` (cost only) | ~$0.000001 of compute: $0.0000118 → $0.000012 | $0.0000017 of compute: $0.0000125 → **$0.000013** |
+
+**The overage, exactly.** ($0.354715 weight + $0.1824 for 57 requests at
+$3.20/M) × 1.3 = **$0.6982** per 1,000, rounded up to the cent: **$0.70**,
+the way the $0.36 was rounded. The request term is then pinned so the sum is
+exactly $0.538462 a thousand and the billed figure exactly $0.70 — "Our cost
+$0.538462 / You pay $0.70" on `/pricing`. The $0.73 estimate that preceded
+this scaled the whole weight term by $0.35/$0.15; only its transfer share is
+Vercel's, and the Firestore reads beside it do not move with the region.
+
+| Per 1,000, billed past a band | weight | requests | cost | billed | over cost |
+|---|---|---|---|---|---|
+| Page views, priced basis, dearest region | $0.354715 | $0.183747 | $0.538462 | **$0.70** | +30.0% |
+| Page views, as measured (748.5 KB), dearest | $0.262148 | $0.182400 | $0.444548 | $0.70 | +57.5% |
+| Form submissions, dearest region | — | — | $0.052622 | **$0.07** | +33.0% |
+
+**The bands, sized on $0.55748 an included gigabyte** ($0.36724 of weight and
+$0.19024 of requests), each the largest multiple of 5 GB that keeps the plan
+at or above zero at the annual price net of Stripe, every band at 100%, the
+CRM terms counted:
+
+| Plan | Sold until 10/01 | First re-size (10/01) | Now | Annual at 100%, first re-size at the dearest region | Annual at 100%, now | Monthly at 100%, now |
+|---|---|---|---|---|---|---|
+| Free | 2 GB | 2 GB | **2 GB** | no price | no price | no price |
+| Starter | 50 | 35 | **20 GB** | −42.1% | **+10.2%** | +40.4% |
+| Pro | 125 | 60 | **35 GB** | −29.4% | **+6.3%** | +33.4% |
+| Business | 185 | 90 | **55 GB** | −18.2% | **+1.5%** | +28.8% |
+| Scale | 290 | 145 | **90 GB** | −17.0% | **+0.1%** | +27.3% |
+| Advanced | 345 | 175 | **105 GB** | −12.7% | **+0.4%** | +24.6% |
+| Agency | 1,540 | 790 | **485 GB** | −16.1% | **+0.1%** | +18.8% |
+| Enterprise (fallback) | 3,080 | 1,580 | **970 GB** | no list price | no list price | no list price |
+
+At the dearest region the bands sold until 2026-10-01 read −44.4% (Advanced)
+to −122.4% (Pro) annually and are under water monthly on every tier. At the
+cheapest region the new bands read +9.9% (Advanced) to +44.1% (Starter)
+annually. Starter and Pro keep more room than the others only because 5 GB is
+a coarse step on a small band. Free does not move: the rule is a margin over a
+price and Free has none; its 2 GB give costs $1.11 a month at the dearest
+region, capped at 1×.
+
+**Deliberately not changed.** Storage ($0.026/GB-mo, GCS) and every other
+GCP-billed input — dataset storage, contacts, the Firestore reads and writes
+inside a page view, a submission and a run — are priced as they were. Email
+(the sending provider) and assist credits (the AI provider) are not
+Vercel-billed. `perApiRequest` is priced off the reads behind a request and
+carries no Vercel term to re-price, although every API request is also a
+function invocation the model has never counted. The edge/ISR share inside
+the 627 KB calibration (~$0.0000003 a view) is not re-priced separately; its
+dearest-region difference is inside the cent the overage rounds up to.
+
+**What it leaves open.** The calibration prices a Firestore read at $0.03 per
+100,000 — the single-region list — while the database is in `nam5`, at $0.06;
+GCP is outside this decision. And `perApiRequest` omits the function
+invocation an API request is.
+
+**Existing subscribers.** No outside organization holds a paid plan: on
+2026-10-01 production was read and the only organizations carrying one are
+the account owner's own four. Nothing is carried to a renewal; the rates and
+bands apply from the production deploy.
+
+**Published surfaces.** `/pricing` was republished on 2026-10-01 to version
+`ZqxHI66ATZ` with the $0.36 rate and the first re-size, ahead of billing. The
+final figures are republished the same way — before the promotion that bills
+them — so the page never quotes less than production charges.
+
+---
+
 ## 2026-10-01 — Included bandwidth bands re-sized past Vercel's 10M (AGL-3444)
 
 - **Decided by:** the account owner, 2026-10-01, on AGL-3444, asked whether to shrink the included bandwidth bands now or wait, after AGL-1879 showed every annual plan under water at 100% of its bands once the platform is past Vercel Pro's 10,000,000 included CDN requests a month: shrink them now. The sizes below apply his standing 2026-09-09 rule — neither a monthly nor an annual plan under water at any utilization — at the dearest CDN request region; that region is the reading of "any utilization" this entry makes, and the cheapest-region alternative is recorded below.

@@ -390,19 +390,20 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   })
 
   it('publishes the metered rates, to six decimals where needed', () => {
-    // $0.0338/GB-mo and $0.065/1k form submissions locked 2026-08-18; page
-    // views re-pegged to $0.21/1k on 2026-09-09 (AGL-2711), then $0.36/1k
-    // once a billed view carried its CDN requests (AGL-1879). Asserted on the
-    // generator's OUTPUT rather than on the constants, because two-decimal
-    // formatting would round the cost and the +30% columns into agreement and
-    // publish a table that looks internally consistent while stating neither
-    // figure.
+    // $0.0338/GB-mo locked 2026-08-18; page views re-pegged to $0.21/1k on
+    // 2026-09-09 (AGL-2711), then $0.36/1k once a billed view carried its CDN
+    // requests (AGL-1879), then $0.70/1k — and form submissions $0.065 →
+    // $0.07/1k — once every Vercel-billed input was priced at the dearest
+    // region (AGL-3444). Asserted on the generator's OUTPUT rather than on the
+    // constants, because two-decimal formatting would round the cost and the
+    // +30% columns into agreement and publish a table that looks internally
+    // consistent while stating neither figure.
     //
-    // The page-view row is where that formatting earns its keep. Its cost is
-    // $0.276923 / 1k — weight plus requests, pinned so the PRICE is round,
-    // which leaves the cost a long decimal — and the price beside it must
-    // still read $0.36, computed from the unrounded cost rather than from the
-    // six-decimal figure printed beside it.
+    // The page-view and form rows are where that formatting earns its keep.
+    // Their costs are $0.538462 and $0.053846 / 1k — pinned so the PRICE is
+    // round, which leaves the cost a long decimal — and the prices beside
+    // them must still read $0.70 and $0.07, computed from the unrounded cost
+    // rather than from the six-decimal figure printed beside it.
     resetFixtures()
     const run = check()
     assert.equal(run.status, 0)
@@ -413,10 +414,10 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
         ['Media & file storage', '$0.026 / GB-mo', '$0.0338 / GB-mo'],
         [
           'Page views (bandwidth + reads)',
-          '$0.276923 / 1k views',
-          '$0.36 / 1k views',
+          '$0.538462 / 1k views',
+          '$0.70 / 1k views',
         ],
-        ['Form submissions', '$0.05 / 1k', '$0.065 / 1k'],
+        ['Form submissions', '$0.053846 / 1k', '$0.07 / 1k'],
       ],
     )
   })
@@ -484,7 +485,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // declaration, and the report names the value it was excused at.
     assert.match(
       run.stderr,
-      /Scale · spec 6 .*code=145 GB bandwidth {2}frame=9 TB bandwidth {2}\(declared stale value was 290 GB bandwidth\)/,
+      /Scale · spec 6 .*code=90 GB bandwidth {2}frame=9 TB bandwidth {2}\(declared stale value was 290 GB bandwidth\)/,
     )
   })
 

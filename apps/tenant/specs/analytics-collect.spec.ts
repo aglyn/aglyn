@@ -642,7 +642,8 @@ describe('dwell time (AGL-2182)', () => {
  * behalf.
  *
  * ⚠️ Free's ceiling is the FLOOR (100,000), not 3× its 2 GB band (~6,212).
- * Starter's is 3× its 35 GB band (108,709). 105,000 views therefore sits
+ * Pro's is 3× its 35 GB band (108,709) — Starter's 20 GB is under the floor
+ * too, so Pro is the paid plan of the pair. 105,000 views therefore sits
  * between them, which is what makes the plan pair below a real forced branch
  * rather than two runs of the same arithmetic.
  */
@@ -738,10 +739,10 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
   })
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
-    // Same traffic, same route, same month — only the plan differs. Starter's
+    // Same traffic, same route, same month — only the plan differs. Pro's
     // ceiling is 108,709 — 35 GB of views times three — so 105,000 is still
     // ordinary growth and nothing happens.
-    mockOrgForHost = { $id: 'org-1', plan: 'starter' }
+    mockOrgForHost = { $id: 'org-1', plan: 'pro' }
     plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toBeUndefined()
@@ -753,7 +754,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // plan, but only an UNCOMPENSATED overage changes what a visitor sees.
     // A metered plan's traffic bills, so taking the site down would trade a
     // bill the customer agreed to for an outage they did not.
-    mockOrgForHost = { $id: 'org-1', plan: 'starter' }
+    mockOrgForHost = { $id: 'org-1', plan: 'pro' }
     plantMonthViews(1_000_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({ ceiling: 108_709, degraded: false })

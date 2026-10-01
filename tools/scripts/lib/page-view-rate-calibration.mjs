@@ -113,22 +113,54 @@
  * Cost per encoded KB of page weight, fixed by the original calibration.
  *
  * $0.0001 per view was measured against a 627 KB cold load, and that pairing
- * is the only thing here that is not re-derived: it carries the Firestore
- * reads and the edge/ISR share of a render as well as the transfer, so it is
- * not a bandwidth price and must not be re-based on an egress rate card.
+ * is not re-derived: it carries the Firestore reads and the edge/ISR share of
+ * a render as well as the transfer, so it is not a bandwidth price and must
+ * not be re-based on an egress rate card as a whole.
  *
  * The 2026-09-09 re-peg (AGL-2711) did NOT move this pair. It moved the weight
  * the pair is applied to, from 627 KB to 1012.8 KB. Keeping the anchor fixed
- * is what makes the new rate checkable: a re-peg that also re-based the cost
- * per KB would be two changes wearing one number, and no gate could tell which
- * of them a later edit had undone.
+ * is what makes the rate checkable: a re-peg that also re-based the cost per
+ * KB would be two changes wearing one number, and no gate could tell which of
+ * them a later edit had undone. The one re-pricing the anchor does take is
+ * named separately below: its TRANSFER share, at the dearest region.
  *
  * @see PAGE_VIEW_CALIBRATION_BASIS_KB
+ * @see TRANSFER_REPRICE_USD_PER_GB
  */
 export const CALIBRATED_USD_PER_VIEW = 0.0001
 
 /** The encoded page weight `CALIBRATED_USD_PER_VIEW` was measured against. */
 export const PAGE_VIEW_CALIBRATION_BASIS_KB = 627
+
+/**
+ * The CDN's transfer price per GB in the region the calibration priced — the
+ * cheapest — and in the dearest, where the rate is priced (AGL-3444).
+ *
+ * The CDN bills transfer in the region that serves a visitor, from $0.15 to
+ * $0.35 per GB, and "at cost + 30%" has to hold wherever that is. The
+ * calibration's ~$0.000088 of transfer on a 627 KB page was the $0.15 figure;
+ * the reads and the edge/ISR share beside it are not transfer and do not move.
+ * So the anchor stays, and every KB of page carries the $0.20-a-GB difference
+ * on top of it — a separate, named term rather than a re-based anchor, for
+ * the reason the anchor's own docblock gives.
+ */
+export const TRANSFER_USD_PER_GB = Object.freeze({ calibrated: 0.15, priced: 0.35 })
+
+/** KB in one GB — binary, the unit a `bandwidthGb` band is denominated in. */
+const KB_PER_GB = 1024 * 1024
+
+/** What the transfer re-price adds to every KB of page weight. */
+export const TRANSFER_REPRICE_USD_PER_GB =
+  TRANSFER_USD_PER_GB.priced - TRANSFER_USD_PER_GB.calibrated
+
+/**
+ * Dollars per encoded KB of page weight: the calibration's, with its transfer
+ * share at the dearest region. The one per-KB figure both directions below
+ * use.
+ */
+export const USD_PER_KB =
+  CALIBRATED_USD_PER_VIEW / PAGE_VIEW_CALIBRATION_BASIS_KB +
+  TRANSFER_REPRICE_USD_PER_GB / KB_PER_GB
 
 /**
  * The grid `pricedForKb` and `measuredKb` are recorded on: a tenth of a KB.
@@ -156,7 +188,7 @@ const toRecordedKb = (kb) => Math.round(kb * KB_GRID) / KB_GRID
  * the gate compares against, for the reason `basisKbForRate` gives.
  */
 export function rateForWeightKb(weightKb) {
-  return (CALIBRATED_USD_PER_VIEW * weightKb) / PAGE_VIEW_CALIBRATION_BASIS_KB
+  return USD_PER_KB * weightKb
 }
 
 /**
@@ -164,10 +196,10 @@ export function rateForWeightKb(weightKb) {
  *
  * The comparison runs in THIS direction, in kilobytes, rather than forwards in
  * dollars, because the checked-in rate is not a round number of dollars per
- * view and cannot be. It is pinned so its marked-up figure is round: $0.21 per
- * 1,000 views is $0.00016153846 per view once `METERED_MARKUP` is divided out,
- * and no rounding of dollars-per-view reproduces that from a weight. (The
- * published $0.36 adds the CDN request term, which this module does not read.)
+ * view and cannot be. It is pinned at eleven decimals — $0.00035471473 a view
+ * for 1012.8 KB — and no rounding of dollars-per-view reproduces a weight on
+ * the tenth-of-a-KB grid. (The published $0.70 adds the CDN request term,
+ * which this module does not read.)
  *
  * Kilobytes have no such problem. The record already writes both weights to a
  * tenth of a KB, so rounding the recovered weight to the same grid compares
@@ -179,13 +211,11 @@ export function rateForWeightKb(weightKb) {
  * $0.00016 is one part in a hundred and sixty.
  */
 export function basisKbForRate(rate) {
-  return toRecordedKb(
-    (rate * PAGE_VIEW_CALIBRATION_BASIS_KB) / CALIBRATED_USD_PER_VIEW,
-  )
+  return toRecordedKb(rate / USD_PER_KB)
 }
 
 /** Bytes in one gigabyte, the unit a `bandwidthGb` band is denominated in. */
-const BYTES_PER_GB = 1024 * 1024 * 1024
+const BYTES_PER_GB = KB_PER_GB * 1024
 
 /**
  * The page weight `ESTIMATED_PAGE_TRANSFER_BYTES` states, on the same grid
@@ -201,10 +231,11 @@ export function basisKbForTransferBytes(bytes) {
 }
 
 /**
- * What one GB of included bandwidth costs, from the pair.
+ * What one GB of included bandwidth costs in WEIGHT, from the pair.
  *
- * This is the quantity every `bandwidthGb` band was sized against and the one
- * neither constant states on its own. Reported rather than compared: the
+ * This, with the CDN request term the same views make, is the quantity every
+ * `bandwidthGb` band is sized against, and the one neither constant states on
+ * its own. Reported rather than compared: the
  * comparison runs in kilobytes for the same reason `basisKbForRate` does, and
  * a reader looking at a red needs the dollars to see what it cost.
  */

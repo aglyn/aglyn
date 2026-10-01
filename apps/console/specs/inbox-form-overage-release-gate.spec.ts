@@ -273,13 +273,14 @@ import { POST } from '../app/api/billing/report-usage/route'
 
 /**
  * Starter includes `hostLimit (1) x formSubmissionsPerMonth (200)` = 200.
- * 10,200 submissions leaves 10,000 billable at $0.00005 = $0.50 at cost, which
- * is 65c after the 1.3 markup. Chosen to land on a whole cent so the assertion
- * is exact rather than a rounding tolerance.
+ * 10,200 submissions leaves 10,000 billable at $0.000053846154 = $0.53846154
+ * at cost, which is 70c after the 1.3 markup — the $0.07 per 1,000 the rate is
+ * pinned to. Chosen to land on a whole cent so the assertion is exact rather
+ * than a rounding tolerance.
  */
 const SUBMISSIONS = 10_200
-const WITHHELD_USD = 0.5
-const BILLED_CENTS = 65
+const WITHHELD_USD = 0.53846154
+const BILLED_CENTS = 70
 
 function seed(options: {
   submissions?: number

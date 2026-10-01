@@ -71,7 +71,10 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  * The published terms are "at cost + 30%", and the markup is applied to the
  * figures in THIS table, so a wrong rate here does not make us expensive, it
  * makes the published claim false. Corrected 2026-08-09 (AGL-1280); the
- * page-view rate re-pegged 2026-09-09 (AGL-2711). A page view billed past its
+ * page-view rate re-pegged 2026-09-09 (AGL-2711); page views and form
+ * submissions re-priced at Vercel's DEAREST region 2026-10-01 (AGL-3444),
+ * because the CDN bills in the region that serves a visitor and "at cost +
+ * 30%" has to be true in every one of them. A page view billed past its
  * band also carries `PAGE_VIEW_CDN_REQUEST_COST_USD` — see
  * {@link METERED_OVERAGE_COST_USD} — which this table does not, because
  * `perPageView` here is the weight-proportional cost the COGS table shares.
@@ -85,14 +88,19 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  *
  * - `storagePerGbMonth` **0.026** (2026-08-09) — GCS Standard **US
  *   multi-region** list, the SKU actually on our invoice. Was 0.03, ~15% over.
- * - `perPageView` **0.00016153846** (2026-09-09, AGL-2711) — folds bandwidth
- *   (~1.0 MB avg transfer at ~$0.15/GB, see `ESTIMATED_PAGE_TRANSFER_BYTES`,
- *   which states this same page in bytes and moves only with this rate)
- *   together with the Firestore reads behind a render. The per-KB cost is the
- *   one AGL-1280 fixed on 2026-08-09: a real cold tenant page load of 24
- *   requests and **627 KB encoded** gave ~$0.000088 transfer + ~40 reads @
- *   $3e-7 + edge/ISR ≈ **$0.000102**, i.e. $0.0001 within +2%. What moved is
- *   the weight that cost is applied to, not the cost model.
+ * - `perPageView` **0.00035471473** (2026-10-01, AGL-3444) — folds bandwidth
+ *   (~1.0 MB avg transfer, see `ESTIMATED_PAGE_TRANSFER_BYTES`, which states
+ *   this same page in bytes and moves only with this rate) together with the
+ *   Firestore reads behind a render. The per-KB cost is the one AGL-1280 fixed
+ *   on 2026-08-09 — a real cold tenant page load of 24 requests and **627 KB
+ *   encoded** gave ~$0.000088 transfer at Vercel's cheapest $0.15/GB + ~40
+ *   reads @ $3e-7 + edge/ISR ≈ **$0.000102**, i.e. $0.0001 within +2% — with
+ *   its TRANSFER share re-priced at Vercel's dearest $0.35/GB: $0.20 more per
+ *   GB of page, which on the 1012.8 KB basis is $0.00019317627 a view on top
+ *   of the $0.00016153846 the cheapest region priced. The reads are GCP's and
+ *   do not move with the region; the edge/ISR share (~$0.0000003 a view on
+ *   the calibration page, 1.6× at the dearest region) sits inside the cent the
+ *   billed rate rounds up to (see `PAGE_VIEW_CDN_REQUEST_COST_USD`).
  *
  *   The rate now prices a **1012.8 KB** page. A cold load of `aglyn.com/`
  *   settles at **976.1 KB** of first-party encoded bytes, measured on
@@ -108,18 +116,26 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  *   `tools/tenant-page-budget.json` under `wireCalibration`, and
  *   `npm run check:page-view-rate` fails if a later measurement pushes a
  *   published page back above the weight this rate is priced for.
- * - `perFormSubmission` **0.00005** (2026-08-09) — measured from
- *   `apps/tenant/app/api/forms/submit/route.ts`: ~12 Firestore reads, ~9
- *   writes, one ~0.4s function invocation. No email is sent
- *   (`notifyHostManagers` is in-app only) and there is no reCAPTCHA
+ * - `perFormSubmission` **0.000053846154** (2026-10-01, AGL-3444) — measured
+ *   from `apps/tenant/app/api/forms/submit/route.ts` on 2026-08-09: ~12
+ *   Firestore reads, ~9 writes, one ~0.4s function invocation. No email is
+ *   sent (`notifyHostManagers` is in-app only) and there is no reCAPTCHA
  *   assessment — spam control is a honeypot plus a Firestore rate limiter.
- *   Was 0.0005, 8-13x over; the invoice corroborates it directly, since the
- *   whole platform's 2,790 July entity writes billed $0.000000.
+ *   Priced with the invocation at Vercel's DEAREST region and the whole
+ *   0.4 s billed as active CPU, because nothing measured splits it from I/O
+ *   wait: 0.4 s × $0.221/hour of CPU ($0.0000246) + 2 GB (the Pro default) ×
+ *   0.4 s × $0.0183/GB-hour of memory ($0.0000041) + $0.60 per million
+ *   invocations ($0.0000006), and the Firestore side at nam5 list — 12 reads
+ *   × $0.0000006 + 9 writes × $0.0000018 ($0.0000234). $0.0000526 a
+ *   submission, ×1.3 is $0.0684 per 1,000, rounded up to $0.07 and pinned
+ *   so the billed figure lands on it: $0.07 ÷ 1.3 ÷ 1,000. The cheapest
+ *   region's same ledger is $0.0000406, which is what the $0.00005 it
+ *   replaced covered.
  */
 export const METERED_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,
-  perPageView: 0.00016153846,
-  perFormSubmission: 0.00005,
+  perPageView: 0.00035471473,
+  perFormSubmission: 0.000053846154,
 }
 
 /**
@@ -144,8 +160,8 @@ export const METERED_OVERAGE_COST_USD = {
 
 /**
  * What a customer is CHARGED per unit past the included band: the overage
- * cost above times {@link METERED_MARKUP} — $0.0338/GB-month, $0.36 per 1,000
- * page views, $0.065 per 1,000 form submissions.
+ * cost above times {@link METERED_MARKUP} — $0.0338/GB-month, $0.70 per 1,000
+ * page views, $0.07 per 1,000 form submissions.
  *
  * The rate above is our cost; this is the published price, and they are three
  * decimal places apart. A billing surface that printed the cost table would be

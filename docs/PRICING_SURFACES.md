@@ -145,27 +145,51 @@ can see it, so the body of the page can be entirely correct while search
 results and every shared link still advertise the old price. Fix it in the
 same pass as the body; it is a different field and it will not follow.
 
-### Owed with the next promotion: the page-view rate and the bandwidth bands
+### 2026-10-01 — republished AHEAD of billing, and the rule that makes that safe
 
-Two 2026-10-01 changes are in code and not yet on any published surface: the
-page-view overage, $0.21 → $0.36 per 1,000 (AGL-1879), and the paid bandwidth
-bands, 50 · 125 · 185 · 290 · 345 GB · 1.54 TB → 35 · 60 · 90 · 145 · 175 ·
-790 GB (AGL-3444). The second is the page AHEAD of the code — it promises more
-bandwidth than a plan includes — so both are republished in one pass once the
-promotion carrying them is live:
+When a price rises — or a band shrinks, which is the same thing — the page goes
+first, so that from the republish until the deploy it quotes more than
+production bills (or promises less than production includes), never the
+reverse. A page quoting less than checkout is the urgent direction above; a
+page quoting more for a day is not.
 
-- `/pricing`: the page-view cell, the six bandwidth cells of the compare table,
-  and the Scale room-to-grow strip's "290 GB bandwidth".
+On 2026-10-01 `/pricing` (screen `v0clP6xQl-`) was republished to version
+`ZqxHI66ATZ`, "Page views $0.36 and bandwidth bands (AGL-1879, AGL-3444)": the
+page-view cell `aQCceq6U4W` to "$0.36 / 1,000"; the bandwidth row to 35 · 60 ·
+90 · 145 · 175 · 790 GB in BOTH the desktop compare table (`C3oFLVp_Ct`,
+`xyyWBGRcwZ`, `57wlzIAcAq`, `P9rbaJ3Wmd`, `11Bq-jNDQh`, `IjzIRIwOGn`) and the
+six mobile plan panels (`4pyJAdNqX5`, `eBq4LpeK4g`, `nGHS0TH9oX`,
+`XXmf0O3gfa`, `1wzSCLDebB`, `Q5xiBvBks3`); and the Scale room-to-grow strip
+to "145 GB bandwidth" in `1vMwEC7XXV` and `_99Id5AtWv`. `/alternatives/webflow`
+(screen `gQUbX_KOk7`) went to version `zTbkt6ySIS`, quoting $0.36 per 1,000,
+and the calculator's site variables followed.
+
+⚠️ The mobile panels are not in the served payload a `curl` reads, so a
+transcription taken off the HTML finds the desktop cells only. Edit by node in
+the besigner, and count the nodes a row lives in before calling it done.
+
+### Owed before the next promotion: the dearest-region rates and bands
+
+The same day every Vercel-billed cost moved to Vercel's dearest region
+(AGL-3444): page views $0.36 → $0.70 and form submissions $0.065 → $0.07 per
+1,000, and the bands 35 · 60 · 90 · 145 · 175 · 790 → 20 · 35 · 55 · 90 · 105 ·
+485 GB. Per the rule above they are republished BEFORE the promotion that
+bills them:
+
+- `/pricing`: the page-view cell (`aQCceq6U4W`) and the form-submission cell
+  (`_4aeO1e1lf`), the six desktop bandwidth cells and the six mobile panels
+  above, and the Scale strip in both nodes.
+- `/alternatives/webflow`: the sentence quoting the three metered rates.
 - The pricing calculator (`/resources/pricing-calculator`) and the simple cost
   sheet (`/resources/multi-site-cost-sheet`) read Aglyn's figures from SITE
   VARIABLES rather than from the page body: `plan_rates.page_views_per_1k`
-  and, per paid plan, `plan_<id>.bandwidth_gb`, `.views` and
-  `.views_ceiling`. No parity spec reads them, so a rate or band change owes
-  them an edit too.
+  and `.forms_per_1k`, and, per paid plan, `plan_<id>.bandwidth_gb`, `.views`
+  and `.views_ceiling`. No parity spec reads them, so a rate or band change
+  owes them an edit too.
 - The four Figma frames, declared stale in `build-pricing-tables.mts` until
   they are redrawn.
 
-The parity spec pins both gaps by name; fold each back into one row with the
+The parity spec pins each gap by name; fold each back into one row with the
 version id when the page catches up.
 
 ## Enterprise has no price here, but it has bands

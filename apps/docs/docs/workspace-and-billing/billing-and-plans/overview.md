@@ -43,7 +43,7 @@ storefront orders, paid memberships and paid bookings alike — separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
 
 Every plan also includes an amount of monthly **traffic** — 2 GB on Free, rising to
-1,580 GB on Enterprise by default (an agreement can set more). Passing it is metered and
+970 GB on Enterprise by default (an agreement can set more). Passing it is metered and
 billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
 

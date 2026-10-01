@@ -231,9 +231,9 @@ describe('the bands are real, and the plan is what selects them', () => {
       { workflowRuns: 500_000, actionRuns: 250_000 } as never,
       0,
     )
-    // 750,000 × $0.000012 = $9.00.
-    expect(withRuns.measuredUsd).toBeCloseTo(9, 6)
-    expect(withRuns.breakdown.runs).toBeCloseTo(9, 6)
+    // 750,000 × $0.000013 = $9.75.
+    expect(withRuns.measuredUsd).toBeCloseTo(9.75, 6)
+    expect(withRuns.breakdown.runs).toBeCloseTo(9.75, 6)
     // CONTROL: a rollup with no runs prices no runs, so the figure above is
     // the two fields and not the model pricing something else.
     expect(orgMonthlyCogsUsd({ pageViews: 500_000 } as never, 0).breakdown.runs).toBe(0)
@@ -249,10 +249,10 @@ describe('the bands are real, and the plan is what selects them', () => {
     // Business sells 50,000 workflow runs and 50,000 action runs.
     expect(row.bands.workflowRuns.fraction).toBeCloseTo(0.5, 9)
     expect(row.bands.actionRuns.fraction).toBeCloseTo(0.1, 9)
-    // …and contributed 36¢ to what the org cost — under the $2 per-site
+    // …and contributed 39¢ to what the org cost — under the $2 per-site
     // floor, so the floor is still the figure, but the meter is no longer
     // reading as free.
-    expect(row.cogs.measuredUsd).toBeCloseTo(0.36, 6)
+    expect(row.cogs.measuredUsd).toBeCloseTo(0.39, 6)
     expect(row.cogs.basis).toBe('floor')
   })
 
@@ -488,25 +488,26 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces the metered part of Agency’s pinned $1,017.12 at full utilization', () => {
-    // `tier-margin-floor.spec.ts` pins Agency at $1,017.12 a month with every
-    // band at 100%. $766.12 of that is the eight metered axes this module
-    // prices; the $251 between them is the terms the rollup has no meter
-    // for — the two CRM decision terms, a seat a month per collaborator and
-    // the one-to-one email cap ($100), and the CDN requests the included
-    // bandwidth makes past the hosting plan's allowance, at the dearest
-    // region ($151). Reaching the metered part through this module's band
-    // table and `orgMonthlyCogsUsd` is what says the two files agree about
-    // the most expensive self-serve tier — the one whose uncapped band once
-    // made it read as the cheapest.
+  it('reproduces the metered part of Agency’s pinned $1,016.99 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $1,016.99 a month with every
+    // band at 100%. $824.73 of that is the eight metered axes this module
+    // prices; the $192.26 between them is what the rollup has no meter for
+    // here — the assist band ($58), the two CRM decision terms, a seat a
+    // month per collaborator and the one-to-one email cap ($42), and the CDN
+    // requests the included bandwidth makes past the hosting plan's
+    // allowance at the dearest region ($92.27). Reaching the metered part
+    // through this module's band table and `orgMonthlyCogsUsd` is what says
+    // the two files agree about the most expensive self-serve tier — the one
+    // whose uncapped band once made it read as the cheapest.
     //
     // The bandwidth axis is what moves this figure, and it moves through the
     // COST OF A GIGABYTE rather than through `perPageView` alone: Agency's
-    // 790 GB band converts to 817,906 included page views at
-    // `ESTIMATED_PAGE_TRANSFER_BYTES`, and each weighs $0.00016153846, which
-    // is $0.16724 a gigabyte and $132.12 of the total.
+    // 485 GB band converts to 502,132 included page views at
+    // `ESTIMATED_PAGE_TRANSFER_BYTES`, and each weighs $0.00035471473 with
+    // its transfer at the CDN's dearest region, which is $0.36724 a gigabyte
+    // and $178.11 of the total.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(766.12, 2)
+    expect(cogs.cogsUsd).toBeCloseTo(824.73, 2)
     expect(cogs.basis).toBe('measured')
   })
 

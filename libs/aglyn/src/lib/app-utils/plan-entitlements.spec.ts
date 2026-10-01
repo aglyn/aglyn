@@ -558,7 +558,7 @@ describe('plan entitlements', () => {
         .bandwidthGb,
     ).toBe(UNLIMITED)
     // CONTROL: without the override the fallback stands.
-    expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).bandwidthGb).toBe(1_580)
+    expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).bandwidthGb).toBe(970)
   })
 
   it('reports no list-price revenue for an enterprise org without a deal price', () => {
