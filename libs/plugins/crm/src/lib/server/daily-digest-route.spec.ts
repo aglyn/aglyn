@@ -443,13 +443,16 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
     const [annMail, bobMail] = mockSent
     expect(annMail).toMatchObject({
       to: ['ann@acme.com'],
-      subject: 'Your CRM today: 1 task due today, 1 overdue, 1 unworked lead',
+      subject: 'Your Acme CRM today: 1 task due today, 1 overdue, 1 unworked lead',
       context: 'crm-daily-digest',
       priority: 'bulk',
       fromName: 'Aglyn',
     })
-    expect(annMail.text).toContain('Overdue (1)\n- Call Jane · Thu, Sep 3, 8:00 AM')
-    expect(annMail.text).toContain('Due today (1)\n- Send proposal · Sat, Sep 5, 9:00 AM')
+    expect(annMail.text).toMatch(
+      /^Here is your Aglyn CRM in Acme for Saturday, September 5: 1 task due today, 1 overdue, 1 unworked lead\./,
+    )
+    expect(annMail.text).toContain('Overdue (1)\n- Call Jane · Main site · Thu, Sep 3, 8:00 AM CDT\n')
+    expect(annMail.text).toContain('Due today (1)\n- Send proposal · Main site · Sat, Sep 5, 9:00 AM CDT\n')
     expect(annMail.text).toContain('- jane@example.com · Main site · first seen Sep 2')
     expect(annMail.text).toContain(
       'Open your tasks: https://app.aglyn.com/acme/hosts/main/crm/tasks',

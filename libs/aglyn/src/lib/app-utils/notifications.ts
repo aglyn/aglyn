@@ -724,6 +724,10 @@ export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
   new Set<AglynNotificationType>([
     'content.crmDailyDigest',
     'content.insightsDigest',
+    // The task-reminders route mails one reminder per member per run, listing
+    // every task due, and writes one notification per task; mailed again
+    // here, each task would arrive a second time as its own email (AGL-3432).
+    'content.taskReminder',
     // Emailed by `notifyRiskEvent` itself, as account mail (AGL-3368).
     'system.riskNotice',
   ])

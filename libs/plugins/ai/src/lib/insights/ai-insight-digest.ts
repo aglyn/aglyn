@@ -178,7 +178,12 @@ function previousWeek(now: Date): string {
   return aiInsightIsoWeek(new Date(now.getTime() - 7 * 86_400_000))
 }
 
-/** A digest email's words: the insights, the site's Analytics page, and where to turn it off. */
+/**
+ * A digest email's words: the insights, the site's Analytics page, and where
+ * to turn it off. The digest is an AI job metered against the workspace, so
+ * it says what it drew, and it names the workspace a member of several asked
+ * for it in.
+ */
 export function aiInsightDigestEmailText(input: {
   siteName: string
   productName: string
@@ -186,9 +191,20 @@ export function aiInsightDigestEmailText(input: {
   /** Absolute links, or `null` where no console origin is configured to build one from. */
   analyticsUrl: string | null
   settingsUrl: string | null
+  /** The workspace the digest was asked for in; `''` falls back to "this workspace". */
+  workspaceName?: string
+  /** The AI credits the digest's job drew; 0 or absent says nothing. */
+  creditsSpent?: number
 }): string {
+  const workspace = input.workspaceName?.trim() || ''
+  const credits = Math.max(0, Math.round(Number(input.creditsSpent) || 0))
+  const drew = credits
+    ? ` Writing it used ${credits.toLocaleString('en-US')} of ` +
+      `${workspace ? `${workspace}’s` : 'the workspace’s'} AI credits.`
+    : ''
+  const forWhom = workspace || 'this workspace'
   return [
-    `Here is what ${input.siteName}'s figures showed this week.`,
+    `Here is what ${input.siteName}'s figures showed this week.${drew}`,
     '',
     ...input.insights.map((insight, index) => `${index + 1}. ${insight.text}`),
     '',
@@ -197,8 +213,8 @@ export function aiInsightDigestEmailText(input: {
       : `Each of these is traced to the figures it cites. See them on the site's Analytics page in ${input.productName}.`,
     '',
     input.settingsUrl
-      ? `You asked for weekly insights for this workspace. Turn them off in Notifications: ${input.settingsUrl}`
-      : `You asked for weekly insights for this workspace. Turn them off in your Notifications settings.`,
+      ? `You asked for weekly insights for ${forWhom}. Turn them off in Notifications: ${input.settingsUrl}`
+      : `You asked for weekly insights for ${forWhom}. Turn them off in your Notifications settings.`,
   ].join('\n')
 }
 
@@ -372,6 +388,8 @@ async function deliverOrgDigest(
             insights: record.insights,
             analyticsUrl,
             settingsUrl: origin ? `${origin}/manage/notifications` : null,
+            workspaceName: str(org['name']),
+            creditsSpent: job.creditsSpent,
           }),
           fromName: branding.fromName,
           siteName: site.name,

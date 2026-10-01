@@ -314,6 +314,7 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
 
   const branding = resolveBrandingProfile(org)
   const orgSlug = String(org['slug'] ?? '')
+  const workspaceName = String(org['name'] ?? '').trim() || orgSlug
   const orgHub = orgSlug ? `${ctx.origin}${buildRoute(Route.ORG_HOME, { orgSlug })}/crm` : null
   const hubUrl = (hostId: string): string | null => {
     if (!hostId) return orgHub
@@ -387,6 +388,7 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
         tasks,
         timeZone,
         productName: branding.productName,
+        workspaceName,
         taskUrl,
         settingsUrl,
         supportLine,
@@ -435,7 +437,7 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
       await notifyUsers([uid], {
         type: 'content.taskReminder',
         title: 'Task reminder',
-        body: composeCrmTaskReminderBody(task, timeZone),
+        body: composeCrmTaskReminderBody(task, timeZone, workspaceName),
         link: crmTaskReminderLink(task.hostId || null, task),
         orgId,
         ...(task.hostId ? { hostId: task.hostId } : {}),

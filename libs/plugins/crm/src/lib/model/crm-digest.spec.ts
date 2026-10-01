@@ -196,6 +196,10 @@ describe('what the digest says', () => {
     expect(composeCrmDigestSubject({ today: 0, overdue: 0, leads: 2 })).toBe(
       'Your CRM today: 2 unworked leads',
     )
+    // Sent per workspace, so a member of two can tell the mails apart (AGL-3432).
+    expect(composeCrmDigestSubject({ today: 0, overdue: 0, leads: 2 }, 'Acme Co')).toBe(
+      'Your Acme Co CRM today: 2 unworked leads',
+    )
   })
 
   it('writes the email with every section, its links and the way out', () => {
@@ -204,6 +208,7 @@ describe('what the digest says', () => {
       nowMs: now,
       timeZone: 'America/Chicago',
       productName: 'Aglyn',
+      workspaceName: 'Acme Co',
       tasksUrl: 'https://app.example/acme/hosts/main/crm/tasks',
       leadsUrl: (hostId) => `https://app.example/acme/hosts/${hostId}/crm/leads`,
       settingsUrl: 'https://app.example/manage/notifications',
@@ -241,11 +246,13 @@ describe('what the digest says', () => {
         ],
       },
     })
-    expect(text).toContain(
-      'Here is your Aglyn CRM for Saturday, September 5: 1 task due today, 1 overdue, 1 unworked lead.',
+    // The system email shows only this body, so it names the workspace
+    // (AGL-3432), and each task line names its site as a lead line does.
+    expect(text).toMatch(
+      /^Here is your Aglyn CRM in Acme Co for Saturday, September 5: 1 task due today, 1 overdue, 1 unworked lead\.\n/,
     )
-    expect(text).toContain('Overdue (1)\n- Call Jane · Tue, Sep 1, 9:00 AM')
-    expect(text).toContain('Due today (1)\n- Send proposal · Sat, Sep 5, 3:30 PM')
+    expect(text).toContain('Overdue (1)\n- Call Jane · Site main · Tue, Sep 1, 9:00 AM CDT\n')
+    expect(text).toContain('Due today (1)\n- Send proposal · Site main · Sat, Sep 5, 3:30 PM CDT\n')
     expect(text).toContain(
       'Unworked leads (1)\n- Jane Doe <jane@acme.com> · Site main · first seen Sep 2',
     )

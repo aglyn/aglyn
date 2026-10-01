@@ -296,6 +296,11 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
      * The email comes before any wait, which makes it an immediate reply to
      * what the visitor just did — transactional, sent from the org's own
      * identity, to the address the event carries.
+     *
+     * Its words promise no response time. The org hub installs this recipe
+     * into a site without its editor opening, so the business never reads
+     * the sentence it is sending, and a "within a day" written here would be
+     * a commitment made on its behalf that nothing in the run keeps.
      */
     build: () => ({
       recipe: 'welcomeNewLead',
@@ -317,8 +322,8 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
           type: 'sendEmail',
           subject: 'Thanks for getting in touch',
           body:
-            'Thanks for reaching out — we have your message, and someone ' +
-            'from our team will be in touch within a day.',
+            'Thanks for reaching out. We have your message and will reply ' +
+            'to this email address.',
         },
         { type: 'addContactTag', tag: 'website' },
       ],

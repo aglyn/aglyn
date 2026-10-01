@@ -56,6 +56,29 @@ import { type CrmLeadFields, type CrmTask, crmLeadStatus } from '@aglyn/aglyn/ap
  */
 export const CRM_DIGEST_DEFAULT_TIME_ZONE = 'America/Chicago'
 
+/**
+ * The zone the digest's "today" is drawn in, and the zone every CRM mail
+ * and notification prints a task's time in.
+ *
+ * `CRM_DIGEST_TIME_ZONE` overrides the default for a self-hosted console
+ * whose team wakes up elsewhere; a value `Intl` does not know falls back to
+ * the default with a warning rather than throwing the whole run away.
+ */
+export function digestTimeZone(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = String(env['CRM_DIGEST_TIME_ZONE'] ?? '').trim()
+  if (!configured) return CRM_DIGEST_DEFAULT_TIME_ZONE
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: configured })
+    return configured
+  } catch {
+    console.warn(
+      `crm-daily-digest: CRM_DIGEST_TIME_ZONE "${configured}" is not a zone — ` +
+        `using ${CRM_DIGEST_DEFAULT_TIME_ZONE}`,
+    )
+    return CRM_DIGEST_DEFAULT_TIME_ZONE
+  }
+}
+
 /** How long a `new` lead may sit untouched before the digest names it. */
 export const CRM_DIGEST_LEAD_AGE_MS = 2 * 24 * 60 * 60 * 1000
 
@@ -290,8 +313,17 @@ export function composeCrmDigestSummary(counts: CrmDigestCounts): string {
   return segments.join(', ')
 }
 
-export function composeCrmDigestSubject(counts: CrmDigestCounts): string {
-  return `Your CRM today: ${composeCrmDigestSummary(counts)}`
+/**
+ * The digest's subject. It names the workspace when it has one: the digest
+ * is sent per workspace, and a member of two would otherwise get two mails
+ * that read the same.
+ */
+export function composeCrmDigestSubject(
+  counts: CrmDigestCounts,
+  workspaceName?: string,
+): string {
+  const workspace = workspaceName?.trim()
+  return `Your ${workspace ? `${workspace} ` : ''}CRM today: ${composeCrmDigestSummary(counts)}`
 }
 
 /** What the digest email needs from the route besides the digest itself. */
@@ -301,6 +333,11 @@ export interface CrmDigestEmailInput {
   timeZone: string
   /** The product name the mail reads as — the org's brand when white-labeled. */
   productName: string
+  /**
+   * The workspace the digest is for. The system email shows only the body,
+   * so the body names it: a member of two workspaces gets one digest each.
+   */
+  workspaceName?: string
   /** The Tasks section, on the site the member's first task belongs to. */
   tasksUrl: string
   /** The Leads section of a site, for the sites that have unworked leads. */
@@ -319,6 +356,7 @@ export interface CrmDigestEmailInput {
   omitClosing?: boolean
 }
 
+/** A task's due time, with the zone named: it is the digest's, not the reader's. */
 function whenInZone(ms: number, timeZone: string): string {
   return new Date(ms).toLocaleString('en-US', {
     timeZone,
@@ -327,6 +365,7 @@ function whenInZone(ms: number, timeZone: string): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZoneName: 'short',
   })
 }
 
@@ -364,12 +403,18 @@ export function composeCrmDigestEmailText(input: CrmDigestEmailInput): string {
     month: 'long',
     day: 'numeric',
   })
+  const workspace = input.workspaceName?.trim()
   const lines: string[] = [
-    `Here is your ${productName} CRM for ${day}: ${composeCrmDigestSummary(counts)}.`,
+    `Here is your ${productName} CRM${workspace ? ` in ${workspace}` : ''} for ${day}: ` +
+      `${composeCrmDigestSummary(counts)}.`,
     '',
   ]
+  // A task's site, as the lead lines name theirs; an organization task
+  // (AGL-2637) has none.
   const taskLine = (task: CrmDigestTask) =>
-    `${task.title} · ${whenInZone(task.dueAtMs, timeZone)}`
+    [task.title, task.hostId ? input.hostName(task.hostId) : '', whenInZone(task.dueAtMs, timeZone)]
+      .filter(Boolean)
+      .join(' · ')
   if (digest.overdue.length) {
     lines.push(...section('Overdue', digest.overdue.map(taskLine)))
   }

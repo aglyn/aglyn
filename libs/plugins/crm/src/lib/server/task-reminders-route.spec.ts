@@ -447,7 +447,7 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
     expect(annCall.payload).toEqual({
       type: 'content.taskReminder',
       title: 'Task reminder',
-      body: 'Call Jane · due Sat, Sep 5, 7:55 AM',
+      body: 'Reminder for your task in Acme: Call Jane, due Sat, Sep 5, 7:55 AM CDT.',
       link: '/site-a/crm/contacts/c-1',
       orgId: 'org-a',
       hostId: 'site-a',
@@ -455,13 +455,13 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
     expect(annOrg.payload).toEqual({
       type: 'content.taskReminder',
       title: 'Task reminder',
-      body: 'Renew the insurance · due Sun, Sep 6, 8:00 AM',
+      body: 'Reminder for your task in Acme: Renew the insurance, due Sun, Sep 6, 8:00 AM CDT.',
       link: '/org/crm/tasks',
       orgId: 'org-a',
     })
     expect(bob.uids).toEqual(['bob'])
     expect(bob.payload).toMatchObject({
-      body: 'Send the deck · due Sat, Sep 5, 7:00 AM',
+      body: 'Reminder for your task in Acme: Send the deck, due Sat, Sep 5, 7:00 AM CDT.',
       link: '/site-b/crm/deals/d-7',
       hostId: 'site-b',
     })
@@ -472,15 +472,16 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
     const [annMail, bobMail] = mockSent
     expect(annMail).toMatchObject({
       to: ['ann@acme.com'],
-      subject: 'Reminder: 2 tasks are due',
+      subject: 'Reminder: 2 tasks',
       context: 'crm-task-reminder',
       priority: 'bulk',
       fromName: 'Aglyn',
     })
+    expect(annMail.text).toMatch(/^A reminder from Aglyn about 2 of your tasks in Acme:\n/)
     expect(annMail.text).toContain(
-      '- Call Jane · due Sat, Sep 5, 7:55 AM\n' +
+      '- Call Jane · due Sat, Sep 5, 7:55 AM CDT\n' +
         '  https://app.aglyn.com/acme/hosts/main/crm/contacts/c-1\n' +
-        '- Renew the insurance · due Sun, Sep 6, 8:00 AM\n' +
+        '- Renew the insurance · due Sun, Sep 6, 8:00 AM CDT\n' +
         '  https://app.aglyn.com/acme/crm/tasks',
     )
     expect(annMail.text).toContain('https://app.aglyn.com/manage/notifications')

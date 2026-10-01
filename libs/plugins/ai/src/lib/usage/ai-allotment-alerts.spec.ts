@@ -106,6 +106,7 @@ const memberStanding = {
 
 beforeEach(() => {
   mockDocs = new Map<string, Record<string, unknown>>([
+    [`orgs/${ORG}`, { name: 'Acme Co', slug: 'acme' }],
     [`orgs/${ORG}/members/owner-1`, { role: 'owner', email: 'owner@example.test' }],
     [`orgs/${ORG}/members/admin-1`, { role: 'admin', email: 'admin@example.test' }],
     [`orgs/${ORG}/members/m1`, { role: 'editor', email: 'sam@example.test', displayName: 'Sam' }],
@@ -128,7 +129,7 @@ describe('a soft allotment’s crossing', () => {
       ['owner-1', 'admin-1'],
       expect.objectContaining({
         type: 'billing.usage',
-        title: 'Sam is past 80% of their AI allotment',
+        title: 'Sam is past 80% of their AI allotment in Acme Co',
         link: '/acme/billing/usage#ai-allotments',
         orgId: ORG,
       }),
@@ -147,6 +148,64 @@ describe('a soft allotment’s crossing', () => {
     expect(pipeline.meter).toHaveBeenCalledTimes(2)
   })
 
+  // AGL-3432: the body opens with whose credits and which workspace, and the
+  // person it is about gets their own words, not the managers' instructions.
+  it('names the workspace in both copies, and tells the person in the second person', async () => {
+    const pipeline = channels()
+    await announceAiAllotmentAlerts(
+      mockFirestore,
+      {
+        orgId: ORG,
+        orgSlug: 'acme',
+        month: MONTH,
+        alerts: [{ standing: { ...memberStanding, used: 1020 }, threshold: 100 }],
+      },
+      pipeline,
+    )
+    const sent = (pipeline.send.mock.calls as unknown as [{ to: string[]; subject: string; text: string }][]).map(
+      ([message]) => message,
+    )
+    const managers = sent.find((message) => message.to.includes('owner@example.test'))
+    const own = sent.find((message) => message.to.includes('sam@example.test'))
+    expect(managers?.subject).toBe('Sam has used their whole AI allotment in Acme Co')
+    expect(managers?.text).toMatch(/^Sam has used all 1,000 AI credits allotted to them in Acme Co this month \(1,020 so far\)\./)
+    expect(managers?.text).toMatch(/make it hard under Billing → Usage;/)
+    expect(own?.subject).toBe('You’ve used your whole AI allotment in Acme Co')
+    expect(own?.text).toMatch(/^You’ve used all 1,000 AI credits Acme Co allotted you this month/)
+    // A member cannot open Billing, so they are never told to go there.
+    expect(own?.text).not.toMatch(/Billing/)
+    expect(pipeline.notify).toHaveBeenCalledWith(
+      ['m1'],
+      expect.objectContaining({ title: 'You’ve used your whole AI allotment in Acme Co' }),
+      { skipEmail: true },
+    )
+  })
+
+  it('a site with neither a name nor an address is named by its id, never "The this site"', async () => {
+    const pipeline = channels()
+    mockDocs.set('hosts/h1', {})
+    await announceAiAllotmentAlerts(
+      mockFirestore,
+      {
+        orgId: ORG,
+        orgSlug: null,
+        month: MONTH,
+        alerts: [
+          {
+            standing: { ...memberStanding, subject: 'host:h1', scope: 'host', uid: null, hostId: 'h1', credits: 5000, used: 4000 },
+            threshold: 80,
+          },
+        ],
+      },
+      pipeline,
+    )
+    expect(pipeline.notify).toHaveBeenCalledWith(
+      ['owner-1', 'admin-1'],
+      expect.objectContaining({ title: 'The h1 site is past 80% of its AI allotment' }),
+      { skipEmail: true },
+    )
+  })
+
   it('tells a locked or disabled account nothing, by either channel (AGL-3418)', async () => {
     const pipeline = channels()
     pipeline.reachable.mockImplementation(async (uids: readonly string[]) =>
@@ -160,7 +219,7 @@ describe('a soft allotment’s crossing', () => {
     expect(pipeline.notify).toHaveBeenCalledTimes(1)
     expect(pipeline.notify).toHaveBeenCalledWith(
       ['admin-1'],
-      expect.objectContaining({ title: 'Sam is past 80% of their AI allotment' }),
+      expect.objectContaining({ title: 'Sam is past 80% of their AI allotment in Acme Co' }),
       { skipEmail: true },
     )
     expect(pipeline.send).toHaveBeenCalledTimes(1)

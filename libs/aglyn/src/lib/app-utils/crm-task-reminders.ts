@@ -135,7 +135,11 @@ export function crmTaskReminderLink(
   return `${base}/tasks`
 }
 
-/** `Wed, Sep 9, 3:00 PM` in a named zone — the words a reminder says a time with. */
+/**
+ * `Wed, Sep 9, 3:00 PM CDT` — the words a reminder says a time with. The zone
+ * is the server's choice, not the reader's, so it is printed: a reader an
+ * hour away would otherwise take it for their own clock.
+ */
 export function crmTaskReminderWhen(ms: number, timeZone: string): string {
   return new Date(ms).toLocaleString('en-US', {
     timeZone,
@@ -144,32 +148,53 @@ export function crmTaskReminderWhen(ms: number, timeZone: string): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZoneName: 'short',
   })
 }
 
 /**
- * The one line the console notification is: the title and when the task is
- * due. A reminder set on a task with no due date says only the title —
- * the person chose the time; the task itself has none.
+ * One task as the reminder email lists it: its title and when it is due, or
+ * that it has no due date — a reminder can sit on a task with none, at a time
+ * the person chose.
  */
-export function composeCrmTaskReminderBody(
+export function crmTaskReminderLine(
   task: Pick<CrmReminderTask, 'title' | 'dueAtMs'>,
   timeZone: string,
 ): string {
   return typeof task.dueAtMs === 'number'
     ? `${task.title} · due ${crmTaskReminderWhen(task.dueAtMs, timeZone)}`
-    : task.title
+    : `${task.title} · no due date`
+}
+
+/**
+ * The console notification's body, one per task, which is also what a
+ * preview of it shows. It says it is a reminder and names the workspace, so
+ * it reads whole without the "Task reminder" title above it.
+ */
+export function composeCrmTaskReminderBody(
+  task: Pick<CrmReminderTask, 'title' | 'dueAtMs'>,
+  timeZone: string,
+  workspaceName?: string,
+): string {
+  const workspace = workspaceName?.trim()
+  const when =
+    typeof task.dueAtMs === 'number'
+      ? `, due ${crmTaskReminderWhen(task.dueAtMs, timeZone)}.`
+      : ' (no due date).'
+  return `Reminder for your task${workspace ? ` in ${workspace}` : ''}: ${task.title}${when}`
 }
 
 /**
  * One mail per member per run, so five tasks due at nine o'clock are one
- * message and not five. The subject names the task when there is one.
+ * message and not five. The subject names the task when there is one, and
+ * never says a task is due: a reminder can be set ahead of the due time, or
+ * on a task with none.
  */
 export function composeCrmTaskReminderSubject(
   tasks: ReadonlyArray<Pick<CrmReminderTask, 'title'>>,
 ): string {
   if (tasks.length === 1) return `Reminder: ${tasks[0].title}`
-  return `Reminder: ${tasks.length} tasks are due`
+  return `Reminder: ${tasks.length} tasks`
 }
 
 /** What the reminder email needs from the route besides the tasks. */
@@ -178,6 +203,11 @@ export interface CrmTaskReminderEmailInput {
   timeZone: string
   /** The product name the mail reads as — the org's brand when white-labeled. */
   productName: string
+  /**
+   * The workspace the tasks are in. The system email shows only the body, so
+   * the body names it: a member of two workspaces gets reminders from each.
+   */
+  workspaceName?: string
   /** The console page a task opens on, absolute. */
   taskUrl: (task: CrmReminderTask) => string
   /** Account settings → Notifications, where the category can be muted. */
@@ -203,14 +233,18 @@ export function composeCrmTaskReminderEmailText(input: CrmTaskReminderEmailInput
   const ordered = [...tasks].sort(
     (a, b) => (a.dueAtMs ?? a.remindAtMs) - (b.dueAtMs ?? b.remindAtMs),
   )
+  // "About", never "is due": a reminder fires at the time somebody chose,
+  // which may be a day ahead of the due date or on a task with none, and
+  // each line below says when its task is actually due.
+  const where = input.workspaceName?.trim() ? ` in ${input.workspaceName.trim()}` : ''
   const lines: string[] = [
     ordered.length === 1
-      ? `A reminder from ${productName}: this task is due.`
-      : `A reminder from ${productName}: ${ordered.length} tasks are due.`,
+      ? `A reminder from ${productName} about your task${where}:`
+      : `A reminder from ${productName} about ${ordered.length} of your tasks${where}:`,
     '',
   ]
   for (const task of ordered) {
-    lines.push(`- ${composeCrmTaskReminderBody(task, timeZone)}`)
+    lines.push(`- ${crmTaskReminderLine(task, timeZone)}`)
     lines.push(`  ${input.taskUrl(task)}`)
   }
   if (input.omitClosing) return lines.join('\n').trimEnd()

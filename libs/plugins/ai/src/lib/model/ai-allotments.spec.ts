@@ -188,14 +188,52 @@ describe('the words', () => {
   })
 
   it('one alert copy for both channels, naming the subject, in credits and never dollars', () => {
-    const reached = aiAllotmentAlertCopy({ scope: 'host', threshold: 100, used: 1200, credits: 1000, name: 'Acme' })
+    const reached = aiAllotmentAlertCopy({ scope: 'host', threshold: 100, used: 1200, credits: 1000, name: 'Acme', workspace: 'Acme Co' })
     expect(reached.title).toMatch(/The Acme site/)
-    expect(reached.body).toMatch(/1,200 of 1,000 credits/)
+    expect(reached.body).toMatch(/all 1,000 AI credits/)
+    expect(reached.body).toMatch(/\(1,200 so far\)/)
     expect(`${reached.title} ${reached.body}`).not.toMatch(/\$/)
-    const warned = aiAllotmentAlertCopy({ scope: 'member', threshold: 80, used: 820, credits: 1000, name: 'Sam' })
+    const warned = aiAllotmentAlertCopy({ scope: 'member', threshold: 80, used: 820, credits: 1000, name: 'Sam', workspace: 'Acme Co' })
     expect(warned.title).toMatch(/Sam is past 80% of their AI allotment/)
     // The step actually crossed, not a fixed 80.
-    const nearly = aiAllotmentAlertCopy({ scope: 'member', threshold: 90, used: 920, credits: 1000, name: 'Sam' })
+    const nearly = aiAllotmentAlertCopy({ scope: 'member', threshold: 90, used: 920, credits: 1000, name: 'Sam', workspace: 'Acme Co' })
     expect(nearly.title).toMatch(/Sam is past 90% of their AI allotment/)
+  })
+
+  // AGL-3432: the email has no heading, so a body that opened on a bare
+  // figure ("820 of 1,000 credits used this month") read like a bill.
+  it('the body opens with whose credits, out of what, and in which workspace and site', () => {
+    expect(
+      aiAllotmentAlertCopy({ scope: 'member', threshold: 80, used: 820, credits: 1000, name: 'Sam', workspace: 'Acme Co' }).body,
+    ).toMatch(/^Sam has used 820 of the 1,000 AI credits allotted to them in Acme Co this month, past the 80% mark\. /)
+    const collab = aiAllotmentAlertCopy({
+      scope: 'collab', threshold: 75, used: 760, credits: 1000, name: 'Sam', workspace: 'Acme Co', site: 'Harbor View',
+    })
+    expect(collab.title).toBe('Sam is past 75% of their AI allotment on the Harbor View site')
+    expect(collab.body).toMatch(/^Sam has used 760 of the 1,000 AI credits allotted to them on the Harbor View site in Acme Co /)
+    expect(
+      aiAllotmentAlertCopy({ scope: 'host', threshold: 100, used: 5100, credits: 5000, name: 'Acme', workspace: 'Acme Co' }).body,
+    ).toMatch(/^The Acme site has used all 5,000 AI credits allotted to it in Acme Co this month \(5,100 so far\)\. /)
+  })
+
+  it('tells managers how to stop the subject at the line, and that crossing it charges nothing', () => {
+    const reached = aiAllotmentAlertCopy({ scope: 'member', threshold: 100, used: 1020, credits: 1000, name: 'Sam', workspace: 'Acme Co' })
+    expect(reached.body).toMatch(/charges nothing by itself/)
+    expect(reached.body).toMatch(/make it hard under Billing → Usage; to give them more, raise it there\.$/)
+  })
+
+  it('the person it is for is told in the second person, and never sent to a Billing page they cannot open', () => {
+    const own = aiAllotmentAlertCopy({
+      scope: 'member', threshold: 100, used: 1020, credits: 1000, name: 'Sam', workspace: 'Acme Co', reader: 'subject',
+    })
+    expect(own.title).toBe('You’ve used your whole AI allotment in Acme Co')
+    expect(own.body).toMatch(/^You’ve used all 1,000 AI credits Acme Co allotted you this month \(1,020 so far\)\. /)
+    expect(own.body).toMatch(/A workspace admin can raise or change it\.$/)
+    expect(own.body).not.toMatch(/Billing|make it hard/)
+    const collab = aiAllotmentAlertCopy({
+      scope: 'collab', threshold: 80, used: 800, credits: 1000, name: 'Sam', workspace: 'Acme Co', site: 'Harbor View', reader: 'subject',
+    })
+    expect(collab.title).toBe('You’re past 80% of your AI allotment on the Harbor View site')
+    expect(collab.body).toMatch(/^You’ve used 800 of the 1,000 AI credits Acme Co allotted you on the Harbor View site this month/)
   })
 })
