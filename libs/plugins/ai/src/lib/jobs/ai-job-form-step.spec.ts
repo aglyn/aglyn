@@ -637,6 +637,33 @@ describe('the form step', () => {
         .fn()
         .mockResolvedValue({ ok: true, id: 'frm-copy', versionId: 'v-copy', name: 'Roof quote request' })
 
+    it('builds from the plan when the source does not collect a field it names, told what the source collects (AGL-3143 §14)', async () => {
+      mockDocs.set('hosts/host-1/forms/frm-contact', {
+        displayName: 'Contact',
+        fields: [
+          { fieldName: 'name', fieldType: 'text', required: true },
+          { fieldName: 'email', fieldType: 'email', required: true },
+          { fieldName: 'message', fieldType: 'textarea' },
+        ],
+      })
+      const duplicate = copies()
+      mockRunAiRequest.mockResolvedValueOnce(completion(GOLDENS['roofingQuote'].answer))
+      // The contact form asks for none of the roof.
+      const plan = promises(['fullName', 'email', 'phone', 'roofType'])
+      const outcome = await createAiJobFormStep({
+        duplicate: duplicate as unknown as typeof duplicateResource,
+      })(context({ plan }))
+      // Before, this copied the contact form and stopped for review: a copy of
+      // a form that never asked for the roof could only fail to ask for it.
+      expect(duplicate).not.toHaveBeenCalled()
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'form', id: FORM_ID })])
+      const [request] = mockRunAiRequest.mock.calls[0]
+      expect(String(request.messages[0].content)).toContain(
+        'The plan starts from a copy of the form "Contact", which lacks part of what the plan gives it. Build from it: it collects name (text, required), email (email, required), message (textarea).',
+      )
+    })
+
     it('stops for a person rather than reporting a copy that collects none of the fields the plan named', async () => {
       // The one thing duplication HIDES, beside the one it causes: "start
       // from the consultation form and add a case-type question" getting the

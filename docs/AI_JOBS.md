@@ -661,6 +661,18 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   group of four repeated things anywhere in a page whose plan promised a section of four
   — is what can still be settled. A screen holds no app bar and no footer, which are its
   layout's, so what is counted is the page's own content.
+- **A short source is built from, not copied (AGL-3143 §14).** Each copy branch first
+  asks its own review of the SOURCE — the page step did already; the layout, template,
+  component and form steps now do too. A source read and found short of the plan can
+  only be copied into a certain refusal, and Try again would copy the same thing:
+  measured on 2026-09-22 (job `Pq3pgvMH0D`), "copy the interior layout and add a
+  sidebar" could only end in review. So no copy is minted and the record is built: a
+  layout or a template is shown the source's tree as its start (`aiCopySourceLines`,
+  at most `AI_COPY_SOURCE_MAX_CHARS`), so the firm's header and footer carry over; a
+  form is told every field the source collects; a component is built from the plan.
+  The build is then held to the plan by the step's own checks, with their one re-ask. A
+  source this step cannot read still copies, and the review after the copy answers for
+  it.
 - **Refused before a Confirm.** A plan that passes is asked the kind's admission with
   the plan, as the resume door asks it. A refusal fails the job with the door's
   sentence before any member is shown a Confirm: its plan is not kept, and it holds

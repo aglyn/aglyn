@@ -250,11 +250,17 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
 
     // The plan starts from a copy of a component the site has (rule 15): the
     // copy is the draft, and nothing is generated. A source gone since the
-    // plan was made is built from the brief instead.
-    if (
-      creation?.duplicateOf &&
-      inventory.components.some((component) => component.id === creation.duplicateOf)
-    ) {
+    // plan was made is built from the brief instead, and one that lacks a
+    // property the plan gives the component is built from the plan
+    // (AGL-3143 §14): copying it could only end in the review below. A source
+    // this step cannot read still copies.
+    const source = creation?.duplicateOf
+      ? inventory.components.find((component) => component.id === creation.duplicateOf)
+      : undefined
+    const sourceReview = source
+      ? await aiCopiedComponentReview(firestore, { hostId, id: source.id, name: source.name, plan })
+      : null
+    if (creation?.duplicateOf && source && !sourceReview?.findings.length) {
       const copy = await duplicate('component', {
         orgId: job.orgId,
         hostId,
