@@ -108,7 +108,6 @@ function linkFields(link: PluginRecordEntryContext['link']): CrmActivityLink {
   return {
     ...(link?.contactId ? { contactId: String(link.contactId) } : {}),
     ...(link?.companyId ? { companyId: String(link.companyId) } : {}),
-    ...(link?.dealId ? { dealId: String(link.dealId) } : {}),
     // A lead (AGL-3234): host-scoped by path, so the entry carries the
     // site's scope like any record created from that site.
     ...(link?.leadId ? { leadId: String(link.leadId) } : {}),
@@ -134,8 +133,8 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
     if (!orgId || !hostId || !String(context.sourcePluginId ?? '').trim()) {
       return refuse(400, 'An entry names its organization, its site and the plugin filing it.')
     }
-    if (!link.contactId && !link.companyId && !link.dealId && !link.leadId) {
-      return refuse(400, 'An entry is filed on a contact, a company, a deal or a lead.')
+    if (!link.contactId && !link.companyId && !link.leadId) {
+      return refuse(400, 'An entry is filed on a contact, a company or a lead.')
     }
     const firestore = deps.firestore()
     const orgRef = firestore.collection('orgs').doc(orgId)

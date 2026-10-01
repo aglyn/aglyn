@@ -162,15 +162,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/components/staff-org-actions.component.tsx",
-      "rules": [
-        "domain-declares:forms",
-        "domain-declares:marketplace",
-        "domain-declares:workflows"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "apps/console/components/staff-org-usage-table.component.tsx",
       "rules": [
         "domain-declares:forms",
@@ -583,13 +574,6 @@
         "domain-declares:marketing"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/plugin-manager/plugin-record-timeline.ts",
-      "rules": [
-        "domain-declares:crm"
-      ],
-      "lane": "crm"
     },
     {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",

@@ -24,9 +24,10 @@ import {
 /**
  * An entry one plugin files on a record another plugin keeps (AGL-2981).
  *
- * A person, a company and a deal are records of the workspace's record
- * system, and what happened with them — an email sent, a reply received, a
- * call to make — belongs on their timeline, whichever plugin it happened in.
+ * A person and the company they work for are records of the workspace's
+ * record system, and what happened with them — an email sent, a reply
+ * received, a call to make — belongs on their timeline, whichever plugin it
+ * happened in.
  * A plugin that sends mail or books a meeting must not write the record
  * system's documents itself: it would restate the owner's rules — where an
  * entry lives, who may see it, how a copy of the same email is told apart,
@@ -58,11 +59,15 @@ import {
  * member it acted for.
  */
 
-/** The record an entry is filed on: any of the four, as the owner links them. */
+/**
+ * The record an entry is filed on, as the owner links them: the person (a
+ * contact, or a lead not yet one) and the company they work for. What else
+ * the record system groups them under is its own, and it links an entry
+ * there itself.
+ */
 export interface PluginRecordLink {
   contactId?: string
   companyId?: string
-  dealId?: string
   /**
    * A lead not yet converted (AGL-3234) — the record system's own id for
    * it, addressed under `hostId`. A sequence's emails and tasks land on the
