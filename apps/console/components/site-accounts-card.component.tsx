@@ -36,9 +36,8 @@ import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { docsHelp } from '../constants/docs-links'
-import { useOrgPermissions } from '../hooks/use-org-permissions'
 import { useOrgSlug } from '../hooks/use-org-scope'
-import { useReleaseFlag } from '../hooks/use-release-flags'
+import { useRecordRouteOwner } from '../hooks/use-record-route-owner'
 import { useHostSubdomain } from './host-id-provider'
 import {
   SITE_MEMBER_LIST_FILTER_FIELDS,
@@ -116,28 +115,23 @@ export function SiteAccountsCard(props: { hostId: string }) {
   const visible = memberDocs
 
   /*
-   * Where an account's CONTACT is (AGL-2622). A sign-up updated a person in
-   * the CRM by the account's address, and the row links there by that
-   * address; the Contacts list holds the id nothing here does and opens the
-   * record on one match. Offered under the CRM's own gate — released for
-   * the viewer, and with the permission its rules read for — because a row
-   * action that lands on a hub the shell refuses is a link to a 404. The
-   * app may not import the plugin, so the address is the one the plugin
-   * that keeps contacts publishes on the record-route seam.
+   * Where an account's CONTACT is (AGL-2622). A sign-up updated a person by
+   * the account's address, and the row links there by that address; the
+   * contacts list holds the id nothing here does and opens the record on one
+   * match. The app may not import the plugin that keeps contacts, so the
+   * address is the one that plugin publishes on the record-route seam, and
+   * the action is offered only where that plugin's own gates would let this
+   * reader in — on for the site, on the plan, and with the permission it
+   * declares — because a row action that lands on a page the shell refuses
+   * is a link to a page that says no.
    */
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const contactsFlag = useReleaseFlag('release_crm')
-  const permissions = useOrgPermissions()
-  const crmReachable =
-    Boolean(orgSlug && host) &&
-    contactsFlag.ready &&
-    contactsFlag.visible &&
-    permissions.loaded &&
-    permissions.can('data.manage')
+  const contactOwner = useRecordRouteOwner('contact')
+  const contactsReachable = Boolean(orgSlug && host && contactOwner)
 
   /**
-   * The row's "Open in CRM": the person's contact by the account's address,
+   * The row's "Open in …": the person's contact by the account's address,
    * or the reason there is none to open.
    */
   const contactLink = useCallback(
@@ -210,7 +204,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
                 <Chip label="Active" size="small" variant="outlined" />
               ),
           },
-          ...(crmReachable
+          ...(contactsReachable
             ? [
                 {
                   field: 'actions',
@@ -228,8 +222,8 @@ export function SiteAccountsCard(props: { hostId: string }) {
                         label={String(row.email ?? row.$id)}
                         items={[
                           {
-                            key: 'crm',
-                            label: 'Open in CRM',
+                            key: 'contact',
+                            label: `Open in ${contactOwner?.displayName ?? 'contacts'}`,
                             icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
                             ...contactLink(row),
                           },
@@ -245,7 +239,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
         SITE_MEMBER_LIST_FILTER_OPTIONS,
         SITE_MEMBER_LIST_FILTER_HEADERS,
       ),
-    [crmReachable, contactLink],
+    [contactsReachable, contactOwner, contactLink],
   )
 
   // Resolved from the live docs so the drawer reflects rule-side updates.

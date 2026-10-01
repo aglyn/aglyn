@@ -89,17 +89,17 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   MdiIcon: () => null,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ __esModule: true, useOrgSlug: () => 'acme' }))
-jest.mock('../hooks/use-release-flags', () => ({
+/** Who the contact link lands with, or `null` where no owner admits the reader. */
+let mockContactOwner: { pluginId: string; displayName: string } | null = null
+jest.mock('../hooks/use-record-route-owner', () => ({
   __esModule: true,
-  useReleaseFlag: () => ({ ready: true, visible: false }),
-}))
-jest.mock('../hooks/use-org-permissions', () => ({
-  __esModule: true,
-  useOrgPermissions: () => ({ loaded: true, can: () => false }),
+  useRecordRouteOwner: () => mockContactOwner,
 }))
 jest.mock('./host-id-provider', () => ({ __esModule: true, useHostSubdomain: () => 'bakery' }))
 jest.mock('./site-member-drawer.component', () => ({ __esModule: true, default: () => null }))
 
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import SiteAccountsCard from './site-accounts-card.component'
 
 const lastQuery = () => mockBuilt[mockBuilt.length - 1]
@@ -107,6 +107,7 @@ const lastQuery = () => mockBuilt[mockBuilt.length - 1]
 beforeEach(() => {
   mockBuilt.length = 0
   mockClauses = undefined
+  mockContactOwner = null
 })
 
 describe('the Site users card serves every clause and the search (AGL-3321)', () => {
@@ -164,5 +165,33 @@ describe('the Site users card serves every clause and the search (AGL-3321)', ()
       'Email starts with ann is not applied',
     )
     await act(async () => undefined)
+  })
+})
+
+describe('a row opens the person’s contact where its owner admits the reader (AGL-3080)', () => {
+  afterEach(() => resetPluginServicesForTests())
+
+  it('offers no row action where no plugin that keeps contacts admits the reader', async () => {
+    render(<SiteAccountsCard hostId="host-1" />)
+    expect(screen.queryByRole('button', { name: 'More actions for ann@example.test' })).toBeNull()
+    await act(async () => undefined)
+  })
+
+  it('opens the owner’s list on the person, named as the owner names itself', async () => {
+    resetPluginServicesForTests()
+    registerPluginRecordRoute(
+      'contact',
+      {
+        list: () => null,
+        record: () => null,
+        byEmail: (context, email) => `/${context.orgSlug}/hosts/${context.host}/people?email=${email}`,
+      },
+      { pluginId: 'people' },
+    )
+    mockContactOwner = { pluginId: 'people', displayName: 'People' }
+    render(<SiteAccountsCard hostId="host-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for ann@example.test' }))
+    const item = await screen.findByRole('menuitem', { name: /Open in People/ })
+    expect(item.getAttribute('href')).toBe('/acme/hosts/bakery/people?email=ann@example.test')
   })
 })
