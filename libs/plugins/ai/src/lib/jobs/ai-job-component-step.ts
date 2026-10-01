@@ -18,6 +18,7 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
+import { aiPlanEmbedsFor } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
@@ -299,7 +300,11 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
       ...(AI_ROUTING_TABLE['job.component'].effort
         ? { effort: AI_ROUTING_TABLE['job.component'].effort }
         : {}),
-      context: { definesComponent: true },
+      // A third-party player the confirmed plan lists for this component is the only one it may embed (AGL-3433).
+      context: {
+        definesComponent: true,
+        ...(creation ? { plannedEmbeds: aiPlanEmbedsFor(plan, { create: creation.name }) } : {}),
+      },
       extend: aiComponentCheck({
         inventory,
         plan,

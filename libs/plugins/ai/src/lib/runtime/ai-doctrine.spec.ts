@@ -177,9 +177,17 @@ describe('the doctrine block', () => {
     expect(rule10).toContain('A link goes to a page that does what its words say, or is left out.')
   })
 
+  it('says in rule 16 that a player needs the brief to ask and the plan to list it, and gives a template none in rule 17 (AGL-3433)', () => {
+    // The 9/22 article template reached for a Video embed its brief never
+    // asked for, while rule 17 told it a template may carry one.
+    const rule = (n: number) => AI_BUILDING_DOCTRINE.split('\n').find((line) => line.startsWith(`${n}. `)) ?? ''
+    expect(rule(16)).toContain('no third-party player unless the brief asks for one and the plan lists it')
+    expect(rule(17)).toContain('a template at most 400 elements, 60 KB stored, 1.5 MB of images, no embeds')
+  })
+
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      'dccee298449d3859d588e5547e807c5ac23647ff690dc9e1c614d5cde59539d0',
+      '076f7a49597a403a154d5ee25fcfccd7a9ab06f00a6f6b8c375d31ca708535c7',
     )
   })
 

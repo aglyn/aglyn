@@ -246,7 +246,12 @@ function evalPlanStep(evalCase: AiEvalCase) {
 /** A plan outcome's plan, as a candidate records it. */
 function planOf(outcome: AiJobStepOutcome): AiEvalRecordedAnswer['plan'] {
   return outcome.plan
-    ? { reuse: outcome.plan.reuse, create: outcome.plan.create, screens: outcome.plan.screens }
+    ? {
+        reuse: outcome.plan.reuse,
+        create: outcome.plan.create,
+        screens: outcome.plan.screens,
+        ...(outcome.plan.embeds?.length ? { embeds: outcome.plan.embeds } : {}),
+      }
     : null
 }
 

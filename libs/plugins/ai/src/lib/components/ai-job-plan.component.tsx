@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { AI_BUILD_PLAN_CREATION_NOUNS, isAiPlanNewRef } from '../model/ai-build-plan'
+import {
+  AI_BUILD_PLAN_CREATION_NOUNS,
+  AI_BUILD_PLAN_EMBED_HOST_NAMES,
+  isAiPlanNewRef,
+  type AiBuildPlanEmbed,
+} from '../model/ai-build-plan'
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
 import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import { Box, Button, Collapse, Stack, Typography } from '@mui/material'
@@ -70,6 +75,22 @@ export function aiJobReviewDetails(review: AiJobReview | null): string[] {
     )
   }
   return lines
+}
+
+/**
+ * A third-party player the plan lists, with what it costs the page, read
+ * before the member confirms it (rule 16, AGL-3433). The cost is the
+ * platform's sentence, never the model's: the player is framed lazily, so its
+ * host's code loads when a visitor reaches it, whether or not they press play.
+ */
+export function aiPlanEmbedLine(
+  embed: AiBuildPlanEmbed,
+  named: (ref: string) => string,
+): string {
+  const host = AI_BUILD_PLAN_EMBED_HOST_NAMES[embed.host]
+  const where = isAiPlanNewRef(embed.where) ? `the component ${named(embed.where)}` : embed.where
+  const link = embed.url ? ` playing ${embed.url}` : ', its link left for you to paste'
+  return `Embeds a ${host} player on ${where}${link}, as you asked (“${embed.asked}”). It loads ${host}’s own code when a visitor reaches it, whether or not they press play.`
 }
 
 export function AiJobPlan({
@@ -128,6 +149,11 @@ export function AiJobPlan({
               {screen.sections.length
                 ? `: ${screen.sections.map((section) => section.name).join(', ')}`
                 : ''}
+            </Typography>
+          ))}
+          {(plan.embeds ?? []).map((embed, index) => (
+            <Typography key={`embed-${index}`} variant="body2" role="listitem">
+              {aiPlanEmbedLine(embed, named)}
             </Typography>
           ))}
         </Stack>

@@ -354,8 +354,9 @@ describe('AI_PALETTE_CATALOG stays inside its prompt budget (AGL-2905)', () => {
     expect(estimateCatalogTokens(catalog)).toBeLessThanOrEqual(
       AI_PALETTE_CATALOG_MAX_TOKENS,
     )
+    // Every allowed element has its line, named where its name is more than its id spelled again.
     for (const id of AI_SURFACES[surface].allow) {
-      expect(catalog).toContain(`- ${id} (`)
+      expect([id, new RegExp(`^- ${id}(?: \\([^)]+\\))?: `, 'm').test(catalog)]).toEqual([id, true])
     }
     expect(catalog).toContain(`Surface: ${surface}.`)
   })
