@@ -60,38 +60,16 @@ import {
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveEffectivePlan,
-} from './plan-entitlements'
-import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+import { AI_PLUGIN_ENTITLEMENTS } from '../declarations'
 
-/*
- * The plugins' keys this suite reads, as their own `plan-entitlements`
- * modules declare them (AGL-3080). `PLAN_ENTITLEMENTS` carries them at
- * runtime — the manifest generator compiles each plugin's figures into it —
- * but their types live in the plugins, which this library compiles without.
- */
-declare module '../plugin-manager/plugin-entitlement-keys' {
-  interface PluginEntitlementQuotas {
-    assistCreditsPerMonth?: number
-  }
-}
-
-// The AI add-on is the AI plugin's declaration (AGL-2939), and core cannot
-// import a plugin: a stand-in with the plugin's own figures, so the fold
-// under test is the generic one and the numbers are the shipped ones.
+// The AI add-on as this plugin declares it (AGL-2939), registered before the
+// suite folds the shipped band through the generic resolver.
 beforeAll(() => {
-  registerPluginEntitlements({
-    pluginId: 'ai',
-    seatAddons: [
-      {
-        key: 'aiAddon',
-        label: 'AI add-on',
-        maxUnits: 1,
-        quota: { key: 'assistCreditsPerMonth', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
-        features: ['aiGenerative', 'aiAssist'],
-      },
-    ],
-  })
+  registerPluginEntitlements(AI_PLUGIN_ENTITLEMENTS)
 })
+
 /**
  * Measured cost of one grounded answer, and of one generated screen, at the
  * shipped Sonnet rates.
@@ -971,6 +949,40 @@ describe('the Free taste’s own refusals have their own sentences (AGL-2925)', 
       expect(text).not.toMatch(/\$/)
       expect(text).not.toMatch(/\d/)
       expect(text).not.toMatch(/uid|Firestore|ceiling/i)
+    }
+  })
+})
+
+/**
+ * The AI overage ceiling (AGL-2898) and a workspace's usage budget are
+ * DIFFERENT controls: a budget is an alert, never a cap, and the ceiling is
+ * read off its own field. The platform's half — the budget resolves the same
+ * with or without a ceiling — is `usage-budget.spec.ts`; this is the
+ * ceiling's.
+ */
+describe('the AI overage ceiling reads nothing of a usage budget (AGL-2898)', () => {
+  const withoutCeiling = { usageBudget: { amountUsd: 50, thresholdPcts: [50, 90, 100] } }
+  const withCeiling = { ...withoutCeiling, assistOverage: { capUsd: 5 } }
+
+  it('takes no ceiling from a budget, and keeps its own however large the budget', () => {
+    // A $50 budget with no ceiling is no ceiling; a $5 ceiling is $5 however
+    // large the budget beside it.
+    expect(resolveAssistOverageCapUsd({ plan: 'pro', ...withoutCeiling } as never)).toBeNull()
+    expect(assistOverageCapReached({ plan: 'pro', ...withoutCeiling } as never, 900)).toBe(false)
+    expect(resolveAssistOverageCapUsd({ plan: 'pro', ...withCeiling } as never)).toBe(5)
+  })
+})
+
+describe('assistUsdFromCredits', () => {
+  it('prices a finite band at the credit’s cost', () => {
+    expect(assistUsdFromCredits(7_500)).toBe(7_500 * ASSIST_CREDIT_COST_USD)
+  })
+
+  it('answers 0 for a band that is not a finite positive number', () => {
+    // It feeds a spend budget, and an unbounded budget is worse than none —
+    // which is why the tier margin model multiplies the rate itself instead.
+    for (const band of [Number.POSITIVE_INFINITY, Number.NaN, -1, 0]) {
+      expect(assistUsdFromCredits(band)).toBe(0)
     }
   })
 })

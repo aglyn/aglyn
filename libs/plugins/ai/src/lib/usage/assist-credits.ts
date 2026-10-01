@@ -19,9 +19,9 @@ import {
   isUncappedPlanComp,
   resolveOrgEntitlements,
   resolvePlanPricing,
-} from './plan-entitlements'
-import { planQuotaOf } from '../plugin-manager/plugin-plan-entitlements'
-import type { AglynOrgBilling } from '../foundation/definitions/org-billing.types'
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /**
  * Aglyn Assist credits: the unit assist is sold, metered and refused in.

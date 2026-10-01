@@ -46,7 +46,7 @@ jest.mock('./ai-overage-close', () => ({
   closeAiOverageMonth: (...args: unknown[]) => mockClose(...(args as [])),
 }))
 
-import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistMonthOverage } from '../usage/assist-credits'
 import type { PluginUsageMeterContext } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { AI_OVERAGE_INVOICED_FROM_ENV } from './ai-overage-cutover'
 import { closeAiMonth, measureAiMonth } from './ai-month-meter'

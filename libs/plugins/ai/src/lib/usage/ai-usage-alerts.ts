@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveAssistCreditBudget } from '@aglyn/aglyn/app-utils/assist-credits'
+import { resolveAssistCreditBudget } from './assist-credits'
 import {
   aiAddonName,
   hasAiAddon,

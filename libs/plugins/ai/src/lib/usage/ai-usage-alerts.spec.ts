@@ -26,7 +26,7 @@
  * words on their own.
  */
 
-import { resolveAssistCreditBudget } from '@aglyn/aglyn/app-utils/assist-credits'
+import { resolveAssistCreditBudget } from './assist-credits'
 import { aiAddonName } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {

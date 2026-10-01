@@ -19,7 +19,7 @@ import {
   ASSIST_PROVIDER_COST_FIELD,
   assistMonthOverage,
   assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import type {
   PluginUsageMeterCloseContext,
   PluginUsageMeterContext,

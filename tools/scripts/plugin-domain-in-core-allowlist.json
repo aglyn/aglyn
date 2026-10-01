@@ -226,15 +226,6 @@
       "why": "The install-provenance contract every installed document carries and every reader of installed content shares (the theme editor, a template's page, the site's theme resolution, the AI plugin); named for installed content, not its installer, since AGL-3080. The one marketplace word left is `publisherOrgId`, a PERSISTED field of the stamp on every installed document, named in the Firestore rules and their tests: renaming it is a data migration of every installed artifact on every site for a word, and the field means the org that authored the content whoever installed it."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/assist-credits.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:ai",
-        "domain-declares:ai"
-      ],
-      "lane": "ai"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/automation-placeholders.ts",
       "rules": [
         "domain-name",

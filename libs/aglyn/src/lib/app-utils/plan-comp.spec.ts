@@ -41,13 +41,6 @@
  */
 
 import {
-  assistBandRefuses,
-  assistMonthOverage,
-  priceAssistCreditOverage,
-  resolveAssistCreditBudget,
-  resolveAssistOverageRateUsdPer1k,
-} from './assist-credits'
-import {
   AI_ADDON_CREDITS_PER_MONTH,
   apiRequestEnforcementShape,
   checkApiRequestQuota,
@@ -346,37 +339,6 @@ describe('a comp sells nothing past its bands (AGL-3034)', () => {
     expect(checkCrmRecordsQuota(paying, band.contactsPerHost).allowed).toBe(true)
     expect(planMetersInfraOverage(paying)).toBe(true)
   })
-
-  it('prices no AI overage, so the assist band refuses at 100%', () => {
-    const org = withComp(TEST_ORG, comp('pro'))
-    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
-    expect(assistBandRefuses(org)).toBe(true)
-    // Ten times the band, measured: still nothing to bill.
-    const month = assistMonthOverage(org, 50)
-    expect(month.overageCredits).toBeGreaterThan(0)
-    expect(month.overageMonthlyUsd).toBe(0)
-    expect(month.overageRateUsd).toBeNull()
-    expect(priceAssistCreditOverage(org, 1_000_000).overageMonthlyUsd).toBe(0)
-
-    // The control: Pro on a live subscription does sell it.
-    const paying = { plan: 'pro', billingStatus: 'active' } as any
-    expect(resolveAssistOverageRateUsdPer1k(paying)).toBe(
-      PLAN_PRICING.pro.extraAssistCreditsUsdPer1k,
-    )
-  })
-
-  it('refuses the Starter add-on rate to a Starter comp with a staff-set add-on', () => {
-    // No subscription, so a staff-set add-on quantity still counts (the AI
-    // plugin widens the band from it when registered) — and without the comp
-    // check that band would be sold past at the add-on rate, to nobody.
-    const org = withComp({ seatAddons: { aiAddon: 1 } }, comp('starter'))
-    expect(hasAiAddon(org)).toBe(true)
-    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
-    expect(assistBandRefuses(org)).toBe(true)
-    // The control: the same add-on on a live Starter subscription is sold.
-    const paying = { plan: 'starter', billingStatus: 'active', seatAddons: { aiAddon: 1 } }
-    expect(resolveAssistOverageRateUsdPer1k(paying as any)).not.toBeNull()
-  })
 })
 
 describe('a comp is never a paying subscription (AGL-3034)', () => {
@@ -522,9 +484,6 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
     expect(checkFormSubmissionQuota(org, huge).allowed).toBe(true)
     expect(dataStorageEnforcementShape(org)).toBe('never-blocks')
     expect(apiRequestEnforcementShape(org)).toBe('never-blocks')
-    // The AI band: no band to be a wall at, and none to measure against.
-    expect(assistBandRefuses(org)).toBe(false)
-    expect(resolveAssistCreditBudget(org)).toBeNull()
 
     // The control: the same Starter comp, capped, refuses at its bands —
     // so the verdicts above are the lift's, not a gate that never refuses.
@@ -535,7 +494,6 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
     expect(checkCrmEmailQuota(capped, band.crmEmailsPerDay).allowed).toBe(false)
     expect(checkFormSubmissionQuota(capped, band.formSubmissionsPerMonth).allowed).toBe(false)
     expect(dataStorageEnforcementShape(capped)).toBe('measure')
-    expect(assistBandRefuses(capped)).toBe(true)
   })
 
   it('is never billable: every rate withheld, no overage priced, no revenue booked', () => {
@@ -547,15 +505,6 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
       expect(`${key}: ${value}`).toBe(`${key}: ${typeof value === 'boolean' ? false : null}`)
     }
     expect(planMetersInfraOverage(org)).toBe(false)
-    const month = assistMonthOverage(org, 1_000_000)
-    expect(month).toMatchObject({
-      bandCredits: null,
-      overageCredits: 0,
-      overageMonthlyUsd: 0,
-      overageRateUsd: null,
-    })
-    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
-    expect(priceAssistCreditOverage(org, 1_000_000).overageMonthlyUsd).toBe(0)
     expect(priceEmailSendOverage(org, 1_000_000).overageMonthlyUsd).toBe(0)
     expect(checkCrmRecordsQuota(org, 1_000_000_000)).toMatchObject({
       overageRecords: 0,
@@ -580,13 +529,10 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
     expect(resolved.contactsPerHost).toBe(2000)
     expect(Object.values(resolved).includes(UNLIMITED)).toBe(false)
     expect(checkQuota(live, 'hostLimit', PLAN_ENTITLEMENTS.starter.hostLimit).allowed).toBe(false)
-    // The paying workspace's AI band is sold past as Starter's own terms
-    // say, not lifted by the dormant comp: since AGL-3203 Starter includes
-    // 750 credits and carries a $3.00 rate, so it meters past the band like
-    // any paying Starter — and, crucially, at the PLAN's prices. A comp in
-    // force would have made `resolvePlanPricing` sell nothing; this one is
-    // dormant, so it sells everything the plan sells.
-    expect(assistBandRefuses(live)).toBe(false)
+    // The paying workspace is priced as Starter's own terms say, not lifted
+    // by the dormant comp: a comp in force would have made
+    // `resolvePlanPricing` sell nothing; this one is dormant, so it sells
+    // everything the plan sells — the AI band's $3.00 rate included.
     expect(resolvePlanPricing(live)).toEqual(PLAN_PRICING.starter)
     expect(resolvePlanPricing(live).extraAssistCreditsUsdPer1k).toBe(3)
     // Dormant, and said so.
@@ -616,8 +562,6 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
     expect(resolved.contactsPerHost).toBe(50)
     expect(resolved.screensPerHost).toBe(PLAN_ENTITLEMENTS.enterprise.screensPerHost)
     expect(checkCrmRecordsQuota(recapped, 50).allowed).toBe(false)
-    expect(assistBandRefuses(recapped)).toBe(true)
-    expect(resolveAssistCreditBudget(recapped)).toBe(5000)
     // And removing the comp outright returns the plan stored before it.
     const removed = { ...INTERNAL, entitlements: { ...INTERNAL.entitlements } }
     expect(resolveEffectivePlan(removed as any)).toBe('enterprise')
@@ -660,16 +604,6 @@ describe('a capped comp raises one band at a time (AGL-3049)', () => {
     // The bands nobody raised are still the plan's walls.
     expect(checkQuota(org, 'screensPerHost', band.screensPerHost).allowed).toBe(false)
     expect(checkCrmEmailQuota(org, band.crmEmailsPerDay).allowed).toBe(false)
-  })
-
-  it('raises the AI band the same way: a wall at the raised figure, priced at nothing', () => {
-    const org = withComp(
-      { billingStatus: 'canceled', entitlements: { assistCreditsPerMonth: 20_000 } },
-      comp('pro'),
-    )
-    expect(resolveAssistCreditBudget(org)).toBe(20_000)
-    expect(assistBandRefuses(org)).toBe(true)
-    expect(assistMonthOverage(org, 50).overageMonthlyUsd).toBe(0)
   })
 })
 

@@ -18,7 +18,7 @@
 import {
   assistProviderCostUsd,
   ASSIST_PROVIDER_COST_FIELD,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import { aiCacheHitRate } from '../model/ai-tokens'
 import { aiUsageKindFromRoute } from '../model/ai-usage-by-user'
 

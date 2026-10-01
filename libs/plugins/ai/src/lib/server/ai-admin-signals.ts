@@ -29,7 +29,7 @@ import {
   ASSIST_PROVIDER_COST_FIELD,
   assistCreditsFromUsd,
   assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import {
   hasAiAddon,
   resolveEffectivePlan,

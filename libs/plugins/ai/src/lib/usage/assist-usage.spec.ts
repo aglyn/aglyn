@@ -34,7 +34,7 @@ import {
   assistRefusedByHardCap,
   assistRefusedByOverageCap,
   assistUsdFromCredits,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
   PLAN_ENTITLEMENTS,
@@ -48,7 +48,7 @@ import {
   aiBilledRatesForModel,
   aiProviderRatesForModel,
 } from '../providers/catalog'
-import type { AssistRefusedBy } from '@aglyn/aglyn/app-utils/assist-credits'
+import type { AssistRefusedBy } from './assist-credits'
 import type { AiRefusedBy } from '../model/ai-allotments'
 
 /**

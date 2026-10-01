@@ -24,7 +24,6 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
-import { assistBandRefuses } from '@aglyn/aglyn/app-utils/assist-credits'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
@@ -80,6 +79,11 @@ interface QuotaState {
    * to keep adding" is wrong for a band that is sold past.
    */
   key?: 'assistCredits'
+  /**
+   * What happens at the band, as the AI plugin's credits route reports the
+   * reservation's own verdict: `true` stops, `false` sells past.
+   */
+  stopsAtBand?: boolean
 }
 
 /** The AI credits row's label, used to find it again among the others. */
@@ -385,7 +389,15 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         if (!active || !Number.isFinite(used) || !Number.isFinite(limit)) return
         setQuotas((previous) => [
           ...previous.filter((quota) => quota.key !== 'assistCredits'),
-          { key: 'assistCredits', label: ASSIST_CREDITS_LABEL, used, limit },
+          {
+            key: 'assistCredits',
+            label: ASSIST_CREDITS_LABEL,
+            used,
+            limit,
+            // A route that did not say reads as the wall: promising a charge
+            // the plan may not bill is the worse of the two sentences.
+            stopsAtBand: payload?.stopsAtBand !== false,
+          },
         ])
       } catch {
         // Network trouble: no AI credits row, and no stale one either.
@@ -571,10 +583,10 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const others = breached.filter((quota) => quota.key !== 'assistCredits')
   const names = others.map((quota) => quota.label).join(' and ')
   // What happens at the AI band is a fact about the plan and the org's own
-  // switch, and it is the same predicate the reservation refuses on — so the
-  // banner cannot promise a stop the assistant will not make, or a charge
-  // the plan cannot bill.
-  const assistStops = assistBandRefuses(org)
+  // switch, and the credits route answers it with the same predicate the
+  // reservation refuses on — so the banner cannot promise a stop the
+  // assistant will not make, or a charge the plan cannot bill.
+  const assistStops = assistRow?.stopsAtBand !== false
   const assistSentence = !assistRow
     ? ''
     : assistRow.used >= assistRow.limit

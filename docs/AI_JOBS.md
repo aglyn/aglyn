@@ -251,7 +251,7 @@ What generation costs in tokens is measured beside what it costs in credits
   charges, which on a marked-up model is lower. Read the first to answer "what
   did this workspace draw", the second to answer "what did it cost us" — never
   either for both. `assistProviderCostUsd` in
-  `libs/aglyn/src/lib/app-utils/assist-credits.ts` is the one reader of the
+  `libs/plugins/ai/src/lib/usage/assist-credits.ts` is the one reader of the
   second, and answers with the first for a period closed before the split.
 - **On the person's month.** `aiUsageByUser/{uid}/months/{month}.tokens`, the
   same four counts beside `estCostUsd` — the billed figure, so a person's

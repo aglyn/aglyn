@@ -35,10 +35,6 @@ import {
   publicOrgMonthlySpend,
   resolveUsageBudget,
 } from '@aglyn/aglyn/app-utils/usage-budget'
-import {
-  assistOverageCapReached,
-  resolveAssistOverageCapUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
 
 describe('resolveUsageBudget', () => {
   it('reads no budget from an org that has never set one', () => {
@@ -421,13 +417,5 @@ describe('the AI overage ceiling never enters the budget (AGL-2898)', () => {
     expect(due(withoutCeiling)).toBe(90)
     // A budget answers a threshold, never an `allowed`.
     expect(Object.keys(resolveUsageBudget(withCeiling))).not.toContain('allowed')
-  })
-
-  it('and the ceiling reads nothing of the budget', () => {
-    // A $50 budget with no ceiling is no ceiling; a $5 ceiling is $5 however
-    // large the budget beside it.
-    expect(resolveAssistOverageCapUsd({ plan: 'pro', ...withoutCeiling })).toBeNull()
-    expect(assistOverageCapReached({ plan: 'pro', ...withoutCeiling }, 900)).toBe(false)
-    expect(resolveAssistOverageCapUsd({ plan: 'pro', ...withCeiling })).toBe(5)
   })
 })

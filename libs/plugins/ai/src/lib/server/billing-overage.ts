@@ -25,7 +25,7 @@ import {
   resolveAssistHardCap,
   resolveAssistOverageCapUsd,
   resolveAssistOverageRateUsdPer1k,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -34,7 +34,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { logAiOverageControl } from '../activity/ai-activity'
-import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistMonthOverage } from '../usage/assist-credits'
 import { assistUsageMonth } from '../usage/assist-usage'
 import { aiOverageBillsByInvoice } from '../billing/ai-overage-cutover'
 import { aiOverageNextChargeUsd } from '../billing/ai-overage-gate'

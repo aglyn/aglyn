@@ -39,7 +39,7 @@ import {
   assistCreditRateMarginPct,
   assistCreditsFromUsd,
   assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 import { PLAN_PRICING } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   composeStaffOrgAiMargin,

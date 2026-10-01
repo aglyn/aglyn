@@ -143,10 +143,16 @@ import {
   orgMonthlyCogsUsd,
 } from '@aglyn/aglyn'
 import type { OrgPlan } from '@aglyn/aglyn'
-import {
-  ASSIST_CREDIT_COST_USD,
-  assistUsdFromCredits,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+import { pluginUsageBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+
+/**
+ * What one AI credit costs, as the AI plugin declares its credits band — the
+ * constant its meter converts spend with, compiled into the catalog. The
+ * plugin's own spec holds the declaration to that constant.
+ */
+const ASSIST_CREDIT_COST_USD = pluginUsageBands().find(
+  (band) => band.id === 'assistCredits',
+)?.unitCostUsd as number
 
 type Interval = 'month' | 'year'
 
@@ -193,9 +199,10 @@ const CRM_SEAT_COGS_USD_PER_MONTH = 0.06
  * from it.
  *
  * ⛔ EVERY TERM MULTIPLIES A RATE HERE, INCLUDING ASSIST — the model must not
- * route a band through a production converter, however tempting.
- * `assistUsdFromCredits` answers **0** for a non-finite band, by design: it
- * feeds a spend budget, and an unbounded budget is worse than none. Reading
+ * route a band through a production converter, however tempting. The AI
+ * meter's `assistUsdFromCredits` answers **0** for a non-finite band, by
+ * design: it feeds a spend budget, and an unbounded budget is worse than
+ * none. Reading
  * the assist term through it would make an `UNLIMITED` assist band cost
  * NOTHING here, which is the exact defect the `UNLIMITED` block at the bottom
  * of this file exists to catch, re-introduced on the newest axis. So the rate
@@ -713,10 +720,11 @@ describe('every cost the platform prices has a term here', () => {
   })
 
   it('reads the assist rate, which is NOT in that table', () => {
-    // `ASSIST_CREDIT_COST_USD` lives in `assist-credits.ts` because a credit
-    // IS provider spend rather than a meter priced per unit — the platform
-    // model takes assist in dollars at x1 for the same reason. The sweep
-    // above therefore cannot see it, and this is the term that was missing.
+    // A credit's cost is the AI plugin's declared unit, not a row of the
+    // platform's table, because a credit IS provider spend rather than a
+    // meter priced per unit — the platform model takes assist in dollars at
+    // x1 for the same reason. The sweep above therefore cannot see it, and
+    // this is the term that was missing.
     expect(ASSIST_CREDIT_COST_USD).toBe(0.001)
     expect(Object.keys(ORG_COGS_UNIT_RATES_USD)).not.toContain(
       'assistCreditsPerMonth',
@@ -756,22 +764,19 @@ describe('every cost the platform prices has a term here', () => {
   })
 
   it('governs the assist band on the SAME rate the meter does', () => {
-    // The pairing, both directions. For a FINITE band the model must agree
-    // with the production converter to the cent — a second assist rate here
-    // would be exactly the drift `orgMonthlyCogsUsd` was built to remove.
+    // The pairing. The model prices a credit at the unit the AI plugin's
+    // meter declares — a second assist rate here would be exactly the drift
+    // `orgMonthlyCogsUsd` was built to remove.
     for (const plan of PAID) {
       expect(`${plan}: ${bandCostTerms(plan).assistCredits}`).toBe(
-        `${plan}: ${assistUsdFromCredits(
-          PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth,
-        )}`,
+        `${plan}: ${PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth * ASSIST_CREDIT_COST_USD}`,
       )
     }
-    // …and for an UNBOUNDED band they must NOT agree, which is why the model
-    // multiplies the rate itself instead of calling the converter.
-    // `assistUsdFromCredits` answers 0 for a non-finite band because it feeds
-    // a spend budget; scoring an uncapped band as free is the one thing this
-    // file may never do.
-    expect(assistUsdFromCredits(UNLIMITED)).toBe(0)
+    // …and for an UNBOUNDED band the model multiplies the rate itself, so an
+    // uncapped band costs Infinity rather than nothing. The meter's own
+    // converter answers 0 for a non-finite band because it feeds a spend
+    // budget; scoring an uncapped band as free is the one thing this file may
+    // never do.
     expect(UNLIMITED * ASSIST_CREDIT_COST_USD).toBe(Number.POSITIVE_INFINITY)
     // …and the MODEL, not the helper, is what has to hold that. An uncapped
     // assist band must reach `unboundedTerms` by name, exactly as an uncapped
@@ -1747,12 +1752,12 @@ describe("Free's bandwidth band, and everything derived from it", () => {
   it('the AI taste costs at most $0.30 a month per Free workspace, and is a wall', () => {
     expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(300)
     expect(PLAN_ENTITLEMENTS.free.features.aiGenerative).toBe(true)
-    const monthlyCostUsd = assistUsdFromCredits(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth)
+    const monthlyCostUsd = PLAN_ENTITLEMENTS.free.assistCreditsPerMonth * ASSIST_CREDIT_COST_USD
     expect(monthlyCostUsd).toBeLessThanOrEqual(0.3)
     expect(monthlyCostUsd).toBeGreaterThan(0)
     // …and it is metered on the SAME rate the paid bands are, so a cheaper
     // credit could not silently make the taste larger than it was decided.
-    expect(monthlyCostUsd).toBe(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth * ASSIST_CREDIT_COST_USD)
+    expect(ASSIST_CREDIT_COST_USD).toBe(0.001)
     expect(PLAN_PRICING.free.extraAssistCreditsUsdPer1k).toBeNull()
     // Three workspaces per account (AGL-2265) do NOT triple it: the account
     // allowance is the same constant, read by the meter for the owner — held
@@ -2087,12 +2092,9 @@ describe('the Aglyn AI add-on band clears the same invariant with its revenue co
   })
 
   it('reads the add-on band on the SAME rate the meter does, and it is finite everywhere', () => {
+    // `addonCostUsd` prices the add-on's credits at the AI meter's declared
+    // unit, the one every band above is priced at.
     expect(ASSIST_CREDIT_COST_USD).toBe(0.001)
-    for (const plan of PAID) {
-      expect(`${plan}: ${addonCostUsd(plan)}`).toBe(
-        `${plan}: ${assistUsdFromCredits(AI_ADDON_CREDITS_PER_MONTH[plan])}`,
-      )
-    }
     // Free sells none and Enterprise is Agency x 2 — the rule every
     // Enterprise fallback follows — and neither is `UNLIMITED`, for the
     // reason the `UNLIMITED` block above gives.

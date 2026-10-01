@@ -18,7 +18,7 @@
 import {
   assistBandRefuses,
   resolveAssistBudgetUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   assistOperatorCeilingUsd,

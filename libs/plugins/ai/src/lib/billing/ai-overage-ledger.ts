@@ -58,7 +58,7 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
-import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistMonthOverage } from '../usage/assist-credits'
 import {
   AI_OVERAGE_MIN_CHARGE_USD,
   AI_OVERAGE_THRESHOLD_USD,

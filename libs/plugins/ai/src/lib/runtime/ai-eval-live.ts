@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { LAYOUT_SLOT_COMPONENT_ID } from '@aglyn/aglyn/app-utils/compose-layout-nodes'
 import { stampDocumentLandmark } from '@aglyn/aglyn/app-utils/document-landmark'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'

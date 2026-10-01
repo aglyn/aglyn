@@ -870,8 +870,8 @@ export interface OrgStorageOverage {
  * could set it on another org would switch that org's assistant off at the
  * band. So the rules deny it to every client and only
  * `/api/billing/assist-overage` (Admin SDK, `billing.manage`) writes it. Read
- * through `resolveAssistHardCap` in `app-utils/assist-credits`, never
- * directly.
+ * through `resolveAssistHardCap` in the AI plugin's `usage/assist-credits`,
+ * never directly.
  *
  * `report-usage` never reads this map — it bills whatever landed past the
  * band, the way storage bills stored bytes. With the cap on that is at most

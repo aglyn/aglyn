@@ -20,7 +20,7 @@ import { AI_USAGE_METER_ID } from './constants'
 import {
   ASSIST_CREDIT_COST_USD,
   ASSIST_PROVIDER_COST_FIELD,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './usage/assist-credits'
 
 /**
  * THE AI PLUGIN'S METER (AGL-3080): provider spend, in the platform's cost

@@ -23,7 +23,7 @@ import {
   resolveAssistCreditBudget,
   resolveAssistHardCap,
   resolveAssistOverageRateUsdPer1k,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from './assist-credits'
 import type {
   UsageQuotaCheck,
   UsageQuotaContext,

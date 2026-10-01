@@ -45,7 +45,7 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { crmActionRecipe } from '@aglyn/aglyn/app-utils/actions'
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistCreditsFromUsd } from '../usage/assist-credits'
 import type { PluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS, AI_JOB_PLAN_SCOPES } from '../jobs/ai-job-plan-step'

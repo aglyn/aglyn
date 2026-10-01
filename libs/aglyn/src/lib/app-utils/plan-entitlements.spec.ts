@@ -75,7 +75,7 @@ import {
   aiAddonUnits,
   hasAiAddon,
 } from './plan-entitlements'
-import { ASSIST_CREDIT_COST_USD, assistBandRefuses } from './assist-credits'
+import { pluginUsageBands } from '../plugin-manager/plugin-usage-axes'
 import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
 
 // The AI add-on as its plugin declares it (AGL-2939, AGL-2940): the resolver
@@ -2569,12 +2569,11 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
         if (plan === 'free' && band === 'assistCreditsPerMonth') {
           // The Free AI taste (AGL-2925): a positive band with NO rate, by
           // decision, and NOT the silent free overage this rule forbids —
-          // because the band is a WALL. `assistBandRefuses` is the gate's
-          // own predicate, so a Free workspace is refused at 300 rather
-          // than handed credits past a bound that bills nothing.
+          // because the band is a WALL: the AI plugin's gate refuses a Free
+          // workspace at 300 rather than handing it credits past a bound
+          // that bills nothing (its `assist-credits.spec.ts`).
           expect(limit).toBeGreaterThan(0)
           expect(`${plan}: ${price}`).toBe(`${plan}: null`)
-          expect(assistBandRefuses({ plan })).toBe(true)
           continue
         }
         if (Number.isFinite(limit) && limit > 0) {
@@ -2600,7 +2599,6 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
         expect(unsold).toEqual([])
         expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBeGreaterThan(0)
         expect(PLAN_PRICING.free.extraAssistCreditsUsdPer1k).toBeNull()
-        expect(assistBandRefuses({ plan: 'free' })).toBe(true)
       } else {
         expect(unsold.length).toBeGreaterThan(0)
       }
@@ -3071,6 +3069,12 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
   })
 
   it('every band costs at most 50% of the add-on price, and Enterprise is Agency x 2, finite', () => {
+    // A credit's cost as the AI plugin declares its band — compiled, so the
+    // add-on's price is checked against the plugin's own unit.
+    const ASSIST_CREDIT_COST_USD = pluginUsageBands().find(
+      (band) => band.id === 'assistCredits',
+    )?.unitCostUsd as number
+    expect(ASSIST_CREDIT_COST_USD).toBeGreaterThan(0)
     for (const plan of SOLD) {
       const price = PLAN_PRICING[plan].aiAddonMonthlyUsd as number
       const costUsd = AI_ADDON_CREDITS_PER_MONTH[plan] * ASSIST_CREDIT_COST_USD
