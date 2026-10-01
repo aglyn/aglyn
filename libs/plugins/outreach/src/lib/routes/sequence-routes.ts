@@ -19,6 +19,7 @@ import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membersh
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { applyOutreachEnrollmentEvent } from '../engine/enrollment-state'
 import {
   validateOutreachSequence,
@@ -207,22 +208,23 @@ async function draftPlacementIssues(
     )
   }
   /*
-   * The campaigns must be the ORGANIZATION's live containers
-   * (`orgs/{orgId}/emailCampaigns`, AGL-3254): a request can claim any id,
+   * The campaigns must be the ORGANIZATION's live containers of the
+   * `campaign` kind (AGL-3254): a request can claim any id,
    * and a sequence filed under another org's campaign, or under one the
    * console soft-deleted, would credit its outcomes to a page nobody here
    * can open. A sequence is an org record, so any live campaign of the org
    * qualifies, whichever sites it is placed on.
    */
   if (campaignIds.length) {
-    const containers = firestore.collection('orgs').doc(caller.orgId).collection('emailCampaigns')
-    const found = await firestore.getAll(
-      ...campaignIds.map((campaignId) => containers.doc(readOutreachDocumentId(campaignId) ?? '-')),
+    const found = await readOrgContainers(
+      firestore,
+      'campaign',
+      caller.orgId,
+      campaignIds.map((campaignId) => readOutreachDocumentId(campaignId) ?? ''),
     )
-    const unknown = campaignIds.filter((campaignId, index) => {
-      const snapshot = found[index]
-      return !readOutreachDocumentId(campaignId) || !snapshot?.exists || Boolean(snapshot.get('deletedAt'))
-    })
+    const unknown = campaignIds.filter(
+      (campaignId, index) => !readOutreachDocumentId(campaignId) || !found[index]?.live,
+    )
     if (unknown.length) {
       issues.push(
         issue(

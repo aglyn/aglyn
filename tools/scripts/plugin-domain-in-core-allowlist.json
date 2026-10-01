@@ -391,35 +391,7 @@
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
     },
     {
-      "path": "libs/plugins/ai/src/lib/jobs/ai-workflow-records.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/server/campaign-filing-activity.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/crm/src/lib/server/contact-email-history.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/server/lead-create.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/server/leads-import.ts",
       "rules": [
         "plugin-collection:marketing"
       ],
@@ -451,13 +423,6 @@
       "path": "libs/plugins/inbox/src/lib/server.ts",
       "rules": [
         "plugin-collection:forms"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/components/host-reference-health-card.component.tsx",
-      "rules": [
-        "plugin-collection:marketing"
       ],
       "lane": "coupling"
     },
@@ -520,17 +485,9 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/outreach/src/lib/routes/curate-routes.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
       "rules": [
-        "plugin-collection:crm",
-        "plugin-collection:marketing"
+        "plugin-collection:crm"
       ],
       "lane": "coupling"
     },
@@ -538,13 +495,6 @@
       "path": "libs/plugins/outreach/src/lib/routes/preview-routes.ts",
       "rules": [
         "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
-      "rules": [
-        "plugin-collection:marketing"
       ],
       "lane": "coupling"
     },
@@ -557,20 +507,6 @@
     },
     {
       "path": "libs/plugins/workflows/src/lib/components/use-automation-step-pickers.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/workflows/src/lib/components/use-org-automation-step-pickers.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/workflows/src/lib/engine/run-event-actions.ts",
       "rules": [
         "plugin-collection:marketing"
       ],

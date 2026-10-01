@@ -17,6 +17,7 @@
 'use client'
 
 import { scopeCovers } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import {
   pluginRecordListQuery,
   pluginRecordsFromRows,
@@ -100,15 +101,17 @@ export function useOrgAutomationStepPickers(
     listRead,
     EDITOR_OPTION_CEILING,
   )
+  // The `campaign` container kind, where its declaration says it is stored.
+  const campaignCollection = pluginContainerKind('campaign')?.orgCollection
   const { data: campaignRead } = useFirestoreCollection<any>(
     () =>
-      editorOpened && orgId
+      editorOpened && orgId && campaignCollection
         ? collectionCeiling(
-            collection(firestore, 'orgs', orgId, 'emailCampaigns'),
+            collection(firestore, 'orgs', orgId, campaignCollection),
             EDITOR_OPTION_CEILING,
           )
         : null,
-    [firestore, orgId, editorOpened],
+    [firestore, orgId, editorOpened, campaignCollection],
     { idField: '$id' },
   )
   const { rows: campaignDocs, truncated: campaignsTruncated } =

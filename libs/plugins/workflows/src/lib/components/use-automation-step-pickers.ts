@@ -27,6 +27,7 @@
  */
 
 import { scopeTokensForHost } from '@aglyn/aglyn'
+import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -167,29 +168,31 @@ export function useAutomationStepPickers(
     EDITOR_OPTION_CEILING,
   )
   /*
-   * The campaign CONTAINERS, `emailCampaigns`: the collection the executor
-   * resolves an "Assign to a campaign" step's `campaignId` against when it
-   * runs (AGL-3052). `campaigns` beside it holds the individual email sends,
-   * and a send's id names no container, so a step pointed at one fails every
-   * run with "unknown campaign".
+   * The campaign CONTAINERS — the `campaign` container kind, read where its
+   * declaration says they are stored — which the executor resolves an
+   * "Assign to a campaign" step's `campaignId` against when it runs
+   * (AGL-3052). A send's id names no container, so a step pointed at one
+   * fails every run with "unknown campaign". Nothing is read where no plugin
+   * keeps the kind.
    *
    * The org's, narrowed to the ones placed on THIS site by the same host
    * tokens the datasets use — an automation runs on this site, so it may
    * only file under a campaign the site offers, and the clause is what
    * makes the list provable for a collaborator scoped to the site.
    */
+  const campaignCollection = pluginContainerKind('campaign')?.orgCollection
   const { data: campaignRead } = useFirestoreCollection<any>(
     () =>
-      editorOpened && dataScope
+      editorOpened && dataScope && campaignCollection
         ? collectionCeiling(
             query(
-              collection(firestore, dataScope[0], dataScope[1], 'emailCampaigns'),
+              collection(firestore, dataScope[0], dataScope[1], campaignCollection),
               where('visibleTo', 'array-contains-any', scopeTokens),
             ),
             EDITOR_OPTION_CEILING,
           )
         : null,
-    [firestore, dataScope, scopeTokens, editorOpened],
+    [firestore, dataScope, scopeTokens, editorOpened, campaignCollection],
     { idField: '$id' },
   )
   const { rows: campaignDocs, truncated: campaignsTruncated } =

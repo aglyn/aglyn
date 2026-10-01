@@ -17,6 +17,7 @@
 'use client'
 
 import { pluginDocsHelp, scopeTokensForHost } from '@aglyn/aglyn'
+import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import { auditHostReferences } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
@@ -158,22 +159,24 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   }, [datasetRead])
   /*
    * The campaign containers an "Assign to a campaign" step runs against
-   * (AGL-3052); `campaigns` holds the email sends, which no step names.
-   * They are the org's, and the audit judges against the ones placed on
-   * THIS site, by the same host tokens as the datasets above.
+   * (AGL-3052): the `campaign` container kind, read where its declaration
+   * says they are stored, and nothing where no plugin keeps the kind. They
+   * are the org's, and the audit judges against the ones placed on THIS
+   * site, by the same host tokens as the datasets above.
    */
+  const campaignCollection = pluginContainerKind('campaign')?.orgCollection
   const { data: campaignRead } = useFirestoreCollection<any>(
     () =>
-      dataScope
+      dataScope && campaignCollection
         ? collectionCeiling(
             query(
-              collection(firestore, dataScope[0], dataScope[1], 'emailCampaigns'),
+              collection(firestore, dataScope[0], dataScope[1], campaignCollection),
               where('visibleTo', 'array-contains-any', scopeTokens),
             ),
             REFERENCE_CEILING,
           )
         : null,
-    [firestore, dataScope, scopeTokens],
+    [firestore, dataScope, scopeTokens, campaignCollection],
     { idField: '$id' },
   )
   const campaignDocs = useMemo(

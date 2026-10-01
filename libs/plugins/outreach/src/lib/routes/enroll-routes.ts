@@ -34,6 +34,7 @@ import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plu
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
@@ -412,9 +413,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
 
   /**
    * The names of the sequence's campaigns as they stand, for the entry the
-   * enroll files on the person's record (AGL-3274) — the org's containers,
-   * `orgs/{orgId}/emailCampaigns`. Read once per request, not per person; a
-   * container that is gone answers nothing and the entry names the rest.
+   * enroll files on the person's record (AGL-3274) — the org's containers of
+   * the `campaign` kind. Read once per request, not per person; a container
+   * that is gone answers nothing and the entry names the rest.
    */
   async function sequenceCampaignNames(
     firestore: Firestore,
@@ -424,9 +425,8 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     const campaignIds = normalizeContainerIds(sequence.campaignIds)
     if (!campaignIds.length || !orgId) return []
     try {
-      const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')
-      const found = await firestore.getAll(...campaignIds.map((id) => containers.doc(id)))
-      return found.map((snapshot) => String(snapshot.get('name') ?? '').trim()).filter(Boolean)
+      const found = await readOrgContainers(firestore, 'campaign', orgId, campaignIds)
+      return found.map((container) => container.name).filter(Boolean)
     } catch (error) {
       console.error('[outreach] the sequence’s campaigns could not be named for the record', error)
       return []

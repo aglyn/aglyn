@@ -73,6 +73,11 @@ import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 // The leaf, not the barrel: this library's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import {
+  findOrgContainersByName,
+  readOrgContainers,
+  type OrgContainerRecord,
+} from '@aglyn/tenant-data-admin/server/org-containers'
 // The leaf again, for the phishing screen's hold (AGL-3356): the control
 // that stops a send must be the real one under a spec that mocks the barrel.
 import { screenOutboundSend } from '@aglyn/tenant-data-admin/server/outbound-send-review'
@@ -1177,34 +1182,30 @@ async function runServerStep(
       const campaignLabel = step.campaignName || step.campaignId
       const campaignOrgId = env.orgId ?? (await resolveOrgIdForHost(hostId))
       if (!campaignOrgId) return failed(`unknown campaign "${campaignLabel}"`)
-      const campaignsRef = firebaseAdmin
-        .app()
-        .firestore()
-        .collection('orgs')
-        .doc(campaignOrgId)
-        .collection('emailCampaigns')
-      const usable = (doc: FirebaseFirestore.DocumentSnapshot | undefined) =>
-        Boolean(
-          doc?.exists &&
-            !doc.get('deletedAt') &&
-            visibleToHost(doc.get('visibleTo') as string[] | undefined, hostId),
-        )
+      // The org's containers of the `campaign` kind, read where the kind's
+      // declaration says they are stored.
+      const containerStore = firebaseAdmin.app().firestore()
+      const usable = (container: OrgContainerRecord | undefined) =>
+        Boolean(container?.live && visibleToHost(container.visibleTo, hostId))
       const namedId = step.campaignId?.trim() ?? ''
-      const campaignDoc = namedId
-        ? await campaignsRef.doc(namedId).get()
+      const campaign = namedId
+        ? (await readOrgContainers(containerStore, 'campaign', campaignOrgId, [namedId]))[0]
         : (
-            await campaignsRef
-              .where('name', '==', step.campaignName?.trim() ?? '')
-              .limit(10)
-              .get()
-          ).docs.find(usable)
-      if (!campaignDoc?.exists) {
+            await findOrgContainersByName(
+              containerStore,
+              'campaign',
+              campaignOrgId,
+              step.campaignName?.trim() ?? '',
+              10,
+            )
+          ).find(usable)
+      if (!campaign?.exists) {
         return failed(`unknown campaign "${campaignLabel}"`)
       }
-      if (campaignDoc.get('deletedAt')) {
+      if (!campaign.live) {
         return failed(`campaign "${campaignLabel}" was deleted`)
       }
-      if (!usable(campaignDoc)) {
+      if (!usable(campaign)) {
         return failed(`campaign "${campaignLabel}" is not placed on this site`)
       }
       /*
@@ -1224,7 +1225,7 @@ async function runServerStep(
       const group = await consentGroupForSite(hostId)
       await contact.ref.update({
         [contactContainerFieldPath(group.groupId, 'campaign')]: FieldValue.arrayUnion(
-          campaignDoc.id,
+          campaign.id,
         ),
         updatedAt: FieldValue.serverTimestamp(),
       })

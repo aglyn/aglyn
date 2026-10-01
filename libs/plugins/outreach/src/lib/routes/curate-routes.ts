@@ -22,6 +22,7 @@ import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
+import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   OUTREACH_CURATION_SYSTEM,
@@ -233,15 +234,14 @@ const texts = (value: unknown): string[] =>
 
 /**
  * The names of the campaigns the person is filed under — the org's
- * containers, `orgs/{orgId}/emailCampaigns`. A container that is gone names
- * nothing; a read that fails names none, and the draft goes without.
+ * containers of the `campaign` kind. A container that is gone names nothing;
+ * a read that fails names none, and the draft goes without.
  */
 async function campaignNames(firestore: Firestore, orgId: string, campaignIds: readonly string[]): Promise<string[]> {
   if (!campaignIds.length) return []
   try {
-    const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')
-    const found = await firestore.getAll(...campaignIds.map((id) => containers.doc(id)))
-    return found.map((snapshot) => text(snapshot.get('name'))).filter(Boolean)
+    const found = await readOrgContainers(firestore, 'campaign', orgId, campaignIds)
+    return found.map((container) => container.name).filter(Boolean)
   } catch (error) {
     console.error('[outreach] the person’s campaigns could not be named for the draft', error)
     return []

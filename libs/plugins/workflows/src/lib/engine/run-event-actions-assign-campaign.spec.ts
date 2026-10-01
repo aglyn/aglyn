@@ -102,6 +102,8 @@ const collectionHandle = (path: string): any => {
           value,
       ),
     limit: () => query(matcher),
+    // A projection reads the same documents; the double hands back whole ones.
+    select: () => query(matcher),
     get: async () => {
       if (path.endsWith('actions')) {
         return {
@@ -168,6 +170,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       firestore: () => ({
         collection: (name: string) => collectionHandle(name),
+        // Keyed reads in one round trip, answered in the order asked, as the
+        // SDK's `getAll` does.
+        getAll: (...refs: Array<{ get: () => Promise<unknown> }>) =>
+          Promise.all(refs.map((ref) => ref.get())),
       }),
     }),
   },
