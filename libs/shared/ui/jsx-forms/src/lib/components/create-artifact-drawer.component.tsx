@@ -84,6 +84,11 @@ export interface CreateArtifactDrawerProps {
    * that lives in the app and depends on the console's session hook. Defaults
    * to {@link ArtifactFormTemplate}, which is the same layout without that
    * dependency.
+   *
+   * A template reads form state — `submitting`, `valid` — through a
+   * `FormSpy`. The form does not draw its template again when that state
+   * changes, so the `pristine` and `valid` on `useFormApi()` keep the values
+   * they had when the drawer opened.
    */
   FormTemplate?: any
   /** Label on the submit button. */
@@ -106,7 +111,9 @@ export const ArtifactFormTemplate = forwardRef<any, FormTemplateRenderProps>(
         <Grid spacing={2} container>
           {formFields as any}
         </Grid>
-        <FormSpy>
+        {/* `submitting` alone: it is all the button reads, and a spy with
+            no subscription draws the button again on every keystroke. */}
+        <FormSpy subscription={{ submitting: true }}>
           {({ submitting }) => (
             <Box sx={{ mt: 2 }}>
               <FormControl margin="normal" fullWidth>
@@ -181,12 +188,22 @@ export function CreateArtifactDrawer(props: CreateArtifactDrawerProps) {
       }
     >
       <Container gutterY>
+        {/*
+          The form subscribes to nothing, so a keystroke draws the field it
+          lands in and no other (AGL-3423). Each field reads its own state, a
+          condition watches the fields it names, and the template's button
+          watches `submitting` through its own FormSpy: nothing here is drawn
+          from the form's state as a whole. The renderer's own defaults —
+          pristine, submitting, valid — are switched off too: a change in any
+          of them draws every field again, and the first letter of a required
+          name changes two of them.
+         */}
         <FormRenderer
           FormTemplate={FormTemplate}
           componentMapper={simpleComponentMapper}
           onSubmit={onSubmit}
           schema={schema}
-          subscription={{ values: true }}
+          subscription={{ pristine: false, submitting: false, valid: false }}
           clearOnUnmount
         />
         {errorSlot}
