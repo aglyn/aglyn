@@ -21,10 +21,12 @@ import { within } from '@testing-library/dom'
  * A multi-select beside a field being typed in, in a form that re-renders
  * its fields on every change (AGL-3423).
  *
- * `CreateArtifactDrawer` renders with a `values` subscription, so every
- * keystroke re-renders every field, and the campaign drawer puts two
- * multi-selects under its name. A multi-select is a multiple Autocomplete,
- * which leaves a state update pending after every commit it takes part in
+ * A form with a `values` subscription re-renders every field on every
+ * keystroke, and a form can put multi-selects beside a text field: the
+ * campaign drawer has two under its name. (The create drawer's own form
+ * subscribes to nothing; `create-artifact-drawer.keystroke-cost.spec.tsx`
+ * holds it there.) A multi-select is a multiple Autocomplete, which leaves a
+ * state update pending after every commit it takes part in
  * (MUI's `InputBase` copies each render's new chip array into its
  * `FormControl` from a passive effect); React 19 counts each such commit as
  * a nested update, and keystrokes delivered back to back commit one after
@@ -81,7 +83,7 @@ describe('a multi-select beside a field being typed in (AGL-3423)', () => {
             'text-field': TextField,
           },
           onSubmit: () => undefined,
-          // The create drawer's subscription: every field on every change.
+          // Every field on every change: the shape this select must survive.
           subscription: { values: true },
           initialValues: { topics: ['design', 'build'] },
           schema: {
