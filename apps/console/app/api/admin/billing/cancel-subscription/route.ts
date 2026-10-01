@@ -166,10 +166,12 @@ async function handler(request: Request): Promise<Response> {
             orgId,
             item: { label: 'your subscription', path: '/org/billing' },
             lock: {
+              // A canceled workspace is on the Free plan (the billing
+              // webhook mirrors `plan: 'free'`): nothing is deleted.
               affected:
                 when === 'now'
-                  ? 'The subscription ended now, with no refund. Your sites and data stay; paid features stop.'
-                  : 'The subscription ends at the end of the current billing period, with no refund. Paid features stop then.',
+                  ? 'The subscription ended now, with no refund, and the workspace is on the Free plan. Your sites and data stay; paid features stop.'
+                  : 'The subscription stays active until the end of the current billing period, with no refund. Then the workspace moves to the Free plan: your sites and data stay, and paid features stop.',
             },
           })
         : null

@@ -210,6 +210,22 @@ async function cardFingerprintOf(
   return result.ok && typeof fingerprint === 'string' && fingerprint ? fingerprint : null
 }
 
+/** The display name of the listing a recorded sale is for, or null. Never throws. */
+async function soldListingName(
+  firestore: FirebaseFirestore.Firestore,
+  purchaseRef: FirebaseFirestore.DocumentReference,
+): Promise<string | null> {
+  try {
+    const listingId = String((await purchaseRef.get()).get('listingId') ?? '')
+    if (!listingId) return null
+    const listing = await firestore.collection('marketplaceListings').doc(listingId).get()
+    const name = String(listing.get('displayName') ?? '').trim()
+    return name || null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Tell staff and the publisher's owners and admins that a sale was flagged
  * (AGL-3365), once per row, through the risk notice seam (AGL-3368). Staff
@@ -228,14 +244,23 @@ export async function notifySaleRisk(
     amountCents: number
     paymentIntentId: string
     livemode: boolean
+    /** The listing sold, by its display name, when the sale names one. */
+    listingName?: string | null
   },
 ): Promise<void> {
+  const listingName = String(flagged.listingName ?? '').trim()
   await notifyRisk({
     kind: 'marketplace-sale-review',
     orgId: flagged.publisherOrgId,
     reviewId: flagged.reviewId,
     reference: flagged.reference,
-    item: { label: 'a recent marketplace sale', path: '/org/marketplace/payouts' },
+    item: {
+      // Which sale, for a publisher with several listings.
+      label: listingName
+        ? `a sale of your listing "${listingName.replace(/"/g, '”')}"`
+        : 'a recent marketplace sale',
+      path: '/org/marketplace/payouts',
+    },
     amount: `$${(flagged.amountCents / 100).toFixed(2)}`,
     stripeUrl: flagged.paymentIntentId
       ? `https://dashboard.stripe.com/${flagged.livemode ? '' : 'test/'}payments/${encodeURIComponent(flagged.paymentIntentId)}`
@@ -407,6 +432,7 @@ export async function screenMarketplaceSale(
         amountCents: input.amountCents,
         paymentIntentId: input.paymentIntentId,
         livemode: input.livemode,
+        listingName: await soldListingName(firestore, input.purchaseRef),
       })
     }
     return { signals, filed: reference }

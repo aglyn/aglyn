@@ -597,6 +597,23 @@ describe('lockdownNotice — per-reason visitor copy', () => {
     expect(notice.body).toBe('Custom words.')
     expect(notice.contact).toBe('support@aglyn.com')
   })
+
+  // A site lock closes one site: its owners are not told their account was
+  // closed while their other sites serve (AGL-3432).
+  it('says "this site" for a site lock, and keeps "this account" for the rest', () => {
+    expect(lockdownNotice(state({ scope: 'host', reason: 'abuse' })).body).toBe(
+      'This site has been closed for a violation of our Terms of Service.',
+    )
+    expect(lockdownNotice(state({ scope: 'host', reason: 'manual' })).body).toBe(
+      'Access to this site is currently disabled.',
+    )
+    expect(lockdownNotice(state({ scope: 'org', reason: 'abuse' })).body).toBe(
+      'This account has been closed for a violation of our Terms of Service.',
+    )
+    expect(lockdownNotice(state({ scope: 'user', reason: 'manual' })).body).toBe(
+      'Access to this account is currently disabled.',
+    )
+  })
 })
 
 /**

@@ -99,6 +99,30 @@ export function cardPaymentAlarmReviewId(hostId: string, day: string): string {
 }
 
 /**
+ * What the alarm is about, in the owner's words:
+ * `checkout on the site "Harbor View"`. The label rides on the row, so the
+ * review's closing notice and the staff alert name the site too — a
+ * workspace with several stores reads which orders to look at. Pure.
+ */
+export function cardTestingItemLabel(siteName: string | null | undefined): string {
+  const name = String(siteName ?? '').trim()
+  return name ? `checkout on the site "${name.replace(/"/g, '”')}"` : 'checkout on your site'
+}
+
+/** The site's name for the label, from its document. Never throws. */
+async function readSiteName(firestore: any, hostId: string): Promise<string | null> {
+  try {
+    const host = await firestore.collection('hosts').doc(hostId).get()
+    for (const value of [host?.get?.('displayName'), host?.get?.('name'), host?.get?.('subdomain')]) {
+      if (typeof value === 'string' && value.trim()) return value.trim()
+    }
+  } catch {
+    // The notice still goes, naming "your site".
+  }
+  return null
+}
+
+/**
  * Tell staff and the site's managers and the workspace's owners that a site
  * crossed the card-payment window (AGL-3363), through the risk notice seam
  * (AGL-3368): the owners read the catalog's `card-testing` words — what was
@@ -106,7 +130,14 @@ export function cardPaymentAlarmReviewId(hostId: string, day: string): string {
  * Never throws.
  */
 export async function notifyCardTestingVelocity(
-  input: { hostId: string; orgId: string | null; reference: string; reviewId?: string | null },
+  input: {
+    hostId: string
+    orgId: string | null
+    reference: string
+    reviewId?: string | null
+    /** The site's display name, for the label. */
+    siteName?: string | null
+  },
   deps: { notifyRisk: (input: RiskEventInput) => Promise<unknown> },
 ): Promise<void> {
   await deps
@@ -116,7 +147,7 @@ export async function notifyCardTestingVelocity(
       hostId: input.hostId,
       reviewId: input.reviewId ?? null,
       reference: input.reference,
-      item: { label: 'your site', path: `/${input.hostId}/products/orders` },
+      item: { label: cardTestingItemLabel(input.siteName), path: `/${input.hostId}/products/orders` },
       staffEvidence: 'An unusual number of card payments opened on one site.',
     })
     .catch(() => undefined)
@@ -184,7 +215,13 @@ export async function recordCardPaymentAlarm(input: {
     )
     if (first) {
       await notifyCardTestingVelocity(
-        { hostId: input.hostId, orgId: input.orgId, reference, reviewId },
+        {
+          hostId: input.hostId,
+          orgId: input.orgId,
+          reference,
+          reviewId,
+          siteName: await readSiteName(input.firestore, input.hostId),
+        },
         { notifyRisk: input.notifyRisk },
       )
     }

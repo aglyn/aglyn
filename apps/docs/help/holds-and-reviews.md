@@ -56,15 +56,19 @@ notice email or write to support with the reference in the notice.
 A campaign, an automated email, or another email from your sites was held before it was
 sent.
 
-- **What it means.** That email was not sent. Nobody on your list received it. Nothing
-  else on your account changed.
+- **What it means.** That email was not delivered to anyone, and other emails with the
+  same links or wording are stopped too while it is under review. Nothing else on your
+  account changed.
 - **What to do.** Open the email and check its links, its sender name and its wording.
   If you edit it, the edited version is checked again when it next sends. If you think it
   is a mistake, request a review.
-- **When it is released.** A held campaign goes back on the schedule and sends shortly;
-  an automated email sends the next time it runs.
+- **When it is released.** A held campaign that is still waiting goes back on the schedule
+  and sends shortly; one you edited or canceled meanwhile stays as you left it. An automated
+  email sends the next time it runs. A single email that was stopped, such as a receipt or a
+  form reply, is not sent again; the next one like it sends normally.
 - **If it is not approved.** A held campaign is canceled and an automated email step stays
-  stopped.
+  stopped. Other emails with the same links or wording are stopped too until they are
+  changed.
 
 ## A published page is on hold {#page-held}
 
@@ -119,8 +123,9 @@ A listing you submitted to the marketplace was held before it was listed.
 A custom domain for a site, or a domain you send email from, is waiting on a routine
 review.
 
-- **What it means.** The domain stays connected while we look. Email sent from it may wait
-  until the review finishes.
+- **What it means.** The domain stays connected while we look. If you send email from it,
+  that email is stopped and held for its own review, whatever this review decides, and
+  clearing the domain does not send an email that was stopped.
 - **What to do.** Nothing, if the domain and the name on it are yours. To speed it up,
   request a review and tell us who owns the domain.
 
@@ -130,7 +135,9 @@ A download, feed or supplier link you configured points to an address that looks
 another company's website, so nobody is sent there.
 
 - **What to do.** Replace it with a file from your media library or a link on your own
-  domain. If the address really is yours, request a review.
+  domain. The link stays blocked whatever a review decides, so replacing it is the way to
+  make it work again. If the address really is yours, you can still tell us in a review
+  request.
 
 ## Unusual checkout activity {#card-testing}
 
@@ -159,8 +166,8 @@ The card issuer reported a payment you received as possibly not made by the card
 - **What it means.** The payment may be reversed by the cardholder's bank. It is not a
   chargeback yet, and nothing has been refunded or canceled.
 - **What to do.** Hold anything not yet shipped or delivered. Refunding now usually prevents
-  a chargeback and its fee. If you know the buyer and the sale is genuine, you can keep the
-  order.
+  a chargeback; if a chargeback is decided for the cardholder, the payment is taken back from
+  you. If you know the buyer and the sale is genuine, you can keep the order.
 
 ## A payment you received is on hold for review {#sale-payment-review}
 
@@ -184,7 +191,8 @@ The cardholder disputed a payment with their bank (a chargeback).
 
 ## A payment on your subscription needs attention {#billing-payment-flagged}
 
-A payment for your own subscription was flagged for a fraud check.
+A payment for your own subscription was flagged for a fraud check, or disputed by the
+cardholder with their bank.
 
 - **What it means.** The payment may be reversed by the cardholder's bank. If it is, your
   subscription may need a new payment method.
@@ -229,7 +237,8 @@ wrote for you, and what the lock affects, for example:
 The email is sent to the workspace's owners and admins (or, for an account lock, to you)
 even though the workspace itself cannot send anything while it is locked.
 
-- **What to do.** Read the message in the notice; it says what we need from you.
+- **What to do.** Nothing is needed from you unless the message in the notice asks for
+  something, or you believe the lock is a mistake.
 - **To appeal.** Reply to the notice email, or write to support with the reference it
   gives (it starts `LK-`). Tell us anything that explains what happened. A person reviews
   every appeal and answers from the support address. You don't need to sign in to appeal,
@@ -241,5 +250,6 @@ even though the workspace itself cannot send anything while it is locked.
 ## Your subscription was canceled {#subscription-canceled}
 
 Our team canceled the workspace's subscription. The notice says whether it ended now or
-at the end of the billing period. Nothing is refunded. Export anything you need, and
-contact support with the reference if you believe it was a mistake.
+at the end of the billing period. Nothing is refunded, and nothing is deleted: the workspace
+moves to the Free plan, and your sites and data stay. Contact support with the reference if
+you believe it was a mistake.

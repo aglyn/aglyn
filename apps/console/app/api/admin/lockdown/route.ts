@@ -1094,9 +1094,12 @@ async function lockOwnedWorkspaces(options: {
     const slug = orgSnapshot.get('slug') ?? null
     const alreadyLocked = orgSnapshot.get('suspendedAt') != null
     let lockError: string | null = null
+    // Whether this lock signed the workspace's members out: a billing,
+    // maintenance or read-only lock does not, and the notice says so.
+    let tokensRevoked = 0
     if (!alreadyLocked) {
       try {
-        await lockOrgAndAudit({
+        const locked = await lockOrgAndAudit({
           firestore,
           actor,
           orgId,
@@ -1105,6 +1108,7 @@ async function lockOwnedWorkspaces(options: {
           lock,
           via: `user-lock:${uid}`,
         })
+        tokensRevoked = Number((locked as { tokensRevoked?: unknown }).tokensRevoked ?? 0)
       } catch (error) {
         lockError = (error as Error)?.message ?? String(error)
       }
@@ -1128,7 +1132,7 @@ async function lockOwnedWorkspaces(options: {
           emailOwners: options.emailOwners,
           lock,
           effects: {
-            sessionsRevoked: true,
+            sessionsRevoked: tokensRevoked > 0,
             subscriptionCanceled: stepConfirmed(subscriptionCancel),
           },
         })

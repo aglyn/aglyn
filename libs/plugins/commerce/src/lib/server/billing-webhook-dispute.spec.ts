@@ -634,6 +634,30 @@ describe('charge.dispute.created — flag, reverse nothing (AGL-1787)', () => {
     expect(disputeEvents()).toHaveLength(1)
     expect(riskNotices).toHaveLength(1)
   })
+
+  /**
+   * A fraud warning names the sum in question, as the dispute does: the
+   * notice printed "(an amount shown on the payment)" because none was
+   * passed (AGL-3432).
+   */
+  it('tells the merchant the amount of a payment the issuer reported', async () => {
+    await deliver('radar.early_fraud_warning.created', {
+      id: 'issfr_1',
+      object: 'radar.early_fraud_warning',
+      charge: 'ch_1',
+      payment_intent: 'pi_dispute_1',
+      fraud_type: 'made_with_stolen_card',
+      created: OPENED_AT_S,
+    })
+    expect(riskNotices).toEqual([
+      expect.objectContaining({
+        kind: 'sale-fraud-warning',
+        hostId: 'host-1',
+        amount: '$62.00',
+        paymentEvent: 'reported by the card issuer as possibly not made by the cardholder',
+      }),
+    ])
+  })
 })
 
 describe('charge.dispute.closed — the only event that moves money', () => {

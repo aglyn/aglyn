@@ -27,7 +27,9 @@
  * seam, from the platform's sender, with:
  *
  * - the lock's own customer-facing message, verbatim — the same words the
- *   lock serves on its notice page (`lockdownNotice`);
+ *   lock serves on its notice page (`lockdownNotice`) — except a feature
+ *   pause staff wrote nothing for, whose served words are a member's
+ *   mid-task "try again shortly", and which names what is paused instead;
  * - what the lock affects: the sites, whether everyone was signed out, a
  *   canceled subscription, paused renewals and payouts;
  * - how to appeal: reply, or write to the support address;
@@ -149,7 +151,8 @@ export function lockdownAffectedText(input: {
         parts.push('you are signed out and cannot sign in')
         break
       case 'feature':
-        parts.push('this one capability is off; everything else keeps working')
+        // A staff pause, not an outage: it holds until it is lifted.
+        parts.push('it stays off until our team turns it back on')
         break
     }
     if (effects.sessionsRevoked && input.scope !== 'user') {
@@ -168,19 +171,29 @@ export function lockdownAffectedText(input: {
     if (effects.renewalsPaused) parts.push('your customers’ renewals are paused, and nobody is charged')
     if (effects.payoutsPaused) parts.push('payouts to your bank are paused; the money stays in your balance')
   } else {
-    parts.push(
-      input.scope === 'user'
-        ? 'you can sign in again'
-        : input.scope === 'domain'
-          ? 'the domain serves your site again'
-          : input.scope === 'feature'
-            ? 'the capability is back on'
-            : 'everything is back as it was, and you can sign in again',
-    )
+    switch (input.scope) {
+      case 'user':
+        parts.push('you can sign in again')
+        break
+      case 'domain':
+        parts.push('the domain serves your site again')
+        break
+      case 'feature':
+        parts.push('the feature is back on')
+        break
+      case 'host':
+        // A site lock signs nobody out, so there is no "sign in again".
+        parts.push('the site works as normal again, and it can be changed')
+        break
+      default:
+        parts.push('the workspace works as normal again, and you can sign in')
+    }
     if (effects.renewalsResumed) parts.push('your customers’ renewals have resumed on their normal schedule')
     if (effects.payoutsRestored) parts.push('payouts are back on your normal schedule')
     if (input.scope === 'org') {
-      parts.push('a subscription canceled with the lock stays canceled — restart it from Billing')
+      // A lift never recreates a subscription, and not every lock canceled
+      // one: said as a condition, it is true of both.
+      parts.push('if the lock canceled your subscription, it stays canceled — restart it from Billing')
     }
   }
   const sentence = parts.join('; ')
@@ -195,7 +208,19 @@ async function subjectFor(
   orgId: string | null,
 ): Promise<{ orgId: string | null; hostId: string | null; label: string; path: string | null }> {
   if (scope === 'org') {
-    return { orgId: targetId, hostId: null, label: 'your workspace', path: null }
+    // By name: a resend that covers an account and its workspaces lists each.
+    const org = await firestore
+      .collection('orgs')
+      .doc(targetId)
+      .get()
+      .catch(() => null)
+    const name = String(org?.get('name') ?? '').trim()
+    return {
+      orgId: targetId,
+      hostId: null,
+      label: name ? `the workspace "${name}"` : 'your workspace',
+      path: null,
+    }
   }
   if (scope === 'host') {
     const host = await firestore.collection('hosts').doc(targetId).get()
@@ -280,7 +305,7 @@ export async function sendLockdownOwnerNotice(input: {
     )
     // The customer-facing words the lock SERVES: staff's message, or the
     // per-reason default beneath it.
-    const message =
+    const served =
       input.action === 'lock' && input.lock
         ? lockdownNotice({
             scope: input.scope as LockdownScope,
@@ -289,8 +314,21 @@ export async function sendLockdownOwnerNotice(input: {
             ...(input.lock.message ? { message: input.lock.message } : {}),
             ...(input.lock.mode ? { mode: input.lock.mode as never } : {}),
             ...(input.lock.untilMs ? { untilMs: input.lock.untilMs } : {}),
-          }).body
+          })
         : null
+    // A feature's served body is what a member meets mid-task ("please try
+    // again shortly"), which a staff pause that holds until it is lifted
+    // makes false in an owner's inbox. With no message from staff, the
+    // owners read what is paused, and when it is expected back if staff set
+    // a time.
+    const message =
+      served && input.scope === 'feature' && !input.lock?.message?.trim()
+        ? `${served.title.replace(/[.\s]+$/, '')}.${
+            input.lock?.untilMs
+              ? ` Expected back by ${new Date(input.lock.untilMs).toUTCString()}.`
+              : ''
+          }`
+        : (served?.body ?? null)
     step.attempted = true
     const result = await input.notifyRisk({
       kind,

@@ -198,6 +198,8 @@ describe("a sale's fraud shape", () => {
 
   it('flags a buyer workspace that shares a member with the publisher', async () => {
     docs.set('orgs/org-buyer/members/owner-1', { role: 'editor' })
+    docs.set('marketplacePurchases/cs_1', { sellerOrgId: 'org-pub', buyerOrgId: 'org-buyer', listingId: 'invoice-kit' })
+    docs.set('marketplaceListings/invoice-kit', { displayName: 'Invoice Kit' })
     const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notifyRisk, nowMs: NOW })
     expect(result.signals).toEqual([{ code: 'shared-member', uids: ['owner-1'] }])
     const row = [...docs.entries()].find(([key]) => key.startsWith('abuseReports/'))?.[1]
@@ -216,6 +218,8 @@ describe("a sale's fraud shape", () => {
         reference: expect.stringMatching(/^MR-/),
         amount: '$49.00',
         staffEvidence: expect.stringMatching(/member/i),
+        // Which sale, by its listing (AGL-3432), for a publisher with several.
+        item: expect.objectContaining({ label: 'a sale of your listing "Invoice Kit"' }),
       }),
     ])
     const told = renderOwnerRiskNotice('marketplace-sale-review', {

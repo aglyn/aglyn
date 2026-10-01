@@ -246,3 +246,80 @@ describe('a locked account is told how to appeal (AGL-3420)', () => {
   })
 })
 
+
+/*
+ * Every notice states only what the code does (AGL-3432). Each case below
+ * was a sentence that promised a consequence, a remedy or a cost that does
+ * not exist.
+ */
+describe('what a notice claims is what happens', () => {
+  const owner = (kind: (typeof RISK_EVENT_KINDS)[number]) => ownerText(kind).join(' ')
+
+  it('never tells a canceled workspace to export its data: nothing is deleted', () => {
+    expect(owner('subscription-canceled')).not.toMatch(/export/i)
+    expect(RISK_NOTICE_CATALOG['subscription-canceled'].owner.steps.join(' ')).toMatch(/Nothing is deleted/)
+  })
+
+  it('says an upheld review changes nothing by itself, rather than that action was taken', () => {
+    const upheld = renderOwnerRiskNotice('review-upheld', { 'item.label': 'the "About" page (/about)' })
+    expect(upheld.summary).not.toMatch(/took action/)
+    expect(upheld.meaning).toMatch(/does not lock anything, take anything down or change your billing/)
+  })
+
+  it('never names a dispute fee the platform absorbs', () => {
+    expect(owner('sale-fraud-warning')).not.toMatch(/fee/i)
+    expect(RISK_NOTICE_CATALOG['sale-fraud-warning'].owner.steps.join(' ')).toMatch(
+      /the payment is taken back from you/,
+    )
+  })
+
+  it('never promises that a cleared domain sends the email it stopped', () => {
+    expect(owner('domain-cleared')).not.toMatch(/sends on its next attempt|waiting on it/)
+    expect(owner('domain-flagged')).not.toMatch(/may wait/)
+    expect(owner('domain-rejected')).not.toMatch(/may be restricted/)
+  })
+
+  it('never promises that a released email is sent, when a stopped one-off is not', () => {
+    expect(RISK_NOTICE_CATALOG['email-released'].owner.meaning).toMatch(/is not sent again/)
+    expect(RISK_NOTICE_CATALOG['email-held'].owner.meaning).not.toMatch(/Nobody on your list/)
+  })
+
+  it('never offers a review as the way to unblock a link, which stays blocked whatever it decides', () => {
+    expect(owner('link-blocked')).toMatch(/stays blocked whatever a review decides/)
+  })
+
+  it('never claims a lock message says what is needed, when the default ones ask nothing', () => {
+    for (const kind of ['workspace-locked', 'site-locked', 'domain-locked', 'account-locked', 'feature-locked'] as const) {
+      expect({ kind, text: owner(kind) }).toEqual({ kind, text: expect.not.stringMatching(/it says what we need/) })
+    }
+    // The appeal and the reference are untouched.
+    expect(RISK_NOTICE_CATALOG['account-locked'].owner.steps.join(' ')).toContain('{{reference}}')
+    expect(RISK_NOTICE_CATALOG['workspace-locked'].owner.steps.join(' ')).toContain('{{reference}}')
+  })
+
+  it('names a paused feature without bending it into a sentence ("Media uploads is paused")', () => {
+    const paused = renderOwnerRiskNotice('feature-locked', {
+      'item.label': 'Media uploads',
+      'workspace.name': 'Harbor View',
+    })
+    expect(paused.title).toBe('Paused on Harbor View: Media uploads')
+    expect(paused.summary).toMatch(/paused one feature on Harbor View: Media uploads\./)
+  })
+
+  it('names the site a site notice is about, and says "your site" only when it has no name', () => {
+    for (const kind of ['page-held', 'page-released', 'page-flagged', 'page-rejected', 'link-blocked', 'card-testing', 'gift-card-hold', 'sale-fraud-warning', 'sale-payment-review', 'sale-dispute'] as const) {
+      expect({ kind, named: renderOwnerRiskNotice(kind, { 'site.label': 'the site "Harbor View"' }).summary }).toEqual({
+        kind,
+        named: expect.stringContaining('the site "Harbor View"'),
+      })
+      expect({ kind, fallback: renderOwnerRiskNotice(kind, {}).summary }).toEqual({
+        kind,
+        fallback: expect.stringContaining('your site'),
+      })
+    }
+  })
+
+  it('keeps a dispute out of the burst digest, which would drop its deadline', () => {
+    expect(RISK_NOTICE_CATALOG['sale-dispute'].neverDigest).toBe(true)
+  })
+})

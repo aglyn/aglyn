@@ -4762,10 +4762,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         fullyRefunded: external.fullyRefunded,
       })
       if (outcome.kind === 'frozen-for-review') {
+        const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
         await notifyGiftCardHold(
           {
             hostId,
-            orderLabel: `order ${snapshot.id}`,
+            // The order number the merchant knows it by, never its document id.
+            orderLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
             orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
             orderId: snapshot.id,
             cards: outcome.cards,
@@ -4796,12 +4798,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     const snapshot = lookup.snapshot
     const hostId = String(snapshot.ref.parent.parent?.id ?? '')
     const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
+    const orderCents = Number(order.totals?.totalCents ?? order.amountCents ?? 0)
     await recordPaymentRiskOnRecord(
       {
         ref: snapshot.ref,
         signal: risk.signal,
         hostId,
         subjectLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        // The notice names the sum in question, as the dispute's does.
+        amount: orderCents > 0 ? `$${(orderCents / 100).toFixed(2)}` : null,
         // The Orders section of the Products hub, with this order's dialog
         // open — where Refund lives (`siteRecordLinks().order`).
         link: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
@@ -4894,10 +4899,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
       if (type === 'charge.dispute.created') {
         // A chargeback's gift cards are frozen while it is open (AGL-3363).
+        const disputed = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
         await notifyGiftCardHold(
           {
             hostId,
-            orderLabel: `order ${snapshot.id}`,
+            orderLabel: `order ${CommerceModel.formatOrderNumber(disputed, snapshot.id)}`,
             orderPath: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,
             orderId: snapshot.id,
             cards: await applyOrderGiftCardRisk(snapshot, {

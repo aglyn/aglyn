@@ -1135,6 +1135,10 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
   if (state.scope === 'domain') {
     return domainLockdownNotice(state, custom)
   }
+  // A SITE lock closes one site, not the account that owns it: its default
+  // copy says "this site", or the owners' notice tells them their account was
+  // closed when their other sites are serving (AGL-3432).
+  const subject = state.scope === 'host' ? 'site' : 'account'
   switch (state.reason) {
     case 'maintenance': {
       const until =
@@ -1155,7 +1159,7 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
         title: 'Account on hold',
         body:
           custom ??
-          'This account is on hold over an unresolved billing issue. ' +
+          `This ${subject} is on hold over an unresolved billing issue. ` +
             'Updating the payment method in workspace billing settings ' +
             'restores access.',
         contact: lockdownSupportEmail() ?? undefined,
@@ -1176,7 +1180,7 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
         title: 'Unavailable',
         body:
           custom ??
-          'This account has been closed for a violation of our Terms of ' +
+          `This ${subject} has been closed for a violation of our Terms of ` +
             'Service.',
         contact: lockdownSupportEmail() ?? undefined,
         // A platform-wide lock is ours, with nobody to appeal it.
@@ -1186,7 +1190,7 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
     default:
       return {
         title: 'Temporarily unavailable',
-        body: custom ?? 'Access to this account is currently disabled.',
+        body: custom ?? `Access to this ${subject} is currently disabled.`,
         contact: lockdownSupportEmail() ?? undefined,
       }
   }
