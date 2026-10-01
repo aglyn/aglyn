@@ -87,8 +87,10 @@ import {
   type ResolvedRiskAction,
   type RiskActionParams,
   type RiskEventKind,
+  type RiskNoticeSeverity,
   type RiskNoticeValues,
 } from '@aglyn/shared-util-email/risk-notice-catalog'
+import type { NotificationLevel } from '@aglyn/aglyn/server'
 import {
   sendEmail as sendEmailImpl,
   type SendEmailOptions,
@@ -135,6 +137,16 @@ export const RISK_NOTICE_LEDGER_COLLECTION = 'riskNoticeLedger'
 
 /** The in-app notification type every owner notice is written as. */
 export const RISK_NOTICE_NOTIFICATION_TYPE = 'system.riskNotice' as const
+
+/**
+ * The level an owner notice is drawn at (AGL-3437), from its kind's
+ * severity: a release or a lift is `info`, not the red of the hold it ends.
+ */
+export const RISK_NOTICE_LEVELS: Record<RiskNoticeSeverity, NotificationLevel> = {
+  urgent: 'critical',
+  warning: 'warning',
+  info: 'info',
+}
 
 /**
  * The burst allowance: how many notices one workspace's owners, and staff
@@ -818,6 +830,7 @@ export async function notifyRiskEvent(
             type: RISK_NOTICE_NOTIFICATION_TYPE,
             title: owner.title,
             body: `${owner.summary} ${owner.meaning}`.slice(0, 1000),
+            level: RISK_NOTICE_LEVELS[definition.severity],
             link: primary?.href ?? riskHoldsPath(noticeId),
             ...(orgId ? { orgId } : {}),
             ...(input.hostId ? { hostId: input.hostId } : {}),
@@ -863,6 +876,7 @@ export async function notifyRiskEvent(
           {
             type: RISK_NOTICE_NOTIFICATION_TYPE,
             title: 'More account notices are arriving',
+            level: 'warning',
             body:
               'Several items on your workspace were held or flagged in the last hour. ' +
               'We will send one summary instead of a message for each. Every item is listed on Holds & reviews.',
@@ -1086,6 +1100,7 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
           type: RISK_NOTICE_NOTIFICATION_TYPE,
           title,
           body: summary.slice(0, 1000),
+          level: 'warning',
           link: riskHoldsPath(),
           ...(orgId ? { orgId } : {}),
         },

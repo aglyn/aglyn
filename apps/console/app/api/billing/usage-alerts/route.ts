@@ -68,6 +68,7 @@ import {
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/server'
+import { usageNotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import {
   firebaseAdmin,
   notifyOrgAdmins,
@@ -1339,6 +1340,7 @@ async function handler(request: Request): Promise<Response> {
             type: 'billing.usage',
             title: alertTitle,
             body: alertBody,
+            level: usageNotificationLevel(threshold),
             orgId: org.id,
             // Billing is org-scoped now (AGL-621/644); links are frozen at
             // write time, so emit canonical and let the reader repair the
@@ -1453,6 +1455,7 @@ async function handler(request: Request): Promise<Response> {
             type: 'billing.usage',
             title,
             body,
+            level: usageNotificationLevel(budgetThreshold),
             orgId: org.id,
             link: billingLink,
           },
@@ -1530,6 +1533,7 @@ async function handler(request: Request): Promise<Response> {
               body,
               link,
               emailContext,
+              level,
             }) => {
               // The first sweep of an org sends nothing, whoever asks.
               if (seedOnly) return
@@ -1537,6 +1541,7 @@ async function handler(request: Request): Promise<Response> {
                 type: 'billing.usage',
                 title,
                 body,
+                ...(level ? { level } : {}),
                 orgId: org.id,
                 link,
               })

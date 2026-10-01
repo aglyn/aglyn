@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynNotificationType } from './notifications'
+import type { AglynNotificationType, NotificationLevel } from './notifications'
 
 /**
  * OPERATOR ALERTS (AGL-3377): the events whoever runs an install must hear
@@ -106,6 +106,13 @@ export interface OperatorAlertDefinition {
    * keeps it, so its icon, label and everyone's mutes are unchanged.
    */
   notificationType?: AglynNotificationType
+  /**
+   * How loud its console notification is drawn (AGL-3437). Absent, the
+   * tier answers — see {@link operatorAlertLevel}. Set where the tone and
+   * the importance part ways: a recovery is worth hearing about and is good
+   * news, and a degraded check is a must-know that is not yet an outage.
+   */
+  level?: NotificationLevel
   /** The plugin that contributed it; absent for core's own. */
   pluginId?: string
 }
@@ -123,6 +130,26 @@ export const OPERATOR_ALERT_TIER_LABELS: Record<OperatorAlertTier, string> = {
   must: 'Must know',
   should: 'Should know',
   low: 'Routine',
+}
+
+/**
+ * The level an alert's notification is drawn at when its entry names none:
+ * a must-know is red, a should-know amber, routine review work informational.
+ */
+export const OPERATOR_ALERT_TIER_LEVELS: Record<
+  OperatorAlertTier,
+  NotificationLevel
+> = {
+  must: 'critical',
+  should: 'warning',
+  low: 'info',
+}
+
+/** The level an alert's console notification carries (AGL-3437). */
+export function operatorAlertLevel(
+  definition: Pick<OperatorAlertDefinition, 'tier' | 'level'>,
+): NotificationLevel {
+  return definition.level ?? OPERATOR_ALERT_TIER_LEVELS[definition.tier]
 }
 
 export const OPERATOR_ALERT_CATEGORY_LABELS: Record<
@@ -357,6 +384,8 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     body: '{{check}} went from healthy to degraded. {{detail}}',
     link: '/admin/health',
     delivery: 'immediate',
+    // Must-know, and still amber rather than red: degraded is not down.
+    level: 'warning',
     // A check flapping across the line is told once an hour, not on
     // every swing.
     dedupeWindowMinutes: 60,
@@ -372,6 +401,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     body: '{{check}} is healthy again after {{duration}}.',
     link: '/admin/health',
     delivery: 'immediate',
+    level: 'success',
     // A check flapping across the line is told once an hour, not on
     // every swing.
     dedupeWindowMinutes: 60,
@@ -483,6 +513,8 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     dedupeWindowMinutes: 0,
     defaultEnabled: true,
     notificationType: 'support.ticketOpened',
+    // A customer asking for help, not a fault.
+    level: 'info',
   },
   {
     type: 'support.ticketReply',
@@ -496,6 +528,7 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     dedupeWindowMinutes: 0,
     defaultEnabled: true,
     notificationType: 'support.ticketReply',
+    level: 'info',
   },
 
   // ── SHOULD: deliverability ──────────────────────────────────────────────

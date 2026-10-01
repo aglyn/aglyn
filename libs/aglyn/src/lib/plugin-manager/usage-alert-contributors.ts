@@ -59,6 +59,7 @@
  * one org's alerts in a different order per process.
  */
 
+import type { NotificationLevel } from '../app-utils/notifications'
 import type {
   OrgSpendBreakdown,
   UsageAlertGuard,
@@ -79,6 +80,12 @@ export interface UsageStaffAlert {
   link: string
   /** The email's tag and log label. */
   emailContext: string
+  /**
+   * How loud the bell draws it (AGL-3437). A contributor's threshold is its
+   * own unit, not a percentage, so only the contributor can say; absent, the
+   * `billing.usage` default answers.
+   */
+  level?: NotificationLevel
 }
 
 /** What the sweep hands a contributor for one org. */

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { NOTIFICATION_TYPE_LABELS } from '@aglyn/aglyn/app-utils/notifications'
+import { notificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
@@ -32,10 +32,13 @@ import {
   NOTIFICATION_FILTER_OPTIONS,
 } from '../utils/notification-filters'
 import type { NotificationWorkspace } from '../utils/notification-links'
-
-/** The label a notification's type reads as, or the stored type itself. */
-const typeLabel = (type: string | undefined): string =>
-  (NOTIFICATION_TYPE_LABELS as Record<string, string>)[type ?? ''] ?? type ?? ''
+import {
+  NotificationLevelIcon,
+  notificationLevelRowClass,
+  notificationLevelGridSx,
+  NotificationTypeChip,
+  notificationTypeLabel,
+} from './notification-level.component'
 
 /** The empty feed with no filter set, once it has loaded. */
 export const CAUGHT_UP_COPY = "You're all caught up."
@@ -51,6 +54,8 @@ const NO_WORKSPACE = '—'
  * One row per notification: what it says, what kind it is, which workspace
  * it is about, when it arrived, and whether it is still unread. The title
  * carries the unread weight, and the body rides beneath it on one line.
+ * The level's icon leads the title, and its color runs through the type chip
+ * and the row (AGL-3437).
  *
  * Built per render rather than declared once, because the Workspace column
  * needs the caller's resolver — the org names live with the page's org scope
@@ -65,19 +70,22 @@ const notificationColumns = (
     flex: 1,
     minWidth: 260,
     renderCell: ({ row }) => (
-      <Stack sx={{ minWidth: 0 }}>
-        <Typography
-          variant="body2"
-          noWrap
-          sx={{ fontWeight: row.readAt ? 'fontWeightRegular' : 'fontWeightMedium' }}
-        >
-          {row.title}
-        </Typography>
-        {row.body ? (
-          <Typography variant="caption" color="text.secondary" noWrap title={row.body}>
-            {row.body}
+      <Stack direction="row" sx={{ minWidth: 0, alignItems: 'center', gap: 1.25 }}>
+        <NotificationLevelIcon level={notificationLevel(row)} />
+        <Stack sx={{ minWidth: 0 }}>
+          <Typography
+            variant="body2"
+            noWrap
+            sx={{ fontWeight: row.readAt ? 'fontWeightRegular' : 'fontWeightMedium' }}
+          >
+            {row.title}
           </Typography>
-        ) : null}
+          {row.body ? (
+            <Typography variant="caption" color="text.secondary" noWrap title={row.body}>
+              {row.body}
+            </Typography>
+          ) : null}
+        </Stack>
       </Stack>
     ),
   },
@@ -85,8 +93,8 @@ const notificationColumns = (
     field: 'type',
     headerName: 'Type',
     width: 190,
-    valueGetter: (_value, row) => typeLabel(row.type),
-    renderCell: ({ row }) => <Chip size="small" label={typeLabel(row.type)} />,
+    valueGetter: (_value, row) => notificationTypeLabel(row.type),
+    renderCell: ({ row }) => <NotificationTypeChip notification={row} />,
   },
   {
     /**
@@ -280,6 +288,8 @@ export function NotificationsTable(props: NotificationsTableProps) {
           // No index holds a notification's words; see above.
           quickFilter={false}
           onOpen={(_id, row) => onOpen(row)}
+          getRowClassName={({ row }) => notificationLevelRowClass(notificationLevel(row))}
+          sx={notificationLevelGridSx}
           /*
            * The overlay, not the empty copy, while a page is in flight
            * (AGL-3373). Without it a read that never finished drew "No

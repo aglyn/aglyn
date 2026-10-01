@@ -31,7 +31,9 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   notifications (form submissions, bookings, invoices, team changes), split across an
   **Inbox** tab (unread) and an **Archive** tab (already read). **Mark all read** clears
   the inbox, the gear opens your notification preferences, and **View all** opens the
-  full paginated feed.
+  full paginated feed. The badge turns red while an unread critical notification is
+  waiting, and amber for an unread warning. Each notification is colored the way the feed
+  colors it ([below](#notification-levels)).
 - **Account menu** — your avatar opens it. The header shows your name and email with a
   gear to [Manage Account](../workspace-and-billing/manage-account.md), and the first row
   below repeats that destination as a labeled **Manage account** — a gear is not
@@ -292,6 +294,24 @@ remove the chip to drop it. The filters apply to the whole feed, not just the
 page on screen, and the pager then turns through the matches; see
 [Filter and search a list](#filter-and-search). There is no search box, because a
 notification's words are not indexed:
+
+#### How urgent each notification is {#notification-levels}
+
+Every notification carries a level, shown by the icon at the start of its row and
+the color of its type, both in the feed and in the bell:
+
+| Level | Looks like | For example |
+|---|---|---|
+| **Critical** | Red icon, solid red type, red bar and a red wash over the row | A fraud signal, a failed payment, a form that stopped accepting submissions |
+| **Warning** | Amber icon, amber type, amber bar and a light amber wash | A limit reached, low stock, a held email |
+| **Good news** | Green icon, green type, green bar | An order or a booking, a new subscription |
+| **Info** | Blue icon, blue type | An invitation, a support reply, a usage step on the way to a limit |
+| **Routine** | Grey bell | A form submission, an assignment, a digest |
+
+The level belongs to the notification, not only to its type. A usage notice at 75%
+of a limit is **Info** and the one at 100% is a **Warning**; a released hold is
+**Info** while the hold itself was red. The color is for scanning only. Every
+notification still reads as words, and the icon names its level for screen readers.
 
 ![The Notifications page: a Navigation rail listing All notifications and Settings, beside Mark all read and the feed as a table of notification, type, workspace, time and status, under the table's Columns, Filters and Export controls](/img/getting-started/notifications-page.png)
 
