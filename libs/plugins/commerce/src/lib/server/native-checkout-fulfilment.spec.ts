@@ -500,7 +500,12 @@ describe('a redelivered event does not fulfil twice', () => {
     // And it really is the sale notification, not some other event that
     // happens to be filed under the same type — an assertion counting an empty
     // set to 1 would have failed, but one counting the WRONG set to 1 passes.
-    expect(sold[0].title).toBe('New order — $53.35')
+    expect(sold[0].title).toBe('New order on {site} — $53.35')
+    // What came in and where, by the order number the merchant knows it by
+    // (AGL-3432); the body was "From <email>" or nothing.
+    expect(sold[0].body).toMatch(
+      /^Order #\d+ came in on \{site\}: \d+× .+, \$53\.35(, from \S+@\S+)?\.$/,
+    )
   })
 })
 

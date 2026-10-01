@@ -451,6 +451,16 @@ describe('a supplier that does not answer (AGL-2473)', () => {
     expect(notifications).toHaveLength(1)
     expect(notifications[0].hostId).toBe(HOST)
     expect(notifications[0].title).toContain('Northwind Fulfilment')
+    // The consequence and what to do (AGL-3432), on which site: the body
+    // said only that the order "could not be sent". The order has no number
+    // here, so it is named by its id's tail.
+    expect(notifications[0].body).toBe(
+      'Order #SHIP_1 on {site} never reached Northwind Fulfilment: ' +
+        `${SUPPLIER_DELIVERY_MAX_ATTEMPTS} delivery attempts failed ` +
+        '(supplier answered HTTP 500). ' +
+        'They have not been asked to ship it; send it to them yourself or ' +
+        'fulfill it by hand.',
+    )
   })
 
   /**

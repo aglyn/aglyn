@@ -157,7 +157,6 @@ export async function scanRestockAlerts(
     }
     const total = CommerceModel.productInventory(product)
     if (total != null && total <= 0) continue
-    const productUrl = `/products/${product.slug}`
     let loaded = templateCache.get(hostRef.id)
     if (loaded === undefined) {
       loaded = await // The template, or the built-in copy in the site's header and
@@ -189,6 +188,9 @@ export async function scanRestockAlerts(
         }) ?? '',
       )
     }
+    // ABSOLUTE, on the site's own origin (AGL-3432): a bare `/products/…`
+    // path is a dead link in every inbox, and it is the email's only button.
+    const productUrl = `${siteBaseByHost.get(hostRef.id) ?? ''}/products/${product.slug}`
     const designed = loaded
       ? renderLoadedHostEmailWithTokens(
           loaded,
@@ -215,8 +217,7 @@ export async function scanRestockAlerts(
       subject: designed?.subject ?? `Back in stock: ${product.name}`,
       text:
         designed?.text ||
-        `${product.name} is available again — grab it before it sells ` +
-          `out:\n\n${productUrl}`,
+        `${product.name} is back in stock:\n\n${productUrl}`,
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostRef.id)?.fromName,
       sendingIdentity: await hostSendingIdentity(hostRef.id, identityByHost),

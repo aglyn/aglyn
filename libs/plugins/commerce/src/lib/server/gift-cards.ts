@@ -197,19 +197,23 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
     if (recipientEmail && isEmailConfigured()) {
       const value = `$${(amountCents / 100).toFixed(2)}`
       // The same site-designed template the purchase path uses (AGL-771), so
-      // a hand-issued card arrives looking like a bought one.
+      // a hand-issued card arrives looking like a bought one — with the
+      // merchant's note (AGL-3432). A card sent by hand often goes to someone
+      // who has never visited the site, and the note is the only part of the
+      // message the merchant wrote.
       const designed = await renderHostEmailWithTokens(
         firestore,
         hostId,
         'gift-card',
-        { 'giftcard.code': code, 'giftcard.value': value },
+        { 'giftcard.code': code, 'giftcard.value': value, 'giftcard.note': note },
       )
       const sent = await sendEmail({
         to: recipientEmail,
         subject: designed?.subject ?? 'Your gift card',
         text:
           designed?.text ||
-          `Gift card code: ${code}\nValue: ${value}\n\n` +
+          (note ? `${note}\n\n` : '') +
+            `Gift card code: ${code}\nValue: ${value}\n\n` +
             'Enter it at checkout to apply the balance.',
         ...(designed?.html ? { html: designed.html } : {}),
         fromName: Aglyn.resolveBrandingProfile(owner?.org as never).fromName,

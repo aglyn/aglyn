@@ -184,7 +184,7 @@ async function requestConfirmation(options: {
       )
       return true
     }
-    const stream = topic?.name ?? 'our newsletter'
+    const stream = topic?.name ?? 'Newsletter'
     // The `newsletter-confirmation` site email (AGL-3370): the site's design,
     // or the built-in copy in its header and footer.
     const designed = await renderHostEmailWithTokens(
@@ -199,7 +199,7 @@ async function requestConfirmation(options: {
       subject: designed?.subject || `Confirm your subscription`,
       text:
         designed?.text ||
-        `Please confirm that you want to receive ${stream} at this ` +
+        `Please confirm that you want to get ${stream} emails at this ` +
           `address:\n\n${url}\n\nThe link works for three days. If you did ` +
           'not sign up, ignore this message — nothing will be sent.',
       ...(designed?.html ? { html: designed.html } : {}),

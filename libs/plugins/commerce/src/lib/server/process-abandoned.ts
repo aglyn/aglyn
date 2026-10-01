@@ -214,9 +214,11 @@ export async function scanAbandonedCheckouts(
       subject: designed?.subject ?? 'You left something in your cart',
       text:
         designed?.text ||
-        'Your cart is still waiting — pick up where you left off:\n\n' +
+        'You left items in your cart. Pick up where you left off:\n\n' +
           `${data.resumeUrl ?? ''}\n\n` +
-          'Your items are held but not reserved, so they may sell out.',
+          // Not "held" (AGL-3432): the checkout's stock hold expires after
+          // 31 minutes, before this reminder goes out an hour in.
+          'Nothing in your cart is held for you.',
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostId)?.fromName,
       sendingIdentity: await hostSendingIdentity(hostId, identityByHost),

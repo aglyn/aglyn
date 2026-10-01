@@ -138,15 +138,22 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
       res.setHeader('Content-Type', 'text/html')
       const field = (name: string, value: string) =>
         `<input type="hidden" name="${name}" value="${escapeHtml(value)}">`
+      // The carrier and the number are FIELDS the supplier fills in
+      // (AGL-3432), so the emailed link needs no placeholders for them to
+      // edit in the URL. A value a link does carry arrives filled in.
+      const input = (name: string, label: string, value: string) =>
+        `<p><label>${label}<br>` +
+        `<input type="text" name="${name}" value="${escapeHtml(value)}"></label></p>`
       return res.status(200).send(
-        '<h3>Confirm this shipment</h3>' +
-          '<p>Press the button to record it against the order.</p>' +
+        '<h3>Record this shipment</h3>' +
+          '<p>Enter the carrier and tracking number, then press the button ' +
+          'to record it against the order.</p>' +
           '<form method="POST">' +
           field('hostId', hostId) +
           field('orderId', orderId) +
           field('token', token) +
-          field('carrier', carrier) +
-          field('trackingNumber', trackingNumber) +
+          input('carrier', 'Carrier', carrier) +
+          input('trackingNumber', 'Tracking number', trackingNumber) +
           '<button type="submit">Mark as shipped</button>' +
           '</form>',
       )
@@ -296,6 +303,7 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
           order,
           nextStatus,
           remaining,
+          supplierId: postingSupplier,
         }
       })
     if (outcome.status !== 200) {
@@ -306,13 +314,36 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
     // as done, which is the same misreport the status literal made — the
     // merchant would stop watching an order that is two thirds unshipped.
     const outstanding = Number((outcome as any).remaining ?? 0)
+    const orderLabel = CommerceModel.formatOrderNumber(
+      outcome.order as CommerceModel.HostOrder,
+      orderId,
+    )
+    // Which supplier, which order, where, and the tracking (AGL-3432).
+    const supplierId = (outcome as any).supplierId as string | null
+    const supplierName = supplierId
+      ? String(
+          (await firestore
+            .collection('hosts')
+            .doc(hostId)
+            .collection('suppliers')
+            .doc(supplierId)
+            .get()
+            .then((snapshot) => snapshot.get('name'))
+            .catch(() => '')) ?? '',
+        ).trim()
+      : ''
     void notifyHostManagers(hostId, {
       type: 'content.order',
-      title: `Supplier shipped ${CommerceModel.formatOrderNumber(
-        outcome.order as CommerceModel.HostOrder,
-        orderId,
-      )}${outstanding > 0 ? ` — ${outstanding} line${outstanding === 1 ? '' : 's'} still to ship` : ''}`,
-      ...(trackingNumber ? { body: `${carrier} ${trackingNumber}` } : {}),
+      title: `Supplier shipped ${orderLabel}${outstanding > 0 ? ` — ${outstanding} line${outstanding === 1 ? '' : 's'} still to ship` : ''}`,
+      body:
+        `${supplierName || 'Your supplier'} shipped their part of order ` +
+        `${orderLabel} on {site}.` +
+        (trackingNumber
+          ? ` Tracking: ${[carrier, trackingNumber].filter(Boolean).join(' ')}.`
+          : ' No tracking number was given.') +
+        (outstanding > 0
+          ? ` ${outstanding} line${outstanding === 1 ? ' is' : 's are'} still to ship.`
+          : ''),
       link: `/${hostId}/products`,
     })
     return res.status(200).json(outcome.body)

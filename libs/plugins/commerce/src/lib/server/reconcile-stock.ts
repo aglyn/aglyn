@@ -361,7 +361,7 @@ export async function reportMissingSaleDecrements(
       type: 'content.lowStock',
       title: `Stock never came off the shelf — order ${label}`,
       body:
-        `Order ${label} is ${lines[0].orderStatus} but ${units} unit` +
+        `Order ${label} on {site} is ${lines[0].orderStatus} but ${units} unit` +
         `${units === 1 ? '' : 's'} of ` +
         `${lines.map((line) => line.productName).join(', ')} were never ` +
         'taken off the count, so the storefront is still offering stock ' +

@@ -1979,7 +1979,10 @@ describe('POS low-stock crossing alert (AGL-1826)', () => {
         hostId: 'host-1',
         type: 'content.lowStock',
         title: 'Low stock — Candle',
-        body: '7 left across tracked variants',
+        // The product, the count, the threshold and the site (AGL-3432).
+        body:
+          'Candle on {site} is down to 7 in stock across its tracked ' +
+          'variants, at or below its low-stock threshold of 8.',
         link: '/host-1/products',
       },
     ])
@@ -2005,7 +2008,10 @@ describe('POS low-stock crossing alert (AGL-1826)', () => {
     )
     expect(lowStockAlerts()).toHaveLength(1)
     expect(lowStockAlerts()[0].title).toBe('Low stock — Beanie')
-    expect(lowStockAlerts()[0].body).toBe('10 left across tracked variants')
+    expect(lowStockAlerts()[0].body).toBe(
+      'Beanie on {site} is down to 10 in stock across its tracked variants, ' +
+        'at or below its low-stock threshold of 10.',
+    )
   })
 
   /**

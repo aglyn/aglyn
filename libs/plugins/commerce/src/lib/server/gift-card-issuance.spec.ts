@@ -177,7 +177,36 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       notifications.push({ hostId, ...notification })
     },
     upsertHostContact: async () => undefined,
-    renderHostEmailWithTokens: async () => null,
+    /*
+     * The site's built-in copy, rendered for real (AGL-3432), with the site's
+     * own tokens, so the buyer's receipt and gift card below are asserted as
+     * the buyer reads them rather than through the dead fallback text.
+     */
+    renderHostEmailWithTokens: async (
+      _firestore: unknown,
+      _hostId: string,
+      key: string,
+      merge: Record<string, string>,
+    ) => {
+      const email = jest.requireActual('@aglyn/shared-util-email')
+      const entry = email.getTenantEmail(key)
+      const values = {
+        'host.businessName': 'Acme Boxes',
+        'host.url': 'https://acme.aglyn.app',
+        ...merge,
+      }
+      const rendered = email.renderEmailHtml({
+        nodes: email.buildDefaultEmailNodeMap(entry),
+        rootId: email.EMAIL_NODE_ROOT_ID,
+        merge: values,
+        sanitize: (html: string) => html,
+      })
+      return {
+        subject: email.substituteMergeTokens(entry.defaultSubject, values),
+        html: rendered.html,
+        text: rendered.text,
+      }
+    },
     getPluginConfig: async () => ({}),
   }
 })
@@ -277,6 +306,84 @@ afterEach(() => {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * THE BUYER'S COPIES NAME THE STORE (AGL-3432).
+ *
+ * The gift card opened on a bare code and named no store, and the receipt
+ * dropped the merchant's own Receipt footer: since the built-in copy always
+ * renders (AGL-3370) the footer reached only the fallback text, which no
+ * buyer ever sees.
+ */
+describe('the receipt and the gift card name the store (AGL-3432)', () => {
+  const receipt = () =>
+    sentEmails.find((message) => message.context === 'cart receipt')
+  const giftCard = () =>
+    sentEmails.find((message) => message.context === 'gift card')
+
+  it('the receipt names the store and carries its Receipt footer', async () => {
+    docs.set('hosts/host-1/settings/store', {
+      receiptFooter: 'Returns are accepted within 30 days.',
+    })
+    await deliver()
+    const text = String(receipt()?.text)
+    expect(text).toContain(
+      'Here is the receipt for your order from Acme Boxes.',
+    )
+    expect(text).toContain('Total charged: $66.00')
+    expect(text).toContain('Returns are accepted within 30 days.')
+  })
+
+  it('a buy-now receipt carries the quantity and the Receipt footer', async () => {
+    docs.set('hosts/host-1/settings/store', {
+      receiptFooter: 'Returns are accepted within 30 days.',
+    })
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Monthly box',
+      variants: [{ id: 'large', priceUsd: 22, inventory: null }],
+    })
+    await deliver({
+      id: 'cs_buy_1',
+      payment_status: 'paid',
+      payment_intent: 'pi_buy_1',
+      amount_total: 6600,
+      customer_details: { email: 'buyer@example.com', name: 'Ada Cartwright' },
+      total_details: { amount_tax: 0, amount_shipping: 0, amount_discount: 0 },
+      metadata: {
+        type: 'commerce-order',
+        hostId: 'host-1',
+        productId: 'product-2',
+        variantId: 'large',
+        quantity: '3',
+      },
+    })
+    const text = String(
+      sentEmails.find((message) => message.context === 'receipt')?.text,
+    )
+    expect(text).toContain('Here is the receipt for your order from Acme Boxes.')
+    // Three units, not one item at the whole total.
+    expect(text).toContain('3× Monthly box')
+    expect(text).toContain('Total charged: $66.00')
+    expect(text).toContain('Returns are accepted within 30 days.')
+  })
+
+  it('a store with no footer gets no empty line in its place', async () => {
+    await deliver()
+    const text = String(receipt()?.text)
+    expect(text).not.toContain('{{')
+    expect(text).not.toMatch(/\n\s*\n\s*\n/)
+  })
+
+  it('the gift card says what it is, for which store, and links to it', async () => {
+    await deliver()
+    expect(giftCard()?.subject).toBe('Your gift card for Acme Boxes')
+    const text = String(giftCard()?.text)
+    expect(text).toContain('You have a $33.00 gift card for Acme Boxes.')
+    expect(text).toContain(
+      'Enter the code at checkout on https://acme.aglyn.app to use its balance.',
+    )
+  })
+})
+
 describe('the happy path still issues (AGL-322)', () => {
   it('writes one card per unit and emails each code', async () => {
     await deliver()
@@ -342,7 +449,9 @@ describe('a failed issuance write is never emailed (AGL-2161)', () => {
     expect(giftCardAlerts()[0].hostId).toBe('host-1')
     // The amount and the order, because the merchant has to hand-issue it.
     expect(giftCardAlerts()[0].body).toContain('$33.00')
-    expect(giftCardAlerts()[0].body).toContain('cs_gift_1')
+    // By the order number the merchant knows, on which site (AGL-3432).
+    expect(giftCardAlerts()[0].body).toContain('(order #1)')
+    expect(giftCardAlerts()[0].body).toContain('on {site}')
     expect(giftCardAlerts()[0].link).toBe('/host-1/products')
   })
 

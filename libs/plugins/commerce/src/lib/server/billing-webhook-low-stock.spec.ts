@@ -266,7 +266,11 @@ describe('the cart crossing alert (AGL-1826)', () => {
         hostId: 'host-1',
         type: 'content.lowStock',
         title: 'Low stock — Monthly box',
-        body: '7 left across tracked variants',
+        // The product, the count, the threshold and the site (AGL-3432):
+        // the body was a bare "7 left".
+        body:
+          'Monthly box on {site} is down to 7 in stock across its tracked ' +
+          'variants, at or below its low-stock threshold of 8.',
         link: '/host-1/products',
       },
     ])
@@ -310,7 +314,10 @@ describe('the cart crossing alert (AGL-1826)', () => {
     expect(
       lowStockAlerts().find((alert) => alert.title === 'Low stock — Mug')
         ?.body,
-    ).toBe('3 left across tracked variants')
+    ).toBe(
+      'Mug on {site} is down to 3 in stock across its tracked variants, at ' +
+        'or below its low-stock threshold of 4.',
+    )
   })
 
   /** The `created` transaction bounds the alert as it bounds the decrement. */
@@ -351,7 +358,9 @@ describe('the buy-now crossing alert (AGL-1826 pins)', () => {
         hostId: 'host-1',
         type: 'content.lowStock',
         title: 'Low stock — Monthly box',
-        body: '7 left across tracked variants',
+        body:
+          'Monthly box on {site} is down to 7 in stock across its tracked ' +
+          'variants, at or below its low-stock threshold of 8.',
         link: '/host-1/products',
       },
     ])
@@ -466,7 +475,9 @@ describe('two cart lines of one product (AGL-1830)', () => {
         hostId: 'host-1',
         type: 'content.lowStock',
         title: 'Low stock — Monthly box',
-        body: '11 left across tracked variants',
+        body:
+          'Monthly box on {site} is down to 11 in stock across its tracked ' +
+          'variants, at or below its low-stock threshold of 12.',
         link: '/host-1/products',
       },
     ])

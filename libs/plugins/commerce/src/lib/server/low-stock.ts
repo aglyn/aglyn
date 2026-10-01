@@ -64,10 +64,16 @@ export function alertLowStockCrossing(
     CommerceModel.isLowStock(updated) &&
     !CommerceModel.isLowStock(lifted)
   ) {
+    // The product, the count, the threshold and the site, in the body
+    // (AGL-3432), which an email reader sees without the title.
     void notifyHostManagers(hostId, {
       type: 'content.lowStock',
       title: `Low stock — ${updated.name}`,
-      body: `${CommerceModel.productInventory(updated) ?? 0} left across tracked variants`,
+      body:
+        `${updated.name} on {site} is down to ` +
+        `${CommerceModel.productInventory(updated) ?? 0} in stock across its ` +
+        'tracked variants, at or below its low-stock threshold of ' +
+        `${updated.lowStockThreshold}.`,
       link: `/${hostId}/products`,
     })
   }

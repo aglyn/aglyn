@@ -255,13 +255,22 @@ export async function decrementVariantStock(options: {
     outcome.before &&
     outcome.before.oversellPolicy !== 'backorder'
   ) {
+    // What was sold, where, and what is short, in the body (AGL-3432),
+    // which an email reader sees without the title.
+    const sold = Math.abs(outcome.requested)
+    const inStock = Math.abs(outcome.applied)
+    const onShelf =
+      inStock === 0
+        ? 'none was'
+        : `only ${inStock} ${inStock === 1 ? 'was' : 'were'}`
     void notifyHostManagers(hostId, {
       type: 'content.lowStock',
       title: `Oversold — ${outcome.before.name}`,
       body:
-        `${Math.abs(outcome.requested)} sold, ${Math.abs(outcome.applied)} ` +
-        `came off the shelf. ${short} unit${short === 1 ? '' : 's'} were not ` +
-        'in stock — the sale is paid and needs restocking or refunding.',
+        `An order on {site} was paid for ${sold}× ${outcome.before.name}, ` +
+        `but ${onShelf} in stock. ` +
+        `${short} unit${short === 1 ? ' is' : 's are'} short: restock ` +
+        `${short === 1 ? 'it' : 'them'} or refund the difference.`,
       link: `/${hostId}/products`,
     })
   }

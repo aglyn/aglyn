@@ -370,6 +370,23 @@ describe('a supplier closes only their own lines (AGL-2455)', () => {
     expect(notifications[1].title).not.toContain('still to ship')
   })
 
+  /**
+   * Which supplier shipped which order, on which site, and the tracking
+   * (AGL-3432): the body was a bare carrier and number, or nothing.
+   */
+  it('names the supplier, the order, the site and the tracking in the body', async () => {
+    docs.set('hosts/host-1/suppliers/northwind', { name: 'Northwind Supply' })
+    await post({
+      token: supplierToken('northwind'),
+      carrier: 'UPS',
+      trackingNumber: '1Z-NW',
+    })
+    expect(notifications[0].body).toBe(
+      'Northwind Supply shipped their part of order #1012 on {site}. ' +
+        'Tracking: UPS 1Z-NW. 1 line is still to ship.',
+    )
+  })
+
   it('leaves the fields it does not write alone', async () => {
     await post({ token: supplierToken('northwind') })
     expect(order().supplierToken).toBe(supplierToken('contoso'))
