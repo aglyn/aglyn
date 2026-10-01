@@ -1437,7 +1437,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     owner: {
       title: 'Paused on {{workspace.name}}: {{item.label}}',
       summary:
-        'On {{occurredAt}}, our team paused one feature on {{workspace.name}}: {{item.label}}. The message from our team: {{lock.message}}',
+        'On {{occurredAt}}, our team paused {{item.label}} on {{workspace.name}}. The message from our team: {{lock.message}}',
       meaning: 'Everything else on your workspace keeps working. {{lock.affected}}',
       steps: [
         'Nothing is needed from you unless the message above asks for something, or you believe this is a mistake.',
@@ -1447,7 +1447,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     },
     staff: {
       title: 'Workspace feature paused',
-      summary: '{{item.label}} was paused for {{workspace.name}} on {{occurredAt}}.',
+      summary: 'Paused for {{workspace.name}} on {{occurredAt}}: {{item.label}}.',
       actions: ['staff-unlock', 'staff-view-workspace'],
     },
   },
@@ -1462,14 +1462,14 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     helpAnchor: 'locked',
     owner: {
       title: 'Back on for {{workspace.name}}: {{item.label}}',
-      summary: 'On {{occurredAt}}, our team turned one feature back on for {{workspace.name}}: {{item.label}}.',
+      summary: 'On {{occurredAt}}, our team turned {{item.label}} back on for {{workspace.name}}.',
       meaning: 'What happens now: {{lock.affected}}',
       steps: ['Nothing to do.'],
       actions: ['contact-support'],
     },
     staff: {
       title: 'Workspace feature restored',
-      summary: '{{item.label}} was restored for {{workspace.name}} on {{occurredAt}}.',
+      summary: 'Restored for {{workspace.name}} on {{occurredAt}}: {{item.label}}.',
       actions: ['staff-view-workspace'],
     },
   },

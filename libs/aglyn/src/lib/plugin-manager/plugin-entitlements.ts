@@ -95,6 +95,14 @@ export interface PluginLockdownFeatureDeclaration {
   /** The staff checklist's label. */
   label: string
   /**
+   * What the lever is called in the customer's mail when staff pull it for
+   * their workspace (`media uploads`, `AI generation`). A noun phrase that
+   * reads right mid-sentence ("our team paused media uploads") and after a
+   * colon, so lowercase unless it starts with a name or an acronym. The
+   * staff `label` never reaches a customer.
+   */
+  customerName: string
+  /**
    * Whether a verified staff claim passes the lock. Granted where a staff
    * action aids incident response — one real call proves a provider is back
    * — and withheld where the staff action would BE the incident.

@@ -300,11 +300,24 @@ describe('what a notice claims is what happens', () => {
 
   it('names a paused feature without bending it into a sentence ("Media uploads is paused")', () => {
     const paused = renderOwnerRiskNotice('feature-locked', {
-      'item.label': 'Media uploads',
+      'item.label': 'media uploads',
       'workspace.name': 'Harbor View',
     })
-    expect(paused.title).toBe('Paused on Harbor View: Media uploads')
-    expect(paused.summary).toMatch(/paused one feature on Harbor View: Media uploads\./)
+    expect(paused.title).toBe('Paused on Harbor View: media uploads')
+    expect(paused.summary).toMatch(/our team paused media uploads on Harbor View\./)
+    // Two levers paused by one staff action read as one sentence too (AGL-3442).
+    const both = renderOwnerRiskNotice('feature-locked', {
+      'item.label': 'AI assist and AI generation',
+      'workspace.name': 'Harbor View',
+    })
+    expect(both.title).toBe('Paused on Harbor View: AI assist and AI generation')
+    expect(both.summary).toMatch(/our team paused AI assist and AI generation on Harbor View\./)
+    expect(renderOwnerRiskNotice('feature-unlocked', { 'item.label': 'AI assist and AI generation', 'workspace.name': 'Harbor View' }).summary).toMatch(
+      /our team turned AI assist and AI generation back on for Harbor View\.$/,
+    )
+    for (const kind of ['feature-locked', 'feature-unlocked'] as const) {
+      expect(owner(kind)).not.toMatch(/one feature|\b(is|are) (paused|back on)\b/)
+    }
   })
 
   it('names the site a site notice is about, and says "your site" only when it has no name', () => {

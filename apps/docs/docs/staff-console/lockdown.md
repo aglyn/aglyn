@@ -414,8 +414,11 @@ A feature lock can also be scoped to **one workspace**: the same `lockdowns`
 carrier at `feature--{key}--org--{orgId}`, written by the same route with an
 `orgId` in the body, audited the same way, and read only by the AI doors that
 name that org. The staff org page offers it as **Pause AI** in its Staff actions,
-which writes both `ai-assist` and `ai-generate` for the org in one click, and
-**Resume AI** lifts both.
+which writes both `ai-assist` and `ai-generate` for the org in one request, and
+**Resume AI** lifts both. A request may name several levers in `targetIds`
+instead of one `targetId`: each is written and audited as if asked for alone,
+and the workspace's owners get **one** email naming every lever by its customer
+name ("AI assist and AI generation"), never the checklist label.
 
 Reach for it to stop a customer's AI spend **without touching what they bought**:
 the plan, the add-on and every entitlement override stay exactly as they are, so

@@ -1849,7 +1849,8 @@ registerPluginEntitlements({
   lockdownFeatures: [
     {
       key: 'ai-generate',
-      label: 'AI generation',
+      label: 'AI generation', // the staff checklist
+      customerName: 'AI generation', // the customer's mail: "our team paused AI generation"
       staffBypass: true,
       notice: { title: 'AI generation is temporarily unavailable', body: '…' },
       apiPaths: { prefixes: ['ai/generate'] },
@@ -1876,7 +1877,7 @@ registerPluginEntitlements({
 | `hostRoleDefaults` on a catalog key | Makes the key per-site for a site collaborator: `resolveCollaboratorHostPermissions` and `resolveMemberHostPermissions` decide it from the host role, refined by the per-site toggle on the member document, and `projectHostMemberPermissions` stamps the site's `memberPermissions` projection. On the server, `memberHasPermissionOnHost`, `permissionRefusal` and `setHostPermissions` are a door's rung, its 403 and the toggle write. |
 | `listPluginSeatAddons()` / `pluginSeatAddon(key)` | What `resolveOrgEntitlements` folds: the quota named gains `perUnitByPlan[plan] × units` and the features switch on, after the org's overrides and before nothing. `pluginSeatAddonUnits(org.seatAddons, key)` / `hasPluginSeatAddon(org, key)` in `plan-entitlements` are the readings every surface shares. |
 | `listPluginFeatures()` | A declared feature's `defaultByPlan` fills the plan tables where they are silent; a key the tables already carry keeps their answer. |
-| `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |
+| `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, the owners' pause email names it by `customerName` (`lockdownFeatureCustomerName`) and never by the staff `label`, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |
 
 Registration order is deterministic: `FIRST_PARTY_PLUGINS` catalog order,
 then any other id alphabetically — plugin modules load in parallel, and a

@@ -58,8 +58,8 @@ import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-e
 registerPluginEntitlements({
   pluginId: 'ai',
   lockdownFeatures: [
-    { key: 'ai-assist', label: 'AI assist', staffBypass: true, notice: { title: 'a', body: 'a' } },
-    { key: 'ai-generate', label: 'AI generation', staffBypass: true, notice: { title: 'g', body: 'g' } },
+    { key: 'ai-assist', label: 'AI assist', customerName: 'AI assist', staffBypass: true, notice: { title: 'a', body: 'a' } },
+    { key: 'ai-generate', label: 'AI generation', customerName: 'AI generation', staffBypass: true, notice: { title: 'g', body: 'g' } },
   ],
 })
 import {

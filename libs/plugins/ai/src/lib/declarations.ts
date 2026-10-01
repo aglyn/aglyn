@@ -72,6 +72,7 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
     {
       key: 'ai-assist',
       label: 'AI assist',
+      customerName: 'AI assist',
       staffBypass: true,
       notice: {
         title: 'AI assist is temporarily unavailable',
@@ -84,6 +85,7 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
     {
       key: 'ai-generate',
       label: 'AI generation',
+      customerName: 'AI generation',
       staffBypass: true,
       notice: {
         title: 'AI generation is temporarily unavailable',
