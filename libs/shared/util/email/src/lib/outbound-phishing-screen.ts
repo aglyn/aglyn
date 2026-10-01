@@ -33,7 +33,7 @@
  *
  * A false positive costs a real merchant's first campaign a wait for a
  * human; a miss costs strangers their bank logins. Both are real, so only
- * three shapes hold, and each is one a legitimate merchant essentially never
+ * four shapes hold, and each is one a legitimate merchant essentially never
  * produces:
  *
  * 1. **A lookalike link** — a link or reply address whose host carries a
@@ -50,8 +50,15 @@
  *    neither the brand's, nor the workspace's, nor a common social or maps
  *    link. Any two of the three are ordinary marketing — "our book is on
  *    Amazon", "sign in to your account", a link to the shop — and pass.
+ * 4. **A prefilled sign-in** (AGL-3453): account or password phrasing
+ *    ("your password expires today") beside a link to such a domain that
+ *    carries the reader's own address, so the harvester's form opens with
+ *    it filled in: `…/ss/c/…#victim@example.com`.
  *
- * Mentioning a brand, alone, never holds.
+ * Mentioning a brand, alone, never holds. Brands and lures are read from
+ * what the reader SEES ({@link visibleTextOf}), never from the raw HTML, in
+ * which a kit splits every letter with a tag; links are read from the raw
+ * HTML, where an href lives.
  *
  * ## The brand list is small on purpose
  *
@@ -390,11 +397,15 @@ export const PHISHING_SCREEN_BRANDS: readonly PhishingScreenBrand[] = [
 export const ACCOUNT_LURE_PATTERNS: readonly RegExp[] = [
   /\bverify\s+your\s+(?:account|identity|information|details|payment|email)\b/i,
   /\bconfirm\s+your\s+(?:account|identity|details|payment|password|billing|information)\b/i,
-  /\b(?:account|payment|card)\s+(?:has\s+been\s+|is\s+|was\s+)?(?:suspended|locked|limited|restricted|disabled|on\s+hold)\b/i,
+  /\b(?:account|payment|card)\s+(?:has\s+been\s+|is\s+|was\s+|will\s+be\s+)?(?:suspended|locked|limited|restricted|disabled|deactivated|terminated|on\s+hold)\b/i,
   /\bunusual\s+(?:sign[-\s]?in|login|activity)\b/i,
   /\bupdate\s+your\s+(?:payment|billing|card|account)\s*(?:details|information|method)?\b/i,
   /\b(?:sign|log)\s?in\s+to\s+(?:your|view|confirm|claim|release)\b/i,
-  /\bpassword\s+(?:will\s+)?expire/i,
+  // "Password Expired", "your password expires today", "will expire".
+  /\bpassword\s+(?:has\s+|will\s+)?expire/i,
+  /\bkeep\s+(?:your|my|the)\s+(?:current\s+|active\s+|existing\s+|same\s+)?password\b/i,
+  /\bchange\s+(?:your\s+)?password\s+settings?\b/i,
+  /\bmailbox\s+(?:storage\s+|quota\s+)?(?:is\s+)?(?:almost\s+|nearly\s+)?(?:full|exceeded)\b/i,
   /\bsecurity\s+alert\b/i,
 ]
 
@@ -523,6 +534,14 @@ export type PhishingScreenSignal =
    * sends visitors to such a host (`screenSiteRedirect`, AGL-3447). Soft.
    */
   | { code: 'offsite-redirect'; source: string; lure: string; host: string }
+  /**
+   * Account or password phrasing beside a link elsewhere that carries the
+   * reader's own address (AGL-3453). STRONG when the address is the whole
+   * fragment (`#victim@example.com`), which only a landing page's script
+   * reads; soft when it is a query parameter or part of a longer fragment.
+   * The address itself is never stored.
+   */
+  | { code: 'recipient-prefill-link'; host: string; lure: string; place: 'fragment' | 'parameter' }
 
 export interface PhishingScreenInput {
   subject?: string | null
@@ -713,6 +732,133 @@ function safeCodePoint(value: number): string {
     : ''
 }
 
+/** Named entities a body uses for spacing, quoting and invisible splitting. */
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: ' ',
+  ensp: ' ',
+  emsp: ' ',
+  thinsp: ' ',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  shy: '',
+  zwnj: '',
+  zwj: '',
+}
+
+/*
+ * Markup is read in single forward passes, never with a pattern that can
+ * rescan to the end of the body from every `<`: the screen reads every
+ * tenant message, and the tenant writes the body, so a million unclosed
+ * `<` must cost a linear read.
+ */
+/** An element whose contents a reader never sees: the start of its opening tag. */
+const UNSEEN_ELEMENT_OPEN = /<(style|script|head|template)\b/gi
+/** The name at the start of a tag that breaks a line or a block: a reader sees a gap there. */
+const BREAKING_TAG_NAME =
+  /^\/?(?:br|p|div|li|ul|ol|tr|td|th|table|tbody|thead|h[1-6]|section|article|header|footer|blockquote|hr|center)\b/i
+/** Characters that render as nothing, used to split a word for a scanner. */
+const INVISIBLE_CHARACTERS = /[\u00ad\u200b-\u200d\u2060\ufeff]/g
+
+/**
+ * The text between the tags, joined with NO separator — or, with `breaks`,
+ * with a space where a line or block breaks. A comment is dropped; a `<`
+ * with no `>` after it is text.
+ */
+function stripMarkup(html: string, breaks: boolean): string {
+  let text = ''
+  let at = 0
+  while (at < html.length) {
+    const open = html.indexOf('<', at)
+    if (open < 0) return text + html.slice(at)
+    text += html.slice(at, open)
+    if (html.startsWith('<!--', open)) {
+      const end = html.indexOf('-->', open + 4)
+      if (end < 0) return text
+      at = end + 3
+      continue
+    }
+    const close = html.indexOf('>', open + 1)
+    if (close < 0) return text + html.slice(open)
+    if (breaks && BREAKING_TAG_NAME.test(html.slice(open + 1, Math.min(close, open + 12)))) text += ' '
+    at = close + 1
+  }
+  return text
+}
+
+/** The markup with every unseen element and its contents taken out, in one pass. */
+function dropUnseenElements(html: string): string {
+  const lower = html.toLowerCase()
+  const open = new RegExp(UNSEEN_ELEMENT_OPEN.source, 'gi')
+  let kept = ''
+  let at = 0
+  // Each search starts at or after the last; what it found (or that it found
+  // nothing) still answers the next one, so no stretch is scanned twice.
+  const found = new Map<string, number>()
+  const find = (needle: string, from: number) => {
+    const known = found.get(needle)
+    if (known !== undefined && (known < 0 || known >= from)) return known
+    const position = lower.indexOf(needle, from)
+    found.set(needle, position)
+    return position
+  }
+  for (let match = open.exec(html); match; match = open.exec(html)) {
+    // No `>` after it: neither this nor anything later is a tag.
+    const tagEnd = find('>', open.lastIndex)
+    if (tagEnd < 0) break
+    kept += `${html.slice(at, match.index)} `
+    const name = match[1].toLowerCase()
+    const close = find(`</${name}`, tagEnd + 1)
+    // A head nobody closed ends where the body starts, as a browser reads it.
+    const body = name === 'head' ? find('<body', tagEnd + 1) : -1
+    if (body >= 0 && (close < 0 || body < close)) {
+      at = body
+    } else {
+      const end = close < 0 ? -1 : find('>', close)
+      // Never closed: only the opening tag goes, and what follows is still
+      // read, so an unclosed `<style>` cannot hide the lure after it.
+      at = end < 0 ? tagEnd + 1 : end + 1
+    }
+    open.lastIndex = at
+  }
+  return kept + html.slice(at)
+}
+
+/**
+ * What a reader SEES in a body (AGL-3453): its text with the markup taken
+ * out, the way a mail client or a browser draws it.
+ *
+ * A kit splits every letter of a brand and a lure with a tag —
+ * `G<SPAN class=…>o<SPAN …>o…gle`, `P<SPAN …>a<SPAN …>s…word E<SPAN …>x…pired`
+ * — so the raw HTML never contains the word a reader reads. Tags are
+ * therefore removed with NO separator, which rejoins the letters; `<style>`,
+ * `<script>` and `<head>` are dropped with their contents; comments and
+ * zero-width characters are dropped; entities are decoded; whitespace is
+ * collapsed. A second reading that puts a space where a line or block
+ * breaks is added when it differs, so two words in two paragraphs are still
+ * two words. Links are NOT read from this: an href lives inside a tag.
+ */
+export function visibleTextOf(html: string | null | undefined): string {
+  const text = String(html ?? '')
+  const source = text.includes('<') ? dropUnseenElements(text) : text
+  const read = (breaks: boolean) =>
+    decodeVisibleEntities(stripMarkup(source, breaks))
+      .replace(INVISIBLE_CHARACTERS, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  const joined = read(false)
+  const broken = read(true)
+  return broken === joined ? joined : `${joined}\n${broken}`
+}
+
+/** {@link decodeEntities}, after the named entities a body reads with. */
+function decodeVisibleEntities(text: string): string {
+  return decodeEntities(
+    text.replace(/&([a-z]{2,8});/gi, (entity, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? entity),
+  )
+}
+
 const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s"'<>()\\[\]{}]+/gi
 
 /** The hosts every link in the text points at, lowercased. */
@@ -735,6 +881,85 @@ export function linkHostsIn(text: string): string[] {
     }
   }
   return [...hosts]
+}
+
+/** One link: the host it goes to, and its query and fragment, URL-decoded. */
+interface LinkTarget {
+  host: string
+  query: string
+  fragment: string
+}
+
+/** Every link in the text, with what it carries after its path. */
+function linkTargetsIn(text: string): LinkTarget[] {
+  const targets: LinkTarget[] = []
+  for (const match of decodeEntities(String(text ?? '')).match(URL_PATTERN) ?? []) {
+    // The first host is where the browser goes; a userinfo disguise is not.
+    const [host] = linkHostsIn(match)
+    if (!host) continue
+    const hash = match.indexOf('#')
+    const beforeHash = hash < 0 ? match : match.slice(0, hash)
+    const question = beforeHash.indexOf('?')
+    targets.push({
+      host,
+      query: question < 0 ? '' : decodeUrlPart(beforeHash.slice(question + 1)),
+      fragment: hash < 0 ? '' : decodeUrlPart(match.slice(hash + 1)),
+    })
+  }
+  return targets
+}
+
+function decodeUrlPart(part: string): string {
+  try {
+    return decodeURIComponent(part)
+  } catch {
+    return part
+  }
+}
+
+const EMAIL_ADDRESS = /^[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i
+const EMAIL_ADDRESS_IN_TEXT = /[a-z0-9._%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi
+const BASE64_TEXT = /^[a-z0-9+/_-]{8,}={0,2}$/i
+
+/** A fragment read as base64, the other way a kit carries the address, or ''. */
+function base64Text(fragment: string): string {
+  const decode = (globalThis as { atob?: (data: string) => string }).atob
+  if (!decode || !BASE64_TEXT.test(fragment)) return ''
+  try {
+    return decode(fragment.replace(/-/g, '+').replace(/_/g, '/'))
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Where a link carries a reader's own address (AGL-3453), or null.
+ *
+ * - `fragment`: the WHOLE fragment is an address, plain or base64 —
+ *   `…#victim@example.com`. A fragment never reaches the server; the only
+ *   thing that reads it is the landing page's script, filling a sign-in
+ *   form so the reader sees their own address and types the password.
+ * - `parameter`: an address that is not the workspace's own inside a query
+ *   or a longer fragment — `?email=victim@example.com`, a hash route's
+ *   `#/login?email=…`. Ordinary in a sign-up or a SaaS login link, so softer.
+ */
+function prefilledAddressIn(
+  target: LinkTarget,
+  isOwnHost: (host: string) => boolean,
+): 'fragment' | 'parameter' | null {
+  const fragment = target.fragment.trim()
+  if (fragment && (EMAIL_ADDRESS.test(fragment) || EMAIL_ADDRESS.test(base64Text(fragment).trim()))) {
+    return 'fragment'
+  }
+  for (const part of [target.query, target.fragment]) {
+    // An address is short; a tracking token can be kilobytes of the
+    // characters an address is made of, so only the head of one is read.
+    if (!part.includes('@')) continue
+    for (const match of part.slice(0, 4096).matchAll(EMAIL_ADDRESS_IN_TEXT)) {
+      if (!isOwnHost(match[1].toLowerCase())) return 'parameter'
+    }
+  }
+  return null
 }
 
 const ADDRESS_HOST_PATTERN = /[a-z0-9._%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi
@@ -795,10 +1020,13 @@ export function screenOutboundEmail(input: PhishingScreenInput): PhishingScreenV
   const isOwnHost = (host: string) =>
     ownHosts.some((own) => host === own || host.endsWith(`.${own}`))
 
-  const copy = [input.subject, input.preheader, ...(input.bodies ?? [])]
-    .filter((part): part is string => typeof part === 'string' && part.length > 0)
-    .join('\n')
-  const decodedCopy = decodeEntities(copy)
+  const parts = [input.subject, input.preheader, ...(input.bodies ?? [])].filter(
+    (part): part is string => typeof part === 'string' && part.length > 0,
+  )
+  // Links are read from the raw copy, where an href lives; brands and lures
+  // from what a reader sees, where a tag cannot split a word (AGL-3453).
+  const copy = parts.join('\n')
+  const visibleCopy = parts.map(visibleTextOf).join('\n')
   const replyTo = Array.isArray(input.replyTo)
     ? input.replyTo.join(' ')
     : String(input.replyTo ?? '')
@@ -828,16 +1056,17 @@ export function screenOutboundEmail(input: PhishingScreenInput): PhishingScreenV
   }
 
   // 3. Brand + lure + a link to somewhere that is nobody's we know.
-  const lure = PHISHING_LURE_PATTERNS.map((pattern) => decodedCopy.match(pattern)?.[0])
+  const isElsewhere = (host: string) => {
+    if (isOwnHost(host)) return false
+    const registrable = registrableDomain(host)
+    return !isAnyOfficialDomain(registrable) && !COMMON_LINK_DOMAINS.has(registrable)
+  }
+  const lure = PHISHING_LURE_PATTERNS.map((pattern) => visibleCopy.match(pattern)?.[0])
     .find(Boolean)
   if (lure) {
-    const foreign = linkHosts.find((host) => {
-      if (isOwnHost(host)) return false
-      const registrable = registrableDomain(host)
-      return !isAnyOfficialDomain(registrable) && !COMMON_LINK_DOMAINS.has(registrable)
-    })
+    const foreign = linkHosts.find(isElsewhere)
     if (foreign) {
-      const namedInCopy = `${decodedCopy}\n${fromName}`
+      const namedInCopy = `${visibleCopy}\n${fromName}`
       for (const brand of PHISHING_SCREEN_BRANDS) {
         if (brand.mention.test(namedInCopy) && !isOwnBrand(brand, ownNames, ownRegistrables)) {
           signals.push({
@@ -849,6 +1078,28 @@ export function screenOutboundEmail(input: PhishingScreenInput): PhishingScreenV
           break
         }
       }
+    }
+  }
+
+  // 4. An account lure beside a link elsewhere that carries the reader's own
+  //    address, filled in for the sign-in form at the far end (AGL-3453).
+  const accountLure = ACCOUNT_LURE_PATTERNS.map((pattern) => visibleCopy.match(pattern)?.[0]).find(Boolean)
+  if (accountLure) {
+    let prefill: { host: string; place: 'fragment' | 'parameter' } | null = null
+    for (const target of linkTargetsIn(copy)) {
+      if (!isElsewhere(target.host)) continue
+      const place = prefilledAddressIn(target, isOwnHost)
+      if (place && (!prefill || (place === 'fragment' && prefill.place !== 'fragment'))) {
+        prefill = { host: target.host, place }
+      }
+    }
+    if (prefill) {
+      signals.push({
+        code: 'recipient-prefill-link',
+        host: prefill.host,
+        lure: accountLure.slice(0, 120),
+        place: prefill.place,
+      })
     }
   }
 
@@ -885,6 +1136,10 @@ export function describePhishingScreenSignals(
         return `Its call to action ("${signal.action}") sends visitors off the site to ${signal.host}, on a page that reads "${signal.lure}".`
       case 'offsite-redirect':
         return `Redirects ${signal.source}, a path that reads "${signal.lure}", off the site to ${signal.host}.`
+      case 'recipient-prefill-link':
+        return `Links to ${signal.host} with the recipient's own address in the ${
+          signal.place === 'fragment' ? 'fragment' : 'link'
+        }, so a sign-in form there opens filled in, beside "${signal.lure}".`
       default:
         return 'Phishing signal.'
     }
@@ -903,10 +1158,17 @@ export function describePhishingScreenSignals(
  *   workspace is, so it holds for EVERY workspace, on every message and
  *   page, transactional mail included. A merchant has no ordinary reason to
  *   link to a host shaped like somebody else's brand.
+ * - STRONG, too: account or password phrasing beside a link elsewhere whose
+ *   whole FRAGMENT is the reader's address (AGL-3453). A fragment never
+ *   reaches a server, so the address there is for the landing page's script
+ *   to fill a sign-in form with; a merchant's own reset mail links to its
+ *   own domain, and a SaaS login link puts the address in its query, which
+ *   is soft.
  * - SOFT: a brand in the sender name, the three-part lure, a brand's name
  *   beside a sign-in or payment call to action on a page (in one element,
  *   or anywhere on a page that carries a lure), a call to action or a
- *   redirect that leaves the site beside account or document-share wording.
+ *   redirect that leaves the site beside account or document-share wording,
+ *   the reader's address in a query beside account phrasing.
  *   Each is shaped like phishing but also like a clumsy legitimate message,
  *   so they hold
  *   only for a workspace in its first {@link OUTBOUND_REVIEW_YOUNG_DAYS}
@@ -945,7 +1207,14 @@ export const ACCOUNT_SUBDOMAIN_HOSTS: ReadonlySet<string> = new Set([
   'cloudfront.net', 'kajabi.com', 'thinkific.com', 'teachable.com', 'mailchimpsites.com',
 ])
 
-export function phishingSignalTier(signal: { code: string; host?: string }): PhishingSignalTier {
+export function phishingSignalTier(signal: {
+  code: string
+  host?: string
+  place?: string
+}): PhishingSignalTier {
+  if (signal?.code === 'recipient-prefill-link') {
+    return signal.place === 'fragment' ? 'strong' : 'soft'
+  }
   if (!STRONG_PHISHING_SIGNAL_CODES.has(signal?.code)) return 'soft'
   if (
     signal.code === 'lookalike-link' &&

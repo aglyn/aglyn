@@ -88,6 +88,7 @@ import {
   isAnyOfficialBrandDomain,
   isCommonLinkDomain,
   squashScreenText,
+  visibleTextOf,
 } from './outbound-phishing-screen'
 
 export interface HostedPageScreenInput {
@@ -427,9 +428,15 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
   return { signals }
 }
 
-/** Page text with its URLs taken out, so only what a visitor reads is judged as prose. */
+/**
+ * What a visitor reads in page text: its markup taken out the way the email
+ * screen takes it out ({@link visibleTextOf}), so a custom HTML block or a
+ * rich-text prop cannot split a brand or a lure letter by letter with tags
+ * (AGL-3453), and its bare URLs taken out too. Links are still read from
+ * the raw text, where an href lives.
+ */
 function proseOf(text: string): string {
-  return text.replace(PROSE_URL_PATTERN, ' ').replace(/\s+/g, ' ').trim()
+  return visibleTextOf(text).replace(PROSE_URL_PATTERN, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /** The first pattern's match in the text, or undefined. */
@@ -447,7 +454,7 @@ function callToActionLabel(props: Record<string, unknown>): string {
   for (const key of CALL_TO_ACTION_LABEL_KEYS) {
     const value = props[key]
     if (typeof value === 'string' && value.trim()) {
-      return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+      return visibleTextOf(value).split('\n')[0]
     }
   }
   return ''

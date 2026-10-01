@@ -267,7 +267,37 @@ describe('the document-share page (AGL-3447)', () => {
         lure: 'password will expire',
         host: 'm365-keep.example.top',
       },
+      // "Keep my password" is itself an account lure (AGL-3453), so the
+      // button that leaves is the page's call to action, brand or not.
+      {
+        code: 'offsite-action-page',
+        action: 'Keep my password',
+        lure: 'password will expire',
+        host: 'm365-keep.example.top',
+      },
     ])
+  })
+
+  it('reads a custom HTML block that splits the brand and the lure letter by letter (AGL-3453)', () => {
+    const split = (words: string) =>
+      [...words].map((letter) => (letter === ' ' ? ' ' : `${letter}<span class=x>`)).join('')
+    const verdict = screenHostedPage({
+      nodes: page({
+        componentId: 'custom-html',
+        props: {
+          html:
+            `<h2>${split('Google Workspace')}</h2><p>${split('Your password expires today.')}</p>` +
+            `<a href="https://relay.example.top/k">${split('Keep your password')}</a>`,
+        },
+      }),
+      ...PHISHER,
+    })
+    // One element, so the one-element rule reads it — once its tags are out.
+    expect(verdict.signals).toContainEqual({
+      code: 'brand-action-page',
+      brand: 'google',
+      action: 'password expire',
+    })
   })
 
   it('reads the action on a button that leaves when the page carries no lure wording of its own', () => {

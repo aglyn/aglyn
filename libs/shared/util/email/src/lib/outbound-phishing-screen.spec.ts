@@ -27,6 +27,7 @@ import {
   registrableDomain,
   screenOutboundEmail,
   signalsThatHold,
+  visibleTextOf,
 } from './outbound-phishing-screen'
 
 /**
@@ -355,6 +356,175 @@ describe('document-share mail (AGL-3447)', () => {
   })
 })
 
+/**
+ * The 2026-10-01 "Google Workspace — Password Expired Notification" (AGL-3453),
+ * trimmed: every letter of the brand and the lure split by a tag, two
+ * buttons through a real click-tracker with the recipient's address as the
+ * fragment, a `<head>` of its own, and a hundred and fifty empty paragraphs
+ * before a pasted, unrelated thread. The recipient is `victim@example.com`.
+ */
+const split = (words: string) =>
+  [...words].map((letter) => (letter === ' ' ? ' ' : `${letter}<SPAN class=victim@example.com>`)).join('')
+const TRACKER = 'https://links.notification.intuit.com/ss/c/u001.AbCdEf123'
+const PASSWORD_EXPIRED_HTML = [
+  '<html><head><style>p{margin:0}</style><title>Notice</title></head><body>',
+  `<p><b>${split('Google Workspace')}</b></p>`,
+  `<h2>${split('Password Expired Notification')}</h2>`,
+  `<p>${split('Your password expires today.')} ${split('To keep using your account, choose an option below.')}</p>`,
+  `<a href="${TRACKER}/h1/Aa1#victim@example.com">${split('Keep Your Active Password')}</a>`,
+  `<a href="${TRACKER}/h1/Bb2#victim@example.com">${split('Change Password Settings')}</a>`,
+  '<p>&nbsp;</p>'.repeat(150),
+  '<blockquote>On Tue, the club secretary wrote: Training moves to Saturday at 9, ',
+  'bring the signed forms and the kit order.</blockquote>',
+  '</body></html>',
+].join('\n')
+
+describe('what a reader sees, not the raw HTML (AGL-3453)', () => {
+  it('rejoins a word a kit split letter by letter with tags', () => {
+    expect(visibleTextOf(split('Google Workspace'))).toBe('Google Workspace')
+    expect(visibleTextOf(`P<SPAN class=a>a<SPAN class=a>s<span>s</span>word E<i>x</i>pired`)).toBe(
+      'Password Expired',
+    )
+  })
+
+  it('drops what is never shown, comments and invisible characters, and decodes entities', () => {
+    expect(
+      visibleTextOf(
+        '<head><title>PayPal</title></head><style>.a{}</style><script>var x="verify your account"</script>' +
+          'Go<!-- x -->og\u200ble&nbsp;Docs &amp; Drive',
+      ),
+    ).toBe('Google Docs & Drive')
+  })
+
+  it('keeps two words in two paragraphs apart in its second reading', () => {
+    expect(visibleTextOf('<p>Your password</p><p>expires today</p>')).toContain('Your password expires today')
+  })
+
+  it('reads a body with a million unclosed tags in linear time', () => {
+    const started = Date.now()
+    for (const body of [
+      '<style'.repeat(200_000),
+      `${'<style>'.repeat(100_000)}x`,
+      `${'<head>'.repeat(100_000)}<body>x`,
+      '<a'.repeat(500_000),
+      '<!--'.repeat(250_000),
+    ]) {
+      visibleTextOf(body)
+    }
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('HOLDS the split-letter Google Workspace password email, for every workspace', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Google Workspace — Password Expired Notification',
+      fromName: 'Regional Football Association',
+      fromAddress: 'notices@regional-football.example',
+      bodies: [PASSWORD_EXPIRED_HTML],
+      ...OWN,
+    })
+    expect(verdict.signals).toEqual([
+      {
+        code: 'brand-lure-link',
+        brand: 'google',
+        lure: 'Password Expire',
+        host: 'links.notification.intuit.com',
+      },
+      {
+        code: 'recipient-prefill-link',
+        host: 'links.notification.intuit.com',
+        lure: 'Password Expire',
+        place: 'fragment',
+      },
+    ])
+    // The prefilled fragment is STRONG: it holds an established workspace's
+    // mail too, and mail that says it is owed.
+    expect(signalsThatHold(verdict.signals, { ageDays: 2 })).toHaveLength(2)
+    expect(signalsThatHold(verdict.signals, { ageDays: 900, owed: true })).toEqual([verdict.signals[1]])
+  })
+
+  it('still holds it with the brand split from the subject too, read from the body alone', () => {
+    const verdict = screenOutboundEmail({ subject: 'Notice', bodies: [PASSWORD_EXPIRED_HTML], ...OWN })
+    expect(verdict.signals.map((signal) => signal.code)).toEqual(['brand-lure-link', 'recipient-prefill-link'])
+  })
+
+  it('reads an address the kit base64-encoded into the fragment', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Your mailbox storage is full',
+      bodies: [`Keep your messages: https://box-relay.example.top/m#${btoa('victim@example.com')}`],
+      ...OWN,
+    })
+    expect(verdict.signals).toContainEqual(
+      expect.objectContaining({ code: 'recipient-prefill-link', place: 'fragment', lure: 'mailbox storage is full' }),
+    )
+  })
+
+  it.each([
+    ['Keep your active password', 'Keep your active password'],
+    ['Change password settings', 'Change password settings'],
+    ['Your mailbox is almost full', 'mailbox is almost full'],
+    ['Your account will be deactivated tonight', 'account will be deactivated'],
+    ['Your password has expired', 'password has expire'],
+  ])('reads "%s" as an account lure', (text, lure) => {
+    const verdict = screenOutboundEmail({
+      subject: text,
+      bodies: ['Act now: https://relay.example.top/x#victim@example.com'],
+      ...OWN,
+    })
+    expect(verdict.signals).toContainEqual(expect.objectContaining({ code: 'recipient-prefill-link', lure }))
+  })
+})
+
+describe('a link that carries the reader’s address, where it is ordinary (AGL-3453)', () => {
+  it('lets a workspace mail its own user a password reset on its own domain', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'Your password expires today',
+      fromName: 'Harbor View Hotel',
+      fromAddress: 'no-reply@harborviewhotel.com',
+      bodies: [
+        '<p>Hi Dana, your password expires today. Change password settings here:</p>' +
+          '<a href="https://www.harborviewhotel.com/account/password?email=victim%40example.com#victim@example.com">Reset password</a>',
+      ],
+      ...OWN,
+    })
+    expect(verdict.signals).toEqual([])
+    expect(verdict.hold).toBe(false)
+  })
+
+  it('reads an address in a query, or in a hash route, as SOFT: a SaaS login link does it', () => {
+    for (const href of [
+      'https://app.example-saas.io/login?email=victim%40example.com',
+      'https://app.example-saas.io/#/login?email=victim@example.com',
+    ]) {
+      const verdict = screenOutboundEmail({
+        subject: 'Your account will be suspended',
+        bodies: [`Update your billing to keep it: ${href}`],
+        ...OWN,
+      })
+      expect(verdict.signals).toContainEqual(
+        expect.objectContaining({ code: 'recipient-prefill-link', place: 'parameter' }),
+      )
+      expect(signalsThatHold(verdict.signals, { ageDays: 400 })).toEqual([])
+    }
+  })
+
+  it('never counts the workspace’s own address in a link, or a link with no account lure', () => {
+    expect(
+      screenOutboundEmail({
+        subject: 'Your account will be suspended',
+        bodies: ['Questions? https://forms.example-crm.com/ask?reply=hello@harborviewhotel.com'],
+        ...OWN,
+      }).signals,
+    ).toEqual([])
+    expect(
+      screenOutboundEmail({
+        subject: 'Our new menu',
+        bodies: ['Book a table: https://tables.example.net/r#victim@example.com'],
+        ...OWN,
+      }).signals,
+    ).toEqual([])
+  })
+})
+
 describe('the staff wording', () => {
   it('describes each signal in a sentence', () => {
     const [line] = describePhishingScreenSignals([
@@ -429,6 +599,10 @@ describe('the tiers (every surface)', () => {
     for (const code of ['brand-lure-page', 'offsite-action-page', 'offsite-redirect']) {
       expect(phishingSignalTier({ code, host: 'temps-juenes.com' })).toBe('soft')
     }
+    // A prefilled sign-in (AGL-3453): the whole fragment is strong, a
+    // parameter soft.
+    expect(phishingSignalTier({ code: 'recipient-prefill-link', host: 'x.top', place: 'fragment' })).toBe('strong')
+    expect(phishingSignalTier({ code: 'recipient-prefill-link', host: 'x.top', place: 'parameter' })).toBe('soft')
   })
 })
 

@@ -164,6 +164,13 @@ Redirects page also refuses to save a destination that is a brand lookalike.
   for a password, a card number or a one-time code. Aglyn's own member sign-in,
   account and checkout elements are not affected, because they collect those
   details themselves.
+- **A prefilled sign-in link.** An email with account or password wording
+  ("your password expires today", "keep your active password") links to a
+  website that is not the workspace's, a listed brand's or a common link, and
+  the link's whole fragment is the reader's own address
+  (`…/ss/c/…#victim@example.com`), plain or base64. Only the landing page's
+  script reads a fragment, and it uses the address to fill a fake sign-in form.
+  The address itself is never stored on the row.
 
 **Soft signals hold only for a workspace less than 14 days old:**
 
@@ -189,6 +196,15 @@ Redirects page also refuses to save a destination that is a brand lookalike.
   is needed. A redirect whose source path reads that way
   (`/secure-document-access`) and that sends visitors to such a website holds
   the same way.
+- **The reader's address in a link's query.** The same account wording beside a
+  link elsewhere that carries the reader's address as a parameter
+  (`?email=…`) or inside a longer fragment. A SaaS login link does this too,
+  which is why it is soft.
+
+Brands and wording are read from the text a reader sees, with the markup taken
+out, never from the raw HTML: a kit that splits every letter of "Google" or
+"Password Expired" with its own tag is read as the words it shows. Links are
+read from the HTML, where their addresses are.
 
 Soft signals never hold email a customer is owed by their own action: receipts,
 gift cards and order notices, booking confirmations and reminders, and password
