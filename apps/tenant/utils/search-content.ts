@@ -17,13 +17,18 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { Fuse } from '@aglyn/shared-util-vendor/fuse'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+// By path, never through a barrel: only a server composition asks it.
 import {
-  orgDataQueryForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
+  readRepeatRows,
+  type RepeatRowsAnswer,
+} from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
+import getScreenVersion from '@aglyn/tenant-runtime/get-screen-version'
 import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 
 // The result shape and the tab arithmetic live in `search-facets.ts`, which
@@ -51,33 +56,21 @@ const matches = (haystack: string | undefined, needle: string) =>
 const SEARCH_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
- * Records scanned per REACHABLE dataset when answering one search.
+ * Rows one repeat may contribute to a single result page.
  *
- * Substring matching happens in this process, so recall over a dataset is
- * bounded by whatever is read — there is no query that finds a match beyond
- * the page without reading it. That makes this number a straight trade of
- * cost against recall, and the honest way to set it is against what search
- * can actually show: at most {@link DATASET_RESULTS_PER_SET} rows per
- * dataset reach the results page.
- *
- * 50 keeps a full page of candidates for every dataset small enough to be
- * browsed as a page (the console lists records ten at a time), while cutting
- * the worst case for a site that repeats over many datasets by four. A
- * dataset larger than this is not searched exhaustively — it never was; the
- * old bound of 200 had the same hole one page further out, and answered from
- * an arbitrary subset on top of it.
+ * Every row a page shows is searched — the repeat's own bound
+ * (`REPEAT_MAX_RECORDS`) is what the page renders, so it is what a visitor
+ * could have seen there — but a list of a hundred hits on one page is one
+ * answer repeated, not a hundred.
  */
-const DATASET_RECORD_SCAN_LIMIT = 50
-
-/** Rows one dataset may contribute to a single result page. */
-const DATASET_RESULTS_PER_SET = 5
+const RESULTS_PER_REPEAT = 5
 
 /**
  * Site search (AGL-88), cached per query (AGL-1525).
  *
  * The uncached read below costs on the order of forty Firestore round trips
  * — a screen doc per published route, then entries per collection, then
- * dataset records. That was tolerable when nothing linked here; the
+ * the rows its pages repeat over. That was tolerable when nothing linked here; the
  * Collection Entries suggestion panel now does, from every collection
  * listing on the site, so the same handful of queries arrive over and over.
  *
@@ -124,10 +117,10 @@ export async function searchContent(options: {
 
 /**
  * Site search v1 (AGL-88): the host's published screens (name/description/
- * SEO via the routing map) and published collection entries — the latter
- * through the product's shared fuzzy matcher on title/excerpt (AGL-1525)
- * and a substring test on the body. Deliberately no external search
- * infrastructure; result set is small and cache-friendly.
+ * SEO via the routing map), published collection entries — through the
+ * product's shared fuzzy matcher on title/excerpt (AGL-1525) and a substring
+ * test on the body — and the rows those screens repeat over. Deliberately no
+ * external search infrastructure; result set is small and cache-friendly.
  */
 async function readSearchContent(options: {
   host: Aglyn.AglynHost
@@ -252,115 +245,93 @@ async function readSearchContent(options: {
     }
   }
 
-  // Dataset records (AGL-168): a match links to the first published
-  // screen that repeats over the dataset — records only surface through
-  // repeatables, so an un-navigable match would be noise. Version reads
-  // happen lazily and only when a dataset actually matched.
-  // Scoped to this host (AGL-1039): site search surfaces record contents
-  // publicly, so an unscoped read here leaks another client's rows into
-  // search results without anyone binding a repeatable at all.
-  const datasets = await (
-    await orgDataQueryForHost(host.$id, 'datasets')
-  ).query
-    .limit(20)
-    .get()
+  // Repeated rows (AGL-168): a row is found on the published screen that
+  // repeats over it, and a match links there — a row only ever reaches a
+  // visitor through a repeat, so a match with no page to show it is noise.
+  //
+  // Where the rows live is not this route's to know. A repeat names a key
+  // (`props.repeatDataset`), and the plugin that keeps rows answers for it
+  // through the platform's repeat-rows contract — the same reader, scoped to
+  // this site (AGL-1039), that renders the page. So search finds exactly the
+  // rows the page shows, in the order it shows them, and a row this site may
+  // not see is never read, let alone surfaced.
+  //
+  // Each screen's published tree is read through the render's own cached
+  // version read, so a site whose pages have been served is walked without a
+  // Firestore read, and at most 30 screens are walked at all.
+  //
   // Decoded node maps, not raw version data (AGL-1396). `nodes` is stored in
   // TWO live forms — a plain map and msgpack bytes, the besigner writing the
-  // compressed one — and the Admin SDK hands the compressed form back as a
-  // Node `Buffer`. `Object.values` over a Buffer yields the byte NUMBERS, none
-  // of which has `props.repeatDataset`, so every besigner-saved screen looked
-  // like it repeated over nothing and its records never surfaced.
-  //
-  // The decode belongs HERE rather than at the loop below because this map is
-  // memoised for the whole call: decoding at the consumer would fix the cold
-  // read and go on serving the Buffer to every dataset after the first.
-  let screenNodesCache: Map<string, Record<string, any>> | null = null
-  const loadScreenNodes = async () => {
-    if (screenNodesCache) return screenNodesCache
-    screenNodesCache = new Map()
-    for (const snapshot of screenSnapshots.slice(0, 30)) {
-      if (!snapshot?.exists) continue
+  // compressed one — and bytes that reach this point undecoded would yield
+  // byte NUMBERS to `Object.values`, none of which has `props.repeatDataset`:
+  // every besigner-saved screen would look like it repeated over nothing.
+  const walked = await Promise.all(
+    screenSnapshots.slice(0, 30).map(async (snapshot) => {
+      if (!snapshot?.exists) return null
+      const path = routing[snapshot.id]
       const versionId = (snapshot.data() as any)?.versionId
-      if (!versionId) continue
-      const version = await hostRef
-        .collection('screens')
-        .doc(snapshot.id)
-        .collection('versions')
-        .doc(String(versionId))
-        .get()
-        .catch(() => null)
-      if (!version?.exists) continue
-      screenNodesCache.set(
-        snapshot.id,
-        Aglyn.decodeStoredNodes(version.get('nodes')) ?? {},
+      if (path == null || !versionId) return null
+      const { version } = await getScreenVersion({
+        hostId: host.$id,
+        screenId: snapshot.id,
+        versionId: String(versionId),
+      })
+      const keys = Aglyn.repeatKeys(
+        Aglyn.decodeStoredNodes(version?.nodes) ?? {},
       )
-    }
-    return screenNodesCache
+      return keys.length ? { path, keys } : null
+    }),
+  )
+  const repeats = walked.filter(
+    (repeat): repeat is { path: string; keys: string[] } => repeat !== null,
+  )
+  if (!repeats.length) return results.slice(0, 50)
+
+  // One question for every key the site repeats over. A reader may cache its
+  // answer on the site and the key set, and that is the same for every query
+  // typed on this site, so the rows need not be read again for each distinct
+  // search.
+  let rows: RepeatRowsAnswer
+  try {
+    rows = await readRepeatRows({
+      hostId: host.$id,
+      keys: repeats.flatMap((repeat) => repeat.keys),
+    })
+  } catch (error) {
+    // A reader that is declared and missing makes a page refuse to render;
+    // search is not where that is loud. Pages and entries still answer.
+    console.error(error)
+    return results.slice(0, 50)
   }
-  for (const datasetDoc of datasets.docs) {
-    if (datasetDoc.get('deletedAt')) continue
-    // Console-created datasets store the human name as `displayName`
-    // (AGL-536); `name` covers pre-migration docs.
-    const datasetName = String(
-      datasetDoc.get('displayName') ?? datasetDoc.get('name') ?? '',
-    )
-    // Reachability BEFORE the records read, not after it.
-    //
-    // A record only becomes a result through a screen that repeats over its
-    // dataset — `targetPath == null` discards the dataset entirely. Reading
-    // the records first meant every unreachable dataset cost its full page
-    // of documents to produce nothing: 20 datasets x 200 records is 4,000
-    // reads an uncached query could spend and throw away, and a site
-    // typically repeats over few of the datasets it stores.
-    //
-    // The screen-nodes map this consults is bounded at 30 version reads and
-    // memoised for the whole call, so the trade is at most 30 reads once
-    // against up to 200 per unreachable dataset.
-    const screenNodes = await loadScreenNodes()
-    let targetPath: string | undefined
-    for (const [screenId, nodes] of screenNodes) {
-      const repeats = Object.values(nodes).some((node) => {
-        const key = node?.props?.repeatDataset
-        return (
-          key != null &&
-          (String(key) === datasetDoc.id ||
-            String(key).trim() === datasetName)
-        )
-      })
-      if (repeats) {
-        targetPath = routing[screenId]
-        break
+
+  // The first screen to repeat a key is the one its rows link to, and a row
+  // is one result however many keys reach it — a page may name a set by its
+  // id and another page by its name.
+  const searched = new Set<string>()
+  const found = new Set<string>()
+  for (const { path, keys } of repeats) {
+    for (const key of keys) {
+      if (searched.has(key)) continue
+      searched.add(key)
+      let taken = 0
+      for (const row of rows[key]?.records ?? []) {
+        if (taken >= RESULTS_PER_REPEAT) break
+        const rowId = typeof row['$id'] === 'string' ? row['$id'] : ''
+        if (rowId && found.has(rowId)) continue
+        const values = Object.entries(row)
+          .filter(([field]) => !field.startsWith('$'))
+          .map(([, value]) => String(value ?? ''))
+        const hit = values.find((value) => matches(value, needle))
+        if (hit === undefined) continue
+        if (rowId) found.add(rowId)
+        taken += 1
+        results.push({
+          title: hit,
+          url: Aglyn.screenRoutePathToUrl(path),
+          snippet: values.join(' · ').slice(0, 160),
+          kind: 'data',
+        })
       }
-    }
-    if (targetPath == null) continue
-    // Ordered by document id so the scanned page is the SAME page every
-    // time. A bare `limit()` leaves the backend free to choose, so a dataset
-    // larger than the bound answered one query from one arbitrary subset and
-    // the next from another — search that contradicted itself between cache
-    // windows. Ordering by a DATA field would be worse than the disease: it
-    // drops every record missing that field. The id is on all of them, which
-    // is the same reasoning `dynamic-list-materialize.ts` settled on.
-    const records = await datasetDoc.ref
-      .collection('records')
-      .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
-      .limit(DATASET_RECORD_SCAN_LIMIT)
-      .get()
-    const matching = records.docs.filter((record) =>
-      Object.values((record.get('values') ?? {}) as Record<string, string>)
-        .some((value) => matches(String(value), needle)),
-    )
-    if (!matching.length) continue
-    for (const record of matching.slice(0, DATASET_RESULTS_PER_SET)) {
-      const values = (record.get('values') ?? {}) as Record<string, string>
-      results.push({
-        title:
-          Object.values(values).find((value) =>
-            matches(String(value), needle),
-          ) ?? datasetName,
-        url: Aglyn.screenRoutePathToUrl(targetPath),
-        snippet: Object.values(values).join(' · ').slice(0, 160),
-        kind: 'data',
-      })
     }
   }
 

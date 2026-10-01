@@ -291,13 +291,6 @@
       "lane": "marketing"
     },
     {
-      "path": "apps/tenant/utils/search-content.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/actions.ts",
       "rules": [
         "domain-name",

@@ -22,22 +22,21 @@
  */
 
 /**
- * Site search must see dataset records through the COMPRESSED storage form
- * (AGL-1396).
+ * Site search finds the rows a published page repeats over (AGL-168), through
+ * the platform's repeat-rows contract, and links each to that page.
  *
- * A dataset record only surfaces in search if some published screen repeats
- * over its dataset — the search links to that screen. Finding the repeater
- * means walking the screen version's `nodes`, and `nodes` is stored in two
- * live forms: a plain Firestore map, and msgpack bytes (the besigner writes
- * the compressed one, so it is the majority). Read raw from the Admin SDK the
- * compressed form is a Node `Buffer`, `Object.values` over it yields byte
- * NUMBERS, no number has `props.repeatDataset`, and the search simply returns
- * fewer results — indistinguishable from "no match".
+ * Search names no store: it walks the published screens for the keys their
+ * repeats name (`props.repeatDataset`) and asks the one reader the page
+ * itself renders through. So the reader is the double here, and what is
+ * asserted is the walk around it — which keys reach it, which screen a row
+ * links to, and what happens when it is missing.
  *
- * The version read is MEMOISED for the whole call, so the second dataset is
- * answered from the cache rather than from Firestore. A fix at the consumer
- * would still leave a Buffer in that cache; the warm read is asserted here
- * alongside the cold one for exactly that reason.
+ * The walk must see repeats through the COMPRESSED storage form (AGL-1396).
+ * `nodes` is stored in two live forms — a plain Firestore map, and msgpack
+ * bytes (the besigner writes the compressed one, so it is the majority).
+ * Bytes left undecoded yield byte NUMBERS to `Object.values`, no number has
+ * `props.repeatDataset`, and the search simply returns fewer results —
+ * indistinguishable from "no match".
  */
 
 const HOST_ID = 'host_zeppelin'
@@ -48,15 +47,16 @@ const NEEDLE = 'zeppelin'
 // evaluates the real graph to derive its shape.
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // `firestore.FieldPath` is part of the double because the records read
-  // orders by document id. A stub missing it throws inside the branch under
-  // test, which reads as "no results" — the same silent shape this suite
-  // exists to catch.
-  firebaseAdmin: {
-    app: jest.fn(),
-    firestore: { FieldPath: { documentId: () => '__name__' } },
-  },
-  orgDataQueryForHost: jest.fn(),
+  firebaseAdmin: { app: jest.fn() },
+}))
+jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
+  __esModule: true,
+  PUBLISHED_SITE_DATA_TTL_SECONDS: 3600,
+  tenantDataTag: (hostId: string) => `tenant-data:${hostId}`,
+  // Faithful to the real helper outside a Next server context, which is
+  // where jest runs it: the read is performed directly.
+  withRenderCache: async (options: { read: () => Promise<unknown> }) =>
+    options.read(),
 }))
 jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
@@ -71,14 +71,21 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
     listRoutes: {} as Record<string, string>,
   })),
 }))
-// The REAL helpers, reached by file path so the stub stays light. `decodeStoredNodes`
-// especially: it is the subject, and a faked one would assert nothing.
+// The render's cached version read. The double hands back whatever the seed
+// stored — bytes included — and counts the reads.
+jest.mock('@aglyn/tenant-runtime/get-screen-version', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}))
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
+  __esModule: true,
+  readRepeatRows: jest.fn(),
+}))
+// The REAL helpers, reached by file path so the stub stays light.
+// `decodeStoredNodes` and `repeatKeys` especially: they are the walk under
+// test, and faked ones would assert nothing.
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  // The REAL site time zone (AGL-3237), reached by file path for the same
-  // reason as the modules beside it: absent, the loader's
-  // `resolveSiteTimeZone` call throws into its catch and 404s every case
-  // in this file for a reason unrelated to its subject.
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entry-date',
   ),
@@ -91,6 +98,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   decodeStoredNodes: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/stored-nodes',
   ).decodeStoredNodes,
+  repeatKeys: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/expand-repeatables',
+  ).repeatKeys,
   // The entry branch reaches for both of these (AGL-1525). This suite seeds
   // no content collections, so it never calls them — but an unfaithful
   // double is how a suite starts passing for the wrong reason, and
@@ -103,19 +113,21 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ).formatCollectionEntryDate,
 }))
 
-import { firebaseAdmin, orgDataQueryForHost } from '@aglyn/tenant-data-admin'
+import { readRepeatRows } from '@aglyn/aglyn/plugin-manager/repeat-rows'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import getScreenVersion from '@aglyn/tenant-runtime/get-screen-version'
 import searchContent from '../utils/search-content'
 
 const { compress } = jest.requireActual(
   '../../../libs/aglyn/src/lib/app-utils/compress',
 )
 
-/** A screen that repeats over `datasetId`, as the besigner would author it. */
-const repeaterNodes = (datasetId: string) => ({
+/** A screen whose one element repeats over `key`, as the besigner authors it. */
+const repeaterNodes = (key: string) => ({
   '_@_': { componentId: 'container', nodes: ['n1'] },
   n1: {
     componentId: 'repeatable',
-    props: { repeatDataset: datasetId },
+    props: { repeatDataset: key },
   },
 })
 
@@ -144,28 +156,22 @@ interface ScreenSeed {
   versionId: string
   nodes: unknown
 }
-interface DatasetSeed {
-  id: string
-  displayName: string
-  records: Record<string, string>[]
-}
 
 const snapshot = (id: string, data: Record<string, any> | undefined) => ({
   id,
   exists: data !== undefined,
   data: () => data,
   get: (field: string) => data?.[field],
-  ref: {} as any,
 })
 
-/** Counts the version reads so the memoised path can be told from the cold one. */
+/** The version reads the walk spent, in the order it asked. */
 let versionReads: string[] = []
-/** Datasets whose `records` subcollection was actually read (AGL-168 cost). */
-let recordReads: string[] = []
 
-const seed = (screens: ScreenSeed[], datasets: DatasetSeed[]) => {
+const seed = (
+  screens: ScreenSeed[],
+  rows: Record<string, Array<Record<string, unknown>>>,
+) => {
   versionReads = []
-  recordReads = []
   const screenById = new Map(screens.map((screen) => [screen.id, screen]))
   const hostRef = {
     collection: (name: string) => {
@@ -181,21 +187,6 @@ const seed = (screens: ScreenSeed[], datasets: DatasetSeed[]) => {
                   versionId: screen.versionId,
                 },
               )
-            },
-            collection: (sub: string) => {
-              expect(sub).toBe('versions')
-              return {
-                doc: (versionId: string) => ({
-                  get: async () => {
-                    versionReads.push(`${screenId}/${versionId}`)
-                    const screen = screenById.get(screenId)
-                    return snapshot(
-                      versionId,
-                      screen && { nodes: screen.nodes },
-                    )
-                  },
-                }),
-              }
             },
           }),
         }
@@ -213,40 +204,29 @@ const seed = (screens: ScreenSeed[], datasets: DatasetSeed[]) => {
       },
     }),
   })
-  ;(orgDataQueryForHost as jest.Mock).mockResolvedValue({
-    query: {
-      limit: () => ({
-        get: async () => ({
-          docs: datasets.map((dataset) => ({
-            id: dataset.id,
-            get: (field: string) =>
-              field === 'displayName' ? dataset.displayName : undefined,
-            ref: {
-              collection: () => {
-                // `orderBy` is part of the shape now, and the counter sits on
-                // `get` rather than on `collection` so it records the READ,
-                // not the query being built.
-                const page = {
-                  orderBy: () => page,
-                  limit: () => page,
-                  get: async () => {
-                    recordReads.push(dataset.id)
-                    return {
-                      docs: dataset.records.map((values) => ({
-                        get: (field: string) =>
-                          field === 'values' ? values : undefined,
-                      })),
-                    }
-                  },
-                }
-                return page
-              },
-            },
-          })),
-        }),
-      }),
+  ;(getScreenVersion as jest.Mock).mockImplementation(
+    async (options: { screenId: string; versionId: string }) => {
+      versionReads.push(`${options.screenId}/${options.versionId}`)
+      const screen = screenById.get(options.screenId)
+      return {
+        version:
+          screen && screen.versionId === options.versionId
+            ? { nodes: screen.nodes }
+            : undefined,
+        error: null,
+      }
     },
-  })
+  )
+  // Answers under every key it was asked for that the seed holds, exactly as
+  // the contract describes: a key with nothing to render is absent.
+  ;(readRepeatRows as jest.Mock).mockImplementation(
+    async (request: { keys: string[] }) =>
+      Object.fromEntries(
+        request.keys
+          .filter((key) => rows[key])
+          .map((key) => [key, { records: rows[key] }]),
+      ),
+  )
   return {
     host: {
       $id: HOST_ID,
@@ -257,23 +237,16 @@ const seed = (screens: ScreenSeed[], datasets: DatasetSeed[]) => {
   }
 }
 
-const DATASETS: DatasetSeed[] = [
-  {
-    id: 'ds_airships',
-    displayName: 'Airships',
-    records: [{ name: 'Graf Zeppelin', note: 'rigid' }],
-  },
-  {
-    id: 'ds_crew',
-    displayName: 'Crew',
-    records: [{ name: 'Hugo Eckener', ship: 'Zeppelin LZ 127' }],
-  },
+const AIRSHIPS = [
+  { $id: 'r_graf', name: 'Graf Zeppelin', note: 'rigid' },
+  { $id: 'r_blimp', name: 'Goodyear', note: 'non-rigid' },
 ]
+const CREW = [{ $id: 'r_hugo', name: 'Hugo Eckener', ship: 'Zeppelin LZ 127' }]
 
-describe('searchContent dataset records', () => {
+describe('searchContent repeated rows', () => {
   afterEach(() => jest.clearAllMocks())
 
-  it('surfaces a record when the repeating screen stores nodes PLAINLY', async () => {
+  it('finds a row when the repeating screen stores nodes PLAINLY', async () => {
     // The control: the same site, same query, the other storage form. Its
     // only job is to prove the seed and the predicate are sound, so that the
     // compressed case below fails for the reason claimed.
@@ -286,21 +259,26 @@ describe('searchContent dataset records', () => {
           nodes: repeaterNodes('ds_airships'),
         },
       ],
-      [DATASETS[0]],
+      { ds_airships: AIRSHIPS },
     )
 
     const results = await searchContent({ host, query: NEEDLE })
 
     expect(results).toEqual([
-      expect.objectContaining({
+      {
         kind: 'data',
         title: 'Graf Zeppelin',
         url: '/airships',
-      }),
+        snippet: 'Graf Zeppelin · rigid',
+      },
     ])
+    expect(readRepeatRows).toHaveBeenCalledWith({
+      hostId: HOST_ID,
+      keys: ['ds_airships'],
+    })
   })
 
-  it('surfaces the record when the nodes are a pooled compressed Buffer', async () => {
+  it('finds the row when the nodes are a pooled compressed Buffer', async () => {
     const packed = pooledBuffer(repeaterNodes('ds_airships'))
     // Guard the premise: a zero-offset buffer would decode even with the
     // byteOffset bug, which is the bug most likely to come back.
@@ -308,15 +286,8 @@ describe('searchContent dataset records', () => {
     expect(packed.buffer.byteLength).toBeGreaterThan(packed.byteLength)
 
     const { host } = seed(
-      [
-        {
-          id: 's_airships',
-          path: 'airships',
-          versionId: 'v1',
-          nodes: packed,
-        },
-      ],
-      [DATASETS[0]],
+      [{ id: 's_airships', path: 'airships', versionId: 'v1', nodes: packed }],
+      { ds_airships: AIRSHIPS },
     )
 
     const results = await searchContent({ host, query: NEEDLE })
@@ -330,13 +301,7 @@ describe('searchContent dataset records', () => {
     ])
   })
 
-  /**
-   * The version read is memoised for the whole call, so the SECOND dataset
-   * never touches Firestore — it walks whatever the first one left in the
-   * cache. A fix applied at the consumer instead of at the cache write would
-   * decode the cold read and keep serving the Buffer to every later dataset.
-   */
-  it('serves the second dataset from the memoised read, still decoded', async () => {
+  it('asks the reader once, for every key the screens repeat over', async () => {
     const { host } = seed(
       [
         {
@@ -349,34 +314,57 @@ describe('searchContent dataset records', () => {
           id: 's_crew',
           path: 'crew',
           versionId: 'v7',
-          nodes: pooledBuffer(repeaterNodes('ds_crew')),
+          nodes: repeaterNodes('Crew'),
         },
       ],
-      DATASETS,
+      { ds_airships: AIRSHIPS, Crew: CREW },
     )
 
     const results = await searchContent({ host, query: NEEDLE })
 
-    // Both datasets matched, each linking to ITS OWN repeating screen.
-    expect(results.map((result) => result.url).sort()).toEqual([
-      '/airships',
-      '/crew',
+    // Each row links to ITS OWN repeating screen.
+    expect(results.map((result) => [result.title, result.url])).toEqual([
+      ['Graf Zeppelin', '/airships'],
+      ['Zeppelin LZ 127', '/crew'],
     ])
-    // One read per screen for two datasets — the second dataset was answered
-    // warm, which is the read this test exists to cover.
+    expect(readRepeatRows).toHaveBeenCalledTimes(1)
+    expect(
+      [...(readRepeatRows as jest.Mock).mock.calls[0][0].keys].sort(),
+    ).toEqual(['Crew', 'ds_airships'])
     expect(versionReads).toEqual(['s_airships/v1', 's_crew/v7'])
   })
 
-  /**
-   * A dataset no published screen repeats over can never produce a result:
-   * the loop resolves no `targetPath` and drops it. Reading its records first
-   * therefore bought nothing and cost a page of documents per dataset — up to
-   * 20 x 200 on one uncached query, spent and discarded.
-   *
-   * This asserts the WIRE, not the answer: both orderings return the same
-   * empty result set, so only the read counter can tell them apart.
-   */
-  it('does not read records for a dataset no screen repeats over', async () => {
+  it('makes one result of a row two keys reach, linked to the first screen', async () => {
+    // One set, named by its id on one page and by its name on another: the
+    // reader answers it under both keys.
+    const { host } = seed(
+      [
+        {
+          id: 's_fleet',
+          path: 'fleet',
+          versionId: 'v1',
+          nodes: repeaterNodes('Airships'),
+        },
+        {
+          id: 's_airships',
+          path: 'airships',
+          versionId: 'v2',
+          nodes: repeaterNodes('ds_airships'),
+        },
+      ],
+      { ds_airships: AIRSHIPS, Airships: AIRSHIPS },
+    )
+
+    const results = await searchContent({ host, query: NEEDLE })
+
+    expect(results.map((result) => result.url)).toEqual(['/fleet'])
+  })
+
+  it('takes at most five rows from one repeat', async () => {
+    const many = Array.from({ length: 12 }, (_, index) => ({
+      $id: `r_${index}`,
+      name: `Zeppelin ${index}`,
+    }))
     const { host } = seed(
       [
         {
@@ -386,27 +374,57 @@ describe('searchContent dataset records', () => {
           nodes: repeaterNodes('ds_airships'),
         },
       ],
-      // `ds_crew` is stored but unreachable — nothing repeats over it.
-      DATASETS,
+      { ds_airships: many },
     )
 
     const results = await searchContent({ host, query: NEEDLE })
 
-    expect(recordReads).toEqual(['ds_airships'])
-    expect(results.map((result) => result.url)).toEqual(['/airships'])
+    expect(results.map((result) => result.title)).toEqual([
+      'Zeppelin 0',
+      'Zeppelin 1',
+      'Zeppelin 2',
+      'Zeppelin 3',
+      'Zeppelin 4',
+    ])
   })
 
-  it('reads no records at all when the site repeats over nothing', async () => {
-    // The floor: a site with datasets and no repeater pays for the bounded
-    // screen walk and nothing else.
+  it('asks the reader nothing when the site repeats over nothing', async () => {
+    // The floor: a site with no repeat pays for the bounded screen walk and
+    // nothing else, whatever its plugins keep.
     const { host } = seed(
       [{ id: 's_plain', path: 'plain', versionId: 'v1', nodes: {} }],
-      DATASETS,
+      { ds_airships: AIRSHIPS },
     )
 
     const results = await searchContent({ host, query: NEEDLE })
 
-    expect(recordReads).toEqual([])
+    expect(readRepeatRows).not.toHaveBeenCalled()
     expect(results.filter((result) => result.kind === 'data')).toEqual([])
+  })
+
+  it('still answers pages when the rows cannot be read', async () => {
+    // A declared reader missing from the process makes a page refuse to
+    // render. Search is not where that is loud: the page match still answers.
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const { host } = seed(
+      [
+        {
+          id: 's_zeppelin',
+          path: 'zeppelin',
+          versionId: 'v1',
+          nodes: repeaterNodes('ds_airships'),
+        },
+      ],
+      { ds_airships: AIRSHIPS },
+    )
+    ;(readRepeatRows as jest.Mock).mockRejectedValue(new Error('no reader'))
+
+    const results = await searchContent({ host, query: NEEDLE })
+
+    expect(results).toEqual([
+      expect.objectContaining({ kind: 'page', url: '/zeppelin' }),
+    ])
+    expect(error).toHaveBeenCalled()
+    error.mockRestore()
   })
 })
