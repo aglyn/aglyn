@@ -643,6 +643,41 @@ describe('the template step', () => {
         templates: [{ id: 'tpl-post', name: 'Blog post', kind: 'page' }],
       })
 
+    it('builds from a source that binds none of the tokens the plan named, rather than copy it (AGL-3143 §14)', async () => {
+      inventoryWithSource()
+      mockDocs.set('orgs/org-1', { plan: 'pro', billingStatus: 'active' })
+      mockDocs.set('hosts/host-1/templates/tpl-post', {
+        displayName: 'Blog post',
+        nodes: {
+          [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['h', 'note'] },
+          h: { componentId: 'muiTypography', props: { variant: 'h1', component: 'h1', children: '{{entry.title}}' } },
+          note: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Written by the Harborline team.' } },
+        },
+      })
+      const duplicate = copies()
+      const excerpt = {
+        ...ENTRY_TREE,
+        nodes: {
+          ...ENTRY_TREE.nodes,
+          stack: { ...ENTRY_TREE.nodes.stack, nodes: ['title', 'lede', 'meta', 'cover', 'body', 'related'] },
+          lede: { componentId: 'muiTypography', props: { variant: 'h6', component: 'p', children: '{{entry.excerpt}}' } },
+        },
+      }
+      mockRunAiRequest.mockResolvedValueOnce(treeAnswer(excerpt))
+      const outcome = await createAiJobTemplateStep({
+        duplicate: duplicate as unknown as typeof duplicateResource,
+      })(context({ plan: promises(['{{entry.excerpt}}']) }))
+      // Before, this copied the source and stopped for review: a copy of a
+      // template that never bound the excerpt could only fail to bind it.
+      expect(duplicate).not.toHaveBeenCalled()
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'template', id: TEMPLATE_ID })])
+      const [request] = mockRunAiRequest.mock.calls[0]
+      const content = String(request.messages[0].content)
+      expect(content).toContain('The plan starts from a copy of the template "Blog post"')
+      expect(content).toContain('Written by the Harborline team.')
+    })
+
     it('stops for a person rather than reporting a copy that binds none of the tokens the plan named', async () => {
       inventoryWithSource()
       // The generate path already held a built template to its plan's tokens.

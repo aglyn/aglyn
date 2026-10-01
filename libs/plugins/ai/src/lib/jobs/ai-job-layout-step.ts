@@ -54,6 +54,7 @@ import {
 } from './ai-job-drafts'
 import {
   aiBracketedFactsNote,
+  aiCopySourceLines,
   aiConfirmedPlan,
   aiDoctrineReview,
   aiGenerationSpent,
@@ -89,7 +90,9 @@ import { registerAiJobStep } from './ai-jobs'
  * that copy, through the platform's duplicate module, and nothing generated —
  * so the copy is read back and held to the plan's regions the same way
  * (`aiCopiedLayoutReview`), because a branch that generates nothing is the one
- * branch where a promise can go unmet with no model to answer for it.
+ * branch where a promise can go unmet with no model to answer for it. A
+ * source that already lacks a region the plan gives the layout is not copied
+ * at all: the layout is built from it (AGL-3143 §14).
  *
  * A generation step runs on the job beat, never at an inline door: it
  * registers the least time its lookup rounds, its answer and its re-ask need
@@ -130,13 +133,18 @@ export const AI_JOB_LAYOUT_INSTRUCTIONS: readonly AiSystemBlock[] = [
   },
 ]
 
-/** The layout job as the generation's user turn: the name, the brief, the confirmed plan. */
+/**
+ * The layout job as the generation's user turn: the name, the brief, the
+ * confirmed plan, and the layout a short copy would have started from
+ * (`aiCopySourceLines`, AGL-3143 §14).
+ */
 export function aiJobLayoutPrompt(
   job: Pick<AiJob, 'brief'>,
   plan: AiJobPlan | null,
   name: string,
+  source: readonly string[] = [],
 ): string {
-  return [`Layout name: ${name}`, aiJobBriefLine(job), ...aiPlanReferenceLines(plan)].join('\n')
+  return [`Layout name: ${name}`, aiJobBriefLine(job), ...aiPlanReferenceLines(plan), ...source].join('\n')
 }
 
 /** A component name that says it is the site's navigation; a footer's links are not. */
@@ -290,8 +298,24 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
 
     // The plan starts from a copy of a layout the site has (rule 15): the copy
     // is the draft, and nothing is generated. A source gone since the plan
-    // was made is built from the brief instead.
-    if (creation?.duplicateOf && inventory.layouts.some((layout) => layout.id === creation.duplicateOf)) {
+    // was made is built from the brief instead. A source that cannot keep the
+    // plan's regions is built FROM instead (AGL-3143 §14), as the page step
+    // builds from a short source: copying it could only end in the review
+    // below, and Try again would copy the same thing. Only a source read and
+    // found short diverts; one this step cannot read still copies, and the
+    // review after the copy answers for it.
+    const source = creation?.duplicateOf
+      ? inventory.layouts.find((layout) => layout.id === creation.duplicateOf)
+      : undefined
+    const sourceReview = source
+      ? await aiCopiedLayoutReview(firestore, { hostId, id: source.id, plan, name: source.name })
+      : null
+    const sourceShort = Boolean(sourceReview?.findings.length)
+    const sourceTree =
+      source && sourceShort ? await readAiDraftNodes(firestore, { kind: 'layout', hostId, id: source.id }) : null
+    const sourceLines =
+      source && sourceShort ? aiCopySourceLines('layout', source.name, sourceTree?.nodes ?? null) : []
+    if (creation?.duplicateOf && source && !sourceShort) {
       const copy = await duplicate('layout', {
         orgId: job.orgId,
         hostId,
@@ -333,7 +357,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       model,
       instructions: AI_JOB_LAYOUT_INSTRUCTIONS,
       inventory,
-      messages: [{ role: 'user', content: aiJobLayoutPrompt(job, plan, name) }],
+      messages: [{ role: 'user', content: aiJobLayoutPrompt(job, plan, name, sourceLines) }],
       tool: aiDoctrineTreeTool('layout'),
       maxTokens: AI_JOB_LAYOUT_STEP_BUDGET.maxTokens(model),
       ...(AI_ROUTING_TABLE['job.layout'].thinking ? { thinking: AI_ROUTING_TABLE['job.layout'].thinking } : {}),

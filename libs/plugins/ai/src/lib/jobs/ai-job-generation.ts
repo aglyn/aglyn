@@ -19,6 +19,7 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
 } from '@aglyn/aglyn/app-utils/reusable-component-keys'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   AI_BUILD_PLAN_EMBED_HOST_NAMES,
   AI_PLAN_NEW_REF_PREFIX,
@@ -118,6 +119,52 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
     lines.push(`- embed a ${AI_BUILD_PLAN_EMBED_HOST_NAMES[embed.host]} player (videoEmbed) on ${where}${link}`)
   }
   return lines.length > 1 ? lines : []
+}
+
+/**
+ * The most of a source's tree a build is shown, as JSON characters: about
+ * 3,000 tokens, a whole layout or page template, never a site (AGL-3143 §14).
+ */
+export const AI_COPY_SOURCE_MAX_CHARS = 12_000
+
+/**
+ * The record a plan's copy starts from, as the build that replaces the copy
+ * is shown it (AGL-3143 §14): its tree in the node-map shape the tool takes,
+ * with the one instruction that makes it a start rather than an example.
+ * Empty when there is no tree to show or it is too large to show whole, and
+ * the build then starts from the brief and the plan.
+ *
+ * A copy whose source cannot keep what the plan promised is never minted,
+ * because the review after it would refuse it with certainty and the member
+ * could only try the same copy again. Measured on 2026-09-22 (job
+ * `Pq3pgvMH0D`): "copy the interior layout and add a sidebar" could only end
+ * in review. Building from the source keeps what the plan does not change —
+ * the firm's header, its footer, their copy — which a build from the brief
+ * alone would draw again from nothing.
+ */
+export function aiCopySourceLines(noun: string, label: string, nodes: Readonly<Record<string, unknown>> | null): string[] {
+  if (!nodes || !isRecordNode(nodes[CANVAS_ROOT_ELEMENT_ID])) return []
+  const shaped: Record<string, Record<string, unknown>> = {}
+  for (const [id, node] of Object.entries(nodes)) {
+    if (!isRecordNode(node)) continue
+    const { componentId, props, sx, nodes: children } = node
+    shaped[id] = {
+      componentId,
+      ...(isRecordNode(props) && Object.keys(props).length ? { props } : {}),
+      ...(isRecordNode(sx) && Object.keys(sx).length ? { sx } : {}),
+      ...(Array.isArray(children) && children.length ? { nodes: children } : {}),
+    }
+  }
+  const tree = JSON.stringify({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: shaped })
+  if (tree.length > AI_COPY_SOURCE_MAX_CHARS) return []
+  return [
+    `The plan starts from a copy of the ${noun} "${label}", which lacks part of what the plan gives it. Build from it: keep every part the plan does not change, and add what the plan adds. Its tree, in the node-map shape the tool takes:`,
+    tree,
+  ]
+}
+
+function isRecordNode(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** The reusable components a tree places, by the id each instance names. */

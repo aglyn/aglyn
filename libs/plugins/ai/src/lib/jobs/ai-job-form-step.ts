@@ -555,6 +555,33 @@ export async function aiCopiedFormReview(
   })
 }
 
+/**
+ * What the form a short copy would have started from collects, as the build
+ * that replaces the copy is told it (AGL-3143 §14): every field it asks for,
+ * so the build keeps them beside what the plan adds. Empty when the form
+ * cannot be read.
+ */
+export async function aiFormSourceLines(
+  firestore: FirebaseFirestore.Firestore,
+  input: { hostId: string; id: string; name: string },
+): Promise<string[]> {
+  const snapshot = await firestore.collection('hosts').doc(input.hostId).collection('forms').doc(input.id).get()
+  const fields = snapshot.exists ? ((snapshot.get('fields') ?? []) as unknown[]) : []
+  const asked = fields.flatMap((field) => {
+    if (!field || typeof field !== 'object') return []
+    const row = field as Record<string, unknown>
+    const name = String(row['fieldName'] ?? row['name'] ?? '').trim()
+    if (!name) return []
+    const fieldType = row['fieldType'] ?? row['type']
+    const type = typeof fieldType === 'string' ? ` (${fieldType}${row['required'] ? ', required' : ''})` : ''
+    return [`${name}${type}`]
+  })
+  if (!asked.length) return []
+  return [
+    `The plan starts from a copy of the form "${input.name}", which lacks part of what the plan gives it. Build from it: it collects ${asked.join(', ')}. Keep each of those, and add what the plan adds.`,
+  ]
+}
+
 function listOf(items: readonly string[]): string {
   return items.length < 2
     ? items.join('')
@@ -689,8 +716,20 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
 
     // The plan starts from a copy of a form the site has (rule 15): the copy
     // is the draft, and nothing is generated. A source gone since the plan
-    // was made is built from the brief instead.
-    if (creation?.duplicateOf && inventory.forms.some((form) => form.id === creation.duplicateOf)) {
+    // was made is built from the brief instead, and one that does not collect
+    // a field the plan gives the form is built from the plan, told what the
+    // source collects (AGL-3143 §14): copying it could only end in the review
+    // below. A source this step cannot read still copies.
+    const source = creation?.duplicateOf
+      ? inventory.forms.find((form) => form.id === creation.duplicateOf)
+      : undefined
+    const sourceReview = source
+      ? await aiCopiedFormReview(firestore, { hostId, formId: source.id, name: source.name, plan })
+      : null
+    const sourceShort = Boolean(sourceReview?.findings.length)
+    const sourceLines =
+      source && sourceShort ? await aiFormSourceLines(firestore, { hostId, id: source.id, name: source.name }) : []
+    if (creation?.duplicateOf && source && !sourceShort) {
       const copy = await duplicate('form', {
         orgId: job.orgId,
         hostId,
@@ -746,10 +785,13 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
       messages: [
         {
           role: 'user',
-          content: aiJobFormPrompt(job, plan, name, {
-            audience,
-            submissions: decisions.submissions,
-          }),
+          content: [
+            aiJobFormPrompt(job, plan, name, {
+              audience,
+              submissions: decisions.submissions,
+            }),
+            ...sourceLines,
+          ].join('\n'),
         },
       ],
       tool: AI_JOB_FORM_TOOL,

@@ -61,6 +61,7 @@ import {
 } from './ai-job-drafts'
 import {
   aiConfirmedPlan,
+  aiCopySourceLines,
   aiDoctrineReview,
   aiGenerationSpent,
   aiJobBriefLine,
@@ -193,13 +194,14 @@ export function aiTemplateDraftSlug(
   )
 }
 
-/** The template job as the generation's user turn. */
+/** The template job as the generation's user turn, with the template a short copy would have started from (AGL-3143 §14). */
 export function aiJobTemplatePrompt(
   job: Pick<AiJob, 'brief'>,
   definition: AiTemplateSubjectDefinition,
   collection: AiTemplateCollection | null,
   plan: AiJobPlan | null,
   name: string,
+  source: readonly string[] = [],
 ): string {
   const of = collection
     ? ` of the "${collection.name}" collection${collection.slug ? ` (/${collection.slug})` : ''}`
@@ -215,6 +217,7 @@ export function aiJobTemplatePrompt(
       : 'No block fills itself on this page: bind the tokens.',
     aiJobBriefLine(job),
     ...aiPlanReferenceLines(plan),
+    ...source,
   ].join('\n')
 }
 
@@ -481,11 +484,25 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
 
     // The plan starts from a copy of a template the site has (rule 15): the
     // copy is the draft, and nothing is generated. A source gone since the
-    // plan was made is built from the brief instead.
-    if (
-      creation?.duplicateOf &&
-      inventory.templates.some((template) => template.id === creation.duplicateOf)
-    ) {
+    // plan was made is built from the brief instead, and one that cannot keep
+    // the plan's tokens is built FROM (AGL-3143 §14): copying it could only end
+    // in the review below. A source this step cannot read still copies.
+    const source = creation?.duplicateOf
+      ? inventory.templates.find((template) => template.id === creation.duplicateOf)
+      : undefined
+    const sourceReview = source
+      ? await aiCopiedTemplateReview(firestore, { hostId, id: source.id, name: source.name, plan, definition })
+      : null
+    const sourceShort = Boolean(sourceReview?.findings.length)
+    const sourceLines =
+      source && sourceShort
+        ? aiCopySourceLines(
+            'template',
+            source.name,
+            (await readAiTemplateDraftNodes(firestore, { hostId, id: source.id })) as Record<string, unknown> | null,
+          )
+        : []
+    if (creation?.duplicateOf && source && !sourceShort) {
       const copy = await duplicate('template', {
         orgId: job.orgId,
         hostId,
@@ -531,7 +548,7 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
       messages: [
         {
           role: 'user',
-          content: aiJobTemplatePrompt(job, definition, collection, plan, name),
+          content: aiJobTemplatePrompt(job, definition, collection, plan, name, sourceLines),
         },
       ],
       tool: aiDoctrineTreeTool('template'),

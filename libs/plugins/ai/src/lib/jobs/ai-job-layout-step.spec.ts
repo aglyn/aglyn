@@ -82,7 +82,7 @@ import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_DRAFT_VERSION_NAME } from './ai-job-drafts'
-import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
+import { AI_COPY_SOURCE_MAX_CHARS, AI_JOB_ZERO_USAGE, aiCopySourceLines } from './ai-job-generation'
 import {
   AI_JOB_LAYOUT_INSTRUCTIONS,
   aiJobLayoutPrompt,
@@ -651,6 +651,91 @@ describe('the layout step', () => {
       })
     })
 
+    // The measured shape on 2026-09-22 (job Pq3pgvMH0D): a plan to copy the
+    // interior layout and add a nav and a sidebar could only end in review,
+    // because the copy branch generates nothing (AGL-3143 §14).
+    describe('a source that cannot keep the plan (AGL-3143 §14)', () => {
+      /** `harborline-interior-layout` (3iYZisdPyW) as stored, its links pointed at this site's pages. */
+      const INTERIOR = {
+        [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['bar', 'slot', 'foot'] },
+        bar: { componentId: 'muiAppBar', props: { position: 'sticky', color: 'default' }, nodes: ['tools'] },
+        tools: { componentId: 'muiToolbar', nodes: ['brand', 'links'] },
+        brand: { componentId: 'muiTypography', props: { children: 'Harborline Law', variant: 'h6', component: 'div' } },
+        links: { componentId: 'muiStack', props: { direction: 'row', alignItems: 'center' }, nodes: ['home'] },
+        home: { componentId: 'muiScreenLink', props: { children: 'Home', screenId: 'scr-home', renderAs: 'link' } },
+        slot: { componentId: 'layoutSlot', props: { component: 'main' } },
+        foot: { componentId: 'section', props: { element: 'footer' }, nodes: ['frame'] },
+        frame: { componentId: 'muiContainer', props: { maxWidth: 'lg' }, nodes: ['column'] },
+        column: { componentId: 'muiStack', props: { direction: 'column' }, nodes: ['firm', 'hours'] },
+        firm: { componentId: 'muiTypography', props: { children: 'Harborline Law', variant: 'h6', component: 'p' } },
+        hours: { componentId: 'muiTypography', props: { children: '[Office hours]', variant: 'body2', component: 'p' } },
+      }
+      /** The same layout with the nav and the sidebar the plan adds. */
+      const BUILT = {
+        rootId: 'root',
+        nodes: {
+          root: { componentId: 'div', nodes: ['bar', 'slot', 'rail', 'foot'] },
+          bar: { componentId: 'muiAppBar', props: { position: 'sticky', color: 'default' }, nodes: ['tools'] },
+          tools: { componentId: 'muiToolbar', nodes: ['brand', 'nav'] },
+          brand: { componentId: 'muiTypography', props: { children: 'Harborline Law', variant: 'h6', component: 'p' } },
+          nav: { componentId: 'section', props: { element: 'nav', ariaLabel: 'Main' }, nodes: ['home', 'about'] },
+          home: { componentId: 'muiScreenLink', props: { children: 'Home', screenId: 'scr-home' } },
+          about: { componentId: 'muiScreenLink', props: { children: 'About', screenId: 'scr-about' } },
+          slot: { componentId: 'layoutSlot', props: { component: 'main' } },
+          rail: { componentId: 'section', props: { element: 'aside', ariaLabel: 'Related reading' }, nodes: ['related'] },
+          related: { componentId: 'muiTypography', props: { children: 'Related reading', variant: 'body2' } },
+          foot: { componentId: 'section', props: { element: 'footer' }, nodes: ['firm', 'hours'] },
+          firm: { componentId: 'muiTypography', props: { children: 'Harborline Law', variant: 'body2' } },
+          hours: { componentId: 'muiTypography', props: { children: '[Office hours]', variant: 'body2' } },
+        },
+      }
+      const withNavAndSidebar: AiJobPlan = {
+        ...plan,
+        create: [{ ...plan.create[0], fields: ['header', 'nav', 'main', 'sidebar', 'footer'] }],
+      }
+      const storeSource = (nodes: Record<string, unknown>) => {
+        mockDocs.set('hosts/host-1/layouts/lay-site', { displayName: 'Site layout', versionId: 'v-site' })
+        mockDocs.set('hosts/host-1/layouts/lay-site/versions/v-site', { nodes })
+      }
+
+      it('builds from the source rather than copy it into a certain refusal', async () => {
+        mockReadInventory.mockResolvedValue(inventory)
+        mockDocs.set('orgs/org-1', { plan: 'pro', billingStatus: 'active' })
+        storeSource(INTERIOR)
+        const duplicate = jest.fn()
+        mockRunAiRequest.mockResolvedValueOnce(treeAnswer(BUILT))
+        const outcome = await createAiJobLayoutStep({
+          duplicate: duplicate as unknown as typeof duplicateResource,
+        })(context({ plan: withNavAndSidebar }))
+        // Before, this copied the source and stopped for review with
+        // plan-region-missing, every time, with nothing a member could do.
+        expect(duplicate).not.toHaveBeenCalled()
+        expect(outcome.review).toBeUndefined()
+        expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'layout', id: LAYOUT_ID })])
+        // The build is shown the source, so the firm's header and footer carry over.
+        const [request] = mockRunAiRequest.mock.calls[0]
+        const content = String(request.messages[0].content)
+        expect(content).toContain('The plan starts from a copy of the layout "Site layout"')
+        expect(content).toContain('"[Office hours]"')
+      })
+
+      it('still copies a source that keeps the plan, spending nothing', async () => {
+        mockReadInventory.mockResolvedValue(inventory)
+        storeSource({
+          ...INTERIOR,
+          [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['bar', 'slot', 'rail', 'foot'] },
+          links: { componentId: 'section', props: { element: 'nav' }, nodes: ['home'] },
+          rail: { componentId: 'section', props: { element: 'aside' }, nodes: [] },
+        })
+        const duplicate = jest.fn().mockResolvedValue({ ok: false, status: 403, error: LIMIT })
+        await createAiJobLayoutStep({
+          duplicate: duplicate as unknown as typeof duplicateResource,
+        })(context({ plan: withNavAndSidebar }))
+        expect(duplicate).toHaveBeenCalledTimes(1)
+        expect(mockRunAiRequest).not.toHaveBeenCalled()
+      })
+    })
+
     it('stops for the member when the copy meets the band, and builds from the brief when the source is gone', async () => {
       mockReadInventory.mockResolvedValue(inventory)
       const refused = jest.fn().mockResolvedValue({ ok: false, status: 403, error: LIMIT })
@@ -668,6 +753,23 @@ describe('the layout step', () => {
       expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
       expect(built.outputs).toEqual([expect.objectContaining({ resource: 'layout', id: LAYOUT_ID })])
     })
+  })
+})
+
+describe('aiCopySourceLines (AGL-3143 §14)', () => {
+  it('shows a short source whole, and nothing it cannot show whole', () => {
+    const root = { [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['slot'], hidden: false }, slot: { componentId: 'layoutSlot' } }
+    const [line, tree] = aiCopySourceLines('layout', 'Base', root)
+    expect(line).toContain('copy of the layout "Base"')
+    // Only what the tool takes: the stored node's other keys are not the model's.
+    expect(JSON.parse(tree)).toEqual({
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      nodes: { [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['slot'] }, slot: { componentId: 'layoutSlot' } },
+    })
+    expect(aiCopySourceLines('layout', 'Base', null)).toEqual([])
+    expect(aiCopySourceLines('layout', 'Base', { slot: { componentId: 'layoutSlot' } })).toEqual([])
+    const big = { ...root, note: { componentId: 'muiTypography', props: { children: 'x'.repeat(AI_COPY_SOURCE_MAX_CHARS) } } }
+    expect(aiCopySourceLines('layout', 'Base', big)).toEqual([])
   })
 })
 
