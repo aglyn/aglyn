@@ -28,26 +28,26 @@ import {
   decodeStoredNodes,
   encodeStoredNodes,
   newResourceScopeFields,
-  ORG_SCOPE_TOKEN,
   type PluginApiHandler,
   type ScopeToken,
 } from '@aglyn/aglyn/server'
 import {
   applyArtifactUpdate,
   planArtifactUpdate,
-  summarizeSchemaChange,
   type ArtifactChange,
   type ArtifactUpdatePlan,
 } from '../model/artifact-merge'
 import { ARTIFACT_BASE_COLLECTION } from '@aglyn/aglyn/app-utils/artifact-provenance'
+import {
+  declaredArtifactTypeOwner,
+  type InstalledArtifactCopy,
+} from '@aglyn/aglyn/plugin-manager/plugin-artifact-types'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import {
-  listingArtifactType,
-  resolveInstalledDatasetSchema,
-} from '../model/marketplace'
+import { listingArtifactType } from '../model/marketplace'
 import { readPublishedProps } from '../model/marketplace-props'
+import { artifactTypeOwnerOrRefusal, marketplaceInstallStamp } from './artifact-owner'
 import { recordInstallProvenance } from './provenance'
 import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
@@ -75,6 +75,12 @@ import { isPublisherSecurityLocked } from './sale-risk'
  *
  * Without a base snapshot only `copy` is offered. Inventing an origin to diff
  * against is how a merge becomes confidently wrong.
+ *
+ * A copy that lives in ANOTHER plugin's storage (a dataset schema's dataset)
+ * is found and written by the plugin that keeps its type (AGL-3080), through
+ * `plugin-manager/plugin-artifact-types`: this route diffs what the owner
+ * hands back and asks it to apply the result, and never reads its collection.
+ * Such a copy updates by merge only.
  */
 
 type Mode = 'merge' | 'copy'
@@ -93,14 +99,6 @@ interface UpdatePreview {
   conflicts: ArtifactChange[]
   unchanged: number
   identical: boolean
-  /** Dataset schemas only: what the change does to existing records. */
-  schema?: {
-    added: string[]
-    removed: string[]
-    retyped: string[]
-    additiveOnly: boolean
-    recordCount: number
-  }
 }
 
 /** Everything the route needs to diff and write one copied artifact. */
@@ -119,11 +117,11 @@ interface Target {
    * Required, and required on purpose. `copy` mode writes a brand-new
    * document into `target.ref.parent` — whatever collection that turns out
    * to be — from a spread of carried fields, and a spread cannot carry a
-   * field the source never had. For `orgs/{orgId}/datasets` that is the
-   * AGL-1466 bug exactly: an unstamped dataset is not "unrestricted", it is
+   * field the source never had. For a scoped collection that is the
+   * AGL-1466 bug exactly: an unstamped document is not "unrestricted", it is
    * matched by no `array-contains-any` reader in the product, so it renders
-   * on no site and is missing from the workflows and reference-health cards
-   * even for an org-wide member.
+   * on no site and is missing from every scoped list even for an org-wide
+   * member.
    *
    * Making it optional with a sensible default would have been the smaller
    * diff and is the thing that fails: the two `mediaFolders` creators that
@@ -274,11 +272,12 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
 
     /** The installed copy, the base it was installed from, and the offer. */
     let target: Target | null = null
+    /** A copy another plugin keeps, as its owner found it. */
+    let owned: InstalledArtifactCopy | null = null
     let incoming: unknown = null
     let installedVersion: string | null = null
     let baseSha: string | null = null
     let notMergeable: string | undefined
-    let schemaSummary: UpdatePreview['schema']
 
     if (artifactType === 'component') {
       const existing = await hostRef
@@ -363,72 +362,6 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         forkScope: null,
         props: readPublishedProps(layout?.props),
       }
-    } else if (artifactType === 'datasetSchema') {
-      if (!orgId) {
-        return res.status(404).json({ error: 'Site has no owning organization' })
-      }
-      const orgRef = firestore.collection('orgs').doc(orgId)
-      const datasets = await orgRef.collection('datasets').get()
-      const doc = datasets.docs.find(
-        (entry) =>
-          entry.get('source.listingId') === listingId && !entry.get('deletedAt'),
-      )
-      if (!doc) {
-        return res.status(404).json({ error: 'Not installed in this organization' })
-      }
-      // Relink the incoming schema onto THIS org's datasets exactly as install
-      // does — the base holds the relinked shape, so diffing the published one
-      // would report every reference field as a user edit.
-      const byLabel: Record<string, string> = {}
-      for (const entry of datasets.docs) {
-        const label = String(entry.get('displayName') ?? '').toLowerCase()
-        if (label && !byLabel[label]) byLabel[label] = entry.id
-      }
-      const { schema } = resolveInstalledDatasetSchema(
-        versionSnapshot.get('datasetSchema') as any,
-        byLabel,
-      )
-      incoming = schema
-      installedVersion = String(
-        doc.get('installedFrom.version') ?? doc.get('source.version') ?? '',
-      ) || null
-      baseSha = doc.get('installedFrom.sha256') ?? null
-      const current = doc.get('model') ?? { order: doc.get('fields') ?? [], fields: {} }
-      const summary = summarizeSchemaChange(current as any, schema as any)
-      // The count is read for the preview, not estimated: "3 fields will be
-      // removed" means nothing without "from 1,240 records".
-      const records = await doc.ref
-        .collection('records')
-        .count()
-        .get()
-        .catch(() => null)
-      schemaSummary = {
-        added: summary.added,
-        removed: summary.removed,
-        retyped: summary.retyped,
-        additiveOnly: summary.additiveOnly,
-        recordCount: records?.data().count ?? 0,
-      }
-      const installedScope = doc.get('visibleTo')
-      target = {
-        ref: doc.ref,
-        current,
-        write: (content) => ({
-          model: content,
-          // The v1 flat list the older editor still reads, kept in step.
-          fields: content?.order ?? [],
-        }),
-        // A fork INHERITS the copy it forked from, never a fresh default: a
-        // dataset restricted to one client's site must not reappear org-wide
-        // because somebody took a publisher update as a separate copy. An
-        // absent scope reads as org-wide everywhere else (`visibleToHost`),
-        // so it does here. A stored empty array — "visible to nobody" — is
-        // passed through and throws at the write rather than being widened,
-        // which is the right direction to fail in.
-        forkScope: Array.isArray(installedScope)
-          ? (installedScope as ScopeToken[])
-          : [ORG_SCOPE_TOKEN],
-      }
     } else if (artifactType === 'theme') {
       // A theme lives on the host document itself, so there is no artifact doc
       // to look up and no "not installed on this site" — the site either runs
@@ -468,6 +401,28 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         'Email templates install as a draft version and never replace what your ' +
         'site is sending. Add the new version as another draft, then activate ' +
         'it when you are ready.'
+    } else if (declaredArtifactTypeOwner(artifactType)) {
+      // A copy another plugin keeps (a dataset schema's dataset): its owner
+      // finds it in the site's organization, makes the version on offer this
+      // workspace's exactly as an install would, and says what taking it
+      // does. With the declared owner missing, the update refuses whole.
+      const resolved = await artifactTypeOwnerOrRefusal(artifactType)
+      if (resolved.ok === false) {
+        return res.status(resolved.status).json({ error: resolved.error })
+      }
+      const located = await resolved.owner.locate({
+        orgId: orgId || null,
+        hostId,
+        listingId,
+        published: versionSnapshot.get(artifactType),
+      })
+      if (located.ok === false) {
+        return res.status(located.status).json({ error: located.error })
+      }
+      owned = located
+      incoming = located.incoming
+      installedVersion = located.installedVersion
+      baseSha = located.baseSha
     }
 
     if (notMergeable) {
@@ -485,7 +440,8 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       }
       return res.status(200).json({ preview })
     }
-    if (!target) {
+    const copy: { current: unknown } | null = owned ?? target
+    if (!copy) {
       return res.status(404).json({ error: 'Nothing installed to update' })
     }
 
@@ -500,10 +456,10 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
     const mergeable = base !== undefined
 
     let plan: ArtifactUpdatePlan | null = null
-    if (mergeable) plan = planArtifactUpdate(base, target.current, incoming)
+    if (mergeable) plan = planArtifactUpdate(base, copy.current, incoming)
 
     if (action === 'preview') {
-      const preview: UpdatePreview = {
+      const preview: UpdatePreview & Readonly<Record<string, unknown>> = {
         artifactType,
         installedVersion,
         availableVersion,
@@ -522,7 +478,10 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         conflicts: trimChanges(plan?.conflicts ?? []),
         unchanged: plan?.unchanged ?? 0,
         identical: plan?.identical ?? false,
-        ...(schemaSummary ? { schema: schemaSummary } : {}),
+        // What the owner of a copy it keeps says taking it does (a dataset's
+        // `schema`: the fields it adds, removes and retypes, over how many
+        // records), shown as it is.
+        ...(owned?.impact?.preview ?? {}),
       }
       return res.status(200).json({ preview })
     }
@@ -537,20 +496,18 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
             'No original snapshot for this install — it can only be taken as a new copy',
         })
       }
-      // A schema change that removes or retypes a field reinterprets rows that
-      // already exist. It is applicable, but never without the caller having
-      // been told the count and said yes to it specifically.
-      if (schemaSummary && !schemaSummary.additiveOnly && !confirmDestructive) {
+      // An update that reinterprets something the copy already holds (a
+      // schema change that removes or retypes a field over existing rows) is
+      // applicable, but never without the caller having been told what it
+      // costs and said yes to it specifically.
+      if (owned?.impact?.destructive && !confirmDestructive) {
         return res.status(409).json({
-          error:
-            `This update removes or retypes ${
-              schemaSummary.removed.length + schemaSummary.retyped.length
-            } field(s) on a dataset holding ${schemaSummary.recordCount} record(s).`,
+          error: owned.impact.refusal,
           needsConfirmation: true,
-          schema: schemaSummary,
+          ...owned.impact.preview,
         })
       }
-      const merged = applyArtifactUpdate(plan, target.current, { takePaths })
+      const merged = applyArtifactUpdate(plan, copy.current, { takePaths })
       const provenance = await recordInstallProvenance({
         firestore,
         listingId,
@@ -563,40 +520,53 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         // the publisher's column, where the next update could take them away.
         content: incoming,
       })
-      await target.ref.set(
-        {
-          ...target.write(merged.content),
-          ...(target.props && { props: target.props }),
-          // A theme is a FIELD on the host document, not a document of its own,
-          // so it namespaces its provenance (`themeInstalledFrom`) and has no
-          // legacy `source`/`marketplace` pair — writing those here would put a
-          // stray marketplace stamp on the host itself, where `resolveProvenance`
-          // would later read it as the host being an installed artifact.
-          ...(artifactType === 'theme'
-            ? { themeInstalledFrom: provenance.installedFrom }
-            : {
-                installedFrom: provenance.installedFrom,
-                // The legacy per-type version fields the console still reads.
-                ...(artifactType === 'component'
-                  ? {
-                      marketplace: {
-                        listingId,
-                        profileId: listing.profileId ?? null,
-                        version: listing.latestVersion ?? null,
-                      },
-                    }
-                  : {
-                      source: {
-                        type: 'marketplace' as const,
-                        listingId,
-                        version: listing.latestVersion ?? null,
-                      },
-                    }),
-              }),
-          updatedAt: now,
-        },
-        { merge: true },
-      )
+      if (owned) {
+        // The owner writes its own copy: the merged content, with the
+        // marketplace's stamp.
+        await owned.apply({
+          content: merged.content,
+          stamp: marketplaceInstallStamp({
+            installedFrom: provenance.installedFrom,
+            listingId,
+            version: listing.latestVersion,
+          }),
+        })
+      } else if (target) {
+        await target.ref.set(
+          {
+            ...target.write(merged.content),
+            ...(target.props && { props: target.props }),
+            // A theme is a FIELD on the host document, not a document of its own,
+            // so it namespaces its provenance (`themeInstalledFrom`) and has no
+            // legacy `source`/`marketplace` pair — writing those here would put a
+            // stray marketplace stamp on the host itself, where `resolveProvenance`
+            // would later read it as the host being an installed artifact.
+            ...(artifactType === 'theme'
+              ? { themeInstalledFrom: provenance.installedFrom }
+              : {
+                  installedFrom: provenance.installedFrom,
+                  // The legacy per-type version fields the console still reads.
+                  ...(artifactType === 'component'
+                    ? {
+                        marketplace: {
+                          listingId,
+                          profileId: listing.profileId ?? null,
+                          version: listing.latestVersion ?? null,
+                        },
+                      }
+                    : {
+                        source: {
+                          type: 'marketplace' as const,
+                          listingId,
+                          version: listing.latestVersion ?? null,
+                        },
+                      }),
+                }),
+            updatedAt: now,
+          },
+          { merge: true },
+        )
+      }
       // A merged THEME repaints every page of the site the moment it lands,
       // and nothing publishes it — so the site's cached pages go now rather
       // than within the hour (AGL-3386). Awaited before the response, and it
@@ -651,19 +621,14 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
     }
 
     // ---- copy ----
-    if (!target.detach) {
-      // Only types with a detachable link get a copy from here. A dataset's
-      // "new copy" is a whole new dataset, which consumes org quota and lands
-      // empty — exactly what the install route already does, with the quota
-      // check this one does not have.
-      //
-      // This return is also, today, the only thing keeping the fork below
-      // from creating an unstamped `orgs/{orgId}/datasets` document
-      // (AGL-1478): a dataset never reaches it because it has no `detach`.
-      // That is a guard by accident, three statements away from the write
-      // and phrased as a quota argument — give `datasetSchema` a `detach`
-      // for any reason and the scope hole opens with it. `Target.forkScope`
-      // is the guard that stays true whichever way this branch goes.
+    if (!target?.detach) {
+      // Only types with a detachable link get a copy from here. A copy
+      // another plugin keeps never does: its "new copy" (a dataset schema's
+      // is a whole new dataset, which consumes org quota and lands empty) is
+      // exactly what the install route already does, with the checks only
+      // its owner can make, and this route never writes that plugin's
+      // storage. `Target.forkScope` is what keeps the fork below stamped
+      // for every type that does reach it.
       return res.status(400).json({
         error:
           artifactType === 'theme'

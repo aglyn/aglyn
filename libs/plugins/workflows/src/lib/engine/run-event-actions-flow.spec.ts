@@ -203,11 +203,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgIdForHost: async () => 'org-1',
 }))
 
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
-  __esModule: true,
-  resolveDatasetDoc: async () => null,
-}))
-
 jest.mock('@aglyn/shared-util-email', () => {
   // The REAL refusal classifiers. `isDeferrableSendResult` is the one place
   // "worth coming back for" is decided, and stubbing it would make the

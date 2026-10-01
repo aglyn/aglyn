@@ -33,11 +33,14 @@ import {
   consentGroupForSite,
   orgDataCollectionForHost,
   recordPendingTopicConfirmation,
-  resolveCampaignTouch,
   resolveOrgIdForHost,
   siteRequiresDoubleOptIn,
 } from '@aglyn/tenant-data-admin'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+import {
+  CONVERSION_TOUCH_DETAIL,
+  resolveConversionTouch,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { renderHostEmailWithTokens } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { buildConfirmUrl } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
 import { sendEmail } from '@aglyn/shared-util-email'
@@ -356,8 +359,9 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
   try {
     // A newsletter signup is an identify moment: the visitor was anonymous
     // while they browsed and this request is the first thing that names them.
-    // Both channels are asked once, here, and the later touch is credited.
-    const campaignTouch = await resolveCampaignTouch({
+    // Where they arrived from is asked once, here, of the plugin that credits
+    // outcomes, and handed to the record the capture files.
+    const arrival = await resolveConversionTouch({
       hostId,
       wire: body.campaignTouch,
       email,
@@ -398,7 +402,7 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
       ...(disclosedConsentGroup ? { disclosedConsentGroup } : {}),
       // Where the visitor ARRIVED from — a fact about this visit and not
       // about the person, which is what `detail` carries.
-      ...(campaignTouch ? { detail: { campaignTouch } } : {}),
+      ...(arrival ? { detail: { [CONVERSION_TOUCH_DETAIL]: arrival } } : {}),
     })
     /*
      * The confirmation, when this site asks for one.

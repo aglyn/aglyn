@@ -117,8 +117,6 @@ const mockDatasets: Record<string, ReturnType<typeof mockDataset>> = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  resolveCampaignTouch: async () => null,
-  attributeCampaignConversion: async () => null,
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -199,10 +197,11 @@ import { POST } from '../app/api/forms/submit/route'
 import { stampFormRecordTargets } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 
 /*
- * The data plugin reads the dataset through the runtime's LEAF module, which
- * the barrel double above does not intercept; this forwards the leaf to it.
+ * The data plugin finds the dataset through its own `resolve-dataset` module
+ * (AGL-3080), which the runtime double above does not reach; this forwards the
+ * lookup to that double.
  */
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
+jest.mock('@aglyn/plugins-data/server/resolve-dataset', () => ({
   resolveDatasetDoc: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {

@@ -19,6 +19,7 @@ import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
 import type { PluginTemplateSource } from './plugin-template-sources'
 import type { FormRecordTargetDeclaration } from './submission-record-target'
+import type { ArtifactTypeDeclaration } from './plugin-artifact-types'
 import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
@@ -1200,6 +1201,15 @@ export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | n
 }
 
 /**
+ * The installable artifact types a first-party plugin keeps the copies of,
+ * declared by that plugin (AGL-3080). Empty when none does, and an installer
+ * then refuses every listing of a type nobody keeps.
+ */
+export const PLUGIN_ARTIFACT_TYPES_DECLARED: readonly ArtifactTypeDeclaration[] = [
+  {"pluginId":"data","type":"datasetSchema"},
+]
+
+/**
  * What a site's template library calls a template a plugin installed, by the
  * `source.type` that plugin stamps, declared by that plugin (AGL-3080).
  * Core names no installer.
@@ -1266,7 +1276,14 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
  * declared by that plugin (AGL-3080). Core names no plugin step.
  */
 export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
-
+  {
+    "pluginId": "data",
+    "type": "datasetAppend"
+  },
+  {
+    "pluginId": "data",
+    "type": "updateDataset"
+  },
 ]
 
 /**

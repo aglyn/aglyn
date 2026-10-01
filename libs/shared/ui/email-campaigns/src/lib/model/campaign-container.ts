@@ -50,7 +50,7 @@
  * `cid={sendId}`, both inside the link's HMAC, and those emails sit in
  * inboxes forever. So the move copied every document under its existing id,
  * and every reader that starts from a link resolves the send through the
- * site's org (`resolveCampaignSendRef` in `@aglyn/tenant-data-admin`), with the
+ * site's org (`resolveCampaignSendRef` in the Marketing plugin), with the
  * old site path as the fallback for a document the migration has not reached.
  * A member's `campaignIds` names container ids, which likewise never moved.
  *

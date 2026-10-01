@@ -546,9 +546,12 @@ export type PhishingScreenSignal =
    * A link, embed, redirect or form action whose host Google Web Risk lists
    * as phishing, malware or unwanted software (AGL-3451,
    * `link-reputation.ts`). Strong: a harvester already known to be bad
-   * anywhere is bad whatever page or message surrounds it.
+   * anywhere is bad whatever page or message surrounds it. `url` is set
+   * when the listing names one page on the host rather than the host
+   * (AGL-3459, `platformSettings/webRisk.lookupMode: 'url'`): the address
+   * as looked up, scheme, host and path, never a query string.
    */
-  | { code: 'web-risk-link'; host: string; threats: string[] }
+  | { code: 'web-risk-link'; host: string; threats: string[]; url?: string }
 
 export interface PhishingScreenInput {
   subject?: string | null
@@ -890,6 +893,21 @@ export function linkHostsIn(text: string): string[] {
   return [...hosts]
 }
 
+/**
+ * Every link in the text as written — `www.` read as `https://`, prose
+ * punctuation after it dropped — in the order found, each once. Query
+ * strings and fragments are still on them: read them through
+ * `normalizeReputationLink` (`link-reputation.ts`) before they go anywhere.
+ */
+export function linkUrlsIn(text: string): string[] {
+  const urls = new Set<string>()
+  for (const match of decodeEntities(String(text ?? '')).match(URL_PATTERN) ?? []) {
+    const url = match.replace(/[.,;:!]+$/, '')
+    urls.add(/^www\./i.test(url) ? `https://${url}` : url)
+  }
+  return [...urls]
+}
+
 /** One link: the host it goes to, and its query and fragment, URL-decoded. */
 interface LinkTarget {
   host: string
@@ -1162,7 +1180,7 @@ export function describePhishingScreenSignals(
           signal.place === 'fragment' ? 'fragment' : 'link'
         }, so a sign-in form there opens filled in, beside "${signal.lure}".`
       case 'web-risk-link':
-        return `Links to ${signal.host}, which Google Web Risk lists as ${describeLinkThreats(signal.threats)}.`
+        return `Links to ${signal.url ?? signal.host}, which Google Web Risk lists as ${describeLinkThreats(signal.threats)}.`
       default:
         return 'Phishing signal.'
     }

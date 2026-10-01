@@ -53,11 +53,11 @@ import {
  *
  * ## The registry carries no authorization of the CALLER
  *
- * Like `order-fulfilment`, a writer is a pre-authorized operation. It applies
- * the owner's rules to the member the draft is for, and knows nothing about
- * whether the caller may act for that member. A caller establishes, in its
- * own terms and before it asks: who is asking, that the org owns the site,
- * and that the owning plugin is switched on for that site.
+ * A writer is a pre-authorized operation. It applies the owner's rules to the
+ * member the draft is for, and knows nothing about whether the caller may act
+ * for that member. A caller establishes, in its own terms and before it asks:
+ * who is asking, that the org owns the site, and that the owning plugin is
+ * switched on for that site.
  *
  * ## One writer per resource
  *

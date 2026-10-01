@@ -46,7 +46,6 @@ export {
   applyArtifactUpdate,
   describeChange,
   planArtifactUpdate,
-  summarizeSchemaChange,
   summarizeValue,
   type ArtifactChange,
   type ArtifactUpdatePlan,

@@ -38,13 +38,13 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { countCrmRecords, restampCrmListFieldsAt } from './crm-records'
-import { attributeOrderToEmail } from './email-revenue-attribution'
 import { hostErasedEmails, hostRefusesCaptureForErasure } from './email-suppression'
 import { scheduleCapturedEmailCheck } from './capture-email-check'
 import {
-  attributeCampaignConversion,
-  type ResolvedCampaignTouch,
-} from './campaign-conversion-attribution'
+  creditConversion,
+  creditOrderConversion,
+  type PluginConversionTouch,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
@@ -280,7 +280,7 @@ function normalizeTags(tags: readonly string[] | undefined): string[] {
  * Handed to {@link UpsertHostContactOptions.onCreated} once, on the create
  * branch only. The merge branch is a visit by somebody the org already held,
  * which is another interaction and not a new contact — the same line
- * `campaignTouch` draws for attribution. Scalars and one string array, so
+ * `conversionTouch` draws for attribution. Scalars and one string array, so
  * the runtime can flatten it into an event payload without inventing keys.
  */
 export interface HostContactCreated {
@@ -381,17 +381,19 @@ export interface UpsertHostContactOptions {
    *
    * Absent everywhere today, because no order document carries a currency and
    * every checkout door writes `currency: 'usd'` onto the Stripe line items.
-   * `attributeOrderToEmail` defaults it on that basis and says so. The field
+   * The plugin that credits orders defaults it on that basis and says so. The field
    * exists so a door that ever charges in something else can pass it, and the
    * campaign revenue report keeps it in its own bucket rather than adding it
    * to the dollars.
    */
   purchaseCurrency?: string
   /**
-   * The campaign this person came from, already resolved by the door.
+   * Where this person arrived from, already resolved by the door through the
+   * plugin that credits outcomes (`plugin-conversion-credit`), and opaque
+   * here.
    *
    * ⛔ The ORDER path passes none, and must not start. An order already has
-   * its own join one branch below — `attributeOrderToEmail`, keyed on the
+   * its own credit one branch below — `creditOrderConversion`, keyed on the
    * order id — and a second record for the same sale would be the same money
    * counted twice under two rules. This is the door for the moments an order
    * does NOT cover: a form submission, a membership sign-up, a booking, a
@@ -400,11 +402,11 @@ export interface UpsertHostContactOptions {
    * Resolved rather than raw, for the reason `addHostLead` states: one
    * visitor action reaches several writers and the touch lookup is paid once.
    */
-  campaignTouch?: ResolvedCampaignTouch | null
+  conversionTouch?: PluginConversionTouch | null
   /**
    * The campaigns the CAPTURE SURFACE is filed under.
    *
-   * ⚠️ A different fact from {@link campaignTouch} beside it, and the two must
+   * ⚠️ A different fact from {@link conversionTouch} beside it, and the two must
    * never be folded together. A touch is where the visitor came FROM — an ad,
    * a link, a browser-supplied label resolved through an allowlist. This is
    * which campaigns the merchant put the form itself in, which is the
@@ -514,7 +516,7 @@ export async function upsertHostContact(
      * contact capture below it.
      *=========================================*/
     if (options.source === 'order' && options.interaction.refId) {
-      await attributeOrderToEmail({
+      await creditOrderConversion({
         hostId: options.hostId,
         orderId: String(options.interaction.refId),
         email,
@@ -1039,12 +1041,12 @@ export async function upsertHostContact(
      * somebody the site already held is another visit, not a new person, and
      * crediting it would let the most recent campaign re-earn the whole list.
      */
-    if (options.campaignTouch) {
-      await attributeCampaignConversion({
+    if (options.conversionTouch) {
+      await creditConversion({
         hostId: options.hostId,
         kind: 'contact',
         refId: created.id,
-        touch: options.campaignTouch,
+        touch: options.conversionTouch,
         convertedAtMs: interaction.atMs,
       })
     }

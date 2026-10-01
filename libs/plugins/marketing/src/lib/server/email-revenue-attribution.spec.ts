@@ -21,7 +21,7 @@ import { FieldValue } from 'firebase-admin/firestore'
  * The site → org index the send lookup resolves through: a send is the
  * ORG's (`orgs/{orgId}/campaigns/{sendId}`). One site in one org.
  */
-jest.mock('./organizations', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   __esModule: true,
   resolveOrgIdForHost: async (hostId: string) => (hostId === 'host1' ? 'org1' : null),
 }))
@@ -30,8 +30,8 @@ import {
   attributeOrderToEmail,
   reverseEmailAttributedRevenue,
 } from './email-revenue-attribution'
-import { recordEmailCampaignTouch } from './email-delivery-log'
-import { emailSuppressionKey } from './email-suppression'
+import { recordEmailCampaignTouch } from './email-campaign-touch'
+import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 /*==========================================
  * A DOUBLE THAT APPLIES SENTINELS AT DEPTH.

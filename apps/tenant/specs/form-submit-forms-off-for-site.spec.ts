@@ -82,8 +82,6 @@ const mockCollectionHandle = (path: string): any => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  resolveCampaignTouch: async () => null,
-  attributeCampaignConversion: async () => null,
   // The CRM's capture writer asks whether the workspace already holds the
   // address as a contact before it files a lead (AGL-3232). Nobody, here.
   findContactByEmail: async () => null,

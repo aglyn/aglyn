@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
+
 /*==========================================
  * GOOGLE WEB RISK (AGL-3451): the lookup behind the link reputation screen.
  *
  * `@aglyn/shared-util-email/link-reputation` decides which hosts are foreign
  * and turns a listing into a strong `web-risk-link` signal. This is the store
- * half: the `uris.search` client, the cache, the kill switch.
+ * half: the `uris.search` client, the cache, the switches.
  *
  * ## The client
  *
@@ -30,32 +31,54 @@
  * SOCIAL_ENGINEERING, MALWARE and UNWANTED_SOFTWARE as the platform's own
  * service account — the firebase-admin credential every other server-side
  * Google call here already uses (`client-error-report.ts`), so there is no
- * key of its own. Only `https://<host>/` is ever sent: see the module header
- * of `link-reputation.ts`.
+ * key of its own. What is sent depends on the lookup mode, below.
+ *
+ * ## The lookup mode (AGL-3459)
+ *
+ * `platformSettings/webRisk.lookupMode`:
+ *
+ * - `'host'` — the default, and anything that is not `'url'`. Only
+ *   `https://<host>/` is ever sent.
+ * - `'url'` — the host first, from the cache or a call; then, for a host
+ *   that is not itself listed, each of its links' addresses as
+ *   `normalizeReputationLink` reduced them: scheme, host and path, never a
+ *   query string, a fragment or a `user:password@`. A listed address is a
+ *   hit on a clean host, so a kit at a path on a compromised site holds the
+ *   page. At most `MAX_REPUTATION_URLS_PER_LOOKUP` addresses per lookup,
+ *   inside the same deadline as the hosts.
+ *
+ * `'url'` sends more than a host to Google, so it stays off until the
+ * Subprocessors page names that purpose — see the `webrisk.googleapis.com`
+ * entry in `apps/console/constants/subprocessor-inventory.ts`.
  *
  * ## Not evidence when it fails
  *
  * A call is given {@link WEB_RISK_TIMEOUT_MS}, and a whole lookup
- * {@link WEB_RISK_DEADLINE_MS}. A host whose answer did not arrive, or whose
- * call failed, is UNKNOWN: it holds nothing and logs a warning. A credential
- * the API refuses (the API is not enabled on a self-hosted project, say) backs
- * the lookup off for a quarter of an hour, so a misconfiguration is one log
- * line rather than one per page.
+ * {@link WEB_RISK_DEADLINE_MS} — hosts and addresses together. A host or an
+ * address whose answer did not arrive, or whose call failed, is UNKNOWN: it
+ * holds nothing and logs a warning. A credential the API refuses (the API is
+ * not enabled on a self-hosted project, say) backs the lookup off for a
+ * quarter of an hour, so a misconfiguration is one log line rather than one
+ * per page.
  *
  * ## The cache
  *
- * Per host, in two layers:
+ * Per host and per address, in two layers, with the same rules for both:
  *
- * - this process's memory — a listed host until the answer's `expireTime`,
- *   which Web Risk sets and which may not be exceeded; a clean one for
+ * - this process's memory — a listing until the answer's `expireTime`,
+ *   which Web Risk sets and which may not be exceeded; a clean answer for
  *   {@link WEB_RISK_MEMORY_CLEAN_TTL_MS}, short so a listing the daily
- *   re-check writes reaches every warm render within minutes;
- * - `webRiskVerdicts/{host}` — server-only, one document per host, a clean
- *   answer kept {@link WEB_RISK_CLEAN_TTL_MS}. Bounded by the number of
- *   distinct foreign hosts and rewritten in place, so it needs no TTL policy.
+ *   re-check writes reaches every warm render within minutes. Capped at
+ *   {@link WEB_RISK_MEMORY_MAX_ENTRIES}, then started again;
+ * - the store, server-only, a clean answer kept {@link WEB_RISK_CLEAN_TTL_MS}:
+ *   `webRiskVerdicts/{host}`, bounded by the number of distinct foreign
+ *   hosts and rewritten in place; and `webRiskUrlVerdicts/{sha256(address)}`,
+ *   whose answers the daily re-check deletes a day after they expire
+ *   ({@link reapExpiredWebRiskUrlVerdicts}), because addresses are many more
+ *   than hosts and a path is worth keeping no longer than it is used.
  *
- * Read in one `getAll` per lookup, so a page's twenty hosts cost one round
- * trip, and nothing at all once they are in memory.
+ * Read in one `getAll` per lookup, so a page's hosts and addresses cost one
+ * round trip, and nothing at all once they are in memory.
  *
  * ## The kill switch
  *
@@ -64,27 +87,40 @@
  * deploy. Absent or anything else means on.
  *=========================================*/
 
+import { createHash } from 'crypto'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import {
   LINK_THREAT_TYPES,
   type LinkReputationAnswer,
   type LinkThreatType,
   MAX_REPUTATION_HOSTS_PER_LOOKUP,
+  MAX_REPUTATION_URLS_PER_LOOKUP,
   normalizeReputationHost,
+  normalizeReputationLink,
+  pickReputationUrls,
   setLinkReputationLookup,
 } from '@aglyn/shared-util-email/link-reputation'
 import { getApp } from 'firebase-admin/app'
 import firebaseAdmin from './firebase-admin'
 
 export const WEB_RISK_SEARCH_ENDPOINT = 'https://webrisk.googleapis.com/v1/uris:search'
+/** One answer per host. */
 export const WEB_RISK_CACHE_COLLECTION = 'webRiskVerdicts'
-/** The kill switch: `{ enabled: false }` turns every lookup off. */
+/** One answer per address, in `'url'` mode (AGL-3459), keyed by the address's SHA-256. */
+export const WEB_RISK_URL_CACHE_COLLECTION = 'webRiskUrlVerdicts'
+/**
+ * The switches: `{ enabled: false }` turns every lookup off;
+ * `lookupMode: 'url'` looks up links' addresses as well as their hosts.
+ */
 export const WEB_RISK_SETTINGS_COLLECTION = 'platformSettings'
 export const WEB_RISK_SETTINGS_DOC = 'webRisk'
 
+/** What a lookup sends: the host only (the default), or the address too. */
+export type WebRiskLookupMode = 'host' | 'url'
+
 /** One call's budget. */
 export const WEB_RISK_TIMEOUT_MS = 1_000
-/** One lookup's budget, however many hosts it asks about. */
+/** One lookup's budget, however many hosts and addresses it asks about. */
 export const WEB_RISK_DEADLINE_MS = 1_200
 /** How long a clean answer is kept in the store. */
 export const WEB_RISK_CLEAN_TTL_MS = 12 * 60 * 60_000
@@ -92,7 +128,11 @@ export const WEB_RISK_CLEAN_TTL_MS = 12 * 60 * 60_000
 export const WEB_RISK_MEMORY_CLEAN_TTL_MS = 10 * 60_000
 /** A listing whose answer named no `expireTime` is kept this long. */
 export const WEB_RISK_LISTED_FALLBACK_TTL_MS = 5 * 60_000
-/** How long the switch's answer is trusted. */
+/** The most answers this process remembers before it starts again. */
+export const WEB_RISK_MEMORY_MAX_ENTRIES = 20_000
+/** How long past its expiry an address's stored answer is deleted. */
+export const WEB_RISK_URL_VERDICT_GRACE_MS = 24 * 60 * 60_000
+/** How long the switches' answer is trusted. */
 const SWITCH_TTL_MS = 60_000
 /** How long a refused credential stops the lookup. */
 const REFUSED_BACKOFF_MS = 15 * 60_000
@@ -215,15 +255,16 @@ interface Verdict {
   expiresAtMs: number
 }
 
+/** Hosts and addresses share one memory: an address always holds `://`, a host never does. */
 const memory = new Map<string, Verdict & { memoryUntilMs: number }>()
-let switchMemo: { off: boolean; atMs: number } | null = null
+let settingsMemo: { off: boolean; mode: WebRiskLookupMode; atMs: number } | null = null
 let backoffUntilMs = 0
 let lastWarnAtMs = 0
 
-/** Test seam: forget the caches, the switch, the back-off; optionally stand in a client. */
+/** Test seam: forget the caches, the switches, the back-off; optionally stand in a client. */
 export function resetWebRiskForTests(client?: WebRiskClient | null): void {
   memory.clear()
-  switchMemo = null
+  settingsMemo = null
   backoffUntilMs = 0
   lastWarnAtMs = 0
   clientOverride = client
@@ -233,24 +274,39 @@ export function resetWebRiskForTests(client?: WebRiskClient | null): void {
 function warn(nowMs: number, message: string, error?: unknown): void {
   if (nowMs - lastWarnAtMs < WARN_EVERY_MS) return
   lastWarnAtMs = nowMs
-  console.warn(`[web-risk] ${message} — the host reads unknown, which is not evidence`, error ?? '')
+  console.warn(`[web-risk] ${message} — it reads unknown, which is not evidence`, error ?? '')
 }
 
-/** Is the lookup switched off? Read at most once a minute; an unreadable switch is on. */
-async function switchedOff(nowMs: number): Promise<boolean> {
-  if (switchMemo && nowMs - switchMemo.atMs < SWITCH_TTL_MS) return switchMemo.off
-  const off = await firebaseAdmin
+/**
+ * The switches, read at most once a minute. An unreadable document is on,
+ * in `'host'` mode; a mode that is not exactly `'url'` is `'host'`.
+ */
+async function webRiskSettings(nowMs: number): Promise<{ off: boolean; mode: WebRiskLookupMode }> {
+  if (settingsMemo && nowMs - settingsMemo.atMs < SWITCH_TTL_MS) return settingsMemo
+  const settings = await firebaseAdmin
     .app()
     .firestore()
     .collection(WEB_RISK_SETTINGS_COLLECTION)
     .doc(WEB_RISK_SETTINGS_DOC)
     .get()
     .then(
-      (snapshot) => snapshot.get('enabled') === false,
-      () => false,
+      (snapshot) => ({
+        off: snapshot.get('enabled') === false,
+        mode: snapshot.get('lookupMode') === 'url' ? ('url' as const) : ('host' as const),
+      }),
+      () => ({ off: false, mode: 'host' as const }),
     )
-  switchMemo = { off, atMs: nowMs }
-  return off
+  settingsMemo = { ...settings, atMs: nowMs }
+  return settings
+}
+
+/**
+ * The lookup mode in force (AGL-3459): `'url'` only while the lookup is on
+ * and `platformSettings/webRisk.lookupMode` is exactly `'url'`.
+ */
+export async function webRiskLookupMode(nowMs: number = Date.now()): Promise<WebRiskLookupMode> {
+  const settings = await webRiskSettings(nowMs)
+  return settings.off ? 'host' : settings.mode
 }
 
 /**
@@ -267,8 +323,19 @@ function isPlatformHost(host: string): boolean {
   )
 }
 
-function verdictFrom(data: Record<string, unknown> | undefined): Verdict | null {
+/** An address's document id in {@link WEB_RISK_URL_CACHE_COLLECTION}: an address holds `/`, a hash does not. */
+export function webRiskUrlVerdictId(url: string): string {
+  return createHash('sha256').update(url).digest('hex')
+}
+
+function isAddress(key: string): boolean {
+  return key.includes('://')
+}
+
+/** A stored answer, or null. An address's must name the address it was asked for. */
+function verdictFrom(data: Record<string, unknown> | undefined, url?: string): Verdict | null {
   if (!data) return null
+  if (url !== undefined && data['url'] !== url) return null
   const threats = Array.isArray(data['threats'])
     ? LINK_THREAT_TYPES.filter((type) => (data['threats'] as unknown[]).includes(type))
     : []
@@ -278,8 +345,9 @@ function verdictFrom(data: Record<string, unknown> | undefined): Verdict | null 
   return { threats, checkedAtMs, expiresAtMs }
 }
 
-function remember(host: string, verdict: Verdict, nowMs: number): void {
-  memory.set(host, {
+function remember(key: string, verdict: Verdict, nowMs: number): void {
+  if (memory.size >= WEB_RISK_MEMORY_MAX_ENTRIES && !memory.has(key)) memory.clear()
+  memory.set(key, {
     ...verdict,
     memoryUntilMs: verdict.threats.length
       ? verdict.expiresAtMs
@@ -287,28 +355,67 @@ function remember(host: string, verdict: Verdict, nowMs: number): void {
   })
 }
 
+function fromMemory(key: string, nowMs: number): Verdict | null {
+  const known = memory.get(key)
+  return known && nowMs < known.memoryUntilMs ? known : null
+}
+
 export interface HostReputationLookupOptions {
   /** How long the caller will wait, overall. */
   deadlineMs?: number
   /** The most hosts asked about; the rest read unknown. */
   maxHosts?: number
+  /**
+   * The links' addresses, looked up on the hosts asked about in `'url'`
+   * mode (AGL-3459) and ignored in `'host'` mode. Normalized again here, so
+   * a query string handed in is still never sent.
+   */
+  urls?: readonly string[]
+  /** The most addresses asked about ({@link MAX_REPUTATION_URLS_PER_LOOKUP}); the rest are not asked about. */
+  maxUrls?: number
   nowMs?: number
 }
 
-/** What a lookup answered, and how many hosts it had to ask the API about. */
+/** What a lookup answered, and how many calls it made to the API. */
 export interface HostReputationLookupResult extends LinkReputationAnswer {
   looked: number
 }
 
 /**
- * The reputation of each host: listed, clean, or unknown. Platform hosts are
- * clean without asking. Never throws, and never waits longer than the
- * deadline: a call still running then finishes in the background and fills
- * the caches for the next asker.
+ * The reputation of each host — and, in `'url'` mode, of each address on a
+ * host that is not itself listed: listed, clean, or unknown. Platform hosts
+ * are clean without asking. Never throws, and never waits on the API longer
+ * than the deadline: a call still running then finishes in the background
+ * and fills the caches for the next asker.
+ *
+ * "Never throws" covers the store as well as the API: a missing app, a
+ * settings read that fails before it is a promise, or a cache reference
+ * that cannot be built all read every host as unknown. The page review
+ * calls this before its own fail-closed `try`, so a throw here would take
+ * down every page with a link off the site.
  */
-export async function lookupHostReputation(
+export async function lookupLinkReputation(
   hosts: readonly string[],
   options: HostReputationLookupOptions = {},
+): Promise<HostReputationLookupResult> {
+  try {
+    return await lookupLinkReputationOrThrow(hosts, options)
+  } catch (error) {
+    warn(options.nowMs ?? Date.now(), 'a lookup failed before it could answer', error)
+    const unknown = [
+      ...new Set(
+        hosts
+          .map((raw) => normalizeReputationHost(raw))
+          .filter((host): host is string => Boolean(host)),
+      ),
+    ]
+    return { hits: [], clean: [], unknown, looked: 0 }
+  }
+}
+
+async function lookupLinkReputationOrThrow(
+  hosts: readonly string[],
+  options: HostReputationLookupOptions,
 ): Promise<HostReputationLookupResult> {
   const nowMs = options.nowMs ?? Date.now()
   const result: HostReputationLookupResult = { hits: [], clean: [], unknown: [], looked: 0 }
@@ -321,107 +428,169 @@ export async function lookupHostReputation(
     else result.unknown.push(host)
   }
   if (!wanted.length) return result
+  let urls = options.urls?.length
+    ? pickReputationUrls(options.urls, wanted, options.maxUrls ?? MAX_REPUTATION_URLS_PER_LOOKUP)
+    : []
+  const hostOf = new Map(urls.map((url) => [url, normalizeReputationLink(url)?.host ?? '']))
 
-  const settle = (host: string, verdict: Verdict) => {
-    if (verdict.threats.length) result.hits.push({ host, threats: verdict.threats })
+  // What is known before the API is asked, host or address.
+  const known = new Map<string, Verdict>()
+  const unknownTo = (keys: readonly string[]) =>
+    keys.filter((key) => {
+      const verdict = fromMemory(key, nowMs)
+      if (verdict) known.set(key, verdict)
+      return !verdict
+    })
+
+  // 1. This process's memory, for the hosts.
+  let missingHosts = unknownTo(wanted)
+  let missingUrls: string[] = []
+  let mayAsk = true
+
+  // 2. The switches — read only when a host is left to ask about, or
+  //    addresses wait on the mode. Off reads everything left as unknown.
+  if (missingHosts.length || urls.length) {
+    const settings = await webRiskSettings(nowMs)
+    if (settings.off || settings.mode !== 'url') urls = []
+    if (settings.off) mayAsk = false
+    // An address on a host already known to be listed adds nothing.
+    urls = urls.filter((url) => !known.get(hostOf.get(url) ?? '')?.threats.length)
+    // 1b. This process's memory, for the addresses.
+    missingUrls = unknownTo(urls)
+  }
+
+  // 3. The store, hosts and addresses in one round trip.
+  const firestore = firebaseAdmin.app().firestore()
+  const hostCollection = firestore.collection(WEB_RISK_CACHE_COLLECTION)
+  const urlCollection = firestore.collection(WEB_RISK_URL_CACHE_COLLECTION)
+  if (mayAsk && (missingHosts.length || missingUrls.length)) {
+    const keys = [...missingHosts, ...missingUrls]
+    try {
+      const snapshots = await firestore.getAll(
+        ...keys.map((key) =>
+          isAddress(key) ? urlCollection.doc(webRiskUrlVerdictId(key)) : hostCollection.doc(key),
+        ),
+      )
+      snapshots.forEach((snapshot, index) => {
+        const key = keys[index]
+        const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : undefined
+        const verdict = verdictFrom(data, isAddress(key) ? key : undefined)
+        if (!verdict || nowMs >= verdict.expiresAtMs) return
+        remember(key, verdict, nowMs)
+        known.set(key, verdict)
+      })
+      missingHosts = missingHosts.filter((host) => !known.has(host))
+      missingUrls = missingUrls.filter((url) => !known.has(url))
+    } catch (error) {
+      warn(nowMs, 'the verdict cache could not be read', error)
+    }
+  }
+
+  // 4. The API, everything left at once, within the deadline: each host
+  //    first, then — unless the host itself is listed — its addresses.
+  const answered = new Map<string, Verdict>()
+  const client = activeClient()
+  if (mayAsk && client && nowMs >= backoffUntilMs && (missingHosts.length || missingUrls.length)) {
+    let looked = 0
+    const ask = async (key: string): Promise<Verdict | null> => {
+      if (Date.now() < backoffUntilMs) return null
+      looked += 1
+      try {
+        const answer = await client.searchUri(isAddress(key) ? key : webRiskUriForHost(key))
+        const checkedAtMs = Date.now()
+        const verdict: Verdict = {
+          threats: answer.threats,
+          checkedAtMs,
+          expiresAtMs: answer.threats.length
+            ? (answer.expireTimeMs ?? checkedAtMs + WEB_RISK_LISTED_FALLBACK_TTL_MS)
+            : checkedAtMs + WEB_RISK_CLEAN_TTL_MS,
+        }
+        answered.set(key, verdict)
+        remember(key, verdict, checkedAtMs)
+        const document = isAddress(key)
+          ? urlCollection
+              .doc(webRiskUrlVerdictId(key))
+              .set({ host: hostOf.get(key) ?? '', url: key, ...verdict, listed: verdict.threats.length > 0 })
+          : hostCollection.doc(key).set({ host: key, ...verdict, listed: verdict.threats.length > 0 })
+        await document.catch((error: unknown) => warn(checkedAtMs, 'a verdict could not be cached', error))
+        return verdict
+      } catch (error) {
+        if (error instanceof WebRiskHttpError && [401, 403, 404].includes(error.status)) {
+          backoffUntilMs = Date.now() + REFUSED_BACKOFF_MS
+          console.error('[web-risk] the API refused the credential — lookups paused for 15 minutes', error)
+        } else if (error instanceof WebRiskHttpError && error.status === 429) {
+          backoffUntilMs = Date.now() + THROTTLED_BACKOFF_MS
+          warn(Date.now(), 'the API is rate limiting', error)
+        } else if (error instanceof WebRiskUnavailableError) {
+          backoffUntilMs = Date.now() + REFUSED_BACKOFF_MS
+          warn(Date.now(), 'no credential to call the API with', error)
+        } else {
+          warn(Date.now(), `the lookup of ${key} failed or timed out`, error)
+        }
+        return null
+      }
+    }
+    const pipelines = wanted.map(async (host) => {
+      const hostVerdict = known.get(host) ?? (missingHosts.includes(host) ? await ask(host) : null)
+      if (hostVerdict?.threats.length) return
+      await Promise.all(missingUrls.filter((url) => hostOf.get(url) === host).map((url) => ask(url)))
+    })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      Promise.allSettled(pipelines),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, options.deadlineMs ?? WEB_RISK_DEADLINE_MS)
+      }),
+    ])
+    if (timer) clearTimeout(timer)
+    result.looked = looked
+    const late = [...missingHosts, ...missingUrls].filter((key) => !answered.has(key)).length
+    if (late) warn(Date.now(), `${late} host(s) or address(es) had no answer within the deadline`)
+  }
+
+  // 5. The answer. An address on a listed host is not reported: the host's
+  //    listing already names it.
+  const verdictOf = (key: string) => known.get(key) ?? answered.get(key)
+  for (const host of wanted) {
+    const verdict = verdictOf(host)
+    if (!verdict) result.unknown.push(host)
+    else if (verdict.threats.length) result.hits.push({ host, threats: verdict.threats })
     else result.clean.push(host)
   }
-
-  // 1. This process's memory.
-  let missing = wanted.filter((host) => {
-    const known = memory.get(host)
-    if (known && nowMs < known.memoryUntilMs) {
-      settle(host, known)
-      return false
-    }
-    return true
-  })
-  if (!missing.length) return result
-
-  // 2. The switch. Off reads every remaining host as unknown.
-  if (await switchedOff(nowMs)) {
-    result.unknown.push(...missing)
-    return result
+  for (const url of urls) {
+    const host = hostOf.get(url) ?? ''
+    if (verdictOf(host)?.threats.length) continue
+    const verdict = verdictOf(url)
+    if (!verdict) result.unknown.push(url)
+    else if (verdict.threats.length) result.hits.push({ host, url, threats: verdict.threats })
+    else result.clean.push(url)
   }
-
-  // 3. The store, in one round trip.
-  const firestore = firebaseAdmin.app().firestore()
-  const collection = firestore.collection(WEB_RISK_CACHE_COLLECTION)
-  try {
-    const snapshots = await firestore.getAll(...missing.map((host) => collection.doc(host)))
-    const stored = new Map<string, Verdict>()
-    for (const snapshot of snapshots) {
-      const verdict = verdictFrom(snapshot.exists ? (snapshot.data() as Record<string, unknown>) : undefined)
-      if (verdict && nowMs < verdict.expiresAtMs) stored.set(snapshot.id, verdict)
-    }
-    missing = missing.filter((host) => {
-      const verdict = stored.get(host)
-      if (!verdict) return true
-      remember(host, verdict, nowMs)
-      settle(host, verdict)
-      return false
-    })
-  } catch (error) {
-    warn(nowMs, 'the verdict cache could not be read', error)
-  }
-  if (!missing.length) return result
-
-  // 4. The API, every remaining host at once, within the deadline.
-  const client = activeClient()
-  if (!client || nowMs < backoffUntilMs) {
-    result.unknown.push(...missing)
-    return result
-  }
-  result.looked = missing.length
-  const answers = new Map<string, Verdict>()
-  const calls = missing.map(async (host) => {
-    try {
-      const answer = await client.searchUri(webRiskUriForHost(host))
-      const checkedAtMs = Date.now()
-      const verdict: Verdict = {
-        threats: answer.threats,
-        checkedAtMs,
-        expiresAtMs: answer.threats.length
-          ? (answer.expireTimeMs ?? checkedAtMs + WEB_RISK_LISTED_FALLBACK_TTL_MS)
-          : checkedAtMs + WEB_RISK_CLEAN_TTL_MS,
-      }
-      answers.set(host, verdict)
-      remember(host, verdict, checkedAtMs)
-      await collection
-        .doc(host)
-        .set({ host, ...verdict, listed: verdict.threats.length > 0 })
-        .catch((error: unknown) => warn(checkedAtMs, 'a verdict could not be cached', error))
-    } catch (error) {
-      if (error instanceof WebRiskHttpError && [401, 403, 404].includes(error.status)) {
-        backoffUntilMs = Date.now() + REFUSED_BACKOFF_MS
-        console.error('[web-risk] the API refused the credential — lookups paused for 15 minutes', error)
-      } else if (error instanceof WebRiskHttpError && error.status === 429) {
-        backoffUntilMs = Date.now() + THROTTLED_BACKOFF_MS
-        warn(Date.now(), 'the API is rate limiting', error)
-      } else if (error instanceof WebRiskUnavailableError) {
-        backoffUntilMs = Date.now() + REFUSED_BACKOFF_MS
-        warn(Date.now(), 'no credential to call the API with', error)
-      } else {
-        warn(Date.now(), `the lookup of ${host} failed or timed out`, error)
-      }
-    }
-  })
-  let timer: ReturnType<typeof setTimeout> | undefined
-  await Promise.race([
-    Promise.allSettled(calls),
-    new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, options.deadlineMs ?? WEB_RISK_DEADLINE_MS)
-    }),
-  ])
-  if (timer) clearTimeout(timer)
-  const late = missing.filter((host) => !answers.has(host))
-  for (const host of missing) {
-    const verdict = answers.get(host)
-    if (verdict) settle(host, verdict)
-  }
-  result.unknown.push(...late)
-  if (late.length) warn(Date.now(), `${late.length} host(s) had no answer within the deadline`)
   return result
+}
+
+/**
+ * Delete the addresses' stored answers that expired more than
+ * {@link WEB_RISK_URL_VERDICT_GRACE_MS} ago (AGL-3459), at most `limit` at a
+ * time. The daily re-check calls it once per walk. A host's answers are not
+ * reaped: they are few and rewritten in place. Never throws.
+ */
+export async function reapExpiredWebRiskUrlVerdicts(
+  options: { nowMs?: number; limit?: number; firestore?: FirebaseFirestore.Firestore } = {},
+): Promise<number> {
+  const nowMs = options.nowMs ?? Date.now()
+  const firestore = options.firestore ?? firebaseAdmin.app().firestore()
+  try {
+    const stale = await firestore
+      .collection(WEB_RISK_URL_CACHE_COLLECTION)
+      .where('expiresAtMs', '<', nowMs - WEB_RISK_URL_VERDICT_GRACE_MS)
+      .limit(options.limit ?? 500)
+      .get()
+    await Promise.all(stale.docs.map((snapshot) => snapshot.ref.delete()))
+    return stale.docs.length
+  } catch (error) {
+    console.warn('[web-risk] expired address verdicts could not be deleted', error)
+    return 0
+  }
 }
 
 /**
@@ -432,6 +601,6 @@ export async function lookupHostReputation(
 export function installLinkReputationLookup(): void {
   if (typeof setLinkReputationLookup !== 'function') return
   setLinkReputationLookup((hosts, options) =>
-    lookupHostReputation(hosts, { deadlineMs: options?.deadlineMs }),
+    lookupLinkReputation(hosts, { deadlineMs: options?.deadlineMs, urls: options?.urls }),
   )
 }

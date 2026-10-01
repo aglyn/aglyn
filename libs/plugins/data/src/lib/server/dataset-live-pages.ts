@@ -58,6 +58,14 @@
  * failed drop is reported to the caller and logged, never thrown: a record
  * must not be lost because a cache refused, and the TTL is still underneath as
  * the backstop it was always meant to be.
+ *
+ * ## Which pages is the data plugin's; how a page is dropped is the runtime's
+ *
+ * Datasets are this plugin's, so the walk from a dataset to the pages that
+ * repeat over it is too. The drop itself is the platform's
+ * (`@aglyn/tenant-data-admin/server/live-page-drops`): the deployment that
+ * owns the caches registers its dropper there, and a caller holding its own —
+ * the console's — passes it here.
  */
 
 import {
@@ -68,13 +76,18 @@ import {
 } from '@aglyn/aglyn/server'
 import type { Firestore } from 'firebase-admin/firestore'
 import {
+  type LivePageDropper,
+  type LivePageTarget,
+  registeredLivePageDropper,
+} from '@aglyn/tenant-data-admin/server/live-page-drops'
+import {
   readUsageSources,
   screenIdsUsingComponentDeep,
   screenIdsUsingLayoutDeep,
   isLiveUsageCandidate,
   type UsageCandidate,
   type UsageSources,
-} from './live-page-usage'
+} from '@aglyn/tenant-data-admin/server/live-page-usage'
 
 /**
  * How many documents per collection the per-site scan reads.
@@ -138,21 +151,8 @@ export function resetDatasetAnnounceThrottle(): void {
   lastAnnouncedAt.clear()
 }
 
-/** One site's share of a dataset change. */
-export interface DatasetLivePageTarget {
-  hostId: string
-  /** The tenant keys its cache on this, never on `hostId`. */
-  subdomain: string
-  /** The attached custom domain, whose pages live under a second cache key. */
-  cname?: string
-  /** Site-absolute addresses (`/`, `/team`) that repeat over the dataset. */
-  paths: string[]
-  /** The site held more documents than the scan read, so `paths` is partial. */
-  truncated: boolean
-}
-
 export interface DatasetLivePageScope {
-  targets: DatasetLivePageTarget[]
+  targets: LivePageTarget[]
   /**
    * Sites the fan-out cap left out. Zero in the ordinary case, and reported
    * rather than logged because a caller that says "refreshed" while some sites
@@ -290,7 +290,7 @@ async function targetForHost(
   firestore: Firestore,
   hostId: string,
   keys: ReadonlySet<string>,
-): Promise<DatasetLivePageTarget | null> {
+): Promise<LivePageTarget | null> {
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   if (!hostSnapshot.exists) return null
@@ -369,7 +369,7 @@ export async function datasetLivePageScope(options: {
       }),
     )
     const targets = resolved.filter(
-      (target): target is DatasetLivePageTarget => target !== null,
+      (target): target is LivePageTarget => target !== null,
     )
     return {
       targets,
@@ -379,38 +379,6 @@ export async function datasetLivePageScope(options: {
   } catch (error) {
     console.error('[dataset-live-pages] scope failed', datasetId, error)
     return { targets: [], hostsDropped: 0, reason: 'error' }
-  }
-}
-
-/**
- * How one runtime drops a site's cached pages.
- *
- * The generic seam, registered by the deployment that owns the caches. The
- * tenant registers an in-process drop at boot; the console announces over the
- * shared secret and passes its own dropper at the call site. Core names
- * neither, exactly as it names no repeat source.
- *
- * Returns whether the drop landed. It must never throw: everything above it
- * has already been written.
- */
-export type LivePageDropper = (
-  target: DatasetLivePageTarget,
-) => Promise<boolean>
-
-let registeredDropper: LivePageDropper | undefined
-
-/**
- * Registers the dropper for this process, replacing any previous one. Returns
- * the unregister, which removes it only if it is still the one registered.
- *
- * Called from a function the platform calls BY NAME at boot, never from a
- * module's top level: a bundler deletes a module imported only for its side
- * effect when its package says it has none (AGL-3025).
- */
-export function registerLivePageDropper(drop: LivePageDropper): () => void {
-  registeredDropper = drop
-  return () => {
-    if (registeredDropper === drop) registeredDropper = undefined
   }
 }
 
@@ -454,7 +422,7 @@ export async function announceDatasetRecordChange(options: {
   drop?: LivePageDropper
 }): Promise<DatasetAnnounceResult> {
   const { firestore, orgId, datasetId } = options
-  const drop = options.drop ?? registeredDropper
+  const drop = options.drop ?? registeredLivePageDropper()
   if (!drop) {
     // Said out loud: a process that writes records and registered no dropper
     // is one where this feature is silently absent, which reads exactly like

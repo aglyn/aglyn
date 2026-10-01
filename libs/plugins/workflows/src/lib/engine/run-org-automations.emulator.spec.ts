@@ -29,7 +29,7 @@
  * shape Firestore refuses to run fails here rather than in production; and it
  * holds that query to the composite index `cloud/firebase-firestore.indexes.json`
  * declares for it, because the emulator plans any valid query without one
- * (see the note in `run-event-actions-update-dataset.emulator.spec.ts`).
+ * (see the note in the data plugin's `dataset-steps.emulator.spec.ts`).
  *
  * Skipped unless FIRESTORE_EMULATOR_HOST is set. Start the emulator
  * (`npm run firebase:emulate`), then:

@@ -57,11 +57,12 @@ jest.mock('./notifications', () => ({
   notifyHostManagers: async () => undefined,
 }))
 
-const attributeCampaignConversion = jest.fn(async () => null)
-jest.mock('./campaign-conversion-attribution', () => ({
+// The credit is asked of whichever plugin credits outcomes, through the
+// platform's contract; what it writes is that plugin's own spec's claim.
+const creditConversion = jest.fn(async () => false)
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-conversion-credit', () => ({
   __esModule: true,
-  attributeCampaignConversion: (...args: unknown[]) =>
-    (attributeCampaignConversion as any)(...args),
+  creditConversion: (...args: unknown[]) => (creditConversion as any)(...args),
 }))
 
 /**
@@ -203,7 +204,7 @@ beforeEach(() => {
   leads = {}
   counterWrites = []
   autoIdCounter = 0
-  attributeCampaignConversion.mockClear()
+  creditConversion.mockClear()
 })
 
 describe('one person submitting twice is one lead', () => {
@@ -405,7 +406,7 @@ describe('a lead is credited to the campaign that created it, once', () => {
   it('credits the campaign on the capture that CREATES the lead', async () => {
     await captureFrom(TOUCH)
 
-    expect(attributeCampaignConversion).toHaveBeenCalledWith(
+    expect(creditConversion).toHaveBeenCalledWith(
       expect.objectContaining({
         hostId: HOST_ID,
         kind: 'lead',
@@ -417,19 +418,19 @@ describe('a lead is credited to the campaign that created it, once', () => {
 
   it('credits NOTHING on a later capture of the same person', async () => {
     await captureFrom(TOUCH)
-    attributeCampaignConversion.mockClear()
+    creditConversion.mockClear()
 
     await captureFrom(TOUCH, { source: 'booking' })
 
     expect(Object.keys(leads)).toHaveLength(1)
-    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+    expect(creditConversion).not.toHaveBeenCalled()
   })
 
   it('credits nothing when the door resolved no campaign', async () => {
     await captureFrom(null)
 
     expect(Object.keys(leads)).toHaveLength(1)
-    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+    expect(creditConversion).not.toHaveBeenCalled()
   })
 
   it('credits nothing for a lead the ceiling REFUSED', async () => {
@@ -439,6 +440,6 @@ describe('a lead is credited to the campaign that created it, once', () => {
     await captureFrom(TOUCH, {}, 0)
 
     expect(Object.keys(leads)).toHaveLength(0)
-    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+    expect(creditConversion).not.toHaveBeenCalled()
   })
 })

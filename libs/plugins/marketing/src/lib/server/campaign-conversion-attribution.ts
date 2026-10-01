@@ -39,10 +39,10 @@ import {
   CAMPAIGN_ATTRIBUTIONS_COLLECTION,
   eraseCampaignAttributionsForPersonKey,
 } from './campaign-attribution-store'
-import { readEmailCampaignTouch } from './email-delivery-log'
-import { isDocumentId } from './document-id'
-import firebaseAdmin from './firebase-admin'
-import { resolveOrgIdForHost } from './organizations'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
+import { readEmailCampaignTouch } from './email-campaign-touch'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -75,8 +75,9 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
  *
  *  - the WEB touch the visitor's device carried, from an ad, a partner link
  *    or a social post; and
- *  - the EMAIL touch on `emailDeliveries/{personKey}.campaignTouches[hostId]`,
- *    written server-side when they clicked a campaign's mail.
+ *  - the EMAIL touch on `emailDeliveries/{personKey}.campaignTouches[hostId]`
+ *    (`email-campaign-touch.ts`), written server-side when they clicked a
+ *    campaign's mail.
  *
  * Both are window-checked and the LATER one wins. Splitting the outcome
  * between them is the multi-touch model the revenue work rejected for the
@@ -112,9 +113,8 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
 
 /**
  * The collection and the erasure sweep, re-exported so a caller needs one
- * import for the whole join. They are DEFINED in a leaf module because the
- * sweep runs from `email-delivery-log.ts`, which this file reads — see
- * `campaign-attribution-store.ts` for why that cycle is not merely untidy.
+ * import for the whole join. They are DEFINED in a leaf module — see
+ * `campaign-attribution-store.ts` for why.
  */
 export {
   CAMPAIGN_ATTRIBUTIONS_COLLECTION,
@@ -471,8 +471,8 @@ export async function attributeCampaignConversion(
 
 /**
  * The per-org collection of sequence rollups. Restated from the reader
- * (`campaign-report.ts` in the campaigns UI library, which this package may
- * not import) and asserted equal by the reader's spec.
+ * (`campaign-report.ts` in the campaigns UI library) and asserted equal by
+ * the reader's spec.
  */
 export const CAMPAIGN_SEQUENCE_REPORTS_COLLECTION = 'campaignSequenceReports'
 
@@ -578,11 +578,8 @@ export async function creditCampaignSequenceOutcome(
  * first and the site second. After the migration the second read never
  * happens, because the first one answers.
  *
- * The collection names are spelled here rather than imported from the
- * campaign model (`@aglyn/shared-ui-email-campaigns`), which this package
- * does not depend on. They are the same strings; `campaign-container.ts`
- * documents them. The join above is this lookup's first reader, and the two
- * move together when the campaign code leaves this package.
+ * The collection names are spelled here, beside the join that is this
+ * lookup's first reader; `campaign-container.ts` documents the same strings.
  */
 
 const sendRefFirestore = (): Firestore => firebaseAdmin.app().firestore()

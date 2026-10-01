@@ -363,19 +363,23 @@ jest.mock(
       recordedEngagement.push(outcomes)
       return 0
     }),
-    /*
-     * The campaign touch revenue attribution is taken over. Recorded rather
-     * than asserted-on-storage here for the same reason the engagement rollup
-     * is: this file's subject is what the WEBHOOK does, and the touch's own
-     * storage rules — forward-only, per host, capped — are proved against a
-     * real double in `email-revenue-attribution.spec.ts`.
-     */
-    recordEmailCampaignTouch: jest.fn(async (touch: unknown) => {
-      recordedTouches.push(touch)
-      return true
-    }),
   }),
 )
+/*
+ * The campaign touch attribution is taken over, kept by this plugin on the
+ * same person document. Recorded rather than asserted-on-storage here for the
+ * same reason the engagement rollup is: this file's subject is what the
+ * WEBHOOK does, and the touch's own storage rules — forward-only, per host,
+ * capped — are proved against a real double in
+ * `campaign-conversion-attribution.spec.ts` and
+ * `email-revenue-attribution.spec.ts`.
+ */
+jest.mock('./email-campaign-touch', () => ({
+  recordEmailCampaignTouch: jest.fn(async (touch: unknown) => {
+    recordedTouches.push(touch)
+    return true
+  }),
+}))
 
 /**
  * What the handler handed the CONTACT STAMP (AGL-2616), per call. Recorded

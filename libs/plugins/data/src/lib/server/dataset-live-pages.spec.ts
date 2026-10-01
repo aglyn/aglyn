@@ -33,15 +33,17 @@
  */
 
 import {
+  registerLivePageDropper,
+  type LivePageTarget,
+} from '@aglyn/tenant-data-admin/server/live-page-drops'
+import type { UsageCandidate, UsageSources } from '@aglyn/tenant-data-admin/server/live-page-usage'
+import {
   announceDatasetRecordChange,
   datasetLivePageScope,
   describeDatasetAnnounceShortfall,
-  registerLivePageDropper,
   resetDatasetAnnounceThrottle,
   screenIdsRepeatingDataset,
-  type DatasetLivePageTarget,
 } from './dataset-live-pages'
-import type { UsageCandidate, UsageSources } from './live-page-usage'
 
 const DATASET_ID = 'ds_team'
 const DATASET_NAME = 'Team'
@@ -380,7 +382,7 @@ describe('announceDatasetRecordChange', () => {
     resetDatasetAnnounceThrottle()
   })
 
-  const announce = (drop: (target: DatasetLivePageTarget) => Promise<boolean>) =>
+  const announce = (drop: (target: LivePageTarget) => Promise<boolean>) =>
     announceDatasetRecordChange({
       firestore: fakeFirestore(ONE_SITE),
       orgId: ORG_ID,
@@ -389,7 +391,7 @@ describe('announceDatasetRecordChange', () => {
     })
 
   it('drops exactly the pages that repeat, once per site', async () => {
-    const dropped: DatasetLivePageTarget[] = []
+    const dropped: LivePageTarget[] = []
     const result = await announce(async (target) => {
       dropped.push(target)
       return true

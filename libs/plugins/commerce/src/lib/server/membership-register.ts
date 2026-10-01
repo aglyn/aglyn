@@ -29,10 +29,13 @@ import {
   firebaseAdmin,
   rearmVisitorRecordCeilingNotice,
   recordVisitorRecordCeilingTrip,
-  resolveCampaignTouch,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+import {
+  CONVERSION_TOUCH_DETAIL,
+  resolveConversionTouch,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import {
   hashMemberPassword,
   mintMemberSession,
@@ -220,19 +223,19 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
     // never fails the sign-up: the visitor asked for an account, not for a
     // lead record, and the trip is recorded for the owner either way.
     /*
-     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SIGN-UP.
+     * WHERE THE VISITOR ARRIVED FROM, RESOLVED ONCE FOR THE WHOLE SIGN-UP.
      *
      * A sign-up is the identify moment for a visitor who has been anonymous
-     * until now, and it writes two records that a campaign can be credited
-     * with — the lead and the contact. One resolve, one keyed read, and the
-     * two cannot end up naming different campaigns.
+     * until now, and it writes two records an arrival can be credited with —
+     * the lead and the contact. One resolve, by the plugin that credits
+     * outcomes, and the two cannot end up credited to different arrivals.
      *
      * The MEMBER record itself is not attributed. A member is an account the
      * visitor holds and the lead is the site's record of the same act, so
      * crediting both would count one sign-up twice under two names.
      */
     const signedUpAtMs = Date.now()
-    const campaignTouch = await resolveCampaignTouch({
+    const arrival = await resolveConversionTouch({
       hostId,
       wire: req.body?.campaignTouch,
       email,
@@ -274,7 +277,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       ...(marketingConsent ? { marketingConsent: true } : {}),
       // Where the visitor ARRIVED from — a fact about this visit and not
       // about the person, which is what `detail` carries.
-      ...(campaignTouch ? { detail: { campaignTouch } } : {}),
+      ...(arrival ? { detail: { [CONVERSION_TOUCH_DETAIL]: arrival } } : {}),
     })
     // Event trigger (AGL-128/148). A sign-up is no longer a lead (AGL-3232),
     // so the `lead` event is the lead surfaces' to emit.

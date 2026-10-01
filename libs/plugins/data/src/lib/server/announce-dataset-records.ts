@@ -16,11 +16,8 @@
  */
 
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
-import {
-  announceDatasetRecordChange,
-  type DatasetAnnounceResult,
-  type LivePageDropper,
-} from '@aglyn/tenant-data-admin/server/dataset-live-pages'
+import type { LivePageDropper } from '@aglyn/tenant-data-admin/server/live-page-drops'
+import { announceDatasetRecordChange, type DatasetAnnounceResult } from './dataset-live-pages'
 import type { Firestore } from 'firebase-admin/firestore'
 
 /**

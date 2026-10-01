@@ -283,17 +283,17 @@ const staffNotices: any[] = []
 /*
  * The campaign revenue reversal, mocked for the reason `refund.spec.ts` mocks
  * it: whether a reversal lands correctly is settled against a real double in
- * `email-revenue-attribution.spec.ts`, and what this file is the only place
+ * the crediting plugin's own spec, and what this file is the only place
  * to prove is that a LOST DISPUTE reaches it — money reversed is money
  * reversed whichever door it left by. Left unmocked it would reach the real
  * firebase-admin, which this suite has no app for.
  */
 const reverseAttributedRevenue = jest.fn(async () => true)
 jest.mock(
-  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  '@aglyn/aglyn/plugin-manager/plugin-conversion-credit',
   () => ({
     __esModule: true,
-    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+    reverseOrderConversion: (...args: unknown[]) =>
       (reverseAttributedRevenue as any)(...args),
   }),
 )

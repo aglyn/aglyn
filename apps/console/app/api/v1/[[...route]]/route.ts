@@ -138,11 +138,11 @@ async function dispatch(
         // read this list (AGL-898). Orders and products (AGL-1928) are
         // site-scoped for the same reason and stay out for the same reason;
         // `media` earns its place because `/v1/media` — the ORGANIZATION
-        // library — really is a top-level path. A resource a plugin serves
-        // (AGL-3080) is top-level by construction — it is registered under
-        // its first path segment — so every one the build serves is listed,
-        // and none it does not.
-        resources: ['datasets', 'sites', 'media', ...(await pluginApiV1ResourceNames())],
+        // library — really is a top-level path. A resource a plugin serves at
+        // the top level (AGL-3080) is registered under its first path segment,
+        // so every one the build serves is listed — the data plugin's
+        // `datasets` among them — and none it does not.
+        resources: ['sites', 'media', ...(await pluginApiV1ResourceNames())],
       },
       { headers },
     )

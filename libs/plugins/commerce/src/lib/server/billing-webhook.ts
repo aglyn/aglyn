@@ -53,7 +53,7 @@ import { recordContactRefund } from './contact-refund'
 // Leaf import, not the barrel, for the reason `contact-refund.ts` records: the
 // specs in this library mock `@aglyn/tenant-data-admin` wholesale, and a
 // permissive stub would turn a reversal that never happened green.
-import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
+import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { paymentRiskEventFrom } from '@aglyn/aglyn/app-utils/payment-risk'
 import { recordPaymentRiskOnRecord } from '@aglyn/tenant-data-admin/server/payment-risk-record'
 import {
@@ -5350,7 +5350,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             // for it — and the reversal is recorded beside the credit rather
             // than subtracted from it, exactly as the contact ledger above
             // records `refundedCents` beside `ltvCents`.
-            await reverseEmailAttributedRevenue({
+            await reverseOrderConversion({
               hostId,
               orderId: snapshot.id,
               amountCents: settled.reversedCents,

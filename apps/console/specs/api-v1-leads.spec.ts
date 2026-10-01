@@ -208,17 +208,10 @@ jest.mock('firebase-admin/firestore', () => {
 /*
  * The lead door (AGL-3231): `POST /v1/leads` writes through the real
  * `addHostLead`, so the create is judged on what the door leaves — the
- * person-key id, the `capturedByHostIds` stamp, no basis. Its two side
- * effects on the way past are stubbed: no campaign touch travels with an
- * API create, and nothing here trips the platform ceiling.
+ * person-key id, the `capturedByHostIds` stamp, no basis. Its side effect on
+ * the way past is stubbed: nothing here trips the platform ceiling. No
+ * touch travels with an API create, so nothing is credited.
  */
-jest.mock(
-  '../../../libs/tenant/data/admin/src/lib/server/campaign-conversion-attribution',
-  () => ({
-    __esModule: true,
-    attributeCampaignConversion: jest.fn(async () => undefined),
-  }),
-)
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/notifications', () => ({
   __esModule: true,
   notifyHostManagers: jest.fn(async () => undefined),

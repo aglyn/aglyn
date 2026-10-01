@@ -39,7 +39,7 @@ import { FieldValue } from 'firebase-admin/firestore'
  * resolve through: sends and sequence reports are the ORG's. One site in
  * one org, and a site with no org at all.
  */
-jest.mock('./organizations', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   __esModule: true,
   resolveOrgIdForHost: async (hostId: string) => (hostId === 'host1' ? 'org1' : null),
 }))
@@ -60,7 +60,12 @@ import {
   EMAIL_ATTRIBUTION_MODEL as ATTRIBUTION_MODEL,
   EMAIL_ATTRIBUTION_WINDOW_DAYS as ATTRIBUTION_WINDOW_DAYS,
 } from '@aglyn/shared-util-email/email-revenue-window'
-import { recordEmailCampaignTouch } from './email-delivery-log'
+import {
+  EMAIL_TOUCH_FIELD,
+  eraseEmailCampaignTouches,
+  readEmailCampaignTouch,
+  recordEmailCampaignTouch,
+} from './email-campaign-touch'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 
 /*==========================================
@@ -147,6 +152,10 @@ function fakeFirestore() {
         throw error
       }
       store.set(path, applyWrite({}, update))
+    },
+    update: async (update: Record<string, any>) => {
+      if (!store.has(path)) throw new Error('NOT_FOUND')
+      store.set(path, applyWrite(store.get(path) ?? {}, update))
     },
     delete: async () => {
       store.delete(path)
@@ -873,5 +882,44 @@ describe('eraseCampaignAttributionsForPersonKey', () => {
     expect(await eraseCampaignAttributionsForPersonKey(null, firestore)).toBe(0)
     expect(await eraseCampaignAttributionsForPersonKey('', firestore)).toBe(0)
     expect(firestore.attribution(HOST, 'form', 's1')).toBeDefined()
+  })
+})
+
+describe('eraseEmailCampaignTouches', () => {
+  it("forgets the person's click on every site, and only theirs", async () => {
+    const firestore = fakeFirestore()
+    await clickedMail(firestore, 'spring', LANDED_AT)
+    await recordEmailCampaignTouch(
+      { email: VISITOR, hostId: 'host2', campaignId: 'autumn', atMs: LANDED_AT },
+      firestore,
+    )
+    await recordEmailCampaignTouch(
+      { email: 'other@example.com', hostId: HOST, campaignId: 'spring', atMs: LANDED_AT },
+      firestore,
+    )
+
+    expect(await eraseEmailCampaignTouches(personKey(VISITOR), firestore)).toBe(true)
+
+    // The strongest personal fact on the delivery document — it names the
+    // person AND what they were reading — so nothing may go on crediting
+    // their future orders to mail they asked us to forget.
+    expect(await readEmailCampaignTouch(VISITOR, HOST, firestore)).toBeNull()
+    expect(await readEmailCampaignTouch(VISITOR, 'host2', firestore)).toBeNull()
+    expect(await readEmailCampaignTouch('other@example.com', HOST, firestore)).toMatchObject({
+      campaignId: 'spring',
+    })
+  })
+
+  it('leaves no document behind for a person the log never held', async () => {
+    const firestore = fakeFirestore()
+
+    expect(await eraseEmailCampaignTouches(personKey(VISITOR), firestore)).toBe(false)
+    expect(await eraseEmailCampaignTouches(null, firestore)).toBe(false)
+    expect(firestore.paths()).toEqual([])
+  })
+
+  it('keeps the field name the delivery log has always stored', () => {
+    // A rename here would strand every touch already written.
+    expect(EMAIL_TOUCH_FIELD).toBe('campaignTouches')
   })
 })

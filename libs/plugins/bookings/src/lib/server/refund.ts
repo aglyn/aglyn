@@ -20,7 +20,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 // Leaf import, not the barrel: the specs in this library mock
 // `@aglyn/tenant-data-admin` wholesale, and a permissive stub would turn a
 // reversal that never happened green.
-import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
+import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { createHash } from 'crypto'
 import { apiIdempotencyExpiry } from '@aglyn/aglyn/app-utils/api-idempotency'
 
@@ -303,7 +303,7 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
      * whole: the money has already left the merchant's account and the booking
      * already records it, so nothing here may fail a refund.
      */
-    await reverseEmailAttributedRevenue({
+    await reverseOrderConversion({
       hostId,
       orderId: bookingId,
       amountCents: refundCents,

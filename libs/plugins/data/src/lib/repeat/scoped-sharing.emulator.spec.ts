@@ -36,9 +36,7 @@
  *       --testPathPatterns scoped-sharing
  */
 
-// Static, unlike the reader below: a lib reached by `import()` anywhere is
-// read by nx as lazy-loaded everywhere (AGL-2282).
-import { resolveDatasetDoc } from '@aglyn/tenant-runtime/resolve-dataset'
+import { resolveDatasetDoc } from '../server/resolve-dataset'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 

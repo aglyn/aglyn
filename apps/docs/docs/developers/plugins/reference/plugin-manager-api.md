@@ -220,6 +220,7 @@ registerApiV1Resource(
 | `handle(request, ctx, segments, url)` | Runs after the pipeline admitted the request — the API key, the plan's API access, the request quota, the rate limit. `ctx` is the `ApiV1Context`; the handler asks for its own scopes with `requireScope` and answers in the published envelope (`apiJson`, `ApiErrors`). |
 | `entitlement` | The plan feature the resource needs. The router refuses an organization without it — `402 plan_required`, the feature as the `code`, the registration's sentence as the message — before the handler runs and before any scope is asked, so a key minted while the plan carried the feature cannot outlive it. |
 | `describe` | Loads the resource's description — tag, record schema, writable members, operations — in the terms of `@aglyn/tenant-data-admin/server/api-v1-description`. The OpenAPI document at `/api/v1/openapi.json`, and the MCP tools derived from it, list every resource the build serves and nothing it does not; a description that fails to load is left out and logged. `apiV1Resources()` lists the registrations, and the API root's `resources` names them. |
+| `registerApiV1SiteResource(resource, { handle, entitlement?, describe? }, { pluginId? })` | Serves every request under `/v1/sites/{siteId}/<resource>` — a site's own records, as the forms plugin serves `form-submissions` and commerce `orders` and `products`. The router answers the site itself and refuses a site the key's organization does not own (`404 No such site`) before it asks any registration, so the handler is handed only a site its caller may reach, with the whole path in `segments`. Refused, as at the top level: a name that is not one lowercase path segment, the platform's own (`media`, `publish`) and a resource another plugin serves. `apiV1SiteResources()` lists them; they are not listed at the API root, which names top-level resources only. |
 | `registerApiV1UsageFigures(read, { pluginId? })` | Adds the plugin's members to `GET /v1/usage` — a band its records are metered on, the sizes an integration plans a sync by — read with the platform's on every call (`usageBand` gives one its published shape). A member the platform or another plugin already names is dropped and logged. |
 
 The helpers every handler shares — `claimWrite` (the idempotency claim),
@@ -1067,6 +1068,49 @@ cannot be declared. A template whose stamp no plugin in the build declares —
 installed by a plugin since removed — still reads as **Installed**, never as
 something the site authored.
 
+## Installable artifact types — `plugin-artifact-types` (`/server`)
+
+A workspace can install some content rather than author it. When the copies of
+one artifact type live in your plugin's storage, your plugin keeps that type:
+the installer, which owns the listing, the purchase and the provenance stamp,
+asks you to read a published source, check an install and write it, and find
+and update an installed copy. It never reads your collections itself. Declare
+each type in `plugins.config.json` and register its owner from your
+`consoleServerDeclarations` entry, with the work behind `import()`:
+
+```json
+"artifactTypes": [{ "type": "cellarList" }]
+```
+
+```ts
+registerArtifactTypeOwner(
+  'cellarList',
+  {
+    snapshot: async (request) => (await import('./server/cellar-artifact')).snapshot(request),
+    admits: async (workspace) => (await import('./server/cellar-artifact')).admits(workspace),
+    prepare: async (request) => (await import('./server/cellar-artifact')).prepare(request),
+    locate: async (request) => (await import('./server/cellar-artifact')).locate(request),
+  },
+  { pluginId: 'acme-cellar' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `snapshot({ orgId, sourceId })` | Publishing. Read the source the publisher named in their own workspace and answer `{ ok: true, content, facts? }`: `content` is what every install of the version receives, and `facts` are plain values the listing carries beside it. Answer `{ ok: false, status, error }` to refuse. |
+| `admits({ orgId, org })` | Asked before the installer reads the listing: a refusal when this workspace's plan cannot hold one at all, else `null`. |
+| `prepare({ orgId, org, listing, published })` | Installing. Validate the published content, check what the workspace may hold, make the content this workspace's, and write nothing. Answer `{ ok: true, content, commit }`: `content` is exactly what the copy will hold, which the installer records as its base snapshot. `commit({ installedFrom, source })` then writes the copy with the installer's stamp and answers `{ ok: true, report }`, the fields the install reports, or a refusal that wrote nothing. |
+| `locate({ orgId, hostId, listingId, published })` | Updating. Find the copy the listing installed and answer its `current` content, the `incoming` version made this workspace's, its `installedVersion` and `baseSha`, an optional `impact` (`preview` fields shown on the update dialog, and `destructive` with the `refusal` an unconfirmed merge gets), and `apply({ content, stamp })`, the one write that takes the merged result. |
+| `resolveArtifactTypeOwner(type)` | What the installer asks: `null` when no plugin declares the type, the registered owner when one does. A declared owner that is not registered runs the app's declarations step once; still missing, it throws `ArtifactTypeOwnerUnavailableError`. |
+| `listDeclaredArtifactTypes()` / `declaredArtifactTypeOwner(type)` | The compiled declarations. |
+
+Every answer comes before the installer writes anything, so an install whose
+owner is missing refuses whole: no copy, no provenance, no tally. One owner
+per type, a camelCase `type`, and a plugin with a declarations entry on the
+console's server; the generator refuses anything else. The data plugin's
+`datasetSchema` is the first: the marketplace sells a dataset's schema and
+never reads the datasets collection.
+
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 
 A security lockdown pauses the subscriptions a locked site sells to its own
@@ -1161,6 +1205,51 @@ uses that surface, which is what makes it a different fact from where this
 visitor arrived from. The owner files the person under the kinds it keeps and
 ignores the rest. Filing is not consent: `marketingConsent` is the only input
 that records one.
+
+## Conversion credit — `plugin-conversion-credit` (`/server`)
+
+A door that produces an outcome somebody may be credited with — a form
+submission, a booking, a member sign-up, an order, what a plugin's own mail
+led to — asks whichever plugin credits outcomes, instead of importing its
+join. One plugin registers the creditor (a slot); every door calls the
+functions below, and each answers its empty value when nobody credits.
+
+```ts
+// the crediting plugin, from its server declarations
+registerPluginConversionCreditor(creditor)
+
+// a door: where the visitor arrived from, once per request…
+const touch = await resolveConversionTouch({ hostId, wire: body.campaignTouch, email, atMs })
+// …credited to what the door produced, and handed to the person capture
+void creditConversion({ hostId, kind: 'booking', refId: bookingId, touch, convertedAtMs: atMs })
+await recordCapturedContact({ …, detail: { [CONVERSION_TOUCH_DETAIL]: touch } })
+```
+
+| API | Semantics |
+| --- | --- |
+| `resolveConversionTouch({ hostId, wire?, email?, atMs? })` | The arrival to credit, or `null` (direct traffic, or nobody credits). Opaque: a door hands it back unread. |
+| `creditConversion({ hostId, kind, refId, touch?, click?, convertedAtMs? })` | Credits one identify moment, in the door's word (`form`, `lead`, `contact`, `booking`). `click` credits a link the door's own mail carried, in place of a touch. |
+| `creditOrderConversion` / `reverseOrderConversion` | An order's money, and a refund's or a lost dispute's reversal of it, keyed by the order. |
+| `recordConversionClick({ email, hostId, creditTo, atMs, via? })` | A person followed a link in mail a plugin sent them; `via` is the sender's own facts (its sequence, its enrollment). |
+| `creditConversionOutcome({ hostId, orgId?, containerIds, outcome, atMs? })` | What a plugin's own record produced, counted under the containers it is filed in (`plugin-containers`). |
+| `eraseConversionCredits(key)` | Everything the creditor holds about a person, by `personKey`, on every site — called by the platform's address erasure beside the delivery log. |
+
+Nothing here throws: every door has already done the thing being credited.
+The first call that finds no creditor runs the app's boot step once and asks
+again, as a person capture does. A door that hands its touch to the person
+capture puts it under `CONVERSION_TOUCH_DETAIL` in `detail`, and the plugin
+that keeps people passes it on to the contact or the lead it files.
+
+## Send tallies — `plugin-send-tallies` (`/server`)
+
+A bulk send's own figures, moved by a door that is not its sender: the plugin
+that serves a site's unsubscribe page learns that a recipient left from a
+message a send carried, and tells the sender, which counts it.
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginSendTally({ unsubscribed })` | A sender's tally (a set: several plugins may send in bulk). `unsubscribed({ hostId, sendId })` answers whether the send was this plugin's and was counted. |
+| `tallySendUnsubscribe({ hostId, sendId })` | Asks each tally until one counts it. Never throws; the door counts only an unsubscribe it just created. |
 
 ## Record timeline — `plugin-record-timeline` (`/server`)
 

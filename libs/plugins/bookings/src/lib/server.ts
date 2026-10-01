@@ -115,8 +115,6 @@ import {
   getOrgForHost,
   meterHostEmail,
   notifyHostManagers,
-  attributeCampaignConversion,
-  resolveCampaignTouch,
   getPluginConfig,
   resolveOrgIdForHost,
   renderHostEmailWithTokens,
@@ -126,6 +124,11 @@ import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+import {
+  CONVERSION_TOUCH_DETAIL,
+  creditConversion,
+  resolveConversionTouch,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import {
   isEmailConfigured,
   sendEmail,
@@ -548,31 +551,30 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     })
 
     /*
-     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE BOOKING.
+     * WHERE THE VISITOR ARRIVED FROM, RESOLVED ONCE FOR THE WHOLE BOOKING.
      *
      * A booking is an identify moment: the visitor was anonymous while they
      * browsed and picked a slot, and this request is the first thing that
-     * names them. Both channels are asked here — the labels their device
-     * carried, and the campaign mail they clicked, joined on the address they
-     * just typed — and the later of the two is credited, exactly as the
-     * revenue join credits the later click.
+     * names them. The plugin that credits outcomes
+     * (`plugin-conversion-credit`) is asked with what their device carried
+     * and the address they just typed, and decides what earns the credit.
      *
      * Resolved once and handed to the booking record, the contact and the
-     * lead below, so the email-channel lookup is one keyed read for the whole
-     * request and the three records cannot name different campaigns.
+     * lead below, so the lookup is paid once for the whole request and the
+     * three records cannot be credited to different arrivals.
      */
     const bookedAtMs = Date.now()
-    const campaignTouch = await resolveCampaignTouch({
+    const arrival = await resolveConversionTouch({
       hostId,
       wire: req.body?.campaignTouch,
       email,
       atMs: bookedAtMs,
     })
-    void attributeCampaignConversion({
+    void creditConversion({
       hostId,
       kind: 'booking',
       refId: bookingId,
-      touch: campaignTouch,
+      touch: arrival,
       convertedAtMs: bookedAtMs,
     })
 
@@ -612,7 +614,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       ...(marketingConsent ? { marketingConsent: true } : {}),
       // Where the visitor ARRIVED from — a fact about this visit and not
       // about the person, which is what `detail` carries.
-      ...(campaignTouch ? { detail: { campaignTouch } } : {}),
+      ...(arrival ? { detail: { [CONVERSION_TOUCH_DETAIL]: arrival } } : {}),
     })
 
     if (paid) {

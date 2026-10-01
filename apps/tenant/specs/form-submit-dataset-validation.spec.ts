@@ -106,13 +106,6 @@ const mockCollectionHandle = (path: string): any => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // The attribution seam the route resolves once per submission. Recorded
-  // rather than executed — `campaign-conversion-attribution.spec.ts` owns
-  // what the write does — and defined here at all because a mocked module
-  // answers `undefined` for a name it does not list, which would make the
-  // route throw rather than fail an assertion.
-  resolveCampaignTouch: async () => null,
-  attributeCampaignConversion: async () => null,
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -191,10 +184,11 @@ import { POST } from '../app/api/forms/submit/route'
 import { stampFormRecordTargets } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 
 /*
- * The data plugin reads the dataset through the runtime's LEAF module, which
- * the barrel double above does not intercept; this forwards the leaf to it.
+ * The data plugin finds the dataset through its own `resolve-dataset` module
+ * (AGL-3080), which the runtime double above does not reach; this forwards the
+ * lookup to that double.
  */
-jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
+jest.mock('@aglyn/plugins-data/server/resolve-dataset', () => ({
   resolveDatasetDoc: (...args: unknown[]) =>
     (
       jest.requireMock('@aglyn/tenant-runtime') as {
