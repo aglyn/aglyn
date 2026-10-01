@@ -31,41 +31,35 @@
 // The shared escaper, by subpath — see the note in the library's index.
 import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 
+/**
+ * CSS system colors only — `Canvas`, `CanvasText`, `LinkText` — rather than
+ * a palette. They are the browser's own pair for the visitor's light or dark
+ * setting and for forced-colors (high contrast) mode, so the page is legible
+ * in all three without a value of ours to get wrong, and it is plainly not
+ * dressed as anyone's brand.
+ */
 const PAGE_STYLE = `
   :root { color-scheme: light dark; }
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: #f6f7f9; color: #16181d; line-height: 1.55; }
+         background: Canvas; color: CanvasText; line-height: 1.55; }
   main { max-width: 600px; margin: 0 auto; padding: 48px 20px 64px; }
   h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 12px; }
   p { margin: 0 0 16px; }
-  .destination { background: #fff; border: 1px solid #d0d4d9; border-radius: 10px;
+  .destination { border: 1px solid CanvasText; border-radius: 10px;
                  padding: 16px 18px; margin: 0 0 20px; }
   .destination .host { font-size: 1.125rem; font-weight: 700; margin: 0 0 6px;
                        overflow-wrap: anywhere; }
   .destination code { display: block; font: .875rem/1.5 ui-monospace, SFMono-Regular,
-                      Menlo, Consolas, monospace; color: #3b4148; overflow-wrap: anywhere; }
-  .warning { background: #fff8e6; border: 1px solid #e6cf8f; border-radius: 8px;
-             padding: 12px 14px; }
+                      Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .warning { border-left: 4px solid CanvasText; padding: 4px 0 4px 14px; }
   .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 32px; }
   .button { display: inline-block; padding: 11px 20px; border-radius: 6px;
-            font-weight: 600; text-decoration: none; border: 1px solid #1b1f24;
-            color: #1b1f24; background: #fff; }
-  .button.primary { background: #1b1f24; color: #fff; }
-  a { color: #0b57c2; }
-  a:focus-visible { outline: 3px solid #0b57c2; outline-offset: 2px; }
-  footer { color: #4f565e; font-size: .875rem; border-top: 1px solid #d0d4d9;
-           padding-top: 16px; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #16181d; color: #e6e8ea; }
-    .destination { background: #1e2127; border-color: #3a4048; }
-    .destination code { color: #c3c8ce; }
-    .warning { background: #2a2415; border-color: #5c4f22; }
-    .button { background: #16181d; color: #e6e8ea; border-color: #e6e8ea; }
-    .button.primary { background: #e6e8ea; color: #16181d; }
-    a { color: #8ab8ff; }
-    a:focus-visible { outline-color: #8ab8ff; }
-    footer { color: #a5abb3; border-color: #3a4048; }
-  }
+            font-weight: 600; text-decoration: none; border: 2px solid CanvasText;
+            color: CanvasText; background: Canvas; }
+  .button.primary { background: CanvasText; color: Canvas; }
+  a { color: LinkText; }
+  a:focus-visible { outline: 3px solid CanvasText; outline-offset: 3px; }
+  footer { font-size: .875rem; border-top: 1px solid CanvasText; padding-top: 16px; }
 `
 
 function documentHtml(title: string, body: string): string {
