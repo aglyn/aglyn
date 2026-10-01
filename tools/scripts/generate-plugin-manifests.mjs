@@ -472,6 +472,80 @@ async function pluginTenantEmails() {
   return entries
 }
 
+/**
+ * The starter sites a plugin offers (AGL-3080): a plugin whose elements a
+ * starter is built around names a function under `starterTemplates`, and
+ * this loads `${package}/starter-templates` through jiti, calls it, and
+ * compiles the starters into core as data, after the platform's own. Their
+ * readers — the template gallery, the seed route, the examples a model is
+ * shown — load no plugin code, so a runtime registry would be one they had
+ * not filled.
+ *
+ * Checked here: a starter id is declared once across all plugins (it is part
+ * of every seeded template's document id), each starter has pages with keys
+ * unique to it, and every element a page places is the declaring plugin's or
+ * the basic mui bundle's — a starter that placed another plugin's element
+ * would seed a page that renders nothing on a site without that plugin.
+ */
+const STARTER_TEMPLATES_FILE = 'libs/aglyn/src/lib/app-utils/plugin-starter-templates.generated.ts'
+
+async function pluginStarterTemplates() {
+  const jiti = jitiForWorkspace()
+  const starters = []
+  const ids = new Set()
+  for (const plugin of config.plugins.filter((entry) => entry.register?.starterTemplates)) {
+    const specifier = `${plugin.package}/starter-templates`
+    const fnName = plugin.register.starterTemplates
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') throw new Error(`${specifier} exports no function named ${fnName}`)
+    const answer = await fn()
+    const where = `${specifier}: ${fnName}()`
+    requireStringFields(answer, ['id', 'displayName', 'description', 'category'], where)
+    for (const starter of answer) {
+      if (!/^[a-z][a-z0-9-]*$/.test(starter.id)) {
+        throw new Error(`${where}: "${starter.id}" is not a lowercase, hyphenated id`)
+      }
+      if (ids.has(starter.id)) throw new Error(`${where}: starter "${starter.id}" is declared twice`)
+      ids.add(starter.id)
+      if (!Array.isArray(starter.screens) || !starter.screens.length) {
+        throw new Error(`${where}: starter "${starter.id}" has no pages`)
+      }
+      requireStringFields(starter.screens, ['key', 'displayName', 'slug'], `${where} "${starter.id}" pages`)
+      const keys = new Set()
+      for (const screen of starter.screens) {
+        if (keys.has(screen.key)) throw new Error(`${where}: "${starter.id}" has two pages keyed "${screen.key}"`)
+        keys.add(screen.key)
+        for (const node of Object.values(screen.nodes ?? {})) {
+          const owner = node?.pluginId
+          if (owner !== undefined && owner !== plugin.id && owner !== 'mui') {
+            throw new Error(
+              `${where}: "${starter.id}/${screen.key}" places "${node.componentId}" from "${owner}"; ` +
+                `a starter places only its own plugin's elements and mui's`,
+            )
+          }
+        }
+      }
+      starters.push(starter)
+    }
+  }
+  return starters
+}
+
+function starterTemplatesContent(starters) {
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The starter sites plugins offer (AGL-3080): what each plugin's\n` +
+    ` * \`starterTemplates\` entry returned when this file was generated, in\n` +
+    ` * config order. \`STARTER_TEMPLATES\` in \`starter-templates.ts\` is the\n` +
+    ` * platform's own starters followed by these.\n` +
+    ` * Source of truth: plugins.config.json and the entries it names.\n */\n\n` +
+    `import type { StarterTemplate } from './starter-template-nodes'\n\n` +
+    `export const PLUGIN_STARTER_TEMPLATES: readonly StarterTemplate[] = ` +
+    `${JSON.stringify(starters, null, 2)}\n`
+  )
+}
+
 function tenantEmailsContent(entries) {
   return (
     `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
@@ -2582,6 +2656,10 @@ const ALL = [
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
   { file: HOST_EVENTS_FILE, content: hostEventsContent(hostEventRows()) },
   { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },
+  {
+    file: STARTER_TEMPLATES_FILE,
+    content: starterTemplatesContent(await pluginStarterTemplates()),
+  },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },
   {

@@ -45,6 +45,10 @@ The entry in `plugins.config.json` also declares an `accounts` capability ("User
 
 All console pages and cards are code-split.
 
+### Starter sites
+
+`commerceStarterTemplates()` (`starter-templates`) returns the two shop starters, "Shop (physical products)" and "Shop (digital products)": home, shop, product page, cart and account pages built around this plugin's elements. `plugins.config.json` names it under `starterTemplates`, and the manifest generator compiles the starters into core's `STARTER_TEMPLATES`, which the template gallery, the seed route and the AI plugin's examples read. The starter ids, page keys and node ids are persisted in every site that used one.
+
 ### On the server
 
 `@aglyn/plugins-commerce/server` pulls in `firebase-admin` and Stripe and is kept out of the client entry point.

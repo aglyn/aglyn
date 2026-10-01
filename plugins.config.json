@@ -267,7 +267,8 @@
         "consoleApi": "registerCommerceConsoleApi",
         "serverDeclarations": "registerCommerceServerDeclarations",
         "tenantEmails": "commerceTenantEmails",
-        "planEntitlements": "commercePlanEntitlements"
+        "planEntitlements": "commercePlanEntitlements",
+        "starterTemplates": "commerceStarterTemplates"
       },
       "modules": {
         "site": "site"
