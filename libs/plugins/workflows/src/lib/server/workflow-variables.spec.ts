@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
 }))
 
 import type { HostFunction } from '@aglyn/aglyn/app-utils/functions'
-import type { HostVariable } from '@aglyn/aglyn/app-utils/variables'
+import type { WorkflowComputedVariable } from '../model/workflows'
 import { COMPUTED_VARIABLE_WORKFLOWS_READ, prepareWorkflowVariables } from './workflow-variables'
 
 const double: HostFunction = {
@@ -81,7 +81,7 @@ const double: HostFunction = {
 
 const QUOTE = { name: 'Quote', steps: [{ functionName: 'Double', args: ['21'] }] }
 
-const VARIABLES: Record<string, HostVariable> = {
+const VARIABLES: Record<string, WorkflowComputedVariable> = {
   'v-id': { name: 'byId', type: 'number', value: '1', workflowId: 'wf-quote', workflowName: 'Old name' },
   'v-name': { name: 'byName', type: 'number', value: '2', workflowName: 'Quote' },
   'v-gone': { name: 'gone', type: 'number', value: '3', workflowId: 'wf-gone' },

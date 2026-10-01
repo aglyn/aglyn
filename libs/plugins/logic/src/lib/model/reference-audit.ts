@@ -55,10 +55,20 @@ export interface AuditedWorkflow {
   steps?: Array<{ functionId?: string; functionName?: string }>
 }
 
+/**
+ * A site variable as the audit reads one: computed variables also carry the
+ * workflow that computes them, by id and by the name it had when picked.
+ */
+export interface AuditedVariable extends HostVariable {
+  $id: string
+  workflowId?: string
+  workflowName?: string
+}
+
 export interface ReferenceAuditInput {
   actions?: Array<HostAction & { $id: string }>
   workflows?: AuditedWorkflow[]
-  variables?: Array<HostVariable & { $id: string }>
+  variables?: AuditedVariable[]
   /** Screen node maps to scan for entity/screen-link references. */
   screens?: ScreenAuditEntry[]
   /** Known-good targets: doc ids AND display names both resolve. */

@@ -208,10 +208,21 @@ export function runWorkflow(
 }
 
 /**
- * Computed variables (AGL-129): a variable with `workflowName` takes the
- * named workflow's result as its value at compose time; failures keep the
- * stored fallback value. Each computed variable evaluates once, bounded
- * by the shared depth guard.
+ * The reference a computed site variable carries to the workflow that
+ * computes it: the workflow's document id (AGL-261), and the name it had when
+ * it was picked, which a variable computed before ids existed carries alone.
+ * Written by the variables editor; read here.
+ */
+export interface WorkflowComputedVariable extends HostVariable {
+  workflowId?: string
+  workflowName?: string
+}
+
+/**
+ * Computed variables (AGL-129): a variable naming a workflow takes that
+ * workflow's result as its value at compose time — by id first, then by
+ * name; failures keep the stored fallback value. Each computed variable
+ * evaluates once, bounded by the shared depth guard.
  */
 export function resolveComputedVariables(
   variables: Record<string, HostVariable>,
@@ -223,8 +234,11 @@ export function resolveComputedVariables(
   // can appear under two keys — evaluate each workflow once per doc.
   const memo = new Map<HostVariable, HostVariable>()
   for (const [name, variable] of Object.entries(variables)) {
-    const workflowId = (variable as any).workflowId?.trim?.() ?? ''
-    const workflowName = variable.workflowName?.trim()
+    const source = variable as WorkflowComputedVariable
+    const workflowId =
+      typeof source.workflowId === 'string' ? source.workflowId.trim() : ''
+    const workflowName =
+      typeof source.workflowName === 'string' ? source.workflowName.trim() : ''
     const workflow =
       (workflowId ? workflows[workflowId] : undefined) ??
       (workflowName ? workflows[workflowName] : undefined)

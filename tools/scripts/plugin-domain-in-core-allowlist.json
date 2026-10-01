@@ -671,13 +671,6 @@
       "lane": "ai"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/variables.ts",
-      "rules": [
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
-    },
-    {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
       "rules": [
         "domain-name"
