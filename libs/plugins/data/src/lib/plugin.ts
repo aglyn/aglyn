@@ -21,6 +21,7 @@ import { registerRepeatSource } from '@aglyn/aglyn/app-utils/repeat-sources'
 import { mdiDatabaseOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerDatasetRecordList } from './model/dataset-record-list'
 import { DATASET_REPEAT_SOURCE } from './repeat/dataset-repeat-source'
 
 /** Code-split: the Data console page only loads when opened. */
@@ -44,6 +45,8 @@ const DataConsolePage = lazy(() => import('./components/data-console-page'))
  */
 export function registerDataConsole(): void {
   registerRepeatSource(DATASET_REPEAT_SOURCE)
+  // The workspace's datasets, for another plugin's picker (AGL-3080).
+  registerDatasetRecordList()
   Aglyn.registerConsoleExtension({
     // Org datasets card (AGL-419): org/data renders it through the
     // 'orgData' widget slot.

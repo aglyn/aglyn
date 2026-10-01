@@ -554,13 +554,6 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/crm/src/lib/components/deal-products-card.tsx",
-      "rules": [
-        "plugin-collection:commerce"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/crm/src/lib/server/campaign-filing-activity.ts",
       "rules": [
         "plugin-collection:marketing"
@@ -620,15 +613,7 @@
     {
       "path": "libs/plugins/logic/src/lib/components/host-reference-health-card.component.tsx",
       "rules": [
-        "plugin-collection:data",
         "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/components/host-variables-card.component.tsx",
-      "rules": [
-        "plugin-collection:workflows"
       ],
       "lane": "coupling"
     },
@@ -750,7 +735,6 @@
     {
       "path": "libs/plugins/workflows/src/lib/components/use-automation-step-pickers.ts",
       "rules": [
-        "plugin-collection:data",
         "plugin-collection:marketing"
       ],
       "lane": "coupling"
@@ -758,7 +742,6 @@
     {
       "path": "libs/plugins/workflows/src/lib/components/use-org-automation-step-pickers.ts",
       "rules": [
-        "plugin-collection:data",
         "plugin-collection:marketing"
       ],
       "lane": "coupling"

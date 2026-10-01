@@ -25,7 +25,6 @@ import {
   DEAL_LINE_ITEM_QUANTITY_MAX,
   DEAL_LINE_ITEMS_MAX,
   lineItemsTotalCents,
-  nameSearchToken,
   pluginDocsHelp,
   readDealLineItems,
 } from '@aglyn/aglyn'
@@ -53,17 +52,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  doc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-} from 'firebase/firestore'
+import { doc, getDocs, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import type { CrmOrgDoc } from '../hooks/use-crm-scope'
 import {
   amountInputValue,
@@ -408,44 +399,42 @@ function AddLineDialog(props: AddLineDialogProps) {
   }, [open, catalog])
 
   /*
-   * THE CATALOG SEARCH: the first typed word as a prefix token over active
-   * products, ordered by name, debounced so a name typed at speed is one
-   * query rather than one per letter. Each variant is its own choice,
-   * priced from `priceUsd` in cents.
+   * THE CATALOG SEARCH: what is typed, matched the way the plugin that keeps
+   * products matches it — through the source it publishes (AGL-3080), which
+   * offers active products only — debounced so a name typed at speed is one
+   * query rather than one per letter. Nothing typed, or no plugin keeping
+   * products, matches nothing. Each variant is its own choice, priced from
+   * its `priceUsd` in cents.
    */
   useEffect(() => {
     if (!open || door !== 'catalog' || !hostId) return
-    const token = nameSearchToken(search)
-    if (!token) {
+    const products = pluginRecordListSource('product')?.source ?? null
+    const catalogQuery = products?.query(firestore, { hostId, search, limit: CATALOG_MATCHES }) ?? null
+    if (!products || !catalogQuery) {
       setChoices([])
       return
     }
     let active = true
     const timer = setTimeout(() => {
-      void getDocs(
-        query(
-          collection(firestore, 'hosts', hostId, 'products'),
-          where('status', '==', 'active'),
-          where('nameTokens', 'array-contains', token),
-          orderBy('nameLower'),
-          limit(CATALOG_MATCHES),
-        ),
-      )
+      void getDocs(catalogQuery)
         .then((snapshot) => {
           if (!active) return
           const next: CatalogChoice[] = []
           for (const entry of snapshot.docs) {
-            const productName = String(entry.get('name') ?? '')
-            const variants = (entry.get('variants') as Array<Record<string, unknown>> | undefined) ?? []
+            const product = products.record(entry.id, entry.data())
+            if (!product) continue
+            const variants = Array.isArray(product.facts['variants'])
+              ? (product.facts['variants'] as Array<Record<string, unknown>>)
+              : []
             const priced = variants.length
               ? variants
-              : [{ id: '', priceUsd: entry.get('priceUsd') }]
+              : [{ id: '', options: {}, priceUsd: product.facts['priceUsd'] }]
             for (const variant of priced) {
               const options = Object.values((variant['options'] as Record<string, string>) ?? {})
-              const label = options.length ? `${productName} — ${options.join(' / ')}` : productName
+              const label = options.length ? `${product.name} — ${options.join(' / ')}` : product.name
               next.push({
-                key: `${entry.id}:${String(variant['id'] ?? '')}`,
-                productId: entry.id,
+                key: `${product.id}:${String(variant['id'] ?? '')}`,
+                productId: product.id,
                 label,
                 unitAmountCents: Math.max(0, Math.round((Number(variant['priceUsd']) || 0) * 100)),
               })

@@ -37,6 +37,10 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import {
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -265,7 +269,8 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   if (draft && !editorOpened) setEditorOpened(true)
   /*
    * Workflow picker options (AGL-261): computed variables reference the
-   * workflow by doc id instead of a typed name.
+   * workflow by doc id instead of a typed name. The workflows are the
+   * workflows plugin's, listed through the source it publishes (AGL-3080).
    *
    * READ WHEN THE EDITOR OPENS, not when the card mounts (AGL-2501). Nothing
    * outside the dialog below touches these rows — the table shows a computed
@@ -281,23 +286,20 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   const { data: workflowDocs } = useFirestoreCollection<any>(
     () =>
       editorOpened
-        ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'workflows'),
-            WORKFLOW_OPTION_CEILING,
-          )
+        ? pluginRecordListQuery('workflow', firestore, {
+            hostId,
+            limit: WORKFLOW_OPTION_CEILING + 1,
+          })
         : null,
     [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
   const { rows: readWorkflows, truncated: workflowOptionsTruncated } =
     ceilingedWindow<any>(workflowDocs, WORKFLOW_OPTION_CEILING)
-  // Sorting the whole ceiling, not a page of it.
-  const workflowOptions = readWorkflows
-    .filter((workflow: any) => !workflow.deletedAt && workflow.name)
-    .map((workflow: any) => ({
-      id: workflow.$id as string,
-      name: workflow.name as string,
-    }))
+  // Sorting the whole ceiling, not a page of it. The workflows plugin answers
+  // live, named workflows only.
+  const workflowOptions = pluginRecordsFromRows('workflow', readWorkflows)
+    .map((workflow) => ({ id: workflow.id, name: workflow.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
   /*
    * Sorting is safe HERE in a way it is not on a paged list: these rows are

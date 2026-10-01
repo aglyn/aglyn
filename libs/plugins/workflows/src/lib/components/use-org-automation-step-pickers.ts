@@ -16,8 +16,11 @@
  */
 'use client'
 
-import { datasetPickerOptions } from '@aglyn/aglyn'
 import { scopeCovers } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -31,13 +34,7 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
-import {
-  collection,
-  documentId,
-  limit,
-  orderBy,
-  query,
-} from 'firebase/firestore'
+import { collection } from 'firebase/firestore'
 import { useMemo } from 'react'
 import type { AutomationStepPickers } from './automation-step-fields.component'
 import {
@@ -70,23 +67,23 @@ export function useOrgAutomationStepPickers(
 ): AutomationStepPickerData {
   const firestore = useFirestore()
   /*
-   * Unfiltered, ordered by id: the org hub admits only org-wide members, who
-   * read every dataset, and `documentId()` ordering is served by the
-   * automatic index where a field order would need a composite one.
+   * The organization's own datasets, listed through the source the data
+   * plugin publishes (AGL-3080): the org hub admits only org-wide members,
+   * who read every dataset, and placement narrows them below.
    */
   const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
       editorOpened && orgId
-        ? query(
-            collection(firestore, 'orgs', orgId, 'datasets'),
-            orderBy(documentId()),
-            limit(EDITOR_OPTION_CEILING + 1),
-          )
+        ? pluginRecordListQuery('dataset', firestore, {
+            orgId,
+            hostId: null,
+            limit: EDITOR_OPTION_CEILING + 1,
+          })
         : null,
     [firestore, orgId, editorOpened],
     { idField: '$id' },
   )
-  const { rows: datasetDocs, truncated: datasetsTruncated } =
+  const { rows: datasetRows, truncated: datasetsTruncated } =
     ceilingedWindow<any>(datasetRead, EDITOR_OPTION_CEILING)
   const { data: listRead } = useFirestoreCollection<any>(
     () =>
@@ -124,7 +121,10 @@ export function useOrgAutomationStepPickers(
       workflowOptions: [],
       overlayOptions: [],
       webhookOptions: [],
-      datasetOptions: datasetPickerOptions((datasetDocs ?? []).filter(covers)),
+      datasetOptions: pluginRecordsFromRows('dataset', datasetRows)
+        .filter((dataset) => scopeCovers(dataset.facts['visibleTo'] as string[] | undefined, placement))
+        .map((dataset) => ({ id: dataset.id, name: dataset.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
       listOptions: (listDocs ?? [])
         .filter((list: any) => !list.deletedAt && list.name)
         .map((list: any) => ({ id: list.$id as string, name: list.name as string }))
@@ -138,7 +138,7 @@ export function useOrgAutomationStepPickers(
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     }
-  }, [datasetDocs, listDocs, campaignDocs, placement])
+  }, [datasetRows, listDocs, campaignDocs, placement])
 
   const truncated = [
     datasetsTruncated ? 'datasets' : null,

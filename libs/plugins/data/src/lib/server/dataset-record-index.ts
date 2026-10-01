@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-import { effectiveDatasetModel, type DatasetModel } from '@aglyn/aglyn/app-utils/dataset-models'
-import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
   PluginIndexedRecord,
@@ -24,6 +22,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
+import { datasetIndexedRecord } from '../model/dataset-record'
 
 /**
  * The data plugin's `dataset` index (AGL-3080): the workspace's datasets, as
@@ -36,33 +35,9 @@ import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
  * with it are answered — the site Data page's rule. A deleted dataset is left
  * out of every answer.
  *
- * A `dataset`'s `facts`:
- *   `fields` — its fields in the dataset page's order, each
- *   `{ id, name, type }`; and `visibleTo` — the scope tokens it is shared
- *   with, so a reader acting for a member can apply the platform's own
- *   visibility rule to them. Never a record.
+ * Each record is `datasetIndexedRecord`'s (`model/dataset-record.ts`): the
+ * name, the fields and the scope tokens, never a record of the dataset.
  */
-
-type Data = Record<string, unknown>
-
-const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
-
-function recordOf(id: string, data: Data | undefined): PluginIndexedRecord | null {
-  if (!data || data['deletedAt'] != null) return null
-  const model = effectiveDatasetModel(data as { model?: DatasetModel; fields?: string[] })
-  return {
-    id,
-    name: datasetDisplayName(data) || id,
-    facts: {
-      fields: model.order.map((fieldId) => ({
-        id: fieldId,
-        name: text(model.fields[fieldId]?.name) || fieldId,
-        type: String(model.fields[fieldId]?.type ?? 'text'),
-      })),
-      visibleTo: Array.isArray(data['visibleTo']) ? (data['visibleTo'] as string[]) : [],
-    },
-  }
-}
 
 function datasets(orgId: string) {
   return firebaseAdmin.app().firestore().collection('orgs').doc(orgId).collection('datasets')
@@ -77,14 +52,14 @@ export const datasetRecordIndex: PluginRecordIndex = {
     // deleted datasets are filtered after the read.
     const snapshot = await query.limit(limit + 1).get()
     const records = snapshot.docs
-      .map((doc) => recordOf(doc.id, doc.data()))
+      .map((doc) => datasetIndexedRecord(doc.id, doc.data()))
       .filter((record): record is PluginIndexedRecord => record !== null)
     return { records: records.slice(0, limit), truncated: snapshot.size > limit }
   },
   async get({ orgId, hostId, id }) {
     if (!orgId || !id) return null
     const snapshot = await datasets(orgId).doc(id).get()
-    const record = snapshot.exists ? recordOf(snapshot.id, snapshot.data()) : null
+    const record = snapshot.exists ? datasetIndexedRecord(snapshot.id, snapshot.data()) : null
     if (!record || !hostId) return record
     return visibleToHost(record.facts['visibleTo'] as string[], hostId) ? record : null
   },

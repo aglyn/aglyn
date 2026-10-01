@@ -20,6 +20,7 @@ import type {
   PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { productIndexedRecord } from '../model/product-record'
 
 /**
  * The commerce plugin's record indexes (AGL-3080): its products and its
@@ -30,42 +31,11 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
  * Both are a SITE's (`hostId` required; an org-only scope answers nothing).
  * A deleted product and an unnamed one are left out of every answer.
  *
- * A product's `facts`:
- *   `type` (`physical` | `digital` | `service` | the stored value),
- *   `description`, `tags: string[]`, `categoryIds: string[]`,
- *   `options: Array<{ name, values: string[] }>`, `imageUrl` (the first
- *   photo's stored media value, or `null`), `seoTitle`, `seoDescription`.
- * A category's `facts` are empty: it is its name.
+ * A product is `productIndexedRecord`'s (`model/product-record.ts`), which
+ * documents its facts. A category's `facts` are empty: it is its name.
  */
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '')
-const strings = (value: unknown): string[] =>
-  (Array.isArray(value) ? value : []).map(str).filter(Boolean)
-
-function productRecord(id: string, data: Record<string, unknown> | undefined): PluginIndexedRecord | null {
-  if (!data || data['deletedAt'] != null) return null
-  const name = str(data['name'])
-  if (!name) return null
-  const seo = (data['seo'] ?? {}) as Record<string, unknown>
-  const mediaUrls = Array.isArray(data['mediaUrls']) ? data['mediaUrls'] : []
-  return {
-    id,
-    name,
-    facts: {
-      type: data['type'],
-      description: str(data['description']),
-      tags: strings(data['tags']),
-      categoryIds: strings(data['categoryIds']),
-      options: (Array.isArray(data['options']) ? data['options'] : []).map((option) => {
-        const record = (option ?? {}) as Record<string, unknown>
-        return { name: str(record['name']), values: strings(record['values']) }
-      }),
-      imageUrl: str(mediaUrls[0]) || str(data['imageUrl']) || null,
-      seoTitle: str(seo['title']),
-      seoDescription: str(seo['description']),
-    },
-  }
-}
 
 function hostCollection(hostId: string, name: 'products' | 'productCategories') {
   return firebaseAdmin.app().firestore().collection('hosts').doc(hostId).collection(name)
@@ -78,14 +48,14 @@ export const productRecordIndex: PluginRecordIndex = {
     // deleted rows are filtered after the read, like every reader did.
     const snapshot = await hostCollection(hostId, 'products').limit(limit + 1).get()
     const records = snapshot.docs
-      .map((doc) => productRecord(doc.id, doc.data()))
+      .map((doc) => productIndexedRecord(doc.id, doc.data()))
       .filter((record): record is PluginIndexedRecord => record !== null)
     return { records: records.slice(0, limit), truncated: snapshot.size > limit }
   },
   async get({ hostId, id }) {
     if (!hostId || !id) return null
     const snapshot = await hostCollection(hostId, 'products').doc(id).get()
-    return snapshot.exists ? productRecord(snapshot.id, snapshot.data()) : null
+    return snapshot.exists ? productIndexedRecord(snapshot.id, snapshot.data()) : null
   },
 }
 

@@ -30,6 +30,7 @@ import {
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { WORKFLOW_USAGE_ZONE } from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerWorkflowsRecordLists } from './model/workflows-record-lists'
 import { registerWorkflowsRecordRoutes } from './model/workflows-record-routes'
 import { WORKFLOWS_SEARCH_SOURCES } from './model/workflows-search-sources'
 
@@ -54,6 +55,7 @@ const WorkflowsConsolePage = lazy(
  */
 export function registerWorkflowsConsole(): void {
   registerWorkflowsRecordRoutes()
+  registerWorkflowsRecordLists()
   registerPluginZone(
     {
       zone: WORKFLOW_USAGE_ZONE,

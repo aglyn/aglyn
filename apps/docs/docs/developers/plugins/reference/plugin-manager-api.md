@@ -813,6 +813,48 @@ Logic answers for a `workflow` (the variables it computes), which is how the
 Automation page learns what a workflow's deletion would leave on its fallback
 value without either plugin importing the other.
 
+## Record lists — `plugin-record-lists` (console)
+
+The browser's half of the record index: the records of a kind, LISTED in the
+console for another plugin's picker or check — an automation step choosing a
+dataset, a reference check confirming a workflow still exists, a deal
+searching the catalog — without that plugin querying the owner's collection
+from the browser itself.
+
+```ts
+// the owner, from its console registrar
+registerPluginRecordListSource('bottle', {
+  query: (firestore, { hostId, search, limit: max }) =>
+    hostId
+      ? query(collection(firestore, 'hosts', hostId, 'bottles'), orderBy(documentId()), limit(max))
+      : null,
+  record: (id, data) => (data.deletedAt ? null : { id, name: String(data.name ?? id), facts: {} }),
+})
+
+// any other plugin's console code, with its own listener
+const { data } = useFirestoreCollection(
+  () => (open ? pluginRecordListQuery('bottle', firestore, { hostId, limit: 101 }) : null),
+  [firestore, hostId, open],
+  { idField: '$id' },
+)
+const bottles = pluginRecordsFromRows('bottle', data)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordListSource(kind, source, { pluginId? })` | A kind another plugin lists throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `source.query(firestore, { orgId?, hostId?, search?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. |
+| `source.record(id, data)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed). |
+| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows)` | The reader's half: the query to listen to, and the rows read back through the owner. Both answer nothing where no plugin keeps the kind here. |
+
+The reader runs the query with the console's own collection listener, so the
+read is bounded, retried and reported like every other list. Import it by its
+own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-lists`). Data lists the
+workspace's `dataset` records (a site's narrowed by its scope tokens),
+Workflows a site's `workflow`, `webhook` and `action` records, and Commerce
+FINDS a site's active `product` records by the first word typed, each with its
+price and priced variants.
+
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The

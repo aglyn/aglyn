@@ -20,14 +20,7 @@ import { pluginDocsHelp, scopeTokensForHost } from '@aglyn/aglyn'
 import { auditHostReferences } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
-import {
-  collection,
-  documentId,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore'
+import { collection, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   useFirestore,
@@ -44,6 +37,10 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import {
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 
 export interface HostReferenceHealthCardProps {
   hostId: string
@@ -123,42 +120,42 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   // Scoped (AGL-1044) — see the note in host-actions-card: an unfiltered
   // list is rejected, not filtered.
   // Scoped to the HOST, not the viewer (AGL-1044): the audit speaks for this host, so it must judge against what THIS host can reach — an org-wide
-  // admin would otherwise be offered datasets that resolve to nothing at
+  // admin would otherwise be offered org records that resolve to nothing at
   // render time. Filtering by the host's tokens also satisfies the
   // AGL-1041 rules, since they are a subset of any viewer's who can reach
   // this host at all.
   // Memoised: this is a listener DEPENDENCY, and a fresh array each
   // render tears the subscription down and clears its data every time.
   const scopeTokens = useMemo(() => scopeTokensForHost(hostId), [hostId])
-  // The `visibleTo` filter is now unconditional: the only scope this hook
-  // hands out is an org one, and org datasets are all scoped (AGL-1041).
-  // It used to be conditional on having an org, for the host fallback's
-  // sake — those rows carried no `visibleTo` and the filter would have
-  // matched nothing.
   /*
-   * `documentId()` rather than a field, for the reason the audience sweep in
-   * `campaign-send.ts` gives: Firestore's automatic single-field index for an
-   * array member is keyed on the value and the document name, so
-   * `array-contains-any` plus `orderBy(__name__)` is served by it. Ordering on
-   * anything else here would need a composite index that does not exist.
+   * The datasets are the data plugin's, listed through the source it
+   * publishes (AGL-3080): the ones shared with THIS site, which is the set a
+   * step on this site can reach. Shaped as the other windows are, so the
+   * audit reads every known set the same way.
    */
+  const datasetOrgId = dataScope?.[1] ?? null
   const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
-      dataScope
-        ? query(
-            collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-            where('visibleTo', 'array-contains-any', scopeTokens),
-            orderBy(documentId()),
-            limit(REFERENCE_CEILING + 1),
-          )
+      datasetOrgId
+        ? pluginRecordListQuery('dataset', firestore, {
+            orgId: datasetOrgId,
+            hostId,
+            limit: REFERENCE_CEILING + 1,
+          })
         : null,
-    [firestore, dataScope, scopeTokens],
+    [firestore, datasetOrgId, hostId],
     { idField: '$id' },
   )
-  const datasetDocs = useMemo(
-    () => ceilingedWindow<any>(datasetRead, REFERENCE_CEILING),
-    [datasetRead],
-  )
+  const datasetDocs = useMemo(() => {
+    const { rows, truncated } = ceilingedWindow<any>(datasetRead, REFERENCE_CEILING)
+    return {
+      rows: pluginRecordsFromRows('dataset', rows).map((dataset) => ({
+        $id: dataset.id,
+        name: dataset.name,
+      })),
+      truncated,
+    }
+  }, [datasetRead])
   /*
    * The campaign containers an "Assign to a campaign" step runs against
    * (AGL-3052); `campaigns` holds the email sends, which no step names.

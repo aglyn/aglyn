@@ -23,7 +23,6 @@ import {
 import {
   datasetDisplayName,
   describeDatasetRecordErrors,
-  datasetPickerOptions,
   defaultDatasetFieldId,
   humanizeDatasetFieldId,
   parseDatasetFieldEntries,
@@ -409,58 +408,6 @@ describe('datasets', () => {
       const accepted = prepareDatasetRecordWrite({ model }, { stars: '4' })
       expect(accepted.errors).toEqual({})
       expect(accepted.values).toEqual({ stars: 4 })
-    })
-  })
-
-  /**
-   * The Actions card's "Save to dataset" select is built from these. Every
-   * path that creates a dataset today writes `displayName` and no `name`, so
-   * a select that keys on `name` offers nothing for any dataset made since
-   * AGL-536.
-   */
-  describe('datasetPickerOptions', () => {
-    it('offers a dataset that carries only displayName', () => {
-      expect(
-        datasetPickerOptions([{ $id: 'leads', displayName: 'Leads' }]),
-      ).toEqual([{ id: 'leads', name: 'Leads' }])
-    })
-
-    it('labels a pre-migration dataset by its legacy name', () => {
-      expect(
-        datasetPickerOptions([{ $id: 'old', name: 'Subscribers' }]),
-      ).toEqual([{ id: 'old', name: 'Subscribers' }])
-    })
-
-    it('prefers displayName when a document carries both', () => {
-      expect(
-        datasetPickerOptions([
-          { $id: 'both', displayName: 'Customers', name: 'customers_v1' },
-        ]),
-      ).toEqual([{ id: 'both', name: 'Customers' }])
-    })
-
-    it('leaves out a deleted dataset', () => {
-      expect(
-        datasetPickerOptions([
-          { $id: 'gone', displayName: 'Gone', deletedAt: 1 },
-          { $id: 'kept', displayName: 'Kept' },
-        ]),
-      ).toEqual([{ id: 'kept', name: 'Kept' }])
-    })
-
-    it('offers a dataset with no name under its id instead of hiding it', () => {
-      expect(datasetPickerOptions([{ $id: 'unnamed' }])).toEqual([
-        { id: 'unnamed', name: 'unnamed' },
-      ])
-    })
-
-    it('sorts by the label it shows', () => {
-      expect(
-        datasetPickerOptions([
-          { $id: 'b', displayName: 'Orders' },
-          { $id: 'a', name: 'Bookings' },
-        ]).map((option) => option.name),
-      ).toEqual(['Bookings', 'Orders'])
     })
   })
 
