@@ -69,12 +69,12 @@ describe('the lead vocabulary', () => {
   })
 
   /**
-   * The list's own status control offers new, working and unqualified;
+   * The list's own status control offers new, nurturing, working and unqualified;
    * qualification is the conversion's to write, beside the contact it
    * created. A file may set exactly what a person may.
    */
-  it('offers the three statuses a person may set, and not qualified', () => {
-    expect([...LEAD_IMPORT_STATUSES]).toEqual(['new', 'working', 'unqualified'])
+  it('offers the four statuses a person may set, and not qualified', () => {
+    expect([...LEAD_IMPORT_STATUSES]).toEqual(['new', 'nurturing', 'working', 'unqualified'])
   })
 })
 

@@ -27,10 +27,12 @@ import { Chip, type ChipProps } from '@mui/material'
 /**
  * One palette key per status, so the list and the record page paint the same
  * state the same way. `qualified` is the converted state and reads as the
- * success it is; `unqualified` is outlined and neutral — closed, not wrong.
+ * success it is; `nurturing` — automation is reaching it, no person yet —
+ * takes its own hue between New and Working; `unqualified` is outlined and neutral — closed, not wrong.
  */
 const STATUS_COLOR: Record<CrmLeadStatus, ChipProps['color']> = {
   new: 'info',
+  nurturing: 'secondary',
   working: 'primary',
   qualified: 'success',
   unqualified: 'default',

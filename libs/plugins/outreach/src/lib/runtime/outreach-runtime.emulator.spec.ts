@@ -316,6 +316,36 @@ async function enroll(n: number, overrides: Partial<OutreachEnrollment> = {}): P
   return enrollment
 }
 
+/**
+ * A lead — the org's own record, captured by a form — and its enrollment,
+ * due now (AGL-3234). The lead's stage is what a send and a reply move.
+ */
+async function enrollLead(n: number, lead: Record<string, unknown> = {}): Promise<OutreachEnrollment> {
+  const leadId = `lead-${n}`
+  const email = `person${n}@example.org`
+  await org()
+    .collection('leads')
+    .doc(leadId)
+    .set({
+      email,
+      name: `Pat${n} Example`,
+      company: `Company ${n}`,
+      sources: ['form:contact'],
+      address: { country: 'US' },
+      ...lead,
+    })
+  return enroll(n, {
+    id: `${SEQUENCE.id}_${leadId}`,
+    target: 'lead',
+    contactId: '',
+    leadId,
+  })
+}
+
+async function leadStatus(n: number): Promise<unknown> {
+  return (await org().collection('leads').doc(`lead-${n}`).get()).get('status')
+}
+
 async function enrollment(id: string): Promise<OutreachEnrollment> {
   return (await org().collection('outreachEnrollments').doc(id).get()).data() as OutreachEnrollment
 }
@@ -653,6 +683,69 @@ describeEmulated('the send job (AGL-2981)', () => {
     expect(report.recovered).toBe(1)
     expect(gmail.sent).toHaveLength(1)
     expect(await enrollment(one.id)).toMatchObject({ stepIndex: 1, sendClaim: null })
+  })
+})
+
+describeEmulated('the lead stage a sequence moves (AGL-3446)', () => {
+  it('moves a New lead to Nurturing when a step is sent to it, and not before', async () => {
+    await seedOrg()
+    await enrollLead(1)
+    expect(await leadStatus(1)).toBeUndefined()
+
+    const report = await tick()
+
+    expect(report).toMatchObject({ sent: 1 })
+    expect(await leadStatus(1)).toBe('nurturing')
+  })
+
+  it('leaves a lead alone when nothing was sent to it', async () => {
+    await seedOrg()
+    const one = await enrollLead(1)
+    await org()
+      .collection('outreachDoNotContact')
+      .doc(String(outreachDoNotContactKey(one.email)))
+      .set({ key: 'k', reason: 'manual', source: 'member', addedByUid: REP, addedAtMs: 1 })
+
+    await tick()
+
+    expect(gmail.sent).toHaveLength(0)
+    expect(await leadStatus(1)).toBeUndefined()
+  })
+
+  it('never moves a Working or closed lead back to Nurturing', async () => {
+    await seedOrg()
+    await enrollLead(1, { status: 'working' })
+    await enrollLead(2, { status: 'unqualified', unqualifiedReason: 'Not a fit' })
+
+    await tick()
+
+    // The Working lead was mailed; whatever the closed one met, it stays closed.
+    expect(gmail.sentHeaders(0)['To']).toBe('person1@example.org')
+    expect(await leadStatus(1)).toBe('working')
+    expect(await leadStatus(2)).toBe('unqualified')
+  })
+
+  it('moves a Nurturing lead to Working when it replies', async () => {
+    await seedOrg()
+    const one = await enrollLead(1)
+    await tick()
+    expect(await leadStatus(1)).toBe('nurturing')
+    const sent = await enrollment(one.id)
+    clock += 3_600_000
+    gmail.deliver({
+      threadId: String(sent.gmailThreadId),
+      from: 'Pat1 Example <person1@example.org>',
+      to: MAILBOX_EMAIL,
+      subject: 'Re: A question about Company 1',
+      text: 'Sure, send me more.',
+      atMs: clock - 60_000,
+      messageId: '<reply-lead-1@mail.example.org>',
+      headers: { 'In-Reply-To': sent.messageIds[0] },
+    })
+
+    await sync()
+
+    expect(await leadStatus(1)).toBe('working')
   })
 })
 

@@ -700,7 +700,7 @@ export interface LeadFunnel {
   total: number
   /** Leads at each status now, every status present. An absent status is `new`. */
   byStatus: Record<CrmLeadStatus, number>
-  /** `new` and `working` — the leads still needing somebody. */
+  /** `new`, `nurturing` and `working` — the leads still needing somebody. */
   open: number
   /** Qualified over every lead, 0–1, or `null` when there were none. */
   qualifiedRate: number | null
@@ -753,7 +753,7 @@ export function leadFunnel(
   return {
     total,
     byStatus,
-    open: byStatus.new + byStatus.working,
+    open: byStatus.new + byStatus.nurturing + byStatus.working,
     qualifiedRate: total > 0 ? byStatus.qualified / total : null,
     unqualifiedRate: total > 0 ? byStatus.unqualified / total : null,
     reasons: [...reasons.values()].sort(

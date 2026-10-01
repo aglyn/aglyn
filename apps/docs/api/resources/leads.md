@@ -80,7 +80,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | `siteId` | string | The site that captured the lead. **Read-only.** |
 | `email` | string \| null | The address — the lead's identity within its site. Set on [create](#create-a-lead); **read-only** after. |
 | `name` | string \| null | The person's name. Set on create or by a capture; **read-only** on a `PATCH`. |
-| `status` | string | `new`, `working`, `qualified` or `unqualified` — see [Status](#status). Writable, with rules. |
+| `status` | string | `new`, `nurturing`, `working`, `qualified` or `unqualified` — see [Status](#status). Writable, with rules. |
 | `ownerUid` | string \| null | The team member working the lead. Must be a member of your organization. Writable — by uid, or as `ownerEmail` (see [Update a lead](#update-a-lead)). |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
 | `unqualifiedReason` | string \| null | Why the lead was closed without converting. Present only while `status` is `unqualified`. Writable, with `status`. |
@@ -105,7 +105,8 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | Status | Meaning |
 | --- | --- |
 | `new` | Captured and untouched. A lead nobody has worked reads as `new` even though nothing has been written on it yet. |
-| `working` | Somebody is on it. |
+| `nurturing` | Automated email is reaching it — a sequence sent it a step, or a campaign email was delivered to it — and nobody has engaged yet. Set by Aglyn over `new` only; a `PATCH` may also set it. |
+| `working` | Somebody is on it. A reply to a sequence moves a `new` or `nurturing` lead here. |
 | `unqualified` | Closed without converting, with an `unqualifiedReason`. |
 | `qualified` | **Converted.** Reached only through [`POST /v1/leads/{id}/convert`](#convert-a-lead) — never by a `PATCH`, because the status is a claim that a contact exists and the conversion is what makes it true. A converted lead's status is fixed. |
 
@@ -120,7 +121,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | Param | Notes |
 | --- | --- |
 | `siteId` | Required — see [above](#site). |
-| `status` | `new`, `working`, `qualified` or `unqualified`. Anything else is a `400`. |
+| `status` | `new`, `nurturing`, `working`, `qualified` or `unqualified`. Anything else is a `400`. |
 | `ownerUid` | Leads this member owns. |
 | `limit`, `cursor` | [Standard pagination](../conventions.md#pagination). |
 
@@ -184,8 +185,8 @@ An omitted key is left alone, `null` clears an optional field, `{}` is a no-op.
 
 | Key | Notes |
 | --- | --- |
-| `status` | `new`, `working` or `unqualified`. Not `qualified` — [convert](#convert-a-lead) instead. |
-| `unqualifiedReason` | Required when `status` becomes `unqualified`; may be sent alone to reword the reason of a lead already unqualified. Refused with any other status. Setting the status back to `new` or `working` drops it. |
+| `status` | `new`, `nurturing`, `working` or `unqualified`. Not `qualified` — [convert](#convert-a-lead) instead. |
+| `unqualifiedReason` | Required when `status` becomes `unqualified`; may be sent alone to reword the reason of a lead already unqualified. Refused with any other status. Setting the status back to `new`, `nurturing` or `working` drops it. |
 | `ownerUid` | A member's uid, or `null` to clear. |
 | `ownerEmail` | A member's address, resolved against your organization's roster — for a spreadsheet or a zap that has the address and not the uid. Not with `ownerUid` in the same request. `null` clears. |
 | `notes` | Free text, or `null`. |

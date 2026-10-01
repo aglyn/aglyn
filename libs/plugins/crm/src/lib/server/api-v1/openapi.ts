@@ -300,7 +300,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     writeRequired: ['email'],
     writeOnly: {
       siteId: stringField('The site the lead belongs to, instead of the `siteId` query parameter.'),
-      status: stringField('`new`, `working` or `unqualified` (`unqualified` on a `PATCH` only). A lead becomes `qualified` by being converted.'),
+      status: stringField('`new`, `nurturing`, `working` or `unqualified` (`nurturing` and `unqualified` on a `PATCH` only). A lead becomes `qualified` by being converted.'),
       ownerEmail: stringField('A member’s address, resolved against the organization’s roster. Not with `ownerUid` in the same request.'),
     },
     fields: {

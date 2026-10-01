@@ -345,6 +345,13 @@ function seedPlatform() {
     firstSeenAtMs: NOW - DAY,
     visibleTo: ['host:site-b'],
   })
+  // One a sequence is reaching (AGL-3446): counted, never listed as unworked.
+  seed('orgs/org-a/leads/l-nurtured', {
+    email: 'seq@example.com',
+    status: 'nurturing',
+    firstSeenAtMs: NOW - 3 * DAY,
+    visibleTo: ['host:site-a'],
+  })
   seed('hosts/site-b/leads/l-working', {
     email: 'busy@example.com',
     status: 'working',
@@ -413,8 +420,8 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
     expect(body.orgs['org-free'].skipped).toBe('not-entitled')
     expect(body.orgs['org-off'].skipped).toBe('release-flag')
     expect(body.orgs['org-a'].members).toEqual({
-      ann: { overdue: 1, today: 1, leads: 1, notified: true, emailed: true },
-      bob: { overdue: 1, today: 0, leads: 1, notified: true, emailed: true },
+      ann: { overdue: 1, today: 1, leads: 1, nurturing: 1, notified: true, emailed: true },
+      bob: { overdue: 1, today: 0, leads: 1, nurturing: 0, notified: true, emailed: true },
       vic: { skipped: 'no-data-manage' },
     })
 
@@ -464,13 +471,17 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
     expect(bobMail.to).toEqual(['bob@acme.com'])
     expect(bobMail.text).toContain('- Joe <joe@example.com> · Shop · first seen Sep 1')
     expect(bobMail.text).not.toContain('jane@example.com')
+    // The nurturing lead is counted for whoever it is for, and never listed.
+    expect(annMail.text).toContain('1 lead is in sequences or campaigns.')
+    expect(annMail.text).not.toContain('seq@example.com')
+    expect(bobMail.text).not.toContain('in sequences or campaigns')
     expect(mockMetered).toBe(2)
 
     // The marker, per member, and the beat.
     const marker = mockStore.get(`orgs/org-a/${CRM_DIGEST_MARKER_COLLECTION}/2026-09-05`)
     expect(marker?.members).toEqual({
-      ann: { atMs: NOW, overdue: 1, today: 1, leads: 1, notified: true, emailed: true },
-      bob: { atMs: NOW, overdue: 1, today: 0, leads: 1, notified: true, emailed: true },
+      ann: { atMs: NOW, overdue: 1, today: 1, leads: 1, nurturing: 1, notified: true, emailed: true },
+      bob: { atMs: NOW, overdue: 1, today: 0, leads: 1, nurturing: 0, notified: true, emailed: true },
     })
     expect(mockStore.get(`platformCronBeats/${CRM_DIGEST_JOB_ID}`)?.jobId).toBe(
       CRM_DIGEST_JOB_ID,
@@ -578,6 +589,7 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
       overdue: 1,
       today: 1,
       leads: 1,
+      nurturing: 1,
       notified: true,
     })
     expect(mockSent).toEqual([])

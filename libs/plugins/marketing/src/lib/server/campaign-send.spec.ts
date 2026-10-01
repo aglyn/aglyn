@@ -290,6 +290,20 @@ jest.mock('@aglyn/tenant-data-admin/server/outbound-send-review', () => ({
   screenOutboundSend: (request: unknown) => mockScreenOutboundSend(request),
 }))
 
+/*
+ * The record system's reach seam (AGL-3446). Recorded rather than executed:
+ * the CRM's `lead-nurturing.spec` owns what the write does; the sender's
+ * contract is to hand it the addresses that were reached.
+ */
+const mockNurtured: Array<{ orgId: string; hostId: string; emails: readonly string[] }> = []
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-record-email-state', () => ({
+  ...jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-record-email-state'),
+  stampRecordEmailReach: async (input: { orgId: string; hostId: string; emails: readonly string[] }) => {
+    mockNurtured.push(input)
+    return { records: input.emails.length }
+  },
+}))
+
 import { compress } from '@aglyn/aglyn/server'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
@@ -986,6 +1000,18 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
       templateScreenId: 'screen-1',
       senderUid: 'uid-1',
     })
+
+  it('moves the leads it reached on to Nurturing, and a test send none (AGL-3446)', async () => {
+    seed(NODES)
+    mockNurtured.length = 0
+    await expect(recorded()).resolves.toMatchObject({ sent: 1 })
+    expect(mockNurtured).toEqual([{ orgId: 'org-1', hostId: 'host-1', emails: ['dana@example.com'] }])
+
+    mockNurtured.length = 0
+    seed(NODES)
+    await send()
+    expect(mockNurtured).toEqual([])
+  })
 
   it('meters the delivered count once, as a campaign', async () => {
     seed(NODES)

@@ -143,6 +143,7 @@ import {
  */
 const LEAD_PATCH_STATUSES = [
   'new',
+  'nurturing',
   'working',
   'unqualified',
 ] as const satisfies readonly Exclude<CrmLeadStatus, 'qualified'>[]

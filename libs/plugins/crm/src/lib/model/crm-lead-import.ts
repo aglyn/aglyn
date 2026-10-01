@@ -118,7 +118,7 @@ const NAME_MAX = 120
 /**
  * The statuses a file may set.
  *
- * The list's own status control offers exactly these three, and for the
+ * The list's own status control offers exactly these four, and for the
  * reason given above: `qualified` is written by the conversion, beside the
  * contact it produced.
  */
@@ -168,7 +168,7 @@ export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
   phone: 'Phone',
   website: 'Website',
   leadSource: 'Lead source',
-  status: 'Status (new, working, unqualified)',
+  status: 'Status (new, nurturing, working, unqualified)',
   ownerEmail: 'Owner (team member email)',
   addressLine1: 'Address line 1',
   addressLine2: 'Address line 2',

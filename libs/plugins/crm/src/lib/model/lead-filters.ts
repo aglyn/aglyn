@@ -19,6 +19,7 @@ import {
   EMAIL_STATE_LABELS,
   EMAIL_STATE_STATUSES,
   CRM_LEAD_STATUS_LABELS,
+  CRM_LEAD_OPEN_STATUSES,
   CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
   CRM_LEAD_STATUSES,
   type EmailStateStatus,
@@ -41,7 +42,8 @@ import {
 /**
  * What the Leads section's `Show` control offers (AGL-2608): the two
  * aggregate views and each status on its own. `open` is the default — the
- * list opens on the work — asked of the query as `status in [new, working]`,
+ * list opens on the work — asked of the query as
+ * `status in [new, nurturing, working]`,
  * which every lead answers because every lead writer stores a status, `new`
  * for one nobody has touched (`crmLeadListFields`, AGL-3321).
  */
@@ -50,6 +52,7 @@ export type LeadFilter = 'open' | 'all' | CrmLeadStatus
 export const LEAD_FILTERS: readonly LeadFilter[] = [
   'open',
   'new',
+  'nurturing',
   'working',
   'qualified',
   'unqualified',
@@ -60,6 +63,7 @@ export const LEAD_FILTER_LABELS: Record<LeadFilter, string> = {
   open: 'Open',
   all: 'All',
   new: CRM_LEAD_STATUS_LABELS.new,
+  nurturing: CRM_LEAD_STATUS_LABELS.nurturing,
   working: CRM_LEAD_STATUS_LABELS.working,
   qualified: CRM_LEAD_STATUS_LABELS.qualified,
   unqualified: CRM_LEAD_STATUS_LABELS.unqualified,
@@ -129,12 +133,12 @@ export const LEAD_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   campaignIds: 'Campaign',
 }
 
-/** The choices for Status: Open (new or working) and each status on its own. */
+/** The choices for Status: Open (new, nurturing or working) and each status on its own. */
 export const LEAD_STATUS_FILTER_OPTIONS = LEAD_FILTERS.filter(
   (option) => option !== 'all',
 ).map((option) => ({
   value: option,
-  label: option === 'open' ? 'Open (new or working)' : LEAD_FILTER_LABELS[option],
+  label: option === 'open' ? 'Open (new, nurturing or working)' : LEAD_FILTER_LABELS[option],
 }))
 
 /** The choices for Email: every verdict, plus the two aggregates. */
@@ -215,7 +219,7 @@ export const LEAD_FILTER_CODECS: Readonly<Record<string, ListGridFilterCodec>> =
  * lead writer stores (`crmLeadListFields` in `@aglyn/aglyn`):
  *
  *   status       `status`, stored `new` on a lead nobody has touched, so
- *                Open is `status in [new, working]`
+ *                Open is `status in [new, nurturing, working]`
  *   emailState   `emailStatus`, the verdict's status or `none`; "Cannot be
  *                emailed" is every verdict but `ok`
  *   leadSource   `leadSourceKey`, the label as the picklist compares it, or
@@ -320,7 +324,7 @@ export function leadQueryClause(
     case 'status': {
       const statuses: string[] = []
       for (const value of values) {
-        if (value === 'open') statuses.push('new', 'working')
+        if (value === 'open') statuses.push(...CRM_LEAD_OPEN_STATUSES)
         else if ((CRM_LEAD_STATUSES as readonly string[]).includes(value)) statuses.push(value)
         else return { refused: `${value} is not a lead status` }
       }

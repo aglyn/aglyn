@@ -21,8 +21,10 @@ import {
   pluginRecordEmailStateWriter,
   registerPluginRecordEmailStateWriter,
   stampRecordEmailEngagement,
+  stampRecordEmailReach,
   stampRecordEmailState,
   type PluginRecordEmailEngagementRequest,
+  type PluginRecordEmailReachRequest,
   type PluginRecordEmailStateRequest,
   type PluginRecordEmailStateWriter,
 } from './plugin-record-email-state'
@@ -132,5 +134,48 @@ describe('a send’s engagement, stamped by the record system (AGL-2616)', () =>
       { pluginId: 'records' },
     )
     expect(await stampRecordEmailEngagement(ENGAGEMENT)).toBeNull()
+  })
+})
+
+describe('a delivered marketing send, told to the record system (AGL-3446)', () => {
+  const REACH: PluginRecordEmailReachRequest = { orgId: 'org-1', hostId: 'host-1', emails: ['pat@example.com'] }
+
+  it('answers null while no plugin keeps records, or for one with no such stage', async () => {
+    expect(await stampRecordEmailReach(REACH)).toBeNull()
+    registerPluginRecordEmailStateWriter(writer('records'), { pluginId: 'records' })
+    expect(await stampRecordEmailReach(REACH)).toBeNull()
+  })
+
+  it('hands the organization, the site and the addresses to the record system', async () => {
+    const seen: PluginRecordEmailReachRequest[] = []
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async reached(request) {
+          seen.push(request)
+          return { records: 1 }
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailReach(REACH)).toEqual({ records: 1 })
+    expect(seen).toEqual([REACH])
+    // A send that reached nobody asks nothing.
+    expect(await stampRecordEmailReach({ ...REACH, emails: [] })).toBeNull()
+    expect(seen).toHaveLength(1)
+  })
+
+  it('never throws at the sender: a failing note is logged and answered as null', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    registerPluginRecordEmailStateWriter(
+      {
+        ...writer('records'),
+        async reached() {
+          throw new Error('storage down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await stampRecordEmailReach(REACH)).toBeNull()
   })
 })

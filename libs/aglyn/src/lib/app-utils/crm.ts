@@ -2343,6 +2343,13 @@ export function findOrgMember<T extends { uid: string; email?: string | null }>(
 /**
  * Where a lead stands, in the order a person works one.
  *
+ * `nurturing` is the stage automated email holds a lead in: a sequence step
+ * or a campaign email has reached it and no person has engaged yet. It is
+ * open — the lead still needs somebody — but it is not untouched, so the
+ * digest's unworked list leaves it out. Automation writes it only over
+ * `new` (a person may also set it by hand), and a reply moves it on to
+ * `working`.
+ *
  * `qualified` is the CONVERTED state — a lead becomes a contact by being
  * qualified, and the conversion stamps `convertedContactId` beside it — and
  * `unqualified` is the closed-without-conversion state with its reason. A
@@ -2351,6 +2358,7 @@ export function findOrgMember<T extends { uid: string; email?: string | null }>(
  */
 export const CRM_LEAD_STATUSES = [
   'new',
+  'nurturing',
   'working',
   'qualified',
   'unqualified',
@@ -2361,6 +2369,7 @@ export type CrmLeadStatus = (typeof CRM_LEAD_STATUSES)[number]
 /** How a lead status reads on screen — typed so a status cannot ship unlabeled. */
 export const CRM_LEAD_STATUS_LABELS: Record<CrmLeadStatus, string> = {
   new: 'New',
+  nurturing: 'Nurturing',
   working: 'Working',
   qualified: 'Qualified',
   unqualified: 'Unqualified',
@@ -2371,7 +2380,11 @@ export const CRM_LEAD_STATUS_LABELS: Record<CrmLeadStatus, string> = {
  * section shows by default, so the list opens on the work rather than on
  * the history.
  */
-export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
+export const CRM_LEAD_OPEN_STATUSES: readonly CrmLeadStatus[] = [
+  'new',
+  'nurturing',
+  'working',
+]
 
 /**
  * The statuses that mean nobody needs to work the lead any more — the
