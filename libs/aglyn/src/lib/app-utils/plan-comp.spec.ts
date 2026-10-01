@@ -87,6 +87,21 @@ import {
 } from './plan-entitlements'
 import type { OrgPlan } from '../foundation'
 
+/*
+ * The plugins' keys this suite reads, as their own `plan-entitlements`
+ * modules declare them (AGL-3080). `PLAN_ENTITLEMENTS` carries them at
+ * runtime — the manifest generator compiles each plugin's figures into it —
+ * but their types live in the plugins, which this library compiles without.
+ */
+declare module '../plugin-manager/plugin-entitlement-keys' {
+  interface PluginEntitlementQuotas {
+    assistCreditsPerMonth?: number
+    crmEmailsPerDay?: number
+    formSubmissionsPerMonth?: number
+    marketplaceFeePct?: number
+  }
+}
+
 const DEAD = ['canceled', 'unpaid', 'incomplete', 'incomplete_expired']
 
 /** A comp as the override route writes it. */

@@ -50,6 +50,17 @@ import {
   reserveCrmEmailSend,
 } from './crm-records'
 
+/*
+ * The CRM's own key, as its `plan-entitlements` module declares it
+ * (AGL-3080). `PLAN_ENTITLEMENTS` carries it at runtime; its type lives in the
+ * plugin, which this library compiles without.
+ */
+declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
+  interface PluginEntitlementQuotas {
+    crmEmailsPerDay?: number
+  }
+}
+
 /** Documents by collection path, the way the aggregate counts them. */
 const seeded = new Map<string, Array<Record<string, unknown>>>()
 /** Every `set()` on a document path, so the counter's write is inspectable. */

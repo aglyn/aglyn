@@ -548,9 +548,10 @@ Conventions the scaffold already applies:
   workflow builder, actions builder, and webhooks tabs, plus the shared
   `HostActivityCard` (exported for the app dashboard + screen-view). Each tab
   gates on its own plan flag (workflows / actions / webhooks), so all three
-  read the passed `org` rather than a single `entitled`. Depends on
-  `@aglyn/plugins-logic` for the where-used tooling — the first plugin→plugin
-  dependency.
+  read the passed `org` rather than a single `entitled`. Asks the
+  platform's where-used scan what a workflow computes; the logic plugin
+  answers it through its dependents source and draws the dialog in the
+  `workflowUsage` zone, so neither plugin imports the other.
 - **Data** (`libs/plugins/data`) — console-only, and dual-surfaced (AGL-395):
   the datasets editor is served both as the host `/data` plugin page and,
   because datasets are org-scoped, imported directly by the org `/org/data`

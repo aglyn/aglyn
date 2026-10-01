@@ -18,3 +18,7 @@
 export * from './lib/constants/bundle-common'
 export * from './lib/plugin'
 export * from './lib/model'
+// Type-only (AGL-3080): the plugin's entitlement keys are declared by module
+// augmentation in this module, so every program that loads the package
+// type-checks them. The figures reach core through the manifest generator.
+export type { marketplacePlanEntitlements } from './lib/plan-entitlements'

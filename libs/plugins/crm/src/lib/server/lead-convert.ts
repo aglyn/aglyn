@@ -45,14 +45,14 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
   type ConvertHostLeadRefusal,
   convertHostLead,
-} from '@aglyn/tenant-runtime/convert-host-lead'
+} from './convert-host-lead'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { holdsDataManage } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
 // The stage picker moved to the runtime with the writes; re-exported so the
 // pipeline code that imports it from here keeps its import.
-export { stageForNewDeal } from '@aglyn/tenant-runtime/convert-host-lead'
+export { stageForNewDeal } from './convert-host-lead'
 
 /** The body the console's convert dialog posts. */
 export interface LeadConvertRequest {

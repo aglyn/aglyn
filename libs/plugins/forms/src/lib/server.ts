@@ -104,3 +104,7 @@ export const formStatsHandler: PluginApiHandler = async (req, res) => {
 export function registerFormsConsoleApi(): void {
   registerPluginApiRoute('forms/stats', formStatsHandler)
 }
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { formsPlanEntitlements } from './plan-entitlements'

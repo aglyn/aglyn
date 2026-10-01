@@ -25,10 +25,8 @@ import {
   MEDIA_CDN_VARIANT_WIDTHS,
   parseMediaRef,
 } from '@aglyn/aglyn/app-utils/media-ref'
-import {
-  ESTIMATED_PAGE_TRANSFER_BYTES,
-  FREE_AI_TASTE_CREDITS_PER_MONTH,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,

@@ -32,7 +32,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostOrgId: (hostId: string | undefined) => (hostId ? 'org-1' : null),
 }))
 
-import type { ConsoleProductImportZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleProductImportZoneProps } from './ai-product-zones'
 import AiProductImportOption from './ai-product-import-option.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })

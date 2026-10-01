@@ -50,6 +50,8 @@ const PLUGIN = 'libs/plugins/workflows/src/lib/plugin.ts'
 const PAGE =
   'libs/plugins/workflows/src/lib/components/workflows-console-sections.ts'
 const NEXT_CONFIG = 'apps/console/next.config.js'
+/** The plugins' old addresses, compiled from `consoleRedirects`; the config spreads it. */
+const REDIRECTS = 'apps/console/constants/plugins.redirects.generated.json'
 /**
  * The switchboard row, where the plugin declares it: the generator compiles
  * each `catalog` block into the core's catalog, so this is the one place the
@@ -116,11 +118,15 @@ describe('the automation section', () => {
      * written out here: a redirect whose source drifts from the address it is
      * meant to rescue rescues nothing, and it would look right doing it.
      */
-    const config = readRepo(NEXT_CONFIG)
-    expect(config).toContain(`source: '${asNextSource(Route.HOST_WORKFLOWS)}'`)
-    expect(config).toContain(
-      `destination: '${asNextSource(Route.HOST_AUTOMATION)}'`,
+    expect(readRepo(NEXT_CONFIG)).toContain(
+      "require('./constants/plugins.redirects.generated.json')",
     )
+    expect(JSON.parse(readRepo(REDIRECTS))).toContainEqual({
+      pluginId: 'workflows',
+      source: asNextSource(Route.HOST_WORKFLOWS),
+      destination: asNextSource(Route.HOST_AUTOMATION),
+      permanent: true,
+    })
   })
 
   it('THE CONTROL: the route table really moved', () => {

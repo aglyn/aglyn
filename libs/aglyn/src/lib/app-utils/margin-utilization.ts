@@ -39,6 +39,7 @@ import {
   type OrgCogsResult,
   type OrgUsageRollupInput,
 } from './plan-entitlements'
+import { planQuotaOf } from '../plugin-manager/plugin-plan-entitlements'
 
 export { MARGIN_SCOPE_NOTE }
 
@@ -246,7 +247,8 @@ export function orgIncludedBands(
     // Per host, expanded by the host limit — `meteredIncludedAllowance`
     // expands these two and nothing else.
     storageGb: (hostLimit * entitlements.storagePerHostMb) / 1024,
-    formSubmissions: hostLimit * entitlements.formSubmissionsPerMonth,
+    formSubmissions:
+      hostLimit * planQuotaOf(entitlements, 'formSubmissionsPerMonth'),
     // Bandwidth IS the page-view band, expressed in the unit customers buy.
     pageViews: pageViewsFromBandwidthGb(entitlements.bandwidthGb),
     // Org-wide, in the unit the rollup stores. `dataStorageMbPerOrg` is
@@ -260,10 +262,10 @@ export function orgIncludedBands(
     // Never `UNLIMITED` on any plan, deliberately — Enterprise carries a
     // finite default. The band is a third-party liability rather than capacity
     // the platform already owns, so an uncapped one would be an uncapped bill.
-    assistCredits: entitlements.assistCreditsPerMonth,
+    assistCredits: planQuotaOf(entitlements, 'assistCreditsPerMonth'),
     // Two bands, one rate: the cost model prices both counters at `perRun`,
     // and the utilization is read against the band each builder sells.
-    workflowRuns: entitlements.workflowRunsPerMonth,
+    workflowRuns: planQuotaOf(entitlements, 'workflowRunsPerMonth'),
     actionRuns: entitlements.actionRunsPerMonth,
   }
 }

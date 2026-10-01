@@ -147,20 +147,21 @@ describe('which pages a form publish invalidates', () => {
 const readRepo = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
 
 const FORM_BESIGNER =
-  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx'
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/[documentSegment]/[docId]/versions/[versionId]/besigner/page.tsx'
 const PROMOTE_ROUTE = 'apps/console/app/api/hosts/forms/promote/route.ts'
 const ROUTE = 'apps/console/app/api/screens/revalidate/route.ts'
 const HELPER = 'apps/console/utils/revalidate-live-pages.ts'
 
 describe('both publish paths announce', () => {
-  it('the besigner publish drops the pages that place the form', () => {
+  it('the besigner publishes through the promote route, so it announces too', () => {
+    // One publish path, one announcement: the editor posts the version to the
+    // route the form's plugin declares, and that route drops the pages that
+    // place the form. Republishing a version the site already serves is how
+    // the editor refreshes those pages when nothing new was saved.
     const source = readRepo(FORM_BESIGNER)
-    expect(source).toMatch(
-      /revalidateLivePages\(\{ user, hostId, formId: formId as string \}\)/,
-    )
-    // Fired, never awaited: the publish already landed, and the scan reads
-    // every screen, layout and component on the site.
-    expect(source).toMatch(/void revalidateLivePages\(/)
+    expect(source).toContain('authorizedFetch(user, declared.publish.path')
+    expect(source).toContain('await publishVersion({ quiet: true })')
+    expect(source).not.toContain('revalidateLivePages')
   })
 
   it('the promote route announces server-side', () => {

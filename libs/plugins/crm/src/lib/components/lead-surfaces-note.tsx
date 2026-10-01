@@ -17,7 +17,7 @@
 
 'use client'
 
-import { buildRoute, Route } from '@aglyn/aglyn'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -298,7 +298,7 @@ export function LeadSurfacesNote(props: LeadSurfacesNoteProps) {
   const formHref = useCallback(
     (formId: string) =>
       orgSlug && host
-        ? buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId })
+        ? pluginRecordHref('form', { orgSlug, host }, formId)
         : null,
     [orgSlug, host],
   )

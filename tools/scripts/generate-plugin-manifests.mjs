@@ -606,6 +606,120 @@ async function pluginVideoEmbedProviders() {
   return rows.sort((a, b) => a.id.localeCompare(b.id))
 }
 
+/**
+ * What each plan includes of a plugin's own keys (AGL-3080), declared by the
+ * plugin that owns them: a plugin names a function under `planEntitlements`,
+ * and this loads `${package}/plan-entitlements` through jiti, calls it, and
+ * compiles the answer into the catalog file as data. Core's
+ * `PLAN_ENTITLEMENTS` composes it, and the readers include the published
+ * pricing tables and the plan comparison, neither of which loads a plugin —
+ * so a runtime registry would be one they had not filled
+ * (core `plugin-plan-entitlements.ts`).
+ *
+ * Checked here, because every figure is on a price list:
+ *
+ *  - ONE KEY, ONE OWNER, across quotas and features alike: two meanings for
+ *    one stored value would leave the plan table choosing by config order.
+ *  - EVERY PLAN, THE SAME PLANS: each declaration names the same plans as
+ *    every other, and the generated rows are typed `Record<OrgPlan, …>`, so
+ *    a plan left out or misspelled does not compile.
+ *  - A FIGURE THAT MEANS SOMETHING: a quota is a non-negative number, finite
+ *    or `Infinity` (`UNLIMITED`); a feature is a boolean. `NaN`, a string or
+ *    a negative would each read as a different answer in a different gate.
+ */
+const PLAIN_KEY = /^[a-z][A-Za-z0-9]*$/
+
+async function pluginPlanEntitlements() {
+  const declaring = config.plugins.filter((plugin) => plugin.register?.planEntitlements)
+  const quotas = []
+  const features = []
+  if (!declaring.length) return { quotas, features }
+  const jiti = jitiForWorkspace()
+  const owners = new Map()
+  let plans = null
+  const checkPlans = (byPlan, what) => {
+    if (!byPlan || typeof byPlan !== 'object' || Array.isArray(byPlan)) {
+      throw new Error(`${what} needs "byPlan", one entry per plan`)
+    }
+    const names = Object.keys(byPlan).sort()
+    if (!names.length) throw new Error(`${what}: "byPlan" names no plan`)
+    if (plans === null) plans = names
+    else if (names.join() !== plans.join()) {
+      throw new Error(`${what}: "byPlan" names ${names.join(', ')}, where every other declaration names ${plans.join(', ')}`)
+    }
+  }
+  for (const plugin of declaring) {
+    const specifier = `${plugin.package}/plan-entitlements`
+    const fnName = plugin.register.planEntitlements
+    const fn = (await jiti.import(specifier))[fnName]
+    if (typeof fn !== 'function') {
+      throw new Error(`${specifier} exports no function named ${fnName}`)
+    }
+    const answer = (await fn()) ?? {}
+    const where = `${specifier}: ${fnName}()`
+    const declaredQuotas = answer.quotas ?? []
+    const declaredFeatures = answer.features ?? []
+    if (!Array.isArray(declaredQuotas) || !Array.isArray(declaredFeatures)) {
+      throw new Error(`${where}: "quotas" and "features" are lists`)
+    }
+    if (!declaredQuotas.length && !declaredFeatures.length) {
+      throw new Error(`${where} declares nothing — drop the entry, or declare a key`)
+    }
+    for (const [kind, list, out] of [
+      ['quota', declaredQuotas, quotas],
+      ['feature', declaredFeatures, features],
+    ]) {
+      for (const declaration of list) {
+        const { key, label, byPlan, price } = declaration ?? {}
+        const what = `${where} ${kind} "${key ?? ''}"`
+        if (typeof key !== 'string' || !PLAIN_KEY.test(key)) {
+          throw new Error(`${where}: a ${kind} needs a plain camelCase "key"`)
+        }
+        const held = owners.get(key)
+        if (held) throw new Error(`${what} is already declared by "${held}" — one key has one owner`)
+        owners.set(key, plugin.id)
+        if (typeof label !== 'string' || !label.trim()) throw new Error(`${what} needs a "label"`)
+        checkPlans(byPlan, what)
+        for (const [plan, value] of Object.entries(byPlan)) {
+          const valid =
+            kind === 'quota'
+              ? typeof value === 'number' && value >= 0 && (Number.isFinite(value) || value === Infinity)
+              : typeof value === 'boolean'
+          if (!valid) {
+            throw new Error(
+              `${what}: "${plan}" is ${JSON.stringify(value)}; a ${kind} is ` +
+                (kind === 'quota' ? 'a non-negative number, or Infinity for UNLIMITED' : 'true or false'),
+            )
+          }
+        }
+        if (price !== undefined && (kind !== 'quota' || typeof price !== 'boolean')) {
+          throw new Error(`${what}: "price" is a boolean, and only on a quota`)
+        }
+        out.push({
+          pluginId: plugin.id,
+          key,
+          label,
+          ...(price ? { price: true } : {}),
+          byPlan: Object.fromEntries(Object.keys(byPlan).map((plan) => [plan, byPlan[plan]])),
+        })
+      }
+    }
+  }
+  return { quotas, features }
+}
+
+/**
+ * One row as TypeScript source. JSON cannot spell `Infinity`, and a quota
+ * that reads `null` in the generated file would be a band of zero to every
+ * reader, so the one value JSON loses is written as the literal it is.
+ */
+function literalRow(row) {
+  return JSON.stringify(row, (_key, value) => (value === Infinity ? '__INFINITY__' : value), 2).replace(
+    /"__INFINITY__"/g,
+    'Infinity',
+  )
+}
+
 /** One list of declarations as the manifest writes it, or '' for an empty optional one. */
 function declarationList(name, list, fields, { always = false } = {}) {
   if (!list.length) return always ? `    ${name}: [],\n` : ''
@@ -1024,6 +1138,9 @@ function hostCollectionRows() {
       if (declaration.resource !== undefined) {
         row.resource = hostResourceRow(declaration.resource, `${what} resource`, resourceKinds, plugin.id)
       }
+      if (declaration.siteExport !== undefined) {
+        row.siteExport = siteExportRow(declaration.siteExport, `${what} siteExport`, name, row.resource)
+      }
       rows.push(row)
     }
   }
@@ -1143,6 +1260,65 @@ function stampRecord(stamps, what, writable) {
     }
   }
   return stamps
+}
+
+/**
+ * The keys the whole-site export already writes: the bundle's envelope and the
+ * platform's own documents. A plugin collection carried under one of these
+ * names would overwrite it on the way out and be restored through the wrong
+ * allow-list on the way in.
+ */
+const CORE_SITE_EXPORT_KEYS = [
+  'format', 'version', 'exportedAt', 'sourceHostId', 'host',
+  'screens', 'layouts', 'versions', 'components', 'authors', 'collections', 'entries',
+  'datasets', 'records', 'media', 'mediaFolders', 'hostMedia', 'hostMediaFolders',
+]
+
+/** The most documents one bundle may carry of one collection. */
+const SITE_EXPORT_MAX_LIMIT = 1000
+
+/**
+ * A plugin's host collection in the whole-site export (AGL-3080): the export
+ * reads up to `limit` of its live documents into the bundle under the
+ * collection's own name, and a restore writes each one back through `fields`
+ * with `merge: false` — so the list is every key a live document carries, not
+ * what a create sends, and a key left off is ERASED from every restored
+ * document.
+ *
+ *  - A COUNT. A restore creates documents with the Admin SDK, past the rules,
+ *    so the collection must have a `resource` whose plan `quotaKey` or
+ *    `platformCap` the restore is met against (AGL-1403, AGL-2266).
+ *  - NOTHING THE RESTORE STAMPS OR SCOPES. `createdAt`, `updatedAt`,
+ *    `createdBy` and `deletedAt` are stamped (a bundle carrying a tombstone
+ *    would restore a document invisible), `visibleTo` is assigned fresh, and
+ *    an external destination's approver is provenance a file cannot supply.
+ *  - NO KEY THE PLATFORM'S OWN BUNDLE USES.
+ */
+function siteExportRow(siteExport, what, collection, resource) {
+  if (!siteExport || typeof siteExport !== 'object' || Array.isArray(siteExport)) throw new Error(`${what} is an object`)
+  const { $comment: _note, ...fields } = siteExport
+  const unknown = Object.keys(fields).filter((key) => !['limit', 'fields'].includes(key))
+  if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a site export field`)
+  if (CORE_SITE_EXPORT_KEYS.includes(collection)) {
+    throw new Error(`${what}: "${collection}" is a key the platform's own bundle writes`)
+  }
+  if (!resource) {
+    throw new Error(`${what} needs the collection's "resource": a restore creates documents here, and the resource names the count they are met against`)
+  }
+  const { limit } = fields
+  if (!Number.isInteger(limit) || limit < 1 || limit > SITE_EXPORT_MAX_LIMIT) {
+    throw new Error(`${what}: "limit" is a whole number from 1 to ${SITE_EXPORT_MAX_LIMIT}`)
+  }
+  const restored = plainFieldList(fields.fields, `${what} fields`)
+  const never = [
+    ...SERVER_STAMPED_FIELDS,
+    'visibleTo',
+    ...(resource.externalDestination ? [resource.externalDestination.approvedByField] : []),
+  ]
+  for (const field of restored) {
+    if (never.includes(field)) throw new Error(`${what}: "${field}" is stamped or scoped by the restore, never read from a bundle`)
+  }
+  return { limit, fields: restored }
 }
 
 /**
@@ -1342,6 +1518,48 @@ function orgCapacityRows() {
 }
 
 /**
+ * What a site's template library calls a template a plugin INSTALLED
+ * (AGL-3080): the `source.type` the plugin's install route stamps, and the
+ * badge and sentence the library shows for it. `authored` and `starter` are
+ * the platform's own values and cannot be declared; a type belongs to one
+ * plugin, because a library that found two owners for one stamp could not say
+ * where the template came from.
+ */
+function templateSourceRows() {
+  const rows = []
+  const taken = new Map([
+    ['authored', 'the platform'],
+    ['starter', 'the platform'],
+  ])
+  for (const plugin of config.plugins) {
+    const declared = plugin.templateSource
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" templateSource`
+    if (!declared || typeof declared !== 'object' || Array.isArray(declared)) {
+      throw new Error(`${where} is an object: { "type", "label", "description" }`)
+    }
+    const { type, label, description, $comment: _note, ...rest } = declared
+    const unknown = Object.keys(rest)
+    if (unknown.length) throw new Error(`${where}: unknown key(s) ${unknown.join(', ')}`)
+    if (typeof type !== 'string' || !/^[a-z][A-Za-z0-9]*$/.test(type)) {
+      throw new Error(`${where}: "type" is the plain word the install route stamps as source.type`)
+    }
+    if (taken.has(type)) {
+      throw new Error(`${where}: "${type}" is already a template source of ${taken.get(type)}`)
+    }
+    taken.set(type, `"${plugin.id}"`)
+    if (typeof label !== 'string' || !label.trim() || label.length > 40) {
+      throw new Error(`${where}: "label" is the badge's text, 1 to 40 characters`)
+    }
+    if (typeof description !== 'string' || !description.trim()) {
+      throw new Error(`${where}: "description" says in a sentence where the template came from`)
+    }
+    rows.push({ pluginId: plugin.id, type, label, description })
+  }
+  return rows
+}
+
+/**
  * Where published plugin versions and their kill switches live (AGL-3080),
  * declared by the one plugin that distributes them. The realm loader reads
  * this and names no collection of its own; with none declared it resolves
@@ -1404,6 +1622,68 @@ function repeatSourceRow() {
     )
   }
   return { pluginId: plugin.id, id }
+}
+
+/**
+ * The site documents a plugin authors in the besigner (AGL-3080), served by
+ * the console's one editor route for plugin documents
+ * (`plugin-manager/besigner-documents.ts`).
+ *
+ * Checked here, because a mistake in any of these is an editor link that
+ * 404s or a publish that goes nowhere: a unique `kind` and `segment`, a
+ * segment the console does not already route for its own documents, a
+ * `collection` the same plugin declares in `hostCollections` (so the media
+ * scan, the reference rows and the counters already know it), a noun, and a
+ * `publish` route under `/api/` with the body field that names the document.
+ */
+const CONSOLE_EDITOR_SEGMENTS = new Set(['components', 'emails', 'layouts', 'screens', 'templates', 'theme'])
+
+function besignerDocumentRows() {
+  const rows = []
+  const kinds = new Map()
+  const segments = new Map()
+  const plainId = /^[a-z][a-z0-9-]*$/
+  for (const plugin of config.plugins) {
+    for (const [index, declared] of (plugin.besignerDocuments ?? []).entries()) {
+      const where = `plugins.config.json: "${plugin.id}" besignerDocuments[${index}]`
+      const { kind, segment, collection, noun, publish } = declared ?? {}
+      for (const [field, value] of Object.entries({ kind, segment, collection })) {
+        if (typeof value !== 'string' || !plainId.test(value)) {
+          throw new Error(`${where}: "${field}" is a plain lowercase id`)
+        }
+      }
+      if (typeof noun !== 'string' || !noun.trim() || noun !== noun.toLowerCase()) {
+        throw new Error(`${where}: "noun" is what one is called, lower case`)
+      }
+      if (kinds.has(kind)) {
+        throw new Error(`${where}: kind "${kind}" is already declared by "${kinds.get(kind)}"`)
+      }
+      if (segments.has(segment)) {
+        throw new Error(`${where}: segment "${segment}" is already declared by "${segments.get(segment)}"`)
+      }
+      if (CONSOLE_EDITOR_SEGMENTS.has(segment)) {
+        throw new Error(`${where}: segment "${segment}" is one the console routes for its own documents`)
+      }
+      if (!(plugin.hostCollections ?? []).some((one) => one?.name === collection)) {
+        throw new Error(
+          `${where}: collection "${collection}" is not in this plugin's "hostCollections" — ` +
+            'a document the besigner edits is one the media scan and the counters must know',
+        )
+      }
+      if (
+        typeof publish?.path !== 'string' ||
+        !/^\/api\/[a-z0-9/-]+$/.test(publish.path) ||
+        typeof publish?.idField !== 'string' ||
+        !/^[a-z][A-Za-z0-9]*$/.test(publish.idField)
+      ) {
+        throw new Error(`${where}: "publish" is { "path": "/api/…", "idField": "<bodyField>" }`)
+      }
+      kinds.set(kind, plugin.id)
+      segments.set(segment, plugin.id)
+      rows.push({ pluginId: plugin.id, kind, segment, collection, noun, publish: { path: publish.path, idField: publish.idField } })
+    }
+  }
+  return rows
 }
 
 /**
@@ -1752,7 +2032,7 @@ function revenueSourceIds() {
     .map((plugin) => plugin.id)
 }
 
-function catalogContent(videoEmbedRows) {
+function catalogContent(videoEmbedRows, planEntitlements) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
   const editBarRows = rows
@@ -1775,7 +2055,7 @@ function catalogContent(videoEmbedRows) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -1827,6 +2107,23 @@ ${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).j
 ]
 
 /**
+ * What each plan includes of every quota a first-party plugin owns, declared
+ * by that plugin (AGL-3080). \`PLAN_ENTITLEMENTS\` composes these; core names
+ * no key.
+ */
+export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
+${planEntitlements.quotas.map((row) => `  ${indent(literalRow(row))},`).join('\n')}
+]
+
+/**
+ * What each plan includes of every feature a first-party plugin owns,
+ * declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[] = [
+${planEntitlements.features.map((row) => `  ${indent(literalRow(row))},`).join('\n')}
+]
+
+/**
  * Every top-level plugin collection a workspace erasure sweeps by the field
  * naming the organization, declared by the plugin that owns it (AGL-3080).
  */
@@ -1869,10 +2166,28 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(p
 export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(repeatSourceRow(), null, 2)}
 
 /**
+ * The site documents a plugin authors in the besigner, declared by that
+ * plugin (AGL-3080). Empty when none does, and the console's plugin-document
+ * editor routes answer 404.
+ */
+export const PLUGIN_BESIGNER_DOCUMENTS_DECLARED: readonly ResolvedBesignerDocument[] = [
+${besignerDocumentRows().map((row) => `  ${JSON.stringify(row, null, 2).split('\n').join('\n  ')},`).join('\n')}
+]
+
+/**
  * The plugin whose records a form's submission may also be filed as, declared
  * by that plugin (AGL-3080). \`null\` when none does, and no form writes one.
  */
 export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = ${JSON.stringify(formRecordTargetRow(), null, 2)}
+
+/**
+ * What a site's template library calls a template a plugin installed, by the
+ * \`source.type\` that plugin stamps, declared by that plugin (AGL-3080).
+ * Core names no installer.
+ */
+export const PLUGIN_TEMPLATE_SOURCES: readonly PluginTemplateSource[] = [
+${templateSourceRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
 
 /**
  * The analytics settings each provider mounts a tag for, declared by the
@@ -1925,6 +2240,64 @@ ${notificationDigestRows().map((row) => `  ${indent(JSON.stringify(row, null, 2)
   )
 }
 
+/**
+ * The console addresses a plugin used to answer at, and where they answer
+ * now (AGL-3080): each plugin's `consoleRedirects`, compiled into a JSON file
+ * `apps/console/next.config.js` spreads into its `redirects()`. The shell
+ * keeps the platform's own old addresses; a plugin's are the plugin's to keep
+ * answering, so a renamed plugin section never edits core.
+ *
+ * JSON, because the reader is the console's CommonJS build config, which
+ * runs before anything can compile TypeScript. Checked here:
+ *
+ *  - a site path on both sides, and not the same one;
+ *  - `permanent` said outright — a 308 is cached by browsers for good, and
+ *    that is a choice to make on purpose;
+ *  - one plugin per source: two rules for one address would be answered by
+ *    whichever Next reads first;
+ *  - a destination inside the plugin's OWN console routes, so a plugin can
+ *    only move its own pages, never another's or the platform's.
+ */
+const REDIRECTS_MANIFEST = 'apps/console/constants/plugins.redirects.generated.json'
+const SITE_PATH = /^\/(?!\/)[^\s]*$/
+
+function consoleRedirectRows() {
+  const rows = []
+  const sources = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.consoleRedirects
+    if (declared === undefined) continue
+    const where = `plugins.config.json: "${plugin.id}" consoleRedirects`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the old address`)
+    }
+    const own = [...(plugin.contributes?.console?.routes ?? []), ...(plugin.contributes?.console?.orgRoutes ?? [])]
+    for (const entry of declared) {
+      const { $comment: _note, ...rule } = entry ?? {}
+      const { source, destination, permanent } = rule
+      const what = `${where} "${source ?? ''}"`
+      const unknown = Object.keys(rule).filter((key) => !['source', 'destination', 'permanent'].includes(key))
+      if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a redirect field`)
+      if (typeof source !== 'string' || !SITE_PATH.test(source)) throw new Error(`${what}: "source" is a console path`)
+      if (typeof destination !== 'string' || !SITE_PATH.test(destination)) throw new Error(`${what}: "destination" is a console path`)
+      if (source === destination) throw new Error(`${what} redirects an address to itself`)
+      if (typeof permanent !== 'boolean') throw new Error(`${what}: "permanent" is said outright, true or false`)
+      const held = sources.get(source)
+      if (held) throw new Error(`${what} is already redirected by "${held}" — one address has one rule`)
+      sources.set(source, plugin.id)
+      const lands = own.some((route) => destination.endsWith(route) || destination.includes(`${route}/`))
+      if (!lands) {
+        throw new Error(
+          `${what}: "${destination}" is not under one of "${plugin.id}"'s own console routes ` +
+            `(${own.length ? own.join(', ') : 'it declares none'}) — a plugin moves only its own pages`,
+        )
+      }
+      rows.push({ pluginId: plugin.id, source, destination, permanent })
+    }
+  }
+  return rows
+}
+
 const check = process.argv.includes('--check')
 const drifted = []
 
@@ -1939,7 +2312,10 @@ const ALL = [
     ...manifest,
     content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
   })),
-  { file: CATALOG_FILE, content: catalogContent(await pluginVideoEmbedProviders()) },
+  {
+    file: CATALOG_FILE,
+    content: catalogContent(await pluginVideoEmbedProviders(), await pluginPlanEntitlements()),
+  },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
   { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
@@ -1949,6 +2325,7 @@ const ALL = [
     content: subprocessorsContent(await pluginSubprocessors()),
     describe: describeSubprocessorDrift,
   },
+  { file: REDIRECTS_MANIFEST, content: `${JSON.stringify(consoleRedirectRows(), null, 2)}\n` },
 ]
 
 for (const { file, content, describe = describeDrift } of ALL) {

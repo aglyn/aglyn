@@ -21,6 +21,13 @@ const path = require('path')
 const withAglyn = require('../../with-aglyn.nextjs.config')
 // eslint-disable-next-line @nx/enforce-module-boundaries
 const { syncMonacoAssets } = require('../../tools/scripts/lib/sync-monaco-assets')
+/**
+ * The console addresses plugins used to answer at, and where each answers
+ * now: every plugin's `consoleRedirects` in plugins.config.json, compiled by
+ * tools/scripts/generate-plugin-manifests.mjs. A plugin's old URLs are the
+ * plugin's to keep answering, so this config names only the platform's own.
+ */
+const PLUGIN_REDIRECTS = require('./constants/plugins.redirects.generated.json')
 
 // MARK – GLOBALS
 const isProduction = process.env.NODE_ENV !== 'production'
@@ -156,46 +163,18 @@ module.exports = withAglyn({
   // Manage → Org section move (AGL-236): old bookmarks keep working.
   async redirects() {
     return [
-      ...['billing', 'team', 'support', 'marketplace'].map((section) => ({
+      ...['billing', 'team', 'support'].map((section) => ({
         source: `/manage/${section}`,
         destination: `/org/${section}`,
         permanent: true,
       })),
-      // Workflows → Automation. The section holds a Workflows tab, so the
-      // parent could not keep that name; this is the address it used to have.
-      // Next carries the query string across, which is what makes the tab
-      // deep links (`?tab=actions`, `?tab=webhooks`) survive the move — their
-      // ids are unchanged. Mirrors `Route.HOST_WORKFLOWS`.
-      {
-        source: '/:orgSlug/hosts/:host/workflows',
-        destination: '/:orgSlug/hosts/:host/automation',
-        permanent: true,
-      },
-      // The Emails hub's first section is named for the record it lists rather
-      // than for the surface holding it, so `Emails / Messages` names a place
-      // and `Emails / Emails` named the surface twice. `:path*` matches zero
-      // segments as well as many, so the bare section URL and every message's
-      // own page both arrive.
-      //
-      // A redirect rather than a section alias: the shell resolves a section
-      // by matching the declared id, and a second id answering to the same
-      // body would put the surface back to having two addresses for one page
-      // — which is what a canonical URL is for.
-      {
-        source: '/:orgSlug/hosts/:host/emails/emails/:path*',
-        destination: '/:orgSlug/hosts/:host/emails/messages/:path*',
-        permanent: true,
-      },
-      // The organization's messages left its Marketing hub for its own Emails
-      // page, where a site's have always been. `:path*` carries the bare list,
-      // one message and its `/edit` across, and cannot reach a site's hub:
-      // `/:orgSlug/hosts/:host/marketing/…` has `hosts` where this has
-      // `marketing`, so the second segment never matches.
-      {
-        source: '/:orgSlug/marketing/emails/:path*',
-        destination: '/:orgSlug/emails/messages/:path*',
-        permanent: true,
-      },
+      // Next refuses a rule carrying a key it does not know, so the owner
+      // stays in the manifest.
+      ...PLUGIN_REDIRECTS.map(({ source, destination, permanent }) => ({
+        source,
+        destination,
+        permanent,
+      })),
     ]
   },
 })

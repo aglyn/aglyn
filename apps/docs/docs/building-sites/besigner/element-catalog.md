@@ -388,16 +388,27 @@ Each tile holds an ordinary **Image** element, so galleries get the same respons
 `srcSet` and lazy loading as an image anywhere else. Fill in **Caption** for a caption bar,
 or leave it blank for no bar at all.
 
-## Forms, Input, Commerce, Members
+## Forms
 
-Forms and fields, buttons and widgets, product grids and cart companions, and the
-member sign-in/sign-up elements. These are covered with the features they belong to —
-see [Forms](../../content-and-data/forms/overview.md),
-[Commerce](../../commerce-and-bookings/commerce/overview.md) and
+Forms and their fields, covered with the feature they belong to — see
+[Forms](../../content-and-data/forms/overview.md).
+
+## Commerce
+
+Product grids and cart companions, covered with the feature they belong to — see
+[Commerce](../../commerce-and-bookings/commerce/overview.md).
+
+## Members
+
+The member sign-in and sign-up elements, covered in
 [Member accounts](../../guides/member-accounts.md).
 
-The calculator elements belong to none of these. They come from **Calculators**, a plugin you
-install from the marketplace, and appear under **Input** once it is installed:
+## Input
+
+Buttons and widgets.
+
+The calculator elements belong to no built-in feature. They come from **Calculators**, a
+plugin you install from the marketplace, and appear under **Input** once it is installed:
 
 | Element | What it's for |
 | --- | --- |

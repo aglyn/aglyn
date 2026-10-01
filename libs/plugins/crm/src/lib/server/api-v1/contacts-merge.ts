@@ -21,7 +21,7 @@
  *
  * The contact in the path SURVIVES: it keeps its address as the identity,
  * and the record named by `sourceContactId` is folded into it and deleted.
- * `mergeContacts` in the data library is the whole of the work — the same
+ * `mergeContacts` (`../merge-contacts.ts`) is the whole of the work — the same
  * function behind the console's `crm/contacts-merge` — so an integration
  * and a person at the record page cannot merge two different ways.
  *
@@ -40,13 +40,14 @@
  * with its `alternateEmails` now carrying the merged address.
  */
 
-import { ApiErrors, apiJson, mergeContacts } from '@aglyn/tenant-data-admin'
+import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { apiKeyActorLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import {
   type ApiV1Context,
   claimWrite,
   readJsonBody,
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import { mergeContacts } from '../merge-contacts'
 
 /** The key an integration names the record to fold in by. */
 export const MERGE_SOURCE_FIELD = 'sourceContactId'

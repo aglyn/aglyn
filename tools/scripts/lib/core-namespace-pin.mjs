@@ -94,7 +94,7 @@ export const SHELL_ENTRIES = [
   'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
   'apps/console/app/(editor)/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner/page.tsx',
   'apps/console/app/(editor)/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner/page.tsx',
-  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx',
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/[documentSegment]/[docId]/versions/[versionId]/besigner/page.tsx',
   'apps/console/app/(editor)/[orgSlug]/hosts/[host]/emails/[templateKey]/versions/[versionId]/besigner/page.tsx',
   'apps/console/app/(editor)/[orgSlug]/hosts/[host]/templates/[templateId]/besigner/page.tsx',
   'apps/console/app/(editor)/admin/emails/[templateKey]/versions/[versionId]/besigner/page.tsx',

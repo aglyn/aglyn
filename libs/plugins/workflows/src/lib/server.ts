@@ -371,3 +371,7 @@ export function registerWorkflowsApi(): void {
  * thing to keep in step with plugins.config.json.
  */
 export { registerWorkflowsConsoleApi } from './server-console'
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { workflowsPlanEntitlements } from './plan-entitlements'
