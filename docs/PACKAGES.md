@@ -526,22 +526,62 @@ what they were.
 Nothing inside this repo can see whether a lib is installable: an import
 resolves through a tsconfig alias or the root `node_modules`, and the apps
 consume a lib's source, never what `nx build` emits. So the map is proved from
-outside (AGL-3201):
+outside (AGL-3201), by the examples under `examples/consumers/`:
 
 ```sh
-npm run proof:consumer -- logic-only      # minutes; builds, installs from the registry, bundles
+npm run proof:consumer -- logic-only besigner-ui                 # packs this tree's libs
+npm run proof:consumer -- logic-only --registry                  # this tree's version, from npm
+npm run proof:consumer -- besigner-ui --registry=1.0.0-beta.219  # any published version
 ```
 
-A story names what a consumer asks for, the peers they are told to bring, and
-the peers they must be able to do without. It builds the closure of `@aglyn/*`
-packages read off each `package.json`, packs them as they would be published,
-installs the tarballs into an empty project outside the workspace, bundles an
-entry that imports them, and runs it.
+Each story is an example app a developer can copy, with its own
+`package.json`, README, `npm run build` and `npm run check`. The proof copies
+it to an empty directory outside the workspace, points its `@aglyn/*`
+dependencies at the version under test, installs with a plain `npm install`,
+runs the example's own `build` and `check`, and opens the build in Chrome to
+click through it. What a story adds is what the example cannot say about
+itself: the packages its install must not bring, and the clicks. An example
+whose `@aglyn/*` range does not admit the version under test is refused, so a
+copy never installs something nobody proved.
 
-| story | asks for | brings | must not need | holds |
-| -- | -- | -- | -- | -- |
-| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — eleven packages in the closure, none of them a UI library |
-| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | yes — 22 packages in the closure, and no console, tenant runtime or plugin among them. It holds WITH two peers an embeddable editor should not need, `next` and `firebase`; see below. |
+| story | example | asks for | brings | must not need | holds |
+| -- | -- | -- | -- | -- | -- |
+| `logic-only` | [`examples/consumers/logic-only`](../examples/consumers/logic-only) | `@aglyn/aglyn`, `@aglyn/besigner` | `react`, `react-dom` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — twelve packages in the closure, none of them a UI library |
+| `besigner-ui` | [`examples/consumers/besigner-ui`](../examples/consumers/besigner-ui) | `@aglyn/besigner-ui`, `@aglyn/besigner`, `@aglyn/aglyn`, `@aglyn/aglyn-node-renderer`, `@aglyn/shared-ui-theme` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | yes — 23 packages in the closure, and no console, tenant runtime or plugin among them. It holds WITH two peers an embeddable editor should not need, `next` and `firebase`; see below. |
+
+**Packed or from the registry, and where each runs.** Packed is the default:
+it builds every lib in the closure from this tree and `npm pack`s it, which is
+the tarball `publish:packages` uploads. `consumer-proof.yml` runs it on the
+promotion PR, the last point at which a broken package can be stopped — a
+published version is final. `--registry` installs the exact version from npm,
+siblings and all; `publish-packages.yml` runs it after every publish, waiting
+out npm's read lag first. It sees what packing cannot, a package the release
+failed to publish or a sibling pin the registry cannot satisfy, and it can
+only report. Neither is a required check (RELEASING.md, "Four settings are
+deliberate").
+
+The first runs of the examples found four defects that no test or guard
+inside the repo could see:
+
+- `@aglyn/shared-data-enums` named `firebase` as a REQUIRED peer, so a plain
+  install of the logic packages brought the whole Firebase SDK. Only its
+  `firebase-auth` module uses it, and the core imports the package by subpath
+  and never loads that module; the peer is optional now.
+- Every lib that named `next` pinned it EXACTLY, at `16.3.3`. Once npm's
+  `next` moved to 16.3.8, `npm install @aglyn/besigner-ui next` could not
+  resolve: npm searched for eighteen minutes and failed. A peer is a
+  caret range now, and `check:lib-boundaries` refuses an exact pin and a range
+  that does not admit the version the workspace runs. `@mui/base` was pinned
+  the same way, and a caret on it admits a `5.0.0-dev` build that peers on
+  React 18; it was a peer of `@aglyn/shared-ui-jsx` for one helper that
+  `@mui/utils` also exports, so the peer is gone instead.
+- `@aglyn/shared-ui-jsx-forms` took two default exports from CommonJS files of
+  `@data-driven-forms/common` by deep path. Read under Node's rules, as a
+  `"type": "module"` package is, that default is the whole `exports` object,
+  so the editor's inspector threw the moment an element was selected. Only a
+  browser showed it.
+- `@aglyn/shared-util-tools` shipped a direct `eval`, which every consumer's
+  bundler warned about on every build. Nothing called the mode that used it.
 
 What a build must do for this to hold, all of it invisible from inside: the
 swc output is ESM with `"type": "module"`, so `.swcrc` sets `resolveFully` and
@@ -722,7 +762,5 @@ published again under the same number.
 
 A follow-up project, not this document's commit:
 
-- An `examples/` consumer that builds the designer UI from the published
-  packages, which is the proof the map is real.
 - The licensing decision — which pieces are open source and under which
   license — is an owner decision tracked separately.

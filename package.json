@@ -272,6 +272,7 @@
     "test:dist-tags": "node --test tools/scripts/lib/dist-tags.test.mjs",
     "test:trust-packages": "node --test tools/scripts/lib/trust-packages.test.mjs",
     "proof:consumer": "node tools/scripts/consumer-proof.mjs",
+    "test:consumer-proof": "node --test tools/scripts/consumer-proof.test.mjs",
     "sync:lib-dependencies": "node tools/scripts/sync-lib-dependencies.mjs",
     "sync:lib-dependencies:check": "node tools/scripts/sync-lib-dependencies.mjs --check",
     "test:publish-packages": "node --test tools/scripts/publish-packages.test.mjs",
