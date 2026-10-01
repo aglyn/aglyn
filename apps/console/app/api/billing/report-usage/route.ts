@@ -593,11 +593,33 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const hosts = await firestore.collection('hosts').limit(1000).get()
+    /*==========================================
+     * EVERY WORKSPACE, NOT EVERY WORKSPACE WITH A SITE (AGL-3445).
+     *
+     * The subjects of this sweep used to be read off the sites alone, so a
+     * workspace with none was never visited: no rollup, no meter event, and
+     * no document for the budget card, the alerts cron or the monthly email
+     * to read. Everything a workspace is metered for at the org level —
+     * API requests, CRM records, the org library, plugin bands, org mail —
+     * accrues with or without a site, and went unmeasured.
+     *
+     * So the org ids seed the list and the sites are grouped under them. A
+     * site naming an org with no document is still swept, as before. Ids
+     * only (`select()`), because the loop below reads each org itself.
+     *
+     * Neither read is capped. The sites read was `.limit(1000)`, which past
+     * 1,000 sites would have dropped whole workspaces from billing with
+     * nothing to say so — the AGL-1371 truncation one level up.
+     *=========================================*/
+    const [orgs, hosts] = await Promise.all([
+      firestore.collection('orgs').select().get(),
+      firestore.collection('hosts').get(),
+    ])
 
     // Group hosts by org — the sole billing subject (AGL-238; the legacy
     // per-tenant rollups retired with the tenants collection).
     const byOrg: Record<string, FirebaseFirestore.DocumentReference[]> = {}
+    for (const org of orgs.docs) byOrg[org.id] = []
     // The `screens` routing map per host, kept from this sweep so the AGL-1390
     // screen-cap reconciliation below re-reads nothing: the documents are
     // already in hand here, and the map is what decides which screens count.
