@@ -38,7 +38,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
  */
 
 /** The nav slug the shell resolves the catalog by. */
-const PRODUCTS_SLUG = 'products'
+export const PRODUCTS_SLUG = 'products'
 
 /** The query key the Orders list opens one order's dialog by. */
 export const ORDERS_ORDER_PARAM = 'order'

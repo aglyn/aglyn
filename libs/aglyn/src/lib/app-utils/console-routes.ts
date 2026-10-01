@@ -400,7 +400,6 @@ export enum Route {
   // are open-ended, so this is the one route whose leaf segment is data.
   HOST_PLUGIN = '/[orgSlug]/hosts/[host]/[pluginSlug]',
   HOST_INBOX = '/[orgSlug]/hosts/[host]/inbox',
-  HOST_CONTACTS = '/[orgSlug]/hosts/[host]/contacts',
   HOST_MEDIA = '/[orgSlug]/hosts/[host]/media',
   HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',
   /*
@@ -470,22 +469,8 @@ export enum Route {
    * name with the section that contains it.
    */
   HOST_AUTOMATION = '/[orgSlug]/hosts/[host]/automation',
-  /**
-   * The address the automation section answered to before it had a name of
-   * its own. Nothing links here — `HOST_AUTOMATION` is what the nav, the
-   * search results and the activity feed build — but the console redirects it
-   * permanently, so a held bookmark still lands on the section (and keeps its
-   * `?tab=`, which never changed).
-   *
-   * Kept on the table rather than as a bare literal in the redirect
-   * because the redirect and the address it serves are one fact:
-   * `automation-section.spec.ts` reads this entry and fails if the rule for
-   * it goes missing.
-   */
-  HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
   HOST_DATA = '/[orgSlug]/hosts/[host]/data',
   HOST_LOGIC = '/[orgSlug]/hosts/[host]/logic',
-  HOST_PRODUCTS = '/[orgSlug]/hosts/[host]/products',
   HOST_COMPONENTS = '/[orgSlug]/hosts/[host]/components',
   // Component detail (AGL-693): the listing links here, and the besigner is
   // reached from here — matching SCREEN_DETAILS rather than jumping a row
@@ -504,7 +489,6 @@ export enum Route {
   // publish, so there is no "current" pointer to route through.
   TEMPLATE_DETAILS = '/[orgSlug]/hosts/[host]/templates/[templateId]',
   HOST_MARKETING = '/[orgSlug]/hosts/[host]/marketing',
-  HOST_BOOKINGS = '/[orgSlug]/hosts/[host]/bookings',
   // Events now come from the events-calendar plugin, served by the generic
   // `[orgSlug]/hosts/[host]/[pluginSlug]` route (AGL-394).
   HOST_REDIRECTS = '/[orgSlug]/hosts/[host]/redirects',
@@ -684,7 +668,6 @@ export interface RoutePayload {
   [Route.BILLING_ENTRY]: undefined
   [Route.SUPPORT_ENTRY]: undefined
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
-  [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_DETAILS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_SEO]: { orgSlug: string; host: string }
@@ -705,10 +688,8 @@ export interface RoutePayload {
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }
   [Route.HOST_THEME]: { orgSlug: string; host: string }
   [Route.HOST_AUTOMATION]: { orgSlug: string; host: string }
-  [Route.HOST_WORKFLOWS]: { orgSlug: string; host: string }
   [Route.HOST_DATA]: { orgSlug: string; host: string }
   [Route.HOST_LOGIC]: { orgSlug: string; host: string }
-  [Route.HOST_PRODUCTS]: { orgSlug: string; host: string }
   [Route.HOST_COMPONENTS]: { orgSlug: string; host: string }
   [Route.COMPONENT_DETAILS]: {
     orgSlug: string
@@ -728,7 +709,6 @@ export interface RoutePayload {
     templateId: string
   }
   [Route.HOST_MARKETING]: { orgSlug: string; host: string }
-  [Route.HOST_BOOKINGS]: { orgSlug: string; host: string }
   [Route.HOST_REDIRECTS]: { orgSlug: string; host: string }
   [Route.HOST_USERS]: { orgSlug: string; host: string }
   [Route.HOST_ANALYTICS]: { orgSlug: string; host: string }

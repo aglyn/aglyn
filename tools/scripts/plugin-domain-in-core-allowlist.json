@@ -357,16 +357,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/console-routes.ts",
-      "rules": [
-        "plugin-collection:bookings",
-        "plugin-collection:commerce",
-        "plugin-collection:crm",
-        "plugin-collection:workflows"
-      ],
-      "lane": "bookings"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
       "rules": [
         "domain-name"

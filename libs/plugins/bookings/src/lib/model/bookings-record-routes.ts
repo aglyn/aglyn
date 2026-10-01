@@ -37,7 +37,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
  */
 
 /** The nav slug the shell resolves the Bookings page by. */
-const BOOKINGS_SLUG = 'bookings'
+export const BOOKINGS_SLUG = 'bookings'
 
 /**
  * The query key the Bookings page narrows to one booker by (AGL-2660) — the

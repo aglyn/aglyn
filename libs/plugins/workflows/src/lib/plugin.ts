@@ -100,7 +100,7 @@ export function registerWorkflowsConsole(): void {
         // Workflows, Actions and Webhooks are the tabs INSIDE this section, so
         // the section is named for what they have in common. `/workflows` —
         // the address before the section had its own name — is redirected here
-        // by this plugin's `consoleRedirects` (see `Route.HOST_WORKFLOWS`).
+        // by this plugin's `consoleRedirects`.
         href: '/automation',
         // Sections as ROUTES (AGL-2501): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read.
