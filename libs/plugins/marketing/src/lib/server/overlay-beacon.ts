@@ -16,6 +16,7 @@
  */
 
 import type { PluginSiteBeaconRequest } from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
+import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
 type Firestore = FirebaseFirestore.Firestore
@@ -86,4 +87,15 @@ export async function countOverlayBeacon(
     .doc(overlayId)
     .update({ [`stats.${statKeyOf(event)}`]: FieldValue.increment(1) })
     .catch(() => undefined)
+}
+
+/**
+ * Counts one overlay beacon on the platform's Firestore: what the server
+ * declarations hand the collector, with this module and the Admin SDK loaded
+ * on the first beacon.
+ */
+export async function countOverlayBeaconOnPlatform(
+  request: PluginSiteBeaconRequest,
+): Promise<void> {
+  await countOverlayBeacon(request, firebaseAdmin.app().firestore())
 }

@@ -34,12 +34,13 @@ export function registerMarketingServerDeclarations(): void {
   registerPluginSiteBeacon(
     {
       field: 'overlay',
+      // The plugin's own module, which brings the Admin SDK with it: a lazy
+      // import of the data layer from here would make every static import of
+      // it in this plugin, and in each app that loads these declarations, a
+      // static import of a library loaded lazily.
       async count(request) {
-        const [{ countOverlayBeacon }, { default: firebaseAdmin }] = await Promise.all([
-          import('./server/overlay-beacon'),
-          import('@aglyn/tenant-data-admin/server/firebase-admin'),
-        ])
-        await countOverlayBeacon(request, firebaseAdmin.app().firestore())
+        const { countOverlayBeaconOnPlatform } = await import('./server/overlay-beacon')
+        await countOverlayBeaconOnPlatform(request)
       },
     },
     { pluginId: BUNDLE_ID },
