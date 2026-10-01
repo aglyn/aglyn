@@ -55,7 +55,7 @@
  */
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
-import { parseCsv } from '@aglyn/aglyn/app-utils/dataset-csv'
+import { parseCsv } from '@aglyn/aglyn/app-utils/csv'
 
 /**
  * The most addresses one uploaded file may name.

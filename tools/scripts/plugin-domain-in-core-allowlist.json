@@ -497,15 +497,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/dataset-csv.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/dataset-models.ts",
       "rules": [
         "domain-name",

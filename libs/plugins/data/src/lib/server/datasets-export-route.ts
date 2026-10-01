@@ -16,9 +16,6 @@
  */
 
 import {
-  datasetCsvHeader,
-  datasetCsvRow,
-  datasetRecordToJson,
   effectiveDatasetModel,
   memberCanSee,
   pluginRequestFromWeb,
@@ -35,6 +32,11 @@ import {
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  datasetCsvHeader,
+  datasetCsvRow,
+  datasetRecordToJson,
+} from '../model/dataset-csv'
 
 /**
  * Records read per round trip. Not a cap — the stream keeps paging until

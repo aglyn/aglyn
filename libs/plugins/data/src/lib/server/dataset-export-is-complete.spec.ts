@@ -152,7 +152,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // authorization and the column set asserted against fiction.
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/dataset-models'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/dataset-csv'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/csv'),
   pluginRequestFromWeb: async (request: Request) => {
     const url = new URL(request.url)
     return {

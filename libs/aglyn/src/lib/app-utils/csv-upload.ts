@@ -18,7 +18,7 @@
 /**
  * The most characters one uploaded CSV may carry, whoever reads it.
  *
- * A file a person uploads is parsed in one pass by `parseCsv` (`dataset-csv.ts`), in the
+ * A file a person uploads is parsed in one pass by `parseCsv` (`csv.ts`), in the
  * browser that picked it and again on the server that imports it. This bounds
  * that pass: it is checked before the parse rather than after, because the
  * parse is what the ceiling is protecting — a refusal answered on the byte

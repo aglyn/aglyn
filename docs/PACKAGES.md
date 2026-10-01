@@ -255,7 +255,7 @@ needs it starts.
    through the manifest to prove the owner is there. The number stays.
 2. **`plugins-commerce` → `plugins-data`.** Gone (AGL-3080). Commerce was
    reaching `parseCsv` through the data plugin's barrel, which only re-exports
-   it; it now imports the function from the core's `dataset-csv`, where it
+   it; it now imports the function from the core's `app-utils/csv`, where it
    lives. The number stays so the rows below keep theirs.
 3. **`plugins-crm` → `plugins-bookings`.** Gone (AGL-3080). "Book a meeting"
    read the bookings services collection, the booking plugin's per-site
