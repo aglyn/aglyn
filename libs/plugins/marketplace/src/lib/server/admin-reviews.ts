@@ -55,6 +55,7 @@ import {
 } from '../model/plugin-rejection-categories'
 import { attestationsForBytes } from '../model/publisher-attestation'
 import { VERIFICATION_DECLINE_COOLDOWN_DAYS } from '../model/listing-verification'
+import { isPrivateListing } from '../model/listing-visibility'
 import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementState,
@@ -119,6 +120,152 @@ const ACTIONS: Record<string, string> = {
   // while we look again, without breaking the sites already using it".
   delist: 'in_review',
   unverify: 'listed',
+}
+
+/*
+ * THE WORDS A PUBLISHER READS ABOUT A VERDICT (AGL-3432).
+ *
+ * The publisher email (`plugin-review-update`) prints only its body, never its
+ * subject, and the console feed shows the body under a short title. So every
+ * body below opens by naming the plugin, the version when there is one, and
+ * what happened to it. A publisher with several plugins cannot tell from
+ * "Your plugin" which one review means.
+ *
+ * A private listing never reaches the marketplace (AGL-968), so its copy never
+ * says it entered or left it.
+ */
+
+/** "Acme Forms version 1.2.0", or just the name when no version is known. */
+function pluginAndVersion(name: string, version: string): string {
+  return version ? `${name} version ${version}` : name
+}
+
+/**
+ * Why it was turned down: the category and what to do about it, then the
+ * reviewer's comment when there is one (AGL-977).
+ *
+ * A comment is required only for "Other", so every other rejection stands on
+ * its category: printing the optional comment alone would leave most
+ * rejections with a blank reason and nothing to fix. "Other" says nothing by
+ * itself, so there the comment is the reason.
+ */
+function rejectionReasonText(category: string, reason: string): string {
+  const picked = pluginRejectionCategory(category)
+  const comment = reason.trim()
+  if (!picked || picked.requiresComment) return comment
+  const because = `${picked.label}. ${picked.guidance}`
+  return comment ? `${because}\n\nReviewer’s comment: ${comment}` : because
+}
+
+/** The body of a version verdict, for the console notification and the email. */
+function versionVerdictBody(input: {
+  approving: boolean
+  name: string
+  version: string
+  /** The version new installs receive once this verdict has landed. */
+  offeredVersion: string
+  /** This approval is what put the listing in the marketplace. */
+  listedNow: boolean
+  category: string
+  reason: string
+  liveInstalls: number
+}): string {
+  const { name, version, offeredVersion, liveInstalls } = input
+  const subject = pluginAndVersion(name, version)
+  if (input.approving) {
+    // Approving an OLDER version never walks the offer back, so "now the
+    // version new installs receive" is said only when it became so.
+    const offer =
+      offeredVersion === version
+        ? `It is now the version new installs of ${name} receive. Sites ` +
+          'already running it stay on the version they have until their ' +
+          'owners upgrade.'
+        : offeredVersion
+          ? `New installs still receive version ${offeredVersion}, the ` +
+            'newest approved version.'
+          : ''
+    return [
+      `${subject} passed review.${offer ? ` ${offer}` : ''}`,
+      input.listedNow ? `${name} is now listed in the marketplace.` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+  }
+  const why = rejectionReasonText(input.category, input.reason)
+  return [
+    `${subject} was not approved${why ? `: ${why}` : '.'}`,
+    `Publishing a new version puts ${name} back in the review queue. The ` +
+      'previously approved version, if any, keeps installing in the meantime.',
+    // Pins sitting on these bytes (AGL-1085). The publisher cannot uninstall
+    // a version from somebody else's site, so this says what happens rather
+    // than telling them to do it.
+    liveInstalls > 0
+      ? `Version ${version} is still running on ${liveInstalls} ` +
+        `site${liveInstalls === 1 ? '' : 's'}. A rejection stops new ` +
+        'installs; it does not remove the version from sites already ' +
+        'running it.'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+/** The body of a listing verdict, for the console notification and the email. */
+function listingVerdictBody(input: {
+  action: string
+  name: string
+  /** The listing's newest bytes, the ones the reviewer read. */
+  version: string
+  /** The version new installs receive. */
+  offeredVersion: string
+  isPrivate: boolean
+  category: string
+  reason: string
+}): string {
+  const { name, offeredVersion, isPrivate } = input
+  const subject = pluginAndVersion(name, input.version)
+  const comment = input.reason.trim()
+  const offer = offeredVersion
+    ? ` New installs receive version ${offeredVersion}.`
+    : ''
+  switch (input.action) {
+    case 'reject': {
+      // A rejection is not a delist, comment or no comment: nobody looks
+      // again until the publisher fixes it and sends a new version, so it
+      // never borrows the delist's "while we review it again".
+      const why = rejectionReasonText(input.category, input.reason)
+      const where = isPrivate ? 'in review' : 'from the marketplace'
+      const meanwhile = isPrivate
+        ? 'Sites that already installed it keep working.'
+        : `${name} is out of the marketplace while it is rejected; sites ` +
+          'that already installed it keep working.'
+      return [
+        `${subject} was rejected ${where}${why ? `: ${why}` : '.'}`,
+        `${meanwhile} To send it back for review, publish a new version.`,
+      ].join('\n\n')
+    }
+    case 'delist':
+      return [
+        isPrivate
+          ? `We moved ${subject} back into review. Sites that already ` +
+            'installed it keep working.'
+          : `We removed ${subject} from the marketplace while we review it ` +
+            'again. Sites that already installed it keep working.',
+        comment ? `Reviewer’s comment: ${comment}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+    case 'verify':
+      return isPrivate
+        ? `${name} is now verified.`
+        : `${name} is now verified: its marketplace listing shows the ` +
+            'verified badge.'
+    default:
+      return isPrivate
+        ? `${name} passed review. It is a private plugin, so it stays out ` +
+            `of the marketplace and only your workspace can install it.${offer}`
+        : `${name} passed review and is now listed in the marketplace.${offer}`
+  }
 }
 
 /**
@@ -1086,10 +1233,10 @@ async function handler(request: Request): Promise<Response> {
           latestVersionReviewState: approving ? 'approved' : 'rejected',
         })
       }
-      if (
+      const listsNow =
         approving &&
         !['listed', 'verified'].includes(String(listing.reviewStatus ?? ''))
-      ) {
+      if (listsNow) {
         await updateExisting(listingRef, {
           reviewStatus: 'listed',
           updatedAt: FieldValue.serverTimestamp(),
@@ -1107,6 +1254,8 @@ async function handler(request: Request): Promise<Response> {
       // Only ever moves forward: approving an older version after a newer one
       // is a real sequence (a reviewer working through a backlog) and must not
       // walk the offer backwards.
+      // What new installs receive once this lands, for the publisher's copy.
+      let offeredVersion = String(listing.latestApprovedVersion ?? '')
       if (approving) {
         const previous = listing.latestApprovedVersion
         if (
@@ -1117,6 +1266,7 @@ async function handler(request: Request): Promise<Response> {
             latestApprovedVersion: version,
             updatedAt: FieldValue.serverTimestamp(),
           })
+          offeredVersion = version
         }
       } else if (String(listing.latestApprovedVersion ?? '') === version) {
         // …and BACK when the version being offered is the one just rejected
@@ -1153,18 +1303,22 @@ async function handler(request: Request): Promise<Response> {
       const stranded = !approving && liveInstalls > 0
 
       if (listing.profileId) {
+        const verdict = versionVerdictBody({
+          approving,
+          name: String(listing.displayName ?? ''),
+          version,
+          offeredVersion,
+          listedNow: listsNow && !isPrivateListing(listing),
+          category,
+          reason,
+          liveInstalls,
+        })
         await notifyOrgAdmins(String(listing.profileId), {
           type: 'marketplace.review',
           title: approving
             ? `"${listing.displayName}" v${version} approved`
             : `"${listing.displayName}" v${version} was not approved`,
-          body: approving
-            ? 'It is now the version new installs receive.'
-            : stranded
-              ? `${reason}\n\nThis version is still installed on ` +
-                `${liveInstalls} site${liveInstalls === 1 ? '' : 's'}. ` +
-                'Rejecting it does not remove it — uninstall or roll back.'
-              : reason,
+          body: verdict,
           orgId: String(listing.profileId),
           link: '/',
         }).catch(() => undefined)
@@ -1173,21 +1327,7 @@ async function handler(request: Request): Promise<Response> {
           approving
             ? `${listing.displayName} v${version} passed review`
             : `${listing.displayName} v${version} was not approved`,
-          approving
-            ? `Your plugin version ${version} has been approved and is now ` +
-              'the version new installs receive. Existing installs stay on ' +
-              'the version they pinned until their site owners upgrade.'
-            : `Your plugin version ${version} was not approved.\n\n` +
-              `Reason: ${reason}\n\nPublishing a new version puts it back ` +
-              'in the review queue. The previously approved version, if any, ' +
-              'keeps installing in the meantime.' +
-              (stranded
-                ? `\n\nNote: v${version} is still installed on ` +
-                  `${liveInstalls} site${liveInstalls === 1 ? '' : 's'}. ` +
-                  'A rejection stops new installs, it does not remove an ' +
-                  'existing one — uninstall it or roll back to an approved ' +
-                  'version.'
-                : ''),
+          verdict,
         )
       }
 
@@ -1326,9 +1466,12 @@ async function handler(request: Request): Promise<Response> {
             ? `"${listing.displayName}" v${version} was stopped`
             : `"${listing.displayName}" v${version} was allowed to run again`,
           body: revoking
-            ? 'It has been disabled on every site running it. Sites showing ' +
-              'this plugin now render a placeholder.'
-            : 'Sites running it are no longer blocked.',
+            ? `${pluginAndVersion(String(listing.displayName ?? ''), version)} ` +
+              'has been stopped on every site running it. Those sites now ' +
+              'show a placeholder where the plugin was.'
+            : `${pluginAndVersion(String(listing.displayName ?? ''), version)} ` +
+              'is allowed to run again, and sites running it are no longer ' +
+              'blocked.',
           orgId: String(listing.profileId),
           link: '/',
         }).catch(() => undefined)
@@ -1422,8 +1565,10 @@ async function handler(request: Request): Promise<Response> {
           // Says plainly that nothing about the listing changed. Without it a
           // publisher reads "declined" as a takedown of the plugin itself.
           body:
-            `${declineReason}\n\nYour plugin is unaffected and stays listed. ` +
-            `You can request verification again in ` +
+            `We declined the verified badge for ${listing.displayName}. The ` +
+            'plugin itself is unaffected and stays listed.\n\n' +
+            `Reason: ${declineReason}\n\n` +
+            'You can request verification again in ' +
             `${VERIFICATION_DECLINE_COOLDOWN_DAYS} days.`,
           orgId: publisherOrgId,
           link: '/',
@@ -1531,6 +1676,19 @@ async function handler(request: Request): Promise<Response> {
           ).get('slug') as string | undefined)
         : undefined
       if (publisherOrgId) {
+        const isPrivate = isPrivateListing(listing)
+        // One body for the feed and the email (AGL-3432): it names the
+        // plugin and what happened to it, and a rejection carries its
+        // category and what to fix (AGL-977).
+        const verdict = listingVerdictBody({
+          action,
+          name: String(listing.displayName ?? ''),
+          version: String(listing.latestVersion ?? ''),
+          offeredVersion: String(listing.latestApprovedVersion ?? ''),
+          isPrivate,
+          category,
+          reason,
+        })
         await notifyOrgAdmins(publisherOrgId, {
           type: 'marketplace.review',
           title:
@@ -1539,24 +1697,7 @@ async function handler(request: Request): Promise<Response> {
               : action === 'delist'
                 ? `"${listing.displayName}" is back in review`
                 : `"${listing.displayName}" is now ${nextStatus}`,
-          body:
-            action === 'reject'
-              ? // Category, then what to do about it, then the reviewer's own
-                // words (AGL-977). The publisher's first question is "what do
-                // I fix" — a bare comment answered that only as well as the
-                // reviewer happened to write it.
-                [
-                  pluginRejectionCategory(category)?.label,
-                  pluginRejectionCategory(category)?.guidance,
-                  reason,
-                ]
-                  .filter(Boolean)
-                  .join('\n\n')
-              : action === 'delist'
-                ? reason ||
-                  'It has been removed from the marketplace while we take ' +
-                    'another look. Existing installs keep working.'
-                : 'Your plugin passed review.',
+          body: verdict,
           orgId: publisherOrgId,
           link: publisherSlug
             ? buildRoute(Route.ORG_MARKETPLACE, {
@@ -1572,13 +1713,11 @@ async function handler(request: Request): Promise<Response> {
                 reason,
               )}`
             : action === 'delist'
-              ? `${listing.displayName} was removed from the marketplace`
+              ? isPrivate
+                ? `${listing.displayName} is back in review`
+                : `${listing.displayName} was removed from the marketplace`
               : `${listing.displayName} is now ${nextStatus}`,
-          action === 'reject' || action === 'delist'
-            ? reason ||
-              'It has been removed from the marketplace while we take ' +
-                'another look. Existing installs keep working.'
-            : 'Your plugin passed review and is live in the marketplace.',
+          verdict,
         )
       }
     }
