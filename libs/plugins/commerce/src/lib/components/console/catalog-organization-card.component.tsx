@@ -38,7 +38,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, deleteDoc, doc, setDoc } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   ceilingedWindow,
@@ -91,6 +91,45 @@ const RULE_OPS: Array<{ value: CommerceModel.CollectionRuleOp; label: string }> 
   { value: 'gt', label: 'above' },
   { value: 'contains', label: 'contains' },
 ]
+
+const productLabel = (product: ProductRow): string => product.name
+const sameProduct = (option: ProductRow, value: ProductRow): boolean =>
+  option.$id === value.$id
+
+/**
+ * A manual collection's products, as chips — MEMOIZED, and every prop it
+ * takes is stable while the picked products are (AGL-3423).
+ *
+ * A multiple Autocomplete hands its input a new chip array as
+ * `startAdornment` on every render, and MUI's `InputBase` copies that into
+ * its `FormControl` from a passive effect: a state update left pending after
+ * every commit the field takes part in. React 19 counts each such commit as a
+ * nested update, and keystrokes delivered back to back commit one after
+ * another with nothing to clear the count, so the fifty-first throws
+ * "Maximum update depth exceeded" (#185). The collection's name, slug and
+ * rules share one draft with this list, so each keystroke in them
+ * re-rendered it; kept out of those renders, it commits only when it changes.
+ */
+const CollectionProductsField = memo(function CollectionProductsField(props: {
+  products: readonly ProductRow[]
+  value: readonly ProductRow[]
+  onChange(picked: ProductRow[]): void
+}) {
+  const { onChange } = props
+  return (
+    <Autocomplete
+      multiple
+      options={props.products as ProductRow[]}
+      getOptionLabel={productLabel}
+      isOptionEqualToValue={sameProduct}
+      value={props.value as ProductRow[]}
+      onChange={(_event, picked) => onChange(picked)}
+      renderInput={(params) => (
+        <TextField {...params} label="Products" size="small" />
+      )}
+    />
+  )
+})
 
 /**
  * Categories & collections manager (AGL-280): category tree (parentId)
@@ -497,6 +536,22 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           : null))
       : null
     : null
+
+  const collectionProductIds = collectionDraft?.productIds
+  const collectionProducts = useMemo(
+    () =>
+      products.filter((product) =>
+        (collectionProductIds ?? []).includes(product.$id),
+      ),
+    [products, collectionProductIds],
+  )
+  const setCollectionProducts = useCallback(
+    (picked: ProductRow[]) =>
+      setCollectionDraft((prev) =>
+        prev ? { ...prev, productIds: picked.map((item) => item.$id) } : prev,
+      ),
+    [],
+  )
 
   const previewMatches = useMemo(() => {
     if (!collectionDraft) return []
@@ -998,24 +1053,10 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
             <MenuItem value="smart">{'Smart — rule based'}</MenuItem>
           </TextField>
           {collectionDraft?.mode === 'manual' ? (
-            <Autocomplete
-              multiple
-              options={products}
-              getOptionLabel={(product) => product.name}
-              isOptionEqualToValue={(option, value) => option.$id === value.$id}
-              value={products.filter((product) =>
-                (collectionDraft.productIds ?? []).includes(product.$id),
-              )}
-              onChange={(_event, picked) =>
-                setCollectionDraft((prev) =>
-                  prev
-                    ? { ...prev, productIds: picked.map((item) => item.$id) }
-                    : prev,
-                )
-              }
-              renderInput={(params) => (
-                <TextField {...params} label="Products" size="small" />
-              )}
+            <CollectionProductsField
+              products={products}
+              value={collectionProducts}
+              onChange={setCollectionProducts}
             />
           ) : (
             <>

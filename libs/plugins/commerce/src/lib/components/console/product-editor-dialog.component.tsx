@@ -42,7 +42,7 @@ import {
 } from '@mui/material'
 import { collection, doc, getDoc } from 'firebase/firestore'
 import { productCollectionFields } from './smart-collections'
-import { useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -140,6 +140,71 @@ function comboLabel(options: Record<string, string> | undefined): string {
   const values = Object.values(options ?? {})
   return values.length ? values.join(' / ') : 'Default'
 }
+
+/** Stand-in for a list the product does not hold yet, the same one each render. */
+const NO_ITEMS: readonly string[] = []
+const FILL_ROW = { flex: 1 } as const
+
+const categoryLabel = (category: any): string => category.name
+const recordLabel = (item: any): string => item.name ?? item.$id
+const sameRecord = (option: any, value: any): boolean => option.$id === value.$id
+
+interface ProductChipsFieldProps<T> {
+  label: string
+  options: readonly T[]
+  value: readonly T[]
+  /** `index` is the prop of the same name, handed back for a per-row field. */
+  onChange(next: T[], index: number): void
+  index?: number
+  freeSolo?: boolean
+  getOptionLabel?: (option: T) => string
+  isOptionEqualToValue?: (option: T, value: T) => boolean
+  placeholder?: string
+  helperText?: string
+  fill?: boolean
+}
+
+/**
+ * One of the editor's chip lists — tags, categories, an option's values,
+ * related products — MEMOIZED, and every prop it takes is stable while its
+ * own list is (AGL-3423).
+ *
+ * A multiple Autocomplete hands its input a new chip array as
+ * `startAdornment` on every render, and MUI's `InputBase` copies that into
+ * its `FormControl` from a passive effect: a state update left pending after
+ * every commit the field takes part in. React 19 counts each such commit as a
+ * nested update, and keystrokes delivered back to back commit one after
+ * another with nothing to clear the count, so the fifty-first throws
+ * "Maximum update depth exceeded" (#185). Every field in this editor writes
+ * one draft, so every keystroke in any of them re-rendered all four lists;
+ * kept out of those renders, a list commits only when it changes.
+ */
+const ProductChipsField = memo(function ProductChipsField<T>(
+  props: ProductChipsFieldProps<T>,
+) {
+  const { index = 0, onChange } = props
+  return (
+    <Autocomplete<T, true, false, boolean>
+      multiple
+      freeSolo={props.freeSolo}
+      options={props.options as T[]}
+      value={props.value as T[]}
+      getOptionLabel={props.getOptionLabel as (option: T | string) => string}
+      isOptionEqualToValue={props.isOptionEqualToValue}
+      onChange={(_event, next) => onChange(next as T[], index)}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={props.label}
+          size="small"
+          placeholder={props.placeholder}
+          helperText={props.helperText}
+        />
+      )}
+      sx={props.fill ? FILL_ROW : undefined}
+    />
+  )
+}) as <T>(props: ProductChipsFieldProps<T>) => JSX.Element
 
 /**
  * Products hub editor (AGL-279): the full catalog editor — basics,
@@ -253,6 +318,56 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   const current: CommerceModel.HostProduct = draft ?? lifted ?? blankProduct()
   const update = (patch: Partial<CommerceModel.HostProduct>) =>
     setDraft({ ...current, ...patch })
+  /*
+   * `update` for the memoized chip lists: the same write from the last
+   * rendered draft, from a callback that keeps its identity across renders.
+   */
+  const latest = useRef(current)
+  latest.current = current
+  const updateLatest = useCallback(
+    (patch: Partial<CommerceModel.HostProduct>) =>
+      setDraft({ ...latest.current, ...patch }),
+    [],
+  )
+  const setTags = useCallback(
+    (tags: string[]) =>
+      updateLatest({ tags: tags.map((tag) => String(tag).trim()).filter(Boolean) }),
+    [updateLatest],
+  )
+  const setCategories = useCallback(
+    (picked: any[]) =>
+      updateLatest({ categoryIds: picked.map((category: any) => category.$id) }),
+    [updateLatest],
+  )
+  const setRelatedProducts = useCallback(
+    (picked: any[]) =>
+      updateLatest({ relatedProductIds: picked.map((item: any) => item.$id) }),
+    [updateLatest],
+  )
+  const categoryIds = current.categoryIds
+  const pickedCategories = useMemo(
+    () =>
+      categories.rows.filter((category: any) =>
+        (categoryIds ?? []).includes(category.$id),
+      ),
+    [categories.rows, categoryIds],
+  )
+  const relatedProductIds = current.relatedProductIds
+  const productId = product?.$id
+  const relatedOptions = useMemo(
+    () =>
+      relatedProducts.rows.filter(
+        (item: any) => !item.deletedAt && item.$id !== productId,
+      ),
+    [relatedProducts.rows, productId],
+  )
+  const pickedRelated = useMemo(
+    () =>
+      relatedProducts.rows.filter((item: any) =>
+        (relatedProductIds ?? []).includes(item.$id),
+      ),
+    [relatedProducts.rows, relatedProductIds],
+  )
 
   /** The shell's zone renderer (AGL-2910); `null` outside the console shell. */
   const WidgetSlot = useConsoleWidgetSlot()
@@ -397,6 +512,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       update({ options, variants })
     },
     [current],
+  )
+  const latestOptionsChange = useRef(handleOptionsChange)
+  latestOptionsChange.current = handleOptionsChange
+  const setOptionValues = useCallback(
+    (values: string[], index: number) =>
+      latestOptionsChange.current(index, {
+        values: values.map((value) => String(value).trim()).filter(Boolean),
+      }),
+    [],
   )
 
   const handleVariantField = (
@@ -704,42 +828,22 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           multiline
           minRows={2}
         />
-        <Autocomplete
-          multiple
+        <ProductChipsField<string>
           freeSolo
-          options={[] as string[]}
-          value={current.tags ?? []}
-          onChange={(_event, tags) =>
-            update({ tags: tags.map((tag) => String(tag).trim()).filter(Boolean) })
-          }
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Tags"
-              size="small"
-              placeholder="Type and press Enter"
-            />
-          )}
+          label="Tags"
+          placeholder="Type and press Enter"
+          options={NO_ITEMS}
+          value={current.tags ?? NO_ITEMS}
+          onChange={setTags}
         />
         {categories.rows.length > 0 ? (
-          <Autocomplete
-            multiple
+          <ProductChipsField<any>
+            label="Categories"
             options={categories.rows}
-            getOptionLabel={(category: any) => category.name}
-            isOptionEqualToValue={(option: any, value: any) =>
-              option.$id === value.$id
-            }
-            value={categories.rows.filter((category: any) =>
-              (current.categoryIds ?? []).includes(category.$id),
-            )}
-            onChange={(_event, picked) =>
-              update({
-                categoryIds: picked.map((category: any) => category.$id),
-              })
-            }
-            renderInput={(params) => (
-              <TextField {...params} label="Categories" size="small" />
-            )}
+            getOptionLabel={categoryLabel}
+            isOptionEqualToValue={sameRecord}
+            value={pickedCategories}
+            onChange={setCategories}
           />
         ) : null}
         {/*
@@ -831,25 +935,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               sx={{ width: 160 }}
               placeholder="Size"
             />
-            <Autocomplete
-              multiple
+            <ProductChipsField<string>
               freeSolo
-              options={[] as string[]}
+              fill
+              label="Values"
+              placeholder="S, M, L…"
+              options={NO_ITEMS}
               value={option.values}
-              onChange={(_event, values) =>
-                handleOptionsChange(index, {
-                  values: values.map((value) => String(value).trim()).filter(Boolean),
-                })
-              }
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Values"
-                  size="small"
-                  placeholder="S, M, L…"
-                />
-              )}
-              sx={{ flex: 1 }}
+              index={index}
+              onChange={setOptionValues}
             />
             <Button
               size="small"
@@ -1294,31 +1388,14 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           </>
         ) : null}
 
-        <Autocomplete
-          multiple
-          options={relatedProducts.rows.filter(
-            (item: any) => !item.deletedAt && item.$id !== product?.$id,
-          )}
-          getOptionLabel={(item: any) => item.name ?? item.$id}
-          isOptionEqualToValue={(option: any, value: any) =>
-            option.$id === value.$id
-          }
-          value={relatedProducts.rows.filter((item: any) =>
-            (current.relatedProductIds ?? []).includes(item.$id),
-          )}
-          onChange={(_event, picked) =>
-            update({
-              relatedProductIds: picked.map((item: any) => item.$id),
-            })
-          }
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Related products (upsells)"
-              size="small"
-              helperText="Shown by the Related products block; blank falls back to frequently-bought-together"
-            />
-          )}
+        <ProductChipsField<any>
+          label="Related products (upsells)"
+          helperText="Shown by the Related products block; blank falls back to frequently-bought-together"
+          options={relatedOptions}
+          getOptionLabel={recordLabel}
+          isOptionEqualToValue={sameRecord}
+          value={pickedRelated}
+          onChange={setRelatedProducts}
         />
 
         <Divider textAlign="left">{'Search engine listing'}</Divider>

@@ -82,13 +82,16 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   useHostCampaigns,
   useOrgMemberOptions,
 } from '@aglyn/tenant-feature-instance'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
-import { useOrgCompanyOptions } from '../hooks/use-org-company-options'
+import {
+  type OrgCompanyOption,
+  useOrgCompanyOptions,
+} from '../hooks/use-org-company-options'
 import { useOrgContactFields } from '../hooks/use-org-contact-fields'
 import { useOrgContactSegments } from '../hooks/use-org-contact-segments'
 import { useOrgCrmViews } from '../hooks/use-org-crm-views'
@@ -717,6 +720,67 @@ export function draftToRule(draft: DynamicListRuleDraft): DynamicListRule {
   })
 }
 
+const companyLabel = (option: OrgCompanyOption): string => option.label
+const sameCompany = (option: OrgCompanyOption, chosen: OrgCompanyOption): boolean =>
+  option.id === chosen.id
+// The query already narrowed the hits; a second, client-side filter on the
+// label would hide a match whose stored name differs from its search key.
+const keepHits = <T,>(options: T[]): T[] => options
+const COMPANY_FIELD_SX = { minWidth: 260, flexGrow: 1, maxWidth: 420 } as const
+
+/**
+ * The rule's companies, as chips beside a search — MEMOIZED, and every prop it
+ * takes is stable while the chosen companies and the search are (AGL-3423).
+ *
+ * A multiple Autocomplete hands its input a new chip array as
+ * `startAdornment` on every render, and MUI's `InputBase` copies that into
+ * its `FormControl` from a passive effect: a state update left pending after
+ * every commit the field takes part in. React 19 counts each such commit as a
+ * nested update, and keystrokes delivered back to back commit one after
+ * another with nothing to clear the count, so the fifty-first throws
+ * "Maximum update depth exceeded" (#185). Every other field of the rule
+ * writes the same draft, so each keystroke in them re-rendered this one;
+ * kept out of those renders, it commits only when it changes.
+ */
+const RuleCompaniesField = memo(function RuleCompaniesField(props: {
+  hits: OrgCompanyOption[]
+  value: readonly OrgCompanyOption[]
+  search: string
+  searching: boolean
+  onSearch(value: string): void
+  onChange(ids: string[]): void
+}) {
+  const { onSearch, onChange } = props
+  return (
+    <Autocomplete<OrgCompanyOption, true>
+      multiple
+      size="small"
+      options={props.hits}
+      value={props.value as OrgCompanyOption[]}
+      getOptionLabel={companyLabel}
+      isOptionEqualToValue={sameCompany}
+      filterOptions={keepHits}
+      inputValue={props.search}
+      onInputChange={(_event, value, reason) => {
+        if (reason !== 'reset') onSearch(value)
+      }}
+      onChange={(_event, value) => onChange(value.map((option) => option.id))}
+      loading={props.searching}
+      noOptionsText={
+        props.search ? 'No company by that name' : 'Type to search companies'
+      }
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="At company"
+          helperText="Any of these companies"
+        />
+      )}
+      sx={COMPANY_FIELD_SX}
+    />
+  )
+})
+
 export interface DynamicListRuleFieldsProps {
   /** `['orgs', orgId]` — the resolved org scope the caller already holds. */
   scope: readonly [string, string]
@@ -885,6 +949,23 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
     key: K,
     value: DynamicListRuleDraft[K],
   ) => onChange({ ...draft, [key]: value })
+  /*
+   * `set('companyIds', …)` for the memoized company chips: the same write from
+   * the last rendered draft, from a callback that keeps its identity.
+   */
+  const latest = useRef({ draft, onChange })
+  latest.current = { draft, onChange }
+  const setCompanyIds = useCallback(
+    (companyIds: string[]) =>
+      latest.current.onChange({ ...latest.current.draft, companyIds }),
+    [],
+  )
+  const companyIds = draft.companyIds
+  const companyNames = companies.names
+  const chosenCompanies = useMemo(
+    () => companyIds.map((id) => ({ id, label: companyNames[id] ?? id })),
+    [companyIds, companyNames],
+  )
 
   /*
    * THE CUSTOM-FIELD ROWS. A new row names the first definition with an
@@ -1194,42 +1275,13 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           their names through the hook's own memory of every id it has seen,
           which is what lets a rule reopened months later still say "Acme".
          */}
-        <Autocomplete
-          multiple
-          size="small"
-          options={companies.hits}
-          value={draft.companyIds.map((id) => ({
-            id,
-            label: companies.names[id] ?? id,
-          }))}
-          getOptionLabel={(option) => option.label}
-          isOptionEqualToValue={(option, chosen) => option.id === chosen.id}
-          // The query already narrowed the hits; a second, client-side
-          // filter on the label would hide a match whose stored name differs
-          // from its search key.
-          filterOptions={(options) => options}
-          inputValue={companySearch}
-          onInputChange={(_event, value, reason) => {
-            if (reason !== 'reset') setCompanySearch(value)
-          }}
-          onChange={(_event, value) =>
-            set(
-              'companyIds',
-              value.map((option) => option.id),
-            )
-          }
-          loading={companies.searching}
-          noOptionsText={
-            companySearch ? 'No company by that name' : 'Type to search companies'
-          }
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="At company"
-              helperText="Any of these companies"
-            />
-          )}
-          sx={{ minWidth: 260, flexGrow: 1, maxWidth: 420 }}
+        <RuleCompaniesField
+          hits={companies.hits}
+          value={chosenCompanies}
+          search={companySearch}
+          searching={companies.searching}
+          onSearch={setCompanySearch}
+          onChange={setCompanyIds}
         />
         {/*
           THE RE-ENGAGEMENT WINDOW (AGL-2616), beside the other facet reads
