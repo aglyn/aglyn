@@ -38,7 +38,9 @@
  * never installs the store must still send.
  *=========================================*/
 
+import { linkReputationSignals } from './link-reputation'
 import {
+  linkHostsIn,
   type PhishingScreenSignal,
   screenOutboundEmail,
   signalsThatHold,
@@ -127,9 +129,10 @@ export interface TenantMessageScreenRefusal {
 }
 
 /**
- * Screen one tenant message: the pure screen, its tiers, then — only when a
- * signal holds — the installed gate, which files or reads the review row.
- * `null` when it may go.
+ * Screen one tenant message: the pure screen, the reputation of every
+ * foreign host it links to (AGL-3451), the tiers, then — only when a signal
+ * holds — the installed gate, which files or reads the review row. `null`
+ * when it may go.
  *
  * The ONE door for every transport. `sendEmail` asks it for every message a
  * site sends through the platform's provider, and a sender on another
@@ -155,7 +158,14 @@ export async function screenTenantMessage(
     ownNames: workspace.ownNames,
     ownDomains: workspace.ownDomains,
   })
-  const holding = signalsThatHold(verdict.signals, {
+  // Every foreign host the message links to, against the reputation list
+  // (AGL-3451). A listed host is a strong signal; a lookup that fails is
+  // none. Nothing installed looks nothing up.
+  const reputation = await linkReputationSignals(
+    linkHostsIn([input.subject, ...input.bodies].filter(Boolean).join('\n')),
+    { ownDomains: workspace.ownDomains },
+  )
+  const holding = signalsThatHold([...verdict.signals, ...reputation], {
     ageDays: workspace.ageDays,
     owed: input.owed === true,
   })

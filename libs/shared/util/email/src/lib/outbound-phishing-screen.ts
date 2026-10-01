@@ -542,6 +542,13 @@ export type PhishingScreenSignal =
    * The address itself is never stored.
    */
   | { code: 'recipient-prefill-link'; host: string; lure: string; place: 'fragment' | 'parameter' }
+  /**
+   * A link, embed, redirect or form action whose host Google Web Risk lists
+   * as phishing, malware or unwanted software (AGL-3451,
+   * `link-reputation.ts`). Strong: a harvester already known to be bad
+   * anywhere is bad whatever page or message surrounds it.
+   */
+  | { code: 'web-risk-link'; host: string; threats: string[] }
 
 export interface PhishingScreenInput {
   subject?: string | null
@@ -1111,6 +1118,20 @@ export function phishingScreenBrandLabel(id: string): string {
   return PHISHING_SCREEN_BRANDS.find((brand) => brand.id === id)?.label ?? id
 }
 
+/** Web Risk's threat types, in the words staff read (AGL-3451). */
+const LINK_THREAT_WORDS: Record<string, string> = {
+  SOCIAL_ENGINEERING: 'phishing or social engineering',
+  MALWARE: 'malware',
+  UNWANTED_SOFTWARE: 'unwanted software',
+}
+
+/** "phishing or social engineering and malware", from Web Risk's threat types. */
+export function describeLinkThreats(threats: readonly string[]): string {
+  const words = [...new Set(threats)].map((threat) => LINK_THREAT_WORDS[threat] ?? threat.toLowerCase())
+  if (!words.length) return 'unsafe'
+  return words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
+}
+
 /** One line per signal, in words staff read on the review row. */
 export function describePhishingScreenSignals(
   signals: readonly PhishingScreenSignal[],
@@ -1140,6 +1161,8 @@ export function describePhishingScreenSignals(
         return `Links to ${signal.host} with the recipient's own address in the ${
           signal.place === 'fragment' ? 'fragment' : 'link'
         }, so a sign-in form there opens filled in, beside "${signal.lure}".`
+      case 'web-risk-link':
+        return `Links to ${signal.host}, which Google Web Risk lists as ${describeLinkThreats(signal.threats)}.`
       default:
         return 'Phishing signal.'
     }
@@ -1177,7 +1200,10 @@ export function describePhishingScreenSignals(
  *
  * A credential-harvest page (a password, card or one-time-code field that
  * is not one of the platform's own sign-in or checkout elements) is STRONG:
- * see `hosted-page-screen.ts`.
+ * see `hosted-page-screen.ts`. So is a link to a host Google Web Risk lists
+ * (`web-risk-link`, `link-reputation.ts`): it holds for every workspace, and
+ * an account-subdomain host does not soften it, because the listing names
+ * that host itself.
  *=========================================*/
 
 /** A workspace younger than this many days has the soft rules applied. */
@@ -1190,6 +1216,7 @@ export type PhishingSignalTier = 'strong' | 'soft'
 export const STRONG_PHISHING_SIGNAL_CODES: ReadonlySet<string> = new Set([
   'lookalike-link',
   'credential-field',
+  'web-risk-link',
 ])
 
 /**

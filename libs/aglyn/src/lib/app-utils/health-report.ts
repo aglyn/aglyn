@@ -2402,6 +2402,17 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Sends the one summary a workspace gets when more items were held or flagged in an hour than are sent one by one (AGL-3368). If it stops, a workspace whose attack ended hears nothing about the items folded into its digest until its next notice.',
   },
   {
+    id: 'web-risk-recheck',
+    label: 'Link re-check (Web Risk)',
+    // Daily on Cloud Scheduler (AGL-3451); the dailies' ninety-minute grace.
+    cron: '30 9 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/web-risk-recheck',
+    graceMinutes: 90,
+    drives:
+      'Looks up every live page’s outside links against Google Web Risk again, and holds a page whose link has been listed since it went live; a new workspace’s page also gets its security hold (AGL-3451, AGL-3450). If it stops, a page that linked to a harvester before the harvester was listed keeps serving until somebody publishes it again or a render after the cache expires catches it.',
+  },
+  {
     id: 'firestore-export',
     label: 'Weekly Firestore export',
     cron: '0 5 * * 1',

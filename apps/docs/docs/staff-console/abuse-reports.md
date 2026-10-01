@@ -124,6 +124,7 @@ notification an intake phishing report raises, once per row.
 | Outreach sequences (connected mailboxes) | Before the step is claimed | The enrollment is paused with the reason. A member resumes it once the row is released. |
 | Published pages | When the page is put together for a visitor | The page serves the last version it served clean, or nothing if it has none. |
 | Site redirects that send visitors to another website | When the redirect would fire | The rule does not fire, and the address answers as if it had no rule. The row names the redirect and its source path. |
+| Live pages' outside links | Once a day, against Google Web Risk ([below](#web-risk)) | A page whose link was listed after it went live goes back through the page review. |
 
 A page row names the page by what it is and the route it serves, never by the
 site's root address:
@@ -171,6 +172,10 @@ Redirects page also refuses to save a destination that is a brand lookalike.
   (`…/ss/c/…#victim@example.com`), plain or base64. Only the landing page's
   script reads a fragment, and it uses the address to fill a fake sign-in form.
   The address itself is never stored on the row.
+- **A link to a site Google Web Risk lists.** A link, embed, form action, redirect
+  or email link whose host Google Web Risk lists as phishing, malware or unwanted
+  software. It needs no brand and no wording: a harvester such as
+  `temps-juenes.com` wears neither. See [Links Google Web Risk lists](#web-risk).
 
 **Soft signals hold only for a workspace less than 14 days old:**
 
@@ -213,6 +218,45 @@ resets. A lookalike link in one of those still holds.
 A brand mentioned on its own never holds. The brand list and its real domains
 live in `libs/shared/util/email/src/lib/outbound-phishing-screen.ts`. Add a brand
 there when it has been seen impersonated, not because it is large.
+
+### Links Google Web Risk lists {#web-risk}
+
+The rules above catch content that looks like a lure. A link to a site that is already
+known to be bad is caught by asking Google Web Risk about it, whatever the page or
+message around it says.
+
+- **What is asked.** Every host a published page, a redirect rule, a campaign or any
+  other site email points to, except the workspace's own, the platform's own sites, a
+  listed brand's own domain and common social, maps and review links. At most 20 hosts
+  per page or message. Only the bare origin (`https://<host>/`) is sent: never the path,
+  the query, the page or the message.
+- **What a listing does.** It is a strong signal, `web-risk-link`. A new page or a new
+  version is held, email is held, and a redirect does not fire, for every workspace. A
+  page that is already live on an established workspace keeps serving and is flagged as
+  urgent, like every strong signal. A held page from a workspace less than 14 days old
+  also places the [automatic security hold](#security-hold). The row reads "Links to
+  `<host>`, which Google Web Risk lists as phishing or social engineering".
+- **A failed lookup is not evidence.** An error, a timeout (1 second a call, 1.2 seconds
+  a page) or a refused credential reads the host as unknown. It never holds anything,
+  and the server logs a `[web-risk]` warning. When Google refuses the credential, the
+  lookups pause for 15 minutes and log one error.
+- **Cache.** One answer per host in `webRiskVerdicts/{host}`, server-only: a listing for
+  as long as Google's `expireTime` allows (minutes), a clean answer for 12 hours. Each
+  server process also remembers a clean answer for 10 minutes, so a listing the daily
+  re-check writes reaches every page within minutes.
+- **The daily re-check.** A harvester is often listed only after the page linking to it
+  went live. `/api/admin/web-risk-recheck` (Cloud Scheduler, 09:30 UTC) walks every live
+  page's foreign hosts, which the review notes beside the version it served
+  (`hosts/{hostId}/pageReviews/{screenId}.foreignHosts`), asks again, and sends a page
+  with a newly listed host back through the page review. It drops the cached pages of a
+  site it held, and places the security holds those holds asked for before it returns.
+- **The kill switch.** Set `platformSettings/webRisk` to `{ enabled: false }` in
+  Firestore and every lookup stops within a minute. Every host then reads unknown, so
+  nothing holds on it. Delete the field, or set it to `true`, to turn the lookups back
+  on.
+- **The credential.** The lookups use the platform's own service account, the same one
+  that writes logs. The Web Risk API must be enabled on the project. On a self-hosted
+  install without it, every host reads unknown and nothing else changes.
 
 ### Deciding a row {#deciding-a-held-row}
 

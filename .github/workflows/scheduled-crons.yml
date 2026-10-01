@@ -288,6 +288,13 @@ on:
           # nothing. Safe by hand — each hold is claimed once and a placed
           # one is never placed again.
           - /api/admin/security-holds
+          # The daily link re-check (AGL-3451), the same as the
+          # `consoleWebRiskRecheck` job. A GET walks one chunk of sites and
+          # reports what it would look up; the POST looks them up and holds a
+          # page whose link is newly listed. Safe by hand — a host answered in
+          # the last twelve hours is read from the cache, and a held page's
+          # row is keyed on its signals, so a second run files nothing new.
+          - /api/admin/web-risk-recheck
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

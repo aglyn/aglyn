@@ -75,6 +75,10 @@ export * from './lib/outbound-screen-gate'
 // The same screen read over a published page (AGL-3356): lookalike links and
 // embeds, author-defined credential fields, a brand's call to action.
 export * from './lib/hosted-page-screen'
+// The reputation lookup every foreign link a page, an email or a redirect
+// points at passes (AGL-3451). Pure; the lookup is injected by
+// `@aglyn/tenant-data-admin`, which holds the credential and the cache.
+export * from './lib/link-reputation'
 // The site's theme palette as plain data (AGL-3370), so a palette token an
 // author picked resolves in mail. Built without MUI; `shared-ui-theme`'s
 // parity spec holds it equal to the theme.
