@@ -187,6 +187,12 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         dataStorageMb: 2048,
         apiRequests: 50_000,
         contactsCount: 400,
+        // The CRM's records band and its parts, which this rollup predates:
+        // NULL, not zero, so a client pricing the row falls back to
+        // `contactsCount` as the sweep did, rather than reading no records.
+        crmRecordsCount: null,
+        companiesCount: null,
+        dealsCount: null,
         // AGL-2280 — the same argument one meter along, and this one is
         // dollars rather than fractions of a cent, so a dropped projection
         // here is the difference between a discount refused and approved.
@@ -194,6 +200,10 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         // AGL-2930 — the two AI columns on the staff usage table.
         assistCredits: 18_750,
         assistOverageUsd: 6.25,
+        // Priced since 2026-09-07 (`perRun`), so served beside the other
+        // priced meters as well as on the table's meter line below.
+        workflowRuns: 87,
+        actionRuns: 219,
         // AGL-2321 — the history a rate gets derived from. Asserted as a
         // whole object rather than field by field, so a projection that ADDS
         // a field without a reader, or silently drops one, both fail here.

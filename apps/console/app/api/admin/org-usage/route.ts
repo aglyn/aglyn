@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { pluginCostAxisProjection } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import {
   orgCogsInputFrom,
   orgMonthlyCogsUsd,
@@ -84,9 +85,8 @@ async function handler(request: Request): Promise<Response> {
       month: String(doc.get('month') ?? doc.id),
       storageGb: Number(doc.get('storageGb') ?? 0),
       pageViews: Number(doc.get('pageViews') ?? 0),
-      formSubmissions: Number(doc.get('formSubmissions') ?? 0),
       costUsd: Number(doc.get('costUsd') ?? 0),
-      // The three meters this projection used to drop (AGL-1134). The
+      // The two core meters this projection used to drop (AGL-1134). The
       // rollup records them and `orgMonthlyCogsUsd` prices them, so a client
       // pricing these rows without them got a SMALLER cost than the server
       // did for the same org — and a smaller cost is the direction that
@@ -94,19 +94,13 @@ async function handler(request: Request): Promise<Response> {
       // model; it just quietly answers differently.
       dataStorageMb: Number(doc.get('dataStorageMb') ?? 0),
       apiRequests: Number(doc.get('apiRequests') ?? 0),
-      contactsCount: Number(doc.get('contactsCount') ?? 0),
-      // Aglyn Assist provider spend for the month (AGL-2280). Dollars, not a
-      // meter, and the largest single cost line an org can run up — the same
-      // projection argument as the three above: a field the model prices and
-      // the projection drops makes the browser's cost SMALLER than the
-      // server's, and smaller approves a discount.
-      assistCostUsd: Number(doc.get('assistCostUsd') ?? 0),
-      // The credit view of that spend and the overage that entered
-      // `billedCents` (AGL-2930). NULL, not zero, on a rollup written before
-      // `report-usage` recorded credits: "drew nothing" and "was not measured
-      // in credits" are the AGL-2321 distinction one meter along.
-      assistCredits: nullableNumber(doc.get('assistCredits')),
-      assistOverageUsd: nullableNumber(doc.get('assistOverageUsd')),
+      // Every field a plugin's cost axis reads or records, by the same
+      // argument: form submissions, CRM records, provider spend, runs. A
+      // priced field reads zero where the rollup lacks it, as the model reads
+      // it; a recorded one — the credits a month drew, the overage it billed
+      // — reads NULL on a rollup written before its meter recorded it, the
+      // AGL-2321 distinction between "drew nothing" and "was not measured".
+      ...pluginCostAxisProjection((field) => doc.get(field)),
       // THE RECORDED-NOT-PRICED HALF (AGL-2321). `report-usage` writes these
       // and argues, correctly, that inventing a per-email or per-run rate
       // would put a made-up number into `billedCents` on the same day the
@@ -116,9 +110,11 @@ async function handler(request: Request): Promise<Response> {
       // up: the history a rate would be derived from was unreachable from the
       // only surface anyone looks at it on.
       //
-      // Grouped rather than flattened so the boundary stays legible: nothing
-      // in `recorded` is an input to `orgMonthlyCogsUsd`, and a future field
-      // that IS priced belongs beside `assistCostUsd` above, not here.
+      // Grouped rather than flattened so the boundary stays legible: a field
+      // that IS priced belongs on a cost axis, served above, not here. The
+      // run counts are the one overlap — priced since 2026-09-07 (`perRun`),
+      // so the axis projection serves them too, and the copies here are the
+      // staff table's meter line.
       //
       // A field the rollup never wrote reads as NULL, not as zero or false.
       // An org whose July rollup predates the meter did not send zero emails

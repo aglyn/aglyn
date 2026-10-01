@@ -20,7 +20,6 @@
     {
       "path": "apps/console/app/api/admin/org-usage/route.ts",
       "rules": [
-        "domain-declares:ai",
         "domain-declares:forms",
         "domain-declares:workflows"
       ],

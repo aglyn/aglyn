@@ -61,6 +61,11 @@ export function aiUsageAxes(): PluginUsageAxesDeclaration {
         id: 'assist',
         order: 80,
         fields: ['assistCostUsd'],
+        // The month's credit draw and the overage that entered `billedCents`
+        // (AGL-2930), which the usage sweep writes beside the spend: the
+        // staff usage table's AI columns, `null` on a rollup written before
+        // the sweep recorded credits, and never a cost.
+        staffFields: ['assistCredits', 'assistOverageUsd'],
         live: {
           collection: 'assistUsage',
           fields: [ASSIST_PROVIDER_COST_FIELD, 'estCostUsd'],

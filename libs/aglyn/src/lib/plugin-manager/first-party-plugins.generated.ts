@@ -978,6 +978,10 @@ export const PLUGIN_COST_AXES_DECLARED: readonly ResolvedPluginCostAxis[] = [
     "fields": [
       "assistCostUsd"
     ],
+    "staffFields": [
+      "assistCredits",
+      "assistOverageUsd"
+    ],
     "live": {
       "collection": "assistUsage",
       "fields": [

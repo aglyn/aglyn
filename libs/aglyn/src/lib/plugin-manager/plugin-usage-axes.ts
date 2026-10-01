@@ -90,6 +90,12 @@ export interface PluginCostAxisDeclaration {
    */
   recordedFields?: readonly string[]
   /**
+   * Rollup fields the plugin's usage sweep writes beside the meter for its
+   * staff surfaces to read — served on the staff usage rows, `null` where a
+   * rollup never wrote one, and never forwarded to the cost model.
+   */
+  staffFields?: readonly string[]
+  /**
    * The `ORG_COGS_UNIT_RATES_USD` key pricing one unit. Absent when the
    * fields are already dollars, which then enter the model at ×1.
    */
@@ -269,4 +275,43 @@ export function pluginCostAxisFields(): string[] {
     }
   }
   return fields
+}
+
+/**
+ * A month's rollup as a staff reader is served it, one entry per field the
+ * declared cost axes read, record or serve to staff (`get` reads one rollup
+ * field).
+ *
+ * A field an axis prices reads zero where the rollup lacks it, as the cost
+ * model reads it — except where the axis falls back to an older basis when
+ * the rollup carries none of its fields: there absence is the answer that
+ * selects the fallback, so it is served as `null`, and a reader pricing the
+ * served row reads the month the way the sweep did. A field an axis only
+ * records or serves reads `null` when the rollup never wrote it: "not
+ * recorded" and "recorded zero" are different answers, and a projection
+ * that collapses them invents history (AGL-2321).
+ */
+export function pluginCostAxisProjection(
+  get: (field: string) => unknown,
+): Record<string, number | null> {
+  const out: Record<string, number | null> = {}
+  for (const axis of PLUGIN_COST_AXES_DECLARED) {
+    const absentIsNull = [
+      ...(axis.fallbackFields?.length ? axis.fields : []),
+      ...(axis.recordedFields ?? []),
+      ...(axis.staffFields ?? []),
+    ]
+    for (const field of [
+      ...axis.fields,
+      ...(axis.fallbackFields ?? []),
+      ...(axis.recordedFields ?? []),
+      ...(axis.staffFields ?? []),
+    ]) {
+      if (field in out) continue
+      const value = get(field)
+      out[field] =
+        value != null ? Number(value) : absentIsNull.includes(field) ? null : 0
+    }
+  }
+  return out
 }

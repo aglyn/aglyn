@@ -844,7 +844,7 @@ async function pluginUsageAxes() {
       throw new Error(`${where} declares nothing — drop the entry, or declare a meter`)
     }
     for (const axis of declaredAxes) {
-      const { id, order, fields, fallbackFields, recordedFields, rate, live } = axis ?? {}
+      const { id, order, fields, fallbackFields, recordedFields, staffFields, rate, live } = axis ?? {}
       const what = `${where} cost axis "${id ?? ''}"`
       if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a cost axis needs a plain "id"`)
       if (axisOwners.has(id)) throw new Error(`${what} is already priced by ${axisOwners.get(id)}`)
@@ -855,6 +855,12 @@ async function pluginUsageAxes() {
       plainNames(fields, `${what} "fields"`)
       plainNames(fallbackFields, `${what} "fallbackFields"`, { optional: true })
       plainNames(recordedFields, `${what} "recordedFields"`, { optional: true })
+      plainNames(staffFields, `${what} "staffFields"`, { optional: true })
+      // A field the model reads is never also one staff alone is served: the
+      // projection would answer it twice, with two meanings of "absent".
+      const modelFields = [...fields, ...(fallbackFields ?? []), ...(recordedFields ?? [])]
+      const both = (staffFields ?? []).filter((field) => modelFields.includes(field))
+      if (both.length) throw new Error(`${what}: "staffFields" repeats a field the cost model reads: ${both.join(', ')}`)
       if (rate !== undefined && (typeof rate !== 'string' || !PLAIN_NAME.test(rate))) {
         throw new Error(`${what}: "rate" names a key of ORG_COGS_UNIT_RATES_USD, never a number`)
       }
