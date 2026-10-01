@@ -292,14 +292,6 @@
       "lane": "workflows"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/campaign-touch.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
       "rules": [
         "domain-name"

@@ -54,8 +54,8 @@ import {
 } from './campaign-conversion-attribution'
 import {
   ATTRIBUTION_WINDOW_MS,
-  campaignTouchWire,
-} from '@aglyn/aglyn/app-utils/campaign-touch'
+  utmTouchWire,
+} from '@aglyn/aglyn/app-utils/utm-touch'
 import {
   EMAIL_ATTRIBUTION_MODEL as ATTRIBUTION_MODEL,
   EMAIL_ATTRIBUTION_WINDOW_DAYS as ATTRIBUTION_WINDOW_DAYS,
@@ -224,7 +224,7 @@ const LANDED_AT = 1_700_000_000_000
 
 /** The wire form a browser would have sent with the conversion. */
 function webTouch(campaign: string, atMs: number): string {
-  return campaignTouchWire({ source: 'google', campaign, atMs })
+  return utmTouchWire({ source: 'google', campaign, atMs })
 }
 
 /** Record a click on our own mail, the way the delivery webhook does. */

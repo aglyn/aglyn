@@ -22,7 +22,7 @@
  * Named for what it parses, the web's UTM labels. The `campaign` in
  * `utm_campaign` is the label an ad push carries; it is not the Marketing
  * plugin's campaign, and nothing here reads one. What a site's own visitors
- * carry to the moment they identify is `campaign-touch.ts`'s.
+ * carry to the moment they identify is `utm-touch.ts`'s.
  *
  * Until this existed a paid click, an organic visit and a partner link
  * arrived indistinguishable: `sign_up` carried `method` and nothing else, so

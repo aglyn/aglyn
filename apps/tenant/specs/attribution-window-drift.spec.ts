@@ -18,7 +18,7 @@
 /**
  * THE ATTRIBUTION WINDOW IS ONE NUMBER, DECLARED TWICE.
  *
- * `email-revenue-window.ts` holds it for the server joins; `campaign-touch.ts`
+ * `email-revenue-window.ts` holds it for the server joins; `utm-touch.ts`
  * holds it for the visitor's browser, which decides there whether a remembered
  * touch has expired. Neither can import the other: `shared-util-email` is
  * `scope:shared` and reaches back into `@aglyn/aglyn`, so an edge the other
@@ -48,7 +48,7 @@ import {
 import {
   ATTRIBUTION_WINDOW_DAYS,
   ATTRIBUTION_WINDOW_MS,
-} from '@aglyn/aglyn/app-utils/campaign-touch'
+} from '@aglyn/aglyn/app-utils/utm-touch'
 
 describe('the browser and the server agree about the window', () => {
   it('is the same number of days on both sides', () => {

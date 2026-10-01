@@ -16,8 +16,13 @@
  */
 
 /**
- * THE VISITOR'S HALF OF CAMPAIGN ATTRIBUTION — the touch that has to survive
- * the gap between arriving from a campaign and becoming somebody.
+ * THE VISITOR'S HALF OF ATTRIBUTION — the UTM touch that has to survive the
+ * gap between arriving from a labeled link and becoming somebody.
+ *
+ * The labels are the web's (`utm_source`/`utm_medium`/`utm_campaign`), not
+ * any plugin's model: every door that identifies a visitor — a form, a
+ * booking, a signup — attaches the touch, and whichever plugin credits its
+ * campaigns reads it on the server.
  *
  * ## The gap this exists to cross
  *
@@ -169,8 +174,11 @@ function touchIsInWindow(touchedAtMs: number, convertedAtMs: number): boolean {
   return age >= 0 && age <= ATTRIBUTION_WINDOW_MS
 }
 
-/** Where the touch is held. Namespaced like every other key this app sets. */
-export const CAMPAIGN_TOUCH_STORAGE_KEY = 'aglyn:campaign-touch'
+/**
+ * Where the touch is held. Namespaced like every other key this app sets, and
+ * spelled as visitors' devices already hold it.
+ */
+export const UTM_TOUCH_STORAGE_KEY = 'aglyn:campaign-touch'
 
 /**
  * The parameter the touch's instant rides under inside the wire form.
@@ -180,10 +188,10 @@ export const CAMPAIGN_TOUCH_STORAGE_KEY = 'aglyn:campaign-touch'
  * by it or have to widen it. `t` is outside the allowlist and read
  * separately.
  */
-export const CAMPAIGN_TOUCH_TIME_KEY = 't'
+export const UTM_TOUCH_TIME_KEY = 't'
 
 /** A campaign the visitor arrived from, and when they arrived from it. */
-export interface CampaignTouch extends UtmAttribution {
+export interface UtmTouch extends UtmAttribution {
   /** When the visitor followed the campaign link, epoch ms. */
   atMs: number
 }
@@ -209,15 +217,15 @@ function localStore(): Storage | null {
 
 /**
  * The canonical stored form of a touch — the ONLY place it is written, so it
- * cannot drift from what {@link parseCampaignTouch} reads back.
+ * cannot drift from what {@link parseUtmTouch} reads back.
  */
-export function campaignTouchWire(touch: CampaignTouch | null | undefined): string {
+export function utmTouchWire(touch: UtmTouch | null | undefined): string {
   if (!touch) return ''
   const labels = utmAttributionQuery(touch)
   if (!labels) return ''
   const atMs = Math.round(Number(touch.atMs))
   if (!Number.isFinite(atMs) || atMs <= 0) return ''
-  return `${labels}&${CAMPAIGN_TOUCH_TIME_KEY}=${atMs}`
+  return `${labels}&${UTM_TOUCH_TIME_KEY}=${atMs}`
 }
 
 /**
@@ -229,10 +237,10 @@ export function campaignTouchWire(touch: CampaignTouch | null | undefined): stri
  * future is refused for the reason the revenue join refuses one: a click
  * after the conversion is the receipt, not the cause.
  */
-export function parseCampaignTouch(
+export function parseUtmTouch(
   wire: unknown,
   nowMs: number = Date.now(),
-): CampaignTouch | null {
+): UtmTouch | null {
   if (typeof wire !== 'string' || !wire) return null
   let params: URLSearchParams
   try {
@@ -242,7 +250,7 @@ export function parseCampaignTouch(
   }
   const campaign = parseUtmAttribution(params)
   if (!campaign) return null
-  const atMs = Number(params.get(CAMPAIGN_TOUCH_TIME_KEY))
+  const atMs = Number(params.get(UTM_TOUCH_TIME_KEY))
   if (!touchIsInWindow(atMs, nowMs)) return null
   return { ...campaign, atMs }
 }
@@ -254,17 +262,17 @@ export function parseCampaignTouch(
  * grant remembers the arrival the moment it is given and a withdrawal drops
  * the stored touch immediately.
  */
-export function setCampaignTouchConsent(allowed: boolean | null): void {
+export function setUtmTouchConsent(allowed: boolean | null): void {
   storageConsent = allowed === true ? true : allowed === false ? false : null
   if (storageConsent === true) {
-    rememberCampaignTouch()
+    rememberUtmTouch()
     return
   }
   if (storageConsent === false) {
     const store = localStore()
     if (!store) return
     try {
-      store.removeItem(CAMPAIGN_TOUCH_STORAGE_KEY)
+      store.removeItem(UTM_TOUCH_STORAGE_KEY)
     } catch {
       // Nothing else to try, and a failed cleanup must not break the page.
     }
@@ -281,10 +289,10 @@ export function setCampaignTouchConsent(allowed: boolean | null): void {
  *
  * @returns what is now remembered, or `null`.
  */
-export function rememberCampaignTouch(
+export function rememberUtmTouch(
   search?: string,
   nowMs: number = Date.now(),
-): CampaignTouch | null {
+): UtmTouch | null {
   if (storageConsent !== true) return null
   const store = localStore()
   if (!store) return null
@@ -296,11 +304,11 @@ export function rememberCampaignTouch(
         : window.location.search
   const campaign = parseUtmAttribution(new URLSearchParams(source))
   if (!campaign) return null
-  const touch: CampaignTouch = { ...campaign, atMs: nowMs }
-  const wire = campaignTouchWire(touch)
+  const touch: UtmTouch = { ...campaign, atMs: nowMs }
+  const wire = utmTouchWire(touch)
   if (!wire) return null
   try {
-    store.setItem(CAMPAIGN_TOUCH_STORAGE_KEY, wire)
+    store.setItem(UTM_TOUCH_STORAGE_KEY, wire)
   } catch {
     // A store that refuses the write costs the walk from the landing page to
     // the conversion, never a conversion on the landing page itself — the
@@ -326,9 +334,9 @@ export function rememberCampaignTouch(
  * device would be keeping a record of where somebody came from for no purpose
  * anything reads. The read that finds it removes it.
  */
-export function readCampaignTouch(
+export function readUtmTouch(
   nowMs: number = Date.now(),
-): CampaignTouch | null {
+): UtmTouch | null {
   const live =
     typeof window === 'undefined'
       ? null
@@ -340,15 +348,15 @@ export function readCampaignTouch(
   if (!store) return null
   let raw: string | null
   try {
-    raw = store.getItem(CAMPAIGN_TOUCH_STORAGE_KEY)
+    raw = store.getItem(UTM_TOUCH_STORAGE_KEY)
   } catch {
     return null
   }
   if (!raw) return null
-  const touch = parseCampaignTouch(raw, nowMs)
+  const touch = parseUtmTouch(raw, nowMs)
   if (!touch) {
     try {
-      store.removeItem(CAMPAIGN_TOUCH_STORAGE_KEY)
+      store.removeItem(UTM_TOUCH_STORAGE_KEY)
     } catch {
       // The entry stays until the next read finds it again; it is already
       // uncreditable, so nothing downstream is affected.
@@ -367,9 +375,9 @@ export function readCampaignTouch(
  * never `campaignTouch: undefined`, so that "arrived from nowhere" and "this
  * door does not report" stay distinguishable on the wire.
  */
-export function campaignTouchField(
+export function utmTouchField(
   nowMs: number = Date.now(),
 ): { campaignTouch?: string } {
-  const wire = campaignTouchWire(readCampaignTouch(nowMs))
+  const wire = utmTouchWire(readUtmTouch(nowMs))
   return wire ? { campaignTouch: wire } : {}
 }
