@@ -96,15 +96,17 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   consentGroupForSite,
-  type ContactLifecycleFloor,
   firebaseAdmin,
-  floorContactLifecycleStage,
   getOrgForHost,
   logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  type ContactLifecycleFloor,
+  floorContactLifecycleStage,
+} from './server/contact-lifecycle-floor'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import {

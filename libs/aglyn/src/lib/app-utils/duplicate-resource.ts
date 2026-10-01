@@ -63,7 +63,10 @@ export function isDuplicableResourceKind(
 
 /**
  * The kinds that live under a site and are copied by the core server module;
- * the other two belong to the plugins that own their collections.
+ * the other two belong to the plugins that own their collections. A copy is
+ * made by the platform's own recipe for its kinds, and by the recipe the
+ * owning plugin declares beside its collection for the rest (a workflow's,
+ * in `plugins.config.json`); a kind here with neither is refused.
  */
 export const DUPLICABLE_HOST_RESOURCE_KINDS = [
   'screen',

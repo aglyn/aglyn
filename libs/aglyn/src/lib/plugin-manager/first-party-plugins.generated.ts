@@ -9,13 +9,21 @@
 
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
+import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'
+import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
+import type { PluginTemplateSource } from './plugin-template-sources'
+import type { FormRecordTargetDeclaration } from './submission-record-target'
+import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
+import type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -202,7 +210,37 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "bookings",
     "name": "services",
-    "routeSlug": "bookings"
+    "routeSlug": "bookings",
+    "resource": {
+      "kind": "service",
+      "label": "services",
+      "activityNoun": "service",
+      "quotaKey": "servicesPerHost",
+      "entitlement": "bookings",
+      "fields": [
+        "name",
+        "description",
+        "durationMinutes",
+        "priceUsd",
+        "timezone",
+        "windows",
+        "crmFollowUpTask",
+        "crmMeetingActivity"
+      ]
+    },
+    "siteExport": {
+      "limit": 50,
+      "fields": [
+        "name",
+        "description",
+        "durationMinutes",
+        "priceUsd",
+        "timezone",
+        "windows",
+        "crmFollowUpTask",
+        "crmMeetingActivity"
+      ]
+    }
   },
   {
     "pluginId": "bookings",
@@ -213,7 +251,54 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "commerce",
     "name": "products",
-    "routeSlug": "products"
+    "routeSlug": "products",
+    "resource": {
+      "kind": "product",
+      "label": "products",
+      "activityNoun": "product",
+      "quotaKey": "productsPerHost",
+      "entitlement": "commerce",
+      "fields": [
+        "name",
+        "slug",
+        "description",
+        "type",
+        "status",
+        "mediaUrls",
+        "categoryIds",
+        "tags",
+        "options",
+        "variants",
+        "seo",
+        "supplierId",
+        "oversellPolicy",
+        "taxExempt",
+        "digitalFiles",
+        "downloadLimit",
+        "subscription",
+        "subscriptionOptional",
+        "gatedVideos",
+        "relatedProductIds",
+        "giftCard",
+        "lowStockThreshold",
+        "createdAtMs",
+        "updatedAtMs",
+        "nameLower",
+        "nameTokens",
+        "nameReversed",
+        "skus",
+        "barcodes",
+        "priceFromCents",
+        "soldOut",
+        "collectionIds",
+        "priceUsd",
+        "inventory",
+        "imageUrl"
+      ],
+      "stamps": {
+        "deletedAt": null
+      }
+    }
   },
   {
     "pluginId": "commerce",
@@ -228,7 +313,19 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "commerce",
     "name": "locations",
-    "routeSlug": "products"
+    "routeSlug": "products",
+    "resource": {
+      "kind": "location",
+      "label": "inventory locations",
+      "activityNoun": "inventory location",
+      "quotaKey": "inventoryLocations",
+      "entitlement": "commerce",
+      "fields": [
+        "name",
+        "isDefault",
+        "address"
+      ]
+    }
   },
   {
     "pluginId": "commerce",
@@ -311,7 +408,18 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "commerce",
     "name": "registers",
     "mediaScan": "none",
-    "mediaScanReason": "POS register allocations — a count against the register add-on, read by billing (AGL-1775). No content field at all."
+    "mediaScanReason": "POS register allocations — a count against the register add-on, read by billing (AGL-1775). No content field at all.",
+    "resource": {
+      "kind": "register",
+      "label": "POS registers",
+      "activityNoun": "POS register",
+      "quotaKey": "posRegisters",
+      "entitlement": "pos",
+      "fields": [
+        "name",
+        "locationId"
+      ]
+    }
   },
   {
     "pluginId": "commerce",
@@ -379,12 +487,60 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "logic",
     "name": "functions",
-    "routeSlug": "logic"
+    "routeSlug": "logic",
+    "resource": {
+      "kind": "function",
+      "label": "functions",
+      "activityNoun": "function",
+      "activityType": "function",
+      "quotaKey": "functionsPerHost",
+      "fields": [
+        "name",
+        "parameters",
+        "variables",
+        "operations",
+        "returnValue"
+      ]
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "parameters",
+        "variables",
+        "operations",
+        "returnValue"
+      ]
+    }
   },
   {
     "pluginId": "logic",
     "name": "variables",
-    "routeSlug": "logic"
+    "routeSlug": "logic",
+    "resource": {
+      "kind": "variable",
+      "label": "variables",
+      "activityNoun": "variable",
+      "activityType": "variable",
+      "quotaKey": "variablesPerHost",
+      "fields": [
+        "name",
+        "type",
+        "value",
+        "workflowId",
+        "workflowName"
+      ]
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "type",
+        "value",
+        "workflowId",
+        "workflowName"
+      ]
+    }
   },
   {
     "pluginId": "marketing",
@@ -405,22 +561,165 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   {
     "pluginId": "redirects",
     "name": "redirects",
-    "routeSlug": "redirects"
+    "routeSlug": "redirects",
+    "resource": {
+      "kind": "redirect",
+      "label": "redirects",
+      "activityNoun": "redirect",
+      "quotaKey": "redirectsPerHost",
+      "entitlement": "redirects",
+      "requiresPublishRole": true,
+      "fields": [
+        "source",
+        "destination",
+        "statusCode",
+        "kind",
+        "priority",
+        "enabled"
+      ],
+      "externalDestination": {
+        "field": "destination",
+        "approvedByField": "externalDestinationApprovedBy"
+      },
+      "livePathField": "source"
+    }
   },
   {
     "pluginId": "workflows",
     "name": "workflows",
-    "routeSlug": "automation"
+    "routeSlug": "automation",
+    "resource": {
+      "kind": "workflow",
+      "label": "workflows",
+      "activityNoun": "workflow",
+      "activityType": "workflow",
+      "quotaKey": "workflowsPerHost",
+      "entitlement": "workflows",
+      "fields": [
+        "name",
+        "steps",
+        "returnValue",
+        "trigger"
+      ],
+      "duplicate": {
+        "nameField": "name",
+        "fields": [
+          "steps",
+          "returnValue"
+        ],
+        "stamps": {
+          "trigger": null
+        }
+      }
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "steps",
+        "returnValue",
+        "trigger"
+      ]
+    }
   },
   {
     "pluginId": "workflows",
     "name": "webhooks",
-    "routeSlug": "automation"
+    "routeSlug": "automation",
+    "resource": {
+      "kind": "webhook",
+      "label": "webhooks",
+      "activityNoun": "webhook",
+      "entitlement": "webhooks",
+      "platformCap": "WEBHOOK_MAX_PER_HOST",
+      "softDeletes": true,
+      "fields": [
+        "name",
+        "direction",
+        "url",
+        "workflowName",
+        "secret",
+        "enabled"
+      ]
+    }
   },
   {
     "pluginId": "workflows",
     "name": "actions",
-    "routeSlug": "automation"
+    "routeSlug": "automation",
+    "resource": {
+      "kind": "action",
+      "label": "interactions and actions",
+      "activityNoun": "action",
+      "platformCap": "ACTIONS_MAX_PER_HOST",
+      "softDeletes": true,
+      "fields": [
+        "name",
+        "description",
+        "trigger",
+        "steps",
+        "enabled",
+        "frequency",
+        "cooldownMinutes",
+        "audience",
+        "nodeId",
+        "screenId"
+      ]
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "trigger",
+        "steps",
+        "enabled",
+        "recipe"
+      ]
+    }
+  },
+]
+
+/**
+ * Every child sitemap a first-party plugin's documents fill, declared by that
+ * plugin (AGL-3080), in the order the index lists them.
+ */
+export const PLUGIN_SITEMAP_SECTIONS_DECLARED: readonly ResolvedPluginSitemapSection[] = [
+  {
+    "pluginId": "commerce",
+    "section": "products",
+    "collection": "products",
+    "where": {
+      "field": "status",
+      "equals": "active"
+    },
+    "enabledBy": {
+      "doc": "settings/store",
+      "field": "pdpScreenId"
+    },
+    "path": "/products/{slug}",
+    "skipWhen": "deletedAt",
+    "lastmod": [
+      "updatedAtMs",
+      "createdAtMs"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "section": "catalog",
+    "collection": "collections",
+    "where": {
+      "field": "kind",
+      "equals": "catalog"
+    },
+    "enabledBy": {
+      "doc": "settings/store",
+      "field": "collectionScreenId"
+    },
+    "path": "/collections/{slug}",
+    "lastmod": [
+      "updatedAt",
+      "createdAt"
+    ]
   },
 ]
 
@@ -475,6 +774,276 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
       "many": "datasets",
       "addon": "extra datasets"
     }
+  },
+]
+
+/**
+ * What each plan includes of every quota a first-party plugin owns, declared
+ * by that plugin (AGL-3080). `PLAN_ENTITLEMENTS` composes these; core names
+ * no key.
+ */
+export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
+  {
+    "pluginId": "forms",
+    "key": "formSubmissionsPerMonth",
+    "label": "Form subs / mo",
+    "byPlan": {
+      "free": 20,
+      "starter": 200,
+      "pro": 1000,
+      "business": 8000,
+      "scale": 25000,
+      "advanced": 40000,
+      "agency": 25000,
+      "enterprise": 50000
+    }
+  },
+  {
+    "pluginId": "marketplace",
+    "key": "marketplaceFeePct",
+    "label": "Marketplace fee %",
+    "price": true,
+    "byPlan": {
+      "free": 30,
+      "starter": 20,
+      "pro": 20,
+      "business": 20,
+      "scale": 20,
+      "advanced": 20,
+      "agency": 20,
+      "enterprise": 20
+    }
+  },
+  {
+    "pluginId": "crm",
+    "key": "crmEmailsPerDay",
+    "label": "One-to-one emails / day",
+    "byPlan": {
+      "free": 0,
+      "starter": 50,
+      "pro": 150,
+      "business": 200,
+      "scale": 300,
+      "advanced": 500,
+      "agency": 1000,
+      "enterprise": 2000
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "key": "workflowRunsPerMonth",
+    "label": "Workflow runs / mo",
+    "byPlan": {
+      "free": 0,
+      "starter": 500,
+      "pro": 5000,
+      "business": 50000,
+      "scale": 150000,
+      "advanced": 500000,
+      "agency": 2000000,
+      "enterprise": 4000000
+    }
+  },
+  {
+    "pluginId": "ai",
+    "key": "assistCreditsPerMonth",
+    "label": "AI credits / mo",
+    "byPlan": {
+      "free": 300,
+      "starter": 750,
+      "pro": 2750,
+      "business": 7500,
+      "scale": 10000,
+      "advanced": 13000,
+      "agency": 58000,
+      "enterprise": 116000
+    }
+  },
+]
+
+/**
+ * What each plan includes of every feature a first-party plugin owns,
+ * declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[] = [
+  {
+    "pluginId": "commerce",
+    "key": "storefrontSubscriptions",
+    "label": "Storefront subscriptions",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": false,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "commerce",
+    "key": "giftCards",
+    "label": "Gift cards",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": false,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerceAnalytics",
+    "label": "Commerce analytics",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": true,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "marketplace",
+    "key": "marketplaceSelling",
+    "label": "Sell on the marketplace",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": true,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+]
+
+/**
+ * Every meter a first-party plugin contributes to the platform's cost model,
+ * in breakdown order, declared by that plugin (AGL-3080). Core keeps the rates.
+ */
+export const PLUGIN_COST_AXES_DECLARED: readonly ResolvedPluginCostAxis[] = [
+  {
+    "pluginId": "forms",
+    "id": "formSubmissions",
+    "order": 30,
+    "fields": [
+      "formSubmissions"
+    ],
+    "rate": "perFormSubmission"
+  },
+  {
+    "pluginId": "crm",
+    "id": "contacts",
+    "order": 60,
+    "fields": [
+      "crmRecordsCount"
+    ],
+    "fallbackFields": [
+      "contactsCount"
+    ],
+    "recordedFields": [
+      "companiesCount",
+      "dealsCount"
+    ],
+    "rate": "perContactMonth"
+  },
+  {
+    "pluginId": "ai",
+    "id": "assist",
+    "order": 80,
+    "fields": [
+      "assistCostUsd"
+    ],
+    "live": {
+      "collection": "assistUsage",
+      "fields": [
+        "providerCostUsd",
+        "estCostUsd"
+      ]
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "id": "runs",
+    "order": 90,
+    "fields": [
+      "workflowRuns",
+      "actionRuns"
+    ],
+    "rate": "perRun"
+  },
+]
+
+/**
+ * Every band a first-party plugin contributes to the utilization table, in
+ * column order, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
+  {
+    "pluginId": "forms",
+    "id": "formSubmissions",
+    "label": "Form submissions",
+    "order": 40,
+    "fields": [
+      "formSubmissions"
+    ],
+    "entitlement": "formSubmissionsPerMonth",
+    "perHost": true
+  },
+  {
+    "pluginId": "crm",
+    "id": "contactsCount",
+    "label": "CRM records",
+    "order": 70,
+    "fields": [
+      "crmRecordsCount"
+    ],
+    "fallbackFields": [
+      "contactsCount"
+    ],
+    "entitlement": "contactsPerHost"
+  },
+  {
+    "pluginId": "ai",
+    "id": "assistCredits",
+    "label": "Assist credits",
+    "order": 90,
+    "fields": [
+      "assistCostUsd"
+    ],
+    "entitlement": "assistCreditsPerMonth",
+    "unitCostUsd": 0.001
+  },
+  {
+    "pluginId": "workflows",
+    "id": "workflowRuns",
+    "label": "Workflow runs",
+    "order": 100,
+    "fields": [
+      "workflowRuns"
+    ],
+    "entitlement": "workflowRunsPerMonth"
+  },
+  {
+    "pluginId": "workflows",
+    "id": "actionRuns",
+    "label": "Action runs",
+    "order": 110,
+    "fields": [
+      "actionRuns"
+    ],
+    "entitlement": "actionRunsPerMonth"
   },
 ]
 
@@ -538,6 +1107,48 @@ export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
 }
 
 /**
+ * The site documents a plugin authors in the besigner, declared by that
+ * plugin (AGL-3080). Empty when none does, and the console's plugin-document
+ * editor routes answer 404.
+ */
+export const PLUGIN_BESIGNER_DOCUMENTS_DECLARED: readonly ResolvedBesignerDocument[] = [
+  {
+    "pluginId": "forms",
+    "kind": "form",
+    "segment": "forms",
+    "collection": "forms",
+    "noun": "form",
+    "publish": {
+      "path": "/api/hosts/forms/promote",
+      "idField": "formId"
+    }
+  },
+]
+
+/**
+ * The plugin whose records a form's submission may also be filed as, declared
+ * by that plugin (AGL-3080). `null` when none does, and no form writes one.
+ */
+export const PLUGIN_FORM_RECORD_TARGET_DECLARED: FormRecordTargetDeclaration | null = {
+  "pluginId": "data",
+  "id": "dataset"
+}
+
+/**
+ * What a site's template library calls a template a plugin installed, by the
+ * `source.type` that plugin stamps, declared by that plugin (AGL-3080).
+ * Core names no installer.
+ */
+export const PLUGIN_TEMPLATE_SOURCES: readonly PluginTemplateSource[] = [
+  {
+    "pluginId": "marketplace",
+    "type": "marketplace",
+    "label": "Marketplace",
+    "description": "Installed from the marketplace"
+  },
+]
+
+/**
  * The analytics settings each provider mounts a tag for, declared by the
  * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
  * setting configures a tag.
@@ -549,6 +1160,39 @@ export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration
       "gaMeasurementId",
       "gtmContainerId"
     ]
+  },
+]
+
+/**
+ * Every interaction step a first-party plugin offers in the interaction
+ * builder, declared by that plugin (AGL-3080). Core names no plugin step.
+ */
+export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
+  {
+    "pluginId": "marketing",
+    "type": "showOverlay",
+    "label": "Open an overlay",
+    "picks": {
+      "collection": "overlays",
+      "limit": 50,
+      "idField": "overlayId",
+      "nameField": "overlayName",
+      "label": "Overlay",
+      "missing": "pick an overlay"
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "type": "runWorkflow",
+    "label": "Run a workflow",
+    "picks": {
+      "collection": "workflows",
+      "limit": 100,
+      "idField": "workflowId",
+      "nameField": "workflowName",
+      "label": "Workflow",
+      "missing": "pick a workflow"
+    }
   },
 ]
 
@@ -608,5 +1252,36 @@ export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvi
         "on": "loop"
       }
     ]
+  },
+]
+
+/**
+ * The notification categories first-party plugins add to the settings page
+ * and to every recipient's preferences, declared by each plugin (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_CATEGORIES_DECLARED: readonly NotificationCategoryDeclaration[] = [
+  {
+    "pluginId": "marketplace",
+    "id": "marketplace",
+    "label": "Marketplace",
+    "description": "Decisions on plugin listings you submitted for review.",
+    "defaults": {
+      "console": true,
+      "email": false
+    }
+  },
+]
+
+/**
+ * The digests first-party plugins send on their own schedule, each with the
+ * key its switch is stored under, declared by the plugin that sends it
+ * (AGL-3080).
+ */
+export const PLUGIN_NOTIFICATION_DIGESTS_DECLARED: readonly NotificationDigestDeclaration[] = [
+  {
+    "pluginId": "crm",
+    "key": "crmDaily",
+    "label": "Daily CRM digest",
+    "description": "Each morning: your overdue and due-today tasks and the leads nobody has worked, here and by email."
   },
 ]

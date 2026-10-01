@@ -45,6 +45,17 @@ import {
   pluginSeatAddon,
 } from '../plugin-manager/plugin-entitlements'
 import { pluginOrgCapacity } from '../plugin-manager/plugin-org-capacity'
+import {
+  declaredMeterReading,
+  pluginCostAxes,
+  pluginCostAxisFields,
+} from '../plugin-manager/plugin-usage-axes'
+import {
+  planQuotaOf,
+  pluginPlanFeatureRow,
+  pluginPlanQuotaRow,
+  pluginPlanQuotas,
+} from '../plugin-manager/plugin-plan-entitlements'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
@@ -241,11 +252,13 @@ type NonQuotaEntitlementKeys = 'planComp'
  * `Required` is over the CORE halves on purpose (AGL-3124). It is what keeps
  * a plan table honest — a plan that forgets a platform quota or a platform
  * gate does not compile — and that reasoning does not carry to a plugin's
- * key: a plugin's band comes from its own seat-add-on declaration, and
- * requiring it here would mean every plan row in the core naming every
- * installed plugin's keys, which is the arrangement the seam retires. So the
- * plugin halves join as declared: present once a plugin declares them, and
- * optional, because a workspace without the plugin has no value for them.
+ * key: a plugin's figure per plan comes from its own `plan-entitlements`
+ * declaration (AGL-3080), whose rows are typed per plan and so cannot forget
+ * one either, and requiring it here would mean every plan row in the core
+ * naming every installed plugin's keys, which is the arrangement the seam
+ * retires. So the plugin halves join as declared: present once a plugin
+ * declares them, and optional, because core compiles without the plugin's
+ * type and a workspace without the plugin has no value for them.
  *
  * They join in their MAPPED form (`PluginOrgQuotas`, `PluginOrgFeatures`)
  * because an intersection with a bare interface has no implicit string index
@@ -266,82 +279,6 @@ export type ResolvedOrgEntitlements = Required<
     features: Required<CoreOrgFeatureFlags> & PluginOrgFeatures
   }
 
-/**
- * Aglyn Assist credits an Enterprise agreement includes per month, before the
- * contract says otherwise.
- *
- * ## Never `UNLIMITED`, and the reason is not stylistic
- *
- * `UNLIMITED` is `Number.POSITIVE_INFINITY`, `JSON.stringify(Infinity)` is
- * `null`, and `Number(null)` is `0`. An unbounded assist band therefore
- * serialises to a band of ZERO through every route that does not also send
- * the explicit flag `restoreQuotaLimit` rebuilds from — which would hand the
- * only customers with a signed contract the one budget that refuses
- * everything. A finite number crosses the wire as itself.
- *
- * The band is also a real liability rather than a capacity we already own.
- * Storage and page views are infrastructure metered into the deal; assist is
- * a per-token charge from a third party, and generative building spends it in
- * units two orders of magnitude apart.
- *
- * ## Why this number
- *
- * Enterprise carries no list price, so the band cannot be sized the way every
- * self-serve tier's is — against what that tier's other cost terms leave out
- * of a known price. It is anchored to the top of the ladder instead: 116,000
- * credits is twice Agency's band, the rule every Enterprise fallback follows
- * since the 2026-09-07 pricing decision (see the `enterprise` row of
- * `PLAN_ENTITLEMENTS`). In cost that is $116 of provider spend a month, or
- * under 9% of any deal priced at or above the self-serve top. A deal below
- * that is sold as Agency, not written as an Enterprise agreement.
- *
- * ## It is a DEFAULT, and a contract raises it
- *
- * `resolveOrgEntitlements` applies a per-org `entitlements.assistCreditsPerMonth`
- * override ahead of this, so a deal that buys more assist buys it on that org
- * without moving the figure every other agreement is measured against — the
- * same mechanism the other contracted bands use.
- */
-export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 116_000
-
-/**
- * The Free AI taste (AGL-2925): the assist credits a Free workspace draws
- * on each month, behind a hard wall.
- *
- * ## Why it exists
- *
- * So the AI landing pages can say "generate your first page free" and mean
- * it. Three hundred credits is one or two generated sections or a handful
- * of copy rewrites — enough to see what the assistant does, not enough to
- * build a site on. The band is a WALL: `PLAN_PRICING.free
- * .extraAssistCreditsUsdPer1k` stays `null`, so `assistBandRefuses` answers
- * true and the reservation refuses at 100% with no overage, no switch and no
- * invoice. Nothing about a Free workspace can produce a charge.
- *
- * ## What it costs, and why that is the number
- *
- * A credit is `ASSIST_CREDIT_COST_USD` of provider spend, so the band costs
- * at most **$0.30 per Free workspace per month** — asserted by
- * `apps/console/specs/tier-margin-floor.spec.ts`. It is the one AI band with
- * no invoice behind it, which is why the same issue closes every multiplier
- * a script could use before the flag flips:
- *
- *  - it is metered per ACCOUNT as well as per workspace, so the three free
- *    workspaces an account may hold (AGL-2265) share one 300-credit
- *    allowance rather than tripling it (`reserveAssistMessage`);
- *  - a fresh account waits `AI_FREE_MIN_ACCOUNT_AGE_HOURS` before it can
- *    spend, and every free request is bounded per IP, per uid and per
- *    account per day;
- *  - a platform-wide daily ceiling on free spend pauses the taste for
- *    everyone until the UTC day rolls, paid workspaces untouched.
- *
- * The account allowance reads THIS constant rather than the workspace's
- * resolved band, because a staff override that widens one workspace's band
- * is a decision about that workspace, not about how much one person may
- * draw across all of theirs.
- */
-export const FREE_AI_TASTE_CREDITS_PER_MONTH = 300
-
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
     hostLimit: 1,
@@ -354,7 +291,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 1,
     maxMembersPerHost: 1,
     bandwidthGb: 2,
-    formSubmissionsPerMonth: 20,
     // No saved-form CATALOG on Free: the form entity rides
     // `reusableComponents`, which is Starter-and-above, so
     // `/api/hosts/resources` refuses the create on the entitlement before it
@@ -371,22 +307,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     variablesPerHost: 3,
     functionsPerHost: 1,
     workflowsPerHost: 0,
-    workflowRunsPerMonth: 0,
     servicesPerHost: 0,
     redirectsPerHost: 0,
     contactsPerHost: 100,
-    // No one-to-one email on Free, which has no CRM (below): the send lives
-    // on a record's page, and Free opens no record. Zero here is what
-    // `checkCrmEmailQuota` refuses
-    // against, so a per-org grant of `features.crm` alone still sends
-    // nothing until the band is raised with it.
-    crmEmailsPerDay: 0,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
-    // The Free AI taste (AGL-2925): a real band, and a wall. See the
-    // constant for what it buys, what it costs and the precautions that
-    // keep one person from drawing it three times over.
-    assistCreditsPerMonth: FREE_AI_TASTE_CREDITS_PER_MONTH,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 0,
     maxDatasetsPerOrg: 0,
@@ -397,11 +322,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 0,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
-    // Marketplace take rate (AGL-46/1543): free-plan sellers pay a higher
-    // share. `marketplaceSelling` is false here, so this rate only prices
-    // an org GRANTED selling via a per-org feature override — and any org
-    // whose dead subscription resolved it down to free.
-    marketplaceFeePct: 30,
     features: {
       abTesting: false,
       versioning: false,
@@ -419,7 +339,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: false,
       removeBranding: false,
       scheduledPublishing: false,
-      marketplaceSelling: false,
       // The two AI flags point opposite ways on Free, on purpose (AGL-2925).
       // `aiAssist` is the guided rung of the console assistant — page-aware
       // level-2 answers and the copy assistant — and stays Pro and up; Free
@@ -476,13 +395,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: false,
       commerce: false,
       pos: false,
-      storefrontSubscriptions: false,
       contentGating: false,
-      giftCards: false,
       productReviews: false,
       abandonedCart: false,
       dropshipRouting: false,
-      commerceAnalytics: false,
       whiteLabel: false,
       ssoEnabled: false,
     },
@@ -498,23 +414,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 5,
     maxMembersPerHost: 10,
     bandwidthGb: 50,
-    formSubmissionsPerMonth: 200,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
     workflowsPerHost: 3,
-    workflowRunsPerMonth: 500,
     servicesPerHost: 1,
     redirectsPerHost: 25,
     contactsPerHost: 1000,
-    // One-to-one email from a CRM record, per UTC day (AGL-2611). A hard
-    // daily pace rather than a monthly meter — see `crmEmailsPerDay` on
-    // `OrgEntitlements` — sized so the whole day spent at $0.0009 a message
-    // leaves the tier's CRM axis inside the 20% cost share the Drive
-    // pricing decision of 2026-09-05 sets. 50 a day is $1.35 a month against
-    // a $16 annual price. Every send still lands on the `emailSends` cost
-    // meter beside the transactional mail this tier already sends.
-    crmEmailsPerDay: 50,
     // Campaign email starts at Pro. A site that may send campaigns needs its
     // own verified provider sending domain, and provisioning one is a real
     // per-site operational cost that a campaign allowance commits the platform
@@ -536,50 +442,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // to it, and the CRM is what a Starter site builds before it upgrades.
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
-    // The first paid rung of the assist ladder (AGL-3203). Starter banded at
-    // 0 until 2026-09-20, which put a PAYING workspace below the Free taste's
-    // 300 on the one axis a visitor compares straight down the column — the
-    // `/pricing` row read `300 / mo` for Free and `—` for Starter. A paid
-    // plan that includes less of something than the free plan is not a
-    // packaging subtlety; it is the comparison table arguing against the
-    // upgrade.
-    //
-    // 750 is deliberately small: 2.5x the taste, enough that the assistant is
-    // a thing the tier HAS rather than a thing it is shown, and $0.75 of
-    // provider spend a month at `ASSIST_CREDIT_COST_USD` against a $16 annual
-    // price — a twentieth of the $8.81 the tier's other metered bands already
-    // cost, and the widest margin on the ladder absorbs it with room left
-    // (`tier-margin-floor.spec.ts` carries the arithmetic).
-    //
-    // It is NOT a wall, unlike Free's: `PLAN_PRICING.starter
-    // .extraAssistCreditsUsdPer1k` is $3.00, so past 750 the tier meters and
-    // bills like every paid plan above it. The two fields move together by
-    // rule — a positive band with no rate beside it is usage past a bound
-    // that is silently free, which `plan-entitlements.spec.ts` forbids.
-    //
-    // `features.aiAssist` is TRUE, and AGL-3203 shipping it false was the
-    // defect AGL-3207 closes. The reasoning then was "the band is credits,
-    // not the guided rung, exactly as on Free" — but on Free the band IS
-    // spendable, through `aiGenerative`, which is the door the taste exists
-    // for. Starter carried neither flag, so it was the only row on the
-    // ladder sold a band with nothing to spend it through: 750 credits
-    // reachable only by buying the $9 add-on that was also the only thing
-    // that made them usable. "No plan bands at zero any more" was true of
-    // the number and false of the capability.
-    //
-    // It opens `aiAssist` rather than `aiGenerative` because that is the
-    // shape of every paid rung above it — the included band funds the guided
-    // assistant and generation is the add-on. Opening the generative door
-    // here instead would hand the FIRST paid rung a door Pro through Agency
-    // have to buy.
-    //
-    // No cost moves: `tier-margin-floor.spec.ts` already prices this tier's
-    // assist term at 100% burn of the 750 credits, 75¢/mo. A door does not
-    // widen a band; it only makes spend that was already modeled reachable.
-    //
-    // The AI add-on adds `AI_ADDON_CREDITS_PER_MONTH.starter` on top and
-    // switches `aiGenerative` on as well.
-    assistCreditsPerMonth: 750,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 3,
     maxDatasetsPerOrg: 10,
@@ -594,7 +456,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // norm (Wix/BigCommerce/Squarespace-Core = 0% platform fee). See the
     // Pricing Decision Log + Competitive Benchmark.
     transactionFeeDigitalPct: 5,
-    marketplaceFeePct: 20,
     features: {
       abTesting: false,
       versioning: false,
@@ -612,7 +473,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: false,
       removeBranding: true,
       scheduledPublishing: false,
-      marketplaceSelling: false,
       aiAssist: true,
       aiGenerative: false,
       workflows: true,
@@ -639,13 +499,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: false,
-      storefrontSubscriptions: false,
       contentGating: false,
-      giftCards: false,
       productReviews: false,
       abandonedCart: false,
       dropshipRouting: false,
-      commerceAnalytics: false,
       whiteLabel: false,
       ssoEnabled: false,
     },
@@ -674,22 +531,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
     bandwidthGb: 125,
-    formSubmissionsPerMonth: 1000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
     workflowsPerHost: 25,
-    workflowRunsPerMonth: 5000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: 100,
     contactsPerHost: 10000,
-    crmEmailsPerDay: 150,
     emailSendsPerMonth: 5000,
     actionRunsPerMonth: 5000,
-    // $2.75 of provider spend, against the $8.35 the tier's other seven cost
-    // terms leave out of $56. See `OrgEntitlements.assistCreditsPerMonth` for
-    // why the remainder and not the price is what sizes this.
-    assistCreditsPerMonth: 2_750,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 15,
     maxDatasetsPerOrg: 50,
@@ -702,7 +552,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder
     // (Starter 5 → Pro 3 → Business 2 → Scale 1 → Advanced/Agency 0).
     transactionFeeDigitalPct: 3,
-    marketplaceFeePct: 20,
     features: {
       abTesting: false,
       versioning: true,
@@ -733,7 +582,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: false,
-      marketplaceSelling: true,
       aiAssist: true,
       aiGenerative: false,
       workflows: true,
@@ -755,13 +603,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      storefrontSubscriptions: false,
       contentGating: false,
-      giftCards: false,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
-      commerceAnalytics: true,
       whiteLabel: false,
       ssoEnabled: false,
     },
@@ -778,20 +623,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 100,
     // Sized by the same annual-price invariant as Pro's — see that band.
     bandwidthGb: 185,
-    formSubmissionsPerMonth: 8000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
     functionsPerHost: 250,
     workflowsPerHost: 100,
-    workflowRunsPerMonth: 50000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 50000,
-    crmEmailsPerDay: 200,
     emailSendsPerMonth: 25000,
     actionRunsPerMonth: 50000,
-    // $7.50, against the $22.69 the other seven terms leave out of $139.
-    assistCreditsPerMonth: 7_500,
     apiRequestsPerMonth: 100_000,
     datasetsPerOrg: 100,
     maxDatasetsPerOrg: 250,
@@ -802,7 +642,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 2,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 2,
-    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -812,7 +651,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
-      marketplaceSelling: true,
       aiAssist: true,
       aiGenerative: false,
       workflows: true,
@@ -834,13 +672,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      storefrontSubscriptions: true,
       contentGating: true,
-      giftCards: true,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
-      commerceAnalytics: true,
       whiteLabel: false,
       ssoEnabled: false,
     },
@@ -859,20 +694,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
     bandwidthGb: 290,
-    formSubmissionsPerMonth: 25000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
     functionsPerHost: 500,
     workflowsPerHost: 250,
-    workflowRunsPerMonth: 150000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 100000,
-    crmEmailsPerDay: 300,
     emailSendsPerMonth: 40000,
     actionRunsPerMonth: 100000,
-    // $10.00, against the $30.62 the other seven terms leave out of $249.
-    assistCreditsPerMonth: 10_000,
     apiRequestsPerMonth: 300000,
     datasetsPerOrg: 250,
     maxDatasetsPerOrg: 500,
@@ -883,7 +713,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 3,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 1,
-    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -893,7 +722,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
-      marketplaceSelling: true,
       aiAssist: true,
       aiGenerative: false,
       workflows: true,
@@ -915,13 +743,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      storefrontSubscriptions: true,
       contentGating: true,
-      giftCards: true,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
-      commerceAnalytics: true,
       whiteLabel: false,
       ssoEnabled: false,
     },
@@ -937,22 +762,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
     bandwidthGb: 345,
-    formSubmissionsPerMonth: 40000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
     workflowsPerHost: 500,
-    workflowRunsPerMonth: 500000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 150000,
-    crmEmailsPerDay: 500,
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
-    // $13.00, against the $39.74 the other seven terms leave out of $399 —
-    // the thinnest remainder on the ladder, and the tier that binds the
-    // whole assist ladder's share of it.
-    assistCreditsPerMonth: 13_000,
     apiRequestsPerMonth: 1_000_000,
     datasetsPerOrg: 500,
     maxDatasetsPerOrg: 1000,
@@ -963,7 +781,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 5,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
-    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -973,7 +790,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
-      marketplaceSelling: true,
       aiAssist: true,
       aiGenerative: false,
       workflows: true,
@@ -995,13 +811,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      storefrontSubscriptions: true,
       contentGating: true,
-      giftCards: true,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
-      commerceAnalytics: true,
       whiteLabel: false,
       ssoEnabled: false,
     },
@@ -1021,32 +834,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
     bandwidthGb: 1540,
-    // FINITE, where every other capacity row on this tier is unbounded.
-    // `formSubmissionsPerMonth` is multiplied by `hostLimit` to get the
-    // org-wide band, so at 100 hosts an unbounded figure was not merely
-    // large — it made this tier's cost model unbounded, and an unbounded
-    // term reads as ZERO in any analysis that scores an absent band as
-    // nothing. That is how it stayed invisible: the biggest line item on the
-    // most expensive self-serve plan, contributing 0 to every total.
-    //
-    // Metering makes it safe to bound. `meteredInfraPassThrough` is true
-    // here, so submissions past the band BILL at the pass-through rate
-    // rather than being refused — a merchant's lead form does not stop
-    // working at 25,000.
-    formSubmissionsPerMonth: 25000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,
-    workflowRunsPerMonth: 2000000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 500000,
-    crmEmailsPerDay: 1000,
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
-    // $58.00, against the $176.71 the other seven terms leave out of $1,299.
-    assistCreditsPerMonth: 58_000,
     apiRequestsPerMonth: 5000000,
     datasetsPerOrg: 2000,
     maxDatasetsPerOrg: 5000,
@@ -1057,7 +853,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 20,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
-    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -1067,7 +862,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
-      marketplaceSelling: true,
       aiAssist: true,
       aiGenerative: false,
       workflows: true,
@@ -1089,13 +883,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      storefrontSubscriptions: true,
       contentGating: true,
-      giftCards: true,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
-      commerceAnalytics: true,
       // White-Label Phase 1: the Agency-tier ($1,299) differentiator. Only
       // this tier and Enterprise ship white-label by default.
       whiteLabel: true,
@@ -1152,24 +943,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 1_000,
     maxMembersPerHost: 2_000,
     bandwidthGb: 3_080,
-    formSubmissionsPerMonth: 50_000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,
-    workflowRunsPerMonth: 4_000_000,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 1_000_000,
-    // Finite like the campaign allowance beside it, and for the same reason
-    // one-to-one mail is capped on every other tier: a rep with a template
-    // and a list can put thousands of messages onto the platform's sending
-    // reputation in an afternoon. A negotiated agreement whose reps need more
-    // than 2,000 a day says so, and the override is what carries it.
-    crmEmailsPerDay: 2_000,
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: 2_000_000,
-    assistCreditsPerMonth: ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
     apiRequestsPerMonth: 10_000_000,
     datasetsPerOrg: 4_000,
     maxDatasetsPerOrg: 10_000,
@@ -1180,7 +962,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 40,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
-    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -1190,7 +971,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
-      marketplaceSelling: true,
       aiAssist: true,
       aiGenerative: true,
       workflows: true,
@@ -1213,13 +993,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      storefrontSubscriptions: true,
       contentGating: true,
-      giftCards: true,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
-      commerceAnalytics: true,
       whiteLabel: true,
       // SSO (AGL-1101) is the Enterprise differentiator — the only plan that
       // carries it by default. Lower tiers still need a per-org override.
@@ -1227,6 +1004,37 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     },
   },
 }
+
+/**
+ * Each plan row gains what the plugins declared for that plan (AGL-3080):
+ * a plugin's own band or gate — the AI credits, the CRM's one-to-one email
+ * pace, the marketplace's take rate — is written beside the reasoning that
+ * sized it, in that plugin's `plan-entitlements` module, and compiled into
+ * `first-party-plugins.generated.ts`. Filled here, once, as the module
+ * loads, so every reader of `PLAN_ENTITLEMENTS` — the pricing tables, the
+ * plan comparison, `resolveOrgEntitlements` — reads one table and cannot tell
+ * which half of a row a figure came from.
+ *
+ * Core's keys keep their order and a plugin's follow them. A key both declare
+ * keeps CORE's figure, so a declaration can never shadow what the platform
+ * already charges; `plan-entitlements.spec.ts` refuses the collision outright.
+ */
+function fillPluginPlanEntitlements(
+  rows: Record<OrgPlan, ResolvedOrgEntitlements>,
+): void {
+  for (const plan of Object.keys(rows) as OrgPlan[]) {
+    const quotas = rows[plan] as unknown as Record<string, unknown>
+    for (const [key, value] of Object.entries(pluginPlanQuotaRow(plan))) {
+      if (!(key in quotas)) quotas[key] = value
+    }
+    const features = rows[plan].features as unknown as Record<string, boolean>
+    for (const [key, value] of Object.entries(pluginPlanFeatureRow(plan))) {
+      if (!(key in features)) features[key] = value
+    }
+  }
+}
+
+fillPluginPlanEntitlements(PLAN_ENTITLEMENTS)
 
 /**
  * The tiers a customer can buy themselves — every plan EXCEPT `enterprise`
@@ -2690,36 +2498,24 @@ export const ORG_COGS_UNIT_RATES_USD = {
   perRun: 0.000012,
 }
 
-/** The rollup fields `orgMonthlyCogsUsd` prices. All optional and all absent-safe. */
+/**
+ * The rollup fields `orgMonthlyCogsUsd` prices. All optional and all
+ * absent-safe.
+ *
+ * The named fields are the platform's own meters. A plugin's meter rides the
+ * index signature under the rollup field its declaration names
+ * (`plugin-usage-axes.ts`): the AI plugin's provider spend, the CRM's
+ * records, the forms plugin's submissions, the workflows plugin's runs.
+ */
 export interface OrgUsageRollupInput {
   hostCount?: number | null
   storageGb?: number | null
   pageViews?: number | null
-  formSubmissions?: number | null
   dataStorageMb?: number | null
   apiRequests?: number | null
   /**
-   * Contacts alone — the figure every rollup carried before AGL-2611 widened
-   * the band, kept so a month written under the old basis still prices.
-   * Read only when `crmRecordsCount` is absent; see it.
-   */
-  contactsCount?: number | null
-  /**
-   * Contacts + companies + deals, the CRM records band's own figure
-   * (AGL-2611). Priced at `perContactMonth` — the rate was measured on a
-   * contact, which is the most expensive of the three to hold, so it
-   * over-covers a company or a deal rather than under-pricing one. When
-   * present it REPLACES `contactsCount` in the model rather than adding to
-   * it: the contacts are inside this sum, and a model that priced both
-   * would charge the same people twice.
-   */
-  crmRecordsCount?: number | null
-  /** The components of `crmRecordsCount`, recorded so the sum is legible. */
-  companiesCount?: number | null
-  dealsCount?: number | null
-  /**
    * Every email the org sent this month, campaigns and transactional alike —
-   * the `emailSends` cost meter, not `campaignEmailSends`.
+   * the `emailSends` cost meter, not the campaign meter.
    *
    * The cost meter is the right input precisely because the campaign meter is
    * the one with a cap on it. What this org cost us is every message the
@@ -2728,24 +2524,13 @@ export interface OrgUsageRollupInput {
    */
   emailSends?: number | null
   /**
-   * Aglyn Assist provider spend for the month, ALREADY IN DOLLARS (AGL-2280).
-   *
-   * Unlike every other field here this is not a meter to be priced — it is
-   * `orgs/{id}/assistUsage/{month}.estCostUsd`, our own cost estimate at the
-   * provider's list rates, computed where the tokens were counted. So it
-   * enters the model at ×1 and has no entry in `ORG_COGS_UNIT_RATES_USD`;
-   * inventing a second per-token rate here is precisely the drift AGL-1134
-   * removed.
+   * A plugin's meter, by the rollup field its declaration names. `unknown`
+   * because a rollup document carries its month and its audit fields beside
+   * the meters, and a caller may hand the document over whole; every meter
+   * is read through `declaredMeterReading`, which prices only a positive
+   * finite number.
    */
-  assistCostUsd?: number | null
-  /**
-   * Workflow and action runs this month — the two counters `report-usage`
-   * sums across the org's hosts. Priced together at `perRun`: a run is the
-   * same handful of reads, two writes and a moment of compute whichever
-   * builder produced it, and the bands differ only in which tier sells them.
-   */
-  workflowRuns?: number | null
-  actionRuns?: number | null
+  [field: string]: unknown
 }
 
 export interface OrgCogsResult {
@@ -2759,6 +2544,26 @@ export interface OrgCogsResult {
   floorUsd: number
   /** Per-meter contributions, for showing the working in staff UI. */
   breakdown: Record<string, number>
+}
+
+/**
+ * The unit rate a declared cost axis names, or 1 where it names none (the
+ * rollup already records dollars).
+ *
+ * ⚑ A rate key core does not carry THROWS. Pricing an unknown axis at zero
+ * would make an org cost less than it does, which is the direction that
+ * approves a discount; `plugin-usage-axes.spec.ts` holds every declared key
+ * to a rate that exists, so this is reached only by a tree that skipped it.
+ */
+function cogsRateOf(axis: { id: string; rate?: string }): number {
+  if (axis.rate === undefined) return 1
+  const rate = (ORG_COGS_UNIT_RATES_USD as Record<string, number>)[axis.rate]
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+    throw new Error(
+      `cost axis "${axis.id}" names the rate "${axis.rate}", which ORG_COGS_UNIT_RATES_USD does not carry`,
+    )
+  }
+  return rate
 }
 
 /**
@@ -2794,47 +2599,39 @@ export function orgMonthlyCogsUsd(
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }
   const rates = ORG_COGS_UNIT_RATES_USD
-  const breakdown = {
-    storage: num(rollup?.storageGb) * rates.storagePerGbMonth,
-    pageViews: num(rollup?.pageViews) * rates.perPageView,
-    formSubmissions: num(rollup?.formSubmissions) * rates.perFormSubmission,
+  // The platform's own axes, at the positions the plugins' declared axes
+  // interleave with (`order`, a multiple of 10 here). The generator refuses a
+  // declaration that takes one of these ids or positions.
+  const core: Array<{ id: string; order: number; usd: number }> = [
+    { id: 'storage', order: 10, usd: num(rollup?.storageGb) * rates.storagePerGbMonth },
+    { id: 'pageViews', order: 20, usd: num(rollup?.pageViews) * rates.perPageView },
     // Megabytes on the doc, gigabytes in the rate — the unit mismatch is in
     // the stored field name, so convert here rather than in each caller.
-    dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
-    apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
-    // The records band (AGL-2611), under the axis name every breakdown reader
-    // already keys on. `??` and not `||`: a rollup that measured ZERO records
-    // has answered, and must not fall back to a contacts figure from a month
-    // written under the narrower basis.
-    contacts:
-      num(rollup?.crmRecordsCount ?? rollup?.contactsCount) *
-      rates.perContactMonth,
+    {
+      id: 'dataStorage',
+      order: 40,
+      usd: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
+    },
+    { id: 'apiRequests', order: 50, usd: num(rollup?.apiRequests) * rates.perApiRequest },
     // Every send, not the overage — the provider bills the first message of
-    // the month as much as the last, so a cost model that started counting at
-    // the plan's included band would report an org that stayed inside its
+    // the month as much as the last, so a cost model that started counting
+    // at the plan's included band would report an org that stayed inside its
     // allowance as free.
-    emailSends: num(rollup?.emailSends) * rates.perEmailSend,
-    /*==========================================
-     * AGLYN ASSIST PROVIDER SPEND (AGL-2280).
-     *
-     * Already dollars, so ×1 — see `OrgUsageRollupInput.assistCostUsd`.
-     *
-     * This is the ONE meter on the platform whose unit cost is not a fraction
-     * margin model read it: the discount guardrail priced six meters that
-     * together measured $0.0000054 for the largest real org, and ignored the
-     * only line item that can plausibly clear the $2/site floor on its own.
-     * A 93%-off coupon on an org burning $40/month of tokens rated green.
-     *
-     * It is deliberately NOT in `billedCents` — what an org is charged is a
-     * separate decision with a price sheet behind it. This is what the org
-     * COSTS US, which is the only question the guardrail asks.
-     *=========================================*/
-    assist: num(rollup?.assistCostUsd),
-    // Both run counters on one line: one rate, one cost, whichever builder
-    // produced the run. Unpriced until 2026-09-07 — the two bands were
-    // recorded on every rollup and read as nothing.
-    runs: (num(rollup?.workflowRuns) + num(rollup?.actionRuns)) * rates.perRun,
-  }
+    { id: 'emailSends', order: 70, usd: num(rollup?.emailSends) * rates.perEmailSend },
+  ]
+  // Each plugin's meter, priced at the core rate its declaration names — or
+  // at ×1 where the rollup already records dollars, as the AI plugin's
+  // provider spend does.
+  const declared = pluginCostAxes().map((axis) => ({
+    id: axis.id,
+    order: axis.order,
+    usd: declaredMeterReading(rollup, axis) * cogsRateOf(axis),
+  }))
+  const breakdown: Record<string, number> = Object.fromEntries(
+    [...core, ...declared]
+      .sort((a, b) => a.order - b.order)
+      .map((axis) => [axis.id, axis.usd]),
+  )
   const measuredUsd = Object.values(breakdown).reduce((sum, x) => sum + x, 0)
   const floorUsd = Math.max(0, siteCount) * INFRA_COGS_PER_SITE_USD
   return {
@@ -2863,9 +2660,9 @@ export function orgMonthlyCogsUsd(
  * UNITS, because the field names do not all say: `storageGb` and
  * `dataStorageMb` are gigabytes and MEGABYTES respectively (the conversion
  * lives in `orgMonthlyCogsUsd`, with its own test); `pageViews`,
- * `formSubmissions`, `apiRequests` and `emailSends` are counts FOR THE MONTH;
- * `contactsCount` and `crmRecordsCount` are point-in-time levels, not monthly
- * flows.
+ * `apiRequests` and `emailSends` are counts FOR THE MONTH. A plugin's fields
+ * carry the unit its cost-axis declaration states — a monthly count, a
+ * point-in-time level, or dollars.
  */
 export function orgCogsInputFrom(
   source: Record<string, unknown> | null | undefined,
@@ -2874,31 +2671,19 @@ export function orgCogsInputFrom(
     const value = source?.[field]
     return value == null ? undefined : (value as number)
   }
-  return {
+  const input: OrgUsageRollupInput = {
     hostCount: read('hostCount'),
     storageGb: read('storageGb'),
     pageViews: read('pageViews'),
-    formSubmissions: read('formSubmissions'),
     dataStorageMb: read('dataStorageMb'),
     apiRequests: read('apiRequests'),
-    contactsCount: read('contactsCount'),
-    // AGL-2611. The band's own figure, forwarded for the reason `assistCostUsd`
-    // is: a projection that drops it prices the CRM at its contacts alone,
-    // which is the direction that approves a discount.
-    crmRecordsCount: read('crmRecordsCount'),
-    companiesCount: read('companiesCount'),
-    dealsCount: read('dealsCount'),
     emailSends: read('emailSends'),
-    // AGL-2280. Dollars, not a meter — the projection still has to forward it
-    // or the model prices Assist at nothing, which is the direction that
-    // approves a discount.
-    assistCostUsd: read('assistCostUsd'),
-    // Priced since 2026-09-07 (`perRun`); a projection that drops them prices
-    // the org's automations at nothing, the same direction as every other
-    // omission on this list.
-    workflowRuns: read('workflowRuns'),
-    actionRuns: read('actionRuns'),
   }
+  // Every field a plugin's cost axis reads or records — forwarded for the
+  // reason the six above are: a projection that drops a priced field prices
+  // the meter at nothing, which is the direction that approves a discount.
+  for (const field of pluginCostAxisFields()) input[field] = read(field)
+  return input
 }
 
 /**
@@ -3284,7 +3069,10 @@ const SEAT_BANDS = [
 export const PRICE_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
   'transactionFeePhysicalPct',
   'transactionFeeDigitalPct',
-  'marketplaceFeePct',
+  // A plugin's percentage of a sale says so in its declaration.
+  ...pluginPlanQuotas()
+    .filter((declared) => declared.price)
+    .map((declared) => declared.key),
 ])
 
 /**
@@ -4051,10 +3839,32 @@ export function resolveSubscriptionFeePercent(
 export function resolveMarketplaceFeePct(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number {
-  const pct = resolveOrgEntitlements(org).marketplaceFeePct
-  return Number.isFinite(pct) && pct >= 0 && pct <= 100
+  const pct = takeRatePctOf(resolveOrgEntitlements(org))
+  if (pct !== null) return pct
+  const fallback = takeRatePctOf(PLAN_ENTITLEMENTS.free)
+  if (fallback !== null) return fallback
+  // No plan carries a take rate at all: the marketplace plugin's declaration
+  // did not compile in. Pricing a sale at 0% would hand the whole charge to
+  // the seller, so the sale is refused instead.
+  throw new Error(
+    `no plan declares "${TAKE_RATE_KEY}" — the marketplace take rate ` +
+      'is declared by the marketplace plugin (plugins.config.json)',
+  )
+}
+
+/**
+ * The marketplace take rate's key. Declared by the marketplace plugin
+ * (AGL-3080); read here by key because the storefront and the revenue report
+ * price a marketplace sale from core.
+ */
+const TAKE_RATE_KEY = 'marketplaceFeePct'
+
+/** A row's take rate when it is a usable percentage, else `null`. */
+function takeRatePctOf(entitlements: object): number | null {
+  const pct = (entitlements as Record<string, unknown>)[TAKE_RATE_KEY]
+  return typeof pct === 'number' && Number.isFinite(pct) && pct >= 0 && pct <= 100
     ? pct
-    : PLAN_ENTITLEMENTS.free.marketplaceFeePct
+    : null
 }
 
 /**
@@ -4071,7 +3881,7 @@ export function resolveMarketplaceFeePct(
 export function bindingMarketplaceFeePct(): number {
   return Math.min(
     ...Object.values(PLAN_ENTITLEMENTS)
-      .map((plan) => plan.marketplaceFeePct)
+      .map((plan) => takeRatePctOf(plan) ?? 0)
       .filter((pct) => Number.isFinite(pct) && pct > 0),
   )
 }
@@ -5068,7 +4878,7 @@ export function checkCrmEmailQuota(
   usedToday: number,
   now: Date = new Date(),
 ): CrmEmailQuotaResult {
-  const included = resolveOrgEntitlements(org).crmEmailsPerDay
+  const included = planQuotaOf(resolveOrgEntitlements(org), 'crmEmailsPerDay')
   const used = Math.max(0, Math.floor(Number(usedToday) || 0))
   const resetsAt = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
@@ -5213,7 +5023,10 @@ export function checkFormSubmissionQuota(
   org: Partial<AglynOrgBilling> | null | undefined,
   usedThisMonth: number,
 ): FormSubmissionQuotaResult {
-  const included = resolveOrgEntitlements(org).formSubmissionsPerMonth
+  const included = planQuotaOf(
+    resolveOrgEntitlements(org),
+    'formSubmissionsPerMonth',
+  )
   const metered = planMetersInfraOverage(org)
   const used = Math.max(0, usedThisMonth)
   return {
@@ -5287,7 +5100,10 @@ export function checkFormSubmissionAbuseCeiling(
   org: Partial<AglynOrgBilling> | null | undefined,
   usedThisMonth: number,
 ): FormAbuseCeilingResult {
-  const included = resolveOrgEntitlements(org).formSubmissionsPerMonth
+  const included = planQuotaOf(
+    resolveOrgEntitlements(org),
+    'formSubmissionsPerMonth',
+  )
   const ceiling = Number.isFinite(included)
     ? Math.max(FORM_ABUSE_CEILING_FLOOR, included * FORM_ABUSE_CEILING_MULTIPLE)
     : FORM_ABUSE_CEILING_UNLIMITED
@@ -5545,18 +5361,32 @@ export function normalizeHostBandwidthCeiling(
 /**
  * Is the render path required to serve the capped notice instead of the page?
  *
- * Both halves must hold: the flag is for THIS month, and the trip was
- * recorded as one that degrades. `degraded` is written by the evaluator from
- * {@link bandwidthCeilingDegradesRender} at trip time rather than re-derived
- * here, so a host that upgrades mid-month is not still being degraded by a
- * flag written while it was free — and, in the other direction, a flag from a
- * paying host can never take that host down.
+ * Three things must hold: the flag is for THIS month, the trip was recorded
+ * as one that degrades, and the org's CURRENT plan still degrades.
+ *
+ * The stored `degraded` alone cannot answer the last one. It is written once,
+ * at trip time, and nothing rewrites it: the beacon stops evaluating a host
+ * once it has tripped this month, and a contained site serves no pages to
+ * beacon from. So a host that upgraded mid-month stayed on the notice until
+ * the 1st, while the owner notice and the visitor notice both promised an
+ * upgrade would bring it back. Re-deriving from `org` on every read releases
+ * it on the next org-doc TTL with no write, the same asymmetry
+ * `bandwidthCapEngaged` keeps for the plan band.
+ *
+ * Both halves still hold in the other direction: a flag written for a paying
+ * host (`degraded: false`) can never take that host down, whatever its plan
+ * becomes later. An unknown org (`null`) resolves as unmetered, so a lookup
+ * failure keeps the containment rather than lifting it.
  */
 export function bandwidthCeilingDegradesHost(
   host: Record<string, any> | null | undefined,
   month: string,
+  org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
-  return normalizeHostBandwidthCeiling(host, month)?.degraded === true
+  return (
+    normalizeHostBandwidthCeiling(host, month)?.degraded === true &&
+    bandwidthCeilingDegradesRender(org)
+  )
 }
 
 /** UTC `YYYY-MM`, the key both the beacon and the render path agree on. */

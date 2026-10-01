@@ -20,3 +20,7 @@ export * from './lib/plugin'
 export * from './lib/plugin-config'
 export * from './lib/providers/catalog'
 export { registerAiDeclarations, AI_PLUGIN_ENTITLEMENTS } from './lib/declarations'
+// Type-only (AGL-3080): the plugin's entitlement keys are declared by module
+// augmentation in this module, so every program that loads the package
+// type-checks them. The figures reach core through the manifest generator.
+export type { aiPlanEntitlements } from './lib/plan-entitlements'

@@ -65,7 +65,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ),
     // The REAL merge (AGL-2625): the repoint, the transaction and the index
     // are the properties under test, not a double's idea of them.
-    ...jest.requireActual('../../../libs/tenant/data/admin/src/lib/server/contact-merge'),
+    ...jest.requireActual('../../../libs/plugins/crm/src/lib/server/merge-contacts'),
   }
 })
 
@@ -101,6 +101,7 @@ jest.mock('firebase-admin/firestore', () => {
 })
 
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import { childPaths, mockDocs, resetMockFirestore } from './api-v1-crm-double'
 
 const ORG = 'orgs/org-1'
@@ -178,6 +179,9 @@ function seed() {
   mockDocs.set(`${ORG}/crmTasks/t-1`, { title: 'Call', contactId: 'c-gone' })
   mockDocs.set(LEAD, { email: 'jane@gmail.com', convertedContactId: 'c-gone' })
 }
+
+// The console's boot, which registers the CRM's `/v1` resources (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   resetMockFirestore()

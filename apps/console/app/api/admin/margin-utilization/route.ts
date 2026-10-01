@@ -29,9 +29,9 @@ import {
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { orgMarginRow, type OrgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
 import {
-  ASSIST_PROVIDER_COST_FIELD,
-  assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+  liveMeterReading,
+  pluginCostAxes,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   readStaffListQuery,
@@ -229,38 +229,37 @@ async function handler(request: Request): Promise<Response> {
     reads += rollupSnaps.reduce((sum, snap) => sum + (snap?.docs.length ?? 0), 0)
 
     /*
-     * Assist provider spend for the SAME month as each rollup.
+     * The LIVE reading of every cost axis a plugin declares one for, for the
+     * SAME month as each rollup — the AI plugin's provider spend today.
      *
-     * Live rather than the `assistCostUsd` frozen onto the rollup: the rollup
-     * is a snapshot from when the cron ran and Assist keeps spending after it.
+     * Live rather than the figure frozen onto the rollup: the rollup is a
+     * snapshot from when the cron ran and the meter keeps counting after it.
      * Pairing it with the CURRENT month instead would report two different
-     * periods as one figure.
-     *
-     * It is the one cost line that can clear the $2/site floor on its own, so
-     * a margin surface that could not see it would rate a token-heavy
-     * organization exactly as it rates an idle one.
+     * periods as one figure. It replaces the axis's first rollup field, the
+     * one the cost model and the band both read.
      */
-    const assistTargets = pageDocs.map((doc, index) => {
+    const liveAxes = pluginCostAxes().filter((axis) => axis.live)
+    const liveTargets = pageDocs.flatMap((doc, index) => {
       const rollupDoc = rollupSnaps[index]?.docs[0]
-      if (!rollupDoc) return null
+      if (!rollupDoc) return []
       const month = String(rollupDoc.get('month') ?? rollupDoc.id)
-      return { month, ref: doc.ref.collection('assistUsage').doc(month) }
+      return liveAxes.map((axis) => ({
+        index,
+        axis,
+        ref: doc.ref.collection(axis.live!.collection).doc(month),
+      }))
     })
-    const assistRefs = assistTargets
-      .map((target) => target?.ref)
-      .filter((ref): ref is FirebaseFirestore.DocumentReference => Boolean(ref))
-    const assistSnaps = assistRefs.length ? await db.getAll(...assistRefs) : []
-    reads += assistSnaps.length
-    // Our bill for the month, not what the organizations drew (AGL-3015):
-    // this page rates margins, and a cost side carrying our own markup would
-    // rate a token-heavy organization worse than it is.
-    const assistByPath = new Map<string, number>()
-    assistSnaps.forEach((snap) => {
-      const cost = assistProviderCostUsd(
-        snap.get('estCostUsd'),
-        snap.get(ASSIST_PROVIDER_COST_FIELD),
-      )
-      if (cost > 0) assistByPath.set(snap.ref.path, cost)
+    const liveSnaps = liveTargets.length
+      ? await db.getAll(...liveTargets.map((target) => target.ref))
+      : []
+    reads += liveSnaps.length
+    const liveByOrg = new Map<number, Record<string, number>>()
+    liveTargets.forEach((target, position) => {
+      const reading = liveMeterReading(liveSnaps[position], target.axis.live!)
+      if (reading === undefined) return
+      const overrides = liveByOrg.get(target.index) ?? {}
+      overrides[target.axis.fields[0]!] = reading
+      liveByOrg.set(target.index, overrides)
     })
 
     const rows = pageDocs.map((doc, index) => {
@@ -273,25 +272,17 @@ async function handler(request: Request): Promise<Response> {
         ...(billingSnap?.exists ? billingSnap.data() : {}),
       }
       const rollupDoc = rollupSnaps[index]?.docs[0]
-      const target = assistTargets[index]
-      const liveAssist = target ? assistByPath.get(target.ref.path) : undefined
       return orgMarginRow({
         orgId: doc.id,
         name: (orgData['name'] as string | undefined) ?? null,
         org: org as never,
-        month: target?.month ?? null,
+        month: rollupDoc ? String(rollupDoc.get('month') ?? rollupDoc.id) : null,
         rollup: rollupDoc
           ? {
               // ONE shared list of priced fields, so this projection cannot
               // starve the cost model the way a hand-listed one did.
               ...orgCogsInputFrom(rollupDoc.data()),
-              // The two meters that are recorded and banded but carry no unit
-              // cost. `orgCogsInputFrom` is the PRICED list and correctly
-              // omits them; a utilization figure needs no rate, so they are
-              // read here rather than left unreachable.
-              workflowRuns: Number(rollupDoc.get('workflowRuns') ?? 0),
-              actionRuns: Number(rollupDoc.get('actionRuns') ?? 0),
-              ...(liveAssist === undefined ? {} : { assistCostUsd: liveAssist }),
+              ...liveByOrg.get(index),
             }
           : null,
       })

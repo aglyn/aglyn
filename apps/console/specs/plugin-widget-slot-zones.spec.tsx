@@ -52,8 +52,9 @@ const mockProposeDraft = jest.fn()
 const mockOpenAction = jest.fn()
 /** The first-run zone's way back to the blank path (AGL-2918), by identity. */
 const mockStartBlank = jest.fn()
-/** The commerce zones' doors (AGL-2916), passed through by identity. */
-const mockProductWrite = jest.fn()
+/** The template gallery's doors (AGL-3080), passed through by identity. */
+const mockGalleryInstalled = jest.fn()
+const mockReportShelf = jest.fn()
 /** The CRM record zones' proposal doors (AGL-2917), passed through by identity. */
 const mockProposeTask = jest.fn()
 const mockProposeStage = jest.fn()
@@ -347,54 +348,7 @@ const MOUNTS: Record<
   },
 }
 
-/**
- * Zones a PLUGIN hosts (AGL-2916): the commerce product editor, products hub
- * and import dialog draw the shell's renderer through
- * `useConsoleWidgetSlot`, as the product editor draws `seoFields`, so their
- * mounts are in the plugin's files rather than a console page.
- */
 Object.assign(MOUNTS, {
-  productEditor: {
-    file: 'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx',
-    how: 'slot',
-    props: {
-      hostId: 'host-1',
-      orgId: undefined,
-      product: {
-        id: 'prod-1',
-        name: 'Desk lamp',
-        type: 'physical',
-        description: '',
-        tags: [],
-        categoryIds: [],
-        options: [],
-        mediaUrls: [],
-        seoTitle: '',
-        seoDescription: '',
-      },
-      categories: [],
-      proposeValues: mockProposeValues,
-    },
-  },
-  productsHub: {
-    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-zone.component.tsx',
-    how: 'slot',
-    props: {
-      hostId: 'host-1',
-      orgId: undefined,
-      products: [],
-      lastImport: null,
-      applyProductCopy: mockProductWrite,
-      createProductDrafts: mockProductWrite,
-      createCategories: mockProductWrite,
-      createDiscountDrafts: mockProductWrite,
-    },
-  },
-  productImport: {
-    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx',
-    how: 'slot',
-    props: { hostId: 'host-1', orgId: undefined, count: 2, options: {}, setOption: mockProductWrite },
-  },
   // AGL-3080: the installed half of the workspace's plugin inventory, and an
   // installation's version line, drawn by the plugin that installed them.
   orgPluginInstalls: {
@@ -406,6 +360,24 @@ Object.assign(MOUNTS, {
     file: 'apps/console/app/(app)/[orgSlug]/plugins/[pluginRef]/page.tsx',
     how: 'slot',
     props: { orgSlug: 'acme', pluginRef: 'listing-1', pin: { version: '1.0.0' } },
+  },
+  // AGL-3080: a site's templates — a shelf of the gallery, and a library row
+  // whose template a plugin installed — drawn by the plugin offering them.
+  templateGallery: {
+    file: 'apps/console/components/templates/template-gallery-dialog.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      kind: 'page',
+      search: '',
+      onInstalled: mockGalleryInstalled,
+      reportShelf: mockReportShelf,
+    },
+  },
+  templateInstallStatus: {
+    file: 'apps/console/components/templates/host-templates-card.component.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', template: { $id: 'tpl-1', source: { type: 'installer' } } },
   },
   // AGL-3080: what a plugin holds across every workspace, on the staff
   // overview. No props — the overview is about the platform, not one org.

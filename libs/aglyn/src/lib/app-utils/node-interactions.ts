@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-import type { HostAction } from './actions'
+import type { SiteInteraction } from './site-interactions'
 
 /**
  * Interactions stored on the element that carries them.
  *
  * An interaction is what an ELEMENT does — clicked, hovered, scrolled into
- * view. A host action is what the SITE does — an order was placed, a form was
- * submitted. Both compile to the same runtime shape, and until now both were
- * stored the same way too, as rows in `hosts/{hostId}/actions` bound to an
+ * view. A site-wide one listens for what the SITE does — an order was placed,
+ * a form was submitted. Both are the same shape (`site-interactions.ts`),
+ * and until now both were stored the same way too, as rows in `hosts/{hostId}/actions` bound to an
  * element by selector. That made an interaction a site-wide object that
  * merely happened to point at one element, with all four consequences an
  * author would be surprised by: it did not publish or roll back with its
@@ -44,10 +44,10 @@ import type { HostAction } from './actions'
  * the copy binds to the copy, which is the whole reason for moving the
  * storage.
  */
-export interface NodeInteraction extends Omit<HostAction, 'trigger'> {
+export interface NodeInteraction extends Omit<SiteInteraction, 'trigger'> {
   /** Stable within its node, so an edit updates rather than appends. */
   id: string
-  trigger: Omit<HostAction['trigger'], 'selector'>
+  trigger: Omit<SiteInteraction['trigger'], 'selector'>
 }
 
 /** Cap per element. Ten triggers on one button is a bug, not a design. */
@@ -180,7 +180,7 @@ export interface CollectedNodeInteraction {
    * are) treats them as the separate things they are.
    */
   id: string
-  action: HostAction
+  action: SiteInteraction
 }
 
 /**
@@ -210,10 +210,10 @@ export interface CollectedNodeInteraction {
  * exactly as written rather than pointed somewhere plausible.
  */
 function regraftStepSelectors(
-  steps: HostAction['steps'],
+  steps: SiteInteraction['steps'],
   nodeId: string,
   present: ReadonlySet<string>,
-): HostAction['steps'] {
+): SiteInteraction['steps'] {
   const boundary = nodeId.lastIndexOf('__')
   if (boundary < 0) return steps
   const prefix = nodeId.slice(0, boundary + 2)
@@ -226,7 +226,7 @@ function regraftStepSelectors(
     const grafted = `${prefix}${targetId}`
     if (!present.has(grafted)) return step
     return { ...step, selector: nodeInteractionSelector(grafted) }
-  }) as HostAction['steps']
+  }) as SiteInteraction['steps']
 }
 
 export function collectNodeInteractions(
@@ -252,7 +252,7 @@ export function collectNodeInteractions(
           ...(Array.isArray((interaction as { steps?: unknown }).steps)
             ? {
                 steps: regraftStepSelectors(
-                  (interaction as unknown as HostAction).steps,
+                  (interaction as unknown as SiteInteraction).steps,
                   nodeId,
                   present,
                 ),
@@ -264,7 +264,7 @@ export function collectNodeInteractions(
             // is not stored.
             selector: nodeInteractionSelector(nodeId),
           },
-        } as HostAction,
+        } as SiteInteraction,
       })
     }
   }

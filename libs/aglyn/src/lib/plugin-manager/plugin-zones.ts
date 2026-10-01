@@ -29,10 +29,9 @@ import {
  * a slot id has always been an open string, so a plugin could already host a
  * zone of its own. What it could not do is say what that zone HANDS a widget.
  * The props had to be a type, the type had to be somewhere both sides import,
- * and "somewhere both sides import" was read as the core — which is how
- * `plugin-manager/commerce-zone-props.ts` and `plugin-manager/record-zone-props.ts`
- * came to spell out the commerce catalog and the record vocabulary of two
- * named plugins inside the platform.
+ * and "somewhere both sides import" was read as the core — which is how a
+ * named plugin's catalog or record vocabulary comes to be spelled out inside
+ * the platform.
  *
  * So the declaration moves to the plugin. A plugin defines a token for its
  * zone with {@link definePluginZone}, carrying the props type on the token,
@@ -44,7 +43,7 @@ import {
  *
  * A zone token is `{ id }` and nothing else: `__props` is a phantom field that
  * never holds a value, so the props type is carried at the type level and
- * erased. That is the same trick the two type-only modules above use, and it
+ * erased. That is the same trick a type-only props module uses, and it
  * is load-bearing rather than tidy — AGL-3082 measured the zone catalog on the
  * published page's static graph, and a declaration that put a plugin's prop
  * SHAPES there would have made every published page carry the console's

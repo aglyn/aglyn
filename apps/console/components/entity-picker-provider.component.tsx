@@ -589,7 +589,8 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
       categories: categories.options,
       forms: forms.options,
       datasets: datasets.options,
-      datasetFields: datasetModels,
+      // The one kind whose documents carry a field model.
+      entityFields: { datasets: datasetModels },
       // Why each list is the length it is, so a picker showing nothing can
       // say which kind of nothing it is.
       //

@@ -30,6 +30,7 @@ import {
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { WORKFLOW_USAGE_ZONE } from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerWorkflowsRecordRoutes } from './model/workflows-record-routes'
 
 /** Code-split: the Automation console page only loads when opened. */
 const WorkflowsConsolePage = lazy(
@@ -51,6 +52,7 @@ const WorkflowsConsolePage = lazy(
  * them. Only what a reader sees carries the new name.
  */
 export function registerWorkflowsConsole(): void {
+  registerWorkflowsRecordRoutes()
   registerPluginZone(
     {
       zone: WORKFLOW_USAGE_ZONE,
@@ -96,7 +98,7 @@ export function registerWorkflowsConsole(): void {
         // Workflows, Actions and Webhooks are the tabs INSIDE this section, so
         // the section is named for what they have in common. `/workflows` —
         // the address before the section had its own name — is redirected here
-        // by the console (see `Route.HOST_WORKFLOWS`).
+        // by this plugin's `consoleRedirects` (see `Route.HOST_WORKFLOWS`).
         href: '/automation',
         // Sections as ROUTES (AGL-2501): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read.

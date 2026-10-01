@@ -17,8 +17,9 @@
 
 /**
  * Where the Emails page's records are read (AGL-3080): what this plugin
- * publishes under `emailMessage` and `sendingIdentity`, for the surfaces that
- * link to them — a contact's timeline, a composer refused for its sender.
+ * publishes under `emailMessage`, `emailTemplate` and `sendingIdentity`, for
+ * the surfaces that link to them — a contact's timeline, a composer refused
+ * for its sender, a campaign's messages and the designs they were built from.
  */
 
 import {
@@ -41,6 +42,14 @@ describe('the Emails page’s record routes', () => {
   it('publishes both kinds under this plugin', () => {
     expect(pluginRecordRoute('emailMessage')?.pluginId).toBe('email')
     expect(pluginRecordRoute('sendingIdentity')?.pluginId).toBe('email')
+    expect(pluginRecordRoute('emailTemplate')?.pluginId).toBe('email')
+  })
+
+  it('addresses a design on the site’s Emails page, and nowhere at the organization', () => {
+    expect(pluginRecordHref('emailTemplate', SITE, 'scr 9')).toBe('/acme/hosts/shop/emails/templates/scr%209')
+    expect(pluginRecordListHref('emailTemplate', SITE)).toBe('/acme/hosts/shop/emails/templates')
+    expect(pluginRecordHref('emailTemplate', ORG, 'scr-9')).toBeNull()
+    expect(pluginRecordListHref('emailTemplate', ORG)).toBeNull()
   })
 
   it('addresses a message on the site’s Emails page, and on the organization’s', () => {

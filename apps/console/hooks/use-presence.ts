@@ -1110,7 +1110,8 @@ function startPresenceAppCheck(app: FirebaseApp): void {
  */
 export function usePresence(options: {
   hostId: string | undefined
-  docType: 'screen' | 'layout' | 'component' | 'template' | 'email' | 'form'
+  /** A platform document kind, or a plugin document's declared `kind`. */
+  docType: string
   docId: string | undefined
   /**
    * The version being edited. Part of the ROOM KEY, so two people on

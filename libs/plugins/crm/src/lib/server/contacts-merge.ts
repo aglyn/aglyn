@@ -22,7 +22,7 @@
  * Body: `{ hostId, survivorId, mergedId }`. The survivor keeps its address
  * as the identity; the merged record's address becomes an alternate on it,
  * every deal, task, activity and lead naming the merged record is repointed,
- * and the merged document is deleted. `mergeContacts` in the data library
+ * and the merged document is deleted. `mergeContacts` (`merge-contacts.ts`)
  * is the whole of the work, so the REST door performs the same merge.
  *
  * ## Who may call it
@@ -56,13 +56,9 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import {
-  firebaseAdmin,
-  getOrgForHost,
-  logOrgActivity,
-  mergeContacts,
-} from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost, logOrgActivity } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { mergeContacts } from './merge-contacts'
 import { authorizeOrgCaller, holdsDataManage, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 

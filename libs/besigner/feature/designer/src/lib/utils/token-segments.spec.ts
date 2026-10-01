@@ -198,7 +198,7 @@ describe('resolveTokenLabel (AGL-586)', () => {
     ],
     variables: { v2: { name: 'Tagline' } },
     functions: { f2: { name: 'Shout' } },
-    datasetFields: [{ id: 'fld1', label: 'Author' }],
+    itemFields: [{ id: 'fld1', label: 'Author' }],
   }
 
   it('resolves a variable id through the host docs', () => {
@@ -272,22 +272,22 @@ describe('resolveTokenLabel (AGL-586)', () => {
     })
   })
 
-  it('resolves dataset-item tokens against the ancestor model fields', () => {
+  it('resolves item tokens against the fields of the repeated entity', () => {
     expect(resolveTokenLabel('{{item.fld1}}', context)).toEqual({
       label: 'Author',
-      group: 'dataset',
+      group: 'item',
       known: true,
     })
     expect(resolveTokenLabel('{{item.other}}', context)).toEqual({
       label: 'item.other',
-      group: 'dataset',
+      group: 'item',
       known: false,
     })
   })
 
   it('labels a one-hop reference token through the field + hop id', () => {
     const resolved = resolveTokenLabel('{{item.fld1.displayName}}', context)
-    expect(resolved.group).toBe('dataset')
+    expect(resolved.group).toBe('item')
     expect(resolved.known).toBe(true)
     expect(resolved.label.startsWith('Author → ')).toBe(true)
   })

@@ -91,6 +91,10 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // A card of the Plugins page, and a notice above an installation's cards.
   orgPluginInstalls: 'stack',
   pluginInstallStatus: 'stack',
+  // A shelf among the template gallery's own, spaced from the one above it.
+  templateGallery: 'stack',
+  // A control in a cell of the Templates library, beside the Source badge.
+  templateInstallStatus: 'bare',
   // A notice above a subtree, spaced by the layout that draws it.
   // The body of the ƒx dialog, which spaces its own contents.
   besignerFunctions: 'bare',
@@ -138,12 +142,6 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   hostAutomations: 'bare',
   automationEditor: 'bare',
   automationRun: 'bare',
-  // Sections the commerce plugin places inside its own spaced layouts: the
-  // product editor's fields, above the products hub's catalog table, and the
-  // CSV import dialog's options.
-  productEditor: 'bare',
-  productsHub: 'bare',
-  productImport: 'bare',
   // A card among a CRM record page's own cards, which the CRM plugin hosts.
   recordInsights: 'stack',
   // Sections the CRM plugin places inside its own spaced layouts: under the

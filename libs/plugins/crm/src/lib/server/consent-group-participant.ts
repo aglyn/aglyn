@@ -58,7 +58,7 @@
  * (`copiedByChange`), and a pass that finds the stamp does not copy again.
  */
 
-import { mergeContactFacet } from '@aglyn/aglyn/app-utils/contact-merge'
+import { mergeContactFacet } from '../model/contact-merge'
 import type {
   ConsentGroupChangePlan,
   ConsentGroupChangePreviewLine,

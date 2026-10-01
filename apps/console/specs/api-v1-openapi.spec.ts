@@ -19,17 +19,30 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { describeApiV1Resources } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_OPENAPI_PATH,
   CUSTOMER_API_VERSION,
 } from '../utils/api-v1-openapi'
 
-const document = buildCustomerApiOpenApi({
-  origin: 'https://app.acme.test',
-  documentationUrl: 'https://docs.acme.test/api',
-  brandName: 'Acme',
-}) as any
+let document: any
+
+// The console's boot, which registers the plugins' resources and their
+// descriptions (AGL-3080): the document is what the route serves, the
+// platform's resources and every one the build's plugins describe.
+beforeAll(async () => {
+  await registerPluginServerDeclarations()
+  document = buildCustomerApiOpenApi(
+    {
+      origin: 'https://app.acme.test',
+      documentationUrl: 'https://docs.acme.test/api',
+      brandName: 'Acme',
+    },
+    await describeApiV1Resources(),
+  )
+})
 
 /** Every `{ path, method, operation }` triple. */
 function* operations(): Generator<{ path: string; method: string; op: any }> {
@@ -100,6 +113,33 @@ describe('the customer API description — document shape (AGL-2733)', () => {
       if (path === '/v1/openapi.json') continue
       expect(op.security).toBeUndefined()
     }
+  })
+})
+
+describe('a plugin describes the resources it serves (AGL-3080)', () => {
+  const platformOnly = () =>
+    buildCustomerApiOpenApi({
+      origin: 'https://app.acme.test',
+      documentationUrl: 'https://docs.acme.test/api',
+      brandName: 'Acme',
+    }) as any
+
+  it('describes no plugin resource the build does not serve', () => {
+    const paths = Object.keys(platformOnly().paths)
+    expect(paths).toContain('/v1/datasets')
+    expect(paths).not.toContain('/v1/contacts')
+    expect(platformOnly().components.schemas.ContactMerge).toBeUndefined()
+  })
+
+  it('describes the CRM’s resources once the CRM has registered them', () => {
+    const paths = Object.keys(document.paths)
+    for (const path of ['/v1/contacts', '/v1/contacts/{contactId}/merge', '/v1/leads/{leadId}/convert', '/v1/email-templates']) {
+      expect(paths).toContain(path)
+    }
+    // A description's own named schema replaces what the builder derives.
+    expect(document.components.schemas.ContactMerge.required).toEqual(['sourceContactId'])
+    expect(document.components.schemas.LeadConversion.properties.object.const).toBe('lead_conversion')
+    expect(document.paths['/v1/deals'].get.responses['403']).toBeTruthy()
   })
 })
 

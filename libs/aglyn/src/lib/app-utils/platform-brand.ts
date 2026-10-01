@@ -126,12 +126,22 @@ export const PLATFORM_SUPPORT_URL: string = (() => {
   if (configured) return configured
   const operatorEmail = clean(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL)
   if (operatorEmail) return `mailto:${operatorEmail}`
-  const consoleOrigin = clean(process.env.NEXT_PUBLIC_CONSOLE_URL)?.replace(
-    /\/+$/,
-    '',
-  )
-  return `${consoleOrigin || 'https://app.aglyn.com'}/support`
+  return `${platformConsoleOrigin()}/support`
 })()
+
+/**
+ * This install's console origin, with no trailing slash — what a link in a
+ * notification or an email the platform sends is built on (AGL-3080).
+ *
+ * `NEXT_PUBLIC_CONSOLE_URL`, which every self-hosted install sets; Aglyn's
+ * own console only for a build that names none. One reading for the support
+ * page above and for every scheduled sender, a plugin's included, so none of
+ * them spells the fallback again.
+ */
+export function platformConsoleOrigin(): string {
+  const configured = clean(process.env.NEXT_PUBLIC_CONSOLE_URL)?.replace(/\/+$/, '')
+  return configured || 'https://app.aglyn.com'
+}
 
 /** True when this deployment still answers to Aglyn's own brand. */
 export const isAglynOperatedBrand = (): boolean =>

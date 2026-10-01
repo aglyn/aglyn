@@ -57,6 +57,10 @@ import type { ReactNode } from 'react'
 import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { EmailsListCard } from './emails-list-card'
 import { MarketingOrgMountProvider } from './marketing-org-mount'
+import { standInEmailsPageRoutes } from '../testing/stand-in-emails-page-routes'
+
+// The Emails page this campaign links into is the email plugin's (AGL-3080).
+standInEmailsPageRoutes()
 
 const BASE_PATH = '/acme/hosts/site/emails'
 /** The sibling hub a campaign's page lives on. */

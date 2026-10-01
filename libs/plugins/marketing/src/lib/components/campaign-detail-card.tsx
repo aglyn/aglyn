@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiDeleteOutline,
   mdiEyeOutline,
@@ -128,7 +129,7 @@ import {
   useMarketingOrgMount,
 } from './marketing-org-mount'
 import { useCampaignManageApi } from './use-campaign-send-api'
-import { useEmailsHubPath } from './use-emails-hub-path'
+import { siteRecordRouteContext, useRecordRouteContext } from './record-route-context'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
 /** How many of a campaign's emails the detail page enumerates. */
@@ -239,9 +240,9 @@ export interface CampaignDetailCardProps {
 export function CampaignDetailCard(props: CampaignDetailCardProps) {
   const { hostId, campaignId, basePath } = props
   const firestore = useFirestore()
-  // The sibling hub, for the two records this page links to but does not own:
-  // each message's report and the template it was built from.
-  const emailsHub = useEmailsHubPath()
+  // The scope this page asks the owner of two records it links to but does
+  // not own: each message's report and the template it was built from.
+  const routeContext = useRecordRouteContext()
   const router = useRouter()
   const orgMount = useMarketingOrgMount()
   const { orgId } = useMarketingOrgId(hostId)
@@ -588,22 +589,21 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * A message opens on the Emails page: the site's under a site, and over the
    * org the organization's own, which lists every site's messages.
    */
-  const messagesPath = emailsHub ? `${emailsHub}/messages` : null
   const sendHref = (send: CampaignSend) =>
-    messagesPath ? `${messagesPath}/${send.$id}` : undefined
+    (routeContext && pluginRecordHref('emailMessage', routeContext, send.$id)) || undefined
   /** A template is a site's design, so it opens on the site the send used. */
-  const templatesPath = (send: CampaignSend): string | null => {
-    const hub = orgMount ? orgSiteHubPath(orgMount, send.hostId, 'emails') : emailsHub
-    return hub ? `${hub}/templates` : null
+  const templateHref = (send: CampaignSend, templateScreenId: string): string | null => {
+    const siteContext = siteRecordRouteContext(routeContext, orgMount, send.hostId)
+    return siteContext ? pluginRecordHref('emailTemplate', siteContext, templateScreenId) : null
   }
 
   /**
    * What one of this campaign's emails can be opened into.
    *
    * The same two the Emails hub offers, less the campaign — this page IS the
-   * campaign. Both destinations are records the Emails console owns, so they
-   * are built from {@link useEmailsHubPath} rather than from this surface's
-   * own `basePath`.
+   * campaign. Both destinations are records the Emails page owns, so they
+   * are asked of its record routes ({@link useRecordRouteContext}) rather than
+   * built from this surface's own `basePath`.
    *
    * A message composed inline was built from no template, so that entry is
    * shown DISABLED with the reason rather than hidden: an absent control and
@@ -611,7 +611,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    */
   const sendActions = (send: CampaignSend): RowActionsMenuItem[] => {
     const templateScreenId = String((send as any).templateScreenId ?? '')
-    const templates = templatesPath(send)
+    const templates = templateScreenId ? templateHref(send, templateScreenId) : null
     return [
       {
         key: 'details',
@@ -625,11 +625,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         key: 'template',
         label: 'Open its template',
         icon: <MdiIcon path={mdiPaletteOutline.path} size={0.8} />,
-        href:
-          templateScreenId && templates
-            ? `${templates}/${templateScreenId}`
-            : undefined,
-        disabled: !templateScreenId || !templates,
+        href: templates ?? undefined,
+        disabled: !templates,
         disabledReason: templateScreenId
           ? 'This site’s console URL has not resolved yet'
           : 'This message was not built from a template',

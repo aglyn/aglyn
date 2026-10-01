@@ -511,7 +511,7 @@ describe('deleting a campaign', () => {
       siteBase: 'https://acme.example',
       hostId: HOST,
       email: 'ada@example.com',
-      campaignId: 'send-1',
+      sendId: 'send-1',
       secret: SECRET,
     })
     expect(url).toContain('cid=send-1')
@@ -523,7 +523,7 @@ describe('deleting a campaign', () => {
       unsubscribeSignatureMatches({
         hostId: HOST,
         email: 'ada@example.com',
-        campaignId: 'send-1',
+        sendId: 'send-1',
         signature,
         secret: SECRET,
       }),

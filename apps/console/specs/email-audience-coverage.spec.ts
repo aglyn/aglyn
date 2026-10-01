@@ -95,6 +95,16 @@ const PLATFORM_SENDERS: Record<string, string> = {
     'sat under `apps/console/app/api/_lib/` until AGL-3080 moved the review ' +
     'queue into the plugin that owns it, which is the only thing that ' +
     'changed about who the mail is from.',
+  [join('libs', 'plugins', 'crm', 'src', 'lib', 'server', 'daily-digest-route.ts')]:
+    "The daily CRM digest to a workspace's own members. The recipient is " +
+    "Aglyn's customer, never a site's visitor or contact, and the send is " +
+    'metered as platform mail (`meterPlatformEmail`). It was a console route ' +
+    'until AGL-3080 moved it into the CRM, which changed nothing about who ' +
+    'the mail is from.',
+  [join('libs', 'plugins', 'crm', 'src', 'lib', 'server', 'task-reminders-route.ts')]:
+    "A task's reminder to the workspace member it is assigned to — Aglyn's " +
+    "customer, never a site's visitor or contact — metered as platform mail " +
+    'like the digest beside it, and moved into the CRM with it (AGL-3080).',
 }
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'coverage', '.nx', 'tmp'])
@@ -262,9 +272,16 @@ describe('the platform senders are named, not inferred', () => {
    * And the exemption must be narrow. A platform sender inside a tenant tree
    * is an exception; if the list ever grew to cover most of the tree it would
    * have stopped being one, and this sweep would be asserting nothing.
+   *
+   * The ceiling rose once, deliberately (AGL-3080): the console's scheduled
+   * routes that mail a workspace's own members — the AI insights, the CRM's
+   * digest and task reminders — moved into the plugins that own them, so a
+   * platform sender that used to sit outside this tree now sits inside it.
+   * That is a move, not a new kind of sender; a sixth entry is the moment to
+   * ask whether the sweep still means anything.
    */
   it('keeps the exemption list short', () => {
-    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(4)
+    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(6)
   })
 })
 

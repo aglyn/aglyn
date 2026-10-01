@@ -83,10 +83,6 @@ export * from './crm-email-templates'
 // link carries, the record reference inside it, and the wording and due
 // date of what a booking files back on the record.
 export * from './crm-booking'
-// Two contact documents folded into one (AGL-2625): the plan the console
-// previews and the server writes, reading the facet shape from `contacts`
-// and the company mirror from `crm`.
-export * from './contact-merge'
 // A person's privacy erasure from one workspace (AGL-2623): the request's
 // shape and id, the marker a record carries while it waits, and the lists
 // the dialog and the docs share. Pure like `crm`; the sweep is server-side.
@@ -105,18 +101,14 @@ export * from './crm-csv'
 // beside the files that write it: the org-level list and the server's
 // export both flatten a contact this way.
 export * from './contact-holder'
-// What one member is owed this morning — the day's window in a named zone,
-// the task and lead bucketing, and the words the notification and the mail
-// say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
-export * from './crm-digest'
 // A task's reminder at its own time (AGL-2659): which reminder a save
 // leaves, whether one is owed, and the words the notification and the mail
-// say. Pure like `crm-digest`, read by the hourly route and by every
+// say. Pure like `crm-reports`, read by the hourly route and by every
 // writer of the field.
 export * from './crm-task-reminders'
 // Email capture (AGL-2657): the address's shape and token, which of a
 // message's addresses is the correspondent, the excerpt, and the row a
-// captured message becomes. Pure like `crm-digest`; the webhook route and
+// captured message becomes. Pure like `crm-reports`; the webhook route and
 // the address route are the readers with Firestore.
 export * from './crm-inbound'
 // A member's own addresses in a workspace (AGL-2975): the ones they have
@@ -300,6 +292,9 @@ export * from './plugin-api-rate-limit'
 // `plugin-api-rate-limit`, whose `isMachinePluginApiPath` it reuses so the
 // two gates exempt exactly the same machine surfaces.
 export * from './plugin-api-cross-origin'
+// What a published page does when a visitor does something (AGL-3080): the
+// platform's interaction vocabulary, which `./actions` builds its automations on.
+export * from './site-interactions'
 export * from './actions'
 export * from './element-animation'
 export * from './attribution-guard'

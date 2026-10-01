@@ -83,6 +83,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     hostId === HOST ? { orgId: ORG, org: mockOrg } : null,
   getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG, ...mockOrg } : null),
   logOrgActivity: (...args: unknown[]) => (mockLogOrgActivity as any)(...args),
+}))
+jest.mock('./merge-contacts', () => ({
   mergeContacts: (...args: unknown[]) => (mockMergeContacts as any)(...args),
 }))
 

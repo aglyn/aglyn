@@ -76,29 +76,7 @@ import useFirestoreCollection from '../../../../../../../hooks/use-firestore-col
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
 import UseTemplateDialog from '../../../../../../../components/templates/use-template-dialog.component'
 import { useDeclareDocumentSubject } from '../../../../../../../components/document-subject'
-
-/** Human label + colour for the frozen `source.type` (AGL-666/687). */
-function sourceLabel(source: { type?: string; version?: string } | undefined) {
-  if (source?.type === 'marketplace') {
-    return {
-      label: source.version ? `Marketplace · v${source.version}` : 'Marketplace',
-      color: 'primary' as const,
-      title: 'Installed from the marketplace',
-    }
-  }
-  if (source?.type === 'starter') {
-    return {
-      label: 'Starter',
-      color: 'default' as const,
-      title: 'A first-party starter, copied in when you used or edited it',
-    }
-  }
-  return {
-    label: 'Saved here',
-    color: 'default' as const,
-    title: 'Saved from this site',
-  }
-}
+import { templateSourceBadge } from '../../../../../../../components/templates/template-source-badge'
 
 /**
  * Template detail (AGL-694), the counterpart to the component detail page.
@@ -314,7 +292,8 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
     host,
     templateId,
   })
-  const chip = sourceLabel(template?.source)
+  // The frozen `source.type` (AGL-666/687), in the installer's words.
+  const chip = templateSourceBadge(template?.source, { withVersion: true })
   const dirty = name != null || description != null
 
   return (

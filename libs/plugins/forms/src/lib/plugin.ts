@@ -24,6 +24,7 @@ import {
   FORM_SUBMISSIONS_ZONE,
 } from './components/form-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerFormsRecordRoutes } from './model/forms-record-routes'
 
 /** Code-split: the Forms console surface only loads when opened. */
 const FormsConsolePage = lazy(() => import('./components/forms-console-page'))
@@ -36,6 +37,7 @@ const FormsConsolePage = lazy(() => import('./components/forms-console-page'))
  * declared section. Safe to call at console app load — the page is lazy.
  */
 export function registerFormsConsole(): void {
+  registerFormsRecordRoutes()
   registerPluginZone(
     {
       zone: FORM_SUBMISSIONS_ZONE,

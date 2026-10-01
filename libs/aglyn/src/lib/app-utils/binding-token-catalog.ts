@@ -15,12 +15,6 @@
  * limitations under the License.
  */
 
-import {
-  DATASET_FIELD_TYPE_LABELS,
-  type DatasetModel,
-} from './dataset-models'
-import { humanizeDatasetFieldId } from './datasets'
-
 /**
  * Browsable data-placeholder catalogs for the designer's insert picker
  * (AGL-583). Hand-typing `{{entry.title}}` stays the advanced path; these
@@ -302,50 +296,16 @@ export const AUTHOR_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
 ]
 
 /**
- * Renders an `{{item.*}}` token for a dataset field, optionally hopping
- * one reference to a field of the referenced record (AGL-180). Always
- * takes the stable model field ID — display names are labels only.
+ * The `{{item.*}}` token for one field of the record a repeat is rendering,
+ * optionally hopping one reference to a field of the referenced record
+ * (AGL-180). Always takes the stable field id — display names are labels
+ * only, so renaming a field never breaks a binding (AGL-578).
  */
-export function datasetItemToken(
+export function repeatItemToken(
   fieldId: string,
   targetFieldId?: string,
 ): string {
   return targetFieldId
     ? `{{item.${fieldId}.${targetFieldId}}}`
     : `{{item.${fieldId}}}`
-}
-
-/**
- * Dataset-item token entries for a repeatable container's model: one per
- * field in model order, labeled with the CURRENT display name while the
- * token carries the stable reference id (AGL-578 — renaming a label never
- * breaks bindings). Reference fields with a configured display field also
- * get their one-hop token (`{{item.author.name}}`).
- */
-export function datasetItemTokens(
-  model: DatasetModel,
-): BindingTokenCatalogEntry[] {
-  const entries: BindingTokenCatalogEntry[] = []
-  for (const fieldId of model.order ?? []) {
-    const field = model.fields?.[fieldId]
-    if (!field) continue
-    const label = field.name?.trim() || humanizeDatasetFieldId(fieldId)
-    entries.push({
-      token: datasetItemToken(fieldId),
-      label,
-      description: DATASET_FIELD_TYPE_LABELS[field.type] ?? field.type,
-    })
-    // One reference hop (AGL-180): surface the configured display field of
-    // the referenced record — the hop editors reach for most.
-    const hopId =
-      field.type === 'reference' ? field.reference?.displayFieldId : undefined
-    if (hopId) {
-      entries.push({
-        token: datasetItemToken(fieldId, hopId),
-        label: `${label} → ${humanizeDatasetFieldId(hopId)}`,
-        description: 'Field from the referenced record.',
-      })
-    }
-  }
-  return entries
 }

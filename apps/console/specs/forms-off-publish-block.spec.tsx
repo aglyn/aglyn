@@ -135,10 +135,17 @@ describe('every besigner publish asks before it writes', () => {
     expect(wrote).toBeGreaterThan(asked)
   })
 
-  it('the form designer hands the site’s answer to the contract check', () => {
-    const source = read(`${EDITOR}/forms/[formId]/versions/[versionId]/besigner/page.tsx`)
-    const checked = source.indexOf('const violations = checkFormContract({')
-    expect(checked).toBeGreaterThan(-1)
-    expect(source.slice(checked, checked + 200)).toContain('formsOnForSite,')
+  it('a form publishes through the route that asks the site’s answer', () => {
+    // The form's own designer writes nothing live: it posts the version to the
+    // route the forms plugin declares, and that route refuses a site that
+    // switched Forms off before its write.
+    const editor = read(
+      `${EDITOR}/[documentSegment]/[docId]/versions/[versionId]/besigner/page.tsx`,
+    )
+    expect(editor).toContain('authorizedFetch(user, declared.publish.path')
+    const route = read('apps/console/app/api/hosts/forms/promote/route.ts')
+    expect(route).toContain(
+      'formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), FORMS_PLUGIN_ID)',
+    )
   })
 })

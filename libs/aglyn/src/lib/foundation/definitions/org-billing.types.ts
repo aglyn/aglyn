@@ -45,9 +45,10 @@ import type {
  *
  * Each is an EMPTY interface a plugin augments with `declare module`, so the
  * keys a plugin owns are part of `OrgEntitlements` and `OrgFeatureFlags`
- * without the core listing them. Nothing composes today — the interfaces are
- * empty until a plugin declares into them — so this changes no shape at this
- * sha; what it changes is where the NEXT key is declared.
+ * without the core listing them. The AI credits, the CRM's one-to-one email
+ * pace, the form-submission and workflow-run bands, the marketplace's take
+ * rate and selling gate and commerce's three gated features are declared that
+ * way, each in its plugin's `plan-entitlements` module (AGL-3080).
  *
  * `import type` and nothing else: TypeScript erases it, so the plugin-manager
  * module is not on this module's runtime graph and a published page that
@@ -151,8 +152,6 @@ export interface CoreOrgFeatureFlags {
   removeBranding?: boolean
   /** Schedule a version to publish at a date/time (tier above versioning). */
   scheduledPublishing?: boolean
-  /** Sell listings on the marketplace marketplace (AGL-46). */
-  marketplaceSelling?: boolean
   /** AI copy assist in the besigner (AGL-89). */
   aiAssist?: boolean
   /**
@@ -264,20 +263,14 @@ export interface CoreOrgFeatureFlags {
   commerce?: boolean
   /** Console point-of-sale mode (AGL-312). */
   pos?: boolean
-  /** Recurring storefront subscription products (AGL-303). */
-  storefrontSubscriptions?: boolean
   /** Entitlement-gated screens/sections/video paywalls (AGL-309). */
   contentGating?: boolean
-  /** Gift cards & store credit (AGL-322). */
-  giftCards?: boolean
   /** Verified-buyer product reviews (AGL-324). */
   productReviews?: boolean
   /** Abandoned checkout recovery emails (AGL-323). */
   abandonedCart?: boolean
   /** Dropship supplier routing on paid orders (AGL-289). */
   dropshipRouting?: boolean
-  /** Commerce analytics dashboard (AGL-327). */
-  commerceAnalytics?: boolean
   /**
    * White-label the platform (White-Label Phase 1): replace the Aglyn brand
    * — product name, logo, colors, support URL, transactional email from-name
@@ -309,11 +302,11 @@ export interface CoreOrgFeatureFlags {
  * {@link CoreOrgFeatureFlags} is the platform's own set — what
  * `PLAN_ENTITLEMENTS` declares for every plan, and what
  * `Required<CoreOrgFeatureFlags>` keeps exhaustive.
- * {@link PluginEntitlementFeatures} is the plugin half (AGL-3124): empty
- * until a plugin declares a gate of its own into it with `declare module`,
- * and resolved from that plugin's `registerPluginEntitlements` defaults
- * rather than from a row in a core plan table — which is why a plugin's gate
- * joins HERE and not above. Every reader keeps reading `OrgFeatureFlags`, and
+ * {@link PluginEntitlementFeatures} is the plugin half (AGL-3124): a plugin
+ * declares a gate of its own into it with `declare module`, and its answer
+ * per plan comes from that plugin's `plan-entitlements` declaration or its
+ * `registerPluginEntitlements` defaults rather than from a row core writes —
+ * which is why a plugin's gate joins HERE and not above. Every reader keeps reading `OrgFeatureFlags`, and
  * `keyof OrgFeatureFlags` admits a plugin's key the moment it is declared.
  */
 export interface OrgFeatureFlags
@@ -511,8 +504,6 @@ export interface CoreOrgEntitlements {
   /** Hard per-site collaborator cap incl. addons (see `membersPerHost`). */
   maxMembersPerHost?: number
   bandwidthGb?: number
-  /** Form submissions accepted per calendar month (Forms & Lead Capture). */
-  formSubmissionsPerMonth?: number
   /**
    * Saved form DEFINITIONS per host — documents under
    * `hosts/{hostId}/forms`, the entity a submission's `formId` points at.
@@ -536,8 +527,6 @@ export interface CoreOrgEntitlements {
   functionsPerHost?: number
   /** Workflow builder cap (AGL-99/101). */
   workflowsPerHost?: number
-  /** Event-triggered workflow runs per calendar month (AGL-165). */
-  workflowRunsPerMonth?: number
   /** Bookable services per host (AGL-159). */
   servicesPerHost?: number
   /** Redirect rules per host (AGL-154). */
@@ -553,48 +542,6 @@ export interface CoreOrgEntitlements {
    * and activities are not counted — see `CRM_ACTIVITIES_PER_RECORD_CEILING`.
    */
   contactsPerHost?: number
-  /**
-   * One-to-one emails a workspace may send from CRM records per UTC day —
-   * the message a rep writes to one person from their contact page, as
-   * against a campaign (`emailSendsPerMonth`) or transactional mail.
-   *
-   * A HARD cap on every tier and a daily one, because it is the only send
-   * class a person can produce by hand at volume: a campaign is one act over
-   * a metered audience, and a receipt follows an order somebody paid for,
-   * but a rep with a template and a list can put a thousand messages onto
-   * the platform's sending reputation in an afternoon. The day boundary is
-   * what makes the cap a pace rather than a wall — tomorrow the count is
-   * zero again — and the number is sized so that every tier holds its
-   * margin with the whole day spent, which is the arithmetic the Drive
-   * pricing decision of 2026-09-05 records. `checkCrmEmailQuota` reads it;
-   * the counter it is enforced against is `orgs/{orgId}/crmEmailUsage/{day}`.
-   *
-   * Every send still counts on the org's `emailSends` cost meter, like any
-   * other message the provider charged for. 0 on Free, which has no CRM,
-   * and finite on every paid tier, Enterprise's 2,000 included.
-   *
-   * ## This ladder and `emailSendsPerMonth` are NOT the same ladder
-   *
-   * They answer to different principles, deliberately, and a tier's two
-   * numbers are not expected to look like each other. `emailSendsPerMonth`
-   * is sized against SHARED-DOMAIN REPUTATION: campaign mail is bulk on a
-   * pool every tier without its own verified sending domain rides under
-   * `p=reject`, so what one workspace sends is a cost every other workspace
-   * pays. This one is sized against COGS SHARE: one-to-one mail is a per-tier
-   * margin question, which is why it is a daily pace rather than a monthly
-   * band.
-   *
-   * The two are far apart at the entry tier — a band of 0 beside a real daily
-   * allowance — and that reads as an inconsistency until the principles are
-   * named. It is not one. One-to-one mail is addressed to a single person,
-   * usually inside a relationship the recipient started, and it reaches the
-   * provider through a per-user pace limit, both suppression lists, a
-   * `declined` consent basis as a hard stop, and an atomic daily reservation.
-   * Complaint rates on it are structurally unlike bulk. Reconciling the two
-   * ladders would price a reply to one customer as though it carried a
-   * campaign's reputation risk.
-   */
-  crmEmailsPerDay?: number
   /**
    * CAMPAIGN emails sendable per calendar month (AGL-161), and campaign
    * emails only (AGL-1438).
@@ -615,47 +562,6 @@ export interface CoreOrgEntitlements {
    * are not meant to track each other.
    */
   emailSendsPerMonth?: number
-  /**
-   * Aglyn Assist credits per calendar month — the band assist spends against.
-   *
-   * A CREDIT IS A UNIT OF MODEL COST, not a message. One assist action can
-   * cost two orders of magnitude more than another: a question is a few
-   * thousand tokens, while generating a screen carries the node tree, the
-   * component catalog and the theme tokens in, structured markup out, and
-   * iterates. A message allowance would price those the same, so one
-   * workspace's ten screen builds would outspend another's thousand questions
-   * and both would read as "within allowance".
-   *
-   * The unit is defined by `ASSIST_CREDIT_COST_USD` and the conversion lives
-   * in `assist-credits.ts`. Only that module turns credits into dollars;
-   * everything a customer sees counts credits, because the dollar figure
-   * behind them is our provider bill and not a price.
-   *
-   * ## HOW THE BAND IS SIZED, and why it is not a share of the price
-   *
-   * A credit is a dollar of provider spend at `ASSIST_CREDIT_COST_USD`, so
-   * the band IS a liability figure: the plan's whole assist give is
-   * `assistCreditsPerMonth / 1000` dollars. Credits past it are not a give —
-   * since AGL-2653 they are SOLD at `extraAssistCreditsUsdPer1k`, unless the
-   * org's `assistOverage.hardCap` asks `reserveAssistMessage` to refuse at
-   * the band instead. Sizing it as a share of the subscription price says
-   * nothing about whether the tier can afford it, because the price is also
-   * carrying storage, bandwidth, form submissions, dataset storage, API
-   * requests, contacts and email.
-   *
-   * So each band is sized against what those SEVEN other terms leave. Every
-   * paid band takes between a quarter and a third of that remainder, which
-   * keeps the tier's worst case positive and keeps the ladder's shape: the
-   * margin each tier holds at 100% of every band stays in proportion to what
-   * it held before assist was sold at all. `tier-margin-floor.spec.ts` is the
-   * model, and it pins both the rule and the resulting figures.
-   *
-   * 0 on Free and Starter, which carry no `aiAssist` and no band. The Aglyn
-   * AI add-on (AGL-2896) adds `AI_ADDON_CREDITS_PER_MONTH[plan]` to this
-   * band in `resolveOrgEntitlements` — one pool, widened, rather than a
-   * second meter — so Starter with the add-on carries a band after all.
-   */
-  assistCreditsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
   /** Included customer REST API requests per calendar month (AGL-634);
@@ -687,13 +593,6 @@ export interface CoreOrgEntitlements {
   transactionFeePhysicalPct?: number
   /** Platform fee % on digital storefront sales (Connect app fee). */
   transactionFeeDigitalPct?: number
-  /**
-   * Platform take rate % on the org's MARKETPLACE listing sales (AGL-46,
-   * resolved from entitlements per AGL-1543): 20 on paid plans, 30 on
-   * free. Distinct from the storefront `transactionFee*Pct` above — this
-   * is Aglyn's cut of a marketplace sale, priced off the SELLER org.
-   */
-  marketplaceFeePct?: number
   features?: OrgFeatureFlags
   /**
    * A staff PLAN COMP (AGL-3034) — see `OrgPlanComp`. Not a quota: the
@@ -709,10 +608,10 @@ export interface CoreOrgEntitlements {
  *
  * {@link CoreOrgEntitlements} is what `PLAN_ENTITLEMENTS` declares per plan
  * and what `ResolvedOrgEntitlements` keeps exhaustive.
- * {@link PluginEntitlementQuotas} is the plugin half: empty until a plugin
- * declares a key of its own into it with `declare module` and registers it
- * with `registerPluginEntitlementKeys`, and resolved from that plugin's seat
- * add-on declaration rather than from a row in a core plan table. So
+ * {@link PluginEntitlementQuotas} is the plugin half: a plugin declares a
+ * key of its own into it with `declare module`, and its figure per plan comes
+ * from that plugin's `plan-entitlements` declaration, compiled into
+ * `PLAN_ENTITLEMENTS` (AGL-3080), widened by any seat add-on it declares. So
  * `resolveOrgEntitlements` carries a plugin's band, and `keyof
  * OrgEntitlements` admits its key, without this file naming the plugin's
  * domain.

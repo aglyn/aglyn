@@ -175,7 +175,7 @@ export function buildFormPreviewDocument(options: {
  *
  * A form has two halves and they fail differently. The DESIGN — fonts,
  * spacing, the theme the site draws it in — is previewed by
- * `Route.FORM_PREVIEW`, which renders the stored nodes through
+ * `Route.PLUGIN_DOCUMENT_PREVIEW`, which renders the stored nodes through
  * `AglynNodeRenderer`, the same component tree the published page mounts. That
  * is a whole-page surface and it stays where it is.
  *

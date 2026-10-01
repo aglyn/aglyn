@@ -222,3 +222,7 @@ export function registerAiConsoleApi(): void {
   // dispute pause comes off — and resetting the step. Every act audited.
   registerPluginApiRoute('ai/admin/overage', { web: aiAdminOverage })
 }
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { aiPlanEntitlements } from './plan-entitlements'

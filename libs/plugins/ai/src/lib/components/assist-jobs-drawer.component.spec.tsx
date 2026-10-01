@@ -125,7 +125,33 @@ function renderDrawer(overrides: Partial<Parameters<typeof AssistJobsDrawer>[0]>
   )
 }
 
+/**
+ * A form's page and the list of a site's actions are other plugins' (AGL-3080):
+ * the drawer asks the record-route registry, so these stand in the addresses
+ * the forms and workflows plugins publish. What each owner publishes is held
+ * in its own spec.
+ */
+function standInFormAndActionRoutes() {
+  registerPluginRecordRoute(
+    'form',
+    {
+      list: () => null,
+      record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/forms/${id}`,
+    },
+    { pluginId: 'forms' },
+  )
+  registerPluginRecordRoute(
+    'action',
+    {
+      list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/automation/actions`,
+      record: () => null,
+    },
+    { pluginId: 'workflows' },
+  )
+}
+
 beforeEach(() => {
+  standInFormAndActionRoutes()
   mockFlagVisible = true
   mockTrackEvent.mockReset()
   mockFetch.mockReset()
@@ -355,10 +381,13 @@ describe('aiJobOutputHref', () => {
   const unloadOwners = () => {
     unregisterPluginServices('marketing')
     unregisterPluginServices('commerce')
+    unregisterPluginServices('forms')
+    unregisterPluginServices('workflows')
   }
   afterEach(unloadOwners)
   beforeEach(() => {
     unloadOwners()
+    standInFormAndActionRoutes()
     registerPluginRecordRoute(
       'campaign',
       {
@@ -377,10 +406,12 @@ describe('aiJobOutputHref', () => {
     )
   })
 
-  it('links nothing for a campaign or a product when neither owner is loaded', () => {
+  it('links nothing for a campaign, a product, a form or an automation when no owner is loaded', () => {
     unloadOwners()
     expect(aiJobOutputHref(output({ resource: 'campaign', id: 'cmp-1' }) as never, 'acme')).toBeNull()
     expect(aiJobOutputHref(output({ resource: 'product' }) as never, 'acme')).toBeNull()
+    expect(aiJobOutputHref(output({ resource: 'form', id: 'form-1' }) as never, 'acme')).toBeNull()
+    expect(aiJobOutputHref(output({ resource: 'workflow' }) as never, 'acme')).toBeNull()
   })
 
   const output = (patch: Record<string, unknown>) => ({

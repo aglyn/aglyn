@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+import { isInstalledTemplateSource } from '@aglyn/aglyn/plugin-manager/plugin-template-sources'
 import {
   AppLink,
   CardDisplay,
@@ -37,7 +37,6 @@ import { artifactDeleteListKeys } from '@aglyn/aglyn/app-utils/artifact-list-key
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { type GridColDef } from '@mui/x-data-grid'
 import {
-  mdiDownloadOutline,
   mdiFileMultipleOutline,
   mdiPencilOutline,
   mdiPlusBoxOutline,
@@ -73,7 +72,6 @@ import ListTable, {
   ListRowActions,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { checkOrgQuota } from '../../constants/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
@@ -94,56 +92,24 @@ import createPageFromTemplate, {
 import { releaseDefaultHomeRoot } from '../../constants/screen-publishing'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import UseTemplateDialog from './use-template-dialog.component'
+import PluginWidgetSlot from '../plugin-widget-slot.component'
 import useStarterPages from './use-starter-pages'
-
-/**
- * Provenance badge (AGL-666), qualified once the copy has been edited
- * locally (AGL-681).
- *
- * `source` is server-managed so a marketplace claim cannot be forged. But
- * once someone edits a downloaded template, "Marketplace" alone starts
- * vouching for content the publisher never wrote — so an edited copy says
- * so. `editedAt` is client-written on purpose: it is a claim nobody gains
- * anything by faking about their own copy.
- */
-function sourceChip(
-  source: { type?: string; listingId?: string } | undefined,
-  editedAt?: unknown,
-) {
-  const edited = Boolean(editedAt)
-  if (source?.type === 'marketplace') {
-    return {
-      label: edited ? 'Marketplace · edited' : 'Marketplace',
-      color: 'primary' as const,
-    }
-  }
-  if (source?.type === 'starter') {
-    return {
-      label: edited ? 'Starter · edited' : 'Starter',
-      color: 'default' as const,
-    }
-  }
-  return { label: 'Saved here', color: 'default' as const }
-}
-
-/** Where a template came from, by its stored `source.type`. */
-type TemplateSourceKey = 'marketplace' | 'starter' | 'authored'
-const templateSourceKey = (source: { type?: string } | undefined): TemplateSourceKey =>
-  source?.type === 'marketplace' || source?.type === 'starter' ? source.type : 'authored'
+import {
+  TEMPLATE_SOURCE_OPTIONS,
+  templateSourceBadge,
+} from './template-source-badge'
 
 /*
  * What the library grid's Filters panel and quick search offer: every clause
  * on the query (AGL-3321) — see `TEMPLATE_LIST_QUERY`, whose note says what
  * each asks and which composite serves it. Kind and Source are the STORED
  * values, which every create writes and the list-keys backfill stamped on
- * the templates that predate them.
+ * the templates that predate them; an installer's Source value is the one it
+ * declares (`TEMPLATE_SOURCE_OPTIONS`).
  */
 const TEMPLATE_FILTER_OPTIONS = {
   kind: TEMPLATE_KIND_OPTIONS,
-  source: (['marketplace', 'starter', 'authored'] as const).map((key) => ({
-    value: key,
-    label: sourceChip(key === 'authored' ? undefined : { type: key }).label,
-  })),
+  source: TEMPLATE_SOURCE_OPTIONS,
 }
 const TEMPLATE_SELECT_FIELDS = Object.keys(TEMPLATE_FILTER_OPTIONS)
 
@@ -151,8 +117,8 @@ const TEMPLATE_SELECT_FIELDS = Object.keys(TEMPLATE_FILTER_OPTIONS)
  * Templates library (AGL-667).
  *
  * Templates are inert: nothing here is on the live site until it is used,
- * which is what lets marketplace downloads land somewhere safe instead of
- * publishing pages the moment you click install.
+ * which is what lets an installed template land somewhere safe instead of
+ * publishing pages the moment someone clicks install.
  *
  * Grouped by kind rather than listed flat because the three kinds are used
  * in completely different places — a page template makes a screen, a
@@ -211,17 +177,6 @@ export function HostTemplatesCard({
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
   )
-  const [updating, setUpdating] = useState<string | null>(null)
-  /**
-   * Listing id → latest published version (AGL-671).
-   *
-   * "An update is available" needs no new data: a listing already records
-   * `latestVersion`, and an installed template records the version it came
-   * from. This is that comparison.
-   */
-  const [latestByListing, setLatestByListing] = useState<
-    Map<string, number | string>
-  >(new Map())
   /**
    * THE LIBRARY, paged by its query (AGL-3321).
    *
@@ -318,8 +273,6 @@ export function HostTemplatesCard({
             displayName:
               template.source?.starterName ?? template.displayName ?? starterId,
             description: template.source?.starterDescription,
-            kindKey: template.kind ?? 'page',
-            sourceKey: templateSourceKey(template.source),
           }
         }
         return {
@@ -328,128 +281,9 @@ export function HostTemplatesCard({
           pages: [template],
           displayName: template.displayName ?? template.$id,
           description: template.description,
-          kindKey: template.kind ?? 'page',
-          sourceKey: templateSourceKey(template.source),
         }
       }),
     [heads, starterPages],
-  )
-
-  const listingIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const entry of heads) {
-      const id = entry.source?.listingId
-      if (entry.source?.type === 'marketplace' && id) ids.add(id)
-    }
-    return Array.from(ids).sort().join(',')
-  }, [heads])
-
-  useEffect(() => {
-    if (!listingIds) return
-    let active = true
-    void Promise.all(
-      listingIds.split(',').map(async (id) => {
-        try {
-          const snapshot = await getDoc(doc(firestore, 'marketplaceListings', id))
-          const version = snapshot.get('latestVersion')
-          return version == null ? null : ([id, version] as const)
-        } catch {
-          // Listing removed or unreadable — no badge rather than a wrong one.
-          return null
-        }
-      }),
-    ).then((entries) => {
-      if (!active) return
-      setLatestByListing(
-        new Map(entries.filter(Boolean) as Array<readonly [string, any]>),
-      )
-    })
-    return () => {
-      active = false
-    }
-  }, [firestore, listingIds])
-
-  const hasUpdate = useCallback(
-    (template: any) => {
-      if (template.source?.type !== 'marketplace') return false
-      const latest = latestByListing.get(template.source.listingId)
-      if (latest == null || template.source.version == null) return false
-      // Versions are numbers in practice but typed loosely; compare
-      // numerically when both parse, otherwise fall back to inequality.
-      const a = Number(template.source.version)
-      const b = Number(latest)
-      return Number.isFinite(a) && Number.isFinite(b)
-        ? b > a
-        : String(latest) !== String(template.source.version)
-    },
-    [latestByListing],
-  )
-
-  const handleUpdate = useCallback(
-    (template: any) => async () => {
-      const listingId = template.source?.listingId
-      if (!listingId || updating) return
-      // Updating re-installs and replaces the bundle (AGL-671). If this copy
-      // was edited locally (AGL-681) those edits go with it, so ask first —
-      // silently discarding someone's work to fetch a newer version is the
-      // worst possible reading of "update".
-      if (template.editedAt) {
-        const confirmed = await confirm({
-          title: 'Replace your edited copy?',
-          description:
-            `You have edited "${template.displayName ?? template.$id}" since ` +
-            'installing it. Updating replaces it with the publisher’s latest ' +
-            'version, and your changes to this template are lost. Pages you ' +
-            'already created from it are unaffected.',
-          confirmationText: 'Replace',
-          confirmationButtonProps: { color: 'error' },
-        })
-          .then(() => true)
-          .catch(() => false)
-        if (!confirmed) return
-      }
-      setUpdating(template.$id)
-      try {
-        const response = await authorizedFetch(
-          user,
-          '/api/marketplace/install-template',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ listingId, hostId }),
-          },
-        )
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) {
-          // An installs lock is not a broken template (AGL-1532).
-          const locked = parseLockdownRefusal(response.status, payload)
-          if (locked) {
-            return void enqueueSnackbar(lockdownRefusalText(locked), {
-              variant: 'warning',
-              persist: true,
-            })
-          }
-          return void enqueueSnackbar(payload?.error ?? 'Update failed', {
-            variant: response.status === 402 ? 'warning' : 'error',
-            allowDuplicate: true,
-          })
-        }
-        enqueueSnackbar(
-          `Updated to v${payload.version} — pages you already created are ` +
-            'unchanged.',
-          { variant: 'success', persist: false },
-        )
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('Update failed', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      } finally {
-        setUpdating(null)
-      }
-    },
-    [updating, confirm, user, hostId, enqueueSnackbar],
   )
 
   /**
@@ -744,21 +578,28 @@ export function HostTemplatesCard({
       minWidth: 150,
       sortable: false,
       renderCell: ({ row }: any) => {
-        const chip = sourceChip(row.template.source, row.template.editedAt)
+        const badge = templateSourceBadge(row.template.source, {
+          editedAt: row.template.editedAt,
+        })
         return (
-          // Provenance is server-managed (AGL-666), so this badge means
-          // something — a client cannot claim a marketplace origin.
-          <Tooltip
-            title={
-              row.template.source?.type === 'marketplace'
-                ? 'Installed from the marketplace'
-                : row.template.source?.type === 'starter'
-                  ? 'A first-party starter'
-                  : 'Saved from this site'
-            }
-          >
-            <Chip size="small" label={chip.label} color={chip.color} />
-          </Tooltip>
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+            {/* Provenance is server-managed (AGL-666), so this badge means
+                something — a client cannot claim an installer's origin. */}
+            <Tooltip title={badge.title}>
+              <Chip size="small" label={badge.label} color={badge.color} />
+            </Tooltip>
+            {/* What the installer says about this copy — an update to
+                install, say (AGL-671) — drawn by the plugin that installed
+                it, which reads its own listings and installs through its
+                own route (AGL-3080). */}
+            {isInstalledTemplateSource(row.template.source?.type) ? (
+              <PluginWidgetSlot
+                slot="templateInstallStatus"
+                hostId={hostId}
+                template={row.template}
+              />
+            ) : null}
+          </Stack>
         )
       },
     },
@@ -866,15 +707,6 @@ export function HostTemplatesCard({
           onClick: handleDelete(row),
         },
       ]
-      if (hasUpdate(template)) {
-        items.unshift({
-          key: 'update',
-          label: 'Update available',
-          icon: <MdiIcon path={mdiDownloadOutline.path} size={0.8} />,
-          disabled: updating === template.$id,
-          onClick: handleUpdate(template),
-        } as any)
-      }
       return (
         <ListRowActions
           label={template.displayName ?? template.$id}
@@ -985,7 +817,7 @@ export function HostTemplatesCard({
           : {
               noRowsLabel: 'No templates yet',
               noRowsDescription:
-                'A template is a saved starting point for a screen or layout. Create one, save one from a screen you have already built, or install one from the marketplace.',
+                'A template is a saved starting point for a screen or layout. Create one, or save one from a screen you have already built.',
               noRowsAction: onCreate ? (
                 <Button variant="contained" onClick={onCreate}>
                   {'Create your first template'}

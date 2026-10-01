@@ -74,7 +74,7 @@ export function unsubscribeLinkSecret(): string {
 export function unsubscribeSignatureSubject(
   hostId: string,
   email: string,
-  campaignId?: string,
+  sendId?: string,
   topicId?: string,
 ): string {
   const address = String(email ?? '')
@@ -93,7 +93,7 @@ export function unsubscribeSignatureSubject(
    * `host:email::t` and a campaign id of `:t` the same string. The sender
    * always has a campaign, so this is a guard rather than a path.
    */
-  const campaign = String(campaignId ?? '')
+  const campaign = String(sendId ?? '')
   const topic = String(topicId ?? '')
   if (campaign.includes(':') || topic.includes(':')) return ''
   if (topic && campaign) return `${hostId}:${address}:${campaign}:${topic}`
@@ -106,10 +106,10 @@ export function unsubscribeSignature(
   hostId: string,
   email: string,
   secret: string,
-  campaignId?: string,
+  sendId?: string,
   topicId?: string,
 ): string {
-  const subject = unsubscribeSignatureSubject(hostId, email, campaignId, topicId)
+  const subject = unsubscribeSignatureSubject(hostId, email, sendId, topicId)
   // An unsignable subject yields no signature rather than a signature over the
   // empty string, which would verify for every caller that also passed one.
   if (!subject) return ''
@@ -134,7 +134,7 @@ export function unsubscribeSignature(
 export function unsubscribeSignatureMatches(args: {
   hostId: string
   email: string
-  campaignId?: string
+  sendId?: string
   signature: string
   secret: string
 }): boolean {
@@ -142,7 +142,7 @@ export function unsubscribeSignatureMatches(args: {
     args.hostId,
     args.email,
     args.secret,
-    args.campaignId || undefined,
+    args.sendId || undefined,
   )
   return (
     expected.length === args.signature.length &&
@@ -274,8 +274,11 @@ export function buildUnsubscribeUrl(input: {
   siteBase: string
   hostId: string
   email: string
-  /** The campaign this link rides in, when there is one. */
-  campaignId?: string
+  /**
+   * The bulk send this link rides in, when there is one (`cid`): the id of
+   * the send document an unsubscribe is counted against.
+   */
+  sendId?: string
   /** The topic the message belonged to, when it belonged to one. */
   topicId?: string
   /**
@@ -304,7 +307,7 @@ export function buildUnsubscribeUrl(input: {
     input.hostId,
     address,
     secret,
-    input.campaignId,
+    input.sendId,
     input.topicId,
   )
   if (!signature) return ''
@@ -317,7 +320,7 @@ export function buildUnsubscribeUrl(input: {
     `?hostId=${encodeURIComponent(input.hostId)}` +
     `&email=${encodeURIComponent(address)}` +
     `&sig=${signature}` +
-    (input.campaignId ? `&cid=${encodeURIComponent(input.campaignId)}` : '') +
+    (input.sendId ? `&cid=${encodeURIComponent(input.sendId)}` : '') +
     (input.topicId ? `&tid=${encodeURIComponent(input.topicId)}` : '')
   )
 }

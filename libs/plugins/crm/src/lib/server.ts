@@ -686,6 +686,39 @@ export function registerCrmConsoleApi(): void {
   // and rotated here, behind the CRM's own gate, and the org document that
   // carries it is closed to every client.
   registerPluginApiRoute(CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler)
+  /*
+   * The three doors a MACHINE calls (AGL-3080), at the paths they have
+   * always answered on: the scheduler's daily digest and hourly task
+   * reminders, on the cron secret, and the mail provider's capture webhook,
+   * on its signature. None names a site or a member, so each is registered
+   * as a machine's route — the dispatcher leaves the plugin's release and
+   * enablement gates and its write limit to it — and each judges the CRM's
+   * plan and flag for every organization it resolves. Loaded with the
+   * first call, not with the surface.
+   */
+  registerPluginApiRoute(
+    CRM_API_ROUTES.dailyDigest,
+    {
+      web: async (request) =>
+        (await import('./server/daily-digest-route')).crmDailyDigestRoute(request),
+    },
+    { machine: true },
+  )
+  registerPluginApiRoute(
+    CRM_API_ROUTES.taskReminders,
+    {
+      web: async (request) =>
+        (await import('./server/task-reminders-route')).crmTaskRemindersRoute(request),
+    },
+    { machine: true },
+  )
+  registerPluginApiRoute(
+    CRM_API_ROUTES.inbound,
+    {
+      web: async (request) => (await import('./server/inbound-route')).crmInboundRoute(request),
+    },
+    { machine: true },
+  )
   registerPluginApiRoute(
     CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
     crmEmailTemplateDuplicateHandler,
@@ -704,3 +737,7 @@ export function registerCrmConsoleApi(): void {
   // do-not-contact mark — stamps the lead and the contact through it.
   registerCrmRecordEmailStateWriter()
 }
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { crmPlanEntitlements } from './plan-entitlements'

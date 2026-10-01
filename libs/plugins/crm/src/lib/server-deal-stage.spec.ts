@@ -123,12 +123,10 @@ const fakeFirestore = {
   },
 }
 
+// The REAL floor (AGL-2641), imported by the route from its own module,
+// runs over the contacts store above: what the route proves is that it
+// calls it, on the right site, on a win alone.
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  // The REAL floor (AGL-2641), over the contacts store above: what the
-  // route proves is that it calls it, on the right site, on a win alone.
-  floorContactLifecycleStage: jest.requireActual(
-    '@aglyn/tenant-data-admin/server/contact-lifecycle-floor',
-  ).floorContactLifecycleStage,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({

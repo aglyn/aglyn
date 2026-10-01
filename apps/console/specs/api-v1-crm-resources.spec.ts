@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     // The REAL customer floor a win applies to the deal's contact (AGL-2641),
     // over the same double, so the facet it writes is the one read back.
     ...jest.requireActual(
-      '../../../libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor',
+      '../../../libs/plugins/crm/src/lib/server/contact-lifecycle-floor',
     ),
     // The REAL `nextTaskAtMs` writer (AGL-2661), over the same double, so the
     // figure a task write leaves on its contact is the one read back.
@@ -137,6 +137,7 @@ import {
   DEFAULT_DEAL_STAGES,
 } from '@aglyn/aglyn/app-utils/crm'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
+import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import {
   childPaths,
   issued,
@@ -190,6 +191,9 @@ async function json(response: Response) {
 const tokensFor = (hostId: string) =>
   crmScopeTokens(mockOrg, consentGroupForHost(mockOrg, hostId))
 
+// The console's boot, which registers the CRM's `/v1` resources (AGL-3080).
+beforeAll(() => registerPluginServerDeclarations())
+
 beforeEach(() => {
   resetMockFirestore()
   mockUidSeq = 0
@@ -214,7 +218,7 @@ describe('the premise (AGL-899)', () => {
     expect(scopes).toContain("'crm:read'")
     expect(scopes).toContain("'crm:write'")
     for (const resource of ['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']) {
-      const source = readSource(`apps/console/utils/api-v1/crm-${resource}.ts`)
+      const source = readSource(`libs/plugins/crm/src/lib/server/api-v1/crm-${resource}.ts`)
       expect(source).toContain("requireScope(ctx, 'crm:read')")
       if (resource !== 'pipelines') {
         expect(source).toContain("requireScope(ctx, 'crm:write')")

@@ -25,6 +25,7 @@
  * sites it folds, reading nothing for a site it has not opened.
  */
 
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
@@ -118,7 +119,25 @@ function mountWith(hosts: typeof HOSTS) {
   }
 }
 
+
+/**
+ * A form's page is the forms plugin's (AGL-3080): the note asks the
+ * record-route registry, so this stands in the address that plugin publishes.
+ * What it publishes is held in its own spec.
+ */
+function standInFormRoute() {
+  registerPluginRecordRoute(
+    'form',
+    {
+      list: () => null,
+      record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/forms/${id}`,
+    },
+    { pluginId: 'forms' },
+  )
+}
+
 beforeEach(() => {
+  standInFormRoute()
   listened.clear()
   updateDoc.mockClear()
   enqueueSnackbar.mockClear()

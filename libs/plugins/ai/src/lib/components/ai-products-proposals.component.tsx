@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
 import { ListTable, type ListTableProps } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { Alert, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'

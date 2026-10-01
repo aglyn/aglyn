@@ -18,15 +18,14 @@
 
 import {
   type ConsentGroup,
-  type ContactMergePreviewRow,
   contactDisplayName,
-  contactMergePreview,
   nameSearchKey,
   normalizeContactEmail,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { type ContactMergePreviewRow, contactMergePreview } from '../model/contact-merge'
 import {
   Alert,
   Button,

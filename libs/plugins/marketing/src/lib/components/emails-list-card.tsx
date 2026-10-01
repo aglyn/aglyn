@@ -17,6 +17,7 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiBullhornOutline,
   mdiContentCopy,
@@ -81,12 +82,12 @@ import {
   emailCampaignQueryClauses,
 } from '../model/campaign-list-query'
 import { useMarketingHubPath } from './use-marketing-hub-path'
+import { siteRecordRouteContext, useRecordRouteContext } from './record-route-context'
 import {
   campaignContainersQuery,
   campaignSendsCollection,
 } from './campaign-queries'
 import {
-  orgSiteHubPath,
   orgSiteName,
   orgSiteOptions,
   useMarketingOrgId,
@@ -239,8 +240,11 @@ export function EmailsListCard(props: EmailsListCardProps) {
    */
   const messagesPath = `${basePath}/messages`
   const emailHref = (email: any) => `${messagesPath}/${email.$id}`
-  const templatesHub = (email: any): string | null =>
-    orgMount ? orgSiteHubPath(orgMount, email?.hostId, 'emails') : basePath
+  const routeContext = useRecordRouteContext()
+  const templateHref = (email: any, templateScreenId: string): string | null => {
+    const siteContext = siteRecordRouteContext(routeContext, orgMount, email?.hostId)
+    return siteContext ? pluginRecordHref('emailTemplate', siteContext, templateScreenId) : null
+  }
   /** The site a row is sent as, which every action on it must name. */
   const rowHostId = useCallback(
     (email: any): string | null =>
@@ -376,7 +380,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
     const containerId = String(email?.[CAMPAIGN_SEND_CONTAINER_FIELD] ?? '')
     const templateScreenId = String(email?.templateScreenId ?? '')
     const state = String(email?.status ?? '')
-    const templates = templatesHub(email)
+    const templates = templateScreenId ? templateHref(email, templateScreenId) : null
     /** On the org hub, a send that names no site has nothing to act as. */
     const siteless = !rowHostId(email)
     const sitelessReason =
@@ -408,11 +412,8 @@ export function EmailsListCard(props: EmailsListCardProps) {
         key: 'template',
         label: 'Open its template',
         icon: <MdiIcon path={mdiPaletteOutline.path} size={0.8} />,
-        href:
-          templateScreenId && templates
-            ? `${templates}/templates/${templateScreenId}`
-            : undefined,
-        disabled: !templateScreenId || !templates,
+        href: templates ?? undefined,
+        disabled: !templates,
         disabledReason: templateScreenId
           ? 'This site’s console URL has not resolved yet'
           : 'This message was not built from a template',

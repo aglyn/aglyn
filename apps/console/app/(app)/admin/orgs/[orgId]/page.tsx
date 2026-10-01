@@ -35,6 +35,7 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -623,18 +624,38 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     }
   }
 
-  // Entitlement utilization (AGL-391): actual counts against the caps.
-  const [datasetCount, setDatasetCount] = useState<number | null>(null)
+  /*
+   * Entitlement utilization (AGL-391): actual counts against the caps.
+   *
+   * Sites and seats are the platform's own. Every other org capacity is one a
+   * plugin declares (`plugin-org-capacity`), and each is counted from the
+   * collection its declaration names and shown against both entitlement
+   * fields it names — what the plan includes and how far buying raises it.
+   * A count that could not be read is left out, so the row shows a dash
+   * rather than a zero that reads as "none held".
+   */
+  const [capacityCounts, setCapacityCounts] = useState<
+    Record<string, number>
+  >({})
   useEffect(() => {
     if (!orgId) return
     let active = true
-    void getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
-      .then((snap) => {
-        if (active) setDatasetCount(snap.data().count)
-      })
-      .catch(() => {
-        if (active) setDatasetCount(null)
-      })
+    setCapacityCounts({})
+    for (const capacity of pluginOrgCapacities()) {
+      void getCountFromServer(
+        collection(firestore, 'orgs', orgId, capacity.collection),
+      )
+        .then((snap) => {
+          if (!active) return
+          const count = snap.data().count
+          setCapacityCounts((held) => ({
+            ...held,
+            [capacity.includedEntitlement]: count,
+            [capacity.purchaseCeilingEntitlement]: count,
+          }))
+        })
+        .catch(() => undefined)
+    }
     return () => {
       active = false
     }
@@ -644,11 +665,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       hostLimit: (hostDocs ?? []).length,
       managersPerOrg: (memberDocs ?? []).length,
       maxManagersPerOrg: (memberDocs ?? []).length,
-      ...(datasetCount != null
-        ? { datasetsPerOrg: datasetCount, maxDatasetsPerOrg: datasetCount }
-        : {}),
+      ...capacityCounts,
     }),
-    [hostDocs, memberDocs, datasetCount],
+    [hostDocs, memberDocs, capacityCounts],
   )
 
   // Direct org editing (AGL-358): name/logo/contacts through the same

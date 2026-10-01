@@ -18,6 +18,7 @@
 'use client'
 
 import type { ConsolePluginOrgHost } from '@aglyn/aglyn'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
@@ -149,10 +150,8 @@ function SiteLeadSurfaces(props: {
   const subdomain = mount.siteSubdomain(host.id)
   const formHref = useCallback(
     (formId: string) =>
-      subdomain
-        ? `${mount.hostsPath}/${encodeURIComponent(subdomain)}/forms/${encodeURIComponent(formId)}`
-        : null,
-    [mount.hostsPath, subdomain],
+      subdomain ? pluginRecordHref('form', { orgSlug: mount.orgSlug, host: subdomain }, formId) : null,
+    [mount.orgSlug, subdomain],
   )
   return (
     <Stack spacing={0.25}>

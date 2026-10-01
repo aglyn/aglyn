@@ -57,8 +57,9 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
    * uses for the record: a message's own page, a template's sends table and
    * the campaign detail all call it that.
    *
-   * `/emails/emails/{id}` is answered by a permanent redirect in the console's
-   * `next.config.js`, on the terms the Workflows → Automation move set: a URL
+   * `/emails/emails/{id}` is answered by a permanent redirect this plugin
+   * declares (`consoleRedirects` in plugins.config.json), on the terms the
+   * Workflows → Automation move set: a URL
    * somebody pasted keeps resolving, and it resolves to the one address the
    * console generates.
    *
