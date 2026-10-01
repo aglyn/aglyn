@@ -1008,10 +1008,12 @@ export async function composeScreenNodes(options: {
    * with the page exactly as a visitor will receive it. So this is where a
    * page that links to a brand's lookalike, asks for a password or a card
    * in a field of its own, or (for a new workspace) dresses a brand's
-   * sign-in is held rather than served. See `hosted-page-review.ts`.
+   * sign-in or sends its call to action off the site beside a document or
+   * account lure is held rather than served. See `hosted-page-review.ts`.
    *
    * A held version serves the last version this page served clean, screened
-   * again, or nothing.
+   * again, or nothing — and so does a flagged page whose review could not
+   * finish, which is held rather than served.
    */
   const nodes = await composed
   const version = versionRes.version as Aglyn.AglynScreenVersion

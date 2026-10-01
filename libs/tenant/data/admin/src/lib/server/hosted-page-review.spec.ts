@@ -127,6 +127,7 @@ import {
   recordServedPageVersion,
   resetHostedPageReviewMemoForTests,
   reviewHostedPage,
+  reviewSiteRedirect,
   servedPageVersion,
 } from './hosted-page-review'
 import { decideHeldOutboundSend } from './outbound-send-review'
@@ -249,8 +250,13 @@ describe('a published page', () => {
   it('holds the same soft-rule page from a workspace in its first fortnight', async () => {
     mockOrg = { name: 'Harbor View', createdAt: NOW - 2 * DAY }
     await expect(review(LURE_PAGE)).resolves.toMatchObject({ outcome: 'held' })
+    // The brand beside the action in one element, and its one button
+    // leaving the site beside "a document was shared with you" (AGL-3447).
     expect(pageRow()?.['heldSend']).toMatchObject({
-      signals: [expect.objectContaining({ code: 'brand-action-page', brand: 'docusign' })],
+      signals: [
+        expect.objectContaining({ code: 'brand-action-page', brand: 'docusign' }),
+        expect.objectContaining({ code: 'offsite-action-page', host: 'files-share.example.top' }),
+      ],
     })
   })
 
@@ -267,12 +273,147 @@ describe('a published page', () => {
     await expect(review(LOOKALIKE_PAGE)).resolves.toMatchObject({ outcome: 'rejected' })
   })
 
-  it('fails OPEN when the review cannot run: a screen error never takes a live page down', async () => {
+  /*
+   * This used to fail OPEN, against the module's own header (AGL-3447). The
+   * screen has already found a signal on every page that reaches the review,
+   * so a review that cannot finish has cleared nothing: serving it is the
+   * phishing page the screen exists to stop, and holding it costs a false
+   * positive one render's wait. A clean page never reaches the review, so no
+   * store error can take it down.
+   */
+  it('fails CLOSED when the review of a flagged page cannot finish, and tries again on the next render', async () => {
     mockOrg = { name: 'Harbor View', createdAt: NOW - 2 * DAY }
     failWrites = true
-    await expect(review(LOOKALIKE_PAGE)).resolves.toEqual({ outcome: 'serve' })
+    await expect(review(LOOKALIKE_PAGE)).resolves.toMatchObject({
+      outcome: 'held',
+      reference: expect.stringMatching(/^HS-/),
+    })
     mockGetOrgForHost.mockRejectedValueOnce(new Error('down'))
-    await expect(review(LURE_PAGE)).resolves.toEqual({ outcome: 'serve' })
+    await expect(review(LURE_PAGE)).resolves.toMatchObject({ outcome: 'held' })
+
+    // Not remembered: once the store answers, the review runs and decides.
+    failWrites = false
+    await expect(review(LOOKALIKE_PAGE)).resolves.toMatchObject({ outcome: 'held' })
+    expect(pageRow()?.['heldSend']).toMatchObject({ state: 'held' })
+  })
+
+  it('a clean page is served even while the store is failing: it never reaches the review', async () => {
+    failWrites = true
+    await expect(review(CLEAN_PAGE)).resolves.toEqual({ outcome: 'serve' })
+    expect(mockGetOrgForHost).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The 2026-10-01 page (AGL-3447): a 41-minute-old free workspace's "Share
+ * File" header, a "Secure Document Access Portal" heading, Proofpoint's name
+ * in the body and one button off the site. Brand, lure and action in three
+ * elements, which the one-element rule never read together.
+ */
+const SHARE_FILE_PAGE = {
+  a: node('muiTypography', { children: 'Share File' }),
+  b: node('icon', { path: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' }),
+  c: node('muiTypography', { variant: 'h3', children: 'Secure Document Access Portal' }),
+  d: node('muiTypography', {
+    children:
+      'Proofpoint Encryption for your sensitive documents. Access, share and collaborate with confidence',
+  }),
+  e: node('muiButton', { children: 'Continue to Document', href: 'https://temps-juenes.com/', variant: 'contained' }),
+}
+
+describe('the document-share page (AGL-3447)', () => {
+  it('is HELD for a workspace 41 minutes old, and the row names where the button went', async () => {
+    mockOrg = { name: 'Docs Center', createdAt: NOW - 41 * 60 * 1000 }
+    await expect(review(SHARE_FILE_PAGE, 'v1')).resolves.toMatchObject({ outcome: 'held' })
+    expect(pageRow()).toMatchObject({
+      category: 'phishing',
+      reportedHostname: 'temps-juenes.com',
+      heldSend: { kind: 'page', state: 'held', ageDays: 0 },
+    })
+    expect(pageRow()?.['heldSend']).toMatchObject({
+      signals: expect.arrayContaining([
+        expect.objectContaining({ code: 'brand-lure-page', brand: 'proofpoint', host: 'temps-juenes.com' }),
+        expect.objectContaining({ code: 'offsite-action-page', action: 'Continue to Document' }),
+      ]),
+    })
+    expect(mockNotifyRisk).toHaveBeenCalledWith(expect.objectContaining({ kind: 'page-held' }))
+  })
+
+  it('a law firm’s client document portal, from an established workspace, is served and files nothing', async () => {
+    mockOrg = { name: 'Hale & Whitcomb LLP', createdAt: NOW - 900 * DAY }
+    mockGetHostDoc.mockResolvedValueOnce({
+      name: 'Hale & Whitcomb',
+      subdomain: 'halewhitcomb',
+      cname: 'halewhitcomb.com',
+    })
+    const CLIENT_PORTAL = {
+      a: node('muiTypography', { variant: 'h2', children: 'Client document portal' }),
+      b: node('muiTypography', {
+        children:
+          'Access secure documents and share files with your attorney. We use Microsoft 365 for engagement letters.',
+      }),
+      c: node('muiButton', { children: 'Open the client portal', href: 'https://portal.halewhitcomb.com/login' }),
+    }
+    await expect(review(CLIENT_PORTAL)).resolves.toEqual({ outcome: 'serve' })
+    expect(store.size).toBe(0)
+    expect(mockNotifyRisk).not.toHaveBeenCalled()
+  })
+})
+
+describe('a site redirect (AGL-3447)', () => {
+  const redirect = (source: string, destination: string) =>
+    reviewSiteRedirect({ hostId: 'host-1', ruleId: 'r1', source, destination, nowMs: NOW })
+
+  it('lets a redirect to an ordinary host fire without reading the workspace', async () => {
+    await expect(redirect('/old-menu', 'https://shop.example.net/menu')).resolves.toEqual({ outcome: 'serve' })
+    expect(mockGetOrgForHost).not.toHaveBeenCalled()
+    expect(store.size).toBe(0)
+  })
+
+  it('holds a lure path sent off the site from a workspace in its first fortnight, as a `page` row on the rule', async () => {
+    mockOrg = { name: 'Docs Center', createdAt: NOW - 1 * DAY }
+    await expect(redirect('/secure-document-access', 'https://temps-juenes.com/')).resolves.toMatchObject({
+      outcome: 'held',
+      reference: expect.stringMatching(/^HS-/),
+    })
+    expect(pageRow()).toMatchObject({
+      category: 'phishing',
+      reportedHostname: 'temps-juenes.com',
+      url: expect.stringMatching(/^https:\/\/harborview\..+\/secure-document-access$/),
+      heldSend: { kind: 'page', state: 'held', path: 'hosts/host-1/redirects/r1', ageDays: 1 },
+    })
+    expect(mockNotifyRisk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'page-held',
+        item: { label: 'the redirect from /secure-document-access', path: '/host-1/redirects' },
+      }),
+    )
+  })
+
+  it('lets the same rule fire for an established workspace', async () => {
+    await expect(redirect('/secure-document-access', 'https://temps-juenes.com/')).resolves.toEqual({
+      outcome: 'serve',
+    })
+    expect(store.size).toBe(0)
+  })
+
+  it('holds a destination that wears a brand for every workspace, and fires once staff release it', async () => {
+    await expect(redirect('/login', 'https://sharepoint-files.example.top/')).resolves.toMatchObject({
+      outcome: 'held',
+    })
+    const id = String(pageRow()?.id)
+    await decideHeldOutboundSend({ reviewId: id, decision: 'release', actorUid: 's', actorEmail: null })
+    resetHostedPageReviewMemoForTests()
+    await expect(redirect('/login', 'https://sharepoint-files.example.top/')).resolves.toEqual({
+      outcome: 'serve',
+    })
+  })
+
+  it('fails CLOSED when the review of a flagged rule cannot finish', async () => {
+    mockGetOrgForHost.mockRejectedValueOnce(new Error('down'))
+    await expect(redirect('/secure-document-access', 'https://temps-juenes.com/')).resolves.toMatchObject({
+      outcome: 'held',
+    })
   })
 })
 

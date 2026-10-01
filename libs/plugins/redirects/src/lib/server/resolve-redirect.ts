@@ -16,11 +16,17 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn/server'
-import { type HostRedirect, matchRedirect, normalizeRedirectSource } from '../model/redirects'
+import {
+  type HostRedirect,
+  isExternalRedirectDestination,
+  matchRedirect,
+  normalizeRedirectSource,
+} from '../model/redirects'
 import {
   analyticsDayExpiresAt,
   firebaseAdmin,
   getOrgForHost,
+  reviewSiteRedirect,
 } from '@aglyn/tenant-data-admin'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
@@ -86,9 +92,13 @@ const idKey = (value: string) => value.replace(/[.$#[\]/]/g, '_')
  * rules stop firing — the org read only happens when rules exist.
  * Loop guard: self-redirects never execute even if stored (console
  * validation and this floor can disagree; both refuse).
+ * Phishing screen: a rule that leaves the site fires only once
+ * `reviewSiteRedirect` answers `serve` — a destination that wears a brand is
+ * held for every workspace, a lure path sent off the site for a workspace in
+ * its first fortnight (AGL-3447).
  */
 export async function resolveRedirect(
-  host: { $id: string },
+  host: { $id: string } & Record<string, unknown>,
   requestPath: string,
 ): Promise<ResolvedRedirect | null> {
   try {
@@ -123,11 +133,28 @@ export async function resolveRedirect(
     // downgraded org's leftover rules redirecting for the life of the entry,
     // which on this code path means taking pages off the internet on the
     // strength of a plan the org no longer has.
-    {
-      const org = (await getOrgForHost(host.$id))?.org
-      if (!checkEntitlement(org as any, 'redirects')) {
-        return null
-      }
+    const owner = await getOrgForHost(host.$id)
+    if (!checkEntitlement(owner?.org as any, 'redirects')) {
+      return null
+    }
+
+    // The phishing screen (AGL-3447), for a rule that sends visitors OFF the
+    // site: a page whose one call to action fires on arrival. A held rule does
+    // not fire and is not counted; the request resolves as if it had no rule.
+    // Outside the cache, like the paid gate: a staff decision takes effect on
+    // the next request, not at the end of an hour.
+    if (isExternalRedirectDestination(matched.destination)) {
+      const review = await reviewSiteRedirect({
+        hostId: host.$id,
+        ruleId: matchId,
+        source: ruleList[matched.index].source,
+        destination: matched.destination,
+        // The resolved host doc, when the hook handed one over; read otherwise.
+        host: typeof host['subdomain'] === 'string' ? host : undefined,
+        org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+        orgId: owner?.orgId ?? null,
+      })
+      if (review.outcome !== 'serve') return null
     }
 
     // Sampled hit recording (fire-and-forget): day-doc counter + recency

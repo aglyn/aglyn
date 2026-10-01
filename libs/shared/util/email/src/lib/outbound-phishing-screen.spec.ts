@@ -22,6 +22,7 @@ import {
   linkHostsIn,
   lookalikeBrandForHost,
   OUTBOUND_REVIEW_YOUNG_DAYS,
+  PHISHING_SCREEN_BRANDS,
   phishingSignalTier,
   registrableDomain,
   screenOutboundEmail,
@@ -105,6 +106,22 @@ describe('lookalike hosts', () => {
     ['apple.account-check.top', 'apple'],
     ['usps-redelivery.com', 'usps'],
     ['wellsfargo-alerts.co.uk', 'wellsfargo'],
+    // The document-share brands (AGL-3447).
+    ['sharepoint-files.example.top', 'microsoft'],
+    ['office-365-login.top', 'microsoft'],
+    ['onedrive.secure-view.top', 'microsoft'],
+    ['proofpoint-encrypt.com', 'proofpoint'],
+    ['secure-mimecast.net', 'mimecast'],
+    ['docs-google.com', 'google'],
+    ['drive.google.com.share-doc.top', 'google'],
+    ['g00gle-docs.top', 'google'],
+    ['dropbox-transfer.top', 'dropbox'],
+    ['wetransfer-files.top', 'wetransfer'],
+    ['box-com-share.top', 'boxcom'],
+    ['app.box.com.file-view.top', 'boxcom'],
+    ['adobe.document-share.top', 'adobe'],
+    ['adobesign.doc-view.top', 'adobe'],
+    ['sharefile-secure.top', 'sharefile'],
   ])('%s wears %s', (host, brand) => {
     expect(lookalikeBrandForHost(host)?.id).toBe(brand)
   })
@@ -124,6 +141,28 @@ describe('lookalike hosts', () => {
     'bookingengine.hotelsoft.com',
     'booking.harborviewhotel.com',
     'myoffice.com.au',
+    // The document-share brands' own hosts, and the businesses that share a
+    // word with one (AGL-3447).
+    'contoso.sharepoint.com',
+    'docs.google.com',
+    'www.google.co.uk',
+    'fonts.googleapis.com',
+    'www.google-analytics.com',
+    'www.googletagmanager.com',
+    'www.dropbox.com',
+    'dl.dropboxusercontent.com',
+    'app.box.com',
+    'acme.ent.box.com',
+    'urldefense.com',
+    'acme.sharefile.com',
+    'we.tl',
+    'use.typekit.net',
+    'adobe-rose-inn.com',
+    'adobehomes.com',
+    'lunchbox.com',
+    'thebox-gym.com',
+    'outlook-advisors.com',
+    'proof-point-coaching.com',
   ])('%s is not a lookalike', (host) => {
     expect(lookalikeBrandForHost(host)).toBeNull()
   })
@@ -253,6 +292,69 @@ describe('ordinary mail from a young workspace passes', () => {
   })
 })
 
+describe('document-share mail (AGL-3447)', () => {
+  const brandNamed = (text: string) =>
+    PHISHING_SCREEN_BRANDS.filter((brand) => brand.mention.test(text)).map((brand) => brand.id)
+
+  it('holds a Proofpoint "encrypted message" lure that links elsewhere', () => {
+    const verdict = screenOutboundEmail({
+      subject: 'You have received an encrypted message',
+      bodies: [
+        'Proofpoint Encryption: a secure document was shared with you. ' +
+          'Continue to document: https://temps-juenes.com/',
+      ],
+      ...OWN,
+    })
+    expect(verdict.signals).toEqual([
+      {
+        code: 'brand-lure-link',
+        brand: 'proofpoint',
+        lure: 'secure document',
+        host: 'temps-juenes.com',
+      },
+    ])
+  })
+
+  it.each([
+    ['Shared a file with you on SharePoint', 'microsoft'],
+    ['Your Outlook Web App mailbox is full', 'microsoft'],
+    ['Open it in Google Drive', 'google'],
+    ['Sent with WeTransfer', 'wetransfer'],
+    ['Adobe Acrobat Sign: please sign', 'adobe'],
+    ['Files on box.com', 'boxcom'],
+    ['Mimecast secure message', 'mimecast'],
+    ['Share File portal', 'sharefile'],
+  ])('reads %s as naming %s', (text, brand) => {
+    expect(brandNamed(text)).toContain(brand)
+  })
+
+  it.each([
+    'Our 2026 market outlook',
+    'Leave payments in the drop box by the office door',
+    'We transfer your files to the new server overnight',
+    'A key proof point for investors',
+    'Order the lunch box special',
+    'Tour our adobe homes in Santa Fe',
+    'Find us on Google',
+    'Google Maps directions',
+  ])('does not read "%s" as naming a document-share brand', (text) => {
+    expect(brandNamed(text)).toEqual([])
+  })
+
+  it('lets a firm mail its clients about its own document portal', () => {
+    expect(
+      screenOutboundEmail({
+        subject: 'Your documents are ready for review',
+        bodies: [
+          'Hello, your engagement letter is in our secure document portal. We use Microsoft 365 ' +
+            'and Adobe Acrobat Sign: https://portal.harborviewhotel.com/docs',
+        ],
+        ...OWN,
+      }).hold,
+    ).toBe(false)
+  })
+})
+
 describe('the staff wording', () => {
   it('describes each signal in a sentence', () => {
     const [line] = describePhishingScreenSignals([
@@ -260,6 +362,25 @@ describe('the staff wording', () => {
     ])
     expect(line).toContain('poshmark.id63835663.shop')
     expect(line).toContain('Poshmark')
+  })
+
+  it('names the page-wide, off-site and redirect signals (AGL-3447)', () => {
+    expect(
+      describePhishingScreenSignals([
+        { code: 'brand-lure-page', brand: 'proofpoint', lure: 'Secure Document', host: 'temps-juenes.com' },
+        {
+          code: 'offsite-action-page',
+          action: 'Continue to Document',
+          lure: 'Secure Document',
+          host: 'temps-juenes.com',
+        },
+        { code: 'offsite-redirect', source: '/secure-document', lure: 'secure document', host: 'temps-juenes.com' },
+      ]),
+    ).toEqual([
+      'Names Proofpoint on a page that asks visitors to act ("Secure Document") and links to temps-juenes.com, and this workspace is not Proofpoint.',
+      'Its call to action ("Continue to Document") sends visitors off the site to temps-juenes.com, on a page that reads "Secure Document".',
+      'Redirects /secure-document, a path that reads "secure document", off the site to temps-juenes.com.',
+    ])
   })
 })
 
@@ -304,6 +425,10 @@ describe('the tiers (every surface)', () => {
     expect(phishingSignalTier(sender)).toBe('soft')
     expect(phishingSignalTier(lure)).toBe('soft')
     expect(phishingSignalTier(page)).toBe('soft')
+    // The page-wide, off-site and redirect rules (AGL-3447): young only.
+    for (const code of ['brand-lure-page', 'offsite-action-page', 'offsite-redirect']) {
+      expect(phishingSignalTier({ code, host: 'temps-juenes.com' })).toBe('soft')
+    }
   })
 })
 
@@ -321,6 +446,15 @@ describe('a subdomain that wears a brand', () => {
     ['docusign-files', 'docusign'],
     ['wellsfargo', 'wellsfargo'],
     ['poshmark-2', 'poshmark'],
+    ['proofpoint', 'proofpoint'],
+    ['sharepoint-login', 'microsoft'],
+    ['google-docs', 'google'],
+    ['dropbox-share', 'dropbox'],
+    ['wetransfer', 'wetransfer'],
+    ['adobe', 'adobe'],
+    ['adobe-support', 'adobe'],
+    ['boxcom-files', 'boxcom'],
+    ['mimecast-secure', 'mimecast'],
   ])('%s is refused as %s', (label, brand) => {
     expect(brandForSubdomainLabel(label)?.id).toBe(brand)
   })
@@ -334,6 +468,15 @@ describe('a subdomain that wears a brand', () => {
     'amazonia-tours',
     'dhlfan',
     'my-id-photos',
+    // A common word one of the document-share brands also uses (AGL-3447).
+    'lunch-box-orders',
+    'tool-box-support',
+    'adobe-rose-inn',
+    'proof-point-coaching',
+    'market-outlook',
+    'drop-box-laundry',
+    'we-transfer-movers',
+    'share-files-studio',
   ])('%s is an ordinary name', (label) => {
     expect(brandForSubdomainLabel(label)).toBeNull()
   })

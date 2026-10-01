@@ -123,6 +123,7 @@ notification an intake phishing report raises, once per row.
 | Every other email a site sends (CRM one-off mail, inbox replies, newsletters, member posts, cart and restock reminders, receipts, booking mail, marketplace plugins) | At the send itself (`sendEmail`) | That one email is not sent, and its sender reports `held-for-review`. |
 | Outreach sequences (connected mailboxes) | Before the step is claimed | The enrollment is paused with the reason. A member resumes it once the row is released. |
 | Published pages | When the page is put together for a visitor | The page serves the last version it served clean, or nothing if it has none. |
+| Site redirects that send visitors to another website | When the redirect would fire | The rule does not fire, and the address answers as if it had no rule. The row names the redirect and its source path. |
 
 A page row names the page by what it is and the route it serves, never by the
 site's root address:
@@ -145,6 +146,12 @@ Publishing is a pointer move made from the browser in several places, and an
 author can edit a live version in place. Every one of those paths reaches a
 visitor through the same composition step, and that is where the screen reads
 the page: the page itself, its layout, the components placed on it and its forms.
+If the review of a page the screen flagged cannot finish, for example because a
+store read fails, the page is held for that request and reviewed again on the
+next one. A page the screen finds nothing on is never held this way.
+
+A redirect is read the same way, over the one text it has: its source path. The
+Redirects page also refuses to save a destination that is a brand lookalike.
 
 ### What holds, in two tiers {#tiers}
 
@@ -169,6 +176,19 @@ the page: the page itself, its layout, the components placed on it and its forms
 - **A brand's call to action on a page.** One element names a brand and asks
   the reader to sign in, verify, confirm or open a document, and the page links
   to somewhere that is not the brand's or the workspace's.
+- **A brand's lure anywhere on a page.** The page names a brand somewhere, carries
+  account or document-share wording somewhere else ("Secure Document Access
+  Portal", "your password will expire") or has a button that leaves the site
+  worded as an action ("Continue to Document"), and links to somewhere that is
+  not the brand's or the workspace's. The brand, the wording and the button can
+  be in different elements.
+- **A call to action that leaves the site, beside a lure.** The page's only
+  button or link, or one worded as an account or document action, goes to a
+  website that is not the workspace's, a listed brand's or a common social or
+  maps link, and the page carries account or document-share wording. No brand
+  is needed. A redirect whose source path reads that way
+  (`/secure-document-access`) and that sends visitors to such a website holds
+  the same way.
 
 Soft signals never hold email a customer is owed by their own action: receipts,
 gift cards and order notices, booking confirmations and reminders, and password
@@ -185,8 +205,8 @@ write the audit row:
 
 | You set the row to | Effect |
 | -- | -- |
-| `dismissed` (false positive) | **Released.** A campaign goes back on the clock and sends on the next processor run. An automation sends from its next event, and a queued step sends on its next beat. Other email from the site that carries the same signals sends. A page serves its held version once the site's cache is dropped, which the decision does itself. |
-| `actioned` | **Rejected.** A campaign is canceled. Email carrying the same content or signals is refused. A page stays unserved. |
+| `dismissed` (false positive) | **Released.** A campaign goes back on the clock and sends on the next processor run. An automation sends from its next event, and a queued step sends on its next beat. Other email from the site that carries the same signals sends. A page serves its held version, and a redirect fires, once the site's cache is dropped, which the decision does itself. |
+| `actioned` | **Rejected.** A campaign is canceled. Email carrying the same content or signals is refused. A page stays unserved, and a redirect does not fire. |
 | `reviewing` | Still held. |
 
 A campaign or automation release covers **exactly the content that was held**.

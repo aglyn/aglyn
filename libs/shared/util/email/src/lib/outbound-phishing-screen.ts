@@ -55,12 +55,15 @@
  *
  * ## The brand list is small on purpose
  *
- * The brands phishing kits most often wear, plus the two in the incident. A
- * brand is added when it has been seen impersonated, not because it is big:
- * every entry is a set of words that can now hold somebody's newsletter.
+ * The brands phishing kits most often wear, plus the two in the incident, and
+ * the file-share and mail-security names a document-share lure wears — a
+ * "Secure Document Access Portal" under Proofpoint's or SharePoint's name
+ * whose one button leaves for the kit (AGL-3447). A brand is added when it
+ * has been seen impersonated, not because it is big: every entry is a set of
+ * words that can now hold somebody's newsletter.
  * Each carries its REAL domains, so a link to the brand itself is never
  * suspicious, and host tokens chosen so a common word (`booking`, `apple`,
- * `outlook`) does not match an unrelated host by itself.
+ * `outlook`, `box`, `adobe`) does not match an unrelated host by itself.
  *
  * Pure: no DNS, no store, no clock. Everything the caller knows about the
  * workspace arrives as input.
@@ -170,16 +173,31 @@ export const PHISHING_SCREEN_BRANDS: readonly PhishingScreenBrand[] = [
   {
     id: 'microsoft',
     label: 'Microsoft',
-    mention: /\bmicrosoft\b|\boffice\s?365\b|\bonedrive\b|\bsharepoint\b/i,
-    hostTokens: ['microsoft', 'office365', 'onedrive', 'sharepoint', 'microsoftonline', 'msonline'],
+    // Outlook only as the product — "our 2026 outlook" is every advisor's
+    // newsletter.
+    mention:
+      /\bmicrosoft\b|\b(?:office|ms|m)\s?365\b|\bonedrive\b|\bsharepoint\b|\boutlook(?:\.com|\s+(?:web\s+app|web\s+access|online|account|365))\b/i,
+    hostTokens: [
+      'microsoft',
+      'microsoft365',
+      'office365',
+      'office-365',
+      'outlook365',
+      'onedrive',
+      'sharepoint',
+      'microsoftonline',
+      'msonline',
+    ],
     officialDomains: [
       'microsoft.com',
       'office.com',
       'office365.com',
+      'microsoft365.com',
       'live.com',
       'outlook.com',
       'microsoftonline.com',
       'sharepoint.com',
+      'sharepointonline.com',
       'onedrive.com',
       '1drv.ms',
       'aka.ms',
@@ -191,6 +209,114 @@ export const PHISHING_SCREEN_BRANDS: readonly PhishingScreenBrand[] = [
     mention: /\bdocu\s?sign\b/i,
     hostTokens: ['docusign'],
     officialDomains: ['docusign.com', 'docusign.net'],
+  },
+  {
+    id: 'google',
+    label: 'Google',
+    // The account and the files, never the bare name: "find us on Google"
+    // and "Google Maps" are on every shop's contact page.
+    mention: /\bgoogle\s?(?:drive|docs?|sheets|slides|workspace|account)\b|\bgmail\b|\bg\s?suite\b/i,
+    // The products and the account, never the bare name: Google runs
+    // hyphenated hosts of its own that a page embeds, and a bare `google`
+    // token would read each as its lookalike. `docs.google.com.<kit>` is
+    // still read, by the primary-domain rule.
+    hostTokens: [
+      'gmail',
+      'gsuite',
+      'googledocs',
+      'googledrive',
+      'google-docs',
+      'google-drive',
+      'google-workspace',
+      'google-account',
+      'google-login',
+      'google-mail',
+      'docs-google',
+      'drive-google',
+    ],
+    officialDomains: [
+      'google.com',
+      'goo.gl',
+      'g.co',
+      'g.page',
+      'forms.gle',
+      'gmail.com',
+      'googleapis.com',
+      'gstatic.com',
+      'googleusercontent.com',
+      'withgoogle.com',
+    ],
+    countryDomains: true,
+  },
+  {
+    id: 'adobe',
+    label: 'Adobe',
+    // "Adobe" alone is a house, a grill and an inn across the Southwest;
+    // the products are what a lure names.
+    mention:
+      /\badobe\s?(?:acrobat|sign|id|account|document\s?cloud|reader|pdf|creative\s?cloud)\b|\bacrobat\s?(?:reader|sign|pro)\b|\bechosign\b/i,
+    hostTokens: ['adobe', 'adobeid', 'adobesign', 'adobeacrobat', 'echosign'],
+    wordToken: true,
+    officialDomains: [
+      'adobe.com',
+      'adobe.io',
+      'adobe.ly',
+      'adobelogin.com',
+      'adobesign.com',
+      'echosign.com',
+      'acrobat.com',
+      'typekit.net',
+      'adobedtm.com',
+    ],
+  },
+  {
+    id: 'dropbox',
+    label: 'Dropbox',
+    // One word only: a "drop box" is by every library's door.
+    mention: /\bdropbox\b/i,
+    hostTokens: ['dropbox'],
+    officialDomains: ['dropbox.com', 'db.tt', 'dropboxusercontent.com', 'dropboxstatic.com', 'hellosign.com'],
+  },
+  {
+    // Never the bare word, as an id either — `brandForSubdomainLabel` reads
+    // ids as words, and "box" is every lunch box's and subscription box's.
+    id: 'boxcom',
+    label: 'Box',
+    mention: /\bbox\.com\b|\bbox\s+drive\b/i,
+    hostTokens: ['boxcom', 'box-com'],
+    officialDomains: ['box.com', 'box.net', 'boxcdn.net', 'boxcloud.com'],
+  },
+  {
+    id: 'wetransfer',
+    label: 'WeTransfer',
+    // One word only: "we transfer" is a moving company's sentence.
+    mention: /\bwetransfer\b/i,
+    hostTokens: ['wetransfer'],
+    officialDomains: ['wetransfer.com', 'we.tl'],
+  },
+  {
+    id: 'sharefile',
+    label: 'ShareFile',
+    mention: /\bshare\s?file\b/i,
+    hostTokens: ['sharefile'],
+    officialDomains: ['sharefile.com', 'sharefile.eu', 'citrix.com'],
+  },
+  {
+    // A secure-mail gateway's name is what makes a document lure read as
+    // safe: "Proofpoint Encryption for your sensitive documents".
+    id: 'proofpoint',
+    label: 'Proofpoint',
+    // One word only: a "proof point" is every pitch deck's.
+    mention: /\bproofpoint\b/i,
+    hostTokens: ['proofpoint'],
+    officialDomains: ['proofpoint.com', 'urldefense.com', 'pphosted.com', 'ppe-hosted.com'],
+  },
+  {
+    id: 'mimecast',
+    label: 'Mimecast',
+    mention: /\bmimecast\b/i,
+    hostTokens: ['mimecast'],
+    officialDomains: ['mimecast.com', 'mimecastprotect.com'],
   },
   {
     id: 'netflix',
@@ -258,27 +384,63 @@ export const PHISHING_SCREEN_BRANDS: readonly PhishingScreenBrand[] = [
 ]
 
 /**
- * Account-action and credential phrasing — the half of a lure that asks the
- * reader to DO something with an account. Only ever counted beside a brand
- * AND a foreign link; alone, several of these are ordinary transactional copy.
+ * Account and credential phrasing: the lure that asks the reader to DO
+ * something with an account — verify it, confirm it, sign in to it.
  */
-export const PHISHING_LURE_PATTERNS: readonly RegExp[] = [
+export const ACCOUNT_LURE_PATTERNS: readonly RegExp[] = [
   /\bverify\s+your\s+(?:account|identity|information|details|payment|email)\b/i,
   /\bconfirm\s+your\s+(?:account|identity|details|payment|password|billing|information)\b/i,
   /\b(?:account|payment|card)\s+(?:has\s+been\s+|is\s+|was\s+)?(?:suspended|locked|limited|restricted|disabled|on\s+hold)\b/i,
   /\bunusual\s+(?:sign[-\s]?in|login|activity)\b/i,
   /\bupdate\s+your\s+(?:payment|billing|card|account)\s*(?:details|information|method)?\b/i,
   /\b(?:sign|log)\s?in\s+to\s+(?:your|view|confirm|claim|release)\b/i,
+  /\bpassword\s+(?:will\s+)?expire/i,
+  /\bsecurity\s+alert\b/i,
+]
+
+/**
+ * Document-share phrasing (AGL-3447): the lure that says a file is waiting
+ * behind a secure door — "Secure Document Access Portal", "Continue to
+ * Document", "shared a file with you", "encrypted message". The credential
+ * harvest is on the far side of the button, so these are the words the page
+ * or the mail itself carries.
+ */
+export const DOCUMENT_SHARE_LURE_PATTERNS: readonly RegExp[] = [
+  /\b(?:document|invoice|agreement)s?\s+(?:is\s+|are\s+)?(?:ready|waiting|pending)\s+(?:for\s+)?(?:your\s+)?(?:review|signature|to\s+sign)\b/i,
+  /\b(?:view|access|open)\s+(?:the\s+|your\s+)?secure\s+(?:file|document|message)s?\b/i,
+  /\bsecure\s+(?:file|document|message)s?\b/i,
+  /\bdocument\s+access\b/i,
+  /\baccess\s+portal\b/i,
+  /\b(?:continue|proceed)\s+to\s+(?:the\s+|your\s+)?(?:document|file)s?\b/i,
+  /\bshared\s+(?:a|an|the)\s+(?:file|document|folder)\s+with\s+you\b/i,
+  /\b(?:file|document|folder)s?\s+(?:has\s+been|have\s+been|was|were)\s+shared\s+with\s+you\b/i,
+  /\bencrypted\s+(?:message|document|file|email)s?\b/i,
+]
+
+/**
+ * Marketplace, booking and parcel phrasing: the lure that says a sale, a
+ * guest or a delivery needs the reader. The incident's Poshmark and
+ * Booking.com mail.
+ */
+const SALE_AND_PARCEL_LURE_PATTERNS: readonly RegExp[] = [
   /\b(?:has|have)\s+(?:finally\s+)?sold\b/i,
   /\bseller\s+account\b/i,
   /\b(?:guest|customer)\s+(?:complaint|review|feedback)\b/i,
   /\bfeedback\s+regarding\s+your\s+(?:property|listing|stay|booking|reservation)\b/i,
-  /\b(?:document|invoice|agreement)s?\s+(?:is\s+|are\s+)?(?:ready|waiting|pending)\s+(?:for\s+)?(?:your\s+)?(?:review|signature|to\s+sign)\b/i,
-  /\bpassword\s+(?:will\s+)?expire/i,
   /\bclaim\s+your\s+(?:refund|reward|prize|package|payment|funds)\b/i,
   /\b(?:delivery|shipment)\s+(?:failed|attempt|suspended|on\s+hold)\b/i,
   /\b(?:package|parcel)\s+(?:is\s+)?(?:on\s+hold|held|awaiting|undeliverable)\b/i,
-  /\bsecurity\s+alert\b/i,
+]
+
+/**
+ * Every lure — the half of the three-part lure that asks the reader to act.
+ * Only ever counted beside a brand AND a foreign link; alone, several of
+ * these are ordinary transactional copy.
+ */
+export const PHISHING_LURE_PATTERNS: readonly RegExp[] = [
+  ...ACCOUNT_LURE_PATTERNS,
+  ...DOCUMENT_SHARE_LURE_PATTERNS,
+  ...SALE_AND_PARCEL_LURE_PATTERNS,
 ]
 
 /**
@@ -341,6 +503,26 @@ export type PhishingScreenSignal =
    * Soft.
    */
   | { code: 'brand-action-page'; brand: string; action: string }
+  /**
+   * The same, read over the page as a WHOLE (AGL-3447): a brand that is not
+   * the workspace's anywhere on a page that carries an account or
+   * document-share lure anywhere, or whose call to action leaves the site
+   * worded as one, and that links away (`hosted-page-screen.ts`). Soft.
+   */
+  | { code: 'brand-lure-page'; brand: string; lure: string; host: string }
+  /**
+   * A published page's call to action — its only one, or one worded as an
+   * account or document action — sends visitors to a host that is not the
+   * site's, a listed brand's or a common link, on a page that carries an
+   * account or document-share lure (`hosted-page-screen.ts`, AGL-3447). No
+   * brand needed. Soft.
+   */
+  | { code: 'offsite-action-page'; action: string; lure: string; host: string }
+  /**
+   * A site redirect whose path reads as an account or document-share lure
+   * sends visitors to such a host (`screenSiteRedirect`, AGL-3447). Soft.
+   */
+  | { code: 'offsite-redirect'; source: string; lure: string; host: string }
 
 export interface PhishingScreenInput {
   subject?: string | null
@@ -697,6 +879,12 @@ export function describePhishingScreenSignals(
         } in its own field ("${signal.label}"), outside the platform's sign-in and checkout elements.`
       case 'brand-action-page':
         return `Names ${brand} beside a call to action ("${signal.action}"), and this workspace is not ${brand}.`
+      case 'brand-lure-page':
+        return `Names ${brand} on a page that asks visitors to act ("${signal.lure}") and links to ${signal.host}, and this workspace is not ${brand}.`
+      case 'offsite-action-page':
+        return `Its call to action ("${signal.action}") sends visitors off the site to ${signal.host}, on a page that reads "${signal.lure}".`
+      case 'offsite-redirect':
+        return `Redirects ${signal.source}, a path that reads "${signal.lure}", off the site to ${signal.host}.`
       default:
         return 'Phishing signal.'
     }
@@ -716,8 +904,11 @@ export function describePhishingScreenSignals(
  *   page, transactional mail included. A merchant has no ordinary reason to
  *   link to a host shaped like somebody else's brand.
  * - SOFT: a brand in the sender name, the three-part lure, a brand's name
- *   beside a sign-in or payment call to action on a page. Each is shaped
- *   like phishing but also like a clumsy legitimate message, so they hold
+ *   beside a sign-in or payment call to action on a page (in one element,
+ *   or anywhere on a page that carries a lure), a call to action or a
+ *   redirect that leaves the site beside account or document-share wording.
+ *   Each is shaped like phishing but also like a clumsy legitimate message,
+ *   so they hold
  *   only for a workspace in its first {@link OUTBOUND_REVIEW_YOUNG_DAYS}
  *   days — the incident's window — and NEVER for mail the recipient's own
  *   act made owed ({@link OutboundScreenPolicy.owed}).
