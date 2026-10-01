@@ -41,7 +41,7 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 
 1. Define **services** (what can be booked, duration, price).
 2. Configure **availability** — the windows when slots are offered.
-3. Add the **booking widget** to a screen as a canvas element.
+3. Add the **booking widget** to a page as a canvas element.
 
 ## Taking bookings
 

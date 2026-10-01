@@ -29,6 +29,7 @@ import {
 import {
   EXPORT_COLLECTION_LIMITS,
   EXPORTABLE_HOST_FIELDS,
+  PLUGIN_SITE_EXPORT_COLLECTIONS,
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
@@ -38,12 +39,13 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 /**
  * Whole-site export (AGL-163): one JSON bundle of everything designable —
  * host settings, screens/layouts with their PUBLISHED versions, reusable
- * components, variables/functions/workflows/actions, services, content
- * collections + entries, datasets + records, and a media manifest
- * (metadata + URLs; bytes stay in storage). Never includes admins,
- * tenant linkage, domain, bookings/leads/submissions (PII), or secrets
- * (webhooks stay behind). HubSpot famously has no site backup — this is
- * the differentiator. Pro+ (`siteExport` flag).
+ * components, authors, content collections + entries, datasets + records,
+ * a media manifest (metadata + URLs; bytes stay in storage), and every host
+ * collection a plugin declares for the bundle (a site's variables, functions,
+ * workflows, interactions and services), each under its own name. Never
+ * includes admins, tenant linkage, domain, bookings/leads/submissions (PII),
+ * or secrets (webhooks are declared out). HubSpot famously has no site
+ * backup — this is the differentiator. Pro+ (`siteExport` flag).
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -298,31 +300,22 @@ async function handler(request: Request): Promise<Response> {
       screens,
       layouts,
       components,
-      variables,
-      functions,
-      workflows,
-      actions,
       authors,
-      services,
       collections,
       datasets,
       media,
       mediaFolders,
       hostMedia,
       hostMediaFolders,
+      declared,
     ] = await Promise.all([
       withPublishedVersion('screens'),
       withPublishedVersion('layouts'),
       exportCollection('components'),
-      exportCollection('variables'),
-      exportCollection('functions'),
-      exportCollection('workflows'),
-      exportCollection('actions'),
       // The bylines `entries.authorId` points at (AGL-2486). A referenced
       // collection nobody added to the manifest is the AGL-1046/1050/1392
       // shape, and here it would restore every post's author as a dangling id.
       exportCollection('authors'),
-      exportCollection('services'),
       withEntries(),
       withRecords(),
       // Media manifest only — bytes stay in storage; URLs keep working
@@ -351,6 +344,11 @@ async function handler(request: Request): Promise<Response> {
         'mediaFolders',
         EXPORT_COLLECTION_LIMITS['hostMediaFolders'],
       ),
+      // The collections plugins declare for the bundle, read exactly like the
+      // platform's plain ones: capped, live documents only, trees readable.
+      Promise.all(
+        PLUGIN_SITE_EXPORT_COLLECTIONS.map((one) => exportCollection(one.collection)),
+      ),
     ])
 
     const bundle = {
@@ -362,12 +360,10 @@ async function handler(request: Request): Promise<Response> {
       screens,
       layouts,
       components,
-      variables,
-      functions,
-      workflows,
-      actions,
+      ...Object.fromEntries(
+        PLUGIN_SITE_EXPORT_COLLECTIONS.map((one, index) => [one.collection, declared[index]]),
+      ),
       authors,
-      services,
       collections,
       datasets,
       media,

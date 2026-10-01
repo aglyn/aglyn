@@ -95,7 +95,7 @@ export const EMAIL_DESIGN_MAX_VARIANTS = 10
 /** The resources route's refusal at the non-page ceiling. */
 export const EMAIL_DESIGN_LIMIT_REFUSAL =
   'This site is at its limit of ' +
-  `${NON_PAGE_SCREEN_MAX_PER_HOST} email and template screens — ` +
+  `${NON_PAGE_SCREEN_MAX_PER_HOST} email designs and template pages — ` +
   'delete some to make room'
 
 /** The resources route's refusal for a member who may not write the site. */
@@ -413,7 +413,7 @@ export function createEmailDesignDraftWriter(
         if (existing.exists) {
           return existing.get('kind') === SCREEN_KIND_EMAIL
             ? { ok: true, replayed: true, ...recordOf(existing) }
-            : { ok: false, status: 409, error: 'That id already names a screen that is not an email design' }
+            : { ok: false, status: 409, error: 'That id is already used by something other than an email design' }
         }
         const refusal = roleRefusal(host, request.uid) ?? roomRefusal(rows, host)
         if (refusal) return { ok: false, ...refusal }

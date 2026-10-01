@@ -121,7 +121,6 @@ import {
 } from '../utils/usage-metering'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
-  FREE_AI_TASTE_CREDITS_PER_MONTH,
   BANDWIDTH_ABUSE_CEILING_FLOOR,
   BANDWIDTH_ABUSE_CEILING_MULTIPLE,
   ESTIMATED_PAGE_TRANSFER_BYTES,
@@ -1704,8 +1703,8 @@ describe("Free's bandwidth band, and everything derived from it", () => {
     expect(monthlyCostUsd).toBe(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth * ASSIST_CREDIT_COST_USD)
     expect(PLAN_PRICING.free.extraAssistCreditsUsdPer1k).toBeNull()
     // Three workspaces per account (AGL-2265) do NOT triple it: the account
-    // allowance is the same constant, read by the meter for the owner.
-    expect(FREE_AI_TASTE_CREDITS_PER_MONTH).toBe(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth)
+    // allowance is the same constant, read by the meter for the owner — held
+    // by the AI plugin's `plan-entitlements.spec.ts`, where the constant is.
   })
 
   it('costs what the give is worth, at the platform\'s own rate', () => {

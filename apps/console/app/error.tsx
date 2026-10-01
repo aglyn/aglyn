@@ -17,10 +17,9 @@
 'use client'
 
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
-import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import {
   isStaleBuildError,
-  shouldReloadForStaleBuild,
+  recoverStaleBuildOrReport,
 } from '@aglyn/aglyn/app-utils/stale-build-error'
 import { useEffect } from 'react'
 
@@ -68,11 +67,7 @@ export default function ConsoleError({
    */
   const stale = isStaleBuildError(error)
   useEffect(() => {
-    if (shouldReloadForStaleBuild(error)) {
-      window.location.reload()
-      return
-    }
-    redispatchCaughtError(error)
+    recoverStaleBuildOrReport(error)
   }, [error])
 
   return (

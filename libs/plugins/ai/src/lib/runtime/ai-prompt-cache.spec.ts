@@ -642,29 +642,29 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     expect(measured()).toEqual({
       // 2,945 before AGL-3024 told the planner what a layout's fields are:
       // the regions it has, which is what the build is then held to.
-      plan: { prefixTokens: 2_980, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_978, minimum: 1_024, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary
       // joined the Button and Screen Link colors, and the catalog stopped
       // printing a second identical `FAQ (muiStack)`, which more than paid
       // for it.
-      layout: { prefixTokens: 4_432, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 4_974, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_040, minimum: 1_024, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_425, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 4_970, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_035, minimum: 1_024, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate.
-      email: { prefixTokens: 2_919, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_730, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_616, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_916, minimum: 1_024, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_728, minimum: 1_024, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_610, minimum: 1_024, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
-      theme: { prefixTokens: 3_514, minimum: 1_024, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_511, minimum: 1_024, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096).
-      'workflow-draft': { prefixTokens: 4_616, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-explain': { prefixTokens: 2_212, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 4_614, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_209, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
@@ -673,7 +673,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 2_003, minimum: 1_024, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 2_000, minimum: 1_024, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
@@ -687,9 +687,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
       // product after its first.
-      'product-copy': { prefixTokens: 2_421, minimum: 1_024, caches: true, toolsStable: true },
-      catalog: { prefixTokens: 2_446, minimum: 1_024, caches: true, toolsStable: true },
-      categories: { prefixTokens: 2_345, minimum: 1_024, caches: true, toolsStable: true },
+      'product-copy': { prefixTokens: 2_418, minimum: 1_024, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_444, minimum: 1_024, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_342, minimum: 1_024, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
       // so each prompt is only the field rules, the kind's own and its tool.
       'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },

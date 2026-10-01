@@ -81,8 +81,13 @@ export type AiCreditAllotmentScope = Exclude<AiAllotmentScope, 'org'>
  */
 export type AiRefusedBy = AssistRefusedBy | 'allotment'
 
-/** The two thresholds a soft allotment announces. */
-export type AiAllotmentThreshold = 80 | 100
+/**
+ * The steps a soft allotment announces — the same 75, 80, 90 and 100 every
+ * usage quota steps through (AGL-3431). Only the highest step reached is
+ * sent, each once a month.
+ */
+export const AI_ALLOTMENT_ALERT_BANDS = [75, 80, 90, 100] as const
+export type AiAllotmentThreshold = (typeof AI_ALLOTMENT_ALERT_BANDS)[number]
 
 /** The share of an allotment at which the strip warns and a soft one alerts. */
 export const AI_ALLOTMENT_WARN_SHARE = 0.8
@@ -245,13 +250,20 @@ export function aiAllotmentState(used: number, credits: number): AiAllotmentStat
   return 'ok'
 }
 
-/** The threshold a standing sits at, for the alert pipeline. */
+/**
+ * The highest step a standing has reached, for the alert pipeline — compared
+ * as `used × 100 ≥ step × credits`, so 9 of 10 is exactly 90%.
+ */
 export function aiAllotmentThreshold(
   used: number,
   credits: number,
 ): AiAllotmentThreshold | null {
-  const state = aiAllotmentState(used, credits)
-  return state === 'reached' ? 100 : state === 'warn' ? 80 : null
+  if (!(credits > 0) || !Number.isFinite(used) || used < 0) return null
+  for (let index = AI_ALLOTMENT_ALERT_BANDS.length - 1; index >= 0; index -= 1) {
+    const band = AI_ALLOTMENT_ALERT_BANDS[index]
+    if (used * 100 >= band * credits) return band
+  }
+  return null
 }
 
 /**
@@ -393,7 +405,7 @@ export function aiAllotmentAlertCopy(input: {
     }
   }
   return {
-    title: `${who} is past ${Math.round(AI_ALLOTMENT_WARN_SHARE * 100)}% of ${whose} AI allotment${where}`,
+    title: `${who} is past ${input.threshold}% of ${whose} AI allotment${where}`,
     body: `${figures} The allotment is soft, so nothing stops at the line.`,
   }
 }

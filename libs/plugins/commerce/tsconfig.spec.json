@@ -14,6 +14,7 @@
     "**/*.spec.jsx",
     "**/*.test.jsx",
     "**/*.d.ts",
+    "src/lib/plan-entitlements.ts",
     "jest.config.ts"
   ]
 }

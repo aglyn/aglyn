@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { findPluginDependents } from '@aglyn/aglyn/plugin-manager/plugin-dependents'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   type BindingRefVia,
@@ -44,6 +44,16 @@ import {
 } from '../../../../utils/server/read-usage-candidates'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
+/** What the platform's own scans find a reference in. */
+type PlatformDependentType =
+  | 'screen'
+  | 'layout'
+  | 'component'
+  | 'collection'
+  | 'emailTemplate'
+  | 'emailDesign'
+  | 'systemEmail'
+
 export interface WhereUsedDependent {
   /**
    * Resource collection the dependent lives in. `emailTemplate` is one of the
@@ -51,18 +61,10 @@ export interface WhereUsedDependent {
    * campaign's email, a `kind: 'email'` screen that is never a page
    * (AGL-3287); `systemEmail` is one of the platform's own emails, keyed by
    * its catalog key, reported only for the platform marketing site's
-   * components (AGL-3318).
+   * components (AGL-3318). A record a plugin's dependents source answered is
+   * listed under the kind that source names (`variable`, `workflow`).
    */
-  type:
-    | 'screen'
-    | 'layout'
-    | 'workflow'
-    | 'variable'
-    | 'component'
-    | 'collection'
-    | 'emailTemplate'
-    | 'emailDesign'
-    | 'systemEmail'
+  type: PlatformDependentType | (string & {})
   id: string
   name: string
   /** 'id' = rename-safe reference; 'name' = legacy token, breaks on rename. */
@@ -93,9 +95,12 @@ const SCANNABLE_KINDS = [
  * reusable component, or layout.
  *
  * Screens/layouts are scanned on their PUBLISHED version's nodes (matching
- * what visitors see); workflow steps are checked for function calls and
- * variables for workflow backings. The `via` field distinguishes rename-safe
- * id references from legacy name tokens — renames only endanger the latter.
+ * what visitors see). What refers to the thing from inside a plugin's records
+ * — a workflow step calling a function, a variable computed from a workflow —
+ * is answered by the plugins that keep those records, through their
+ * dependents sources (`plugin-dependents`); this route names none of them.
+ * The `via` field distinguishes rename-safe id references from legacy name
+ * tokens — renames only endanger the latter.
  * Auth: Firebase ID token, host admin.
  *
  * The two AGL-703 kinds follow the runtime's own reference model:
@@ -223,33 +228,6 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    if (kind === 'function') {
-      // Workflow steps call functions by name (AGL-129). A site's workflows
-      // are the plugin's that keeps them, read through the index it publishes
-      // — its live records, with each one's steps among the facts — and none
-      // where no plugin keeps them here.
-      const workflows = pluginRecordIndex('workflow')
-      const { records } = workflows
-        ? await workflows.index.list({ hostId, limit: 100 })
-        : { records: [] }
-      for (const record of records) {
-        const steps = (
-          Array.isArray(record.facts['steps']) ? record.facts['steps'] : []
-        ) as Array<{ functionName?: string } | null>
-        if (
-          refName &&
-          steps.some((step) => String(step?.functionName ?? '') === refName)
-        ) {
-          dependents.push({
-            type: 'workflow',
-            id: record.id,
-            name: record.name,
-            via: ['name'],
-          })
-        }
-      }
-    }
-
     /**
      * Did every scan read its whole collection?
      *
@@ -259,6 +237,17 @@ async function handler(request: Request): Promise<Response> {
      * where that rule lives for the console.
      */
     let truncated = false
+
+    // What plugins' records refer to it. A source that read only part of its
+    // records, or failed, makes the answer a lower bound like a capped scan.
+    const referring = await findPluginDependents({
+      hostId,
+      kind,
+      id: refId,
+      name: refName || undefined,
+    })
+    dependents.push(...referring.dependents)
+    if (!referring.complete) truncated = true
 
     if (
       kind === 'component' ||
@@ -396,25 +385,6 @@ async function handler(request: Request): Promise<Response> {
             systemEmails,
           }),
         )
-      }
-    }
-
-    if (kind === 'workflow') {
-      // Computed variables back onto workflows by name (AGL-129).
-      const variables = await hostRef.collection('variables').limit(100).get()
-      for (const docSnapshot of variables.docs) {
-        if (docSnapshot.get('deletedAt')) continue
-        if (
-          refName &&
-          String(docSnapshot.get('workflowName') ?? '') === refName
-        ) {
-          dependents.push({
-            type: 'variable',
-            id: docSnapshot.id,
-            name: String(docSnapshot.get('name') ?? docSnapshot.id),
-            via: ['name'],
-          })
-        }
       }
     }
 

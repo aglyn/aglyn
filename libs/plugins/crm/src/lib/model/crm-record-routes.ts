@@ -50,6 +50,9 @@ function hub(context: PluginRecordRouteContext): CrmRoutes {
   )
 }
 
+/** The hub's routes at the scope the context names — the site's, or the org's. */
+export { hub as crmHubRoutes }
+
 /** The one narrowing the contacts list publishes: the form that captured them. */
 export const CRM_CONTACT_FILTER_FORM = 'form'
 

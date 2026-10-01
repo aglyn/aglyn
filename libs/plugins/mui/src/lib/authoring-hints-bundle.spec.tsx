@@ -120,7 +120,7 @@ const HINTS: Array<{
   { name: 'Icon', id: 'icon', hint: /^Icon$/ },
   { name: 'Table of Contents', id: 'tableOfContents', hint: /add ## headings/ },
   { name: 'Plugin', id: 'marketplacePlugin', hint: /pick an installed plugin/ },
-  { name: 'Layout Slot', id: 'layoutSlot', hint: /Screen content renders here/ },
+  { name: 'Layout Slot', id: 'layoutSlot', hint: /Page content renders here/ },
   // The instance's label is CSS generated content, which jsdom does not lay
   // out; the dashed `:empty` frame it hangs on is what is left to see.
   { name: 'Reusable Component', id: 'reusableInstance', hint: 'dashed frame' },
@@ -128,7 +128,7 @@ const HINTS: Array<{
   { name: 'Markdown', id: 'markdown', hint: /paste the document/ },
   { name: 'Entry Body', id: 'collectionEntryBody', hint: /markdown renders here/ },
   { name: 'Category Pills', id: 'collectionCategories', hint: /render here/ },
-  { name: 'Language Switcher', id: 'languageSwitcher', hint: /set screen translations/ },
+  { name: 'Language Switcher', id: 'languageSwitcher', hint: /set page translations/ },
 ]
 
 describe('an empty element draws its authoring hint for the author only (AGL-3067)', () => {

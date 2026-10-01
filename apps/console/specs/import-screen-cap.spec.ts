@@ -359,7 +359,7 @@ describe('the bundle cap is twice the plan cap (AGL-1398)', () => {
     // Concrete, the way AGL-1390's refusal is: what the bundle holds, what the
     // site holds, and the cap. A bulk refusal that says only "too many screens"
     // leaves the owner of a 200-page backup nothing to act on.
-    expect(response.body.error).toContain('200 screens')
+    expect(response.body.error).toContain('200 pages')
     expect(response.body.error).toContain('8')
     expect(response.body.error).toContain(`208 of ${PRO_SCREEN_CAP}`)
 

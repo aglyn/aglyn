@@ -157,7 +157,7 @@ export function SubtreeJsonDialog(props: SubtreeJsonDialogProps) {
       open={open}
       title="Edit element JSON"
       description={
-        'This element and its children only — the rest of the screen is ' +
+        'This element and its children only — the rest of the page is ' +
         'untouched. Save replaces the subtree (undo restores it).'
       }
       defaultValue={nested as any}

@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiSignDirection } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { REDIRECTS_SEARCH_SOURCES } from './model/redirects-search-sources'
 
 /** Code-split: the Redirects console page only loads when opened. */
 const RedirectsConsolePage = lazy(
@@ -37,6 +38,7 @@ export function registerRedirectsConsole(): void {
     pluginId: BUNDLE_ID,
     displayName: 'Redirects',
     featureFlag: 'redirects',
+    searchSources: REDIRECTS_SEARCH_SOURCES,
     navItems: [
       {
         label: 'Redirects',

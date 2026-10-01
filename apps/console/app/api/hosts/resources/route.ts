@@ -203,7 +203,7 @@ const RESOURCES: Record<string, HostResource> = {
   screen: {
     collection: 'screens',
     quotaKey: 'screensPerHost',
-    label: 'screens',
+    label: 'pages',
     activity: { type: 'screen', noun: 'screen' },
     fields: ['displayName', 'description', 'slug', 'seo', 'kind', 'versionId'],
   },
@@ -619,7 +619,7 @@ async function handler(request: Request): Promise<Response> {
     ) {
       return Response.json({
         error:
-          `Create the screen, then convert it — a screen cannot be created ` +
+          `Create the page, then convert it — a page cannot be created ` +
           `as '${requestedKind}'`,
       }, { status: 403 })
     }
@@ -870,7 +870,7 @@ async function handler(request: Request): Promise<Response> {
           return {
             error:
               'This site is at its limit of ' +
-              `${NON_PAGE_SCREEN_MAX_PER_HOST} email and template screens — ` +
+              `${NON_PAGE_SCREEN_MAX_PER_HOST} email designs and template pages — ` +
               'delete some to make room',
           }
         }

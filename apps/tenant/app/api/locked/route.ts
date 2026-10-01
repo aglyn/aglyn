@@ -214,6 +214,7 @@ export async function GET(request: Request): Promise<Response> {
               bandwidthCeilingDegradesHost(
                   hostRes.host as never,
                   bandwidthCeilingMonthKey(),
+                  orgRes.org as never,
                 )
               ? { kind: 'contained' }
               : { kind: 'none' }

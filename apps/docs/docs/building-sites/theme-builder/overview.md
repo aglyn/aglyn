@@ -7,7 +7,7 @@ description: Set your site's colors, fonts, and light/dark schemes with a live p
 # Theme Builder
 
 The **theme builder** controls how your whole site looks — colors, fonts, and light/dark
-schemes — applied consistently across every screen.
+schemes — applied consistently across every page.
 
 :::info Plan availability
 **Free**. Theming is core to every site.
@@ -36,4 +36,4 @@ so previews match the live site.
 ## Related
 
 - [The Besigner](../besigner/overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

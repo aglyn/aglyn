@@ -49,7 +49,8 @@ reference. Providers receive the org billing doc as `tenant`.
 
 Use `defineUiFeatureBundle` on your `site` surface — components get
 schemas + presets and appear in the Besigner drawer. **Component ids are
-persisted in screen documents; never rename them.** The editor and the
+persisted in page documents (the `screens` collection); never rename
+them.** The editor and the
 published site both suspend until your `site` surface registers, so the
 canvas never renders unregistered components.
 

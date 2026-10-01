@@ -32,7 +32,7 @@ describe('EmptyDocumentSlot (AGL-1246)', () => {
     render(<EmptyDocumentSlot />)
     const region = screen.getByRole('button')
     expect(region.hasAttribute('data-aglyn-empty-document')).toBe(true)
-    expect(region.textContent).toContain('This screen is empty')
+    expect(region.textContent).toContain('This page is empty')
     expect(region.textContent).toContain('Drag an element here')
   })
 

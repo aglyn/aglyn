@@ -30,8 +30,10 @@
  * not move at all is the site hub's, whose path differs from the org's only
  * in its second segment.
  *
- * The config is read as text, as the other redirect specs read it: loading
- * it runs the build's asset sync.
+ * The rule is the email plugin's (`consoleRedirects` in plugins.config.json),
+ * read from the compiled manifest `next.config.js` spreads into its
+ * `redirects()` rather than by loading the config, which runs the build's
+ * asset sync.
  */
 
 import { readFileSync } from 'node:fs'
@@ -40,15 +42,18 @@ import { getPathMatch } from 'next/dist/shared/lib/router/utils/path-match'
 import { prepareDestination } from 'next/dist/shared/lib/router/utils/prepare-destination'
 
 const CONFIG = readFileSync(join(__dirname, '..', 'next.config.js'), 'utf8')
+const MANIFEST = 'plugins.redirects.generated.json'
+const RULES = JSON.parse(
+  readFileSync(join(__dirname, '..', 'constants', MANIFEST), 'utf8'),
+) as Array<{ pluginId: string; source: string; destination: string; permanent: boolean }>
 const SOURCE = '/:orgSlug/marketing/emails/:path*'
 
-/** The rule declared for `SOURCE`, as the config spells it. */
+/** The rule declared for `SOURCE`, as the manifest carries it. */
 function declaredRule(): { destination: string; permanent: boolean } {
-  const at = CONFIG.indexOf(`source: '${SOURCE}'`)
-  const rule = CONFIG.slice(at, CONFIG.indexOf('}', at))
+  const rule = RULES.find((one) => one.source === SOURCE)
   return {
-    destination: rule.match(/destination: '([^']+)'/)?.[1] ?? '',
-    permanent: /permanent: true/.test(rule),
+    destination: rule?.destination ?? '',
+    permanent: rule?.permanent === true,
   }
 }
 
@@ -69,7 +74,8 @@ function landing(path: string): string | null {
 
 describe('the org Marketing hub’s old Emails section', () => {
   it('CONTROL: the rule is declared, and permanent', () => {
-    expect(CONFIG).toContain(`source: '${SOURCE}'`)
+    expect(CONFIG).toContain(`require('./constants/${MANIFEST}')`)
+    expect(RULES.find((one) => one.source === SOURCE)?.pluginId).toBe('email')
     expect(declaredRule()).toEqual({
       destination: '/:orgSlug/emails/messages/:path*',
       permanent: true,

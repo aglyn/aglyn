@@ -405,7 +405,7 @@ describe('the dialog offers every property kind (AGL-2893)', () => {
       />,
     )
     expect(await screen.findByText('Layout properties')).toBeTruthy()
-    expect(screen.getByText(/Each screen that uses it sets its own values/)).toBeTruthy()
+    expect(screen.getByText(/Each page that uses it sets its own values/)).toBeTruthy()
   })
 
   it('speaks of emails, not pages, for an email block (AGL-3287)', async () => {

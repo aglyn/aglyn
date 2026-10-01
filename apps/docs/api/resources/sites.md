@@ -52,7 +52,7 @@ one is **not** read-only.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `form` | string \| null | The form's name — what you filter on. |
-| `path` | string \| null | The screen path it was submitted from. |
+| `path` | string \| null | The page path it was submitted from. |
 | `fields` | object | Submitted values, keyed by field name. Shape follows the form's design, so it varies per form. |
 | `read` | boolean | Whether it's been marked read in the console inbox. Reading over the API doesn't change it. |
 | `created` | string \| null | ISO 8601. |
@@ -109,7 +109,7 @@ Each of those releases the key, so the retry that should finally succeed is not
 answered with a replay of the refusal.
 
 Renaming and deleting a site are deliberately **not** available over the API. A delete
-would erase every screen, version, product and uploaded file immediately, with no hold
+would erase every page, version, product and uploaded file immediately, with no hold
 and no undo, from one field in a request body — that is not something to expose to an
 automated caller before a soft-delete exists.
 

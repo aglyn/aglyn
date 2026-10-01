@@ -211,8 +211,8 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
           size="small"
           select
           helperText={
-            'Screen rendered at /products/{slug} — design it in the ' +
-            'besigner with the Product detail block and {{product.*}} tokens.'
+            'Page rendered at /products/{slug} — design it in the ' +
+            'Besigner with the Product detail block and {{product.*}} tokens.'
           }
         >
           <MenuItem value="">{'None (product URLs 404)'}</MenuItem>
@@ -231,7 +231,7 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
           size="small"
           select
           helperText={
-            'Screen rendered at /collections/{slug} — drop a Product grid ' +
+            'Page rendered at /collections/{slug} — drop a Product grid ' +
             'with source "A collection" and {{collection.*}} tokens.'
           }
         >

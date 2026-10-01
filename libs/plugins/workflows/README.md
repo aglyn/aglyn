@@ -51,8 +51,11 @@ surface loads.
 
 The same declarations publish the record indexes of a site's `workflow`,
 `webhook` and `action` records (`server/automation-record-index.ts`), so the
-AI plugin and the console's "Used by" scan read them without reaching for this
-plugin's collections. The readers load on the first read.
+AI plugin reads them without reaching for this plugin's collections, and a
+dependents source (`server/workflow-dependents.ts`) that answers the console's
+"Used by" scan with the workflows calling a function. The readers load on the
+first read. What depends on a workflow — the variables it computes — is the
+logic plugin's to answer; the Automation page asks the same scan.
 
 An action is a site interaction (`@aglyn/aglyn/app-utils/site-interactions`,
 the platform's: the trigger, its conditions, the client steps, validation)

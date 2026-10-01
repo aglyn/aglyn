@@ -11,11 +11,14 @@ import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from '.
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { ResolvedPluginCostAxis, ResolvedPluginUsageBand } from './plugin-usage-axes'
+import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
 import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
 import type { PluginTemplateSource } from './plugin-template-sources'
 import type { FormRecordTargetDeclaration } from './submission-record-target'
+import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
@@ -214,6 +217,19 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "activityNoun": "service",
       "quotaKey": "servicesPerHost",
       "entitlement": "bookings",
+      "fields": [
+        "name",
+        "description",
+        "durationMinutes",
+        "priceUsd",
+        "timezone",
+        "windows",
+        "crmFollowUpTask",
+        "crmMeetingActivity"
+      ]
+    },
+    "siteExport": {
+      "limit": 50,
       "fields": [
         "name",
         "description",
@@ -485,6 +501,16 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "operations",
         "returnValue"
       ]
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "parameters",
+        "variables",
+        "operations",
+        "returnValue"
+      ]
     }
   },
   {
@@ -497,6 +523,16 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "activityNoun": "variable",
       "activityType": "variable",
       "quotaKey": "variablesPerHost",
+      "fields": [
+        "name",
+        "type",
+        "value",
+        "workflowId",
+        "workflowName"
+      ]
+    },
+    "siteExport": {
+      "limit": 100,
       "fields": [
         "name",
         "type",
@@ -575,6 +611,15 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
           "trigger": null
         }
       }
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "steps",
+        "returnValue",
+        "trigger"
+      ]
     }
   },
   {
@@ -619,6 +664,16 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "audience",
         "nodeId",
         "screenId"
+      ]
+    },
+    "siteExport": {
+      "limit": 100,
+      "fields": [
+        "name",
+        "trigger",
+        "steps",
+        "enabled",
+        "recipe"
       ]
     }
   },
@@ -723,6 +778,276 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
 ]
 
 /**
+ * What each plan includes of every quota a first-party plugin owns, declared
+ * by that plugin (AGL-3080). `PLAN_ENTITLEMENTS` composes these; core names
+ * no key.
+ */
+export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
+  {
+    "pluginId": "forms",
+    "key": "formSubmissionsPerMonth",
+    "label": "Form subs / mo",
+    "byPlan": {
+      "free": 20,
+      "starter": 200,
+      "pro": 1000,
+      "business": 8000,
+      "scale": 25000,
+      "advanced": 40000,
+      "agency": 25000,
+      "enterprise": 50000
+    }
+  },
+  {
+    "pluginId": "marketplace",
+    "key": "marketplaceFeePct",
+    "label": "Marketplace fee %",
+    "price": true,
+    "byPlan": {
+      "free": 30,
+      "starter": 20,
+      "pro": 20,
+      "business": 20,
+      "scale": 20,
+      "advanced": 20,
+      "agency": 20,
+      "enterprise": 20
+    }
+  },
+  {
+    "pluginId": "crm",
+    "key": "crmEmailsPerDay",
+    "label": "One-to-one emails / day",
+    "byPlan": {
+      "free": 0,
+      "starter": 50,
+      "pro": 150,
+      "business": 200,
+      "scale": 300,
+      "advanced": 500,
+      "agency": 1000,
+      "enterprise": 2000
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "key": "workflowRunsPerMonth",
+    "label": "Workflow runs / mo",
+    "byPlan": {
+      "free": 0,
+      "starter": 500,
+      "pro": 5000,
+      "business": 50000,
+      "scale": 150000,
+      "advanced": 500000,
+      "agency": 2000000,
+      "enterprise": 4000000
+    }
+  },
+  {
+    "pluginId": "ai",
+    "key": "assistCreditsPerMonth",
+    "label": "AI credits / mo",
+    "byPlan": {
+      "free": 300,
+      "starter": 750,
+      "pro": 2750,
+      "business": 7500,
+      "scale": 10000,
+      "advanced": 13000,
+      "agency": 58000,
+      "enterprise": 116000
+    }
+  },
+]
+
+/**
+ * What each plan includes of every feature a first-party plugin owns,
+ * declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[] = [
+  {
+    "pluginId": "commerce",
+    "key": "storefrontSubscriptions",
+    "label": "Storefront subscriptions",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": false,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "commerce",
+    "key": "giftCards",
+    "label": "Gift cards",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": false,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "commerce",
+    "key": "commerceAnalytics",
+    "label": "Commerce analytics",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": true,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+  {
+    "pluginId": "marketplace",
+    "key": "marketplaceSelling",
+    "label": "Sell on the marketplace",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": true,
+      "business": true,
+      "scale": true,
+      "advanced": true,
+      "agency": true,
+      "enterprise": true
+    }
+  },
+]
+
+/**
+ * Every meter a first-party plugin contributes to the platform's cost model,
+ * in breakdown order, declared by that plugin (AGL-3080). Core keeps the rates.
+ */
+export const PLUGIN_COST_AXES_DECLARED: readonly ResolvedPluginCostAxis[] = [
+  {
+    "pluginId": "forms",
+    "id": "formSubmissions",
+    "order": 30,
+    "fields": [
+      "formSubmissions"
+    ],
+    "rate": "perFormSubmission"
+  },
+  {
+    "pluginId": "crm",
+    "id": "contacts",
+    "order": 60,
+    "fields": [
+      "crmRecordsCount"
+    ],
+    "fallbackFields": [
+      "contactsCount"
+    ],
+    "recordedFields": [
+      "companiesCount",
+      "dealsCount"
+    ],
+    "rate": "perContactMonth"
+  },
+  {
+    "pluginId": "ai",
+    "id": "assist",
+    "order": 80,
+    "fields": [
+      "assistCostUsd"
+    ],
+    "live": {
+      "collection": "assistUsage",
+      "fields": [
+        "providerCostUsd",
+        "estCostUsd"
+      ]
+    }
+  },
+  {
+    "pluginId": "workflows",
+    "id": "runs",
+    "order": 90,
+    "fields": [
+      "workflowRuns",
+      "actionRuns"
+    ],
+    "rate": "perRun"
+  },
+]
+
+/**
+ * Every band a first-party plugin contributes to the utilization table, in
+ * column order, declared by that plugin (AGL-3080).
+ */
+export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
+  {
+    "pluginId": "forms",
+    "id": "formSubmissions",
+    "label": "Form submissions",
+    "order": 40,
+    "fields": [
+      "formSubmissions"
+    ],
+    "entitlement": "formSubmissionsPerMonth",
+    "perHost": true
+  },
+  {
+    "pluginId": "crm",
+    "id": "contactsCount",
+    "label": "CRM records",
+    "order": 70,
+    "fields": [
+      "crmRecordsCount"
+    ],
+    "fallbackFields": [
+      "contactsCount"
+    ],
+    "entitlement": "contactsPerHost"
+  },
+  {
+    "pluginId": "ai",
+    "id": "assistCredits",
+    "label": "Assist credits",
+    "order": 90,
+    "fields": [
+      "assistCostUsd"
+    ],
+    "entitlement": "assistCreditsPerMonth",
+    "unitCostUsd": 0.001
+  },
+  {
+    "pluginId": "workflows",
+    "id": "workflowRuns",
+    "label": "Workflow runs",
+    "order": 100,
+    "fields": [
+      "workflowRuns"
+    ],
+    "entitlement": "workflowRunsPerMonth"
+  },
+  {
+    "pluginId": "workflows",
+    "id": "actionRuns",
+    "label": "Action runs",
+    "order": 110,
+    "fields": [
+      "actionRuns"
+    ],
+    "entitlement": "actionRunsPerMonth"
+  },
+]
+
+/**
  * Every top-level plugin collection a workspace erasure sweeps by the field
  * naming the organization, declared by the plugin that owns it (AGL-3080).
  */
@@ -780,6 +1105,25 @@ export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
   "pluginId": "data",
   "id": "dataset"
 }
+
+/**
+ * The site documents a plugin authors in the besigner, declared by that
+ * plugin (AGL-3080). Empty when none does, and the console's plugin-document
+ * editor routes answer 404.
+ */
+export const PLUGIN_BESIGNER_DOCUMENTS_DECLARED: readonly ResolvedBesignerDocument[] = [
+  {
+    "pluginId": "forms",
+    "kind": "form",
+    "segment": "forms",
+    "collection": "forms",
+    "noun": "form",
+    "publish": {
+      "path": "/api/forms/promote",
+      "idField": "formId"
+    }
+  },
+]
 
 /**
  * The plugin whose records a form's submission may also be filed as, declared

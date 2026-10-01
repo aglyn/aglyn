@@ -17,7 +17,7 @@ how many a request used.
 
 ## Write a page's listing
 
-On a screen's detail page, the **SEO** card has a **Write with AI** section:
+On a page's detail view, the **SEO** card has a **Write with AI** section:
 
 1. Optionally add **target keywords**, separated by commas.
 2. Press **Write SEO**.

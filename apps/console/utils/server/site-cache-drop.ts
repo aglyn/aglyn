@@ -17,6 +17,7 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { PluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import { announceLivePaths } from './announce-live-paths'
 import { dropSiteCaches } from './tenant-revalidate'
 
 /**
@@ -39,12 +40,31 @@ import { dropSiteCaches } from './tenant-revalidate'
  * `skipped`, not as incompleteness: that was a decision, and it is logged.
  */
 export const consoleSiteCache: PluginSiteCache = {
-  drop: async ({ hostIds, reason }) => {
-    const { hosts, hostsDropped } = await dropSiteCaches(
-      firebaseAdmin.app().firestore(),
-      { hostIds, reason },
-    )
-    return { dropped: hosts.length, skipped: hostsDropped, complete: true }
+  drop: async ({ hostIds, reason, paths }) => {
+    const firestore = firebaseAdmin.app().firestore()
+    // A site the caller placed exactly loses only the pages it named, through
+    // the same announcement a server publish route makes; every other site
+    // named loses every page, as a revoke needs.
+    const placed = hostIds.filter((hostId) => paths?.[hostId])
+    const whole = hostIds.filter((hostId) => !paths?.[hostId])
+    let dropped = 0
+    for (const hostId of placed) {
+      const addresses = [...(paths?.[hostId] ?? [])]
+      if (!addresses.length) continue
+      const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
+      if (await announceLivePaths({ hostSnapshot, hostId, paths: addresses })) {
+        dropped += 1
+      }
+    }
+    const { hosts, hostsDropped } = await dropSiteCaches(firestore, {
+      hostIds: whole,
+      reason,
+    })
+    return {
+      dropped: dropped + hosts.length,
+      skipped: hostsDropped,
+      complete: true,
+    }
   },
 }
 

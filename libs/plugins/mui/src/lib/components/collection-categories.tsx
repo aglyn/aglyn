@@ -157,7 +157,7 @@ export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategor
         label: 'Collection slug',
         description:
           'Content collection whose categories render as pills (e.g. ' +
-          '"blog"). Leave blank on a list-template screen to use the ' +
+          '"blog"). Leave blank on a list-template page to use the ' +
           'collection from the URL.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },

@@ -951,7 +951,7 @@ describe('when a pass stops', () => {
       estCostUsd: 0,
       model: 'claude-sonnet-5',
       stopReason: null,
-      review: { reason: 'limit', message: 'Your plan includes 5 screens — upgrade in Billing for more', findings: [] },
+      review: { reason: 'limit', message: 'Your plan includes 5 pages — upgrade in Billing for more', findings: [] },
     })
   })
 

@@ -171,7 +171,7 @@ export function LanguagesCard(props: { hostId: string }) {
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
           {'List the languages this site publishes in, then link each ' +
-            "screen to its translations from the screens list (the globe " +
+            "page to its translations from the Pages list (the globe " +
             'button). Add a Language Switcher element so visitors can ' +
             'change language.'}
         </Typography>

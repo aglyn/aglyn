@@ -19,15 +19,15 @@ scale with your tier.
 ## Site templates & starter gallery
 
 - Spin up a new site from the **starter template gallery**, which instantiates published
-  screens for you. Starters are copied into your site's own
+  pages for you. Starters are copied into your site's own
   [template library](./templates-library.md), so you can edit and version them like any
   other template. A starter's first page becomes the site's home page: it replaces the
-  placeholder **Home** screen a new site is created with (which is kept as a draft),
+  placeholder **Home** page a new site is created with (which is kept as a draft),
   but never a home page you published yourself.
 - **Save a site as a template** from **Setup → Site template**, which publishes it to the
   marketplace — see [save & share a template](./save-a-template.md). Browsing and installing
   marketplace templates happens in the **Start from a template** picker, opened by the
-  **Templates** button on the Screens, Layouts and Components lists.
+  **Templates** button on the Pages, Layouts and Components lists.
 
 ## Section & block library
 
@@ -43,7 +43,7 @@ The library ships these sections:
 
 | Block | What it inserts |
 | --- | --- |
-| **Nav Bar** | App bar + toolbar with brand text and three screen links, in page flow (switch its Position attribute to *Sticky* for a pinned header) |
+| **Nav Bar** | App bar + toolbar with brand text and three page links, in page flow (switch its Position attribute to *Sticky* for a pinned header) |
 | **Hero** | Centered headline, tagline, and call-to-action button |
 | **Feature Grid** | Three selling-point columns that wrap on small screens |
 | **Image + Text** | Image beside a heading, paragraph, and link button |
@@ -54,10 +54,10 @@ The library ships these sections:
 | **Contact Section** | Heading plus a working name/email/message form |
 | **Announcement Bar** | Accent strip with a message and link |
 | **Image Gallery** | Three-across image row |
-| **Footer** | Semantic `<footer>` with brand, screen links, social icons, and copyright |
+| **Footer** | Semantic `<footer>` with brand, page links, social icons, and copyright |
 
-Blocks are ordinary elements once inserted — nothing is locked. Screen links resolve
-against your site's screens (pick targets in the link's attributes), the contact form
+Blocks are ordinary elements once inserted — nothing is locked. Page links resolve
+against your site's pages (pick targets in the link's attributes), the contact form
 submits like any [form](../../content-and-data/forms/overview.md), and social icons
 appear once you add profile URLs.
 
@@ -65,7 +65,7 @@ appear once you add profile URLs.
 
 - Create **collections** managed in the console.
 - Publish a **blog** with rich entries (images, preview, scheduling) and an **RSS** feed.
-- Use **entry-template screens** with `{{entry.*}}` bindings to render each collection item.
+- Use **entry-template pages** with `{{entry.*}}` bindings to render each collection item.
 
 :::tip How-tos
 - [Build a blog](build-a-blog.md)

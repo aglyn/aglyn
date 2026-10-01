@@ -162,7 +162,7 @@ describe('AdminBar at phone widths (AGL-1829)', () => {
     for (const text of [
       'About',
       'Draft changes',
-      'Screens',
+      'Pages',
       'Inbox',
       '128 views today · 12 on this page',
     ]) {
@@ -204,7 +204,7 @@ describe('AdminBar at phone widths (AGL-1829)', () => {
     expect(more.getAttribute('aria-expanded')).toBe('true')
     const menu = screen.getByRole('menu', { name: 'Admin bar menu' })
     expect(
-      (within(menu).getByText('Screens') as HTMLAnchorElement).href,
+      (within(menu).getByText('Pages') as HTMLAnchorElement).href,
     ).toBe(CONTEXT_RESPONSE.screensUrl)
     expect(
       (within(menu).getByText('Inbox') as HTMLAnchorElement).href,
@@ -228,7 +228,7 @@ describe('AdminBar at phone widths (AGL-1829)', () => {
 
     // A followed link closes the menu.
     act(() => {
-      within(menu).getByText('Screens').click()
+      within(menu).getByText('Pages').click()
     })
     expect(screen.queryByRole('menu')).toBeNull()
     expect(more.getAttribute('aria-expanded')).toBe('false')

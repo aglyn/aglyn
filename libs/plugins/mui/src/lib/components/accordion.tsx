@@ -327,7 +327,7 @@ export const accordionSummarySchema: Aglyn.ComponentSchema = {
       label: 'Header links to',
       description:
         'Optional. Give the header a destination and the row splits: the ' +
-        'text becomes a link to that screen and the chevron beside it ' +
+        'text becomes a link to that page and the chevron beside it ' +
         'opens the panel. That is the only way a header can do both — a ' +
         'link inside the toggle button is invalid and unreachable by ' +
         'keyboard. Leave it empty and the whole row toggles, as before.',

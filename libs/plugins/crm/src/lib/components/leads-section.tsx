@@ -73,6 +73,7 @@ import {
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { leadPrimaryGroup } from '../model/contact-holder'
 import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import {
@@ -864,7 +865,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         onClose={() => setConverting(null)}
         hostId={
           hostId ??
-          (Aglyn.leadPrimaryGroup(converting, org as Record<string, unknown>).hostId || null)
+          (leadPrimaryGroup(converting, org as Record<string, unknown>).hostId || null)
         }
         orgId={orgId}
         org={org as Record<string, unknown> | undefined}

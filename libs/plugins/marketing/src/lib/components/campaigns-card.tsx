@@ -583,7 +583,7 @@ export function HostCampaignsCard(props: {
               'not stop that — the sender picks each one up from its own ' +
               'record. Stop a send from its own page. '
             : '') +
-          'Any screens, forms and contacts assigned to it come out of it and ' +
+          'Any pages, forms and contacts assigned to it come out of it and ' +
           'are otherwise untouched. Only the campaign itself goes.',
         confirmationText: 'Delete campaign',
       })

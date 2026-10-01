@@ -29,8 +29,8 @@ site's — each one is checked, and the tightest is the one you see.
 - **Hard** stops AI requests once the allotment is used for the month. The message says
   who can raise it.
 - **Soft** keeps requests working, and notifies the person and the workspace's owners and
-  admins — in the console and by email — when the month passes **80%** and again at
-  **100%**, once per threshold per month.
+  admins — in the console and by email — when the month passes **75%**, **80%** and
+  **90%**, and again at **100%**: each step once a month, and only the highest one reached.
 
 An allotment is checked against what was drawn **before** a request, the same way the
 workspace's own credits are, so a request that starts under the line can finish a little

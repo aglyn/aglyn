@@ -116,7 +116,7 @@ export function SocialImageCard(props: SocialImageCardProps) {
         anchor: '#social-cards',
         excerpt:
           'The picture shown when any page of this site is shared to ' +
-          'social media or chat. Screens can override it in their own SEO ' +
+          'social media or chat. Each page can override it in its own SEO ' +
           'panel. 1200×630 is the size every network crops well.',
       })}
     >
@@ -184,8 +184,8 @@ export function SocialImageCard(props: SocialImageCardProps) {
             size="small"
             fullWidth
             helperText={
-              'Read aloud by screen readers in a social preview. Screens can ' +
-              'override it in their own SEO panel.'
+              'Read aloud by screen readers in a social preview. Each page can ' +
+              'override it in its own SEO panel.'
             }
           />
         ) : null}

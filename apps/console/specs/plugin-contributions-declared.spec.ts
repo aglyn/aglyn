@@ -34,6 +34,7 @@
 
 import {
   components,
+  CONSOLE_SEARCH_LOAD_POINT,
   listConsoleExtensions,
   listCustomFieldTypes,
   THEME_PRESETS_LOAD_POINT,
@@ -87,6 +88,8 @@ function consoleContributions(extensions: readonly ConsoleExtension[]) {
     for (const widget of extension.widgets ?? []) slots.add(widget.slot)
     // Theme presets load where the theme page lists them (AGL-3404).
     if (extension.themePresets?.length) slots.add(THEME_PRESETS_LOAD_POINT)
+    // Search sources load where the palette lists them (AGL-3080).
+    if (extension.searchSources?.length) slots.add(CONSOLE_SEARCH_LOAD_POINT)
     for (const item of extension.navItems ?? []) routes.add(item.href)
     for (const item of extension.orgNavItems ?? []) orgRoutes.add(item.href)
     if (SHELL_FIELDS.some((field) => (extension[field] as unknown[] | undefined)?.length)) {

@@ -153,7 +153,7 @@ export async function assignErrorScreen(options: {
       tx.get(screenRef),
     ])
     if (!target.exists || target.get('deletedAt') != null) {
-      return { status: 404 as const, error: 'Unknown screen' }
+      return { status: 404 as const, error: 'Unknown page' }
     }
     // Same refusal as the conversion route's, for the same reason: overwriting
     // either kind is a destructive edit dressed as a billing one — it would move
@@ -169,7 +169,7 @@ export async function assignErrorScreen(options: {
     if (currentKind === SCREEN_KIND_TEMPLATE) {
       return {
         status: 400 as const,
-        error: 'A collection entry template cannot also be an error screen',
+        error: 'A collection entry template cannot also be an error page',
       }
     }
 
@@ -192,7 +192,7 @@ export async function assignErrorScreen(options: {
         return {
           status: 403 as const,
           error:
-            `This site already has ${liveErrorScreens.length} error screens, ` +
+            `This site already has ${liveErrorScreens.length} error pages, ` +
             `one for each status. Turn one back into a page, or delete it, ` +
             `before assigning another.`,
         }
@@ -257,7 +257,7 @@ export async function convertScreenKind(options: {
       tx.get(screenRef),
     ])
     if (!target.exists) {
-      return { status: 404 as const, error: 'Unknown screen' }
+      return { status: 404 as const, error: 'Unknown page' }
     }
     // An email document is not a page and never was, so neither direction of
     // this conversion means anything for it — and overwriting `kind` would move
@@ -280,8 +280,8 @@ export async function convertScreenKind(options: {
       return {
         status: 400 as const,
         error:
-          `This screen is assigned as this site's ${ERROR_SLOT_LABELS[boundSlot]} ` +
-          `screen. Unassign it in Error pages first.`,
+          `This page is assigned as this site's ${ERROR_SLOT_LABELS[boundSlot]} ` +
+          `page. Unassign it in Error pages first.`,
       }
     }
     if (target.get('kind') === kind) {
@@ -308,7 +308,7 @@ export async function convertScreenKind(options: {
         status: 403 as const,
         error:
           `Making “${name}” a page again puts this site at ${next.size} of ` +
-          `${limit} screens. Delete a page first, or upgrade in Billing.`,
+          `${limit} pages. Delete a page first, or upgrade in Billing.`,
       }
     }
 
@@ -381,7 +381,7 @@ async function handler(request: Request): Promise<Response> {
     // prevent, four slots or not.
     if (kind !== SCREEN_KIND_PAGE && kind !== SCREEN_KIND_TEMPLATE) {
       return Response.json({
-        error: `Screen kind must be '${SCREEN_KIND_PAGE}' or '${SCREEN_KIND_TEMPLATE}'`,
+        error: `Kind must be '${SCREEN_KIND_PAGE}' or '${SCREEN_KIND_TEMPLATE}'`,
       }, { status: 400 })
     }
     convertKind = kind
@@ -415,7 +415,7 @@ async function handler(request: Request): Promise<Response> {
       const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
       if (!HOST_WRITER_ROLES.has(String(memberRole))) {
         return Response.json({
-          error: 'Editing screens requires the editor role',
+          error: 'Editing pages requires the editor role',
         }, { status: 403 })
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
@@ -507,7 +507,7 @@ async function handler(request: Request): Promise<Response> {
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
     console.error(error)
-    return Response.json({ error: 'Screen conversion failed' }, { status: 500 })
+    return Response.json({ error: 'Page conversion failed' }, { status: 500 })
   }
 }
 

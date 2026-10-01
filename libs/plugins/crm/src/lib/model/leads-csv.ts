@@ -39,11 +39,11 @@
  * count) and the conversion's stamp on "Do not import".
  */
 
-/* The writer moved to `@aglyn/aglyn` under AGL-2662 — see `deals-csv.ts`. */
+/* The writer is `crm-csv.ts`, shared with the server's export — see `deals-csv.ts`. */
 export {
   LEAD_CSV_COLUMNS,
   leadCsvHeader,
   leadsCsv,
   type LeadCsvOptions,
   type LeadCsvRow,
-} from '@aglyn/aglyn'
+} from './crm-csv'

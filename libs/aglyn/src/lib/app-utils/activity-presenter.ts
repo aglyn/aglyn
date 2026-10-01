@@ -113,7 +113,7 @@ export interface ActivityLinkContext {
 /** Human, singular noun for a target type. Falls back to the raw type. */
 const TYPE_LABELS: Record<string, string> = {
   host: 'Site',
-  screen: 'Screen',
+  screen: 'Page',
   layout: 'Layout',
   theme: 'Theme',
   media: 'Media',

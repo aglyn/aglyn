@@ -184,7 +184,7 @@ export function resolveScreenLiveUrl(
   return {
     unavailableReason:
       'This template has no live address — the collection it serves has ' +
-      'no slug, or another screen has taken over as its template.',
+      'no slug, or another page has taken over as its template.',
   }
 }
 

@@ -108,7 +108,7 @@ it('says a screen starts from a copy, as a creation does (AGL-3024)', () => {
     screens: [{ ...PLAN.screens[0], duplicateOf: 'scr-home' }],
   }
   render(<AiJobPlan job={job({ plan: copying })} onResume={jest.fn()} />)
-  const row = screen.getByText(/the screen Home/)
+  const row = screen.getByText(/the page Home/)
   expect(row.textContent).toContain('from a copy of')
 })
 

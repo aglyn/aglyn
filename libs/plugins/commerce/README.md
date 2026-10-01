@@ -40,6 +40,7 @@ The entry in `plugins.config.json` also declares an `accounts` capability ("User
 - A **POS** nav item and page at `/pos`, which requires the plugin's own `managePos` permission.
 - A "Commerce" widget in the `commerceGlance` slot, and a "Newest site users" widget in the `hostDashboard` slot under the accounts capability.
 - The plugin's permissions (`COMMERCE_PERMISSIONS`) and its config schema (`COMMERCE_CONFIG_SCHEMA`, which holds the POS discount ceiling).
+- Three zones its own surfaces host, declared with `registerPluginZone`: `productEditor` (among the product editor's fields), `productsHub` (above the catalog table) and `productImport` (inside the CSV import dialog). Their props are declared on the zone tokens in `components/console/product-zones`.
 
 All console pages and cards are code-split.
 

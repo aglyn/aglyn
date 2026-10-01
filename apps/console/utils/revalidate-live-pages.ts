@@ -61,17 +61,6 @@ export interface RevalidateLivePagesOptions {
    */
   componentId?: string
   /**
-   * Publishing a FORM invalidates every page that places it, found the same
-   * way a component's dependents are — by searching node trees, so a form
-   * inside a layout's chrome or inside a reusable component is reached too.
-   *
-   * A form publish had nothing to announce until a placed form began rendering
-   * its entity's published design. Now it changes the form on every page at
-   * once, and without this the change waits out the hour-long document cache
-   * while the besigner says the live sites already serve it.
-   */
-  formId?: string
-  /**
    * A content ENTRY changed — saved, published, unpublished, re-dated or
    * deleted. The caller names the COLLECTION rather than the entry, because
    * the collection is what decides both halves of the answer: its slug gives
@@ -219,7 +208,6 @@ export async function revalidateLivePages(
     screenId,
     layoutId,
     componentId,
-    formId,
     collectionId,
     entrySlugs,
     paths,
@@ -231,7 +219,6 @@ export async function revalidateLivePages(
       !screenId &&
       !layoutId &&
       !componentId &&
-      !formId &&
       !collectionId &&
       !paths?.length)
   ) {
@@ -247,7 +234,6 @@ export async function revalidateLivePages(
         ...(screenId ? { screenId } : {}),
         ...(layoutId ? { layoutId } : {}),
         ...(componentId ? { componentId } : {}),
-        ...(formId ? { formId } : {}),
         ...(collectionId ? { collectionId } : {}),
         ...(entrySlugs?.length ? { entrySlugs } : {}),
         ...(paths?.length ? { paths } : {}),

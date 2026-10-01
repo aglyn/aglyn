@@ -29,6 +29,10 @@
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { CampaignConversionsRollup } from '@aglyn/shared-ui-email-campaigns/model/campaign-conversions'
+import { standInEmailsPageRoutes } from '../testing/stand-in-emails-page-routes'
+
+// The Emails page this campaign links into is the email plugin's (AGL-3080).
+standInEmailsPageRoutes()
 
 /** What each `useFirestoreDoc` call answers, keyed by document path. */
 const mockDocs = new Map<string, unknown>()

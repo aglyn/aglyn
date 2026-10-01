@@ -18,28 +18,33 @@
 import { Box, Chip, Link, Stack, Typography } from '@mui/material'
 import type { ElementDetail } from '../utils/describe-element'
 import ElementPreview from './element-preview.component'
-import { besignerDocsUrl, type BesignerDocsAnchor } from '../utils/docs-help'
+import {
+  BESIGNER_DOCS_ANCHORS,
+  besignerDocsUrl,
+  type BesignerDocsAnchor,
+} from '../utils/docs-help'
 
 /**
  * Element category → its section of the element catalog page.
  *
  * The catalog's H2s ARE the drawer's categories, so the deep link is derived
- * rather than mapped by hand per element — 45+ hand-written anchors would be
- * 45+ things to get wrong. A category with no section (plugin-registered
- * labels, "Your components") lands on the page itself, which is correct
- * rather than broken.
+ * from the page's own headings rather than mapped by hand per category — a
+ * category is its heading's slug (`Data Display` → `#data-display`). A
+ * category the page has no section for — a plugin-registered label, "Your
+ * components" — lands on the page itself, which is correct rather than
+ * broken.
  */
-const CATALOG_ANCHORS: Record<string, BesignerDocsAnchor<'elementCatalog'>> = {
-  Layout: '#layout',
-  Surface: '#surface',
-  Navigation: '#navigation',
-  Text: '#text',
-  'Data Display': '#data-display',
-  Media: '#media',
-  Forms: '#forms-input-commerce-members',
-  Input: '#forms-input-commerce-members',
-  Commerce: '#forms-input-commerce-members',
-  Members: '#forms-input-commerce-members',
+export function elementCatalogAnchor(
+  category: string | undefined,
+): BesignerDocsAnchor<'elementCatalog'> | undefined {
+  const slug = (category ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  if (!slug) return undefined
+  return BESIGNER_DOCS_ANCHORS.elementCatalog.find(
+    (anchor) => anchor === `#${slug}`,
+  )
 }
 
 export interface ElementDetailViewProps {
@@ -169,7 +174,7 @@ export function ElementDetailView(props: ElementDetailViewProps) {
       <Link
         href={besignerDocsUrl(
           'elementCatalog',
-          CATALOG_ANCHORS[detail.category ?? ''],
+          elementCatalogAnchor(detail.category),
         )}
         target="_blank"
         rel="noopener noreferrer"

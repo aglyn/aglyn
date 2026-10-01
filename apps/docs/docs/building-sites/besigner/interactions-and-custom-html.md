@@ -49,7 +49,7 @@ configures in one dialog without leaving the besigner:
     [Scroll to element](#scroll-to-element-step).
   - **Play a video** — presses a Video element's poster from anywhere on
     the page. See [Play a video](#play-video-step).
-  - **Make the nav sticky**, **go to a URL / screen**, or **show a site
+  - **Make the nav sticky**, **go to a URL / page**, or **show a site
     alert** — navigation and lightweight feedback, no server involved.
 - The remaining actions are the **automations engine** (Pro+, metered —
   see [Plan availability](#plan-availability)):
@@ -69,7 +69,7 @@ Interactions list with edit (✎), enable/disable, and remove controls.
 
 ## Interactions belong to the page they are on
 
-An interaction is stored **on the element**, inside the screen, layout,
+An interaction is stored **on the element**, inside the page, layout,
 component or template that holds it. That is what makes the obvious things
 true:
 

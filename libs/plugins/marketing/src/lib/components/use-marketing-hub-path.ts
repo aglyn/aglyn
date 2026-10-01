@@ -14,11 +14,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+'use client'
+
+import { buildRoute, Route } from '@aglyn/aglyn'
+import { useParams } from 'next/navigation'
+
 /**
- * The Marketing console's URL, re-exported under the name the cards import.
+ * The MARKETING console's URL: under the site being read, or the
+ * organization's own Marketing hub on a page that names no site.
  *
- * One implementation lives beside the Emails hub's in `use-emails-hub-path`;
- * this module is the address the Marketing cards have always imported it
- * from, kept so neither name can drift into a second copy of the rule.
+ * A converted record — a form submission in the Inbox, a contact in
+ * Contacts — links to the campaign it came from, and the surfaces that draw
+ * those records are handed their own hub's `basePath`, not this one's.
+ *
+ * Free, deliberately: the org slug and the subdomain are already in the URL
+ * the console is on, so this reads the route rather than resolving the host
+ * document — the two `getDoc`s that resolution costs would be paid on every
+ * open of a card, to render a link. `null` before the params resolve, so
+ * callers render plain text rather than a link to nowhere.
+ *
+ * Campaigns belong to the organization, so the org-level CRM and the org
+ * Marketing hub itself link a campaign to `/[orgSlug]/marketing/campaigns/{id}`.
  */
-export { useMarketingHubPath, useMarketingHubPath as default } from './use-emails-hub-path'
+export function useMarketingHubPath(): string | null {
+  const params = useParams<{ orgSlug: string; host: string }>()
+  const orgSlug = params?.orgSlug
+  if (!orgSlug) return null
+  return params?.host
+    ? buildRoute(Route.HOST_PLUGIN, {
+        orgSlug,
+        host: params.host,
+        pluginSlug: MARKETING_SLUG,
+      })
+    : orgMarketingHubPath(orgSlug)
+}
+
+/** The Marketing hub's URL slug, under a site and under the org alike. */
+const MARKETING_SLUG = 'marketing'
+
+/** The organization's own Marketing hub, `/[orgSlug]/marketing`. */
+export function orgMarketingHubPath(orgSlug: string): string {
+  return buildRoute(Route.ORG_PLUGIN, { orgSlug, pluginSlug: MARKETING_SLUG })
+}
+
+export default useMarketingHubPath

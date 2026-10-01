@@ -20,10 +20,8 @@ import {
   assistUsdFromCredits,
   type AssistRefusedBy,
 } from '@aglyn/aglyn/app-utils/assist-credits'
-import {
-  FREE_AI_TASTE_CREDITS_PER_MONTH,
-  resolveEffectivePlan,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { sendStaffAlertEmail } from '@aglyn/tenant-data-admin/server/staff-alert-email'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'

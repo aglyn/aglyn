@@ -49,7 +49,7 @@
 
     "Seventeen [building rules](https://docs.aglyn.com/ai/how-aglyn-ai-builds) hold the draft to your site rather than to a house style, and they are checked rather than suggested: every plan and every generated document is held to them before you see it. The ones that keep a page on-brand are worth knowing by name.",
 
-    "- **Colors, spacing and type come from your theme** — never a fixed color value. A color your theme lacks comes back as a proposed theme change for you to review, not as a hex code baked into a section.\n- **Repeats become one reusable component.** A block that appears three or more times is built once and placed as instances, and the job looks for a component you already have before it makes one.\n- **Site-wide regions live in the layout.** A generated page sits in your header, navigation and footer. It never carries its own copy of them.\n- **Start from a duplicate of the nearest thing.** Where your site has a similar screen, the job starts from a copy of it, which keeps its bindings and its SEO.",
+    "- **Colors, spacing and type come from your theme** — never a fixed color value. A color your theme lacks comes back as a proposed theme change for you to review, not as a hex code baked into a section.\n- **Repeats become one reusable component.** A block that appears three or more times is built once and placed as instances, and the job looks for a component you already have before it makes one.\n- **Site-wide regions live in the layout.** A generated page sits in your header, navigation and footer. It never carries its own copy of them.\n- **Start from a duplicate of the nearest thing.** Where your site has a similar page, the job starts from a copy of it, which keeps its bindings and its SEO.",
 
     "An answer that breaks a rule is not used. The job asks once more, naming the rules that were broken; if the second answer still breaks one it stops and shows you which.",
 
@@ -71,17 +71,17 @@
 
     "## Generate the draft",
 
-    "Open **Screens** for the site and choose **Describe it**, beside **Templates** and **Create New Screen**; you can also start one from **Describe a page** in **AI jobs** in the Assist panel. Write the brief in the one box and choose **Plan the page**.",
+    "Open **Pages** for the site and choose **Describe it**, beside **Templates** and **Create New Page**; you can also start one from **Describe a page** in **AI jobs** in the Assist panel. Write the brief in the one box and choose **Plan the page**.",
 
     "Read the plan. It names the layout the page will render in, the components and forms it places, anything it needs to create first, the page's address and search title, and its sections top to bottom — with what the whole job is estimated to use beside the button that confirms it. If the plan is wrong, this is the cheap moment: cancel and rewrite the brief rather than editing a finished page into shape.",
 
-    "Confirm, and the job builds anything the plan creates first — a layout, a form, a reusable component, each as its own draft — then builds the page one section at a time in the background. You can leave the Screens page while it works.",
+    "Confirm, and the job builds anything the plan creates first — a layout, a form, a reusable component, each as its own draft — then builds the page one section at a time in the background. You can leave the Pages list while it works.",
 
-    "What comes back is a new screen with **no address on your site**. It is not in your navigation, your sitemap or your site search, and visitors cannot reach it. It does have a layout, an address ready to take, a search title and a search description written from the page's own text. Pictures arrive as image slots with a description of what belongs there, for you to fill from your media library — generated pages never link an image from another website, and every image it does place has alt text or is marked decorative.",
+    "What comes back is a new page with **no address on your site**. It is not in your navigation, your sitemap or your site search, and visitors cannot reach it. It does have a layout, an address ready to take, a search title and a search description written from the page's own text. Pictures arrive as image slots with a description of what belongs there, for you to fill from your media library — generated pages never link an image from another website, and every image it does place has alt text or is marked decorative.",
 
     "## Edit it on the canvas",
 
-    "The draft opens in the [Besigner](/product/besigner) like any other screen, because it is one. There is no separate AI editor to learn and nothing about the page is locked.",
+    "The draft opens in the [Besigner](/product/besigner) like any other page, because it is one. There is no separate AI editor to learn and nothing about the page is locked.",
 
     "- **Text.** Select any text element and use **Rewrite with AI** under the field in the Attributes panel — a headline, body copy, a button label, a caption. What you apply is an unsaved change on the version you have open, exactly like typing it yourself, and one undo takes it back.\n- **Components.** A section the job built inline that you would rather reuse can be promoted to a reusable component and placed as instances.\n- **Theme.** If the draft made you notice the palette, the [theme assistant](https://docs.aglyn.com/ai/theme-assist) on **Setup → Theme** proposes values for the theme editor's own controls — colors, font, corner radius, spacing, navigation heights, dark scheme. A hex color you name is used exactly as written, and it reads the colors of your site logo when the logo comes from your media library. Nothing changes until you save.",
 
@@ -89,7 +89,7 @@
 
     "## Write the search listing",
 
-    "A page nobody finds is a page that did not ship. The screen's detail page has an **SEO** card with a **Write with AI** section: add target keywords if you have them, press **Write SEO**, and read the proposal.",
+    "A page nobody finds is a page that did not ship. The page's detail view has an **SEO** card with a **Write with AI** section: add target keywords if you have them, press **Write SEO**, and read the proposal.",
 
     "| Field | Limit | Written from |\n| --- | --- | --- |\n| Title | 60 characters | What the page is about, specifically |\n| Description | 155 characters | A one- or two-sentence summary |\n| Breadcrumb label | 40 characters | The page's short name in a trail |\n| Image description | 300 characters | Only when the page has a social image |",
 

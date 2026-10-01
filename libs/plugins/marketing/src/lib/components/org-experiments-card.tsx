@@ -113,7 +113,7 @@ async function readSiteExperiments(
 }
 
 const TARGET_LABEL: Record<string, string> = {
-  screen: 'Screen',
+  screen: 'Page',
   section: 'Section',
   email: 'Email',
 }

@@ -21,8 +21,9 @@
  *
  * The browser hops through `/api/screens/revalidate` because the tenant route
  * is secret-authenticated. A route running on the server already holds that
- * secret, so it announces directly — the arrangement `announceFormPublish`
- * established for a form promotion.
+ * secret, so it announces directly — the arrangement a form promotion
+ * established, which the forms plugin's promote route now makes through the
+ * platform site cache.
  *
  * The "cannot fail the write" half is proved here at the helper rather than
  * at each route, and deliberately: both `announceLivePaths` and

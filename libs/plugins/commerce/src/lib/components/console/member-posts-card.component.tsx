@@ -171,7 +171,7 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
         {posts.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'Post updates only your subscribers can see (and optionally ' +
-              'email them). Add a Member feed block to a members screen.'}
+              'email them). Add a Member feed block to a members-only page.'}
           </Typography>
         ) : (
           posts.map((post: any) => (

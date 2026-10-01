@@ -284,3 +284,53 @@ test('the guard names the file a contributor has to edit', () => {
   })
   assert.match(verdictFor(verdicts, 'change-control').detail, new RegExp(DECISION_LOG_PATH))
 })
+
+/** The compiled catalog file, carrying one plugin's plan figures. */
+const CATALOG_PATH = WATCHED.find((spec) => spec.pluginPlanFigures).path
+const catalog = ({ proBand = 20 } = {}) => `
+export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
+  {
+    "pluginId": "marketplace",
+    "key": "marketplaceFeePct",
+    "label": "Marketplace fee %",
+    "byPlan": {
+      "free": 30,
+      "pro": ${proBand},
+      "business": Infinity
+    }
+  },
+]
+
+export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[] = [
+]
+`
+
+test('a figure that moves from a core row into a plugin declaration, unchanged, moves nothing', () => {
+  const base = sources()
+  const head = sources()
+  head[ENTITLEMENTS_PATH] = head[ENTITLEMENTS_PATH].replace(/\n {4}marketplaceFeePct: \d+,/g, '')
+  head[CATALOG_PATH] = catalog()
+  const baseSurface = priceSurface(base).values
+  const headSurface = priceSurface(head).values
+  assert.equal(headSurface['PLAN_ENTITLEMENTS.pro.marketplaceFeePct'], 20)
+  assert.equal(headSurface['PLAN_ENTITLEMENTS.business.marketplaceFeePct'], 'UNLIMITED')
+  assert.equal(baseSurface['PLAN_ENTITLEMENTS.pro.marketplaceFeePct'], 20)
+
+  const moved = { ...head, [CATALOG_PATH]: catalog({ proBand: 25 }) }
+  const verdicts = changeControlVerdicts({
+    baseRef: 'origin/production',
+    baseSources: base,
+    headSources: moved,
+    baseLog: GOOD_LOG,
+    headLog: GOOD_LOG,
+  })
+  assert.equal(overallExitCode(verdicts), 1)
+})
+
+test('a plan value spelled as a constant reads as the number the file assigns it', () => {
+  const src = sources()
+  src[ENTITLEMENTS_PATH] = src[ENTITLEMENTS_PATH]
+    .replace('marketplaceFeePct: 30,', 'marketplaceFeePct: FREE_TAKE_RATE,')
+    .concat('\nexport const FREE_TAKE_RATE = 30\n')
+  assert.equal(priceSurface(src).values['PLAN_ENTITLEMENTS.free.marketplaceFeePct'], 30)
+})

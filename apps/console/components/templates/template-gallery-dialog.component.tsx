@@ -108,7 +108,7 @@ const STARTER_IDS = STARTER_TEMPLATES.map((starter) => starter.id).slice(0, 30)
 
 /** What one item of each kind is called, for the zero-state copy. */
 const KIND_NOUN: Record<'page' | 'component' | 'layout', string> = {
-  page: 'screen',
+  page: 'page',
   component: 'component',
   layout: 'layout',
 }
@@ -168,8 +168,8 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     screenCount,
     kind = 'page',
     title = 'Start from a template',
-    blurb = 'Templates add ready-made, published screens you can restyle in ' +
-      'the besigner. Existing screens are never touched.',
+    blurb = 'Templates add ready-made, published pages you can restyle in ' +
+      'the Besigner. Existing pages are never touched.',
   } = props
   // The search box: one word, asked of every shelf's name keys (AGL-3321).
   const [filterOpen, setFilterOpen] = useState(false)
@@ -449,7 +449,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           // `formatQuotaLimit`, not the raw number: `UNLIMITED` is
           // `Number.POSITIVE_INFINITY`, so an uncapped plan that ever reached
           // this branch would read "your plan allows Infinity".
-          `This template needs ${template.screens.length} screens — your ` +
+          `This template needs ${template.screens.length} pages — your ` +
             `plan allows ${formatQuotaLimit(quota.limit)}. See Billing to ` +
             'upgrade.',
           { variant: 'warning', persist: false },
@@ -517,11 +517,11 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
         }
         if (added) {
           enqueueSnackbar(
-            `Added ${added} screen${added === 1 ? '' : 's'} from "${
+            `Added ${added} page${added === 1 ? '' : 's'} from "${
               template.displayName
             }"` +
               (releasedRoot
-                ? '. The placeholder home page is kept in Screens as a draft.'
+                ? '. The placeholder home page is kept in Pages as a draft.'
                 : ''),
             { variant: 'success', persist: false },
           )
@@ -531,7 +531,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           // than substituting: a notice that fades is the silent surprise
           // again, one step later.
           enqueueSnackbar(
-            `${skipped.length} screen${
+            `${skipped.length} page${
               skipped.length === 1 ? '' : 's'
             } could not be added: ${skipped.join('; ')}`,
             { variant: 'warning', persist: true },
@@ -753,7 +753,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                         component="div"
                         sx={{ mt: 1 }}
                       >
-                        {`${starter.screens.length} screen${
+                        {`${starter.screens.length} page${
                           starter.screens.length === 1 ? '' : 's'
                         }`}
                       </Typography>

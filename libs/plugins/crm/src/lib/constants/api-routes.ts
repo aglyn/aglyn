@@ -90,6 +90,13 @@ export const CRM_API_ROUTES = {
    * `server/inbound-route.ts`.
    */
   inbound: 'crm/inbound',
+  /**
+   * `GET` — one of the organization's CRM collections, or a site's leads,
+   * as a CSV streamed over every row (AGL-2662); the contacts and leads
+   * files are every workspace's (a portability route), see
+   * `server/export-route.ts`.
+   */
+  export: 'crm/export',
 } as const
 
 /**

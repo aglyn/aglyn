@@ -487,7 +487,7 @@ const seoSchema: FormSchema = {
     help: docsHelp('seo', {
       excerpt:
         'Site-wide defaults for titles, descriptions, and structured ' +
-        'data — screens can override them in their own SEO editor.',
+        'data — pages can override them in their own SEO editor.',
     }),
   },
   fields: [
@@ -497,13 +497,13 @@ const seoSchema: FormSchema = {
       label: 'Title',
       type: 'text',
       helperText:
-        'Fallback for screens with no SEO title of their own — a screen ' +
+        'Fallback for pages with no SEO title of their own — a page ' +
         'that sets one publishes it verbatim',
       help: docsHelp('seo', {
         anchor: '#how-a-page-title-is-built',
         excerpt:
           'Default title emitted in the page head and browser tab — ' +
-          'screens without their own SEO title fall back to it.',
+          'pages without their own SEO title fall back to it.',
       }),
       isRequired: true,
       resolveProps: (_, { input: { value } }) => {
@@ -543,7 +543,7 @@ const seoSchema: FormSchema = {
         anchor: '#per-screen-seo',
         excerpt:
           'Default meta description shown under your site in search ' +
-          'results when a screen sets none of its own.',
+          'results when a page sets none of its own.',
       }),
       isRequired: true,
       multiline: true,
@@ -582,13 +582,13 @@ const seoSchema: FormSchema = {
       label: 'Separator',
       type: 'text',
       helperText:
-        'Joins a screen’s NAME to the site title above, for screens with ' +
+        'Joins a page’s NAME to the site title above, for pages with ' +
         'no SEO title, e.g. "|" or "·"',
       help: docsHelp('seo', {
         anchor: '#how-a-page-title-is-built',
         excerpt:
-          'Character placed between a screen’s name and the site title ' +
-          'when the screen sets no SEO title of its own, e.g. "|" or "·".',
+          'Character placed between a page’s name and the site title ' +
+          'when the page sets no SEO title of its own, e.g. "|" or "·".',
       }),
       isRequired: true,
       validate: [
@@ -624,12 +624,12 @@ const seoSchema: FormSchema = {
       type: 'text',
       placeholder: DEFAULT_TITLE_PATTERN,
       helperText:
-        'How a screen with no SEO title of its own is titled. Leave empty ' +
+        'How a page with no SEO title of its own is titled. Leave empty ' +
         `for ${DEFAULT_TITLE_PATTERN}.`,
       help: docsHelp('seo', {
         anchor: '#how-a-page-title-is-built',
         excerpt:
-          'The pattern a screen with no SEO title of its own is titled ' +
+          'The pattern a page with no SEO title of its own is titled ' +
           'with — page name, separator and site name, in whatever order ' +
           'the site wants them.',
       }),

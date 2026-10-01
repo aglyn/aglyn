@@ -874,8 +874,9 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `scheduled-jobs` | `app.aglyn.com/api/health/crons` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
-| Cloud Scheduler | job attempt logged at `severity >= ERROR`, every job except the two per-minute beats | any | log match |
+| Cloud Scheduler | job attempt logged at `severity >= ERROR`, every job except the three high-frequency beats | any | log match |
 | Cloud Scheduler, per-minute beats | `scheduler_beat_attempt_errors` for `pluginJobsBeat` and `consoleAiJobsBeat` | > 2 failed attempts in 10 min, per job | log-based metric |
+| Cloud Scheduler, `consoleFastCrons` (every 15 min) | `scheduler_beat_attempt_errors` for `consoleFastCrons` | > 1 failed tick in 30 min | log-based metric |
 | Firestore rules denials | `rules/evaluation_count{result = DENY}` | > 5,000 in a trailing hour | metric |
 
 The two Cloud Scheduler rows were one until 2026-09-20. `pluginJobsBeat` and
@@ -891,6 +892,16 @@ failed attempts inside ten minutes for one job, which is a beat that has
 actually stopped. The threshold was set by an agent asked to fix the alerts, not
 chosen by the account owner; move it if three minutes of a dead beat is too
 long to wait.
+
+`consoleFastCrons` joined the beats on 2026-09-30 (AGL-3423). It runs every
+fifteen minutes with `retryCount: 0` and both of its routes are idempotent
+claim-and-work sweeps, so the next tick does whatever a missed one would have;
+its two failures on record (2026-09-08 a 500, 2026-09-29 a 503) were Cloud Run
+front-end refusals with no request in the container's log, each followed by a
+clean tick. The policy (renamed `High-frequency beat job failing repeatedly`)
+gives it its own condition, **two failed ticks inside thirty minutes**, because
+the per-minute rule of three in ten can never trip on a fifteen-minute job.
+`/api/health/crons` still reds it at 45 minutes of silence either way.
 
 :::caution This table was re-read from the live project on 2026-09-14
 Fifteen checks, every one from three regions, every one green for the 24 hours
@@ -1188,7 +1199,44 @@ Notes that keep these honest:
   and never against `/_next/static/`: an asset-path rule would delete every
   error from a self-hosted deployment serving assets off a CDN. The honest cost
   is that a throw from one of our own inline bootstrap scripts looks identical
-  and goes with it.
+  and goes with it. The same rule counts a frame under a foreign scheme
+  (`iabjs:`, `chrome-extension:`, AGL-2786) and, since AGL-3423, a frame in a
+  script with NO URL — `<anonymous>:line:col`, V8's `eval at …` origin, and
+  Firefox's `debugger eval code` — which is what an automation driver's
+  `evaluate` and a devtools snippet produce. It is `every`, never `some`: one
+  frame of ours, including a URL of ours inside an `eval at` origin, keeps the
+  report, and a stack with no frame the rule can read is kept too. It applies
+  to unhandled rejections as well as to uncaught errors.
+- **The `ResizeObserver` loop notice never arrives (AGL-3423).** `ResizeObserver
+  loop completed with undelivered notifications` (older wording: `…loop limit
+  exceeded`) is the browser deferring resize callbacks to the next frame. It
+  carries no error and no stack, and the beacon drops it on its exact wording.
+- **A fault we RECOVER from is labeled, not dropped (AGL-3423).** Both could
+  be ours, so both are written at full severity under their own top-level
+  `jsonPayload.kind`, excluded from the per-entry `Client error beacon`
+  policy, and watched by rate — the same split `hydration` has: the
+  log-based metric `client_recovered_errors` (labelled by `kind`) backs
+  `Client recovered errors spiking (auth-desync / chunk-load, AGL-3423)`,
+  which pages at **more than 10 of one kind in 30 minutes**. One storage event
+  raises about three `auth-desync` reports and the beacon caps a pageview at
+  10, so one visitor cannot reach it. Between 2026-09-21 and 09-30 the
+  per-entry policy paged on fifteen `auth/tenant-id-mismatch` reports, every
+  one recovered by design.
+    - `kind: "auth-desync"` — Firebase's `auth/tenant-id-mismatch`, raised in a
+      tab when a sibling tab signs in to a different account pool. The console
+      reloads that tab once it is hidden (AGL-3280) and deliberately leaves the
+      rejection unhandled so it is still seen. One storage event raises several
+      of them.
+    - `kind: "chunk-load"` — a `ChunkLoadError` or failed dynamic import: a tab
+      open across a deploy asking for a chunk the origin no longer serves.
+      Every boundary, including the two a published page's body actually
+      reaches (`PageBodyBoundary` and `[host]/[scheme]/error.tsx`) and both
+      apps' `global-error.tsx`, reloads once per tab per half hour and does not
+      report what it reloaded (AGL-3279). An `import()` no boundary saw arrives
+      as an unhandled rejection; the beacon spends the same recovery on it but
+      reloads only once the tab is hidden, because that page is still up and
+      may hold unsaved work (AGL-3423). What arrives is the failure the reload
+      did not cure, and a burst of them is a broken deploy.
 - `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
   the second condition here that watches for **silence**. The `Cloud
   Scheduler` row below it can only report the *presence* of a failed attempt:

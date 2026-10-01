@@ -204,7 +204,7 @@ function SiteCard(props: SiteCardProps) {
         anchor: '#what-a-site-contains',
         title: 'Your sites',
         excerpt:
-          'Each site has its own screens, media, users, and ' +
+          'Each site has its own pages, media, users, and ' +
           'settings. Visit opens the live site; Manage opens ' +
           'its dashboard.',
       })}

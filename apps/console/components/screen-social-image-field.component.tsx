@@ -97,7 +97,7 @@ export function ScreenSocialImageField(props: ScreenSocialImageFieldProps) {
   return (
     <>
       <Typography variant="caption" color="text.secondary">
-        {'Social image — the picture shown when this screen is shared. ' +
+        {'Social image — the picture shown when this page is shared. ' +
           'Leave it unset to use the site default from Site setup ▸ SEO.'}
       </Typography>
       {preview ? (

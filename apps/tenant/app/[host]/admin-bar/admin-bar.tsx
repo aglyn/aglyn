@@ -817,7 +817,9 @@ export default function AdminBar({
           context?.collectionName
             ? `A ${context.collectionName} ${
                 context.collectionEntry ? 'entry' : 'list page'
-              } rendered by the "${context.screenName ?? 'template'}" screen`
+              } rendered by ${
+                context.screenName ? `the "${context.screenName}" template` : 'its template'
+              }`
             : undefined
         }
       >
@@ -833,7 +835,7 @@ export default function AdminBar({
         <span
           className="aglyn-ab-desktop"
           style={draftStyle}
-          title="This screen has a version newer than the published one"
+          title="This page has a version newer than the published one"
         >
           <span
             aria-hidden="true"
@@ -898,7 +900,7 @@ export default function AdminBar({
           target="_blank"
           rel="noreferrer"
         >
-          Screens
+          Pages
         </a>
       ) : null}
       {(context?.quickLinks ?? []).map((link) => (
@@ -1061,7 +1063,7 @@ export default function AdminBar({
               rel="noreferrer"
               onClick={() => setMenuOpen(false)}
             >
-              Screens
+              Pages
             </a>
           ) : null}
           {(context?.quickLinks ?? []).map((link) => (

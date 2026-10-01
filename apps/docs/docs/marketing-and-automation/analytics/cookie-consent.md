@@ -164,7 +164,7 @@ over the blanket signal.
 
 ## Previewing what visitors see
 
-You configure from one country; your visitors come from many. In any screen's
+You configure from one country; your visitors come from many. In any page's
 **Preview**, use the **Consent preview** picker (top right) to view your site
 as-if-from the EU, the US, an unknown region, or a GPC-sending browser — the real
 banner, driven by the real rules, with nothing saved. On a published page you can

@@ -383,7 +383,7 @@ describe('HostExperimentsCard (AGL-1358)', () => {
     })
     // The screen under test, without which validation refuses first and the
     // guard would never be reached.
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Screen' }))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Page' }))
     fireEvent.click(
       within(screen.getByRole('listbox')).getByText('Home'),
     )

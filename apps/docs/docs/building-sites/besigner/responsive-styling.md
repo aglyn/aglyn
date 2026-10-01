@@ -614,5 +614,5 @@ modes:
 ## Edit JSON for one element
 
 Right-click any element → **Edit JSON** to edit just that element and
-its children as JSON (the rest of the screen is untouched). Apply
+its children as JSON (the rest of the page is untouched). Apply
 validates component ids and node ids, and the change is undoable.

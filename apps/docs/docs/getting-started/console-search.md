@@ -21,8 +21,8 @@ your sites across the workspace:
 | Group | What a row is | Where clicking it goes |
 | --- | --- | --- |
 | Sites | A site you belong to in this workspace | The site dashboard |
-| Pages | A screen on the open site | The screen's version view |
-| Emails | An email screen on the open site | The email in the Besigner |
+| Pages | A page on the open site | The page's version view |
+| Emails | A designed email on the open site | The email in the Besigner |
 | Components | A reusable component | The component page |
 | Layouts | A shared layout | The layout page |
 | Templates | A site template | The template page |
@@ -41,7 +41,9 @@ your sites across the workspace:
 
 A group only appears if your plan includes it. On the Free plan there are no
 workflows, products, services or redirects, so those groups are neither shown
-nor searched. **Contacts** appear only while the [CRM](../content-and-data/crm/overview.md)
+nor searched. Workflows, products, redirects, services and the CRM's groups
+also appear only where their feature is switched on for the site, since that
+is where their pages open. **Contacts** appear only while the [CRM](../content-and-data/crm/overview.md)
 is available to you and your role can manage data — the same rule that opens
 the CRM itself — so a person you could not open never shows up as a result.
 The other CRM groups — leads, companies, deals, tasks and activities — follow
@@ -49,22 +51,19 @@ that same rule.
 
 Tasks and activities have no page of their own, so a row opens the record it
 was filed under: the deal if it names one, otherwise the company, otherwise
-the person. A task filed against nothing in particular opens the Tasks list.
+the person, otherwise the lead. A task filed against nothing in particular
+opens the Tasks list.
 
 ## Searching from the organization
 
 At the organization-level CRM — `/{workspace}/crm`, with no site in the
 address — the CRM groups search **across every site in the workspace** rather
-than one, and a lead's result opens under the site that captured it. This is
-offered to organization-wide members only, which is the same rule that opens
-that hub.
+than one, and each result opens in the organization's CRM. This is offered to
+organization-wide members only, which is the same rule that opens that hub.
 
 The site groups — pages, emails, components, layouts, templates, content,
 authors, workflows, products, redirects and services — belong to one site and
 are not searched from there; open a site first.
-
-Leads are read one site at a time, so a workspace with a great many sites has
-the first ten searched and the group says it was only partly searched.
 
 ## How matching works
 

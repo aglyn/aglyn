@@ -35,7 +35,7 @@ import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-
 import type {
   ConsoleProductImportZoneProps,
   ConsoleProductsHubZoneProps,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+} from './product-zones'
 import { productSearchFields } from '../../model/commerce'
 
 const ORG_PLAN = { org: { $id: 'org-1', plan: 'pro' }, ready: true }

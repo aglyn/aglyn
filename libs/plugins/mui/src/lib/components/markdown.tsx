@@ -817,7 +817,7 @@ export const markdownSchema: Aglyn.ComponentSchema<MarkdownProps> = {
         'The document, as markdown. Headings (## and ###), paragraphs, ' +
         'bold/italic, links, bullet and 1. numbered lists, images, fenced ' +
         'code, pipe tables and > quotes. Paste the whole source file — a ' +
-        'Table of contents element on the same screen lists the ## and ### ' +
+        'Table of contents element on the same page lists the ## and ### ' +
         'headings automatically.',
       // The WYSIWYG rather than a raw textarea (AGL-1616): this attribute is
       // a whole document — the published Privacy Policy body is one of them —
@@ -844,7 +844,7 @@ export const tableOfContentsSchema: Aglyn.ComponentSchema<TableOfContentsProps> 
         label: 'Markdown element',
         description:
           'The Markdown element to list the headings of. Leave empty on a ' +
-          'page with one Markdown element — the first one on the screen is ' +
+          'page with one Markdown element — the first one on the page is ' +
           'used, and a pick that no longer exists falls back to it too.',
         component: Aglyn.FieldComponentType.NODE_SELECT,
       },
@@ -893,7 +893,7 @@ export const markdownPresets: Aglyn.PresetSchema[] = [
           '## First section\n\nReplace this with your document. Paste ' +
           'markdown straight from the source file.\n\n' +
           '### A sub-section\n\nHeadings become anchors, and a Table of ' +
-          'contents element on the same screen links to them.',
+          'contents element on the same page links to them.',
       },
     },
   },

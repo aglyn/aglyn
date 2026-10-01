@@ -178,6 +178,13 @@ export interface QueryFakeFirestore {
   /** Committed writes since the last reset. */
   writes(): number
   resetWrites(): void
+  /**
+   * Read ROUND TRIPS since the last reset: one per document `get`, query
+   * `get`, `count()`, `getAll` or transaction read, however many documents
+   * it returned — the unit a request's latency is spent in.
+   */
+  reads(): number
+  resetReads(): void
   /** The clock `serverTimestamp()` and every `updateTime` read. */
   setNow(ms: number): void
   /** Makes the next writes to `path` fail with `error` — a stand-in for an outage. */
@@ -193,6 +200,7 @@ export function queryFakeFirestore(
   /** Keeps every write's `updateTime` distinct even on a frozen clock. */
   let tick = 0
   let writeCount = 0
+  let readCount = 0
   const failing = new Map<string, Error>()
   let autoIds = 0
 
@@ -387,7 +395,10 @@ export function queryFakeFirestore(
       id: segments[segments.length - 1],
       path,
       collection: (name: string) => collectionRef(`${path}/${name}`),
-      get: async () => snapshot(path),
+      get: async () => {
+        readCount += 1
+        return snapshot(path)
+      },
       set: async (data: Data, setOptions?: SetOptions) => run(setWrite(path, data, setOptions)),
       update: async (data: Data, precondition?: { lastUpdateTime?: Timestamp }) =>
         run({ type: 'update', path, data, precondition }),
@@ -465,12 +476,14 @@ export function queryFakeFirestore(
       limit: (limit: number) => query({ ...state, limit }),
       count: () => ({
         get: async () => {
+          readCount += 1
           const total = execute({ ...state, limit: null, after: state.after }).length
           const count = state.limit === null ? total : Math.min(total, state.limit)
           return { data: () => ({ count }) }
         },
       }),
       get: async () => {
+        readCount += 1
         const docs = execute(state)
         return { docs, size: docs.length, empty: docs.length === 0, forEach: (fn: any) => docs.forEach(fn) }
       },
@@ -488,7 +501,7 @@ export function queryFakeFirestore(
         return firestore
       },
       ...base,
-      id: path.split('/').pop(),
+      id: segments[segments.length - 1],
       path,
       doc: (id: string) => docRef(`${path}/${id ?? nextAutoId()}`),
       add: async (data: Data) => {
@@ -507,11 +520,17 @@ export function queryFakeFirestore(
       return snapshot(path)
     }
     const api: any = {
-      get: async (target: any) =>
-        typeof target?.path === 'string' && target.path.split('/').length % 2 === 0
-          ? read(target.path)
-          : target.get(),
-      getAll: async (...refs: any[]) => refs.map((ref) => read(ref.path)),
+      get: async (target: any) => {
+        if (typeof target?.path === 'string' && target.path.split('/').length % 2 === 0) {
+          readCount += 1
+          return read(target.path)
+        }
+        return target.get()
+      },
+      getAll: async (...refs: any[]) => {
+        readCount += 1
+        return refs.map((ref) => read(ref.path))
+      },
       set: (ref: any, data: Data, setOptions?: SetOptions) => {
         writes.push(setWrite(ref.path, data, setOptions))
         return api
@@ -558,7 +577,10 @@ export function queryFakeFirestore(
   const firestore: QueryFakeFirestore = {
     collection: (path: string) => collectionRef(path),
     doc: (path: string) => docRef(path),
-    getAll: async (...refs: any[]) => refs.map((ref) => snapshot(ref.path)),
+    getAll: async (...refs: any[]) => {
+      readCount += 1
+      return refs.map((ref) => snapshot(ref.path))
+    },
     runTransaction: async (body) => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const { writes, reads, api } = transactionOrBatch()
@@ -620,6 +642,10 @@ export function queryFakeFirestore(
     writes: () => writeCount,
     resetWrites: () => {
       writeCount = 0
+    },
+    reads: () => readCount,
+    resetReads: () => {
+      readCount = 0
     },
     setNow: (ms) => {
       nowMs = ms

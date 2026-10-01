@@ -402,12 +402,15 @@ describe('the marketplace no longer calls itself community (AGL-975)', () => {
     for (const exported of Object.values(entry?.register ?? {})) {
       // Each register surface has its own entry file: the API registrars in
       // `server.ts`, the boot declarations in `declarations.server.ts`, the
-      // console registrars in `plugin.ts`.
+      // plan figures the manifest generator compiles in
+      // `plan-entitlements.ts`, the console registrars in `plugin.ts`.
       const file = exported.endsWith('Api')
         ? 'server.ts'
         : exported.endsWith('ServerDeclarations')
           ? 'declarations.server.ts'
-          : 'plugin.ts'
+          : exported.endsWith('PlanEntitlements')
+            ? 'plan-entitlements.ts'
+            : 'plugin.ts'
       const source = readFileSync(
         join(REPO_ROOT, 'libs/plugins/marketplace/src/lib', file),
         'utf8',
