@@ -69,6 +69,12 @@ let emailLookups = 0
 let mockEmailIndex: Record<string, Record<string, any>> = {}
 /** Every owner assignment handed to the runtime helper (AGL-2618), in order. */
 let assignments: Record<string, any>[] = []
+/** The one lead the org holds (AGL-3458), keyed by its person key, or null. */
+let mockLead: { id: string; data: Record<string, any> } | null = null
+/** Every `update()` the run made on the lead, in order. */
+let leadUpdates: Record<string, any>[] = []
+/** Every LEAD owner assignment handed to the runtime helper, in order. */
+let leadAssignments: Record<string, any>[] = []
 /** What the helper answers the next assignment with. */
 let mockAssignment: Record<string, any> = {
   outcome: 'assigned',
@@ -90,6 +96,15 @@ jest.mock('@aglyn/tenant-runtime/assign-contact-owner', () => ({
   },
   reassignContactOwner: async (input: Record<string, any>) => {
     assignments.push(input)
+    return mockAssignment
+  },
+  // The lead's twin (AGL-3458): the owner lands on the lead, as the helper's
+  // own spec holds; here, what the step hands it.
+  reassignLeadOwner: async (input: Record<string, any>) => {
+    leadAssignments.push(input)
+    if (mockAssignment['outcome'] === 'assigned' && mockLead) {
+      mockLead.data['ownerUid'] = mockAssignment['ownerUid']
+    }
     return mockAssignment
   },
 }))
@@ -137,6 +152,16 @@ const contactRef = {
   },
 }
 
+/** The lead's document, recording what the run writes on it. */
+const leadRef = (id: string): any => ({
+  id,
+  get: async () =>
+    mockLead?.id === id ? docSnapshot(id, mockLead.data) : missingSnapshot(id),
+  update: async (patch: Record<string, any>) => {
+    leadUpdates.push(patch)
+  },
+})
+
 const collectionHandle = (path: string): any => {
   const query = (
     matchers: ((data: Record<string, any>) => boolean)[],
@@ -154,6 +179,7 @@ const collectionHandle = (path: string): any => {
             }
           : (data) => readField(data, field) === value,
       ]),
+    orderBy: () => query(matchers),
     limit: () => query(matchers),
     get: async () => {
       const matches = (data: Record<string, any>) =>
@@ -195,6 +221,16 @@ const collectionHandle = (path: string): any => {
     // is allocated before the send so it can ride the message (AGL-2615).
     doc: (given?: string) => {
       const id = given ?? `minted-${(minted += 1)}`
+      if (path.endsWith('leads')) {
+        return {
+          id,
+          get: async () =>
+            mockLead?.id === id
+              ? { ...docSnapshot(id, mockLead.data), ref: leadRef(id) }
+              : missingSnapshot(id),
+          update: async (patch: Record<string, any>) => leadRef(id).update(patch),
+        }
+      }
       return {
         id,
         get: async () =>
@@ -260,9 +296,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // `{ ref, query }`, with the query SCOPED the way the real helper scopes
   // it — a double that answered the unscoped collection would let the
   // email fallback reach a contact the site may not see.
-  orgDataQueryForHost: async () => ({
-    ref: collectionHandle(`orgs/${ORG_ID}/contacts`),
-    query: collectionHandle(`orgs/${ORG_ID}/contacts`).where(
+  orgDataQueryForHost: async (_hostId: string, name = 'contacts') => ({
+    ref: collectionHandle(`orgs/${ORG_ID}/${name}`),
+    query: collectionHandle(`orgs/${ORG_ID}/${name}`).where(
       'visibleTo',
       'array-contains-any',
       ['org', `host:${HOST_ID}`],
@@ -276,6 +312,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     summary: 'Sending as hello@site.mail.aglyn.app.',
     refusal: null,
   }),
+  // A transactional reply's suppression check (AGL-3458): every address is
+  // sendable here; `run-event-actions-flow.spec.ts` holds the refusal.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (host: Record<string, unknown> | undefined, hostId: string) =>
+    String(host?.['displayName'] ?? '') || hostId,
   flowEmailRefusal: async () => null,
   enrollListMember: async () => undefined,
   // The email row's reference and write (AGL-2615), faithful to the real
@@ -332,6 +373,9 @@ beforeEach(() => {
   mockActions = []
   mockActivity = []
   contactUpdates = []
+  mockLead = null
+  leadUpdates = []
+  leadAssignments = []
   added = {}
   emailLookups = 0
   mockEmailIndex = {}
@@ -406,7 +450,7 @@ describe('finding the person (claim 1)', () => {
 
     expect(contactUpdates).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
-    expect(mockActivity[0].action).toContain('no contact this site can see for ada@gmail.com')
+    expect(mockActivity[0].action).toContain('no contact or lead this site can see for ada@gmail.com')
   })
 
   it('falls back to the email when the id names nothing this site can see', async () => {
@@ -422,7 +466,7 @@ describe('finding the person (claim 1)', () => {
     expect(contactUpdates).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain(
-      'no contact this site can see for contact-1',
+      'no contact or lead this site can see for contact-1',
     )
   })
 
@@ -454,7 +498,7 @@ describe('finding the person (claim 1)', () => {
 
     expect(added['crmTasks']).toBeUndefined()
     expect(mockActivity[0].action).toContain(
-      'no contact this site can see for nobody@example.com',
+      'no contact or lead this site can see for nobody@example.com',
     )
   })
 })
@@ -907,6 +951,158 @@ describe('a sendEmail step addressed to the contact', () => {
     await run({ contactId: 'contact-1', email: 'ada@example.com' })
     expect(sentMessages).toHaveLength(1)
     expect(added['crmActivities']).toBeUndefined()
+  })
+})
+
+/**
+ * A PERSON WHO IS STILL A LEAD (AGL-3458).
+ *
+ * A lead-routed form files a lead and no contact, so "Welcome a new lead" —
+ * assign an owner, book a call, tag them — has only the lead to act on. Each
+ * step writes the lead's own equivalent; the contact path is untouched.
+ */
+describe('the CRM steps on a lead', () => {
+  const LEAD_KEY = personKey('lead@example.com')!
+
+  beforeEach(() => {
+    mockContact = null
+    mockLead = {
+      id: LEAD_KEY,
+      data: {
+        email: 'lead@example.com',
+        name: 'Lin Lead',
+        visibleTo: [`host:${HOST_ID}`],
+        sources: ['form:form-1'],
+      },
+    }
+  })
+
+  const lead = (step: Record<string, any>) => {
+    mockActions = [acting(step, 'lead')]
+    return runEventActions(HOST_ID, 'lead', {
+      leadId: LEAD_KEY,
+      email: 'lead@example.com',
+      formId: 'form-1',
+    })
+  }
+
+  it('rotates in an owner on the LEAD, through the lead assignment', async () => {
+    await lead({ type: 'assignContactOwner', roundRobin: true })
+
+    expect(assignments).toEqual([])
+    expect(leadAssignments).toEqual([
+      { hostId: HOST_ID, leadId: LEAD_KEY, assign: { roundRobin: true } },
+    ])
+    expect(mockActivity.at(-1)?.result).not.toBe('failed')
+  })
+
+  it('books the task on the lead, for the owner the step before it just chose', async () => {
+    mockActions = [
+      {
+        id: 'welcome',
+        data: {
+          name: 'Welcome a new lead',
+          enabled: true,
+          trigger: { event: 'lead' },
+          steps: [
+            { type: 'assignContactOwner', roundRobin: true },
+            { type: 'createCrmTask', title: 'Call the new lead', kind: 'call', dueInDays: 1 },
+          ],
+        },
+      },
+    ]
+
+    await runEventActions(HOST_ID, 'lead', { leadId: LEAD_KEY, email: 'lead@example.com' })
+
+    const task = added['crmTasks']?.[0]
+    expect(task).toMatchObject({
+      title: 'Call the new lead',
+      kind: 'call',
+      leadId: LEAD_KEY,
+      assigneeUid: 'uid-sam',
+      sourceActionId: 'welcome',
+      hostId: HOST_ID,
+    })
+    expect(task?.['contactId']).toBeUndefined()
+  })
+
+  it('tags the lead itself, with arrayUnion', async () => {
+    await lead({ type: 'addContactTag', tag: 'website' })
+
+    expect(leadUpdates[0]?.['tags']).toEqual({ __arrayUnion: ['website'] })
+    expect(contactUpdates).toEqual([])
+  })
+
+  it('logs an activity under the lead', async () => {
+    await lead({ type: 'logCrmActivity', kind: 'note', body: 'Came in through the draft form' })
+
+    expect(added['crmActivities']?.[0]).toMatchObject({ leadId: LEAD_KEY, kind: 'note' })
+  })
+
+  it('refuses a stage on a lead, and says why', async () => {
+    await lead({ type: 'setContactStage', lifecycleStage: 'customer' })
+
+    expect(leadUpdates).toEqual([])
+    expect(mockActivity.at(-1)?.action).toContain('a lead has no lifecycle stage')
+  })
+
+  it('finds the lead by its address when the event carries no leadId', async () => {
+    mockActions = [acting({ type: 'addContactTag', tag: 'website' })]
+
+    await run({ email: 'Lead@Example.com' })
+
+    expect(leadUpdates).toHaveLength(1)
+  })
+
+  it('treats a lead this site cannot see as nobody', async () => {
+    mockLead!.data['visibleTo'] = ['host:other-site']
+
+    await lead({ type: 'addContactTag', tag: 'website' })
+
+    expect(leadUpdates).toEqual([])
+    expect(mockActivity.at(-1)?.action).toContain('no contact or lead this site can see')
+  })
+
+  it('CONTROL: a contact for the address is still the one acted on', async () => {
+    mockContact = {
+      id: 'contact-1',
+      data: { email: 'lead@example.com', visibleTo: [`host:${HOST_ID}`], facets: {} },
+    }
+
+    await lead({ type: 'addContactTag', tag: 'website' })
+
+    expect(contactUpdates).toHaveLength(1)
+    expect(leadUpdates).toEqual([])
+  })
+
+  it('logs the welcome email on the lead’s timeline, its merge tags filled from the lead', async () => {
+    await lead({ type: 'sendEmail', subject: 'Thanks, {{firstName|there}}', body: 'Hi {{lead.firstName}}' })
+
+    expect(sentMessages[0]?.subject).toBe('Thanks, Lin')
+    expect(sentMessages[0]?.text).toContain('Hi Lin')
+    expect(added['crmActivities']?.[0]).toMatchObject({
+      kind: 'email',
+      leadId: LEAD_KEY,
+      subject: 'Thanks, Lin',
+    })
+  })
+})
+
+describe('an automation email’s merge tags, from the contact (AGL-3458)', () => {
+  it('fills both spellings from the contact as this site knows them, with fallbacks', async () => {
+    mockContact!.data['name'] = 'Ada Lovelace'
+    mockActions = [
+      acting({
+        type: 'sendEmail',
+        subject: 'Hi {{firstName|there}}',
+        body: 'Dear {{contact.firstName}} at {{contact.company|your company}}',
+      }),
+    ]
+
+    await run({ contactId: 'contact-1', email: 'ada@example.com' })
+
+    expect(sentMessages[0]?.subject).toBe('Hi Ada')
+    expect(sentMessages[0]?.text).toContain('Dear Ada at your company')
   })
 })
 

@@ -199,6 +199,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     declared: false,
   }),
   dataStorageRefusal: async () => null,
+  // A transactional reply's suppression check (AGL-3458): every address is
+  // sendable here; `run-event-actions-flow.spec.ts` holds the refusal.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (host: Record<string, unknown> | undefined, hostId: string) =>
+    String(host?.['displayName'] ?? '') || hostId,
   flowEmailRefusal: async () => null,
   hostSendingIdentity: async () => ({
     from: 'hello@site.mail.aglyn.app',

@@ -32,11 +32,15 @@ import {
   hostActionRecipeId,
   type HostActionStepType,
   hostEventLabel,
+  HOST_EVENT_PAYLOAD_KEYS,
   hostEventPayloadHint,
+  type HostEventType,
   isSiteEventType,
   pluginDocsHelp,
   SITE_EVENT_TYPES,
   type TriggerCombinator,
+  stepRunsAfterWait,
+  triggerFilterProblem,
   validateHostAction,
 } from '@aglyn/aglyn'
 import {
@@ -407,7 +411,15 @@ export function HostActionsCard(props: {
    * this picker only, and a reader who never opens it pays nothing.
    */
   const [formPickerOpened, setFormPickerOpened] = useState(false)
-  if (formPickFor && !formPickerOpened) setFormPickerOpened(true)
+  /*
+   * The same window serves the trigger's "Form is" condition (AGL-3458), for
+   * an event that carries the form's id — read once the editor is open on
+   * such an event, on the same latch, so it is never bought twice.
+   */
+  const eventCarriesFormId = Boolean(
+    draft && HOST_EVENT_PAYLOAD_KEYS[draft.trigger.event as HostEventType]?.includes('formId'),
+  )
+  if ((formPickFor || eventCarriesFormId) && !formPickerOpened) setFormPickerOpened(true)
   const { data: formRead } = useFirestoreCollection<any>(
     () =>
       formPickerOpened
@@ -430,6 +442,8 @@ export function HostActionsCard(props: {
     .map((form: any) => ({
       id: form.$id as string,
       name: (String(form.displayName ?? '').trim() || form.$id) as string,
+      // A lead-routed form makes leads, so its recipe listens for one (AGL-3458).
+      routesLeads: form.routing?.lead === true,
     }))
     .sort((a: { name: string }, b: { name: string }) =>
       a.name.localeCompare(b.name),
@@ -940,11 +954,19 @@ export function HostActionsCard(props: {
             ) : (
               <TextField
                 label="Filter (optional)"
-                placeholder={'path == "/pricing"'}
-                // What the expression — and the conditions below — can name
-                // for this event; nothing for an event whose payload is not
+                placeholder="subscribe"
+                // A comparison belongs in the conditions below: the filter's
+                // evaluator is arithmetic, and `path == "/pricing"` throws on
+                // every event, so it is refused here (AGL-3458). Otherwise,
+                // what the expression — and the conditions — can name for
+                // this event; nothing for an event whose payload is not
                 // written down, rather than a guess.
-                helperText={hostEventPayloadHint(draft?.trigger.event) ?? undefined}
+                error={Boolean(triggerFilterProblem(draft?.trigger.filter))}
+                helperText={
+                  triggerFilterProblem(draft?.trigger.filter) ??
+                  hostEventPayloadHint(draft?.trigger.event) ??
+                  undefined
+                }
                 value={draft?.trigger.filter ?? ''}
                 onChange={(event) =>
                   patch((previous) => ({
@@ -978,6 +1000,8 @@ export function HostActionsCard(props: {
                 conditionCombinator: combinator,
               }))
             }
+            // "Form is …", picked by id, where the event names the form (AGL-3458).
+            {...(eventCarriesFormId ? { formOptions } : {})}
           />
           {isSiteEventType(draft?.trigger.event ?? '') ? (
             // Site-event config (AGL-256): what/where the trigger watches.
@@ -1128,6 +1152,10 @@ export function HostActionsCard(props: {
                   steps: update(previous.steps),
                 }))
               }
+              replyContext={{
+                event: draft?.trigger.event,
+                afterWait: stepRunsAfterWait(draft?.steps, index),
+              }}
             />
           ))}
           <Button

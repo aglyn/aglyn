@@ -274,18 +274,21 @@ describe('the actions list is ceilinged and paged (AGL-2501)', () => {
     expect(Object.keys(mockCapsAsked).sort()).toEqual(['actions'])
   })
 
-  it('buys the six option lists on the click that opens the editor, not before', async () => {
+  it('buys the option lists on the click that opens the editor, not before', async () => {
     await mount()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
     })
     // Every picker at the shared editor ceiling plus its probe. Named
-    // individually because they are six independent queries: a check on the
+    // individually because they are independent queries: a check on the
     // KEYS alone would pass with one of them still asking for five hundred.
+    // `forms` is the trigger's "Form is" picker (AGL-3458): a new action
+    // starts on Form submitted, whose payload names the form.
     expect(Object.keys(mockCapsAsked).sort()).toEqual([
       'actions',
       'datasets',
       'emailCampaigns',
+      'forms',
       'lists',
       'overlays',
       'webhooks',
@@ -294,6 +297,7 @@ describe('the actions list is ceilinged and paged (AGL-2501)', () => {
     for (const picker of [
       'datasets',
       'emailCampaigns',
+      'forms',
       'lists',
       'overlays',
       'webhooks',

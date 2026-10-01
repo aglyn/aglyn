@@ -191,6 +191,10 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
       source,
       ...(request.marketingConsent ? { marketingConsent: true } : {}),
       ...disclosureOf(request),
+      // Filed under the surface's campaigns, as the contact door files a
+      // contact (AGL-3458): a lead-routed form in a campaign makes a lead
+      // in that campaign.
+      ...campaignsFiledUnder(request),
     },
     ...(campaignTouchOf(request.detail).campaignTouch
       ? { touch: campaignTouchOf(request.detail).campaignTouch }
@@ -212,16 +216,48 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
     await emitHostEvent(
       request.hostId,
       'lead',
-      {
-        email,
-        source,
+      leadCreatedPayload({
         leadId: key,
-        ...(request.identity.name ? { name: request.identity.name } : {}),
-      },
+        email,
+        name: request.identity.name,
+        source,
+        hostId: request.hostId,
+        formId,
+        campaignIds: campaignsFiledUnder(request).campaignIds,
+      }),
       cause ? { actor: cause } : {},
     )
   }
   return { ok: true, record: 'lead', leadId: key, created, sourceAdded: outcome.sourceAdded }
+}
+
+/**
+ * The `lead` payload (AGL-3458), as the scalars an event may carry — the
+ * shape `contactCreatedPayload` gives a new contact, so one condition reads
+ * the same on either event: `name` always present, empty when the door had
+ * none; `formId` only when a form filed the lead, so `notEmpty` on it reads
+ * as "came in through a form" and `equals` picks one form's people out; and
+ * `campaignIds` comma-joined, only when the surface is filed under any.
+ */
+export function leadCreatedPayload(lead: {
+  leadId: string
+  email: string
+  name?: string | null
+  source: string
+  hostId: string
+  formId?: string | null
+  campaignIds?: readonly string[]
+}): Record<string, string> {
+  const formId = String(lead.formId ?? '').trim()
+  return {
+    leadId: lead.leadId,
+    email: lead.email,
+    name: String(lead.name ?? '').trim(),
+    source: lead.source,
+    hostId: lead.hostId,
+    ...(formId ? { formId } : {}),
+    ...(lead.campaignIds?.length ? { campaignIds: lead.campaignIds.join(',') } : {}),
+  }
 }
 
 /** The capture as a CONTACT — what every capture was before the rule above. */

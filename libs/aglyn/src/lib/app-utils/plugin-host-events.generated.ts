@@ -31,10 +31,12 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
     "order": 10,
     "label": "Form submitted",
     "payloadKeys": [
+      "formId",
       "formName",
       "path",
       "and every submitted field by name"
-    ]
+    ],
+    "recipientActed": true
   },
   {
     "pluginId": "commerce",
@@ -43,7 +45,8 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
     "label": "Member signed up",
     "payloadKeys": [
       "email"
-    ]
+    ],
+    "recipientActed": true
   },
   {
     "pluginId": "commerce",
@@ -66,10 +69,15 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
     "order": 60,
     "label": "New lead",
     "payloadKeys": [
+      "leadId",
       "email",
+      "name",
       "source",
-      "leadId"
-    ]
+      "hostId",
+      "formId",
+      "campaignIds"
+    ],
+    "recipientActed": true
   },
   {
     "pluginId": "bookings",
@@ -80,7 +88,8 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
       "serviceName",
       "email",
       "startsAtMs"
-    ]
+    ],
+    "recipientActed": true
   },
   {
     "pluginId": "crm",

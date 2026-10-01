@@ -48,13 +48,19 @@ import {
   type HostActionStepType,
   hostEventLabel,
   isInteractionAttributeAllowed,
+  SEND_EMAIL_REPLY_INELIGIBLE_REASONS,
+  sendEmailIsTransactionalReply,
+  sendEmailReplyIneligibility,
   type TriggerConditionOp,
 } from '@aglyn/aglyn'
 import { automationPlaceholderIn } from '@aglyn/aglyn/app-utils/automation-placeholders'
 import {
+  FormControlLabel,
+  FormHelperText,
   IconButton,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -226,6 +232,53 @@ export function defaultStep(type: HostActionStepType): HostActionStep {
   }
 }
 
+/**
+ * The email step's TRANSACTIONAL REPLY switch (AGL-3458) — visible on every
+ * email step, so which kind of message it sends is never a guess.
+ *
+ * On by default for a step that qualifies: the trigger is the recipient's own
+ * form submission, booking or sign-up, nothing waits before the step, and it
+ * goes to the address the event carries. Such a reply leaves with no
+ * unsubscribe header and no unsubscribe link. A step that does not qualify
+ * shows the switch off and disabled, saying why, because it is a mailing and
+ * keeps its unsubscribe whatever it says.
+ */
+function SendEmailReplySwitch({
+  step,
+  context,
+  onChange,
+}: {
+  step: Extract<HostActionStep, { type: 'sendEmail' }>
+  context: { event: string | null | undefined; afterWait: boolean }
+  onChange: (transactional: boolean) => void
+}) {
+  const ineligible = sendEmailReplyIneligibility(step, context)
+  const on = sendEmailIsTransactionalReply(step, context)
+  return (
+    <Stack sx={{ pl: 3 }}>
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={on}
+            disabled={ineligible !== null}
+            onChange={(event) => onChange(event.target.checked)}
+          />
+        }
+        label="Transactional reply (no unsubscribe)"
+      />
+      <FormHelperText sx={{ mt: 0 }}>
+        {ineligible
+          ? `Sent as a mailing with an unsubscribe link: ${SEND_EMAIL_REPLY_INELIGIBLE_REASONS[ineligible]}.`
+          : on
+            ? 'Answers what this person just did, so it goes without an unsubscribe ' +
+              'link or header. Bounced, complaining and unsubscribed addresses are still skipped.'
+            : 'Sent as a mailing, with an unsubscribe link and header.'}
+      </FormHelperText>
+    </Stack>
+  )
+}
+
 /** A record a step's picker chooses from: what is stored, and what is read. */
 export interface AutomationStepPickerOption {
   id: string
@@ -270,7 +323,22 @@ export interface AutomationStepFieldsProps {
    * step and a function call is not one.
    */
   fields?: ReactNode
+  /**
+   * Where the step sits (AGL-3458): the automation's trigger event and
+   * whether a wait comes before it — what decides whether a `sendEmail` step
+   * can be a transactional reply. Absent, the email step shows no switch.
+   */
+  replyContext?: { event: string | null | undefined; afterWait: boolean }
 }
+
+/**
+ * What the email step says about its merge tags (AGL-3458): both spellings
+ * the run fills, from the contact or the lead the event is about.
+ */
+export const SEND_EMAIL_MERGE_HELP =
+  'Merge tags: {{firstName|there}}, {{name}}, {{email}}, or {{contact.firstName}}, ' +
+  '{{lead.company}}, {{site.name}} — filled from the contact or lead the event is ' +
+  'about; the text after | is used when there is no value.'
 
 /**
  * One step's row: its number, what it does, the fields that kind takes, and
@@ -285,6 +353,7 @@ export function AutomationStepFields({
   pickers,
   onSteps,
   fields,
+  replyContext,
 }: AutomationStepFieldsProps) {
   const {
     workflowOptions,
@@ -914,6 +983,7 @@ export function AutomationStepFields({
                 size="small"
                 multiline
                 maxRows={3}
+                helperText={SEND_EMAIL_MERGE_HELP}
                 sx={{ flex: 1 }}
               />
             </>
@@ -1385,6 +1455,20 @@ export function AutomationStepFields({
           {'×'}
         </IconButton>
       </Stack>
+      {!fields && step.type === 'sendEmail' && replyContext ? (
+        <SendEmailReplySwitch
+          step={step}
+          context={replyContext}
+          onChange={(transactional) =>
+            patch((previous) => ({
+              ...previous,
+              steps: previous.steps.map((s, index2) =>
+                index2 === index ? { ...s, transactional } : s,
+              ),
+            }))
+          }
+        />
+      ) : null}
       {/*
        * BRANCHING, as a second row under the step it belongs to.
        *

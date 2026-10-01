@@ -123,6 +123,7 @@ const collectionHandle = (path: string): any => ({
     collection: (name: string) => collectionHandle(`${path}/${id}/${name}`),
   }),
   where: () => collectionHandle(path),
+  orderBy: () => collectionHandle(path),
   limit: () => collectionHandle(path),
   get: async () => ({
     docs: path.endsWith('actions')

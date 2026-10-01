@@ -25,6 +25,7 @@ import {
   hasCrmMergeFields,
   normalizeCrmEmailTemplate,
   renderCrmMergeFields,
+  resolveAutomationEmailMerge,
   resolveCrmMergeFields,
   splitPersonName,
 } from './crm-email-templates'
@@ -209,5 +210,46 @@ describe('a stored template', () => {
     expect(crmEmailTemplateIsListed({ visibility: 'personal', ownerUid: 'u-1' }, 'u-1')).toBe(true)
     expect(crmEmailTemplateIsListed({ visibility: 'personal', ownerUid: 'u-1' }, 'u-2')).toBe(false)
     expect(crmEmailTemplateIsListed({ visibility: 'personal' }, undefined)).toBe(false)
+  })
+})
+
+describe('a fallback after a pipe (AGL-3458)', () => {
+  it('prints the fallback for a field with no value, and the value when there is one', () => {
+    expect(renderCrmMergeFields('Hi {{contact.firstName|there}}', {})).toBe('Hi there')
+    expect(renderCrmMergeFields('Hi {{contact.firstName|there}}', CONTEXT)).toBe('Hi Countess')
+    // A fallback the field used counts as filled, so the dialog does not warn.
+    expect(resolveCrmMergeFields('{{lead.title|friend}}', {}).unresolved).toEqual([])
+    expect(crmMergeFieldsIn('{{lead.title|friend}} {{lead.name}}')).toEqual(['lead.title', 'lead.name'])
+  })
+})
+
+describe('resolveAutomationEmailMerge (AGL-3458)', () => {
+  it('fills the campaign’s short tags from the contact as this site knows them', () => {
+    const merged = resolveAutomationEmailMerge(
+      'Hi {{firstName|there}} ({{name}}, {{email}}) — {{contact.title}} at {{site.name}}',
+      CONTEXT,
+    )
+    expect(merged.text).toBe(
+      'Hi Countess (Countess Ada Lovelace, ada@example.com) — Analyst at Acme Site',
+    )
+  })
+
+  it('falls back to the lead when nobody holds a contact for the person', () => {
+    const merged = resolveAutomationEmailMerge('Hi {{firstName|there}} at {{lead.company}}', {
+      lead: CONTEXT.lead,
+    })
+    expect(merged.text).toBe('Hi Charles at Analytical Engines')
+  })
+
+  it('falls back to the event’s own name and address, then to the tag’s fallback', () => {
+    expect(
+      resolveAutomationEmailMerge('Hi {{firstName|there}}, {{email}}', {}, { name: 'Grace Hopper', email: 'g@h.co' })
+        .text,
+    ).toBe('Hi Grace, g@h.co')
+    expect(resolveAutomationEmailMerge('Hi {{firstName|there}}', {}, null).text).toBe('Hi there')
+  })
+
+  it('never sends a tag as its braces', () => {
+    expect(resolveAutomationEmailMerge('{{frstName}}{{contact.nickname}}{{lead.x|y}}', {}).text).toBe('y')
   })
 })

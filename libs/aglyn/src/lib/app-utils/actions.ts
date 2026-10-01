@@ -35,7 +35,7 @@ import {
   type TriggerCombinator,
   validateInteraction,
 } from './site-interactions'
-import { HOST_EVENT_TYPES } from './host-events'
+import { HOST_EVENT_TYPES, hostEventRecipientActed } from './host-events'
 
 /**
  * Actions builder (AGL-148): HubSpot-style event → action automation on
@@ -91,6 +91,15 @@ type ServerActionStep = (
        * actions editor, which the executor resolves to the default topic.
        */
       topicId?: string
+      /**
+       * A TRANSACTIONAL REPLY (AGL-3458): the message answers what the
+       * recipient just did — submitted a form, booked, signed up — so it goes
+       * out with no unsubscribe header and no unsubscribe link, the way the
+       * Inbox's reply to a submission does. Only a step that qualifies can be
+       * one ({@link sendEmailReplyIneligibility}); absent reads as on for a
+       * qualifying step, and `false` sends it as a mailing anyway.
+       */
+      transactional?: boolean
     }
   | { type: 'notifyAdmins'; title: string; body?: string }
   | { type: 'enrollList'; listId?: string; listName?: string }
@@ -201,6 +210,72 @@ export function isFlowSuspendingStep(step: HostActionStep): boolean {
   return FLOW_SUSPENDING_STEP_TYPES.has(step.type)
 }
 
+/**
+ * Whether the step at `index` runs after a wait — a `wait` or a
+ * `waitForEvent` earlier in the list — and so on the business's schedule
+ * rather than as the immediate response to the event.
+ */
+export function stepRunsAfterWait(
+  steps: readonly HostActionStep[] | null | undefined,
+  index: number,
+): boolean {
+  return (steps ?? []).slice(0, Math.max(0, index)).some(isFlowSuspendingStep)
+}
+
+/**
+ * Why a `sendEmail` step cannot be a TRANSACTIONAL REPLY (AGL-3458), or
+ * `null` when it can.
+ *
+ * A reply answers what the recipient just did, so all four have to hold:
+ *
+ *  - `event` — the trigger is the recipient's own action: a form submitted,
+ *    a booking, a sign-up, a new lead (`recipientActed` on the event's
+ *    declaration). A stage change or a won deal is the business acting.
+ *  - `wait` — the step runs at once. After a wait it goes out on the
+ *    business's schedule, to somebody who did one thing once, which is a
+ *    mailing (`marketing-send.ts`).
+ *  - `topic` — the step names no email topic. A topic is a stream somebody
+ *    can leave, which only a mailing belongs to.
+ *  - `recipient` — it goes to the address the event carries, the person who
+ *    acted, rather than through `toField` to somebody else.
+ */
+export type SendEmailReplyIneligibility = 'event' | 'wait' | 'topic' | 'recipient'
+
+export function sendEmailReplyIneligibility(
+  step: Pick<Extract<HostActionStep, { type: 'sendEmail' }>, 'topicId' | 'toField'>,
+  context: { event: string | null | undefined; afterWait: boolean },
+): SendEmailReplyIneligibility | null {
+  if (!hostEventRecipientActed(context.event)) return 'event'
+  if (context.afterWait) return 'wait'
+  if (String(step.topicId ?? '').trim()) return 'topic'
+  const toField = String(step.toField ?? '').trim()
+  if (toField && toField !== 'email') return 'recipient'
+  return null
+}
+
+/** What the editor and the validator say about each — see {@link sendEmailReplyIneligibility}. */
+export const SEND_EMAIL_REPLY_INELIGIBLE_REASONS: Record<SendEmailReplyIneligibility, string> = {
+  event:
+    'only a reply to the person’s own form submission, booking or sign-up can be ' +
+    'transactional',
+  wait: 'an email after a wait is a mailing, so it keeps its unsubscribe link',
+  topic: 'an email in a topic is a mailing, so it keeps its unsubscribe link',
+  recipient: 'only an email to the person who acted can be a transactional reply',
+}
+
+/**
+ * Whether a `sendEmail` step goes out as a transactional reply: it qualifies,
+ * and its author did not switch the reply off. Absent is ON for a step that
+ * qualifies, so the auto-reply a site already sends to a form becomes one
+ * without anybody editing it.
+ */
+export function sendEmailIsTransactionalReply(
+  step: Pick<Extract<HostActionStep, { type: 'sendEmail' }>, 'topicId' | 'toField' | 'transactional'>,
+  context: { event: string | null | undefined; afterWait: boolean },
+): boolean {
+  return step.transactional !== false && sendEmailReplyIneligibility(step, context) === null
+}
+
 /** Longest tag an automation may write — the console's own tag field cap. */
 export const CONTACT_TAG_MAX_LENGTH = 60
 
@@ -235,7 +310,16 @@ export type CrmActionRecipeId = (typeof CRM_ACTION_RECIPE_IDS)[number]
 
 /** What a recipe is handed before it builds — today only the form `tagByForm` reads. */
 export interface CrmActionRecipeInput {
-  form?: { id: string; name: string }
+  form?: {
+    id: string
+    name: string
+    /**
+     * Whether the form files its people as LEADS (`routing.lead`, AGL-3458).
+     * Such a form makes a lead and no contact, so a recipe keyed on it
+     * listens for a new lead rather than a new contact.
+     */
+    routesLeads?: boolean
+  }
 }
 
 export interface CrmActionRecipe {
@@ -282,20 +366,29 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
     id: 'welcomeNewLead',
     title: 'Welcome a new lead',
     description:
-      'When a form makes a new contact: rotate in an owner, book a call for ' +
+      'When a form makes a new lead: rotate in an owner, book a call for ' +
       'tomorrow, send a thank-you, and tag them website.',
     /*
+     * ON A NEW LEAD (AGL-3458), because that is the record a lead-routed form
+     * makes. Since the one-record model (AGL-3232) a form with lead routing
+     * on files a LEAD and no contact, so this recipe — which listened for a
+     * new contact — never reached the people it is named for. `formId` is
+     * on the `lead` event exactly when a form filed the lead, so the
+     * condition keeps the recipe to forms and leaves a booking request to
+     * the booking's own confirmation. Every step below acts on the lead the
+     * event names when the workspace holds no contact for the person.
+     *
      * The owner first, because the task that follows names no assignee and
-     * so goes to whoever owns the contact when it is created — the member
-     * the rotation just chose. Round robin rather than a named member: a
-     * recipe cannot know who is on the team, and the pool under CRM →
-     * Settings is the one place that does. On a workspace with no pool the
-     * step fails and the run continues, so the call, the email and the tag
-     * still land and the run history says who was not assigned.
+     * so goes to whoever owns the lead when it is created — the member the
+     * rotation just chose. Round robin rather than a named member: a recipe
+     * cannot know who is on the team, and the pool under CRM → Settings is
+     * the one place that does. On a workspace with no pool the step fails
+     * and the run continues, so the call, the email and the tag still land
+     * and the run history says who was not assigned.
      *
      * The email comes before any wait, which makes it an immediate reply to
-     * what the visitor just did — transactional, sent from the org's own
-     * identity, to the address the event carries.
+     * what the visitor just did — a transactional reply, sent from the org's
+     * own identity to the address the event carries, with no unsubscribe.
      *
      * Its words promise no response time. The org hub installs this recipe
      * into a site without its editor opening, so the business never reads
@@ -306,8 +399,8 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
       recipe: 'welcomeNewLead',
       name: 'Welcome a new lead',
       trigger: {
-        event: 'contactCreated',
-        conditions: [{ field: 'source', op: 'equals', value: 'form' }],
+        event: 'lead',
+        conditions: [{ field: 'formId', op: 'notEmpty' }],
         combinator: 'and',
       },
       steps: [
@@ -322,8 +415,8 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
           type: 'sendEmail',
           subject: 'Thanks for getting in touch',
           body:
-            'Thanks for reaching out. We have your message and will reply ' +
-            'to this email address.',
+            'Hi {{firstName|there}},\n\nThanks for reaching out. We have your ' +
+            'message and will reply to this email address.',
         },
         { type: 'addContactTag', tag: 'website' },
       ],
@@ -404,16 +497,21 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
     id: 'tagByForm',
     title: 'Tag by form',
     description:
-      'When a form you pick makes a new contact: tag them with the form’s ' +
-      'name.',
+      'When a form you pick makes a new lead or contact: tag them with the ' +
+      'form’s name.',
     needs: 'form',
+    /*
+     * The event follows the form's routing (AGL-3458): a lead-routed form
+     * makes a lead and no contact, so keyed on `contactCreated` it would
+     * never fire. Both events carry `formId` when a form made the record.
+     */
     build: (input) => {
       const form = input?.form
       return {
         recipe: 'tagByForm',
         name: form ? `Tag ${form.name.trim()} submissions` : 'Tag by form',
         trigger: {
-          event: 'contactCreated',
+          event: form?.routesLeads ? 'lead' : 'contactCreated',
           conditions: [{ field: 'formId', op: 'equals', value: form?.id ?? '' }],
           combinator: 'and',
         },
@@ -625,9 +723,26 @@ export function validateHostAction(action: HostAction): string | null {
   }
   // The trigger, the step guards, the client steps and every declared step's
   // pick are the platform's to check; the server steps are this module's.
-  return validateInteraction(action, {
+  const problem = validateInteraction(action, {
     validateStep: (step, label) => serverStepProblem(step as HostActionStep, label),
   })
+  if (problem) return problem
+  /*
+   * A step SWITCHED to a transactional reply has to be one (AGL-3458). The
+   * executor would send it as a mailing anyway — the unsubscribe is never
+   * dropped from mail that is not a reply — so saving the switch would show
+   * an author a promise the run does not keep.
+   */
+  const steps = action.steps ?? []
+  for (const [index, step] of steps.entries()) {
+    if (step.type !== 'sendEmail' || step.transactional !== true) continue
+    const why = sendEmailReplyIneligibility(step, {
+      event: action.trigger?.event,
+      afterWait: stepRunsAfterWait(steps, index),
+    })
+    if (why) return `Step ${index + 1}: ${SEND_EMAIL_REPLY_INELIGIBLE_REASONS[why]}`
+  }
+  return null
 }
 
 /**

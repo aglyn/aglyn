@@ -880,13 +880,25 @@ export async function POST(request: Request): Promise<Response> {
     })
     const submittedEmail =
       typeof sanitizedFields['email'] === 'string' ? sanitizedFields['email'] : ''
+    /*
+     * `formId` is the VERIFIED form's id (AGL-3458), the way `contactCreated`
+     * carries it: a condition keyed on it survives the form being renamed,
+     * where one on `formName` silently stops matching. It is written last
+     * and only from the form this route read, so a submitted field that
+     * calls itself `formId` can neither claim another form's automations
+     * nor stand in for a form the site does not have.
+     */
+    const submittedFields = Object.fromEntries(
+      Object.entries(sanitizedFields).filter(([key]) => key !== 'formId'),
+    )
     const { alerts } = await emitHostEvent(
       hostId,
       'formSubmission',
       {
         formName: resolvedFormName,
         path: String(path ?? '').slice(0, 500),
-        ...sanitizedFields,
+        ...submittedFields,
+        ...(form ? { formId: form.id } : {}),
       },
       // The visitor who submitted, by the address they typed if any (AGL-3376).
       { actor: { kind: 'visitor', ...(submittedEmail ? { email: submittedEmail } : {}) } },

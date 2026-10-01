@@ -90,11 +90,13 @@ export const ORG_AUTOMATION_API_ROUTES = {
 export const ORG_AUTOMATIONS_MAX = 100
 
 /**
- * How many org automations one event may run on one site: the same fan-out
- * bound the site's own actions take (`MAX_TRIGGERED_ACTIONS`), counted
- * separately so the two cannot crowd each other out of the query.
+ * How many org automations one event may run on one site: every one the
+ * organization may hold (AGL-3458). The query asks for switched-on ones only
+ * — a deletion switches an automation off — so nothing that cannot run takes
+ * a place, and a site's own actions are read by a query of their own, so the
+ * two cannot crowd each other out.
  */
-export const MAX_TRIGGERED_ORG_AUTOMATIONS = 10
+export const MAX_TRIGGERED_ORG_AUTOMATIONS = ORG_AUTOMATIONS_MAX
 
 /**
  * The run history's target type for a run of an org automation, on the

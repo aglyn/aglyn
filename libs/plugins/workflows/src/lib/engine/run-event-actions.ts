@@ -17,6 +17,7 @@
 
 import {
   ACTION_MAX_STEPS,
+  ACTIONS_MAX_PER_HOST,
   checkEntitlement,
   consentGroupForHost,
   planLabelGrantingFeature,
@@ -46,7 +47,9 @@ import {
   normalizeTriggerConditions,
   prepareDatasetRecordWrite,
   type PluginJobHostGate,
+  resolveAutomationEmailMerge,
   resolveOrgEntitlements,
+  sendEmailIsTransactionalReply,
 } from '@aglyn/aglyn/server'
 import {
   isDeferrableSendResult,
@@ -57,9 +60,11 @@ import {
 import {
   dataStorageRefusal,
   enrollListMember,
+  filterSendableForHost,
   firebaseAdmin,
   flowEmailRefusal,
   getOrgForHost,
+  hostDisplayName,
   hostSendingIdentity,
   meterHostEmail,
   notifyHostManagers,
@@ -96,6 +101,7 @@ import {
 import { describeStepOutcome } from '../model/step-outcomes'
 import { type HostWebhook, WEBHOOK_URL_PATTERN } from '../model/webhooks'
 import { eventRunSuspension } from './site-suspension'
+import { triggeredDocsForEvent } from './triggered-docs'
 import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
@@ -109,6 +115,7 @@ import {
   sweepDueFlowEnrollments,
 } from './flow-enrollments'
 import {
+  automationEmailMergeContext,
   isCrmActionStep,
   logCrmEmailActivity,
   prepareCrmEmailActivity,
@@ -143,8 +150,24 @@ import { runTriggeredByFields } from './run-trigger-actor'
 // By path, not the barrel: only a server run asks.
 import { pluginServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 
-/** Bounded fan-out per event, mirroring the workflow runner. */
-const MAX_TRIGGERED_ACTIONS = 10
+/**
+ * Every live, switched-on action a site holds for an event runs, in
+ * document-id order (AGL-3458) — up to the most live actions a site may hold
+ * at all. See `triggered-docs.ts`.
+ */
+const MAX_TRIGGERED_ACTIONS = ACTIONS_MAX_PER_HOST
+
+/** The live, switched-on actions a site holds for `event`, in document-id order. */
+export function liveActionsForEvent(
+  hostRef: FirebaseFirestore.DocumentReference,
+  event: string,
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  return triggeredDocsForEvent(hostRef.collection('actions'), event, {
+    keep: (doc) => !doc.get('deletedAt') && doc.get('enabled') !== false,
+    max: MAX_TRIGGERED_ACTIONS,
+    maxReads: MAX_TRIGGERED_ACTIONS * 4,
+  })
+}
 
 export interface ActionRunEnv {
   hostId: string
@@ -954,6 +977,24 @@ async function runServerStep(
        */
       const scope = enrollmentRef ? 'scheduled' : 'immediate'
       /*
+       * A TRANSACTIONAL REPLY (AGL-3458) — the answer to what the recipient
+       * just did: the run started on their own form submission, booking or
+       * sign-up, this step runs at once, names no topic, and goes to the
+       * address the event carries. Such a message is not a mailing, so it
+       * leaves with no unsubscribe header and no unsubscribe link, and asks
+       * no marketing-consent question — the reply the Inbox sends to a
+       * submission is the same kind of message, and CAN-SPAM exempts both.
+       * What it keeps is the suppression check below: a hard bounce, a spam
+       * complaint or a person who asked this site to stop is not mailed by
+       * anything. The author can switch a qualifying step back to a mailing
+       * (`transactional: false`); a step that does not qualify is a mailing
+       * whatever it says.
+       */
+      const transactional = sendEmailIsTransactionalReply(step, {
+        event,
+        afterWait: Boolean(enrollmentRef),
+      })
+      /*
        * The stream this message belongs to, resolved ONCE and read twice:
        * the gate below filters on it, and it rides the `marketing` context
        * so the opt-out link the seam mints names it. Without that the
@@ -961,28 +1002,61 @@ async function runServerStep(
        * the recipient has to find the one they were trying to leave.
        */
       const topicId = flowSubscriptionTopicId(step.topicId, scope)
-      const gate = await flowEmailRefusal({
+      const consentGroup = consentGroupForHost(
+        (env.org as Record<string, unknown> | null) ?? null,
         hostId,
-        email: to,
-        topicId: step.topicId ?? null,
-        org: env.org,
-        scope,
-      })
-      if (gate) {
-        return failed(
-          gate !== 'consent-withheld'
-            ? 'the recipient has left this email topic'
-            : // Named by what was actually asked. An immediate step refuses
-              // only on a stated refusal, so reporting it as a missing
-              // record would send a merchant looking for a consent field to
-              // fill in that would change nothing.
-              enrollmentRef
-              ? 'the recipient has no marketing consent record on this site'
-              : 'the recipient has declined marketing from this site',
-        )
+      )
+      if (transactional) {
+        // Both suppression lists — the platform's bounces and complaints, and
+        // this site's (and its consent group's) opt-outs — fail CLOSED.
+        const sendable = await filterSendableForHost(hostId, [to], undefined, consentGroup)
+        if (!sendable.length) return failed('the recipient is unsubscribed or suppressed')
+      } else {
+        const gate = await flowEmailRefusal({
+          hostId,
+          email: to,
+          topicId: step.topicId ?? null,
+          org: env.org,
+          scope,
+        })
+        if (gate) {
+          return failed(
+            gate !== 'consent-withheld'
+              ? 'the recipient has left this email topic'
+              : // Named by what was actually asked. An immediate step refuses
+                // only on a stated refusal, so reporting it as a missing
+                // record would send a merchant looking for a consent field to
+                // fill in that would change nothing.
+                enrollmentRef
+                ? 'the recipient has no marketing consent record on this site'
+                : 'the recipient has declined marketing from this site',
+          )
+        }
       }
-      const emailSubject = String(step.subject ?? '').slice(0, 200)
-      const emailText = String(step.body ?? '').slice(0, 5000)
+      /*
+       * THE WORDS AS AUTHORED, and as sent (AGL-3458). The merge tags — the
+       * campaign's `{{firstName|there}}` and the CRM's `{{contact.firstName}}`
+       * — are filled from the contact or the lead the run is about, else from
+       * the name and address the event carried. The phishing screen below
+       * reads the AUTHORED words: it judges what the business wrote, once per
+       * automation, not one copy per recipient.
+       */
+      const authoredSubject = String(step.subject ?? '').slice(0, 200)
+      const authoredText = String(step.body ?? '').slice(0, 5000)
+      const mergeContext = await automationEmailMergeContext(hostId, payload, {
+        name: hostDisplayName(hostData ?? undefined, hostId),
+      })
+      const mergePerson = {
+        email: to,
+        name: String(payload['name'] ?? payload['fullName'] ?? '').trim(),
+      }
+      const emailSubject = resolveAutomationEmailMerge(authoredSubject, mergeContext, mergePerson)
+        .text.replace(/[\r\n]+/g, ' ')
+        .slice(0, 200)
+      const emailText = resolveAutomationEmailMerge(authoredText, mergeContext, mergePerson).text.slice(
+        0,
+        5000,
+      )
       /*
        * THE PHISHING SCREEN, for a workspace in its first fortnight
        * (AGL-3356). The incident's second message was exactly this step: a
@@ -1006,8 +1080,8 @@ async function runServerStep(
         orgId: env.orgId,
         org: (env.org as Record<string, unknown> | null) ?? null,
         host: hostData,
-        subject: emailSubject,
-        bodies: [emailText],
+        subject: authoredSubject,
+        bodies: [authoredText],
       })
       if (screened.outcome === 'rejected') {
         return failed(
@@ -1021,10 +1095,6 @@ async function runServerStep(
             `another business (${screened.reference})`,
         )
       }
-      const consentGroup = consentGroupForHost(
-        (env.org as Record<string, unknown> | null) ?? null,
-        hostId,
-      )
       /*
        * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
        * the event is about is logged on that contact's timeline as an
@@ -1077,14 +1147,19 @@ async function runServerStep(
         // The consent group comes off the org the run already holds, so the
         // gate honors an unsubscribe from any site of a declared group —
         // the sender this site mails as — and the org's confirmation switch,
-        // at no extra read.
-        marketing: {
-          hostId,
-          siteBase,
-          topicId,
-          consentHostIds: consentGroup.hostIds,
-          consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
-        },
+        // at no extra read. A transactional reply is not marketing and
+        // carries none of it: no `List-Unsubscribe`, no opt-out line.
+        ...(transactional
+          ? {}
+          : {
+              marketing: {
+                hostId,
+                siteBase,
+                topicId,
+                consentHostIds: consentGroup.hostIds,
+                consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
+              },
+            }),
       })
       /*
        * DEFERRED IS NOT FAILED, and it is not SENT either.
@@ -1674,6 +1749,46 @@ async function suspendFlow(
 const SKIP_LOG_EXCLUDED_EVENTS = new Set(['pageView'])
 
 /**
+ * Whether an action's unmet conditions only say it is ANOTHER FORM'S
+ * (AGL-3458) — the case that is noise rather than an answer.
+ *
+ * A site with one auto-reply per form keyed on `formId equals …` wrote a
+ * `Skipped` row for every other form's reply on every submission: eight rows
+ * a fill on a nine-form site, burying the one row that explains a real miss.
+ * A form picked by id cannot be mistyped, so its mismatch against a
+ * submission that names a DIFFERENT form says only "not this form", and it
+ * is not recorded. Every other unmet condition still is: a hand-typed
+ * `formName`, a field condition, a submission that names no form at all.
+ *
+ * With `and`, one such clause is the whole answer; with `or`, only when every
+ * clause is about which form it was — `formId` or `formName` equals — since
+ * any other clause could have been the one that was meant to match.
+ */
+export function conditionsNameAnotherForm(
+  trigger: HostAction['trigger'] | null | undefined,
+  payload: HostEventPayload,
+): boolean {
+  const submitted = String(payload['formId'] ?? '').trim()
+  if (!submitted) return false
+  const clauses = normalizeTriggerConditions(trigger)
+  const another = (clause: { field?: string; op?: string; value?: string }) =>
+    clause.field?.trim() === 'formId' &&
+    clause.op === 'equals' &&
+    Boolean(clause.value?.trim()) &&
+    clause.value?.trim() !== submitted
+  if (trigger?.combinator === 'or') {
+    return (
+      clauses.some(another) &&
+      clauses.every(
+        (clause) =>
+          clause.op === 'equals' && ['formId', 'formName'].includes(clause.field?.trim() ?? ''),
+      )
+    )
+  }
+  return clauses.some(another)
+}
+
+/**
  * Writes the `Skipped` row (AGL-2171): which condition stopped the run,
  * so the answer to "why didn't it fire?" is in the same place as every
  * run that did.
@@ -1751,14 +1866,7 @@ export async function runEventActions(
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const triggered = await hostRef
-      .collection('actions')
-      .where('trigger.event', '==', event)
-      .limit(MAX_TRIGGERED_ACTIONS)
-      .get()
-    const actions = triggered.docs.filter(
-      (doc) => !doc.get('deletedAt') && doc.get('enabled') !== false,
-    )
+    const actions = await liveActionsForEvent(hostRef, event)
     /*
      * THE ORGANIZATION'S AUTOMATIONS placed on this site and not paused here.
      *
@@ -1858,7 +1966,9 @@ export async function runEventActions(
         // common support question about automations — had no answer
         // anywhere in the product, while `/product/workflows` advertises
         // an amber `Skipped` row that answers it.
-        await recordSkippedRun(hostRef, doc.id, action, event)
+        if (!conditionsNameAnotherForm(action.trigger, payload)) {
+          await recordSkippedRun(hostRef, doc.id, action, event)
+        }
         continue
       }
       executed += 1
@@ -1881,7 +1991,9 @@ export async function runEventActions(
       if (
         !evaluateTriggerConditions(automation.trigger, { event, ...payload })
       ) {
-        await recordSkippedRun(hostRef, doc.id, automation, event, 'orgAutomation')
+        if (!conditionsNameAnotherForm(automation.trigger, payload)) {
+          await recordSkippedRun(hostRef, doc.id, automation, event, 'orgAutomation')
+        }
         continue
       }
       executed += 1

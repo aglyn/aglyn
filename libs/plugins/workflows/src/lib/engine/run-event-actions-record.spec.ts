@@ -74,6 +74,7 @@ const collectionHandle = (path: string): any => ({
     collection: (name: string) => collectionHandle(`${path}/${id}/${name}`),
   }),
   where: () => collectionHandle(path),
+  orderBy: () => collectionHandle(path),
   limit: () => collectionHandle(path),
   get: async () => ({
     docs: path.endsWith('actions')
@@ -109,6 +110,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     summary: 'Sending as hello@site.mail.aglyn.app.',
     refusal: null,
   }),
+  // A transactional reply's suppression check (AGL-3458): every address is
+  // sendable here; `run-event-actions-flow.spec.ts` holds the refusal.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  hostDisplayName: (host: Record<string, unknown> | undefined, hostId: string) =>
+    String(host?.['displayName'] ?? '') || hostId,
   /*
    * The consent + topic gate, permissive. This file is about what a run
    * RECORDS, and every `sendEmail` step now asks this one — an immediate step

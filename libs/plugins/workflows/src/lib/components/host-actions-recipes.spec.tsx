@@ -144,14 +144,18 @@ describe('the Recipes menu (AGL-2626)', () => {
         'Started from the “Welcome a new lead” recipe — change anything, then save.',
       ),
     ).toBeTruthy()
-    // The trigger and its condition, as the recipe wrote them.
-    expect(within(dialog).getByDisplayValue('contactCreated')).toBeTruthy()
+    // The trigger and its condition, as the recipe wrote them: a NEW LEAD a
+    // form filed (AGL-3458), which is what a lead-routed form makes.
+    expect(within(dialog).getByDisplayValue('lead')).toBeTruthy()
+    expect(within(dialog).getByDisplayValue('notEmpty')).toBeTruthy()
     expect(
       (within(dialog).getByLabelText('Field') as HTMLInputElement).value,
-    ).toBe('source')
+    ).toBe('formId')
+    // The email is a transactional reply, said on the step (AGL-3458).
     expect(
-      (within(dialog).getByLabelText('Value') as HTMLInputElement).value,
-    ).toBe('form')
+      (within(dialog).getByLabelText('Transactional reply (no unsubscribe)') as HTMLInputElement)
+        .checked,
+    ).toBe(true)
     // The four steps, in order, with the owner step on the rotation.
     expect(within(dialog).getByDisplayValue('roundRobin')).toBeTruthy()
     expect(
@@ -197,12 +201,11 @@ describe('the Recipes menu (AGL-2626)', () => {
     expect(
       (within(dialog).getByLabelText('Name') as HTMLInputElement).value,
     ).toBe('Tag Contact us submissions')
-    expect(
-      (within(dialog).getByLabelText('Field') as HTMLInputElement).value,
-    ).toBe('formId')
-    expect(
-      (within(dialog).getByLabelText('Value') as HTMLInputElement).value,
-    ).toBe('form-contact')
+    // `formId equals …` reads back as "Form is" with the form picked by id
+    // (AGL-3458), not as a field and a value to type.
+    expect(within(dialog).getByDisplayValue('formIs')).toBeTruthy()
+    expect(within(dialog).getByDisplayValue('form-contact')).toBeTruthy()
+    expect(within(dialog).getByRole('combobox', { name: 'Form' }).textContent).toBe('Contact us')
     expect(
       (within(dialog).getByLabelText('Tag') as HTMLInputElement).value,
     ).toBe('Contact us')

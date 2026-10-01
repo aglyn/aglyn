@@ -48,6 +48,9 @@ let flowGateRefusal: string | null = null
 /** Every question the consent + topic gate was asked. */
 let flowGateCalls: Record<string, any>[] = []
 
+/** Addresses a transactional reply's suppression check refuses (AGL-3458). */
+let mockUnsendable: string[] | null = null
+
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldValue: {
@@ -118,6 +121,7 @@ const collectionHandle = (path: string): any => ({
     }
   },
   where: () => collectionHandle(path),
+  orderBy: () => collectionHandle(path),
   limit: () => collectionHandle(path),
   get: async () => {
     if (path.endsWith('actions')) {
@@ -188,6 +192,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: async () =>
     mockOrg ? { orgId: 'org-1', org: mockOrg } : null,
+  // A transactional reply's suppression check (AGL-3458): every address is
+  // sendable unless a case says otherwise.
+  filterSendableForHost: async (_hostId: string, emails: string[]) =>
+    mockUnsendable ? emails.filter((email) => !mockUnsendable.includes(email)) : emails,
+  hostDisplayName: (host: Record<string, unknown> | undefined, hostId: string) =>
+    String(host?.['displayName'] ?? '') || hostId,
   // The consent + topic gate is instrumented rather than stubbed to a
   // constant: "was it asked, and with what" is itself an assertion here.
   flowEmailRefusal: async (options: Record<string, any>) => {
@@ -656,8 +666,11 @@ describe('an email sent from a flow is still marketing mail', () => {
      * a stated refusal has to stop it. Which of those two questions gets
      * asked is the whole assertion, and `email-flow-gate.spec.ts` owns what
      * each one answers.
+     *
+     * Switched to a MAILING by its author (`transactional: false`, AGL-3458):
+     * left on, the same step is a transactional reply, below.
      */
-    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a' }])
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a', transactional: false }])
 
     await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
 
@@ -670,13 +683,123 @@ describe('an email sent from a flow is still marketing mail', () => {
   })
 
   it('does not send an immediate reply to somebody who declined', async () => {
-    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a' }])
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a', transactional: false }])
     flowGateRefusal = 'consent-withheld'
 
     await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
 
     expect(sent).toEqual([])
     expect(mockActivity.at(-1)?.action).toContain('declined marketing')
+  })
+})
+
+describe('a transactional reply to the person’s own submission (AGL-3458)', () => {
+  beforeEach(() => {
+    mockUnsendable = null
+  })
+
+  it('goes out with no unsubscribe: no marketing context, so no header and no opt-out line', async () => {
+    // An auto-reply to the form the visitor just filled in — the step every
+    // site writes, left as written.
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'We have your message' }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(sent).toHaveLength(1)
+    // `marketing` is what makes the seam add `List-Unsubscribe` and the
+    // "Choose which emails you get, or unsubscribe" line.
+    expect(sent[0].marketing).toBeUndefined()
+    expect(sent[0].headers?.['List-Unsubscribe']).toBeUndefined()
+    // Not a mailing, so no marketing-consent question is asked of it.
+    expect(flowGateCalls).toEqual([])
+    expect(sent[0].priority).toBeUndefined()
+  })
+
+  it('still skips a suppressed address — a bounce, a complaint, an opt-out', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a' }])
+    mockUnsendable = ['a@b.co']
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(sent).toEqual([])
+    expect(mockActivity.at(-1)?.action).toContain('unsubscribed or suppressed')
+  })
+
+  it('is a reply to a new lead and to a booking too, both the person’s own act', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a' }], {
+      trigger: { event: 'lead' },
+    })
+
+    await runEventActions(HOST_ID, 'lead', { email: 'a@b.co', leadId: 'k' })
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0].marketing).toBeUndefined()
+  })
+
+  it('keeps the unsubscribe when its author switched the reply off', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a', transactional: false }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(sent[0].marketing).toEqual(expect.objectContaining({ hostId: HOST_ID }))
+  })
+
+  it('keeps the unsubscribe on a step that names an email topic', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Thanks', body: 'a', topicId: 'promotions' }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(sent[0].marketing).toEqual(expect.objectContaining({ topicId: 'promotions' }))
+  })
+
+  it('keeps the unsubscribe on an event that is not the recipient’s own act', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Moved', body: 'a' }], {
+      trigger: { event: 'contactStageChanged' },
+    })
+
+    await runEventActions(HOST_ID, 'contactStageChanged', { email: 'a@b.co' })
+
+    expect(sent[0].marketing).toEqual(expect.objectContaining({ hostId: HOST_ID }))
+  })
+
+  it('keeps the unsubscribe after a wait, whatever a stored step says', async () => {
+    // A document written around the editor's validator: the run still
+    // never drops the unsubscribe from mail on the business's schedule.
+    seedAction([
+      { type: 'wait', delayMinutes: 60 },
+      { type: 'sendEmail', subject: 'Day one', body: 'a', transactional: true },
+    ])
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+    const [id, enrollment] = onlyEnrollment()
+
+    await resumeFlowEnrollment(enrollment, enrollmentRef(id), { nowMs: NOW })
+
+    expect(sent[0].marketing).toEqual(expect.objectContaining({ hostId: HOST_ID }))
+    expect(sent[0].priority).toBe('bulk')
+  })
+})
+
+describe('the merge tags in an automation’s email (AGL-3458)', () => {
+  it('fills the campaign’s short tags from the event’s name, with the fallback for a blank', async () => {
+    seedAction([
+      { type: 'sendEmail', subject: 'Hi {{firstName|there}}', body: 'Dear {{name|friend}}, {{email}}' },
+    ])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co', name: 'Ada Lovelace' })
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'c@d.co' })
+
+    expect(sent.map((message) => message.subject)).toEqual(['Hi Ada', 'Hi there'])
+    expect(sent[0].text).toContain('Dear Ada Lovelace, a@b.co')
+    expect(sent[1].text).toContain('Dear friend, c@d.co')
+  })
+
+  it('never sends a tag it cannot fill as its braces', async () => {
+    seedAction([{ type: 'sendEmail', subject: 'Hello', body: 'Hi {{frstName}} {{contact.firstName|there}}' }])
+
+    await runEventActions(HOST_ID, 'formSubmission', { email: 'a@b.co' })
+
+    expect(sent[0].text).not.toContain('{{')
+    expect(sent[0].text).toContain('Hi  there')
   })
 })
 

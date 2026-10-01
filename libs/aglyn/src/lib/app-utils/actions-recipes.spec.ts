@@ -33,6 +33,7 @@ import {
   hostActionDocument,
   hostActionRecipeId,
   hostActionStepsForClient,
+  sendEmailIsTransactionalReply,
   STALE_LEAD_WAIT_MINUTES,
   validateHostAction,
 } from './actions'
@@ -203,12 +204,16 @@ describe('hostActionDocument (AGL-2639)', () => {
 describe('Welcome a new lead', () => {
   const action = crmActionRecipe('welcomeNewLead')!.build()
 
-  it('starts on a form capture, rotates in an owner FIRST, then books the call, thanks them and tags them', () => {
+  it('starts on a new lead a form filed, rotates in an owner FIRST, then books the call, thanks them and tags them', () => {
+    // A lead-routed form makes a LEAD and no contact (AGL-3232), so the
+    // recipe named for it listens for one (AGL-3458) — keyed to forms by the
+    // `formId` the `lead` event carries only when a form filed the lead.
     expect(action.trigger).toEqual({
-      event: 'contactCreated',
-      conditions: [{ field: 'source', op: 'equals', value: 'form' }],
+      event: 'lead',
+      conditions: [{ field: 'formId', op: 'notEmpty' }],
       combinator: 'and',
     })
+    expect(HOST_EVENT_PAYLOAD_KEYS.lead).toContain('formId')
     expect(action.steps.map((step) => step.type)).toEqual([
       'assignContactOwner',
       'createCrmTask',
@@ -232,6 +237,12 @@ describe('Welcome a new lead', () => {
     expect(email.subject.trim()).not.toBe('')
     expect(email.body.trim()).not.toBe('')
     expect('toField' in email).toBe(false)
+    // A transactional reply, with no unsubscribe (AGL-3458), and greeting
+    // the person by name with a fallback for one who gave none.
+    expect(
+      sendEmailIsTransactionalReply(email, { event: action.trigger.event, afterWait: false }),
+    ).toBe(true)
+    expect(email.body).toContain('{{firstName|there}}')
   })
 })
 
@@ -302,6 +313,17 @@ describe('Tag by form', () => {
       combinator: 'and',
     })
     expect(action.steps).toEqual([{ type: 'addContactTag', tag: 'Contact us' }])
+  })
+
+  it('listens for a new LEAD when the picked form routes to leads (AGL-3458)', () => {
+    // Such a form makes a lead and no contact, so on `contactCreated` the
+    // recipe would never fire.
+    const action = recipe.build({ form: { ...FORM, routesLeads: true } })
+    expect(action.trigger.event).toBe('lead')
+    expect(action.trigger.conditions).toEqual([
+      { field: 'formId', op: 'equals', value: 'form-contact' },
+    ])
+    expect(validateHostAction(action)).toBeNull()
   })
 
   it('cuts a long form name to the tag cap', () => {

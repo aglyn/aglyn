@@ -32,6 +32,10 @@ import {
   isSiteEventType,
   normalizeTriggerConditions,
   SCROLL_TO_MAX_OFFSET_PX,
+  sendEmailIsTransactionalReply,
+  sendEmailReplyIneligibility,
+  stepRunsAfterWait,
+  triggerFilterProblem,
   validateHostAction,
 } from './actions'
 import { CRM_TASK_MAX_DUE_DAYS } from './crm'
@@ -1042,5 +1046,108 @@ describe('showHtml sanitizer feedback (AGL-2486)', () => {
       withHtml('<script>a</script><p onclick="b()" style="behavior:url(#x)">t</p>'),
     )
     expect(problem).toMatch(/\+2 more/)
+  })
+})
+
+/**
+ * AGL-3458 — a trigger filter the evaluator can never run is refused at save.
+ *
+ * The filter's evaluator is the functions' arithmetic, with no comparison, so
+ * `source == "form"` saved fine, threw on every event, and the automation
+ * never fired. The refusal points at the conditions, which do compare.
+ */
+describe('a trigger filter the evaluator cannot run (AGL-3458)', () => {
+  it.each([
+    'source == "form"',
+    'path === "/pricing"',
+    'total != 0',
+    'total > 10',
+    'a && b',
+    'a || b',
+    'source = "form"',
+  ])('refuses %s and points to conditions', (filter) => {
+    const problem = validateHostAction({ ...base, trigger: { event: 'formSubmission', filter } })
+    expect(problem).toMatch(/can’t compare/)
+    expect(problem).toMatch(/condition/)
+  })
+
+  it('refuses text the evaluator cannot read at all, with its reason', () => {
+    expect(triggerFilterProblem('(total + 1')).toMatch(/Missing closing parenthesis/)
+    expect(triggerFilterProblem('nope(1)')).toMatch(/Unknown function "nope"/)
+    expect(triggerFilterProblem('total total')).toMatch(/trailing input/)
+  })
+
+  it('accepts what the evaluator can run — a field name, arithmetic, a built-in', () => {
+    for (const filter of ['', '  ', 'subscribe', 'total - 100', 'max(a, b)', '"a == b"']) {
+      expect(triggerFilterProblem(filter)).toBeNull()
+    }
+    expect(validateHostAction({ ...base, trigger: { event: 'formSubmission', filter: 'subscribe' } })).toBeNull()
+  })
+
+  it('points a workflow, which has no conditions, at an action that has them', () => {
+    expect(triggerFilterProblem('path == "/x"', { remedy: 'action' })).toMatch(/from an action with a condition/)
+  })
+})
+
+/**
+ * AGL-3458 — a `sendEmail` step answering the person's own act is a
+ * transactional reply: no unsubscribe header, no unsubscribe link.
+ */
+describe('a transactional reply', () => {
+  const reply = { type: 'sendEmail' as const, subject: 'Thanks', body: 'Got it' }
+  const now = { event: 'formSubmission', afterWait: false }
+
+  it('is the default for an immediate step on the person’s own submission, booking, sign-up or new lead', () => {
+    for (const event of ['formSubmission', 'booking', 'memberSignUp', 'lead']) {
+      expect(sendEmailIsTransactionalReply(reply, { event, afterWait: false })).toBe(true)
+    }
+  })
+
+  it('is not, on an event that is the business acting, after a wait, in a topic, or to somebody else', () => {
+    expect(sendEmailReplyIneligibility(reply, { event: 'contactStageChanged', afterWait: false })).toBe('event')
+    expect(sendEmailReplyIneligibility(reply, { event: 'my-custom-event', afterWait: false })).toBe('event')
+    expect(sendEmailReplyIneligibility(reply, { event: 'formSubmission', afterWait: true })).toBe('wait')
+    expect(sendEmailReplyIneligibility({ ...reply, topicId: 'promotions' }, now)).toBe('topic')
+    expect(sendEmailReplyIneligibility({ ...reply, toField: 'managerEmail' }, now)).toBe('recipient')
+    // The default field, named, is still the person who acted.
+    expect(sendEmailReplyIneligibility({ ...reply, toField: 'email' }, now)).toBeNull()
+  })
+
+  it('can be switched back to a mailing', () => {
+    expect(sendEmailIsTransactionalReply({ ...reply, transactional: false }, now)).toBe(false)
+  })
+
+  it('refuses a step SWITCHED on that cannot be one, and saves the default', () => {
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ type: 'wait', delayMinutes: 60 }, { ...reply, transactional: true }],
+      }),
+    ).toMatch(/^Step 2: an email after a wait is a mailing/)
+    expect(
+      validateHostAction({
+        ...base,
+        trigger: { event: 'dealWon' },
+        steps: [{ ...reply, transactional: true }],
+      }),
+    ).toMatch(/^Step 1: only a reply to the person’s own/)
+    expect(validateHostAction({ ...base, steps: [{ ...reply, transactional: true }] })).toBeNull()
+    // A wait after the email does not make the email late.
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ ...reply, transactional: true }, { type: 'wait', delayMinutes: 60 }],
+      }),
+    ).toBeNull()
+  })
+
+  it('knows a step after a wait or a wait-for-event', () => {
+    const steps = [
+      reply,
+      { type: 'waitForEvent' as const, eventName: 'booking', timeoutMinutes: 60 },
+      reply,
+    ]
+    expect(stepRunsAfterWait(steps, 0)).toBe(false)
+    expect(stepRunsAfterWait(steps, 2)).toBe(true)
   })
 })

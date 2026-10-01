@@ -50,9 +50,15 @@ import {
   workflowHasActionSteps,
 } from './workflow-steps'
 import { runTriggeredByFields } from './run-trigger-actor'
+import { triggeredDocsForEvent } from './triggered-docs'
 
-/** Bounded fan-out per event: at most this many triggered workflows run. */
-const MAX_TRIGGERED_WORKFLOWS = 10
+/**
+ * Every live workflow on the event runs, in document-id order, up to this
+ * many (AGL-3458) — the hundred the workflow map below already reads, so a
+ * workflow the map can see is one its event can start. See
+ * `triggered-docs.ts` for why the dispatch pages rather than truncates.
+ */
+const MAX_TRIGGERED_WORKFLOWS = 100
 
 /**
  * One workflow run's row in the site's activity feed, which is the run
@@ -160,12 +166,11 @@ export async function runEventWorkflows(
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const triggered = await hostRef
-      .collection('workflows')
-      .where('trigger.event', '==', event)
-      .limit(MAX_TRIGGERED_WORKFLOWS)
-      .get()
-    const workflows = triggered.docs.filter((doc) => !doc.get('deletedAt'))
+    const workflows = await triggeredDocsForEvent(hostRef.collection('workflows'), event, {
+      keep: (doc) => !doc.get('deletedAt'),
+      max: MAX_TRIGGERED_WORKFLOWS,
+      maxReads: MAX_TRIGGERED_WORKFLOWS * 4,
+    })
     if (!workflows.length) return alerts
     // Full workflow map for nested function→workflow calls (AGL-129).
     const allWorkflowDocs = await hostRef

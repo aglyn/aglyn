@@ -442,7 +442,7 @@ describe('workflows console read cost (AGL-2501)', () => {
    * the reading that says the reads MOVED rather than went away, and it pins
    * the window each one arrives at.
    */
-  it('opening the action editor is what buys the six option lists', async () => {
+  it('opening the action editor is what buys the option lists', async () => {
     await renderConsole('actions')
     await orgPanelListening()
     const before = mockListens.map((listen) => `${listen.path}#${listen.limit}`)
@@ -458,8 +458,10 @@ describe('workflows console read cost (AGL-2501)', () => {
       .sort()
     // A hundred and one apiece: the shared editor ceiling, plus the probe row
     // that lets the dialog say a picker ran short instead of quietly offering
-    // a partial list of targets.
+    // a partial list of targets. The forms are the trigger's "Form is"
+    // picker (AGL-3458), for the Form submitted event a new action starts on.
     expect(opened).toEqual([
+      'hosts/site1/forms#101',
       'hosts/site1/overlays#101',
       'hosts/site1/webhooks#101',
       'hosts/site1/workflows#101',

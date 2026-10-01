@@ -17,6 +17,7 @@
 
 import { resolveAuthoredEventName, sanitizeEventParams } from './analytics-events'
 import { type AuthorHtmlRemoval, sanitizeAuthorHtml } from './author-html'
+import { expressionSyntaxError } from './functions'
 import { PLUGIN_INTERACTION_STEPS_DECLARED } from '../plugin-manager/first-party-plugins.generated'
 
 /**
@@ -126,6 +127,57 @@ export function evaluateTriggerCondition(
     return expected.length > 0 && actual.includes(expected)
   }
   return false
+}
+
+/*
+ * A comparison or a logical operator, outside a quoted string: `==`, `!=`,
+ * `=`, `<`, `>`, `&&`, `||`, `!`. The filter's evaluator is the no-code
+ * functions' arithmetic (`functions.ts`), which has none of them, so a filter
+ * written with one throws on every event and the automation never fires.
+ */
+const FILTER_COMPARISON = /[=!<>]|&&|\|\|/
+
+function withoutStrings(text: string): string {
+  return text.replace(/"[^"]*"|'[^']*'/g, '""')
+}
+
+/**
+ * Why a trigger's free-text `filter` can never run, or `null` (AGL-3458).
+ *
+ * The filter is evaluated by the arithmetic expression evaluator — names,
+ * numbers, quoted text, `+ - * /`, parentheses and the built-in functions —
+ * and runs the automation when the result is truthy. It has no comparison,
+ * so `source == "form"` parses on no event: the evaluator throws, the
+ * dispatcher treats a throwing filter as "do not run", and the automation
+ * saves fine and never fires. The comparison the author meant is a
+ * CONDITION, which the editor offers right beside the filter, so the refusal
+ * names it.
+ *
+ * Only the text is judged. A name the event may not carry is the event's
+ * business: `subscribe` is a filter that runs when the field is filled in.
+ */
+export function triggerFilterProblem(
+  filter: string | null | undefined,
+  options: {
+    /**
+     * Where the comparison the author meant belongs. An action's trigger has
+     * conditions beside the filter; a workflow's has none, so it is pointed
+     * at an action with a condition that runs the workflow.
+     */
+    remedy?: 'conditions' | 'action'
+  } = {},
+): string | null {
+  const text = String(filter ?? '').trim()
+  if (!text) return null
+  const remedy =
+    options.remedy === 'action'
+      ? 'start the workflow from an action with a condition (for example: source equals form) instead'
+      : 'use a condition instead (for example: source equals form)'
+  if (FILTER_COMPARISON.test(withoutStrings(text))) {
+    return `A filter can’t compare values (no ==, !=, <, >, && or ||) — ${remedy}, and clear the filter`
+  }
+  const syntax = expressionSyntaxError(text)
+  return syntax ? `The filter can’t be read (${syntax}) — ${remedy}, and clear the filter` : null
 }
 
 /** How chained trigger conditions combine (AGL-565). */
@@ -685,6 +737,9 @@ export function validateInteraction(
   ) {
     return 'Cooldown must be at least 1 minute'
   }
+  // A filter the evaluator can never run saves fine and never fires (AGL-3458).
+  const filterProblem = triggerFilterProblem(interaction.trigger?.filter)
+  if (filterProblem) return filterProblem
   // Structured payload conditions (AGL-557; chained AGL-565).
   const combinator = interaction.trigger?.combinator
   if (combinator != null && !TRIGGER_COMBINATORS.includes(combinator)) {

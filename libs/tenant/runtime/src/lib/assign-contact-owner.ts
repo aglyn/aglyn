@@ -126,6 +126,7 @@ export interface ReassignmentInput extends OwnerAssignmentInput {
 export type OwnerAssignmentRefusal =
   | 'no-org'
   | 'no-contact'
+  | 'no-lead'
   | 'no-rule'
   | 'empty-pool'
   | 'not-a-member'
@@ -154,6 +155,7 @@ export type OwnerAssignment =
 export const OWNER_ASSIGNMENT_REFUSALS: Record<OwnerAssignmentRefusal, string> = {
   'no-org': 'this site has no organization',
   'no-contact': 'the contact no longer exists',
+  'no-lead': 'the lead no longer exists',
   'no-rule': 'no assignment rule matched and the site has no default owner',
   'empty-pool': 'the round-robin pool has nobody on the roster in it',
   'not-a-member': 'the owner named is not on the team',
@@ -250,6 +252,55 @@ export async function notifyRecordAssigned(input: {
   return true
 }
 
+/**
+ * The roster checks one assignment transaction makes: whether a uid is on the
+ * team, and who a target names — a member as named, or the next member of
+ * the round-robin pool who is still on the roster. One read per candidate
+ * per attempt; a retried transaction builds a fresh one and reads afresh, as
+ * it must.
+ */
+function rosterResolver(
+  tx: FirebaseFirestore.Transaction,
+  membersRef: FirebaseFirestore.CollectionReference,
+  settings: ReturnType<typeof readCrmAssignmentSettings>,
+): {
+  isMember: (uid: string) => Promise<boolean>
+  resolveTarget: (
+    target: CrmAssignmentTarget,
+  ) => Promise<{ uid: string; advancePointer: boolean } | null>
+} {
+  const onRoster = new Map<string, Promise<boolean>>()
+  const isMember = (uid: string): Promise<boolean> => {
+    let known = onRoster.get(uid)
+    if (!known) {
+      known = tx.get(membersRef.doc(uid)).then((snapshot) => snapshot.exists)
+      onRoster.set(uid, known)
+    }
+    return known
+  }
+  const fromPool = async (): Promise<string | null> => {
+    for (const uid of roundRobinOrder(
+      settings.pool.memberUids,
+      settings.pool.lastAssignedUid,
+    )) {
+      if (await isMember(uid)) return uid
+    }
+    return null
+  }
+  const resolveTarget = async (
+    target: CrmAssignmentTarget,
+  ): Promise<{ uid: string; advancePointer: boolean } | null> => {
+    if ('roundRobin' in target) {
+      const uid = await fromPool()
+      return uid ? { uid, advancePointer: true } : null
+    }
+    return (await isMember(target.memberUid))
+      ? { uid: target.memberUid, advancePointer: false }
+      : null
+  }
+  return { isMember, resolveTarget }
+}
+
 async function assignOwner(policy: Policy): Promise<OwnerAssignment> {
   const { input } = policy
   try {
@@ -292,38 +343,7 @@ async function assignOwner(policy: Policy): Promise<OwnerAssignment> {
           return { outcome: 'unchanged', ownerUid: current }
         }
         const settings = readCrmAssignmentSettings(org)
-
-        // One read per candidate per attempt; a retried transaction reads
-        // afresh, as it must.
-        const onRoster = new Map<string, Promise<boolean>>()
-        const isMember = (uid: string): Promise<boolean> => {
-          let known = onRoster.get(uid)
-          if (!known) {
-            known = tx.get(membersRef.doc(uid)).then((snapshot) => snapshot.exists)
-            onRoster.set(uid, known)
-          }
-          return known
-        }
-        const fromPool = async (): Promise<string | null> => {
-          for (const uid of roundRobinOrder(
-            settings.pool.memberUids,
-            settings.pool.lastAssignedUid,
-          )) {
-            if (await isMember(uid)) return uid
-          }
-          return null
-        }
-        const resolveTarget = async (
-          target: CrmAssignmentTarget,
-        ): Promise<{ uid: string; advancePointer: boolean } | null> => {
-          if ('roundRobin' in target) {
-            const uid = await fromPool()
-            return uid ? { uid, advancePointer: true } : null
-          }
-          return (await isMember(target.memberUid))
-            ? { uid: target.memberUid, advancePointer: false }
-            : null
-        }
+        const { isMember, resolveTarget } = rosterResolver(tx, membersRef, settings)
 
         let decision: Decision | null = null
         let refusal: OwnerAssignmentRefusal = 'no-rule'
@@ -489,6 +509,98 @@ export function reassignContactOwner(
   input: ReassignmentInput,
 ): Promise<OwnerAssignment> {
   return assignOwner({ kind: 'reassign', input })
+}
+
+/** The deliberate assignment of a LEAD the site holds and no contact has absorbed yet. */
+export interface LeadReassignmentInput {
+  hostId: string
+  /** `orgs/{orgId}/leads/{leadId}` — the person's key. */
+  leadId: string
+  assign: CrmAssignmentTarget
+  /** As {@link OwnerAssignmentInput.actorUid}: never told about their own choice. */
+  actorUid?: string | null
+}
+
+/**
+ * {@link reassignContactOwner} for a person who is still a LEAD (AGL-3458).
+ *
+ * A lead-routed form files a lead and no contact (AGL-3232), so an
+ * automation welcoming that person — "assign an owner, then book them a
+ * call" — has only the lead to act on. The owner is the lead's own
+ * `ownerUid`, the field the Leads list's Owner column and filter read and a
+ * conversion hands to the contact. Same transaction shape as a contact's:
+ * the org document, the lead and every roster candidate are read inside it,
+ * and the round-robin pointer moves in the commit that writes the owner, so
+ * a lead and a contact assigned at the same moment take two different
+ * members of the one rotation.
+ *
+ * Never rejects; a failure is logged and answered as `none`, which the
+ * automation records as the step's error.
+ */
+export async function reassignLeadOwner(
+  input: LeadReassignmentInput,
+): Promise<OwnerAssignment> {
+  try {
+    const resolved = await getOrgForHost(input.hostId)
+    if (!resolved) return { outcome: 'none', reason: 'no-org' }
+    const { orgId } = resolved
+    const firestore = firebaseAdmin.app().firestore()
+    const orgRef = firestore.collection('orgs').doc(orgId)
+    const leadRef = orgRef.collection('leads').doc(input.leadId)
+    const membersRef = orgRef.collection('members')
+    let who = ''
+    const verdict = await firestore.runTransaction(
+      async (tx): Promise<OwnerAssignment> => {
+        const [orgSnapshot, leadSnapshot] = await Promise.all([
+          tx.get(orgRef),
+          tx.get(leadRef),
+        ])
+        if (!leadSnapshot.exists) return { outcome: 'none', reason: 'no-lead' }
+        const lead = (leadSnapshot.data() ?? {}) as Record<string, unknown>
+        who = String(lead['name'] ?? '') || String(lead['email'] ?? '')
+        const current = String(lead['ownerUid'] ?? '')
+        const settings = readCrmAssignmentSettings(
+          (orgSnapshot.data() ?? {}) as Record<string, unknown>,
+        )
+        const { resolveTarget } = rosterResolver(tx, membersRef, settings)
+        const hit = await resolveTarget(input.assign)
+        if (!hit) {
+          return {
+            outcome: 'none',
+            reason: 'roundRobin' in input.assign ? 'empty-pool' : 'not-a-member',
+          }
+        }
+        if (hit.uid === current) return { outcome: 'unchanged', ownerUid: current }
+        tx.update(leadRef, {
+          ownerUid: hit.uid,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+        if (hit.advancePointer) {
+          tx.update(orgRef, { [CRM_ROUND_ROBIN_LAST_ASSIGNED_PATH]: hit.uid })
+        }
+        return {
+          outcome: 'assigned',
+          ownerUid: hit.uid,
+          by: 'roundRobin' in input.assign ? 'roundRobin' : 'member',
+          leadMirrored: false,
+          notified: false,
+        }
+      },
+    )
+    if (verdict.outcome !== 'assigned') return verdict
+    const notified = await notifyRecordAssigned({
+      hostId: input.hostId,
+      orgId,
+      ownerUid: verdict.ownerUid,
+      actorUid: input.actorUid,
+      record: { kind: 'lead', id: input.leadId },
+      who,
+    })
+    return { ...verdict, notified }
+  } catch (error) {
+    console.error('assignLeadOwner failed', input.hostId, input.leadId, error)
+    return { outcome: 'none', reason: 'failed' }
+  }
 }
 
 export default assignOwnerForCapture

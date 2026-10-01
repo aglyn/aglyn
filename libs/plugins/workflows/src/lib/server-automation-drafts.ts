@@ -125,7 +125,7 @@ export const AUTOMATION_STEP_FIELDS: Readonly<Record<HostActionStepType, readonl
   runJs: ['code'],
   redirect: ['url', 'screenId'],
   trackGaEvent: ['eventName', 'params'],
-  sendEmail: ['subject', 'body', 'toField', 'topicId'],
+  sendEmail: ['subject', 'body', 'toField', 'topicId', 'transactional'],
   notifyAdmins: ['title', 'body'],
   enrollList: ['listId', 'listName'],
   updateDataset: ['datasetId', 'datasetName'],
