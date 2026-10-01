@@ -120,11 +120,11 @@
             "values": {
               "free": "2 GB",
               "starter": "20 GB",
-              "pro": "35 GB",
-              "business": "55 GB",
-              "scale": "90 GB",
-              "advanced": "105 GB",
-              "agency": "485 GB",
+              "pro": "30 GB",
+              "business": "45 GB",
+              "scale": "70 GB",
+              "advanced": "80 GB",
+              "agency": "395 GB",
               "enterprise": "Talk to us"
             }
           },
@@ -818,10 +818,10 @@
               "free": "—",
               "starter": "—",
               "pro": "—",
-              "business": "100k / mo",
-              "scale": "300k / mo",
-              "advanced": "1M / mo",
-              "agency": "5M / mo",
+              "business": "1.5k / mo",
+              "scale": "5k / mo",
+              "advanced": "17k / mo",
+              "agency": "85k / mo",
               "enterprise": "Talk to us"
             }
           },
@@ -871,9 +871,9 @@
           "15 sites",
           "75 collaborators",
           "1% commerce fees",
-          "300k API requests/mo",
+          "5k API requests/mo",
           "25,000 products per site",
-          "90 GB bandwidth",
+          "70 GB bandwidth",
           "40,000 campaign emails/mo"
         ],
         "cta": "CHOOSE",
@@ -900,7 +900,7 @@
           "25 sites",
           "100 collaborators",
           "0% commerce fees",
-          "1M API requests/mo",
+          "17k API requests/mo",
           "unlimited products",
           "priority scale & limits",
           "65,000 campaign emails/mo"
@@ -929,7 +929,7 @@
           "100 sites",
           "250 collaborators",
           "full white-label incl. custom console domain",
-          "5M API requests/mo",
+          "85k API requests/mo",
           "unlimited records & variables",
           "20 POS registers per site",
           "130,000 campaign emails/mo"
@@ -1075,8 +1075,8 @@
           "pro": "—",
           "business": "$0.50",
           "scale": "$0.35",
-          "advanced": "$0.20",
-          "agency": "$0.15",
+          "advanced": "$0.25",
+          "agency": "$0.25",
           "enterprise": "Custom"
         }
       },
@@ -1140,14 +1140,14 @@
       {
         "label": "Page views (bandwidth + reads)",
         "unit": "/ 1k views",
-        "ourCost": "$0.538462 / 1k views",
-        "youPay": "$0.70 / 1k views"
+        "ourCost": "$0.615385 / 1k views",
+        "youPay": "$0.80 / 1k views"
       },
       {
         "label": "Form submissions",
         "unit": "/ 1k",
-        "ourCost": "$0.053846 / 1k",
-        "youPay": "$0.07 / 1k"
+        "ourCost": "$0.061538 / 1k",
+        "youPay": "$0.08 / 1k"
       }
     ],
     "note": "Applies only to plans with `meteredInfraPassThrough`. Dataset storage over the included amount is a separate retail rate ($0.36 / GB-mo), not this pass-through."
