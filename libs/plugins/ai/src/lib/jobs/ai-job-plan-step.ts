@@ -26,6 +26,7 @@ import {
 import type { AiJob, AiJobKind, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
 import {
   AI_TEMPLATE_SUBJECT_DEFINITIONS,
+  aiTemplateShownTokens,
   type AiTemplateSubject,
 } from '../model/ai-template-subjects'
 import { AI_PAGE_CREATE_KINDS, aiPagePlanShapeRefusal } from '../model/ai-page-job'
@@ -165,6 +166,11 @@ export function aiJobPlanPrompt(
  * of the Free page's 300-credit wall, taking the room it keeps for a re-asked
  * section from 45 credits to 44 and breaking `ai-job-free-page.spec.ts`. A
  * page job must not pay for a sentence about templates.
+ *
+ * The list is the tokens a reader sees, never the whole catalog (AGL-3143
+ * §16). Offered a slug and the publish timestamp, a live plan promised them,
+ * and its build kept the promise the only way a slug can be kept: it printed
+ * "entry slug: {{entry.slug}}" on every article.
  */
 export function aiPlanTemplateTokenLines(job: Pick<AiJob, 'kind' | 'inputs'>): string[] {
   if (job.kind !== 'template') return []
@@ -175,9 +181,9 @@ export function aiPlanTemplateTokenLines(job: Pick<AiJob, 'kind' | 'inputs'>): s
       : undefined
   if (!definition) return []
   return [
-    `The template's fields are the binding tokens its page shows, each one of: ${definition.tokens
-      .map((entry) => entry.token)
-      .join(', ')}. Promise only what the page fills.`,
+    `The template's fields are the binding tokens its page shows a reader, each one of: ${aiTemplateShownTokens(
+      definition,
+    ).join(', ')}. A link or picture token is shown by the link or picture holding it. Promise only what the page fills.`,
   ]
 }
 

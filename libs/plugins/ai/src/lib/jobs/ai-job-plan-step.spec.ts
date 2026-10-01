@@ -612,6 +612,16 @@ describe('aiJobPlanPrompt', () => {
     expect(template).toContain('{{author.name}}')
     expect(template).toContain('{{author.bio}}')
 
+    // Only what a reader sees (AGL-3143 §16): offered a slug and the publish
+    // timestamp, a live plan promised them and its build printed both.
+    const entry = aiJobPlanPrompt(job({ kind: 'template', inputs: { subject: 'entry', collectionId: 'c1' } }))
+    expect(entry).toContain('{{entry.title}}')
+    expect(entry).toContain('{{entry.url}}')
+    expect(entry).toContain('{{collection.name}}')
+    for (const unread of ['{{entry.slug}}', '{{entry.publishedAt}}', '{{collection.slug}}', '{{entry.collectionSlug}}']) {
+      expect(entry).not.toContain(unread)
+    }
+
     // ⛔ The line rides the job's OWN turn, never the plan tool's cached
     // `fields` description. Written there it cost 40 tokens of the shared
     // prefix, which is one credit of the Free page's 300-credit wall and takes

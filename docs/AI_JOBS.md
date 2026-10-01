@@ -636,7 +636,13 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   which every kind's request caches: written there it cost 40 tokens of the shared prefix
   — 2,980 to 3,020 — which is one credit of the Free page's 300-credit wall and takes the
   room it keeps for a re-asked section from 45 to 44. A page job does not pay for a
-  sentence about templates. The count is read as generously as the tree allows — the widest
+  sentence about templates. The line lists only the tokens a reader sees
+  (`aiTemplateShownTokens`, AGL-3143 §16): offered the whole catalog, a live plan
+  (job `2xD9Y7NayF`, 2026-10-01) promised `{{entry.slug}}`, `{{collection.slug}}` and
+  `{{entry.publishedAt}}`, and its build kept the promise the only way a slug can be
+  kept, printing "entry slug: {{entry.slug}} — published {{entry.publishedAt}}" on
+  every article. A slug or that timestamp a plan still names is no promise
+  (`aiPlannedTemplateTokens` skips it) and never reaches the build as a field. The count is read as generously as the tree allows — the widest
   fan-out, or the largest group of one shape — and speaks only when the section is
   SHORT, so every reading that finds more items makes it quieter; a section whose items
   a collection fills at render is not counted at all, which is what rule 8 asked for.
@@ -932,8 +938,13 @@ confirmed `job.plan` and builds exactly one draft.
   ride `extend`: a layout places every component the confirmed plan reuses
   and never draws navigation the site keeps as a component (rules 7 and 1); a
   template binds only the tokens its page fills, binds its h1 to the
-  subject's title, and places no block that fills itself only on another
-  subject's page (rule 8).
+  subject's title, places no block that fills itself only on another
+  subject's page, and prints no link or picture token, slug or timestamp in
+  its copy (`printed-token`, rule 8, AGL-3143 §16). Copy is a prop the palette
+  gives the `text` role, read as words where it holds more than one token or
+  is an element's `children`; a block handed one token whole (Entry Meta's
+  `avatarImage`, a Video's `uploadDate`) and a markdown link's target are not
+  printed.
 - **What a template is for.** `inputs.subject` is `entry` (with
   `inputs.collectionId`, a content collection), `product` or `author`
   (`src/lib/model/ai-template-subjects.ts`). The tokens are the besigner

@@ -29,7 +29,11 @@ import {
   type AiDoctrineViolation,
   type AiLayoutRegion,
 } from '../runtime/ai-doctrine-validators'
-import { aiBindingTokensIn, type AiTemplateSubjectDefinition } from '../model/ai-template-subjects'
+import {
+  aiBindingTokensIn,
+  isAiUnreadToken,
+  type AiTemplateSubjectDefinition,
+} from '../model/ai-template-subjects'
 import { aiPlanCreation } from './ai-job-generation'
 
 /**
@@ -242,6 +246,11 @@ export function aiTreeBoundTokens(tree: AiDoctrineTree): Set<string> {
  * The subject tokens the confirmed plan's template creation names, and the
  * words it named that the subject's catalog does not answer to. A plan with
  * no template creation names none.
+ *
+ * A slug or the publish timestamp the plan names is neither (AGL-3143 §16):
+ * the page fills it, and nothing a reader sees could keep a promise to show
+ * it. Held to one, a live build printed "entry slug: {{entry.slug}} —
+ * published {{entry.publishedAt}}" on every article to be let through.
  */
 export function aiPlannedTemplateTokens(
   plan: AiJobPlan | null,
@@ -252,6 +261,7 @@ export function aiPlannedTemplateTokens(
   const unreadable: string[] = []
   for (const field of aiPlanCreation(plan, 'template')?.fields ?? []) {
     const token = catalog.get(tokenKey(field))
+    if (token && isAiUnreadToken(token)) continue
     if (token) tokens.add(token)
     else unreadable.push(field)
   }
