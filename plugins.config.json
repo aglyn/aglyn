@@ -835,7 +835,8 @@
       "register": {
         "console": "registerDataConsole",
         "consoleApi": "registerDataConsoleApi",
-        "serverDeclarations": "registerDataServerDeclarations"
+        "serverDeclarations": "registerDataServerDeclarations",
+        "consoleServerDeclarations": "registerDataConsoleServerDeclarations"
       },
       "repeatSource": {
         "id": "dataset"

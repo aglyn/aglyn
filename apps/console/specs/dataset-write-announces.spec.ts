@@ -56,9 +56,10 @@ describe('a dataset record write announces to the live pages', () => {
   })
 
   it('every /v1 record write announces — create, update and delete', () => {
-    const resources = source('apps/console/utils/api-v1-resources.ts')
+    // The data plugin's `/v1/datasets`, served through the registry (AGL-3080).
+    const resources = source('libs/plugins/data/src/lib/server/api-v1/datasets.ts')
     expect(resources).toContain(
-      "import { announceDatasetChange } from './server/announce-dataset-change'",
+      "import { announceDatasetRecords as announceDatasetChange } from '../announce-dataset-records'",
     )
     // AGL-2462 recorded that a `/v1` write cannot publish and only the TTL
     // made it visible. All three legs answer that now: a deleted row is as

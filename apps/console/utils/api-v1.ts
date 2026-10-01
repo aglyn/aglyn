@@ -406,6 +406,12 @@ export async function authenticateApiV1(
       org,
       firestore,
       headers,
+      // Imported on first use: the loader builds the console's plugin
+      // manifest, which only a write against a custom field type needs.
+      loadPluginSurfaces: async () => {
+        const { serverPluginLoader } = await import('./server-plugin-loader')
+        await serverPluginLoader.ensureAll(['consoleApi'])
+      },
     },
   }
 }

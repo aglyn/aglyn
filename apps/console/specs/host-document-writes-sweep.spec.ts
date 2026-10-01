@@ -421,18 +421,18 @@ describe('/v1: every write handler of rendered data announces', () => {
    * write handler fails here until somebody decides which it is.
    */
   const HANDLERS: Record<string, { announces: string } | { unrendered: string }> = {
-    'api-v1-resources.ts#createDataset': {
+    'data:datasets.ts#createDataset': {
       unrendered: 'A new dataset holds no rows, and no page is bound to it yet.',
     },
-    'api-v1-resources.ts#updateDataset': { announces: 'announceDatasetChange' },
-    'api-v1-resources.ts#deleteDataset': {
+    'data:datasets.ts#updateDataset': { announces: 'announceDatasetChange' },
+    'data:datasets.ts#deleteDataset': {
       unrendered:
         'Refused while any record remains, so a bound page showed no rows ' +
         'before and shows none after.',
     },
-    'api-v1-resources.ts#createRecord': { announces: 'announceDatasetChange' },
-    'api-v1-resources.ts#updateRecord': { announces: 'announceDatasetChange' },
-    'api-v1-resources.ts#deleteRecord': { announces: 'announceDatasetChange' },
+    'data:datasets.ts#createRecord': { announces: 'announceDatasetChange' },
+    'data:datasets.ts#updateRecord': { announces: 'announceDatasetChange' },
+    'data:datasets.ts#deleteRecord': { announces: 'announceDatasetChange' },
     'api-v1-resources.ts#createSite': {
       unrendered: 'A new site has no cached pages to be stale.',
     },
@@ -455,6 +455,11 @@ describe('/v1: every write handler of rendered data announces', () => {
     },
   }
   /**
+   * The organization's datasets, served from the data plugin (AGL-3080):
+   * its handlers are classified in the table above beside the platform's.
+   */
+  const DATA_API_V1 = join(PLUGINS, 'data', 'src', 'lib', 'server', 'api-v1')
+  /**
    * The CRM's resources, served from the plugin (AGL-3080): whole modules
    * that hold CRM records only, none of them rendered.
    */
@@ -467,16 +472,22 @@ describe('/v1: every write handler of rendered data announces', () => {
     /\brunTransaction\(/,
   ]
 
-  function functionsOf(file: string): Array<{ key: string; body: string }> {
-    const source = readFileSync(join(CONSOLE, 'utils', file), 'utf8')
+  function functionsOf(
+    path: string,
+    label: string,
+  ): Array<{ key: string; body: string }> {
+    const source = readFileSync(path, 'utf8')
     const starts = [...source.matchAll(/^(?:export )?(?:async )?function (\w+)/gm)]
     return starts.map((match, index) => ({
-      key: `${file}#${match[1]}`,
+      key: `${label}#${match[1]}`,
       body: source.slice(match.index, starts[index + 1]?.index ?? source.length),
     }))
   }
 
-  const functions = functionsOf('api-v1-resources.ts')
+  const functions = [
+    ...functionsOf(join(CONSOLE, 'utils', 'api-v1-resources.ts'), 'api-v1-resources.ts'),
+    ...functionsOf(join(DATA_API_V1, 'datasets.ts'), 'data:datasets.ts'),
+  ]
   const writeHandlers = functions.filter(({ body }) =>
     WRITE.some((pattern) => pattern.test(body)),
   )
@@ -484,8 +495,8 @@ describe('/v1: every write handler of rendered data announces', () => {
   it('finds the write handlers it means to classify', () => {
     expect(writeHandlers.map(({ key }) => key)).toEqual(
       expect.arrayContaining([
-        'api-v1-resources.ts#createRecord',
-        'api-v1-resources.ts#updateDataset',
+        'data:datasets.ts#createRecord',
+        'data:datasets.ts#updateDataset',
         'api-v1-resources.ts#createMedia',
       ]),
     )

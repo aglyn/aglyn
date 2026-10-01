@@ -163,7 +163,8 @@ describe('every record write path carries the index', () => {
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx'
   // The quota-enforcing route: the data plugin's console API (AGL-3080).
   const CONSOLE_ROUTE = 'libs/plugins/data/src/lib/server/datasets-route.ts'
-  const REST_API = 'apps/console/utils/api-v1-resources.ts'
+  // `/v1/datasets`: the data plugin's resource in the `/v1` registry (AGL-3080).
+  const REST_API = 'libs/plugins/data/src/lib/server/api-v1/datasets.ts'
   // The form-submit leg: the data plugin's form record target (AGL-3080).
   const FORM_SUBMIT =
     'libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts'

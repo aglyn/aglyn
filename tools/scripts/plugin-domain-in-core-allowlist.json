@@ -227,20 +227,11 @@
       "why": "The subprocessor inventory discloses every vendor by name; naming them is its whole job, and a plugin-declared row still folds in through the subprocessor seam."
     },
     {
-      "path": "apps/console/utils/api-v1-openapi.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/console/utils/api-v1-resources.ts",
       "rules": [
         "plugin-id",
         "plugin-collection:commerce",
-        "plugin-collection:data",
         "plugin-collection:forms",
-        "domain-declares:data",
         "domain-declares:forms",
         "domain-declares:marketing"
       ],
@@ -252,13 +243,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "apps/console/utils/server/announce-dataset-change.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
     },
     {
       "path": "apps/console/utils/usage-metering.ts",
