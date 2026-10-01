@@ -808,19 +808,23 @@ value without either plugin importing the other.
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The
-plugin that keeps it answers what a flat rate adds to a charge and which regime
-a settled payment was taxed under; any other plugin that charges asks here
-instead of importing the owner's model.
+plugin that keeps it answers the merchant's rate for a kind of charge, what a
+flat rate adds to a charge and which regime a settled payment was taxed under;
+any other plugin that charges asks here instead of importing the owner's model
+or reading the owner's settings.
 
 ```ts
 // the owner, from each of its server registrars
 registerPluginTaxProfile({
+  flatRate: (hostId, charge) => readStoredRate(hostId, charge),
   flatTax: (rate, chargeCents, fallbackLabel) => resolveFlatTax(rate, chargeCents, fallbackLabel),
   taxModeOf: (settledPayment, manualTaxCents) => modeOf(settledPayment, manualTaxCents),
 })
 
 // a plugin that charges
-const tax = pluginTaxProfile().flatTax(settings.service, chargeCents, 'Service tax')
+const profile = pluginTaxProfile()
+const rate = await profile.flatRate(hostId, 'service')
+const tax = profile.flatTax(rate, chargeCents, 'Service tax')
 const total = chargeCents + tax.taxCents
 ```
 
@@ -828,6 +832,7 @@ const total = chargeCents + tax.taxCents
 | --- | --- |
 | `registerPluginTaxProfile(profile, { pluginId? })` | A slot: a workspace has one tax profile, so a second plugin's is refused and the incumbent keeps serving. |
 | `pluginTaxProfile()` | The rule — and it **throws** when no plugin registered one. |
+| `flatRate(hostId, charge)` | The merchant's flat rate for one kind of charge on a site (`service` for an appointment), read where the owner keeps it, to be handed to `flatTax`. `undefined` for a rate nobody set or a kind the owner keeps none for. The contract's one read; a caller never reads the owner's settings itself. |
 | `flatTax(rate, chargeCents, fallbackLabel)` | `{ taxCents, label, pct }`, exclusive and rounded to the cent. `rate` is the merchant's stored setting passed as read; an absent, zero, negative or out-of-range one answers all-zero and never throws. |
 | `taxModeOf(settledPayment, manualTaxCents?)` | The regime as the owner records it. `manualTaxCents` is tax the caller added as a line of its own, which the processor reports as none. |
 | `pluginTaxProfileOwner()` | The owner's plugin id, or `null` — for a caller that only wants to know who it is. |

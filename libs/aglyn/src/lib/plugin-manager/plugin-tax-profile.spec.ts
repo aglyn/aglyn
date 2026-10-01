@@ -28,7 +28,13 @@ import {
  * tax rule, and a `tickets` plugin prices a charge knowing only that some
  * plugin does.
  */
+/** The rates the ledger keeps, by site and kind of charge. */
+const LEDGER_RATES: Record<string, Record<string, unknown>> = {
+  'host-1': { service: { pct: 8.5 } },
+}
+
 const LEDGER: PluginTaxProfile = {
+  flatRate: async (hostId, charge) => LEDGER_RATES[hostId]?.[charge],
   flatTax: (rate, chargeCents, fallbackLabel) => {
     const pct = Number((rate as { pct?: unknown } | null)?.pct)
     if (!(pct > 0)) return { taxCents: 0, label: '', pct: 0 }
@@ -57,6 +63,16 @@ describe('the tenant’s tax rule, asked of its owner', () => {
     expect(pluginTaxProfileOwner()).toBe('ledger')
   })
 
+  it('answers the site’s rate for a kind of charge, read by the owner', async () => {
+    registerPluginTaxProfile(LEDGER, { pluginId: 'ledger' })
+    const profile = pluginTaxProfile()
+    const rate = await profile.flatRate('host-1', 'service')
+    expect(profile.flatTax(rate, 10_000, 'Service tax').taxCents).toBe(850)
+    // A rate nobody set prices at zero rather than failing the charge.
+    const unset = await profile.flatRate('host-2', 'service')
+    expect(profile.flatTax(unset, 10_000, 'Service tax').taxCents).toBe(0)
+  })
+
   it('REFUSES, rather than answering zero, when no plugin owns the rule', () => {
     // The one seam that must not say "nobody home" quietly: a caller that read
     // that as "no tax" would charge and record an untaxed total.
@@ -74,7 +90,11 @@ describe('the tenant’s tax rule, asked of its owner', () => {
     registerPluginTaxProfile(LEDGER, { pluginId: 'ledger' })
     expect(() =>
       registerPluginTaxProfile(
-        { flatTax: () => ({ taxCents: 1, label: 'x', pct: 1 }), taxModeOf: () => 'x' },
+        {
+          flatRate: async () => undefined,
+          flatTax: () => ({ taxCents: 1, label: 'x', pct: 1 }),
+          taxModeOf: () => 'x',
+        },
         { pluginId: 'tickets' },
       ),
     ).toThrow()
