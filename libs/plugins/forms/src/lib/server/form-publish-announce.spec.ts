@@ -34,14 +34,15 @@
  *   invisible to a scan that only looks at screens, and both fail silently —
  *   the pages that ARE dropped update instantly, so the ones that were missed
  *   look like someone's browser cache.
- * - THAT it is called from each publish path is a wiring failure, which
- *   renders perfectly, so it is asserted against the source — the shape
- *   `component-publish-revalidates.spec.ts` uses next door.
+ * - THAT the publish announces is a wiring failure, which renders perfectly,
+ *   so it is asserted against the source. There is one publish path — the
+ *   besigner and the form's version history both post to the promote route,
+ *   as `besignerDocuments` declares — so there is one place to wire.
  */
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { screenIdsUsingFormDeep } from '../utils/server/scan-artifact-usage'
+import { screenIdsUsingFormDeep } from './form-publish-announce'
 
 const FORM_ID = 'contact-form'
 
@@ -144,48 +145,37 @@ describe('which pages a form publish invalidates', () => {
   })
 })
 
-const readRepo = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
+const readBeside = (file: string) => readFileSync(join(__dirname, file), 'utf8')
 
-const FORM_BESIGNER =
-  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/[documentSegment]/[docId]/versions/[versionId]/besigner/page.tsx'
-const PROMOTE_ROUTE = 'apps/console/app/api/hosts/forms/promote/route.ts'
-const ROUTE = 'apps/console/app/api/screens/revalidate/route.ts'
-const HELPER = 'apps/console/utils/revalidate-live-pages.ts'
-
-describe('both publish paths announce', () => {
-  it('the besigner publishes through the promote route, so it announces too', () => {
-    // One publish path, one announcement: the editor posts the version to the
-    // route the form's plugin declares, and that route drops the pages that
-    // place the form. Republishing a version the site already serves is how
-    // the editor refreshes those pages when nothing new was saved.
-    const source = readRepo(FORM_BESIGNER)
-    expect(source).toContain('authorizedFetch(user, declared.publish.path')
-    expect(source).toContain('await publishVersion({ quiet: true })')
-    expect(source).not.toContain('revalidateLivePages')
-  })
-
-  it('the promote route announces server-side', () => {
-    // It holds the revalidate secret already, so it calls the tenant itself
-    // rather than asking the browser for a second authenticated hop.
-    const source = readRepo(PROMOTE_ROUTE)
-    expect(source).toMatch(
-      /void announceFormPublish\(\{ firestore, hostId, formId \}\)/,
+describe('the publish announces', () => {
+  it('the promote route announces after its write', () => {
+    // Fired, never awaited: the write already landed, and the scan reads
+    // every screen, layout and component on the site.
+    const source = readBeside('form-promote-route.ts')
+    const wroteAt = source.indexOf('await formRef.update({')
+    const announcedAt = source.indexOf(
+      'void announceFormPublish({ firestore, hostId, formId })',
     )
+    expect(wroteAt).toBeGreaterThan(-1)
+    expect(announcedAt).toBeGreaterThan(wroteAt)
   })
 
-  it('the console route accepts a formId and scans for it', () => {
-    const source = readRepo(ROUTE)
-    expect(source).toMatch(/const formId = String\(/)
-    expect(source).toMatch(/screenIdsUsingForm\(firestore, hostId, formId\)/)
-    // The 400 has to name the new key, or a caller sending one gets told the
-    // field it just sent is not a field. Matched inside the list rather than
-    // at its end: the route has since grown a sixth accepted target.
-    expect(source).toMatch(/screenId, layoutId, componentId, formId[,]/)
+  it('drops exactly the placing pages through the platform site cache', () => {
+    // The plugin knows which pages; the app knows how to drop one on every
+    // address the site answers at — so the drop is narrowed by `paths`.
+    const source = readBeside('form-publish-announce.ts')
+    expect(source).toContain('screenIdsUsingFormDeep(formId, sources.candidates)')
+    expect(source).toMatch(/dropPluginSiteCache\(\{\s*hostIds: \[hostId\],\s*paths: \{ \[hostId\]: paths \},/)
   })
 
-  it('the client helper forwards it', () => {
-    const source = readRepo(HELPER)
-    expect(source).toMatch(/formId\?: string/)
-    expect(source).toMatch(/\.\.\.\(formId \? \{ formId \} : \{\}\)/)
+  it('drops the whole site when the scan could not read all of it', () => {
+    // A prefix of the site would report a publish and leave placed pages
+    // stale with nothing recording that they were skipped.
+    const source = readBeside('form-publish-announce.ts')
+    const truncatedAt = source.indexOf('if (sources.truncated) {')
+    expect(truncatedAt).toBeGreaterThan(-1)
+    expect(source.slice(truncatedAt, truncatedAt + 200)).toContain(
+      'dropPluginSiteCache({ hostIds: [hostId], reason })',
+    )
   })
 })

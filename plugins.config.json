@@ -132,7 +132,7 @@
           "collection": "forms",
           "noun": "form",
           "publish": {
-            "path": "/api/hosts/forms/promote",
+            "path": "/api/forms/promote",
             "idField": "formId"
           }
         }

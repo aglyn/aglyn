@@ -1119,7 +1119,7 @@ export const PLUGIN_BESIGNER_DOCUMENTS_DECLARED: readonly ResolvedBesignerDocume
     "collection": "forms",
     "noun": "form",
     "publish": {
-      "path": "/api/hosts/forms/promote",
+      "path": "/api/forms/promote",
       "idField": "formId"
     }
   },

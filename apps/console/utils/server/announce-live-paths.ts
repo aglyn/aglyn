@@ -23,8 +23,8 @@ import { postTenantRevalidate } from './tenant-revalidate'
  * The server counterpart to `revalidateLivePages`. A browser cannot call the
  * tenant itself — that route is secret-authenticated — so the client half
  * hops through `/api/screens/revalidate`; a route running here already holds
- * the secret and announces directly, exactly as `announceFormPublish` does
- * for a form promotion.
+ * the secret and announces directly. A plugin's server route reaches the same
+ * announcement through `dropPluginSiteCache`, narrowed by `paths`.
  *
  * This exists because the routes that need it have a host snapshot and a list
  * of addresses and nothing else: no screen graph to walk and no id whose

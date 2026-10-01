@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { PLUGIN_BESIGNER_DOCUMENTS_DECLARED } from './first-party-plugins.generated'
+import {
+  FIRST_PARTY_PLUGINS,
+  PLUGIN_BESIGNER_DOCUMENTS_DECLARED,
+} from './first-party-plugins.generated'
 
 /**
  * A DOCUMENT A PLUGIN KEEPS UNDER A SITE AND AUTHORS IN THE BESIGNER.
@@ -132,4 +135,25 @@ export function besignerPublishRefusal(
   return typeof payload.error === 'string' && payload.error
     ? payload.error
     : `The ${noun} could not be published.`
+}
+
+/**
+ * Why a document cannot be published on a site that switched its plugin off.
+ *
+ * The plugin's publish route is behind the platform's per-site switch, so on
+ * such a site it would answer as if it did not exist. The editor asks the
+ * site's plugin set first and says this instead, naming the plugin the way
+ * the site's plugin settings do.
+ */
+export function besignerDocumentOffForSite(
+  declared: ResolvedBesignerDocument,
+): string {
+  const label =
+    FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === declared.pluginId)
+      ?.label ?? declared.pluginId
+  return (
+    `${label} is switched off for this site, so a ${declared.noun} published ` +
+    `here would not show on its pages. Switch ${label} back on for this site ` +
+    `in Admin › Plugins to publish it.`
+  )
 }

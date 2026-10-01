@@ -106,13 +106,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/api/hosts/forms/promote/route.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/console/app/api/hosts/import/route.ts",
       "rules": [
         "plugin-collection:data",
@@ -293,13 +286,6 @@
         "domain-declares:workflows"
       ],
       "lane": "workflows"
-    },
-    {
-      "path": "apps/console/utils/promote-form-version.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
     },
     {
       "path": "apps/console/utils/server/announce-dataset-change.ts",
