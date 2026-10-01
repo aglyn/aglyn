@@ -36,24 +36,20 @@ export const CAMPAIGN_KIND = 'campaign'
 export const CAMPAIGN_MEMBERSHIP_FIELD = containerMembershipField(CAMPAIGN_KIND)
 
 /**
- * The host subcollections whose documents may name a campaign.
+ * The host subcollections whose documents may name a campaign and that this
+ * plugin clears when a campaign is deleted: a form's and a screen's, filed
+ * from their own pages.
  *
  * The list a campaign's deletion walks, and the list the assignment surfaces
  * spec reads — so a collection that grows a picker without growing the
  * detach fails the build rather than shipping a campaign whose removal
  * leaves that collection pointing at nothing.
  *
- * `leads` is here for the site rows the lead migration (AGL-3276) has not
- * reached. A live lead is an org row (`orgs/{orgId}/leads/{personKey}`) that
- * carries the field at the top of its document like a form does, and the
- * deletion walks that collection by name beside this list.
- *
- * Contacts are deliberately NOT here. They live on the org
- * (`orgs/{orgId}/contacts`), not the host, and carry the field inside a
- * per-holder facet — so they are detached by their own pass, against a field
- * path that names the group. Nor are another plugin's own members — a
- * sequence and its enrollments live under the org, in collections this
- * plugin does not name — so that plugin registers a detacher
+ * Another plugin's members are NOT here. A lead and a contact are the CRM's
+ * — a lead carries the field at the top of its document, on the org and on
+ * the site rows the lead migration has not reached, and a contact inside a
+ * per-holder facet — and a sequence and its enrollments are Outreach's. Each
+ * of those plugins registers a detacher
  * (`plugin-manager/plugin-membership-detach.ts`) and the deletion runs it.
  */
-export const CAMPAIGN_MEMBER_HOST_COLLECTIONS = ['forms', 'screens', 'leads'] as const
+export const CAMPAIGN_MEMBER_HOST_COLLECTIONS = ['forms', 'screens'] as const

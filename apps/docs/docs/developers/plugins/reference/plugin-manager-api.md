@@ -672,7 +672,9 @@ above:
 
 The owner removes a container by clearing its id from every member it can
 name; a plugin whose members it cannot name registers a detacher
-(`plugin-membership-detach`), which is handed the kind's field.
+(`plugin-membership-detach`), which is handed the kind's field. The CRM
+clears its leads and each site's contact facet that way, and Outreach its
+sequences and enrollments.
 
 ## Record addresses — `plugin-record-routes`
 

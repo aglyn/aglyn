@@ -25,12 +25,14 @@
  *     rule this console runs on is that a record is edited on its own page —
  *     so a kind whose only route to a campaign was raw JSON would be a
  *     missing console feature, not a workaround.
- *  2. **Every HOST collection a picker writes to is walked by the delete.**
+ *  2. **Every collection a picker writes to is walked by the delete.** A
+ *     form's and a screen's are this plugin's to clear:
  *     `CAMPAIGN_MEMBER_HOST_COLLECTIONS` is what `campaign-manage.ts`
- *     iterates. A picker added to a fourth collection without adding the name
- *     there would ship a campaign whose deletion leaves that collection
- *     holding an id nothing resolves — and it would ship silently, because
- *     both sides compile perfectly.
+ *     iterates. A lead's and a contact's are the CRM's, cleared by the
+ *     membership detacher it registers, which the deletion runs. A picker
+ *     added to another collection without either would ship a campaign whose
+ *     deletion leaves that collection holding an id nothing resolves — and it
+ *     would ship silently, because both sides compile perfectly.
  *
  * Read from the SOURCE rather than restated, so the guard cannot agree with a
  * comment while the code says something else. The surfaces are other
@@ -74,8 +76,14 @@ const ASSIGNMENT_SURFACES: Record<string, string> = {
 /** Where a lead is filed as it is created — a second door, beside its page. */
 const LEAD_CREATE_SURFACE = 'libs/plugins/crm/src/lib/components/new-lead-drawer.tsx'
 
-/** The one place a campaign's removal walks its members. */
+/** Where a campaign's removal walks the members this plugin clears. */
 const DELETE_PATH = 'libs/plugins/marketing/src/lib/server/campaign-manage.ts'
+
+/** Where the CRM clears its own: a lead's field and a contact's facet. */
+const CRM_DETACH_PATH = 'libs/plugins/crm/src/lib/server/container-detach.ts'
+
+/** The record kinds whose records are the CRM's, cleared by its detacher. */
+const CRM_KINDS = ['contacts', 'leads']
 
 describe('every assignable record kind has a picker on its own page', () => {
   it.each(Object.entries(ASSIGNMENT_SURFACES))(
@@ -129,18 +137,16 @@ describe('every assignable record kind has a picker on its own page', () => {
 })
 
 describe('the campaign’s removal walks every collection a picker writes', () => {
-  it('names the host collections the pickers write to', () => {
+  it('names the host collections the pickers write to, but the CRM’s', () => {
     const hostCollections = Object.keys(ASSIGNMENT_SURFACES).filter(
-      // Contacts live on the ORG, not the host, and are detached by their own
-      // pass against a facet path rather than by this list.
-      (kind) => kind !== 'contacts',
+      (kind) => !CRM_KINDS.includes(kind),
     )
     expect([...CAMPAIGN_MEMBER_HOST_COLLECTIONS].sort()).toEqual(
       hostCollections.sort(),
     )
   })
 
-  it('iterates that list rather than a second copy of it', () => {
+  it('iterates that list rather than a second copy of it, and asks every plugin', () => {
     const source = read(DELETE_PATH)
     expect(source).toContain('CAMPAIGN_MEMBER_HOST_COLLECTIONS')
     /*
@@ -150,9 +156,20 @@ describe('the campaign’s removal walks every collection a picker writes', () =
      */
     expect(source).toContain('CAMPAIGN_MEMBERSHIP_FIELD')
     expect(source).not.toContain(`'${CAMPAIGN_MEMBERSHIP_FIELD}'`)
-    // The contact pass is separate and must stay separate: a facet path is
+    expect(source).toContain('runPluginMembershipDetachers(')
+  })
+
+  it('leaves the CRM’s leads and contacts to the detacher the CRM registers', () => {
+    const detach = read(CRM_DETACH_PATH)
+    // A lead on the org and on the site, by the membership field…
+    expect(detach).toMatch(/collection\('leads'\)/)
+    // …and a contact inside the site's consent group's facet: a facet path is
     // not a top-level field name.
-    expect(source).toContain('contactContainerFieldPath')
+    expect(detach).toMatch(/collection\('contacts'\)/)
+    expect(detach).toContain('contactContainerFieldPath')
+    expect(read('libs/plugins/crm/src/lib/declarations.console-server.ts')).toContain(
+      'registerPluginMembershipDetacher(',
+    )
   })
 
   it('clears one campaign rather than the whole membership', () => {
@@ -162,5 +179,6 @@ describe('the campaign’s removal walks every collection a picker writes', () =
      * `emailCampaignId` is the only field here that may be removed outright.
      */
     expect(read(DELETE_PATH)).toContain('arrayRemove')
+    expect(read(CRM_DETACH_PATH)).toContain('arrayRemove')
   })
 })

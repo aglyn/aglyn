@@ -92,7 +92,6 @@
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { logResourceDuplicated } from '@aglyn/tenant-data-admin/server/duplicate-activity'
-import { restampCrmListFieldsOf } from '@aglyn/tenant-data-admin/server/crm-records'
 import { restampFormsInCampaign } from './campaign-form-flags'
 import {
   DUPLICATE_BUSY_MESSAGE,
@@ -107,13 +106,11 @@ import { claimAttempt, createResourceUid } from '@aglyn/aglyn/server'
  * pipeline back into this file's graph.
  */
 import {
-  consentGroupForSite,
   getOrgDoc,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin/server/organizations'
 import {
-  contactContainerFieldPath,
   isOrgWideMember,
   type AglynOrgMember,
   type PluginApiHandler,
@@ -135,7 +132,6 @@ import {
 } from './campaign-org-refs'
 import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-route'
 import {
-  CAMPAIGN_KIND,
   CAMPAIGN_MEMBER_HOST_COLLECTIONS,
   CAMPAIGN_MEMBERSHIP_FIELD,
 } from '../model/campaign-kind'
@@ -248,9 +244,6 @@ async function detachSends(
  * campaign and a landing page is in several, so removing one must not be
  * removing all of them.
  *
- * `query` rather than a collection ref, because the contact pass hands in a
- * path this file cannot build for itself.
- *
  * @returns how many were detached, and whether any were left.
  */
 async function detachMembership(
@@ -277,11 +270,6 @@ async function detachMembership(
       })
     }
     await batch.commit()
-    // A lead's campaigns are what the Leads list's Campaign filter reads
-    // under a site (AGL-3321): restamped from each lead as it now stands.
-    if (collectionRef.id === 'leads') {
-      await restampCrmListFieldsOf(page.docs.map((member) => member.ref), 'leads')
-    }
     // A form's `inCampaign` is what the Forms list's "In a campaign" filter
     // asks (AGL-3330), and `arrayRemove` cannot say whether it emptied the
     // array: restamped from each form as it now stands.
@@ -318,9 +306,9 @@ async function orgSiteIds(
 }
 
 /**
- * Clears the campaign off every form, screen, lead and contact holding it,
- * on every site of the organization, and then off every record a plugin
- * keeps about it (AGL-3254).
+ * Clears the campaign off every form and screen holding it, on every site of
+ * the organization, and then off every record a plugin keeps filed under it
+ * (AGL-3254, AGL-3080).
  *
  * ## Why the campaign is not simply deleted over the top of them
  *
@@ -337,34 +325,19 @@ async function orgSiteIds(
  * may still hold forms and screens filed under it. So the walk covers every
  * site in the org regardless of which door the deletion came through.
  *
- * ## Leads and contacts are reached on the organization
- *
- * A lead lives at `orgs/{orgId}/leads` and carries the field at the top of
- * its document, like a form. The site `leads` collection is walked as well,
- * as part of each site's own collections: records captured before leads
- * moved to the org are still read there.
- *
- * A contact lives at `orgs/{orgId}/contacts` and is shared by every site, so
- * the membership sits inside a consent group's facet rather than at the top
- * of the document. The field PATH is therefore the scope, and the walk runs
- * once per distinct group of the org's sites — two sites declared as one
- * sender share a facet, and clearing it twice would find nothing the second
- * time. The unscoped collection ref is what the walk runs on precisely
- * because the path already carries the boundary — a `visibleTo` filter would
- * spend the query's one array-contains slot and leave none for the
- * membership.
- *
  * ## A plugin's members are the plugin's to clear
  *
- * A sequence and its enrollments name the campaign from documents under the
- * org, in collections this plugin does not know (AGL-3254). Every plugin
- * with a membership detacher registered on the core's seam is asked, once
- * per site, with the campaign's id and the field it is held in, and a
- * detacher that reports records remaining — or threw, which is reported as
- * `null` — holds the container exactly as this pass's own `remaining` does.
- * A plugin that failed is a plugin whose records may still name the
- * campaign, and the deletion has no way to tell that apart from one that has
- * more than a request clears.
+ * A lead, a contact, a sequence and its enrollments name the campaign from
+ * documents another plugin keeps, in collections this plugin does not know:
+ * the CRM's leads carry the field at the top of their documents and its
+ * contacts inside each consent group's facet, and Outreach's sequences under
+ * the org. Every plugin with a membership detacher registered on the core's
+ * seam is asked, once per site, with the campaign's id and the field it is
+ * held in, and a detacher that reports records remaining — or threw, which is
+ * reported as `null` — holds the container exactly as this pass's own
+ * `remaining` does. A plugin that failed is a plugin whose records may still
+ * name the campaign, and the deletion has no way to tell that apart from one
+ * that has more than a request clears.
  */
 async function detachMembers(
   firestore: FirebaseFirestore.Firestore,
@@ -392,15 +365,6 @@ async function detachMembers(
       )
     }
   }
-  const orgRef = firestore.collection('orgs').doc(orgId)
-  take(
-    await detachMembership(
-      firestore,
-      orgRef.collection('leads'),
-      CAMPAIGN_MEMBERSHIP_FIELD,
-      campaignId,
-    ),
-  )
   /*
    * An org with no sites still has plugins that may hold the campaign, so
    * the seam is asked once with no site rather than not at all.
@@ -416,29 +380,6 @@ async function detachMembers(
       detached += report?.detached ?? 0
       remaining = remaining || report === null || report.remaining
     }
-  }
-  /*
-   * One read of the org document serves every site's group: with it in
-   * hand, `consentGroupForSite` resolves from the declaration without a
-   * lookup per site. A missing document answers every site as a group of
-   * one, which is `consentGroupForSite`'s documented failure direction and
-   * the safe one here — each site's own facet is cleared, and no other.
-   */
-  const org = ((await getOrgDoc(orgId)) ?? {}) as Record<string, unknown>
-  const groupIds = new Set<string>()
-  for (const hostId of hostIds) {
-    groupIds.add((await consentGroupForSite(hostId, org)).groupId)
-  }
-  const contacts = orgRef.collection('contacts')
-  for (const groupId of groupIds) {
-    take(
-      await detachMembership(
-        firestore,
-        contacts,
-        contactContainerFieldPath(groupId, CAMPAIGN_KIND),
-        campaignId,
-      ),
-    )
   }
   return { detached, remaining }
 }

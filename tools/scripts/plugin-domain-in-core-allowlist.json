@@ -436,13 +436,6 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/marketing/src/lib/server/campaign-manage.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/marketing/src/lib/server/campaign-send.ts",
       "rules": [
         "plugin-collection:marketplace"
