@@ -218,6 +218,16 @@ describe('create tells an invitee who already has an account', () => {
       }),
       { skipEmail: true },
     )
+    // The admins' notice says who invited whom, to which workspace (AGL-3432).
+    // "Ada" is the signed-in admin's name as the mocked IdP resolver gives it.
+    expect(mockNotifyOrgAdmins).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({
+        type: 'team.invite',
+        title: 'Invited ada@work.test to Acme',
+        body: expect.stringMatching(/^Ada invited ada@work\.test to Acme as admin\. /),
+      }),
+    )
   })
 
   it('notifies nobody when the address belongs to no single account', async () => {
@@ -263,7 +273,12 @@ describe('decline', () => {
       'org-1',
       expect.objectContaining({
         type: 'team.invite',
-        title: 'ada@work.test declined their invitation',
+        // The workspace is named: an admin of several cannot otherwise tell
+        // which one was turned down (AGL-3432).
+        title: 'ada@work.test declined the invitation to Acme',
+        body:
+          'ada@work.test declined the invitation to join Acme as admin. ' +
+          'The invite was removed, so it no longer holds a seat.',
       }),
     )
     expect(mockLogOrgActivity).toHaveBeenCalledTimes(1)

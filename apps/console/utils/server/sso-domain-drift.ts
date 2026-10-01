@@ -101,11 +101,28 @@ export function summariseSsoDrift(
 }
 
 /**
+ * The console notification the org's admins get beside the email: what is
+ * missing, that nothing changed, and the action the "Action needed" title
+ * asks for (AGL-3432).
+ */
+export function driftOrgNotificationBody(entry: SsoDomainDriftEntry): string {
+  return (
+    `The DNS record that proves your organization owns ${entry.domain} for ` +
+    `single sign-on is missing. SSO still works and nothing has been turned ` +
+    `off. Restore the TXT record, or remove the domain in SSO settings if you ` +
+    `no longer use it.`
+  )
+}
+
+/**
  * What the org's own admins are told, in words, before anything breaks.
  *
  * Deliberately explicit that NOTHING HAS CHANGED YET. The failure mode of a
  * warning like this is a customer reading it as an outage notice and paging
- * their own on-call at 3am over a DNS record they can fix on Monday.
+ * their own on-call at 3am over a DNS record they can fix on Monday. The
+ * opening also says what DID happen and what to do, because the subject says
+ * "Action needed" and a reader of the first paragraph alone should learn
+ * which action (AGL-3432).
  */
 export function driftOrgEmailText(
   entry: SsoDomainDriftEntry,
@@ -116,8 +133,10 @@ export function driftOrgEmailText(
       `the challenge record specifically is what is no longer there.`
     : `We saw no TXT record at that name at all.`
   return [
-    `Single sign-on for ${entry.domain} is still working. Nothing has been ` +
-      `turned off, and nothing will be turned off automatically.`,
+    `Single sign-on for ${entry.domain} is still working, but the DNS record ` +
+      `that proves your organization owns ${entry.domain} is missing. Please ` +
+      `restore it, or remove the domain in your SSO settings. Nothing has ` +
+      `been turned off, and nothing will be turned off automatically.`,
     ``,
     `When you set up SSO for ${entry.domain}, you proved you owned it by ` +
       `publishing a DNS TXT record. We re-check that record periodically. It ` +
@@ -137,21 +156,58 @@ export function driftOrgEmailText(
   ].join('\n')
 }
 
-/** The staff-side line. Terse, and says the one thing staff must not assume. */
+/** "1 SSO domain no longer proves", "3 SSO domains no longer prove". */
+function driftCountPhrase(count: number): string {
+  return count === 1
+    ? '1 SSO domain no longer proves'
+    : `${count} SSO domains no longer prove`
+}
+
+/** The staff title and email subject for a sweep's drifted domains. */
+export function driftStaffTitle(summary: SsoDriftSummary): string {
+  return `${driftCountPhrase(summary.drifted.length)} ownership`
+}
+
+/**
+ * The staff console notification's body: the domains, by name, and that
+ * nothing was revoked. One domain is named alone, never "and 0 others"
+ * (AGL-3432).
+ */
+export function driftStaffNotificationBody(summary: SsoDriftSummary): string {
+  const [first, ...rest] = summary.drifted
+  const named = !first
+    ? 'No SSO domains'
+    : rest.length === 0
+      ? `${first.domain} no longer proves`
+      : `${first.domain} and ${rest.length} other${rest.length === 1 ? '' : 's'} no longer prove`
+  return (
+    `${named} ownership by DNS. Routing is unchanged and nothing was ` +
+    `revoked; revoking is a human decision.`
+  )
+}
+
+/**
+ * The staff-side line. Terse, and says the one thing staff must not assume.
+ * `orgNames` names each workspace beside its id, for the rows whose name was
+ * read (AGL-3432).
+ */
 export function driftStaffAlertText(
   summary: SsoDriftSummary,
   origin: string,
+  orgNames: ReadonlyMap<string, string> = new Map(),
 ): string {
   const rows = summary.drifted
-    .map(
-      (entry) =>
-        `  ${entry.domain} (org ${entry.orgId}) — ${entry.consecutiveFailures} ` +
-        `consecutive failures` +
-        (entry.daysFailing === null ? '' : ` over ${entry.daysFailing} days`),
-    )
+    .map((entry) => {
+      const name = orgNames.get(entry.orgId)
+      return (
+        `  ${entry.domain} (${name ? `${name}, ` : ''}org ${entry.orgId}) — ` +
+        `${entry.consecutiveFailures} consecutive failures` +
+        (entry.daysFailing === null ? '' : ` over ${entry.daysFailing} days`)
+      )
+    })
     .join('\n')
   return [
-    `${summary.drifted.length} SSO domain(s) no longer prove ownership by DNS.`,
+    `${driftCountPhrase(summary.drifted.length)} ownership by DNS.`,
     ``,
     rows,
     ``,

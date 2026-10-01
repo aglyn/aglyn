@@ -278,13 +278,21 @@ export async function enforceSsoSignInMethods(
 
   if (!dryRun && changedUids.length) {
     // Explaining it beats a mysteriously missing button on their next visit.
+    // The organization is named, because a person can belong to several, and
+    // the sign-out is said, because the refresh tokens were revoked above
+    // (AGL-3432).
+    const orgName = String(orgSnapshot.get('name') ?? '').trim()
     await notifyUsers(changedUids, {
       type: 'system.signInMethodRemoved',
-      title: 'Your sign-in methods changed',
+      title: orgName
+        ? `${orgName} now requires single sign-on`
+        : 'Your sign-in methods changed',
       body:
-        'Your organization now requires single sign-on, so other sign-in ' +
-        'methods have been removed from your account. Sign in through your ' +
-        'organization instead.',
+        `${orgName || 'Your organization'} now requires single sign-on, so ` +
+        'the other sign-in methods on your account were removed and you were ' +
+        'signed out. Sign in with ' +
+        `${orgName ? `${orgName}'s` : "your organization's"} single sign-on ` +
+        'from now on.',
       orgId,
       link: '/manage/user',
     })

@@ -284,14 +284,20 @@ async function handler(request: Request): Promise<Response> {
     }
 
     /**
-     * The org's slug, for the deep link on admin notifications (AGL-1116).
+     * The org's slug, for the deep link on admin notifications (AGL-1116),
+     * and its name, which the notice names because an admin of several
+     * workspaces cannot otherwise tell which one it is about (AGL-3432).
      * Links are frozen at write time, so a notification emitted for a
      * slug-less org gets none rather than a route that would 404 later.
      */
-    const orgSlugForLink = async (): Promise<string | undefined> => {
+    const orgForNotice = async (): Promise<{ slug?: string; name: string }> => {
       const snapshot = await firestore.collection('orgs').doc(orgId).get()
       const slug = snapshot.get('slug')
-      return typeof slug === 'string' && slug ? slug : undefined
+      const name = snapshot.get('name')
+      return {
+        ...(typeof slug === 'string' && slug ? { slug } : {}),
+        name: typeof name === 'string' && name.trim() ? name.trim() : 'the workspace',
+      }
     }
 
     /**
@@ -616,17 +622,22 @@ async function handler(request: Request): Promise<Response> {
       // notification type has existed since AGL-259 with no emitter at all.
       // Whether the email actually went out is the part they cannot
       // otherwise find out.
-      const inviteSlug = await orgSlugForLink()
+      const inviteOrg = await orgForNotice()
+      const inviter = resolveIdpDisplayName(decoded) || decoded.email || 'An admin'
       void notifyOrgAdmins(orgId, {
         type: 'team.invite',
-        title: `${reusing ? 'Invite updated for' : 'Invited'} ${email}`,
+        title: reusing
+          ? `Invite to ${inviteOrg.name} updated for ${email}`
+          : `Invited ${email} to ${inviteOrg.name}`,
         body:
-          `Role: ${role}. ` +
+          (reusing
+            ? `${inviter} updated the invite for ${email} to join ${inviteOrg.name} as ${role}. `
+            : `${inviter} invited ${email} to ${inviteOrg.name} as ${role}. `) +
           (emailed
-            ? 'Invite email sent.'
-            : 'No invite email was sent — they will see it when they sign in.'),
-        ...(inviteSlug
-          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: inviteSlug }) }
+            ? 'The invite email was sent.'
+            : 'No invite email was sent; they will see the invite when they sign in.'),
+        ...(inviteOrg.slug
+          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: inviteOrg.slug }) }
           : {}),
       })
       // And the invitee, when the address already belongs to an account
@@ -753,13 +764,13 @@ async function handler(request: Request): Promise<Response> {
       // Close the loop for whoever invited them (AGL-1116): an admin who sent
       // an invite had no way to learn it was taken up short of re-opening the
       // Team page and noticing the pending row had gone.
-      const acceptSlug = await orgSlugForLink()
+      const acceptOrg = await orgForNotice()
       void notifyOrgAdmins(orgId, {
         type: 'team.invite',
-        title: `${email} accepted their invitation`,
-        body: `They joined as ${invite['role']}.`,
-        ...(acceptSlug
-          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: acceptSlug }) }
+        title: `${email} accepted the invitation to ${acceptOrg.name}`,
+        body: `${email} accepted the invitation and joined ${acceptOrg.name} as ${invite['role']}.`,
+        ...(acceptOrg.slug
+          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: acceptOrg.slug }) }
           : {}),
       })
       await markInviteNotificationsRead(decoded.uid, inviteId)
@@ -792,13 +803,15 @@ async function handler(request: Request): Promise<Response> {
         `Declined the invitation to join as ${invite['role']}`,
         { type: 'invite', id: inviteId, name: String(invite['email']) },
       )
-      const declineSlug = await orgSlugForLink()
+      const declineOrg = await orgForNotice()
       void notifyOrgAdmins(orgId, {
         type: 'team.invite',
-        title: `${invitee.email} declined their invitation`,
-        body: `They were invited as ${invite['role']}.`,
-        ...(declineSlug
-          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: declineSlug }) }
+        title: `${invitee.email} declined the invitation to ${declineOrg.name}`,
+        body:
+          `${invitee.email} declined the invitation to join ${declineOrg.name} ` +
+          `as ${invite['role']}. The invite was removed, so it no longer holds a seat.`,
+        ...(declineOrg.slug
+          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: declineOrg.slug }) }
           : {}),
       })
       await markInviteNotificationsRead(decoded.uid, inviteId)
