@@ -325,7 +325,7 @@ async function main(argv) {
   const work = mkdtempSync(join(tmpdir(), 'aglyn-consumer-'))
   let failed = 0
   try {
-    const tarballs = packed ? buildAndPack(union, work) : null
+    const tarballs = packed ? buildAndPack(union, work, version) : null
     if (!packed) {
       console.log(`  · wait for ${version} on the registry`)
       const missing = await awaitPublished(union.map((project) => project.alias), version, { log: (line) => console.log(`    ${line}`) })
@@ -349,9 +349,18 @@ async function main(argv) {
   return failed ? 1 : 0
 }
 
-/** Builds every lib in the closure and packs each, as `publish:packages` would. */
-function buildAndPack(projects, work) {
+/**
+ * Builds every lib in the closure and packs each, as `publish:packages` would.
+ *
+ * Each lib's `dist` is cleared first, and each packed manifest must carry the
+ * version under test. A manifest left over from an earlier build packs the
+ * previous release, and npm then fetches that sibling from the registry
+ * without a word, so the proof would pass on packages it never packed. That
+ * happened once, through the svg-icons build (see its vite.config.ts).
+ */
+function buildAndPack(projects, work, version) {
   console.log('  · build')
+  for (const project of projects) rmSync(join(ROOT, 'dist', project.root), { recursive: true, force: true })
   run('npx', ['nx', 'run-many', '-t', 'build', '-p', projects.map((project) => project.name).join(',')], ROOT)
   console.log('  · pack')
   mkdirSync(join(work, 'tarballs'))
@@ -359,6 +368,10 @@ function buildAndPack(projects, work) {
   for (const project of projects) {
     const dist = join(ROOT, 'dist', project.root)
     if (!existsSync(join(dist, 'package.json'))) throw new Error(`${project.name} built no package at dist/${project.root}`)
+    const built = readJson(join(dist, 'package.json'))
+    if (built.name !== project.alias || built.version !== version) {
+      throw new Error(`dist/${project.root} is ${built.name}@${built.version}, not ${project.alias}@${version}`)
+    }
     // The license text travels with every package. npm packs a LICENSE only
     // from the package's own directory, and the repo keeps one, at the root.
     copyFileSync(join(ROOT, 'LICENSE'), join(dist, 'LICENSE'))

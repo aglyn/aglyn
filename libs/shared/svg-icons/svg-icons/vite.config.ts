@@ -54,6 +54,13 @@ export default defineConfig({
   // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
     outDir: '../../../../dist/libs/shared/svg-icons/svg-icons',
+    // Start every build from an empty directory (AGL-3201). Vite leaves an
+    // outDir outside the project root alone unless told to, and the Nx
+    // executor copies the lib's package.json only when the output has none,
+    // so a build after a release kept the PREVIOUS release's manifest, and
+    // the Nx cache then stored it under the new hash. The consumer proof
+    // packed `@aglyn/shared-svg-icons@1.0.0-beta.219` from a beta.220 tree.
+    emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: { transformMixedEsModules: true },
     lib: {
