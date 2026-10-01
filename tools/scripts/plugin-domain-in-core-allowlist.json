@@ -22,17 +22,17 @@
       "rules": [
         "plugin-id"
       ],
-      "lane": "plugin-id"
+      "lane": "stays",
+      "why": "The ids it trips on are FEATURE KEYS of the platform's own plan table, not reads of a plugin: `redirects`, `workflows`, `bookings`, `crm` and `commerce` are keys of `PLAN_ENTITLEMENTS.features`, the switch by which a plan includes that plugin at all, and the price list sells each by that key. A plugin declares its own sub-features through `planEntitlements` (commerce's subscriptions and gift cards are there); whether a plan includes the plugin is the platform's decision, made in its plan table. This grid must draw a row for every feature key (`billing-plan-feature-rows.spec.ts`, `FEATURE_ROW_EXCLUSIONS`), and each row's wording is the published compare table's, pinned by `published-pricing-table-parity.spec.ts`."
     },
     {
       "path": "apps/console/components/billing/billing-usage.component.tsx",
       "rules": [
         "plugin-id",
         "plugin-collection:crm",
-        "domain-declares:crm",
-        "domain-declares:workflows"
+        "domain-declares:crm"
       ],
-      "lane": "plugin-id"
+      "lane": "crm"
     },
     {
       "path": "apps/console/components/entity-picker-provider.component.tsx",
