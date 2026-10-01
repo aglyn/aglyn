@@ -66,9 +66,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
 import { MARKETING_REPUTATION_BREAKER } from '../constants/operator-alerts'
-// The leaf, not the barrel: this plugin's specs substitute the barrel
-// wholesale, and the lookup must reach the real index logic under them.
-import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The person behind an address, through the plugin that keeps people
+// (AGL-3080): the sender never opens the record system's collections.
+import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { siteEmailFrame } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 /*
@@ -3519,13 +3519,12 @@ export async function proofPersonasForHost(
  * The three sources are the three an audience is built from, tried in the
  * order a small site grows them. Nothing here is taken from the request.
  *
- * The org `contacts` lookup goes through the org's address index narrowed
- * to this site (AGL-2633): the index is consulted for the address, the
- * contact it names is checked against `visibleTo` in memory, and only
- * then does the `email ==` query run. So a person whose two records were
- * merged is found under the address that became an alternate, and the
- * scope check is not skipped — it is applied to the one document an
- * address names, which is the same shape the segment branch above uses.
+ * The third is the person the workspace keeps for the address, asked of the
+ * plugin that keeps people (`plugin-person-records`, AGL-3080) and narrowed
+ * to this site: the owner's address lookup answers an alternate address a
+ * merge folded in (AGL-2633), and the scope check is applied to the one
+ * record an address names, which is the same shape the segment branch above
+ * uses.
  */
 async function findAudienceDocument(
   hostId: string,
@@ -3551,15 +3550,14 @@ async function findAudienceDocument(
     }
   }
 
-  const contacts = await orgDataCollectionForHost(hostId, 'contacts').catch(
-    () => null,
-  )
-  const contact = contacts
-    ? await findContactByEmail(contacts, email, { hostId }).catch(() => null)
-    : null
-  return contact
+  const person = await findPluginPerson({
+    hostId,
+    email,
+    onlyVisibleToSite: true,
+  }).catch(() => null)
+  return person
     ? {
-        data: (contact.data() ?? {}) as Record<string, unknown>,
+        data: { ...person.data },
         nameFields: ['name', 'firstName'],
       }
     : null

@@ -1298,6 +1298,49 @@ message a send carried, and tells the sender, which counts it.
 | `registerPluginSendTally({ unsubscribed })` | A sender's tally (a set: several plugins may send in bulk). `unsubscribed({ hostId, sendId })` answers whether the send was this plugin's and was counted. |
 | `tallySendUnsubscribe({ hostId, sendId })` | Asks each tally until one counts it. Never throws; the door counts only an unsubscribe it just created. |
 
+## People — `plugin-person-records` (`/server`)
+
+The other half of keeping people. A plugin that holds an address, or a record
+the owner handed it, asks the plugin that keeps people for the person behind
+it — instead of opening that plugin's collections, address index and scope
+rules itself.
+
+```ts
+// the plugin that keeps people, from its server declarations
+registerPluginPersonRecords(rolodexPeople)
+
+// a sender deciding whether it may mail somebody
+const person = await findPluginPerson({ hostId, email, onlyVisibleToSite: true, anyKind: true })
+const basis = readMarketingBasis(person ? { ...person.data } : null, group)
+
+// an automation filing the person under a campaign, as its site holds them
+await filePluginPersonUnder({ hostId, record: person, containerKind: 'campaign', ids: [campaignId] })
+
+// a seller handing money back
+await recordPluginPersonRefund({ hostId, email: order.email, amountCents, refId: orderId, closedTheSale })
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginPersonRecords(records, { pluginId? })` | A slot: a workspace keeps one set of people, so a second plugin's service throws naming both and the incumbent keeps serving. Register it from `serverDeclarations`, so every process has it. |
+| `findPluginPerson({ orgId?, hostId?, email, onlyVisibleToSite?, anyKind? })` | The person an address belongs to — the owner's lookup, so an alternate address a merge folded in answers the person who holds it — or `null`. `onlyVisibleToSite` answers only a record `hostId` may see: one address names one person, so a record the site cannot see is `null`. `anyKind` looks past the record a known person is held as to every kind the owner keeps a person as (a lead not yet qualified). A failed read throws, and the caller decides which way it falls. |
+| `readPluginPeople({ orgId, records })` | The records named by `{ kind, id }`, in the order asked, `null` for each that is gone. |
+| `filePluginPersonUnder({ hostId, orgId?, record, containerKind, ids })` | Files the person under containers (`plugin-containers`, above) as `hostId` holds them; `{ filed: false }` for a record the site cannot see or that is gone. Filing is not consent. |
+| `recordPluginPersonRefund({ hostId, email, amountCents, refId, closedTheSale, reason? })` | Money handed back to a person — a refund, or a dispute lost (`reason: 'chargeback'`). The owner records it beside what the person spent and never creates a person to hold it: `recorded`, `no-email`, `no-person` or `gone`. Never throws. |
+| `pluginPersonRecords()` | The service with its owner, or `null`. |
+
+**Every reader answers `null` when no plugin keeps people.** That is a
+workspace with no record system, which is not "nobody found": a send with no
+record system has no basis to read, and treats it as record-less.
+
+**A record is the owner's word for its kind, an id, the primary address and
+the record as the owner stores it.** The kind is the one `plugin-record-routes`
+addresses it by. The fields the platform defines on a person — the consent
+basis `marketing-consent` reads, `emailState`, `visibleTo` — are read with the
+platform's readers; anything else is the owner's, documented with its
+registration. The CRM keeps `contact` (a known person) and `lead` (one nobody
+has qualified yet).
+
 ## Record timeline — `plugin-record-timeline` (`/server`)
 
 A plugin that sends mail or books meetings files what happened on the

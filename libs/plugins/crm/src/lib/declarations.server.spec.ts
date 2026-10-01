@@ -40,12 +40,14 @@ import {
   listPluginLeadConversionListeners,
   resetPluginLeadConversionListenersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
+import { pluginPersonRecords } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   crmContactCaptureWriter,
+  crmPersonRecordsService,
   crmPipelineRecordIndex,
   registerCrmServerDeclarations,
 } from './declarations.server'
@@ -107,6 +109,13 @@ describe('what the CRM declares at boot', () => {
     expect(pluginRecordIndex('pipeline')).toEqual({ pluginId: 'crm', index: crmPipelineRecordIndex })
     expect(deferredImports).toContain('./server/pipeline-record-index')
     expect(staticImports).not.toContain('./server/pipeline-record-index')
+  })
+
+  it('answers for the workspace’s people under this plugin, its reads loaded with the first question (AGL-3080)', () => {
+    registerCrmServerDeclarations()
+    expect(pluginPersonRecords()).toEqual({ pluginId: 'crm', records: crmPersonRecordsService })
+    expect(deferredImports).toContain('./server/person-records')
+    expect(staticImports).not.toContain('./server/person-records')
   })
 
   it('registers the workspace’s contact-capture writer, under this plugin', () => {

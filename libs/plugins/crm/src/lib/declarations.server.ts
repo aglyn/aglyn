@@ -25,6 +25,10 @@ import {
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonMatcher } from '@aglyn/aglyn/plugin-manager/plugin-person-matches'
 import {
+  registerPluginPersonRecords,
+  type PluginPersonRecords,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
@@ -51,6 +55,30 @@ export const crmContactCaptureWriter: PluginContactCaptureWriter = {
   async capture(request) {
     const { captureContactForCrm } = await import('./server/capture-contact')
     return await captureContactForCrm(request)
+  },
+}
+
+/**
+ * The CRM as the plugin other plugins ask for people (AGL-3080), deferred
+ * like the capture: `server/person-records.ts` and the Admin SDK it brings
+ * load with the first question, not when the process starts.
+ */
+export const crmPersonRecordsService: PluginPersonRecords = {
+  async find(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.find(request)
+  },
+  async read(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.read(request)
+  },
+  async fileUnder(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.fileUnder!(request)
+  },
+  async recordRefund(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.recordRefund!(request)
   },
 }
 
@@ -118,6 +146,11 @@ export function registerCrmServerDeclarations(): void {
   registerPluginContactCaptureWriter(crmContactCaptureWriter, {
     pluginId: BUNDLE_ID,
   })
+  // The other half of keeping people (AGL-3080): another plugin that holds
+  // an address, or a record the CRM handed it, asks here for the person —
+  // a flow email's consent read, a refund, an automation filing somebody
+  // under a campaign — and never opens the CRM's collections itself.
+  registerPluginPersonRecords(crmPersonRecordsService, { pluginId: BUNDLE_ID })
   // The CRM's own share of a lead conversion (AGL-3254): the lead's
   // campaigns go onto the contact's facet. Through the seam every door
   // that converts a lead reaches, and deferred like the capture: the

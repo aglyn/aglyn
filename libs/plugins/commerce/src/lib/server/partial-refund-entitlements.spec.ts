@@ -281,9 +281,6 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   }),
 }))
 
-jest.mock('./contact-refund', () => ({
-  recordContactRefund: async () => undefined,
-}))
 jest.mock('./restock-flag', () => ({ flagOrderRestock: async () => undefined }))
 
 // ---------------------------------------------------------------------------

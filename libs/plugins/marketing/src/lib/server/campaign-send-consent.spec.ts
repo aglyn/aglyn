@@ -182,6 +182,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { MARKETING_CONSENT_ENFORCED_FROM_MS } from '@aglyn/aglyn/server'
 import { CampaignSendError, performCampaignSend } from './campaign-send'
+import { standInPersonRecords } from '../testing/stand-in-person-records'
 
 /** A path-keyed Firestore stand-in, covering only the shapes a send makes. */
 function mockFirestore(): any {
@@ -351,6 +352,9 @@ afterAll(() => {
   }
 })
 beforeEach(seedLeads)
+// The person behind an address is the record system's to find (AGL-3080);
+// the stand-in finds them in this suite's store.
+beforeEach(() => standInPersonRecords({ store: () => mockState.store, orgId: 'org-1' }))
 
 describe('a marketing campaign sends only where a basis permits it', () => {
   /**
