@@ -21,9 +21,13 @@
  */
 
 import {
+  AI_BUILD_PLAN_EMBEDS_TOOL,
   AI_BUILD_PLAN_LIMITS,
   AI_BUILD_PLAN_TOOL,
+  aiBuildPlanToolFor,
+  aiEmbedVideoKey,
   aiPlanCreateFor,
+  aiPlanEmbedsFor,
   aiPlanUndeclaredRefs,
   isAiPlanNewRef,
   parseAiBuildPlan,
@@ -212,13 +216,14 @@ describe('AI_BUILD_PLAN_TOOL — strict structured output', () => {
   }
 
   it('closes every object and requires every property it declares', () => {
-    const objects = objectSchemas(AI_BUILD_PLAN_TOOL.inputSchema)
+    const objects = objectSchemas(AI_BUILD_PLAN_EMBEDS_TOOL.inputSchema)
     expect(objects.map((entry) => entry.path)).toEqual([
       'input',
       'input.reuse[]',
       'input.create[]',
       'input.screens[]',
       'input.screens[].sections[]',
+      'input.embeds[]',
     ])
     for (const { path, schema } of objects) {
       expect([path, schema['additionalProperties']]).toEqual([path, false])
@@ -228,10 +233,11 @@ describe('AI_BUILD_PLAN_TOOL — strict structured output', () => {
       ])
     }
     expect(AI_BUILD_PLAN_TOOL.strict).toBe(true)
+    expect(AI_BUILD_PLAN_EMBEDS_TOOL.strict).toBe(true)
   })
 
   it('carries no bound strict output refuses — the reader enforces them instead', () => {
-    const text = JSON.stringify(AI_BUILD_PLAN_TOOL.inputSchema)
+    const text = JSON.stringify(AI_BUILD_PLAN_EMBEDS_TOOL.inputSchema)
     for (const keyword of [
       'minLength',
       'maxLength',
@@ -271,7 +277,7 @@ describe('AI_BUILD_PLAN_TOOL — strict structured output', () => {
   it('tells the model the ceiling the reader cuts each field it writes at (AGL-3022)', () => {
     // A ceiling the model is not shown is one it writes past, and the reader
     // then ends a rationale mid-sentence, on the last word break inside it.
-    const fields = textFields(AI_BUILD_PLAN_TOOL.inputSchema)
+    const fields = textFields(AI_BUILD_PLAN_EMBEDS_TOOL.inputSchema)
     // Copied from the inventory or from a creation's name, so the length is
     // not the model's to choose.
     const references = [
@@ -281,15 +287,22 @@ describe('AI_BUILD_PLAN_TOOL — strict structured output', () => {
       'input.screens[].template',
       'input.screens[].duplicateOf',
       'input.screens[].sections[].uses',
+      'input.embeds[].where',
     ]
+    // Copied from the brief, where the plan step finds them (AGL-3433): a
+    // prefix the reader cuts is still the brief's own words.
+    const fromBrief = ['input.embeds[].asked', 'input.embeds[].url']
     // Refused by rule 10 far inside the reader's ceilings, and told as the
     // rule's own numbers; the reader's here would contradict the rule.
     const heldByRule10 = ['input.screens[].seoTitle', 'input.screens[].seoDescription']
     expect(fields.map((field) => field.path)).toEqual(
-      expect.arrayContaining([...references, ...heldByRule10]),
+      expect.arrayContaining([...references, ...fromBrief, ...heldByRule10]),
     )
     const written = fields.filter(
-      (field) => !references.includes(field.path) && !heldByRule10.includes(field.path),
+      (field) =>
+        !references.includes(field.path) &&
+        !fromBrief.includes(field.path) &&
+        !heldByRule10.includes(field.path),
     )
     // A text field added to the schema lands here until it is placed in a group.
     expect(written.map((field) => field.path)).toEqual([
@@ -314,6 +327,27 @@ describe('AI_BUILD_PLAN_TOOL — strict structured output', () => {
     }
   })
 
+  it('offers the list of players only to a brief that asks for a video, leaving every other plan’s bytes alone (AGL-3433)', () => {
+    const { embeds, ...plain } = AI_BUILD_PLAN_EMBEDS_TOOL.inputSchema['properties'] as Record<string, unknown>
+    expect(embeds).toBeDefined()
+    expect(AI_BUILD_PLAN_TOOL.inputSchema['properties']).toEqual(plain)
+    expect(AI_BUILD_PLAN_TOOL.inputSchema['required']).toEqual(['reuse', 'create', 'screens'])
+    expect(AI_BUILD_PLAN_EMBEDS_TOOL.name).toBe(AI_BUILD_PLAN_TOOL.name)
+    for (const brief of [
+      'A page template for each of our insights articles: the headline, the author and date, the article body, and a short list of related reading.',
+      'A Practice Areas page for the firm.',
+    ]) {
+      expect(aiBuildPlanToolFor(brief)).toBe(AI_BUILD_PLAN_TOOL)
+    }
+    for (const brief of [
+      'An About page with our intro video at the top.',
+      'Put https://youtu.be/dQw4w9WgXcQ on the home page.',
+      'A service page with the Vimeo walkthrough.',
+    ]) {
+      expect(aiBuildPlanToolFor(brief)).toBe(AI_BUILD_PLAN_EMBEDS_TOOL)
+    }
+  })
+
   it('offers exactly the kinds the reader admits', () => {
     const schema = AI_BUILD_PLAN_TOOL.inputSchema as {
       properties: Record<string, { items: { properties: { kind: { enum: string[] } } } }>
@@ -327,6 +361,63 @@ describe('AI_BUILD_PLAN_TOOL — strict structured output', () => {
       expect(
         parseAiBuildPlan(plan({ create: [{ ...plan().create[0], kind: kind as never }] })).ok,
       ).toBe(true)
+    }
+  })
+})
+
+describe('a planned third-party player (AGL-3433)', () => {
+  const embed = {
+    host: 'youtube',
+    where: '/about',
+    asked: 'our intro video',
+    url: 'https://youtu.be/dQw4w9WgXcQ',
+  }
+
+  it('reads the list, and keeps no list on a plan whose brief asked for none', () => {
+    const parsed = parseAiBuildPlan({ ...plan(), embeds: [embed] })
+    expect(parsed.ok && parsed.plan.embeds).toEqual([embed])
+    const none = parseAiBuildPlan({ ...plan(), embeds: [] })
+    expect(none.ok && 'embeds' in none.plan).toBe(false)
+    const stored = parseAiBuildPlan(plan())
+    expect(stored.ok && 'embeds' in stored.plan).toBe(false)
+  })
+
+  it('refuses a host it cannot play and more players than a plan holds', () => {
+    expect(parseAiBuildPlan({ ...plan(), embeds: [{ ...embed, host: 'dailymotion' }] })).toEqual({
+      ok: false,
+      error: 'embeds[0].host is not one of youtube, vimeo',
+    })
+    const many = Array.from({ length: AI_BUILD_PLAN_LIMITS.embeds + 1 }, () => embed)
+    expect(parseAiBuildPlan({ ...plan(), embeds: many }).ok).toBe(false)
+  })
+
+  it('finds a screen’s players by its slug however it is spelled, and a creation’s by its name', () => {
+    const listed = {
+      embeds: [
+        { ...embed, host: 'youtube' as const },
+        { ...embed, host: 'vimeo' as const, where: 'new:Crew Video', url: null },
+      ],
+    }
+    expect(aiPlanEmbedsFor(listed, { slug: 'About/' }).map((entry) => entry.host)).toEqual(['youtube'])
+    expect(aiPlanEmbedsFor(listed, { create: 'crew video' }).map((entry) => entry.host)).toEqual(['vimeo'])
+    expect(aiPlanEmbedsFor(listed, { slug: '/contact' })).toEqual([])
+    expect(aiPlanEmbedsFor(null, { slug: '/about' })).toEqual([])
+  })
+
+  it('reads one video however its link is spelled, and no video from a link neither host plays', () => {
+    for (const link of [
+      'https://youtu.be/dQw4w9WgXcQ',
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      'https://m.youtube.com/watch?v=dQw4w9WgXcQ&t=4',
+      'https://www.youtube.com/embed/dQw4w9WgXcQ',
+      'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+    ]) {
+      expect([link, aiEmbedVideoKey(link)]).toEqual([link, 'youtube:dQw4w9WgXcQ'])
+    }
+    expect(aiEmbedVideoKey('https://vimeo.com/123456789')).toBe('vimeo:123456789')
+    expect(aiEmbedVideoKey('https://player.vimeo.com/video/123456789')).toBe('vimeo:123456789')
+    for (const link of ['http://youtu.be/dQw4w9WgXcQ', 'https://video.example.com/x', '{{entry.coverVideo}}', 'not a link']) {
+      expect([link, aiEmbedVideoKey(link)]).toEqual([link, null])
     }
   })
 })

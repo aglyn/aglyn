@@ -288,6 +288,32 @@ export function aiPlanTemplateTokenViolations(
       })
     }
   }
+  // A template renders for every record it serves, so a video it plays that
+  // the member never confirmed loads on every page of the collection (AGL-3433).
+  const promised = new Set(tokens.map(tokenKey))
+  const videos = new Set(
+    definition.tokens
+      .map((entry) => tokenKey(entry.token))
+      .filter((token) => token.endsWith('video') && !promised.has(token)),
+  )
+  const playing = new Map<string, string[]>()
+  const nodes = tree.nodes as unknown as Record<string, AiDoctrineNode>
+  for (const { id, node } of walkTree({ rootId: tree.rootId, nodes })) {
+    for (const token of aiBindingTokensIn(JSON.stringify(node.props ?? {}))) {
+      if (videos.has(tokenKey(token))) playing.set(token, [...(playing.get(token) ?? []), id])
+    }
+  }
+  if (playing.size) {
+    violations.push({
+      rule: 16,
+      code: 'plan-video-unasked',
+      message: `This template plays ${listed([...playing.keys()])}, which the confirmed plan does not list, so every ${definition.noun.replace(
+        /^an? /,
+        '',
+      )} page would load a player nobody asked for. Remove it.`,
+      nodeIds: [...new Set([...playing.values()].flat())],
+    })
+  }
   if (unreadable.length) {
     violations.push({
       rule: null,

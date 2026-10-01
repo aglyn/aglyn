@@ -321,12 +321,17 @@ export function aiPageWithSection(
 /**
  * What a tree generated against this inventory may reference, the brand it is
  * held to, where the workspace keeps no reusable components or saved forms
- * (AGL-3030) that the page is built inline, and the sections its plan names,
- * which a link may take a visitor to (AGL-3097).
+ * (AGL-3030) that the page is built inline, the sections its plan names,
+ * which a link may take a visitor to (AGL-3097), and the players its plan
+ * lists for this page, the only ones it may embed (AGL-3433).
  */
 export function aiPageCheckContext(
   inventory: AiSiteInventory | null,
-  options: { reusableComponents?: boolean; sections?: readonly string[] } = {},
+  options: {
+    reusableComponents?: boolean
+    sections?: readonly string[]
+    embeds?: AiDoctrineTreeContext['plannedEmbeds']
+  } = {},
 ): AiDoctrineTreeContext {
   return {
     brand: inventory?.theme ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts } : null,
@@ -334,6 +339,7 @@ export function aiPageCheckContext(
     homeScreenIds: aiHomeScreenIds(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
     ...(options.sections?.length ? { pageSections: options.sections } : {}),
+    ...(options.embeds?.length ? { plannedEmbeds: options.embeds } : {}),
   }
 }
 
