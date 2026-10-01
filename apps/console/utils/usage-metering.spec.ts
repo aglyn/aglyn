@@ -42,7 +42,7 @@ import {
 const GB = 1024 * 1024 * 1024
 
 /**
- * Starter: 1 site × 2048 MB storage, 50 GB bandwidth, 200 form submissions.
+ * Starter: 1 site × 2048 MB storage, 35 GB bandwidth, 200 form submissions.
  * Pro is the multi-site case (3 × 10240 MB, 3 × 1000 submissions), which is
  * what proves the org-wide expansion rather than assuming it.
  */
@@ -94,13 +94,13 @@ describe('meteredIncludedAllowance', () => {
   })
 
   it('sizes enterprise bands at the finite fallback, unmetered', () => {
-    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 3,080 GB of
+    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 1,580 GB of
     // views, 200 × 50,000 submissions — and `metered` false, so nothing past
     // them bills: an agreement sets the terms, and a per-org override the
     // figures.
     const included = meteredIncludedAllowance({ plan: 'enterprise' } as any)
     expect(included.storageGb).toBe(24_000)
-    expect(included.pageViews).toBe(pageViewsFromBandwidthGb(3_080))
+    expect(included.pageViews).toBe(pageViewsFromBandwidthGb(1_580))
     expect(included.meters.formSubmissions!).toBe(10_000_000)
     expect(included.metered).toBe(false)
     // A contracted UNLIMITED still subtracts to zero billable usage.

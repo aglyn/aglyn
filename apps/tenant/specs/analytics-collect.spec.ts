@@ -641,8 +641,8 @@ describe('dwell time (AGL-2182)', () => {
  * the mechanism are proved separately, so neither can pass on the other's
  * behalf.
  *
- * ⚠️ Free's ceiling is the FLOOR (100,000), not 3× its 2 GB band (~10,486).
- * Starter's is 3× its 50 GB band (262,144). 150,000 views therefore sits
+ * ⚠️ Free's ceiling is the FLOOR (100,000), not 3× its 2 GB band (~6,212).
+ * Starter's is 3× its 35 GB band (108,709). 105,000 views therefore sits
  * between them, which is what makes the plan pair below a real forced branch
  * rather than two runs of the same arithmetic.
  */
@@ -690,14 +690,14 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
   it('a FREE host past the ceiling is flagged, degraded and escalated', async () => {
     mockStore[`hosts/${HOST_ID}`] = { subdomain: 'site', displayName: 'Acme' }
     mockOrgForHost = { $id: 'org-1', plan: 'free', name: 'Acme Co' }
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({
       month: MONTH,
       ceiling: 100_000,
       degraded: true,
     })
-    expect(flag().used).toBeGreaterThanOrEqual(150_000)
+    expect(flag().used).toBeGreaterThanOrEqual(105_000)
     expect(flag().trippedAtMs).toBeGreaterThan(0)
     // Staff AND the site's managers — the incident and the customer.
     expect(mockStaffNotices).toHaveLength(1)
@@ -705,9 +705,9 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // Staff read the site by name, not only by id (AGL-3432).
     expect(mockStaffNotices[0]['title']).toBe(`Bandwidth ceiling tripped — Acme (${HOST_ID})`)
     expect(mockStaffNotices[0]['body']).toMatch(
-      new RegExp(`^The site Acme \\(${HOST_ID}\\) on workspace Acme Co served 150,`),
+      new RegExp(`^The site Acme \\(${HOST_ID}\\) on workspace Acme Co served 105,`),
     )
-    // BOTH manager notices, because 150,000 views crosses both limits and the
+    // BOTH manager notices, because 105,000 views crosses both limits and the
     // two say different things: the cap explains a paused site and points at
     // Billing, the ceiling asks whether this is the customer's traffic at all.
     // The cap is first — the band is crossed first, and it is evaluated first.
@@ -739,10 +739,10 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
     // Same traffic, same route, same month — only the plan differs. Starter's
-    // ceiling is 155,299 — 50 GB of views times three — so 150,000 is still
+    // ceiling is 108,709 — 35 GB of views times three — so 105,000 is still
     // ordinary growth and nothing happens.
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toBeUndefined()
     expect(mockStaffNotices).toHaveLength(0)
@@ -756,7 +756,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
     plantMonthViews(1_000_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
-    expect(flag()).toMatchObject({ ceiling: 155_299, degraded: false })
+    expect(flag()).toMatchObject({ ceiling: 108_709, degraded: false })
     expect(mockStaffNotices).toHaveLength(1) // still an incident
     // The managers are told the site still serves and the overage bills
     // (AGL-3432), on the plan that meters it.
@@ -788,7 +788,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // that must not fail open — an unindexed host serving a million views is
     // exactly the shape nobody is billing for.
     mockOrgForHost = undefined // getOrgForHost returns null
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({ ceiling: 100_000, degraded: true })
   })
@@ -814,7 +814,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     plantMonthViews(9_000)
     await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toBeUndefined()
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     for (let i = 0; i < 50; i++) {
       await route.POST(beacon({ hostId: HOST_ID, path: '/' }, spread(i)))
     }
@@ -823,7 +823,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
 
   it('an already-tripped host does not re-notify on every later sample', async () => {
     const route = loadRoute()
-    plantMonthViews(150_000)
+    plantMonthViews(105_000)
     await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(mockStaffNotices).toHaveLength(1)
     for (let i = 0; i < 400; i++) {

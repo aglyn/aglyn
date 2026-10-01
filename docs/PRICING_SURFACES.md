@@ -145,6 +145,29 @@ can see it, so the body of the page can be entirely correct while search
 results and every shared link still advertise the old price. Fix it in the
 same pass as the body; it is a different field and it will not follow.
 
+### Owed with the next promotion: the page-view rate and the bandwidth bands
+
+Two 2026-10-01 changes are in code and not yet on any published surface: the
+page-view overage, $0.21 → $0.36 per 1,000 (AGL-1879), and the paid bandwidth
+bands, 50 · 125 · 185 · 290 · 345 GB · 1.54 TB → 35 · 60 · 90 · 145 · 175 ·
+790 GB (AGL-3444). The second is the page AHEAD of the code — it promises more
+bandwidth than a plan includes — so both are republished in one pass once the
+promotion carrying them is live:
+
+- `/pricing`: the page-view cell, the six bandwidth cells of the compare table,
+  and the Scale room-to-grow strip's "290 GB bandwidth".
+- The pricing calculator (`/resources/pricing-calculator`) and the simple cost
+  sheet (`/resources/multi-site-cost-sheet`) read Aglyn's figures from SITE
+  VARIABLES rather than from the page body: `plan_rates.page_views_per_1k`
+  and, per paid plan, `plan_<id>.bandwidth_gb`, `.views` and
+  `.views_ceiling`. No parity spec reads them, so a rate or band change owes
+  them an edit too.
+- The four Figma frames, declared stale in `build-pricing-tables.mts` until
+  they are redrawn.
+
+The parity spec pins both gaps by name; fold each back into one row with the
+version id when the page catches up.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

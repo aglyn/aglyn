@@ -479,7 +479,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /scale strip: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /Scale · spec 6 .*code=290 GB bandwidth {2}frame=9 TB bandwidth/)
+    // The cell is declared stale at 290 GB until the frames are redrawn
+    // (AGL-3444); a frame that drifts to a THIRD value is not that
+    // declaration, and the report names the value it was excused at.
+    assert.match(
+      run.stderr,
+      /Scale · spec 6 .*code=145 GB bandwidth {2}frame=9 TB bandwidth {2}\(declared stale value was 290 GB bandwidth\)/,
+    )
   })
 
   it('fails when an ADD-ON CAPACITY rate disagrees with the code', () => {

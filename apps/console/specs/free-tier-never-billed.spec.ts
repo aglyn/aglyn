@@ -259,9 +259,16 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     expect(contained.ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
     expect(contained.exceeded).toBe(true)
     expect(bandwidthCeilingDegradesRender(freeOrg())).toBe(true)
-    // POSITIVE CONTROL: the paid plan is not contained at the same count —
-    // its overage bills, which is the whole difference.
-    expect(checkBandwidthAbuseCeiling(paidOrg(), 150_000).exceeded).toBe(false)
+    // POSITIVE CONTROL: at the count that contains a free site — the floor
+    // itself — the paid plan is not contained, because its ceiling is three
+    // times a band that sits above the floor, and its overage bills, which is
+    // the whole difference.
+    expect(
+      checkBandwidthAbuseCeiling(freeOrg(), BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(true)
+    expect(
+      checkBandwidthAbuseCeiling(paidOrg(), BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(false)
     expect(bandwidthCeilingDegradesRender(paidOrg())).toBe(false)
     // …and free UNDER the ceiling is untouched: a hobby site with real
     // traffic must not meet a wall dressed up as an abuse control.

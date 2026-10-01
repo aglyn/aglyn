@@ -488,23 +488,25 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces the metered part of Agency’s pinned $991.56 at full utilization', () => {
-    // `tier-margin-floor.spec.ts` pins Agency at $991.56 a month with every
-    // band at 100%. $891.56 of that is the eight metered axes this module
-    // prices; the $100 between them is the two CRM decision terms — a seat a
-    // month per collaborator and the one-to-one email cap — that the rollup
-    // has no meter for. Reaching the metered part through this module's band
+  it('reproduces the metered part of Agency’s pinned $1,017.12 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $1,017.12 a month with every
+    // band at 100%. $766.12 of that is the eight metered axes this module
+    // prices; the $251 between them is the terms the rollup has no meter
+    // for — the two CRM decision terms, a seat a month per collaborator and
+    // the one-to-one email cap ($100), and the CDN requests the included
+    // bandwidth makes past the hosting plan's allowance, at the dearest
+    // region ($151). Reaching the metered part through this module's band
     // table and `orgMonthlyCogsUsd` is what says the two files agree about
     // the most expensive self-serve tier — the one whose uncapped band once
     // made it read as the cheapest.
     //
     // The bandwidth axis is what moves this figure, and it moves through the
     // COST OF A GIGABYTE rather than through `perPageView` alone: Agency's
-    // 1.54 TB band converts to 1.59M included page views at
-    // `ESTIMATED_PAGE_TRANSFER_BYTES`, and each costs $0.00016153846, which
-    // is $0.16724 a gigabyte and $257.56 of the total.
+    // 790 GB band converts to 817,906 included page views at
+    // `ESTIMATED_PAGE_TRANSFER_BYTES`, and each weighs $0.00016153846, which
+    // is $0.16724 a gigabyte and $132.12 of the total.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(891.56, 2)
+    expect(cogs.cogsUsd).toBeCloseTo(766.12, 2)
     expect(cogs.basis).toBe('measured')
   })
 
@@ -594,11 +596,12 @@ describe('the realised margin', () => {
       }).marginPct as number
     const ladder = [0.03, 0.25, 0.5, 1].map(at)
     expect(ladder).toEqual([...ladder].sort((a, b) => b - a))
-    // …and it really does reach a bad number, so the surface can find one.
-    // 44% on Pro at the monthly price, over the metered axes alone — the
-    // 2026-09-07 bandwidth resize lifted it from 7%; the whole-plan figure at
-    // the annual price is under 1% (`tier-margin-floor.spec.ts`).
-    expect(at(1)).toBeLessThan(0.5)
+    // …and it really does fall to a thin number, so the surface can find
+    // one. 66% on Pro at the monthly price, over the metered axes alone,
+    // which price a page view at its weight; the whole-plan figure at the
+    // annual price, with the CRM terms and the CDN requests counted, is about
+    // 1% (`tier-margin-floor.spec.ts`).
+    expect(at(1)).toBeLessThan(0.7)
     expect(at(0.03)).toBeGreaterThan(0.9)
   })
 

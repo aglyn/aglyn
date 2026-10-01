@@ -92,6 +92,82 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-01 — Included bandwidth bands re-sized past Vercel's 10M (AGL-3444)
+
+- **Decided by:** the account owner, 2026-10-01, on AGL-3444, asked whether to shrink the included bandwidth bands now or wait, after AGL-1879 showed every annual plan under water at 100% of its bands once the platform is past Vercel Pro's 10,000,000 included CDN requests a month: shrink them now. The sizes below apply his standing 2026-09-09 rule — neither a monthly nor an annual plan under water at any utilization — at the dearest CDN request region; that region is the reading of "any utilization" this entry makes, and the cheapest-region alternative is recorded below.
+- **Scope:** pricing, packaging
+- **Evidence:** `PLAN_ENTITLEMENTS[*].bandwidthGb` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts` — Starter 50 → **35**, Pro 125 → **60**, Business 185 → **90**, Scale 290 → **145**, Advanced 345 → **175**, Agency 1,540 → **790**, Enterprise fallback 3,080 → **1,580** (Agency × 2, the 2026-09-07 rule); Free unchanged at 2; `apps/console/specs/tier-margin-floor.spec.ts`, which now counts every included gigabyte's CDN requests at $3.20 per million (`cdnRequestTerms`) and pins every tier at 100% of every band on both intervals, the old bands at $0, $2.00 and $3.20 per million as a mutation, and the next 5 GB on every rung as under water; `apps/console/specs/published-pricing-table-parity.spec.ts` → *Bandwidth / mo*, pinning the live page apart from the code until the republish; `tools/marketing/pricing-copy/tables.json` (regenerated) and the stale Figma cells declared in `tools/marketing/build-pricing-tables.mts`; `apps/docs/.../billing-and-plans/bandwidth.md` and `overview.md`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-3444.
+
+**No charged price moves.** Plan prices, the $0.36 page-view overage, the
+storage and form-submission rates and every retail overage ladder are what
+the 2026-10-01 (AGL-1879) and earlier entries left them. What moves is
+**packaging**: six paid bandwidth bands and the Enterprise fallback beside
+them, and with them the page views each band converts to and the abuse
+ceiling at 3× the band.
+
+**Why.** Past the hosting plan's 10M included requests the CDN bills $2.00 to
+$3.20 per million by region, and a view makes 57.7 requests at the priced
+basis. An included gigabyte (1,035 views at 1012.8 KB) then costs its weight,
+$0.16724, plus its requests: $0.11946 at $2.00 and $0.19114 at $3.20 — so
+$0.28670 to **$0.35838** all in, against the $0.16724 the bands were sized on.
+The 2026-09-09 rule is stated at any utilization, and a band cannot choose
+where its visitors are, so the bands are sized at the dearest region. Each
+new band is the largest multiple of 5 GB that keeps the tier at or above zero
+at the annual price, net of Stripe, with every band at 100% and the CRM terms
+counted; the next 5 GB on any rung is under water.
+
+| Plan | Band, before → after | Included views, after | Annual at 100%, old band ($2.00 / $3.20) | Annual at 100%, new band ($3.20) | Monthly at 100%, new band ($3.20) |
+|---|---|---|---|---|---|
+| Free | 2 GB → 2 GB | 2,071 | no price | no price | no price |
+| Starter | 50 → **35 GB** | 36,236 | −9.7% / −32.1% | **+1.5%** | +34.8% |
+| Pro | 125 → **60 GB** | 62,119 | −35.5% / −58.5% | **+1.2%** | +29.9% |
+| Business | 185 → **90 GB** | 93,179 | −20.6% / −34.0% | **+0.3%** | +28.0% |
+| Scale | 290 → **145 GB** | 150,122 | −17.3% / −28.9% | **+0.1%** | +27.3% |
+| Advanced | 345 → **175 GB** | 181,182 | −11.6% / −19.8% | **+0.5%** | +24.7% |
+| Agency | 1,540 → **790 GB** | 817,906 | −15.0% / −25.5% | **+0.1%** | +18.8% |
+| Enterprise (fallback) | 3,080 → **1,580 GB** | 1,635,812 | no list price | no list price | no list price |
+
+At the old bands and $3.20 per million, Pro (−11.7%) and Agency (−1.9%) were
+under water at the monthly price too. At the new bands and $2.00 per million
+the annual ladder reads +4.7% (Advanced) to +17.2% (Starter); inside the
+allowance, +11.7% to +43.3%. At the realistic 25% of every band it reads
+72.8–73.1% annual.
+
+**Free does not move.** The rule is a margin over a price, and Free has none:
+no band above zero clears it. Its 2 GB is a give, capped at 1× by the
+bandwidth cap; counted at the dearest region it costs $0.72 a month per Free
+workspace instead of $0.33.
+
+**Alternative not taken: the cheapest region.** Sized at $2.00 per million
+($0.28670 a gigabyte), the same rule gives Starter 40, Pro 75, Business 110,
+Scale 180, Advanced 220, Agency 990 GB, and any traffic served from a dearer
+region takes those tiers under water at 100%.
+
+**What it leaves open.** The weight term prices transfer at the cheapest
+region's $0.15 per GB; the dearest is $0.35. This entry applies the dearest
+region to requests only, as the band-sizing question was put, and does not
+re-price transfer.
+
+**Existing subscribers.** Band enforcement reads `PLAN_ENTITLEMENTS` live:
+`resolveOrgEntitlements` on the org document, which carries no subscription
+period, decides the meter, the invoice's included allowance, the usage emails
+and the abuse ceiling. So at the production deploy every subscription on a
+paid plan, monthly or annual and mid-term, gets the smaller band, and traffic
+past it bills at $0.36 per 1,000. ToS §4.7 says a change to an existing
+subscription generally takes effect at the next renewal term. Applying it at
+renewal is not automatic and is an open decision on AGL-3444: the cheap path
+is a staff per-org `bandwidthGb` override at the old band for each live paid
+subscription, removed at its renewal; the automated path needs the webhook to
+clear a carried band at renewal. The AGL-1879 entry recorded that live Stripe
+held no legitimate paying subscription on 2026-10-01.
+
+**Published surfaces.** `/pricing`, the pricing calculator's per-plan site
+variables and the four Figma frames still carry the old bands; they are
+republished with the promotion that ships these, in the same pass as the
+AGL-1879 page-view rate. The parity spec pins the gap until then.
+
+---
+
 ## 2026-10-01 — Page-view overage $0.21 → $0.36 per 1k: a billed page view carries its CDN requests
 
 - **Decided by:** the account owner, 2026-10-01, on AGL-1879, shown that past the hosting plan's 10,000,000 included CDN requests a month the $0.21 line is billed below cost, and asked whether to raise it to $0.36 per 1,000.
