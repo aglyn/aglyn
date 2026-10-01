@@ -157,6 +157,213 @@ const ComplianceCountriesField = memo(function ComplianceCountriesField(props: {
   )
 })
 
+/** A text field that redraws only when what it shows changes (AGL-3423). */
+const MemoTextField = memo(TextField) as typeof TextField
+/** Its own list and listener: nothing typed in the cards above it reaches it. */
+const MemoDoNotContactDomainsCard = memo(OutreachDoNotContactDomainsCard)
+
+type FieldChange = { target: { value: string } }
+
+const LEGAL_NAME_SLOT_PROPS = {
+  htmlInput: { maxLength: OUTREACH_LEGAL_NAME_MAX + 20 },
+}
+const BRAND_NAME_SLOT_PROPS = {
+  htmlInput: { maxLength: OUTREACH_BRAND_NAME_MAX + 20 },
+}
+const POSTAL_ADDRESS_SLOT_PROPS = {
+  htmlInput: { maxLength: OUTREACH_POSTAL_ADDRESS_MAX + 40 },
+}
+const FOOTER_PAPER = { p: 1.5 } as const
+const FOOTER_TEXT = { whiteSpace: 'pre-wrap', wordBreak: 'break-word' } as const
+
+/** How a card's header actions stand: whether it has edits, and can save them. */
+interface ComplianceCardState {
+  dirty: boolean
+  blocked: boolean
+  saving: ComplianceCardKey | null
+  onDiscard(card: ComplianceCardKey): void
+  onSave(card: ComplianceCardKey): void
+}
+
+/** A settings card's header actions: discard its edits, or save its own fields. */
+const ComplianceCardActions = memo(function ComplianceCardActions(
+  props: ComplianceCardState & { card: ComplianceCardKey },
+) {
+  const { card, dirty, saving, onDiscard, onSave } = props
+  return (
+    <Stack direction="row" spacing={1}>
+      <Button
+        size="small"
+        variant="text"
+        disabled={!dirty || saving !== null}
+        onClick={() => onDiscard(card)}
+      >
+        Discard changes
+      </Button>
+      <Button
+        size="small"
+        variant="contained"
+        disabled={!dirty || saving !== null || props.blocked}
+        onClick={() => onSave(card)}
+      >
+        {saving === card ? 'Saving…' : 'Save'}
+      </Button>
+    </Stack>
+  )
+})
+
+/**
+ * Who every email says sent it, and the footer that says it. Each field is
+ * memoized with a handler that keeps its identity, so a letter typed into one
+ * redraws that field and the footer it changes, not the other two.
+ */
+const ComplianceIdentityCard = memo(function ComplianceIdentityCard(
+  props: ComplianceCardState & {
+    legalName: string
+    brandName: string
+    postalAddress: string
+    legalNameIssue?: string
+    brandNameIssue?: string
+    postalAddressIssue?: string
+    /** The footer every email ends with, or `null` while it cannot be composed. */
+    footer: string | null
+    onLegalName(event: FieldChange): void
+    onBrandName(event: FieldChange): void
+    onPostalAddress(event: FieldChange): void
+  },
+) {
+  const { footer } = props
+  return (
+    <CardDisplay
+      header="Sender identity"
+      help={pluginDocsHelp('sequences', { anchor: '#compliance-settings' })}
+      HeaderProps={{
+        action: (
+          <ComplianceCardActions
+            card="identity"
+            dirty={props.dirty}
+            blocked={props.blocked}
+            saving={props.saving}
+            onDiscard={props.onDiscard}
+            onSave={props.onSave}
+          />
+        ),
+      }}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack spacing={2}>
+        <Typography variant="body2" color="text.secondary">
+          {'Every email a sequence sends ends with a footer naming your organization, its postal ' +
+            'address, that the email is a sales email, and how to stop more of them. The law ' +
+            'requires these on commercial email, so every email gets the footer automatically.'}
+        </Typography>
+        <MemoTextField
+          label="Legal name"
+          value={props.legalName}
+          onChange={props.onLegalName}
+          error={Boolean(props.legalNameIssue)}
+          helperText={
+            props.legalNameIssue ??
+            'Your organization’s legal name, as the footer prints it.'
+          }
+          slotProps={LEGAL_NAME_SLOT_PROPS}
+          fullWidth
+        />
+        <MemoTextField
+          label="Brand name"
+          value={props.brandName}
+          onChange={props.onBrandName}
+          error={Boolean(props.brandNameIssue)}
+          helperText={
+            props.brandNameIssue ??
+            'The name the solicitation sentence uses. Leave empty to use the legal name.'
+          }
+          slotProps={BRAND_NAME_SLOT_PROPS}
+          fullWidth
+        />
+        <MemoTextField
+          label="Postal address"
+          value={props.postalAddress}
+          onChange={props.onPostalAddress}
+          error={Boolean(props.postalAddressIssue)}
+          helperText={props.postalAddressIssue ?? OUTREACH_POSTAL_ADDRESS_HELP}
+          slotProps={POSTAL_ADDRESS_SLOT_PROPS}
+          multiline
+          minRows={3}
+          fullWidth
+        />
+        {footer ? (
+          <Stack spacing={0.5}>
+            <Typography variant="subtitle2">Every email ends with</Typography>
+            <Paper variant="outlined" sx={FOOTER_PAPER}>
+              <Typography
+                variant="body2"
+                sx={FOOTER_TEXT}
+                data-testid="outreach-footer-preview"
+              >
+                {footer}
+              </Typography>
+            </Paper>
+          </Stack>
+        ) : (
+          <Alert severity="warning">
+            {'No sequence can be activated, and no email sent, until you add your organization’s legal ' +
+              'name and postal address.'}
+          </Alert>
+        )}
+      </Stack>
+    </CardDisplay>
+  )
+})
+
+/** The countries a sequence may send to at all. */
+const ComplianceCountriesCard = memo(function ComplianceCountriesCard(
+  props: ComplianceCardState & {
+    options: readonly OutreachCountryOption[]
+    value: readonly OutreachCountryOption[]
+    issue?: string
+    onChange(next: OutreachCountryOption[]): void
+  },
+) {
+  return (
+    <CardDisplay
+      header="Allowed countries"
+      help={pluginDocsHelp('sequences', { anchor: '#allowed-countries' })}
+      HeaderProps={{
+        action: (
+          <ComplianceCardActions
+            card="countries"
+            dirty={props.dirty}
+            blocked={props.blocked}
+            saving={props.saving}
+            onDiscard={props.onDiscard}
+            onSave={props.onSave}
+          />
+        ),
+      }}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack spacing={2}>
+        <Typography variant="body2" color="text.secondary">
+          {'Sequences may send only to people in these countries, and every sequence only to the ones ' +
+            'it and this list both allow. The United States is the default: Canada, the United Kingdom and most ' +
+            'of the European Union require a consent basis that an email to someone who never contacted ' +
+            'you does not have, so a cold email never goes outside the United States whatever this list ' +
+            'says. Add another country only for people who came to you first.'}
+        </Typography>
+        <ComplianceCountriesField
+          options={props.options}
+          value={props.value}
+          issue={props.issue}
+          onChange={props.onChange}
+        />
+      </Stack>
+    </CardDisplay>
+  )
+})
+
 /**
  * Sequences → Compliance (AGL-2980): who every email says sent it, the
  * countries a sequence may send to at all, and — below the settings, with
@@ -168,6 +375,11 @@ const ComplianceCountriesField = memo(function ComplianceCountriesField(props: {
  * `composeOutreachFooter`, so the page shows the lines every email will end
  * with — or, while the legal name or the address is empty, the sentence
  * that explains why nothing can be sent and no sequence activated.
+ *
+ * Both settings cards are drawn from the one form, and each is memoized and
+ * handed only what it shows, through handlers that keep their identity
+ * (AGL-3423): a letter typed into the sender identity redraws its field and
+ * the footer, not the other fields, the countries or the domain list.
  */
 export function OutreachComplianceSection(
   props: OutreachComplianceSectionProps,
@@ -222,14 +434,29 @@ export function OutreachComplianceSection(
       (CARDS[card].fields as readonly string[]).includes(issue.field),
     )
   const footer = composeOutreachFooter(normalized)
-  const set = (field: keyof OutreachComplianceSettings) => (value: string) => {
-    setServerIssues((previous) => {
-      const next = { ...previous }
-      delete next[field as OutreachComplianceField]
-      return next
-    })
-    setForm((previous) => ({ ...previous, [field]: value }))
-  }
+  const set = useCallback(
+    (field: keyof OutreachComplianceSettings, value: string) => {
+      setServerIssues((previous) => {
+        const next = { ...previous }
+        delete next[field as OutreachComplianceField]
+        return next
+      })
+      setForm((previous) => ({ ...previous, [field]: value }))
+    },
+    [],
+  )
+  const setLegalName = useCallback(
+    (event: FieldChange) => set('legalName', event.target.value),
+    [set],
+  )
+  const setBrandName = useCallback(
+    (event: FieldChange) => set('brandName', event.target.value),
+    [set],
+  )
+  const setPostalAddress = useCallback(
+    (event: FieldChange) => set('postalAddress', event.target.value),
+    [set],
+  )
 
   const clearIssues = (card: ComplianceCardKey) =>
     setServerIssues((previous) => {
@@ -314,6 +541,19 @@ export function OutreachComplianceSection(
     }
   }
 
+  // The discard and save as last drawn, behind handlers that keep their
+  // identity: both read the form and the stored settings of that render.
+  const drawn = useRef({ discard, save })
+  drawn.current = { discard, save }
+  const onDiscard = useCallback(
+    (card: ComplianceCardKey) => drawn.current.discard(card),
+    [],
+  )
+  const onSave = useCallback(
+    (card: ComplianceCardKey) => void drawn.current.save(card),
+    [],
+  )
+
   if (loaded.status === 'loading' || (!orgId && !stored)) {
     return <OutreachLoading label="Loading compliance settings…" />
   }
@@ -328,136 +568,40 @@ export function OutreachComplianceSection(
     )
   }
 
-  const cardActions = (card: ComplianceCardKey) => {
-    const dirty = cardDirty(card)
-    return (
-      <Stack direction="row" spacing={1}>
-        <Button
-          size="small"
-          variant="text"
-          disabled={!dirty || saving !== null}
-          onClick={() => discard(card)}
-        >
-          Discard changes
-        </Button>
-        <Button
-          size="small"
-          variant="contained"
-          disabled={!dirty || saving !== null || cardBlocked(card)}
-          onClick={() => void save(card)}
-        >
-          {saving === card ? 'Saving…' : 'Save'}
-        </Button>
-      </Stack>
-    )
-  }
-
   return (
     <Stack spacing={2}>
-      <CardDisplay
-        header="Sender identity"
-        help={pluginDocsHelp('sequences', { anchor: '#compliance-settings' })}
-        HeaderProps={{ action: cardActions('identity') }}
-        contentGutterX
-        contentGutterY
-      >
-        <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
-            {'Every email a sequence sends ends with a footer naming your organization, its postal ' +
-              'address, that the email is a sales email, and how to stop more of them. The law ' +
-              'requires these on commercial email, so every email gets the footer automatically.'}
-          </Typography>
-          <TextField
-            label="Legal name"
-            value={form.legalName}
-            onChange={(event) => set('legalName')(event.target.value)}
-            error={Boolean(fieldIssue('legalName'))}
-            helperText={
-              fieldIssue('legalName') ??
-              'Your organization’s legal name, as the footer prints it.'
-            }
-            slotProps={{
-              htmlInput: { maxLength: OUTREACH_LEGAL_NAME_MAX + 20 },
-            }}
-            fullWidth
-          />
-          <TextField
-            label="Brand name"
-            value={form.brandName}
-            onChange={(event) => set('brandName')(event.target.value)}
-            error={Boolean(fieldIssue('brandName'))}
-            helperText={
-              fieldIssue('brandName') ??
-              'The name the solicitation sentence uses. Leave empty to use the legal name.'
-            }
-            slotProps={{
-              htmlInput: { maxLength: OUTREACH_BRAND_NAME_MAX + 20 },
-            }}
-            fullWidth
-          />
-          <TextField
-            label="Postal address"
-            value={form.postalAddress}
-            onChange={(event) => set('postalAddress')(event.target.value)}
-            error={Boolean(fieldIssue('postalAddress'))}
-            helperText={
-              fieldIssue('postalAddress') ?? OUTREACH_POSTAL_ADDRESS_HELP
-            }
-            slotProps={{
-              htmlInput: { maxLength: OUTREACH_POSTAL_ADDRESS_MAX + 40 },
-            }}
-            multiline
-            minRows={3}
-            fullWidth
-          />
-          {footer.footer ? (
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">Every email ends with</Typography>
-              <Paper variant="outlined" sx={{ p: 1.5 }}>
-                <Typography
-                  variant="body2"
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                  data-testid="outreach-footer-preview"
-                >
-                  {footer.footer}
-                </Typography>
-              </Paper>
-            </Stack>
-          ) : (
-            <Alert severity="warning">
-              {'No sequence can be activated, and no email sent, until you add your organization’s legal ' +
-                'name and postal address.'}
-            </Alert>
-          )}
-        </Stack>
-      </CardDisplay>
+      <ComplianceIdentityCard
+        legalName={form.legalName}
+        brandName={form.brandName}
+        postalAddress={form.postalAddress}
+        legalNameIssue={fieldIssue('legalName')}
+        brandNameIssue={fieldIssue('brandName')}
+        postalAddressIssue={fieldIssue('postalAddress')}
+        footer={footer.footer}
+        onLegalName={setLegalName}
+        onBrandName={setBrandName}
+        onPostalAddress={setPostalAddress}
+        dirty={cardDirty('identity')}
+        blocked={cardBlocked('identity')}
+        saving={saving}
+        onDiscard={onDiscard}
+        onSave={onSave}
+      />
 
-      <CardDisplay
-        header="Allowed countries"
-        help={pluginDocsHelp('sequences', { anchor: '#allowed-countries' })}
-        HeaderProps={{ action: cardActions('countries') }}
-        contentGutterX
-        contentGutterY
-      >
-        <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
-            {'Sequences may send only to people in these countries, and every sequence only to the ones ' +
-              'it and this list both allow. The United States is the default: Canada, the United Kingdom and most ' +
-              'of the European Union require a consent basis that an email to someone who never contacted ' +
-              'you does not have, so a cold email never goes outside the United States whatever this list ' +
-              'says. Add another country only for people who came to you first.'}
-          </Typography>
-          <ComplianceCountriesField
-            options={countries}
-            value={selectedCountries}
-            issue={fieldIssue('allowedCountries')}
-            onChange={setCountries}
-          />
-        </Stack>
-      </CardDisplay>
+      <ComplianceCountriesCard
+        options={countries}
+        value={selectedCountries}
+        issue={fieldIssue('allowedCountries')}
+        onChange={setCountries}
+        dirty={cardDirty('countries')}
+        blocked={cardBlocked('countries')}
+        saving={saving}
+        onDiscard={onDiscard}
+        onSave={onSave}
+      />
 
       {/* Its own list, saved as it is edited (AGL-3244): it has no Save. */}
-      <OutreachDoNotContactDomainsCard orgId={orgId} />
+      <MemoDoNotContactDomainsCard orgId={orgId} />
     </Stack>
   )
 }

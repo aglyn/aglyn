@@ -19,6 +19,7 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { crmMergeUnresolvedMessage } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { useContentStable } from '@aglyn/shared-ui-jsx/hooks/use-content-stable'
 import {
   Alert,
   Divider,
@@ -28,7 +29,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type {
   OutreachComplianceSettingsDocument,
   OutreachSequenceStep,
@@ -53,6 +54,36 @@ export interface OutreachSequencePreviewProps {
   siteName: string
 }
 
+/** One email the preview can show: its step's id, and the step's position. */
+interface PreviewChoice {
+  id: string
+  index: number
+}
+
+/** Which email the preview shows, when the sequence has more than one. */
+const PreviewEmailPicker = memo(function PreviewEmailPicker(props: {
+  choices: readonly PreviewChoice[]
+  value: number
+  onChange(position: number): void
+}) {
+  const { onChange } = props
+  return (
+    <TextField
+      select
+      size="small"
+      label="Email"
+      value={props.value}
+      onChange={(event) => onChange(Number(event.target.value))}
+    >
+      {props.choices.map((entry, position) => (
+        <MenuItem key={entry.id} value={position}>
+          {`Email ${position + 1} · step ${entry.index + 1}`}
+        </MenuItem>
+      ))}
+    </TextField>
+  )
+})
+
 /**
  * The editor's live preview (AGL-2980): each email as it would reach a
  * sample contact, written by the engine's own composer as the rep types —
@@ -65,6 +96,11 @@ export function OutreachSequencePreview(props: OutreachSequencePreviewProps) {
     .filter(({ step }) => step.kind === 'email')
   const [chosen, setChosen] = useState(0)
   const selected = emails[Math.min(chosen, emails.length - 1)]
+  // Held by content: typing into a step leaves the emails to pick from as
+  // they were, and the picker undrawn (AGL-3423).
+  const choices = useContentStable(
+    emails.map(({ step, index }) => ({ id: step.id, index })),
+  )
 
   const result = useMemo(() => {
     if (!selected) return null
@@ -116,19 +152,11 @@ export function OutreachSequencePreview(props: OutreachSequencePreviewProps) {
       ) : (
         <Stack spacing={1.5}>
           {emails.length > 1 ? (
-            <TextField
-              select
-              size="small"
-              label="Email"
+            <PreviewEmailPicker
+              choices={choices}
               value={Math.min(chosen, emails.length - 1)}
-              onChange={(event) => setChosen(Number(event.target.value))}
-            >
-              {emails.map((entry, position) => (
-                <MenuItem key={entry.step.id} value={position}>
-                  {`Email ${position + 1} · step ${entry.index + 1}`}
-                </MenuItem>
-              ))}
-            </TextField>
+              onChange={setChosen}
+            />
           ) : null}
           {result?.email ? (
             <Paper

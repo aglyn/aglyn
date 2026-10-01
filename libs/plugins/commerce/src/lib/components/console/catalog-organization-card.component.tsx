@@ -38,7 +38,15 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, deleteDoc, doc, setDoc } from 'firebase/firestore'
-import { memo, useCallback, useMemo, useState } from 'react'
+import {
+  type Dispatch,
+  type SetStateAction,
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   ceilingedWindow,
@@ -130,6 +138,608 @@ const CollectionProductsField = memo(function CollectionProductsField(props: {
     />
   )
 })
+
+type CategoryDraft = { id: string | null; name: string; parentId: string }
+type CollectionDraft = CommerceModel.HostCollection & { id: string | null }
+type WalkedCategory = CategoryRow & { depth: number }
+type DraftSetter<T> = Dispatch<SetStateAction<T | null>>
+
+/** A change to one rule, or `null` to remove it. */
+type RuleChange = (
+  index: number,
+  patch: Partial<CommerceModel.CollectionRule> | null,
+) => void
+
+type FieldChange = { target: { value: string } }
+
+/**
+ * A text field that redraws only when what it shows changes (AGL-3423).
+ *
+ * Both editors keep their draft in this card, so a keystroke in either one
+ * re-renders the card, and drawn whole that is both lists with a match count
+ * per collection, their pagers, and every field of the dialog typed into.
+ * When a keystroke costs that much, typed input queues and is processed back
+ * to back, which is what lets a chip list's pending update climb to #185 (see
+ * `CollectionProductsField`). The lists and each part of the dialogs are
+ * memoized on what they show, and each field is this, handed a handler and
+ * styles that keep their identity, so the keystroke redraws the field it
+ * lands in.
+ */
+const MemoTextField = memo(TextField) as typeof TextField
+
+const FIRST_FIELD = { mt: 1 } as const
+const RULE_FIELD = { width: 130 } as const
+const RULE_OP = { width: 110 } as const
+const RULE_VALUE = { flex: 1 } as const
+
+const MODE_MENU = [
+  <MenuItem key="manual" value="manual">
+    {'Manual — pick products'}
+  </MenuItem>,
+  <MenuItem key="smart" value="smart">
+    {'Smart — rule based'}
+  </MenuItem>,
+]
+const RULE_FIELD_MENU = RULE_FIELDS.map((field) => (
+  <MenuItem key={field.value} value={field.value}>
+    {field.label}
+  </MenuItem>
+))
+const RULE_OP_MENU = RULE_OPS.map((op) => (
+  <MenuItem key={op.value} value={op.value}>
+    {op.label}
+  </MenuItem>
+))
+
+/** The category tree, a page at a time, and the button that adds one. */
+const CategoriesSection = memo(function CategoriesSection(props: {
+  /** Every category, walked; the page is `visible`. */
+  categories: readonly WalkedCategory[]
+  visible: readonly WalkedCategory[]
+  page: number
+  pageSize: number
+  truncated: boolean
+  onPageChange(page: number): void
+  onPageSizeChange(pageSize: number): void
+  onEdit: DraftSetter<CategoryDraft>
+  onDelete(category: CategoryRow): () => Promise<void>
+}) {
+  const { categories, visible, onEdit, onDelete } = props
+  return (
+    <>
+      <Typography variant="subtitle2">{'Categories'}</Typography>
+      {categories.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          {'Group products into a browsable tree (e.g. Brakes → Pads).'}
+        </Typography>
+      ) : (
+        visible.map((category) => (
+          <Stack
+            key={category.$id}
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', pl: category.depth * 2 }}
+          >
+            <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+              {category.name}
+              <Typography
+                component="span"
+                variant="caption"
+                color="text.secondary"
+              >
+                {` /${category.slug}`}
+              </Typography>
+            </Typography>
+            <Button
+              size="small"
+              onClick={() =>
+                onEdit({
+                  id: category.$id,
+                  name: category.name,
+                  parentId: category.parentId ?? '',
+                })
+              }
+            >
+              {'Edit'}
+            </Button>
+            <Button
+              size="small"
+              color="error"
+              onClick={onDelete(category)}
+            >
+              {'Delete'}
+            </Button>
+          </Stack>
+        ))
+      )}
+      {categories.length === 0 ? null : (
+        <ListPagination
+          page={props.page}
+          pageSize={props.pageSize}
+          rowCount={visible.length}
+          // The categories the card HOLDS — a client slice of rows already
+          // read, so the total is known exactly.
+          count={categories.length}
+          onPageChange={props.onPageChange}
+          onPageSizeChange={props.onPageSizeChange}
+        />
+      )}
+      {props.truncated ? (
+        <Alert severity="info">
+          {`Showing ${CATEGORY_CEILING} categories, ordered by id. This ` +
+            'catalog has more — a category whose parent is past that ' +
+            'boundary is drawn at the top level here rather than under it.'}
+        </Alert>
+      ) : null}
+      <Button
+        size="small"
+        sx={{ alignSelf: 'flex-start' }}
+        onClick={() => onEdit({ id: null, name: '', parentId: '' })}
+      >
+        {'Add category'}
+      </Button>
+    </>
+  )
+})
+
+/** The catalog collections, a page at a time, and the button that adds one. */
+const CollectionsSection = memo(function CollectionsSection(props: {
+  /** Every catalog collection; the page is `visible`. */
+  collections: readonly CollectionRow[]
+  visible: readonly CollectionRow[]
+  products: readonly ProductRow[]
+  /** "at least " while the catalog window is short of the catalog. */
+  countPrefix: string
+  page: number
+  pageSize: number
+  truncated: boolean
+  onPageChange(page: number): void
+  onPageSizeChange(pageSize: number): void
+  onEdit: DraftSetter<CollectionDraft>
+  onDelete(row: CollectionRow): () => Promise<void>
+}) {
+  const { collections, visible, products, countPrefix, onEdit, onDelete } = props
+  /**
+   * How many products a collection holds — over the CATALOG WINDOW.
+   *
+   * Rendered with "at least" when the probe found a product past the ceiling,
+   * because past that point this is a lower bound and printing it as a total
+   * is the count-that-is-a-window-length defect. The number itself is honest
+   * either way; only the claim around it changes.
+   */
+  const collectionCount = (row: CollectionRow) =>
+    products.filter((product) =>
+      CommerceModel.matchesCollection(product, row, product.$id),
+    ).length
+  return (
+    <>
+      <Typography variant="subtitle2">{'Collections'}</Typography>
+      {visible.map((row) => (
+        <Stack
+          key={row.$id}
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'center' }}
+        >
+          <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+            {row.name}
+            <Typography
+              component="span"
+              variant="caption"
+              color="text.secondary"
+            >
+              {` · ${row.mode ?? 'manual'} · ${countPrefix}${collectionCount(
+                row,
+              )} products`}
+            </Typography>
+          </Typography>
+          <Button
+            size="small"
+            onClick={() =>
+              onEdit({
+                id: row.$id,
+                name: row.name,
+                slug: row.slug ?? '',
+                mode: row.mode ?? 'manual',
+                productIds: row.productIds ?? [],
+                rules: row.rules ?? [],
+                matchAll: row.matchAll !== false,
+              })
+            }
+          >
+            {'Edit'}
+          </Button>
+          <Button size="small" color="error" onClick={onDelete(row)}>
+            {'Delete'}
+          </Button>
+        </Stack>
+      ))}
+      {collections.length === 0 ? null : (
+        <ListPagination
+          page={props.page}
+          pageSize={props.pageSize}
+          rowCount={visible.length}
+          // The CATALOG collections, which is what this list is. Not the
+          // window's length: content collections share the subcollection
+          // and are classified out before this count is taken.
+          count={collections.length}
+          onPageChange={props.onPageChange}
+          onPageSizeChange={props.onPageSizeChange}
+        />
+      )}
+      {props.truncated ? (
+        <Alert severity="info">
+          {`Showing ${COLLECTION_CEILING} collections, ordered by id. This ` +
+            'site has more — the slug check below only covers the ones ' +
+            'listed here, so an address may already be taken by one that ' +
+            'is not.'}
+        </Alert>
+      ) : null}
+      <Button
+        size="small"
+        sx={{ alignSelf: 'flex-start' }}
+        onClick={() =>
+          onEdit({
+            id: null,
+            name: '',
+            slug: '',
+            mode: 'manual',
+            productIds: [],
+            rules: [],
+            matchAll: true,
+          })
+        }
+      >
+        {'Add collection'}
+      </Button>
+    </>
+  )
+})
+
+/** The category editor: a name and a parent. */
+const CategoryDialog = memo(function CategoryDialog(props: {
+  draft: CategoryDraft | null
+  /** Every category, as the parent picker offers them. */
+  categories: readonly WalkedCategory[]
+  setDraft: DraftSetter<CategoryDraft>
+  onSave(): void
+}) {
+  const { draft, categories, setDraft } = props
+  const draftId = draft?.id
+  const close = useCallback(() => setDraft(null), [setDraft])
+  const setName = useCallback(
+    (event: FieldChange) =>
+      setDraft((prev) => (prev ? { ...prev, name: event.target.value } : prev)),
+    [setDraft],
+  )
+  const setParent = useCallback(
+    (event: FieldChange) =>
+      setDraft((prev) =>
+        prev ? { ...prev, parentId: event.target.value } : prev,
+      ),
+    [setDraft],
+  )
+  const parentMenu = useMemo(
+    () => [
+      <MenuItem key="" value="">
+        {'None (top level)'}
+      </MenuItem>,
+      // The whole set, not `visibleCategories` — a parent picker that
+      // offered only the current page could not reparent a category under
+      // one two pages away.
+      ...categories
+        .filter((category) => category.$id !== draftId)
+        .map((category) => (
+          <MenuItem key={category.$id} value={category.$id}>
+            {`${'— '.repeat(category.depth)}${category.name}`}
+          </MenuItem>
+        )),
+    ],
+    [categories, draftId],
+  )
+  return (
+    <Dialog open={Boolean(draft)} onClose={close} maxWidth="xs" fullWidth>
+      <DialogTitle>{draft?.id ? 'Edit category' : 'New category'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <MemoTextField
+          label="Name"
+          value={draft?.name ?? ''}
+          onChange={setName}
+          size="small"
+          autoFocus
+          sx={FIRST_FIELD}
+        />
+        <MemoTextField
+          label="Parent category"
+          value={draft?.parentId ?? ''}
+          onChange={setParent}
+          size="small"
+          select
+        >
+          {parentMenu}
+        </MemoTextField>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={close}>{'Cancel'}</Button>
+        <Button
+          variant="contained"
+          color="primary"
+          disabled={!draft?.name.trim()}
+          onClick={props.onSave}
+        >
+          {'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+})
+
+const CollectionRuleRow = memo(function CollectionRuleRow(props: {
+  index: number
+  rule: CommerceModel.CollectionRule
+  /** The category picker's entries, for a rule on a category. */
+  categoryMenu: readonly JSX.Element[]
+  onChange: RuleChange
+}) {
+  const { index, rule, onChange } = props
+  const setField = useCallback(
+    (event: FieldChange) =>
+      onChange(index, {
+        field: event.target.value as CommerceModel.CollectionRuleField,
+      }),
+    [index, onChange],
+  )
+  const setOp = useCallback(
+    (event: FieldChange) =>
+      onChange(index, {
+        op: event.target.value as CommerceModel.CollectionRuleOp,
+      }),
+    [index, onChange],
+  )
+  const setCategory = useCallback(
+    (event: FieldChange) => onChange(index, { value: event.target.value }),
+    [index, onChange],
+  )
+  const ruleField = rule.field
+  const setValue = useCallback(
+    (event: FieldChange) =>
+      onChange(index, {
+        value:
+          ruleField === 'priceUsd'
+            ? Number(event.target.value)
+            : event.target.value,
+      }),
+    [index, onChange, ruleField],
+  )
+  return (
+    <Stack direction="row" spacing={1}>
+      <MemoTextField
+        value={rule.field}
+        onChange={setField}
+        size="small"
+        select
+        sx={RULE_FIELD}
+      >
+        {RULE_FIELD_MENU}
+      </MemoTextField>
+      <MemoTextField
+        value={rule.op}
+        onChange={setOp}
+        size="small"
+        select
+        sx={RULE_OP}
+      >
+        {RULE_OP_MENU}
+      </MemoTextField>
+      {rule.field === 'categoryId' ? (
+        <MemoTextField
+          value={rule.value}
+          onChange={setCategory}
+          size="small"
+          select
+          sx={RULE_VALUE}
+        >
+          {props.categoryMenu}
+        </MemoTextField>
+      ) : (
+        <MemoTextField
+          value={rule.value}
+          onChange={setValue}
+          size="small"
+          sx={RULE_VALUE}
+          placeholder={rule.field === 'type' ? 'physical' : 'Value'}
+        />
+      )}
+      <Button size="small" color="error" onClick={() => onChange(index, null)}>
+        {'✕'}
+      </Button>
+    </Stack>
+  )
+})
+
+/** Whether every rule must hold, or any one. */
+const CollectionMatchSwitch = memo(function CollectionMatchSwitch(props: {
+  matchAll: boolean
+  setDraft: DraftSetter<CollectionDraft>
+}) {
+  const { matchAll, setDraft } = props
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography variant="body2">{'Match'}</Typography>
+      <Switch
+        size="small"
+        checked={matchAll}
+        onChange={(event) =>
+          setDraft((prev) =>
+            prev ? { ...prev, matchAll: event.target.checked } : prev,
+          )
+        }
+      />
+      <Typography variant="body2">
+        {matchAll ? 'all rules' : 'any rule'}
+      </Typography>
+    </Stack>
+  )
+})
+
+/** A smart collection's rules, whether all or any must hold, and the button that adds one. */
+const CollectionRulesFields = memo(function CollectionRulesFields(props: {
+  rules: readonly CommerceModel.CollectionRule[]
+  matchAll: boolean
+  categories: readonly WalkedCategory[]
+  setDraft: DraftSetter<CollectionDraft>
+  onRule: RuleChange
+}) {
+  const { rules, matchAll, categories, setDraft, onRule } = props
+  const categoryMenu = useMemo(
+    () =>
+      categories.map((category) => (
+        <MenuItem key={category.$id} value={category.$id}>
+          {category.name}
+        </MenuItem>
+      )),
+    [categories],
+  )
+  return (
+    <>
+      <CollectionMatchSwitch matchAll={matchAll} setDraft={setDraft} />
+      {rules.map((rule, index) => (
+        <CollectionRuleRow
+          key={index}
+          index={index}
+          rule={rule}
+          categoryMenu={categoryMenu}
+          onChange={onRule}
+        />
+      ))}
+      <Button
+        size="small"
+        sx={{ alignSelf: 'flex-start' }}
+        onClick={() => onRule(rules.length, {})}
+      >
+        {'Add rule'}
+      </Button>
+    </>
+  )
+})
+
+/** The products a draft collection holds, the first few by name. */
+const CollectionPreview = memo(function CollectionPreview(props: {
+  matches: readonly ProductRow[]
+  countPrefix: string
+}) {
+  const { matches, countPrefix } = props
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+      <Typography variant="caption" color="text.secondary">
+        {`Matches ${countPrefix}${matches.length} products: `}
+      </Typography>
+      {matches.slice(0, 6).map((product) => (
+        <Chip key={product.$id} label={product.name} size="small" />
+      ))}
+      {matches.length > 6 ? (
+        <Typography variant="caption" color="text.secondary">
+          {`+${matches.length - 6} more`}
+        </Typography>
+      ) : null}
+    </Stack>
+  )
+})
+
+/** The collection editor: a name, a mode, and the products or rules it holds. */
+const CollectionDialog = memo(function CollectionDialog(props: {
+  draft: CollectionDraft | null
+  /** The address the draft will be saved at. */
+  slug: string
+  slugTaken: boolean
+  error: string | null
+  products: readonly ProductRow[]
+  /** The draft's manual products, as rows. */
+  picked: readonly ProductRow[]
+  categories: readonly WalkedCategory[]
+  matches: readonly ProductRow[]
+  countPrefix: string
+  setDraft: DraftSetter<CollectionDraft>
+  onProducts(picked: ProductRow[]): void
+  onRule: RuleChange
+  onSave(): void
+}) {
+  const { draft, error, setDraft } = props
+  const close = useCallback(() => setDraft(null), [setDraft])
+  const setName = useCallback(
+    (event: FieldChange) =>
+      setDraft((prev) => (prev ? { ...prev, name: event.target.value } : prev)),
+    [setDraft],
+  )
+  const setMode = useCallback(
+    (event: FieldChange) =>
+      setDraft((prev) =>
+        prev
+          ? { ...prev, mode: event.target.value as 'manual' | 'smart' }
+          : prev,
+      ),
+    [setDraft],
+  )
+  return (
+    <Dialog open={Boolean(draft)} onClose={close} maxWidth="sm" fullWidth>
+      <DialogTitle>{draft?.id ? 'Edit collection' : 'New collection'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <MemoTextField
+          label="Name"
+          value={draft?.name ?? ''}
+          onChange={setName}
+          size="small"
+          autoFocus
+          sx={FIRST_FIELD}
+          error={props.slugTaken}
+          helperText={draft?.name ? `/collections/${props.slug}` : undefined}
+        />
+        <MemoTextField
+          label="Mode"
+          value={draft?.mode ?? 'manual'}
+          onChange={setMode}
+          size="small"
+          select
+        >
+          {MODE_MENU}
+        </MemoTextField>
+        {draft?.mode === 'manual' ? (
+          <CollectionProductsField
+            products={props.products}
+            value={props.picked}
+            onChange={props.onProducts}
+          />
+        ) : (
+          <CollectionRulesFields
+            rules={draft?.rules ?? NO_RULES}
+            matchAll={draft?.matchAll !== false}
+            categories={props.categories}
+            setDraft={setDraft}
+            onRule={props.onRule}
+          />
+        )}
+        {error ? <Alert severity="warning">{error}</Alert> : null}
+        {draft ? (
+          <CollectionPreview matches={props.matches} countPrefix={props.countPrefix} />
+        ) : null}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={close}>{'Cancel'}</Button>
+        <Button
+          variant="contained"
+          color="primary"
+          disabled={!draft?.name.trim() || Boolean(error)}
+          onClick={props.onSave}
+        >
+          {'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+})
+
+/** A collection with no rules yet, the same list on every render. */
+const NO_RULES: readonly CommerceModel.CollectionRule[] = []
 
 /**
  * Categories & collections manager (AGL-280): category tree (parentId)
@@ -329,14 +939,10 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [commerceCollections, collectionPage, collectionPageSize],
   )
 
-  const [categoryDraft, setCategoryDraft] = useState<{
-    id: string | null
-    name: string
-    parentId: string
-  } | null>(null)
-  const [collectionDraft, setCollectionDraft] = useState<
-    (CommerceModel.HostCollection & { id: string | null }) | null
-  >(null)
+  const [categoryDraft, setCategoryDraft] = useState<CategoryDraft | null>(null)
+  const [collectionDraft, setCollectionDraft] = useState<CollectionDraft | null>(
+    null,
+  )
 
   const handleCategorySave = useCallback(async () => {
     if (!categoryDraft?.name.trim()) return
@@ -553,16 +1159,26 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [],
   )
 
+  /*
+   * Recomputed when what decides membership changes — the mode, the picked
+   * products, the rules and whether all must hold — and not on a keystroke in
+   * the name, which no match reads (AGL-3423).
+   */
+  const draftMode = collectionDraft?.mode
+  const draftRules = collectionDraft?.rules
+  const draftMatchAll = collectionDraft?.matchAll
   const previewMatches = useMemo(() => {
-    if (!collectionDraft) return []
-    const candidate: CommerceModel.HostCollection = {
-      ...collectionDraft,
-      slug: collectionDraft.slug || CommerceModel.commerceSlug(collectionDraft.name),
-    }
+    if (!draftMode) return []
+    const candidate = {
+      mode: draftMode,
+      productIds: collectionProductIds,
+      rules: draftRules,
+      matchAll: draftMatchAll,
+    } as CommerceModel.HostCollection
     return products.filter((product) =>
       CommerceModel.matchesCollection(product, candidate, product.$id),
     )
-  }, [collectionDraft, products])
+  }, [draftMode, collectionProductIds, draftRules, draftMatchAll, products])
 
   /**
    * Which products a smart collection holds is stored on the products
@@ -745,18 +1361,6 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [confirm, user, hostId, enqueueSnackbar, restampMembership],
   )
 
-  /**
-   * How many products a collection holds — over the CATALOG WINDOW.
-   *
-   * Rendered with "at least" when the probe found a product past the ceiling,
-   * because past that point this is a lower bound and printing it as a total
-   * is the count-that-is-a-window-length defect. The number itself is honest
-   * either way; only the claim around it changes.
-   */
-  const collectionCount = (row: CollectionRow) =>
-    products.filter((product) =>
-      CommerceModel.matchesCollection(product, row, product.$id),
-    ).length
   /*
    * "at least", or nothing at all.
    *
@@ -771,12 +1375,17 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
    */
   const countPrefix = productsTruncated ? 'at least ' : ''
 
-  const updateRule = (
-    index: number,
-    patch: Partial<CommerceModel.CollectionRule> | null,
-  ) => {
-    if (!collectionDraft) return
-    const rules = [...(collectionDraft.rules ?? [])]
+  /*
+   * A rule's change, written over the collection draft as last rendered, from
+   * a handler that keeps its identity so a rule row redraws only when its own
+   * rule changes (AGL-3423).
+   */
+  const latestCollectionDraft = useRef(collectionDraft)
+  latestCollectionDraft.current = collectionDraft
+  const updateRule = useCallback<RuleChange>((index, patch) => {
+    const draft = latestCollectionDraft.current
+    if (!draft) return
+    const rules = [...(draft.rules ?? [])]
     if (patch === null) rules.splice(index, 1)
     else
       rules[index] = {
@@ -786,8 +1395,8 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         ...rules[index],
         ...patch,
       }
-    setCollectionDraft({ ...collectionDraft, rules })
-  }
+    setCollectionDraft({ ...draft, rules })
+  }, [])
 
   return (
     <CardDisplay
@@ -797,405 +1406,56 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
       contentGutterY
     >
       <Stack spacing={1}>
-        <Typography variant="subtitle2">{'Categories'}</Typography>
-        {categories.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Group products into a browsable tree (e.g. Brakes → Pads).'}
-          </Typography>
-        ) : (
-          visibleCategories.map((category) => (
-            <Stack
-              key={category.$id}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center', pl: category.depth * 2 }}
-            >
-              <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                {category.name}
-                <Typography
-                  component="span"
-                  variant="caption"
-                  color="text.secondary"
-                >
-                  {` /${category.slug}`}
-                </Typography>
-              </Typography>
-              <Button
-                size="small"
-                onClick={() =>
-                  setCategoryDraft({
-                    id: category.$id,
-                    name: category.name,
-                    parentId: category.parentId ?? '',
-                  })
-                }
-              >
-                {'Edit'}
-              </Button>
-              <Button
-                size="small"
-                color="error"
-                onClick={handleCategoryDelete(category)}
-              >
-                {'Delete'}
-              </Button>
-            </Stack>
-          ))
-        )}
-        {categories.length === 0 ? null : (
-          <ListPagination
-            page={categoryPage}
-            pageSize={categoryPageSize}
-            rowCount={visibleCategories.length}
-            // The categories the card HOLDS — a client slice of rows already
-            // read, so the total is known exactly.
-            count={categories.length}
-            onPageChange={setCategoryPage}
-            onPageSizeChange={setCategoryPageSize}
-          />
-        )}
-        {categoriesTruncated ? (
-          <Alert severity="info">
-            {`Showing ${CATEGORY_CEILING} categories, ordered by id. This ` +
-              'catalog has more — a category whose parent is past that ' +
-              'boundary is drawn at the top level here rather than under it.'}
-          </Alert>
-        ) : null}
-        <Button
-          size="small"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={() => setCategoryDraft({ id: null, name: '', parentId: '' })}
-        >
-          {'Add category'}
-        </Button>
+        <CategoriesSection
+          categories={categories}
+          visible={visibleCategories}
+          page={categoryPage}
+          pageSize={categoryPageSize}
+          truncated={categoriesTruncated}
+          onPageChange={setCategoryPage}
+          onPageSizeChange={setCategoryPageSize}
+          onEdit={setCategoryDraft}
+          onDelete={handleCategoryDelete}
+        />
 
         <Divider sx={{ my: 1 }} />
-        <Typography variant="subtitle2">{'Collections'}</Typography>
-        {visibleCollections.map((row) => (
-          <Stack
-            key={row.$id}
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'center' }}
-          >
-            <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-              {row.name}
-              <Typography
-                component="span"
-                variant="caption"
-                color="text.secondary"
-              >
-                {` · ${row.mode ?? 'manual'} · ${countPrefix}${collectionCount(
-                  row,
-                )} products`}
-              </Typography>
-            </Typography>
-            <Button
-              size="small"
-              onClick={() =>
-                setCollectionDraft({
-                  id: row.$id,
-                  name: row.name,
-                  slug: row.slug ?? '',
-                  mode: row.mode ?? 'manual',
-                  productIds: row.productIds ?? [],
-                  rules: row.rules ?? [],
-                  matchAll: row.matchAll !== false,
-                })
-              }
-            >
-              {'Edit'}
-            </Button>
-            <Button size="small" color="error" onClick={handleCollectionDelete(row)}>
-              {'Delete'}
-            </Button>
-          </Stack>
-        ))}
-        {commerceCollections.length === 0 ? null : (
-          <ListPagination
-            page={collectionPage}
-            pageSize={collectionPageSize}
-            rowCount={visibleCollections.length}
-            // The CATALOG collections, which is what this list is. Not the
-            // window's length: content collections share the subcollection
-            // and are classified out before this count is taken.
-            count={commerceCollections.length}
-            onPageChange={setCollectionPage}
-            onPageSizeChange={setCollectionPageSize}
-          />
-        )}
-        {collectionsTruncated ? (
-          <Alert severity="info">
-            {`Showing ${COLLECTION_CEILING} collections, ordered by id. This ` +
-              'site has more — the slug check below only covers the ones ' +
-              'listed here, so an address may already be taken by one that ' +
-              'is not.'}
-          </Alert>
-        ) : null}
-        <Button
-          size="small"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={() =>
-            setCollectionDraft({
-              id: null,
-              name: '',
-              slug: '',
-              mode: 'manual',
-              productIds: [],
-              rules: [],
-              matchAll: true,
-            })
-          }
-        >
-          {'Add collection'}
-        </Button>
+        <CollectionsSection
+          collections={commerceCollections}
+          visible={visibleCollections}
+          products={products}
+          countPrefix={countPrefix}
+          page={collectionPage}
+          pageSize={collectionPageSize}
+          truncated={collectionsTruncated}
+          onPageChange={setCollectionPage}
+          onPageSizeChange={setCollectionPageSize}
+          onEdit={setCollectionDraft}
+          onDelete={handleCollectionDelete}
+        />
       </Stack>
 
-      <Dialog
-        open={Boolean(categoryDraft)}
-        onClose={() => setCategoryDraft(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>
-          {categoryDraft?.id ? 'Edit category' : 'New category'}
-        </DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Name"
-            value={categoryDraft?.name ?? ''}
-            onChange={(event) =>
-              setCategoryDraft((prev) =>
-                prev ? { ...prev, name: event.target.value } : prev,
-              )
-            }
-            size="small"
-            autoFocus
-            sx={{ mt: 1 }}
-          />
-          <TextField
-            label="Parent category"
-            value={categoryDraft?.parentId ?? ''}
-            onChange={(event) =>
-              setCategoryDraft((prev) =>
-                prev ? { ...prev, parentId: event.target.value } : prev,
-              )
-            }
-            size="small"
-            select
-          >
-            <MenuItem value="">{'None (top level)'}</MenuItem>
-            {/* The whole set, not `visibleCategories` — a parent picker
-                that offered only the current page could not reparent a
-                category under one two pages away. */}
-            {categories
-              .filter((category) => category.$id !== categoryDraft?.id)
-              .map((category) => (
-                <MenuItem key={category.$id} value={category.$id}>
-                  {`${'— '.repeat(category.depth)}${category.name}`}
-                </MenuItem>
-              ))}
-          </TextField>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCategoryDraft(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!categoryDraft?.name.trim()}
-            onClick={handleCategorySave}
-          >
-            {'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <CategoryDialog
+        draft={categoryDraft}
+        categories={categories}
+        setDraft={setCategoryDraft}
+        onSave={handleCategorySave}
+      />
 
-      <Dialog
-        open={Boolean(collectionDraft)}
-        onClose={() => setCollectionDraft(null)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          {collectionDraft?.id ? 'Edit collection' : 'New collection'}
-        </DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Name"
-            value={collectionDraft?.name ?? ''}
-            onChange={(event) =>
-              setCollectionDraft((prev) =>
-                prev ? { ...prev, name: event.target.value } : prev,
-              )
-            }
-            size="small"
-            autoFocus
-            sx={{ mt: 1 }}
-            error={slugTaken}
-            helperText={
-              collectionDraft?.name ? `/collections/${draftSlug}` : undefined
-            }
-          />
-          <TextField
-            label="Mode"
-            value={collectionDraft?.mode ?? 'manual'}
-            onChange={(event) =>
-              setCollectionDraft((prev) =>
-                prev
-                  ? { ...prev, mode: event.target.value as 'manual' | 'smart' }
-                  : prev,
-              )
-            }
-            size="small"
-            select
-          >
-            <MenuItem value="manual">{'Manual — pick products'}</MenuItem>
-            <MenuItem value="smart">{'Smart — rule based'}</MenuItem>
-          </TextField>
-          {collectionDraft?.mode === 'manual' ? (
-            <CollectionProductsField
-              products={products}
-              value={collectionProducts}
-              onChange={setCollectionProducts}
-            />
-          ) : (
-            <>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <Typography variant="body2">{'Match'}</Typography>
-                <Switch
-                  size="small"
-                  checked={collectionDraft?.matchAll !== false}
-                  onChange={(event) =>
-                    setCollectionDraft((prev) =>
-                      prev ? { ...prev, matchAll: event.target.checked } : prev,
-                    )
-                  }
-                />
-                <Typography variant="body2">
-                  {collectionDraft?.matchAll !== false
-                    ? 'all rules'
-                    : 'any rule'}
-                </Typography>
-              </Stack>
-              {(collectionDraft?.rules ?? []).map((rule, index) => (
-                <Stack key={index} direction="row" spacing={1}>
-                  <TextField
-                    value={rule.field}
-                    onChange={(event) =>
-                      updateRule(index, {
-                        field: event.target.value as CommerceModel.CollectionRuleField,
-                      })
-                    }
-                    size="small"
-                    select
-                    sx={{ width: 130 }}
-                  >
-                    {RULE_FIELDS.map((field) => (
-                      <MenuItem key={field.value} value={field.value}>
-                        {field.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    value={rule.op}
-                    onChange={(event) =>
-                      updateRule(index, {
-                        op: event.target.value as CommerceModel.CollectionRuleOp,
-                      })
-                    }
-                    size="small"
-                    select
-                    sx={{ width: 110 }}
-                  >
-                    {RULE_OPS.map((op) => (
-                      <MenuItem key={op.value} value={op.value}>
-                        {op.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  {rule.field === 'categoryId' ? (
-                    <TextField
-                      value={rule.value}
-                      onChange={(event) =>
-                        updateRule(index, { value: event.target.value })
-                      }
-                      size="small"
-                      select
-                      sx={{ flex: 1 }}
-                    >
-                      {categories.map((category) => (
-                        <MenuItem key={category.$id} value={category.$id}>
-                          {category.name}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  ) : (
-                    <TextField
-                      value={rule.value}
-                      onChange={(event) =>
-                        updateRule(index, {
-                          value:
-                            rule.field === 'priceUsd'
-                              ? Number(event.target.value)
-                              : event.target.value,
-                        })
-                      }
-                      size="small"
-                      sx={{ flex: 1 }}
-                      placeholder={rule.field === 'type' ? 'physical' : 'Value'}
-                    />
-                  )}
-                  <Button
-                    size="small"
-                    color="error"
-                    onClick={() => updateRule(index, null)}
-                  >
-                    {'✕'}
-                  </Button>
-                </Stack>
-              ))}
-              <Button
-                size="small"
-                sx={{ alignSelf: 'flex-start' }}
-                onClick={() =>
-                  updateRule(collectionDraft?.rules?.length ?? 0, {})
-                }
-              >
-                {'Add rule'}
-              </Button>
-            </>
-          )}
-          {collectionError ? (
-            <Alert severity="warning">{collectionError}</Alert>
-          ) : null}
-          {collectionDraft ? (
-            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-              <Typography variant="caption" color="text.secondary">
-                {`Matches ${countPrefix}${previewMatches.length} products: `}
-              </Typography>
-              {previewMatches.slice(0, 6).map((product) => (
-                <Chip key={product.$id} label={product.name} size="small" />
-              ))}
-              {previewMatches.length > 6 ? (
-                <Typography variant="caption" color="text.secondary">
-                  {`+${previewMatches.length - 6} more`}
-                </Typography>
-              ) : null}
-            </Stack>
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCollectionDraft(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!collectionDraft?.name.trim() || Boolean(collectionError)}
-            onClick={handleCollectionSave}
-          >
-            {'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <CollectionDialog
+        draft={collectionDraft}
+        slug={draftSlug}
+        slugTaken={slugTaken}
+        error={collectionError}
+        products={products}
+        picked={collectionProducts}
+        categories={categories}
+        matches={previewMatches}
+        countPrefix={countPrefix}
+        setDraft={setCollectionDraft}
+        onProducts={setCollectionProducts}
+        onRule={updateRule}
+        onSave={handleCollectionSave}
+      />
     </CardDisplay>
   )
 }

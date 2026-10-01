@@ -24,7 +24,6 @@ import {
   Autocomplete,
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -54,7 +53,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
-import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import {
+  type ConsoleWidgetSlotRenderer,
+  useConsoleWidgetSlot,
+} from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
   seoListingFieldCount,
   seoListingFieldTooLong,
@@ -62,6 +64,7 @@ import {
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import type { ConsoleSeoFieldValues } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { useContentStable } from '@aglyn/shared-ui-jsx/hooks/use-content-stable'
 import {
   EntitlementUpsell,
   useCommerceEntitlement,
@@ -72,6 +75,7 @@ import {
   type ConsoleProductEditorZoneProps,
 } from './product-zones'
 import {
+  type MembersVideo,
   MembersVideosField,
   PaidDownloadAddButton,
   PaidMediaProtection,
@@ -142,8 +146,12 @@ function comboLabel(options: Record<string, string> | undefined): string {
   return values.length ? values.join(' / ') : 'Default'
 }
 
+
 /** Stand-in for a list the product does not hold yet, the same one each render. */
 const NO_ITEMS: readonly string[] = []
+const NO_OPTIONS: readonly CommerceModel.ProductOption[] = []
+const NO_FILES: readonly DigitalFile[] = []
+const NO_VIDEOS: readonly MembersVideo[] = []
 const FILL_ROW = { flex: 1 } as const
 
 const categoryLabel = (category: any): string => category.name
@@ -206,6 +214,947 @@ const ProductChipsField = memo(function ProductChipsField<T>(
     />
   )
 }) as <T>(props: ProductChipsFieldProps<T>) => JSX.Element
+
+type DigitalFile = NonNullable<CommerceModel.HostProduct['digitalFiles']>[number]
+
+/** A change to the product, or a function of the product as it stands. */
+type ProductPatch =
+  | Partial<CommerceModel.HostProduct>
+  | ((product: CommerceModel.HostProduct) => Partial<CommerceModel.HostProduct>)
+
+/** Spreads a patch over the draft as last rendered. One identity per dialog. */
+type ProductUpdate = (patch: ProductPatch) => void
+
+/** Replaces the draft with what `build` makes of it as last rendered. */
+type DraftReplace = (
+  build: (product: CommerceModel.HostProduct) => CommerceModel.HostProduct,
+) => void
+
+/** Opens the media browser and hands what was chosen to `apply`. */
+type MediaPick = (apply: (media: PickedMedia) => void) => Promise<void>
+
+/** A change to one option, or `null` to remove it. */
+type OptionChange = (
+  index: number,
+  patch: Partial<CommerceModel.ProductOption> | null,
+) => void
+
+/** What was typed into one variant's field, as the matrix hands it on. */
+type VariantFieldChange = (
+  index: number,
+  field: keyof CommerceModel.ProductVariant,
+  raw: string,
+) => void
+
+type FieldChange = { target: { value: string } }
+
+/**
+ * A text field that redraws only when what it shows changes (AGL-3423).
+ *
+ * Every field in this editor writes one draft, so a keystroke in any of them
+ * re-renders the dialog, and drawn whole that is some forty inputs and twelve
+ * hundred components for one letter in a product with four variants. When a
+ * keystroke costs that much, typed input queues and is processed back to
+ * back, which is what lets a chip list's pending update climb to #185 (see
+ * `ProductChipsField`). The sections below are memoized on the slice of the
+ * draft they show, and each field in them is this, handed a handler and
+ * styles that keep their identity, so the keystroke redraws the field it
+ * lands in.
+ */
+const MemoTextField = memo(TextField) as typeof TextField
+
+const FIRST_ROW = { mt: 1 } as const
+const WIDE_ROW = { xs: 'column', sm: 'row' } as const
+const NARROW_SELECT = { minWidth: 140 } as const
+const SUPPLIER_SELECT = { minWidth: 160 } as const
+const OVERSELL_SELECT = { minWidth: 200 } as const
+const KIND_SELECT = { minWidth: 130 } as const
+const SHORT_SELECT = { minWidth: 120 } as const
+const BILLING_SELECT = { minWidth: 180 } as const
+const COUNT_FIELD = { width: 140 } as const
+const VERSION_FIELD = { width: 100 } as const
+const OPTION_FIELD = { width: 160 } as const
+const PRICE_CELL = { width: 88 } as const
+const CODE_CELL = { width: 110 } as const
+const STOCK_CELL = { width: 72 } as const
+const DECIMAL_INPUT = { htmlInput: { inputMode: 'decimal' } } as const
+const NUMERIC_INPUT = { htmlInput: { inputMode: 'numeric' } } as const
+
+const TYPE_MENU = [
+  <MenuItem key="physical" value="physical">{'Physical'}</MenuItem>,
+  <MenuItem key="digital" value="digital">{'Digital'}</MenuItem>,
+  <MenuItem key="service" value="service">{'Service'}</MenuItem>,
+]
+const STATUS_MENU = [
+  <MenuItem key="draft" value="draft">{'Draft'}</MenuItem>,
+  <MenuItem key="active" value="active">{'Active'}</MenuItem>,
+  <MenuItem key="archived" value="archived">{'Archived'}</MenuItem>,
+]
+const OVERSELL_MENU = [
+  <MenuItem key="deny" value="deny">{'Stop selling (sold out)'}</MenuItem>,
+  <MenuItem key="backorder" value="backorder">{'Keep selling (backorder)'}</MenuItem>,
+]
+const TAX_MENU = [
+  <MenuItem key="taxable" value="taxable">{'Taxable'}</MenuItem>,
+  <MenuItem key="exempt" value="exempt">{'Tax exempt'}</MenuItem>,
+]
+const INTERVAL_MENU = [
+  <MenuItem key="month" value="month">{'Monthly'}</MenuItem>,
+  <MenuItem key="year" value="year">{'Yearly'}</MenuItem>,
+]
+
+/**
+ * A zone hosted in the dialog, drawn again only when what it is handed
+ * changes (AGL-3423). The shell's renderer is not memoized: drawn straight
+ * into the dialog, every widget in the zone would redraw on each keystroke in
+ * any field.
+ */
+const HostedZone = memo(function HostedZone(
+  props: { renderer: ConsoleWidgetSlotRenderer; slot: string } & Record<string, unknown>,
+) {
+  const { renderer: Renderer, ...zone } = props
+  return <Renderer {...zone} />
+})
+
+interface ProductBasicsFieldsProps {
+  name: string
+  slug: string
+  type: CommerceModel.ProductType
+  status: CommerceModel.ProductStatus
+  supplierId: string | undefined
+  description: string
+  suppliers: readonly any[]
+  onName(event: FieldChange): void
+  onSlug(event: FieldChange): void
+  update: ProductUpdate
+}
+
+/** The product's name and address, type, status, supplier and description. */
+const ProductBasicsFields = memo(function ProductBasicsFields(
+  props: ProductBasicsFieldsProps,
+) {
+  const { suppliers, update } = props
+  const setType = useCallback(
+    (event: FieldChange) =>
+      update({ type: event.target.value as CommerceModel.ProductType }),
+    [update],
+  )
+  const setStatus = useCallback(
+    (event: FieldChange) =>
+      update({ status: event.target.value as CommerceModel.ProductStatus }),
+    [update],
+  )
+  const setSupplier = useCallback(
+    (event: FieldChange) => update({ supplierId: event.target.value || undefined }),
+    [update],
+  )
+  const setDescription = useCallback(
+    (event: FieldChange) => update({ description: event.target.value }),
+    [update],
+  )
+  const supplierMenu = useMemo(
+    () => [
+      <MenuItem key="" value="">
+        {'None (self-fulfilled)'}
+      </MenuItem>,
+      ...suppliers.map((supplier: any) => (
+        <MenuItem key={supplier.$id} value={supplier.$id}>
+          {supplier.name}
+        </MenuItem>
+      )),
+    ],
+    [suppliers],
+  )
+  return (
+    <>
+      <Stack direction={WIDE_ROW} spacing={2} sx={FIRST_ROW}>
+        <MemoTextField
+          label="Name"
+          value={props.name}
+          onChange={props.onName}
+          size="small"
+          autoFocus
+          fullWidth
+        />
+        <MemoTextField
+          label="Slug"
+          value={props.slug}
+          onChange={props.onSlug}
+          size="small"
+          fullWidth
+          helperText={props.slug ? `/products/${props.slug}` : undefined}
+        />
+      </Stack>
+      <Stack direction="row" spacing={2}>
+        <MemoTextField
+          label="Type"
+          value={props.type}
+          onChange={setType}
+          size="small"
+          select
+          sx={NARROW_SELECT}
+        >
+          {TYPE_MENU}
+        </MemoTextField>
+        <MemoTextField
+          label="Status"
+          value={props.status}
+          onChange={setStatus}
+          size="small"
+          select
+          sx={NARROW_SELECT}
+        >
+          {STATUS_MENU}
+        </MemoTextField>
+        {suppliers.length > 0 ? (
+          <MemoTextField
+            label="Supplier"
+            value={props.supplierId ?? ''}
+            onChange={setSupplier}
+            size="small"
+            select
+            sx={SUPPLIER_SELECT}
+            helperText="Routes paid orders"
+          >
+            {supplierMenu}
+          </MemoTextField>
+        ) : null}
+      </Stack>
+      <MemoTextField
+        label="Description"
+        value={props.description}
+        onChange={setDescription}
+        size="small"
+        multiline
+        minRows={2}
+      />
+    </>
+  )
+})
+
+/** The product's images, each removable, and the button that adds one. */
+const ProductMediaFields = memo(function ProductMediaFields(props: {
+  mediaUrls: readonly string[]
+  update: ProductUpdate
+  pick: MediaPick
+}) {
+  const { mediaUrls, update, pick } = props
+  return (
+    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+      {mediaUrls.map((url, index) => (
+        <Box key={`${url}-${index}`} sx={{ position: 'relative' }}>
+          <Box
+            component="img"
+            src={url}
+            alt=""
+            sx={{
+              width: 72,
+              height: 72,
+              objectFit: 'cover',
+              borderRadius: 1,
+              border: 1,
+              borderColor: 'divider',
+            }}
+          />
+          <IconButton
+            size="small"
+            aria-label="Remove image"
+            onClick={() =>
+              update((product) => ({
+                mediaUrls: (product.mediaUrls ?? []).filter(
+                  (_item, itemIndex) => itemIndex !== index,
+                ),
+              }))
+            }
+            sx={{
+              position: 'absolute',
+              top: -8,
+              right: -8,
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider',
+              p: 0.25,
+            }}
+          >
+            {'✕'}
+          </IconButton>
+        </Box>
+      ))}
+      <Button
+        size="small"
+        onClick={() =>
+          void pick((media) =>
+            update((product) => ({
+              mediaUrls: [...(product.mediaUrls ?? []), media.url],
+            })),
+          )
+        }
+      >
+        {'Add image'}
+      </Button>
+    </Box>
+  )
+})
+
+const ProductOptionRow = memo(function ProductOptionRow(props: {
+  index: number
+  option: CommerceModel.ProductOption
+  onChange: OptionChange
+  onValues(values: string[], index: number): void
+}) {
+  const { index, option, onChange, onValues } = props
+  const setName = useCallback(
+    (event: FieldChange) => onChange(index, { name: event.target.value }),
+    [index, onChange],
+  )
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+      <MemoTextField
+        label="Option"
+        value={option.name}
+        onChange={setName}
+        size="small"
+        sx={OPTION_FIELD}
+        placeholder="Size"
+      />
+      <ProductChipsField<string>
+        freeSolo
+        fill
+        label="Values"
+        placeholder="S, M, L…"
+        options={NO_ITEMS}
+        value={option.values}
+        index={index}
+        onChange={onValues}
+      />
+      <Button
+        size="small"
+        color="error"
+        onClick={() => onChange(index, null)}
+        sx={{ mt: 0.5 }}
+      >
+        {'Remove'}
+      </Button>
+    </Stack>
+  )
+})
+
+/** The product's options, one row each, and the button that adds one. */
+const ProductOptionsFields = memo(function ProductOptionsFields(props: {
+  options: readonly CommerceModel.ProductOption[]
+  onChange: OptionChange
+  onValues(values: string[], index: number): void
+}) {
+  const { options, onChange, onValues } = props
+  return (
+    <>
+      {options.map((option, index) => (
+        <ProductOptionRow
+          key={index}
+          index={index}
+          option={option}
+          onChange={onChange}
+          onValues={onValues}
+        />
+      ))}
+      {options.length < CommerceModel.COMMERCE_MAX_OPTIONS ? (
+        <Button
+          size="small"
+          sx={{ alignSelf: 'flex-start' }}
+          onClick={() => onChange(options.length, { name: '', values: [] })}
+        >
+          {'Add option'}
+        </Button>
+      ) : null}
+    </>
+  )
+})
+
+const ProductVariantRow = memo(function ProductVariantRow(props: {
+  index: number
+  variant: CommerceModel.ProductVariant
+  stockApplies: boolean
+  onField: VariantFieldChange
+}) {
+  const { index, variant, stockApplies, onField } = props
+  const label = comboLabel(variant.options)
+  // One handler per cell, each keeping its identity while the row's does.
+  const set = useMemo(() => {
+    const cell =
+      (field: keyof CommerceModel.ProductVariant) => (event: FieldChange) =>
+        onField(index, field, event.target.value)
+    return {
+      priceUsd: cell('priceUsd'),
+      compareAtPriceUsd: cell('compareAtPriceUsd'),
+      sku: cell('sku'),
+      barcode: cell('barcode'),
+      inventory: cell('inventory'),
+      weightGrams: cell('weightGrams'),
+    }
+  }, [index, onField])
+  const stockInput = useMemo(
+    () => ({
+      htmlInput: {
+        inputMode: 'numeric' as const,
+        'aria-label': `Stock — ${label}`,
+      },
+    }),
+    [label],
+  )
+  return (
+    <TableRow>
+      <TableCell sx={{ whiteSpace: 'nowrap' }}>{label}</TableCell>
+      <TableCell>
+        <MemoTextField
+          value={variant.priceUsd ?? ''}
+          onChange={set.priceUsd}
+          size="small"
+          sx={PRICE_CELL}
+          // An empty price is marked (AGL-2916): a proposed
+          // product arrives with none, and Save waits for one.
+          error={!CommerceModel.variantHasPrice(variant)}
+          placeholder="Set"
+          slotProps={DECIMAL_INPUT}
+        />
+      </TableCell>
+      <TableCell>
+        <MemoTextField
+          value={variant.compareAtPriceUsd ?? ''}
+          onChange={set.compareAtPriceUsd}
+          size="small"
+          sx={PRICE_CELL}
+          slotProps={DECIMAL_INPUT}
+        />
+      </TableCell>
+      <TableCell>
+        <MemoTextField
+          value={variant.sku ?? ''}
+          onChange={set.sku}
+          size="small"
+          sx={CODE_CELL}
+        />
+      </TableCell>
+      <TableCell>
+        <MemoTextField
+          value={variant.barcode ?? ''}
+          onChange={set.barcode}
+          size="small"
+          sx={CODE_CELL}
+        />
+      </TableCell>
+      <TableCell>
+        <MemoTextField
+          value={variant.inventory ?? ''}
+          placeholder={stockApplies ? '—' : 'n/a'}
+          disabled={!stockApplies}
+          onChange={set.inventory}
+          size="small"
+          sx={STOCK_CELL}
+          slotProps={stockInput}
+        />
+      </TableCell>
+      <TableCell>
+        <MemoTextField
+          value={variant.weightGrams ?? ''}
+          onChange={set.weightGrams}
+          size="small"
+          sx={PRICE_CELL}
+          slotProps={NUMERIC_INPUT}
+        />
+      </TableCell>
+    </TableRow>
+  )
+})
+
+/** The matrix's column headings, one element for every render. */
+const VARIANTS_HEAD = (
+  <TableHead>
+    <TableRow>
+      <TableCell>{'Variant'}</TableCell>
+      <TableCell>{'Price ($)'}</TableCell>
+      <TableCell>{'Compare-at'}</TableCell>
+      <TableCell>{'SKU'}</TableCell>
+      <TableCell>{'Barcode'}</TableCell>
+      <TableCell>{'Stock'}</TableCell>
+      <TableCell>{'Weight (g)'}</TableCell>
+    </TableRow>
+  </TableHead>
+)
+
+/**
+ * The variants matrix: one row per combination of the options above, each
+ * with its own price, SKU, barcode, stock and weight. A keystroke in one row
+ * leaves the others' props as they were.
+ */
+const ProductVariantsTable = memo(function ProductVariantsTable(props: {
+  variants: readonly CommerceModel.ProductVariant[]
+  stockApplies: boolean
+  onField: VariantFieldChange
+}) {
+  const { variants, stockApplies, onField } = props
+  return (
+    <Box>
+      <ScrollTable size="small">
+        {VARIANTS_HEAD}
+        <TableBody>
+          {variants.map((variant, index) => (
+            <ProductVariantRow
+              key={variant.id}
+              index={index}
+              variant={variant}
+              stockApplies={stockApplies}
+              onField={onField}
+            />
+          ))}
+        </TableBody>
+      </ScrollTable>
+    </Box>
+  )
+})
+
+/** What happens when stock runs out, the gift-card kind, tax, and the low-stock alert. */
+const ProductSellingFields = memo(function ProductSellingFields(props: {
+  oversellPolicy: 'deny' | 'backorder'
+  giftCard: boolean
+  taxExempt: boolean
+  lowStockThreshold: number | undefined
+  stockApplies: boolean
+  giftsLocked: boolean
+  giftsPlanLabel: string | undefined
+  update: ProductUpdate
+}) {
+  const { giftsLocked, giftsPlanLabel, update } = props
+  const setOversellPolicy = useCallback(
+    (event: FieldChange) =>
+      update({ oversellPolicy: event.target.value as 'deny' | 'backorder' }),
+    [update],
+  )
+  const setKind = useCallback(
+    (event: FieldChange) => update({ giftCard: event.target.value === 'gift' }),
+    [update],
+  )
+  const setTax = useCallback(
+    (event: FieldChange) => update({ taxExempt: event.target.value === 'exempt' }),
+    [update],
+  )
+  const setLowStock = useCallback(
+    (event: FieldChange) => {
+      const raw = event.target.value.trim()
+      update({
+        lowStockThreshold:
+          raw === '' ? undefined : Math.max(0, Math.round(Number(raw))),
+      })
+    },
+    [update],
+  )
+  const kindMenu = useMemo(
+    () => [
+      <MenuItem key="standard" value="standard">
+        {'Standard'}
+      </MenuItem>,
+      // Disabled, never removed (AGL-2080). A product saved as a gift
+      // card before the plan lapsed still has `giftCard: true`, and a
+      // MUI select whose value is absent from its options renders
+      // blank — the next edit would silently rewrite the product to
+      // Standard. Locking the option refuses NEW configuration
+      // without rewriting existing data.
+      <MenuItem value="gift" key="gift" disabled={giftsLocked}>
+        {giftsLocked ? `Gift card — ${giftsPlanLabel ?? 'upgrade'} plan` : 'Gift card'}
+      </MenuItem>,
+    ],
+    [giftsLocked, giftsPlanLabel],
+  )
+  return (
+    <Stack direction="row" spacing={2}>
+      <MemoTextField
+        label="When out of stock"
+        value={props.oversellPolicy}
+        onChange={setOversellPolicy}
+        size="small"
+        select
+        sx={OVERSELL_SELECT}
+      >
+        {OVERSELL_MENU}
+      </MemoTextField>
+      <MemoTextField
+        label="Kind"
+        value={props.giftCard ? 'gift' : 'standard'}
+        onChange={setKind}
+        size="small"
+        select
+        sx={KIND_SELECT}
+        helperText={
+          giftsLocked
+            ? `Gift cards are on ${giftsPlanLabel ?? 'a higher plan'}`
+            : 'Gift cards issue a code'
+        }
+      >
+        {kindMenu}
+      </MemoTextField>
+      <MemoTextField
+        label="Tax"
+        value={props.taxExempt ? 'exempt' : 'taxable'}
+        onChange={setTax}
+        size="small"
+        select
+        sx={SHORT_SELECT}
+      >
+        {TAX_MENU}
+      </MemoTextField>
+      <MemoTextField
+        label="Low-stock alert at"
+        value={props.lowStockThreshold ?? ''}
+        placeholder="Off"
+        disabled={!props.stockApplies}
+        onChange={setLowStock}
+        size="small"
+        sx={COUNT_FIELD}
+        slotProps={NUMERIC_INPUT}
+        helperText="Notifies managers"
+      />
+    </Stack>
+  )
+})
+
+/** One-time or subscription billing, its interval, and a free trial. */
+const ProductBillingFields = memo(function ProductBillingFields(props: {
+  subscription: CommerceModel.HostProduct['subscription']
+  subscriptionOptional: boolean | undefined
+  subsLocked: boolean
+  subsPlanLabel: string | undefined
+  update: ProductUpdate
+  replaceDraft: DraftReplace
+}) {
+  const { subscription, subscriptionOptional, subsLocked, update, replaceDraft } =
+    props
+  const setBilling = useCallback(
+    (event: FieldChange) => {
+      const value = event.target.value
+      // `replaceDraft`, not `update`: a patch is spread over the draft,
+      // which would resurrect the keys deleted below.
+      replaceDraft((product) => {
+        // "Both" (AGL-545): the PDP offers one-time OR subscribe at
+        // the same price; the interval field beside picks the cadence.
+        // Cleared keys are deleted (not set undefined) so the
+        // client-direct setDoc on save never sees undefined values.
+        const next = { ...product }
+        if (value === 'once') {
+          delete next.subscription
+        } else {
+          next.subscription = {
+            ...(product.subscription ?? {}),
+            interval:
+              value === 'both'
+                ? (product.subscription?.interval ?? 'month')
+                : (value as 'month' | 'year'),
+          }
+        }
+        if (value === 'both') next.subscriptionOptional = true
+        else delete next.subscriptionOptional
+        return next
+      })
+    },
+    [replaceDraft],
+  )
+  const setBillingInterval = useCallback(
+    (event: FieldChange) => {
+      const interval = event.target.value as 'month' | 'year'
+      update((product) => ({
+        subscription: { ...product.subscription!, interval },
+      }))
+    },
+    [update],
+  )
+  const setTrialDays = useCallback(
+    (event: FieldChange) => {
+      const raw = event.target.value.trim()
+      update((product) => ({
+        subscription: {
+          ...product.subscription!,
+          ...(raw === ''
+            ? { trialDays: undefined }
+            : { trialDays: Math.max(1, Math.round(Number(raw))) }),
+        },
+      }))
+    },
+    [update],
+  )
+  const billingMenu = useMemo(
+    () => [
+      <MenuItem key="once" value="once">
+        {'One-time purchase'}
+      </MenuItem>,
+      // Same rule as the gift-card option: disabled, not removed, so an
+      // existing subscription product keeps its interval instead of being
+      // silently reset to one-time.
+      <MenuItem value="month" key="month" disabled={subsLocked}>
+        {'Monthly subscription'}
+      </MenuItem>,
+      <MenuItem value="year" key="year" disabled={subsLocked}>
+        {'Yearly subscription'}
+      </MenuItem>,
+      <MenuItem value="both" key="both" disabled={subsLocked}>
+        {'Both — buyer chooses'}
+      </MenuItem>,
+    ],
+    [subsLocked],
+  )
+  return (
+    <Stack direction="row" spacing={2}>
+      <MemoTextField
+        label="Billing"
+        value={
+          subscription
+            ? subscriptionOptional
+              ? 'both'
+              : subscription.interval
+            : 'once'
+        }
+        onChange={setBilling}
+        size="small"
+        select
+        sx={BILLING_SELECT}
+        helperText={
+          subsLocked
+            ? `Subscriptions are on ${props.subsPlanLabel ?? 'a higher plan'}`
+            : 'Subscriptions bill until canceled'
+        }
+      >
+        {billingMenu}
+      </MemoTextField>
+      {subscription && subscriptionOptional ? (
+        <MemoTextField
+          label="Interval"
+          value={subscription.interval}
+          onChange={setBillingInterval}
+          size="small"
+          select
+          sx={SHORT_SELECT}
+        >
+          {INTERVAL_MENU}
+        </MemoTextField>
+      ) : null}
+      {subscription ? (
+        <MemoTextField
+          label="Free trial (days)"
+          placeholder="None"
+          value={subscription.trialDays ?? ''}
+          onChange={setTrialDays}
+          size="small"
+          sx={COUNT_FIELD}
+          slotProps={NUMERIC_INPUT}
+        />
+      ) : null}
+    </Stack>
+  )
+})
+
+const DigitalFileRow = memo(function DigitalFileRow(props: {
+  index: number
+  file: DigitalFile
+  hostId: string
+  productId: string | undefined
+  update: ProductUpdate
+}) {
+  const { index, file, update } = props
+  const setVersion = useCallback(
+    (event: FieldChange) => {
+      const version = event.target.value.slice(0, 20)
+      update((product) => {
+        const digitalFiles = [...(product.digitalFiles ?? [])]
+        digitalFiles[index] = { ...file, version }
+        return { digitalFiles }
+      })
+    },
+    [file, index, update],
+  )
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+        {file.fileName}
+        {file.version ? ` · v${file.version}` : ''}
+      </Typography>
+      <PaidMediaProtection
+        url={file.url}
+        hostId={props.hostId}
+        productId={props.productId}
+        kind="download"
+      />
+      <MemoTextField
+        label="Version"
+        value={file.version ?? ''}
+        onChange={setVersion}
+        size="small"
+        sx={VERSION_FIELD}
+      />
+      <Button
+        size="small"
+        color="error"
+        onClick={() =>
+          update((product) => ({
+            digitalFiles: (product.digitalFiles ?? []).filter(
+              (_item, itemIndex) => itemIndex !== index,
+            ),
+          }))
+        }
+      >
+        {'✕'}
+      </Button>
+    </Stack>
+  )
+})
+
+/*
+ * The paid-media controls beside the digital fields, drawn again only when
+ * what they are handed changes: a keystroke in the download limit leaves the
+ * videos, and the protection check on each, as they were.
+ */
+const MemoMembersVideosField = memo(MembersVideosField)
+const MemoPaidDownloadAddButton = memo(PaidDownloadAddButton)
+
+/** A digital product's files, its download limit and its members videos. */
+const ProductDigitalFields = memo(function ProductDigitalFields(props: {
+  hostId: string
+  productId: string | undefined
+  digitalFiles: readonly DigitalFile[]
+  downloadLimit: number | undefined
+  gatedVideos: readonly MembersVideo[]
+  update: ProductUpdate
+}) {
+  const { hostId, productId, update } = props
+  const addFile = useCallback(
+    (file: DigitalFile) =>
+      update((product) => ({
+        digitalFiles: [...(product.digitalFiles ?? []), file],
+      })),
+    [update],
+  )
+  const setDownloadLimit = useCallback(
+    (event: FieldChange) => {
+      const raw = event.target.value.trim()
+      update({
+        downloadLimit:
+          raw === '' ? undefined : Math.max(1, Math.round(Number(raw))),
+      })
+    },
+    [update],
+  )
+  const setVideos = useCallback(
+    (gatedVideos: MembersVideo[]) => update({ gatedVideos }),
+    [update],
+  )
+  return (
+    <>
+      <Divider textAlign="left">{'Digital delivery'}</Divider>
+      {props.digitalFiles.map((file, index) => (
+        <DigitalFileRow
+          key={index}
+          index={index}
+          file={file}
+          hostId={hostId}
+          productId={productId}
+          update={update}
+        />
+      ))}
+      <Stack direction="row" spacing={2}>
+        {/* Paid downloads are private files delivered through expiring
+            links (AGL-2847); adding one makes the file private. */}
+        <MemoPaidDownloadAddButton
+          hostId={hostId}
+          productId={productId}
+          onAdd={addFile}
+        />
+        <MemoTextField
+          label="Download limit"
+          placeholder="Unlimited"
+          value={props.downloadLimit ?? ''}
+          onChange={setDownloadLimit}
+          size="small"
+          sx={COUNT_FIELD}
+          slotProps={NUMERIC_INPUT}
+          helperText="Attempts per order"
+        />
+      </Stack>
+      <Typography variant="caption" color="text.secondary">
+        {'Buyers always download the current files — uploading a new ' +
+          'version re-delivers to everyone.'}
+      </Typography>
+      {/* Members videos are private files delivered through expiring
+          links (AGL-2814); adding one makes the file private. */}
+      <MemoMembersVideosField
+        hostId={hostId}
+        productId={productId}
+        videos={props.gatedVideos}
+        onChange={setVideos}
+      />
+    </>
+  )
+})
+
+/** The product's search listing: its title, description and share image. */
+const ProductSeoFields = memo(function ProductSeoFields(props: {
+  title: string | undefined
+  description: string | undefined
+  hasImage: boolean
+  update: ProductUpdate
+  pick: MediaPick
+}) {
+  const { title, description, update, pick } = props
+  const setTitle = useCallback(
+    (event: FieldChange) => {
+      const next = event.target.value
+      update((product) => ({ seo: { ...product.seo, title: next } }))
+    },
+    [update],
+  )
+  const setDescription = useCallback(
+    (event: FieldChange) => {
+      const next = event.target.value
+      update((product) => ({ seo: { ...product.seo, description: next } }))
+    },
+    [update],
+  )
+  return (
+    <>
+      <Divider textAlign="left">{'Search engine listing'}</Divider>
+      <Stack direction={WIDE_ROW} spacing={2}>
+        <MemoTextField
+          label="SEO title"
+          value={title ?? ''}
+          onChange={setTitle}
+          // The counts every search listing editor prints (AGL-2910): what a
+          // search result shows before it truncates.
+          helperText={seoListingFieldCount('title', title)}
+          error={seoListingFieldTooLong('title', title)}
+          size="small"
+          fullWidth
+        />
+        <Button
+          size="small"
+          onClick={() =>
+            void pick((media) =>
+              update((product) => ({
+                seo: { ...product.seo, imageUrl: media.url },
+              })),
+            )
+          }
+        >
+          {props.hasImage ? 'Change OG image' : 'OG image'}
+        </Button>
+      </Stack>
+      <MemoTextField
+        label="SEO description"
+        value={description ?? ''}
+        onChange={setDescription}
+        helperText={seoListingFieldCount('description', description)}
+        error={seoListingFieldTooLong('description', description)}
+        size="small"
+        multiline
+        minRows={2}
+      />
+    </>
+  )
+})
 
 /**
  * Products hub editor (AGL-279): the full catalog editor — basics,
@@ -308,8 +1257,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   // The console media browser is provided by the shell (AGL-395); opening it
   // resolves with the chosen asset (or null if cancelled).
   const { pickMedia } = useMediaPicker()
-  const pick = useCallback(
-    async (apply: (media: PickedMedia) => void) => {
+  const pick = useCallback<MediaPick>(
+    async (apply) => {
       const media = await pickMedia?.()
       if (media) apply(media)
     },
@@ -317,33 +1266,43 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   )
   // Lazy-init per open; parent remounts via `key` on product change.
   const current: CommerceModel.HostProduct = draft ?? lifted ?? blankProduct()
-  const update = (patch: Partial<CommerceModel.HostProduct>) =>
-    setDraft({ ...current, ...patch })
   /*
-   * `update` for the memoized chip lists: the same write from the last
-   * rendered draft, from a callback that keeps its identity across renders.
+   * The two writes every field goes through, each keeping its identity for
+   * the life of the dialog so a memoized section redraws only when its own
+   * slice of the draft does (AGL-3423). Both write from the draft as last
+   * rendered, which `latest` holds: `update` spreads a patch over it, and a
+   * patch that is a function is handed it, so no field holds a copy of the
+   * product to spread. A write that lands after a picker closes lands on the
+   * draft as it is then.
    */
   const latest = useRef(current)
   latest.current = current
-  const updateLatest = useCallback(
-    (patch: Partial<CommerceModel.HostProduct>) =>
-      setDraft({ ...latest.current, ...patch }),
+  const replaceDraft = useCallback<DraftReplace>(
+    (build) => setDraft(build(latest.current)),
     [],
+  )
+  const update = useCallback<ProductUpdate>(
+    (patch) =>
+      replaceDraft((at) => ({
+        ...at,
+        ...(typeof patch === 'function' ? patch(at) : patch),
+      })),
+    [replaceDraft],
   )
   const setTags = useCallback(
     (tags: string[]) =>
-      updateLatest({ tags: tags.map((tag) => String(tag).trim()).filter(Boolean) }),
-    [updateLatest],
+      update({ tags: tags.map((tag) => String(tag).trim()).filter(Boolean) }),
+    [update],
   )
   const setCategories = useCallback(
     (picked: any[]) =>
-      updateLatest({ categoryIds: picked.map((category: any) => category.$id) }),
-    [updateLatest],
+      update({ categoryIds: picked.map((category: any) => category.$id) }),
+    [update],
   )
   const setRelatedProducts = useCallback(
     (picked: any[]) =>
-      updateLatest({ relatedProductIds: picked.map((item: any) => item.$id) }),
-    [updateLatest],
+      update({ relatedProductIds: picked.map((item: any) => item.$id) }),
+    [update],
   )
   const categoryIds = current.categoryIds
   const pickedCategories = useMemo(
@@ -413,7 +1372,11 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     () => categories.rows.map((category: any) => ({ id: String(category.$id), name: String(category.name ?? '') })),
     [categories.rows],
   )
-  const zoneProduct: ConsoleProductEditorZoneProps['product'] = {
+  /*
+   * What the two zones are handed, held by content: a keystroke in a field
+   * neither zone reads (a SKU, a price) leaves both as they were.
+   */
+  const zoneProduct = useContentStable<ConsoleProductEditorZoneProps['product']>({
     id: product?.$id ?? null,
     name: current.name,
     type: current.type,
@@ -424,7 +1387,17 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     mediaUrls: current.mediaUrls ?? [],
     seoTitle: current.seo?.title ?? '',
     seoDescription: current.seo?.description ?? '',
-  }
+  })
+  const seoSubject = useContentStable({
+    kind: 'product',
+    id: product?.$id ?? null,
+    name: current.name,
+    description: String(current.description ?? ''),
+  })
+  const seoValues = useContentStable({
+    title: current.seo?.title ?? '',
+    description: current.seo?.description ?? '',
+  })
 
   const error = current.name ? CommerceModel.validateProduct(current) : null
 
@@ -454,102 +1427,113 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
    * save is a client-direct `setDoc`, which rejects undefined values.
    */
   const handleClearStockTracking = () => {
-    update({
-      variants: current.variants.map((variant) => {
+    update((at) => ({
+      variants: at.variants.map((variant) => {
         const { inventoryByLocation: _perLocation, ...rest } = variant
         return { ...rest, inventory: null }
       }),
-    })
+    }))
   }
 
-  const handleName = (name: string) =>
-    update({
-      name,
-      ...(!product && !slugTouched ? { slug: CommerceModel.commerceSlug(name) } : {}),
-    })
-
-  const handleOptionsChange = useCallback(
-    (index: number, patch: Partial<CommerceModel.ProductOption> | null) => {
-      // A RENAME moves each variant's selection to the new name (AGL-3066).
-      // Rebuilding the matrix matches variants by name and value, so under a
-      // new name it finds none and replaces every variant, its id, price, SKU
-      // and stock with them. Only a change of values rebuilds.
-      if (
-        patch &&
-        current.options?.[index] &&
-        Object.keys(patch).length === 1 &&
-        typeof patch.name === 'string'
-      ) {
-        update(
-          CommerceModel.renameProductOptions(
-            current,
-            current.options.map((option, at) => (at === index ? patch.name : option.name)),
-          ),
-        )
-        return
-      }
-      const options = [...(current.options ?? [])]
-      if (patch === null) options.splice(index, 1)
-      else options[index] = { name: '', values: [], ...options[index], ...patch }
-      // Regenerate the matrix, carrying data over by option-combo key so
-      // edits to prices/SKUs survive option tweaks.
-      const previous = new Map(
-        current.variants.map((variant) => [comboKey(variant.options), variant]),
-      )
-      const fallback = current.variants[0]
-      const variants = CommerceModel.expandVariantMatrix(options).map(
-        (combo, comboIndex) => {
-          const existing = previous.get(comboKey(combo))
-          return (
-            existing ?? {
-              id: `v${Date.now().toString(36)}${comboIndex}`,
-              options: combo,
-              priceUsd: fallback?.priceUsd ?? 0,
-              inventory: fallback?.inventory ?? null,
-            }
-          )
-        },
-      )
-      update({ options, variants })
+  const handleName = useCallback(
+    (event: FieldChange) => {
+      const name = event.target.value
+      update({
+        name,
+        ...(!product && !slugTouched ? { slug: CommerceModel.commerceSlug(name) } : {}),
+      })
     },
-    [current],
+    [product, slugTouched, update],
   )
-  const latestOptionsChange = useRef(handleOptionsChange)
-  latestOptionsChange.current = handleOptionsChange
+  const handleSlug = useCallback(
+    (event: FieldChange) => {
+      setSlugTouched(true)
+      update({ slug: CommerceModel.commerceSlug(event.target.value) })
+    },
+    [update],
+  )
+
+  const handleOptionsChange = useCallback<OptionChange>(
+    (index, patch) =>
+      update((at) => {
+        // A RENAME moves each variant's selection to the new name (AGL-3066).
+        // Rebuilding the matrix matches variants by name and value, so under a
+        // new name it finds none and replaces every variant, its id, price, SKU
+        // and stock with them. Only a change of values rebuilds.
+        if (
+          patch &&
+          at.options?.[index] &&
+          Object.keys(patch).length === 1 &&
+          typeof patch.name === 'string'
+        ) {
+          return CommerceModel.renameProductOptions(
+            at,
+            at.options.map((option, optionIndex) =>
+              optionIndex === index ? patch.name : option.name,
+            ),
+          )
+        }
+        const options = [...(at.options ?? [])]
+        if (patch === null) options.splice(index, 1)
+        else options[index] = { name: '', values: [], ...options[index], ...patch }
+        // Regenerate the matrix, carrying data over by option-combo key so
+        // edits to prices/SKUs survive option tweaks.
+        const previous = new Map(
+          at.variants.map((variant) => [comboKey(variant.options), variant]),
+        )
+        const fallback = at.variants[0]
+        const variants = CommerceModel.expandVariantMatrix(options).map(
+          (combo, comboIndex) => {
+            const existing = previous.get(comboKey(combo))
+            return (
+              existing ?? {
+                id: `v${Date.now().toString(36)}${comboIndex}`,
+                options: combo,
+                priceUsd: fallback?.priceUsd ?? 0,
+                inventory: fallback?.inventory ?? null,
+              }
+            )
+          },
+        )
+        return { options, variants }
+      }),
+    [update],
+  )
   const setOptionValues = useCallback(
     (values: string[], index: number) =>
-      latestOptionsChange.current(index, {
+      handleOptionsChange(index, {
         values: values.map((value) => String(value).trim()).filter(Boolean),
       }),
-    [],
+    [handleOptionsChange],
   )
 
-  const handleVariantField = (
-    index: number,
-    field: keyof CommerceModel.ProductVariant,
-    raw: string,
-  ) => {
-    const variants = [...current.variants]
-    const numeric = ['priceUsd', 'compareAtPriceUsd', 'weightGrams']
-    const value =
-      field === 'inventory'
-        ? raw.trim() === ''
-          ? null
-          : Math.max(0, Math.round(Number(raw)))
-        : numeric.includes(field)
-          ? raw.trim() === ''
-            ? undefined
-            : Number(raw)
-          : raw
-    variants[index] = { ...variants[index], [field]: value }
-    if (
-      value === undefined &&
-      (field === 'compareAtPriceUsd' || field === 'weightGrams')
-    ) {
-      delete (variants[index] as any)[field]
-    }
-    update({ variants })
-  }
+  const handleVariantField = useCallback<VariantFieldChange>(
+    (index, field, raw) =>
+      update((at) => {
+        const variants = [...at.variants]
+        const numeric = ['priceUsd', 'compareAtPriceUsd', 'weightGrams']
+        const value =
+          field === 'inventory'
+            ? raw.trim() === ''
+              ? null
+              : Math.max(0, Math.round(Number(raw)))
+            : numeric.includes(field)
+              ? raw.trim() === ''
+                ? undefined
+                : Number(raw)
+              : raw
+        variants[index] = { ...variants[index], [field]: value }
+        if (
+          value === undefined &&
+          (field === 'compareAtPriceUsd' || field === 'weightGrams')
+        ) {
+          delete (variants[index] as any)[field]
+        }
+        return { variants }
+      }),
+    [update],
+  )
+
 
   const handleSave = useCallback(async () => {
     if (!current.name.trim() || error) return
@@ -746,88 +1730,22 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     enqueueSnackbar,
   ])
 
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{product ? 'Edit product' : 'Add product'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 1 }}>
-          <TextField
-            label="Name"
-            value={current.name}
-            onChange={(event) => handleName(event.target.value)}
-            size="small"
-            autoFocus
-            fullWidth
-          />
-          <TextField
-            label="Slug"
-            value={current.slug}
-            onChange={(event) => {
-              setSlugTouched(true)
-              update({ slug: CommerceModel.commerceSlug(event.target.value) })
-            }}
-            size="small"
-            fullWidth
-            helperText={current.slug ? `/products/${current.slug}` : undefined}
-          />
-        </Stack>
-        <Stack direction="row" spacing={2}>
-          <TextField
-            label="Type"
-            value={current.type}
-            onChange={(event) =>
-              update({ type: event.target.value as CommerceModel.ProductType })
-            }
-            size="small"
-            select
-            sx={{ minWidth: 140 }}
-          >
-            <MenuItem value="physical">{'Physical'}</MenuItem>
-            <MenuItem value="digital">{'Digital'}</MenuItem>
-            <MenuItem value="service">{'Service'}</MenuItem>
-          </TextField>
-          <TextField
-            label="Status"
-            value={current.status}
-            onChange={(event) =>
-              update({ status: event.target.value as CommerceModel.ProductStatus })
-            }
-            size="small"
-            select
-            sx={{ minWidth: 140 }}
-          >
-            <MenuItem value="draft">{'Draft'}</MenuItem>
-            <MenuItem value="active">{'Active'}</MenuItem>
-            <MenuItem value="archived">{'Archived'}</MenuItem>
-          </TextField>
-          {suppliers.rows.length > 0 ? (
-            <TextField
-              label="Supplier"
-              value={current.supplierId ?? ''}
-              onChange={(event) =>
-                update({ supplierId: event.target.value || undefined })
-              }
-              size="small"
-              select
-              sx={{ minWidth: 160 }}
-              helperText="Routes paid orders"
-            >
-              <MenuItem value="">{'None (self-fulfilled)'}</MenuItem>
-              {suppliers.rows.map((supplier: any) => (
-                <MenuItem key={supplier.$id} value={supplier.$id}>
-                  {supplier.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : null}
-        </Stack>
-        <TextField
-          label="Description"
-          value={current.description ?? ''}
-          onChange={(event) => update({ description: event.target.value })}
-          size="small"
-          multiline
-          minRows={2}
+        <ProductBasicsFields
+          name={current.name}
+          slug={current.slug}
+          type={current.type}
+          status={current.status}
+          supplierId={current.supplierId}
+          description={current.description ?? ''}
+          suppliers={suppliers.rows}
+          onName={handleName}
+          onSlug={handleSlug}
+          update={update}
         />
         <ProductChipsField<string>
           freeSolo
@@ -853,7 +1771,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           the fields above like typing. Save product is still the only write.
         */}
         {WidgetSlot ? (
-          <WidgetSlot
+          <HostedZone
+            renderer={WidgetSlot}
             slot={PRODUCT_EDITOR_ZONE.id}
             hostId={hostId}
             orgId={undefined}
@@ -864,215 +1783,23 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         ) : null}
 
         <Divider textAlign="left">{'Media'}</Divider>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          {(current.mediaUrls ?? []).map((url, index) => (
-            <Box key={`${url}-${index}`} sx={{ position: 'relative' }}>
-              <Box
-                component="img"
-                src={url}
-                alt=""
-                sx={{
-                  width: 72,
-                  height: 72,
-                  objectFit: 'cover',
-                  borderRadius: 1,
-                  border: 1,
-                  borderColor: 'divider',
-                }}
-              />
-              <IconButton
-                size="small"
-                aria-label="Remove image"
-                onClick={() =>
-                  update({
-                    mediaUrls: (current.mediaUrls ?? []).filter(
-                      (_item, itemIndex) => itemIndex !== index,
-                    ),
-                  })
-                }
-                sx={{
-                  position: 'absolute',
-                  top: -8,
-                  right: -8,
-                  bgcolor: 'background.paper',
-                  border: 1,
-                  borderColor: 'divider',
-                  p: 0.25,
-                }}
-              >
-                {'✕'}
-              </IconButton>
-            </Box>
-          ))}
-          <Button
-            size="small"
-            onClick={() =>
-              void pick((media) =>
-                update({
-                  mediaUrls: [...(current.mediaUrls ?? []), media.url],
-                }),
-              )
-            }
-          >
-            {'Add image'}
-          </Button>
-        </Box>
+        <ProductMediaFields
+          mediaUrls={current.mediaUrls ?? NO_ITEMS}
+          update={update}
+          pick={pick}
+        />
 
         <Divider textAlign="left">{'Options & variants'}</Divider>
-        {(current.options ?? []).map((option, index) => (
-          <Stack
-            key={index}
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'flex-start' }}
-          >
-            <TextField
-              label="Option"
-              value={option.name}
-              onChange={(event) =>
-                handleOptionsChange(index, { name: event.target.value })
-              }
-              size="small"
-              sx={{ width: 160 }}
-              placeholder="Size"
-            />
-            <ProductChipsField<string>
-              freeSolo
-              fill
-              label="Values"
-              placeholder="S, M, L…"
-              options={NO_ITEMS}
-              value={option.values}
-              index={index}
-              onChange={setOptionValues}
-            />
-            <Button
-              size="small"
-              color="error"
-              onClick={() => handleOptionsChange(index, null)}
-              sx={{ mt: 0.5 }}
-            >
-              {'Remove'}
-            </Button>
-          </Stack>
-        ))}
-        {(current.options?.length ?? 0) < CommerceModel.COMMERCE_MAX_OPTIONS ? (
-          <Button
-            size="small"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={() =>
-              handleOptionsChange(current.options?.length ?? 0, {
-                name: '',
-                values: [],
-              })
-            }
-          >
-            {'Add option'}
-          </Button>
-        ) : null}
-        <Box>
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Variant'}</TableCell>
-                <TableCell>{'Price ($)'}</TableCell>
-                <TableCell>{'Compare-at'}</TableCell>
-                <TableCell>{'SKU'}</TableCell>
-                <TableCell>{'Barcode'}</TableCell>
-                <TableCell>{'Stock'}</TableCell>
-                <TableCell>{'Weight (g)'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {current.variants.map((variant, index) => (
-                <TableRow key={variant.id}>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    {comboLabel(variant.options)}
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      value={variant.priceUsd ?? ''}
-                      onChange={(event) =>
-                        handleVariantField(index, 'priceUsd', event.target.value)
-                      }
-                      size="small"
-                      sx={{ width: 88 }}
-                      // An empty price is marked (AGL-2916): a proposed
-                      // product arrives with none, and Save waits for one.
-                      error={!CommerceModel.variantHasPrice(variant)}
-                      placeholder="Set"
-                      slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      value={variant.compareAtPriceUsd ?? ''}
-                      onChange={(event) =>
-                        handleVariantField(
-                          index,
-                          'compareAtPriceUsd',
-                          event.target.value,
-                        )
-                      }
-                      size="small"
-                      sx={{ width: 88 }}
-                      slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      value={variant.sku ?? ''}
-                      onChange={(event) =>
-                        handleVariantField(index, 'sku', event.target.value)
-                      }
-                      size="small"
-                      sx={{ width: 110 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      value={variant.barcode ?? ''}
-                      onChange={(event) =>
-                        handleVariantField(index, 'barcode', event.target.value)
-                      }
-                      size="small"
-                      sx={{ width: 110 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      value={variant.inventory ?? ''}
-                      placeholder={stockApplies ? '—' : 'n/a'}
-                      disabled={!stockApplies}
-                      onChange={(event) =>
-                        handleVariantField(index, 'inventory', event.target.value)
-                      }
-                      size="small"
-                      sx={{ width: 72 }}
-                      slotProps={{
-                        htmlInput: {
-                          inputMode: 'numeric',
-                          'aria-label': `Stock — ${comboLabel(variant.options)}`,
-                        },
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      value={variant.weightGrams ?? ''}
-                      onChange={(event) =>
-                        handleVariantField(index, 'weightGrams', event.target.value)
-                      }
-                      size="small"
-                      sx={{ width: 88 }}
-                      slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </ScrollTable>
-        </Box>
+        <ProductOptionsFields
+          options={current.options ?? NO_OPTIONS}
+          onChange={handleOptionsChange}
+          onValues={setOptionValues}
+        />
+        <ProductVariantsTable
+          variants={current.variants}
+          stockApplies={stockApplies}
+          onField={handleVariantField}
+        />
         <Typography variant="caption" color="text.secondary">
           {stockApplies
             ? 'Blank stock = untracked; 0 shows sold out. The first variant’s ' +
@@ -1126,267 +1853,33 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                   'checkout, so the option stays locked here instead.'}
           </EntitlementUpsell>
         ) : null}
-        <Stack direction="row" spacing={2}>
-          <TextField
-            label="When out of stock"
-            value={current.oversellPolicy ?? 'deny'}
-            onChange={(event) =>
-              update({
-                oversellPolicy: event.target.value as 'deny' | 'backorder',
-              })
-            }
-            size="small"
-            select
-            sx={{ minWidth: 200 }}
-          >
-            <MenuItem value="deny">{'Stop selling (sold out)'}</MenuItem>
-            <MenuItem value="backorder">{'Keep selling (backorder)'}</MenuItem>
-          </TextField>
-          <TextField
-            label="Kind"
-            value={current.giftCard ? 'gift' : 'standard'}
-            onChange={(event) =>
-              update({ giftCard: event.target.value === 'gift' })
-            }
-            size="small"
-            select
-            sx={{ minWidth: 130 }}
-            helperText={
-              giftsLocked
-                ? `Gift cards are on ${gifts.planLabel ?? 'a higher plan'}`
-                : 'Gift cards issue a code'
-            }
-          >
-            <MenuItem value="standard">{'Standard'}</MenuItem>
-            {/* Disabled, never removed (AGL-2080). A product saved as a gift
-                card before the plan lapsed still has `giftCard: true`, and a
-                MUI select whose value is absent from its options renders
-                blank — the next edit would silently rewrite the product to
-                Standard. Locking the option refuses NEW configuration
-                without rewriting existing data. */}
-            <MenuItem value="gift" disabled={giftsLocked}>
-              {giftsLocked
-                ? `Gift card — ${gifts.planLabel ?? 'upgrade'} plan`
-                : 'Gift card'}
-            </MenuItem>
-          </TextField>
-          <TextField
-            label="Tax"
-            value={current.taxExempt ? 'exempt' : 'taxable'}
-            onChange={(event) =>
-              update({ taxExempt: event.target.value === 'exempt' })
-            }
-            size="small"
-            select
-            sx={{ minWidth: 120 }}
-          >
-            <MenuItem value="taxable">{'Taxable'}</MenuItem>
-            <MenuItem value="exempt">{'Tax exempt'}</MenuItem>
-          </TextField>
-          <TextField
-            label="Low-stock alert at"
-            value={current.lowStockThreshold ?? ''}
-            placeholder="Off"
-            disabled={!stockApplies}
-            onChange={(event) => {
-              const raw = event.target.value.trim()
-              update({
-                lowStockThreshold:
-                  raw === '' ? undefined : Math.max(0, Math.round(Number(raw))),
-              })
-            }}
-            size="small"
-            sx={{ width: 140 }}
-            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-            helperText="Notifies managers"
-          />
-        </Stack>
-
-        <Stack direction="row" spacing={2}>
-          <TextField
-            label="Billing"
-            value={
-              current.subscription
-                ? current.subscriptionOptional
-                  ? 'both'
-                  : current.subscription.interval
-                : 'once'
-            }
-            onChange={(event) => {
-              const value = event.target.value
-              // "Both" (AGL-545): the PDP offers one-time OR subscribe at
-              // the same price; the interval field beside picks the cadence.
-              // Cleared keys are deleted (not set undefined) so the
-              // client-direct setDoc on save never sees undefined values.
-              const next = { ...current }
-              if (value === 'once') {
-                delete next.subscription
-              } else {
-                next.subscription = {
-                  ...(current.subscription ?? {}),
-                  interval:
-                    value === 'both'
-                      ? (current.subscription?.interval ?? 'month')
-                      : (value as 'month' | 'year'),
-                }
-              }
-              if (value === 'both') next.subscriptionOptional = true
-              else delete next.subscriptionOptional
-              // setDraft directly: update() spreads the patch over
-              // `current`, which would resurrect the deleted keys.
-              setDraft(next)
-            }}
-            size="small"
-            select
-            sx={{ minWidth: 180 }}
-            helperText={
-              subsLocked
-                ? `Subscriptions are on ${subs.planLabel ?? 'a higher plan'}`
-                : 'Subscriptions bill until canceled'
-            }
-          >
-            <MenuItem value="once">{'One-time purchase'}</MenuItem>
-            {/* Same rule as the gift-card option above: disabled, not
-                removed, so an existing subscription product keeps its
-                interval instead of being silently reset to one-time. */}
-            <MenuItem value="month" disabled={subsLocked}>
-              {'Monthly subscription'}
-            </MenuItem>
-            <MenuItem value="year" disabled={subsLocked}>
-              {'Yearly subscription'}
-            </MenuItem>
-            <MenuItem value="both" disabled={subsLocked}>
-              {'Both — buyer chooses'}
-            </MenuItem>
-          </TextField>
-          {current.subscription && current.subscriptionOptional ? (
-            <TextField
-              label="Interval"
-              value={current.subscription.interval}
-              onChange={(event) =>
-                update({
-                  subscription: {
-                    ...current.subscription!,
-                    interval: event.target.value as 'month' | 'year',
-                  },
-                })
-              }
-              size="small"
-              select
-              sx={{ minWidth: 120 }}
-            >
-              <MenuItem value="month">{'Monthly'}</MenuItem>
-              <MenuItem value="year">{'Yearly'}</MenuItem>
-            </TextField>
-          ) : null}
-          {current.subscription ? (
-            <TextField
-              label="Free trial (days)"
-              placeholder="None"
-              value={current.subscription.trialDays ?? ''}
-              onChange={(event) => {
-                const raw = event.target.value.trim()
-                update({
-                  subscription: {
-                    ...current.subscription!,
-                    ...(raw === ''
-                      ? { trialDays: undefined }
-                      : { trialDays: Math.max(1, Math.round(Number(raw))) }),
-                  },
-                })
-              }}
-              size="small"
-              sx={{ width: 140 }}
-              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-            />
-          ) : null}
-        </Stack>
+        <ProductSellingFields
+          oversellPolicy={current.oversellPolicy ?? 'deny'}
+          giftCard={Boolean(current.giftCard)}
+          taxExempt={Boolean(current.taxExempt)}
+          lowStockThreshold={current.lowStockThreshold}
+          stockApplies={stockApplies}
+          giftsLocked={giftsLocked}
+          giftsPlanLabel={gifts.planLabel}
+          update={update}
+        />
+        <ProductBillingFields
+          subscription={current.subscription}
+          subscriptionOptional={current.subscriptionOptional}
+          subsLocked={subsLocked}
+          subsPlanLabel={subs.planLabel}
+          update={update}
+          replaceDraft={replaceDraft}
+        />
         {current.type === 'digital' ? (
-          <>
-            <Divider textAlign="left">{'Digital delivery'}</Divider>
-            {(current.digitalFiles ?? []).map((file, index) => (
-              <Stack key={index} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                  {file.fileName}
-                  {file.version ? ` · v${file.version}` : ''}
-                </Typography>
-                <PaidMediaProtection
-                  url={file.url}
-                  hostId={hostId}
-                  productId={product?.$id}
-                  kind="download"
-                />
-                <TextField
-                  label="Version"
-                  value={file.version ?? ''}
-                  onChange={(event) => {
-                    const digitalFiles = [...(current.digitalFiles ?? [])]
-                    digitalFiles[index] = {
-                      ...file,
-                      version: event.target.value.slice(0, 20),
-                    }
-                    update({ digitalFiles })
-                  }}
-                  size="small"
-                  sx={{ width: 100 }}
-                />
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={() =>
-                    update({
-                      digitalFiles: (current.digitalFiles ?? []).filter(
-                        (_item, itemIndex) => itemIndex !== index,
-                      ),
-                    })
-                  }
-                >
-                  {'✕'}
-                </Button>
-              </Stack>
-            ))}
-            <Stack direction="row" spacing={2}>
-              {/* Paid downloads are private files delivered through expiring
-                  links (AGL-2847); adding one makes the file private. */}
-              <PaidDownloadAddButton
-                hostId={hostId}
-                productId={product?.$id}
-                onAdd={(file) =>
-                  update({ digitalFiles: [...(current.digitalFiles ?? []), file] })
-                }
-              />
-              <TextField
-                label="Download limit"
-                placeholder="Unlimited"
-                value={current.downloadLimit ?? ''}
-                onChange={(event) => {
-                  const raw = event.target.value.trim()
-                  update({
-                    downloadLimit:
-                      raw === ''
-                        ? undefined
-                        : Math.max(1, Math.round(Number(raw))),
-                  })
-                }}
-                size="small"
-                sx={{ width: 140 }}
-                slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-                helperText="Attempts per order"
-              />
-            </Stack>
-            <Typography variant="caption" color="text.secondary">
-              {'Buyers always download the current files — uploading a new ' +
-                'version re-delivers to everyone.'}
-            </Typography>
-            {/* Members videos are private files delivered through expiring
-                links (AGL-2814); adding one makes the file private. */}
-            <MembersVideosField
-              hostId={hostId}
-              productId={product?.$id}
-              videos={current.gatedVideos ?? []}
-              onChange={(gatedVideos) => update({ gatedVideos })}
-            />
-          </>
+          <ProductDigitalFields
+            hostId={hostId}
+            productId={product?.$id}
+            digitalFiles={current.digitalFiles ?? NO_FILES}
+            downloadLimit={current.downloadLimit}
+            gatedVideos={current.gatedVideos ?? NO_VIDEOS}
+            update={update}
+          />
         ) : null}
 
         <ProductChipsField<any>
@@ -1399,43 +1892,12 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           onChange={setRelatedProducts}
         />
 
-        <Divider textAlign="left">{'Search engine listing'}</Divider>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <TextField
-            label="SEO title"
-            value={current.seo?.title ?? ''}
-            onChange={(event) =>
-              update({ seo: { ...current.seo, title: event.target.value } })
-            }
-            // The counts every search listing editor prints (AGL-2910): what a
-            // search result shows before it truncates.
-            helperText={seoListingFieldCount('title', current.seo?.title)}
-            error={seoListingFieldTooLong('title', current.seo?.title)}
-            size="small"
-            fullWidth
-          />
-          <Button
-            size="small"
-            onClick={() =>
-              void pick((media) =>
-                update({ seo: { ...current.seo, imageUrl: media.url } }),
-              )
-            }
-          >
-            {current.seo?.imageUrl ? 'Change OG image' : 'OG image'}
-          </Button>
-        </Stack>
-        <TextField
-          label="SEO description"
-          value={current.seo?.description ?? ''}
-          onChange={(event) =>
-            update({ seo: { ...current.seo, description: event.target.value } })
-          }
-          helperText={seoListingFieldCount('description', current.seo?.description)}
-          error={seoListingFieldTooLong('description', current.seo?.description)}
-          size="small"
-          multiline
-          minRows={2}
+        <ProductSeoFields
+          title={current.seo?.title}
+          description={current.seo?.description}
+          hasImage={Boolean(current.seo?.imageUrl)}
+          update={update}
+          pick={pick}
         />
         {/*
           The search listing zone (AGL-2910), hosted here through the shell's
@@ -1445,22 +1907,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           product is still the only write.
         */}
         {WidgetSlot ? (
-          <WidgetSlot
+          <HostedZone
+            renderer={WidgetSlot}
             slot="seoFields"
             hostId={hostId}
             orgId={undefined}
             orgSlug=""
-            subject={{
-              kind: 'product',
-              id: product?.$id ?? null,
-              name: current.name,
-              description: String(current.description ?? ''),
-            }}
+            subject={seoSubject}
             fields={PRODUCT_SEO_LISTING_FIELDS}
-            values={{
-              title: current.seo?.title ?? '',
-              description: current.seo?.description ?? '',
-            }}
+            values={seoValues}
             hasImage={Boolean(current.seo?.imageUrl)}
             proposeValues={proposeSeoValues}
           />
