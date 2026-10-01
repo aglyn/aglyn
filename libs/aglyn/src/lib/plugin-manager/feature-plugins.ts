@@ -40,6 +40,7 @@
 
 import { runInAction } from 'mobx'
 import type { OrgPermissions } from '../app-utils/org-permissions'
+import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
@@ -48,22 +49,9 @@ import type {
   PresetSchema,
 } from '../types/nodes'
 import type { Plugin, PluginId } from './plugin-manager'
-import type { HostThemeSource } from '../app-utils/marketplace-theme'
+import type { HostThemeSource } from '../app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType } from 'react'
-// The commerce zones' props live in a type-only module (AGL-2916).
-export type {
-  ConsoleProductCopyValues,
-  ConsoleProductDraft,
-  ConsoleProductEditorZoneProps,
-  ConsoleProductImportZoneProps,
-  ConsoleProductOption,
-  ConsoleProductSummary,
-  ConsoleProductType,
-  ConsoleProductsHubZoneProps,
-  ConsoleProposedDiscount,
-  ConsoleProposedProduct,
-} from './commerce-zone-props'
 export type {
   ConsoleImportMappingZoneProps,
   ConsoleRecordEmailZoneProps,
@@ -697,6 +685,69 @@ export const CONSOLE_WIDGET_SLOTS = {
    * the installation detail page and a site's layouts list — offering a
    * marketplace action in passing.
    */
+  /**
+   * The org Plugins page, above the built-in plugins (AGL-3080): the code a
+   * plugin has INSTALLED into this workspace, one row per installation.
+   * Props: {@link ConsoleOrgPluginInstallsZoneProps}.
+   *
+   * The Plugins page is the workspace's inventory — what it runs, wherever it
+   * came from. The built-in half is the shell's own: the switchboard catalog
+   * says what ships. The installed half is not: where an installation is
+   * pinned, what version it runs, whether a newer one may be installed and
+   * whether its publisher's kill switch is thrown are all facts held by the
+   * plugin that installed it, in collections that are its own. So the page
+   * hands over the sites it can see and the plugin draws its installations.
+   *
+   * Every row links to `/[orgSlug]/plugins/[pluginRef]`, the shell's
+   * installation page, keyed by whatever id the installing plugin pins by —
+   * that page is the one place an installation is managed, whoever drew the
+   * row.
+   */
+  orgPluginInstalls: 'orgPluginInstalls',
+  /**
+   * The installation page of a plugin some plugin INSTALLED, above where it
+   * runs (AGL-3080): what the installer says about the version this
+   * workspace runs. Props: {@link ConsolePluginInstallStatusZoneProps}.
+   *
+   * Drawn only for an installation that exists — a first-party plugin has no
+   * version to be behind, and a page for code installed nowhere says so
+   * itself. A widget here reports; it never installs. Applying an update is
+   * the installing plugin's own surface, which the widget may link to.
+   */
+  pluginInstallStatus: 'pluginInstallStatus',
+  /**
+   * The template gallery — "Start from a template" on a site's Screens,
+   * Layouts and Components pages — below the site's own templates and the
+   * starters (AGL-3080): a shelf of templates a plugin offers to INSTALL.
+   * Props: {@link ConsoleTemplateGalleryZoneProps}.
+   *
+   * The gallery is the shell's: what the site holds and what ships with the
+   * platform. Templates offered from elsewhere are the offering plugin's —
+   * what it lists, how it is searched, what it costs and the route that
+   * installs one, with every check that route makes — so the dialog hands
+   * over the kind it picks and the word typed in its search, and the plugin
+   * draws its own shelf. An install lands in the site's library and
+   * publishes nothing; the widget calls `onInstalled` so the gallery closes.
+   *
+   * The dialog's "nothing matches" line covers every shelf, so a widget
+   * reports whether its shelf is loading, empty or showing something through
+   * `reportShelf`. A widget that never reports is a shelf the line ignores;
+   * with no widget at all the gallery is the site's own and the starters.
+   */
+  templateGallery: 'templateGallery',
+  /**
+   * One row of a site's Templates library whose template a plugin INSTALLED,
+   * beside its Source badge (AGL-3080): what the installer says about the
+   * copy the site holds — that a newer version can be installed, and the
+   * control that installs it. Props: {@link ConsoleTemplateInstallStatusZoneProps}.
+   *
+   * Drawn once per such row, and never for a template saved here or a
+   * starter. A widget draws nothing for a template it did not install, and
+   * nothing when there is nothing to say. Applying an update goes through
+   * the installing plugin's own route, which keeps all its checks; the
+   * library's rows re-read the templates it replaced.
+   */
+  templateInstallStatus: 'templateInstallStatus',
   /** Bottom of the host dashboard. Props: hostId, org. (AGL-433) */
   dashboardFooter: 'dashboardFooter',
   /** Org settings page, below the tabbed cards. Props: orgId, org. */
@@ -751,6 +802,13 @@ export const CONSOLE_WIDGET_SLOTS = {
    * widget.
    */
   hostTheme: 'hostTheme',
+  /**
+   * The staff overview, among its platform-wide cards (AGL-3080). No props:
+   * the overview is about the platform, not one org, so a widget here reads
+   * what its plugin holds across every workspace through its own staff
+   * route. A staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffOverview: 'staffOverview',
   /**
    * Staff admin org detail (staff-only surfaces). Props: orgId. A staff
    * zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
@@ -832,12 +890,13 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostMembers: 'hostMembers',
   /**
-   * The console shell's assistant dock (AGL-2940): the one position above
-   * every route boundary in both the `(app)` and `(editor)` shells, where a
-   * floating helper survives a navigation. Props: none — a widget here
-   * resolves its own scope from the URL, as the shell's own chrome does.
+   * The console dock (AGL-2940): the one position above every route boundary
+   * in both the `(app)` and `(editor)` shells, where a floating panel — an
+   * assistant, a helper — survives a navigation. Props:
+   * {@link ConsoleDockZoneProps}. Named for the position, not for what a
+   * plugin puts there (AGL-3080: it was `assistPanel`).
    */
-  assistPanel: 'assistPanel',
+  consoleDock: 'consoleDock',
   /**
    * A section at the bottom of the besigner's Attributes panel (AGL-2940),
    * under the selected element's own fields. Props: `hostId` (`null` on an
@@ -860,11 +919,11 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   seoFields: 'seoFields',
   /**
-   * The host setup SEO section, above the site SEO form (AGL-2910). Props:
-   * {@link ConsoleHostSeoZoneProps} — the site, its stored SEO settings, and
-   * `proposeDraft`, which puts values in the form as unsaved edits. The
-   * form's Update stores them; nothing a widget proposes reaches the
-   * published site before that.
+   * The host setup SEO section, under the site's SEO check and above the site
+   * SEO form (AGL-2910). Props: {@link ConsoleHostSeoZoneProps} — the site,
+   * its stored SEO settings, the check's last report, and `proposeDraft`,
+   * which puts values in the form as unsaved edits. The form's Update stores
+   * them; nothing a widget proposes reaches the published site before that.
    */
   hostSeo: 'hostSeo',
   /** {@link ConsoleRecordInsightsZoneProps} */
@@ -961,12 +1020,6 @@ export const CONSOLE_WIDGET_SLOTS = {
    * changes nothing.
    */
   automationRun: 'automationRun',
-  /** The commerce product editor's fields (AGL-2916). Props: {@link ConsoleProductEditorZoneProps}. */
-  productEditor: 'productEditor',
-  /** Above the commerce products hub's catalog table (AGL-2916). Props: {@link ConsoleProductsHubZoneProps}. */
-  productsHub: 'productsHub',
-  /** Inside the commerce CSV import dialog (AGL-2916). Props: {@link ConsoleProductImportZoneProps}. */
-  productImport: 'productImport',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -1097,6 +1150,113 @@ export interface ConsolePublishableArtifact {
   description?: string
 }
 
+/** One site of the workspace, as the console names it. */
+export interface ConsoleZoneSite {
+  id: string
+  label: string
+}
+
+/** What the `orgPluginInstalls` zone hands each widget (AGL-3080). */
+export interface ConsoleOrgPluginInstallsZoneProps {
+  /** The organization whose inventory the page is. */
+  orgId: string
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /**
+   * The sites of the organization the reader can see. An installation may be
+   * pinned to some of them rather than to the whole organization, so a widget
+   * reads each site's pins through this list rather than listing sites
+   * itself.
+   */
+  hosts: ReadonlyArray<ConsoleZoneSite>
+}
+
+/** What the `pluginInstallStatus` zone hands each widget (AGL-3080). */
+export interface ConsolePluginInstallStatusZoneProps {
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The installation's id: the segment of the page, which is the pin's key. */
+  pluginRef: string
+  /**
+   * One pin of the installation — org-wide if there is one, else any site's.
+   * Every pin carries the same version and manifest, which is what a status
+   * is about.
+   */
+  pin: Readonly<Record<string, unknown>>
+}
+
+/** A release flag's verdict as the console applies it: the staff bypass included. */
+export interface ConsoleReleaseVerdict {
+  /** Released, or the reader is staff. */
+  visible: boolean
+  /** Visible ONLY because the reader is staff. */
+  staffPreview: boolean
+}
+
+/** What the `consoleDock` zone hands each widget (AGL-2940, AGL-3080). */
+export interface ConsoleDockZoneProps {
+  orgId?: string
+  org?: unknown
+  orgReady: boolean
+  /**
+   * The org a widget may speak for, act as, and be METERED against — or
+   * `undefined` where the page named none, or where the membership positively
+   * contradicts the URL (AGL-1130, AGL-1916, AGL-1934).
+   */
+  scopedOrgId?: string
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site in view, or null off a host route. */
+  hostId: string | null
+  /** The product's name as this org reads it (AGL-2319). */
+  productName: string
+  /**
+   * The verdict for any release flag the widget names, staff bypass applied.
+   * The shell names no plugin's flag; a widget asks for its own.
+   */
+  releaseVerdict: (key: string) => ConsoleReleaseVerdict
+  isStaff: boolean
+  /** The reader's verdict for every declared permission key on the site in view. */
+  permissionsOnHost?: { loaded: boolean; granted: Readonly<Record<string, boolean>> }
+}
+
+/** How one plugin's shelf of the template gallery stands (AGL-3080). */
+export type ConsoleTemplateGalleryShelfState = 'loading' | 'empty' | 'shown'
+
+/** What the `templateGallery` zone hands each widget (AGL-3080). */
+export interface ConsoleTemplateGalleryZoneProps {
+  /** The site a template installs into. */
+  hostId: string
+  /**
+   * The kind of template the gallery picks: `page` on the Screens page,
+   * `layout` and `component` on theirs. A shelf offering only one kind
+   * draws nothing for the others.
+   */
+  kind: 'page' | 'component' | 'layout'
+  /** The word typed in the gallery's search box, `''` for none. */
+  search: string
+  /** Closes the gallery once an install has landed in the library. */
+  onInstalled: () => void
+  /**
+   * Says how this shelf stands, keyed by a name the widget chooses and keeps,
+   * so the gallery's "nothing matches" line counts it. Report `empty` rather
+   * than nothing once a read answers with nothing.
+   */
+  reportShelf: (shelfId: string, state: ConsoleTemplateGalleryShelfState) => void
+}
+
+/** What the `templateInstallStatus` zone hands each widget (AGL-3080). */
+export interface ConsoleTemplateInstallStatusZoneProps {
+  /** The site whose library the row is in. */
+  hostId: string
+  /**
+   * The row's template document as the library read it, `$id` included:
+   * its server-managed `source` and `installedFrom` stamps say who installed
+   * it, and `editedAt` whether the site has edited its copy since.
+   */
+  template: Readonly<Record<string, unknown>>
+}
+
 /** What the `hostArtifactPublish` zone hands each widget (AGL-3080). */
 export interface ConsoleArtifactPublishZoneProps {
   /**
@@ -1133,8 +1293,8 @@ export interface ConsoleHostThemeZoneProps {
 }
 
 /**
- * The zones on the STAFF pages (AGL-2939): the staff org page, its detail
- * zone, and the staff user page.
+ * The zones on the STAFF pages (AGL-2939): the staff overview, the staff org
+ * page, its detail zone, and the staff user page.
  *
  * No workspace names the plugin set there. A staff page is ABOUT an org or
  * an account, and the reader's own memberships have nothing to do with what
@@ -1145,6 +1305,7 @@ export interface ConsoleHostThemeZoneProps {
  * reader.
  */
 export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.staffOverview,
   CONSOLE_WIDGET_SLOTS.adminOrgDetail,
   CONSOLE_WIDGET_SLOTS.staffOrg,
   CONSOLE_WIDGET_SLOTS.staffUser,
@@ -1210,6 +1371,17 @@ export interface ConsoleSeoFieldsZoneProps {
   proposeValues: (values: ConsoleSeoFieldValues, key: string) => void
 }
 
+/**
+ * The site's SEO check as the SEO section last ran it: the platform's
+ * findings (`app-utils/seo-audit`), which the section draws for every site
+ * owner, and the target keyword lines the check was run with.
+ */
+export interface ConsoleSeoCheck {
+  report: SeoAuditReport
+  /** The keyword lines as typed, one page a line: `/pricing: plans, pricing`. */
+  keywords: string
+}
+
 /** What the `hostSeo` zone hands each widget (AGL-2910). */
 export interface ConsoleHostSeoZoneProps {
   hostId: string
@@ -1228,6 +1400,12 @@ export interface ConsoleHostSeoZoneProps {
    * applies once, and the form's Update is what stores them.
    */
   proposeDraft: (values: Record<string, string>, key: string) => void
+  /**
+   * The SEO check the section drew above the zone, once somebody has run it
+   * this visit; `null` before. The section lists the findings: a widget adds
+   * what it has for them — a proposed fix, say — and never lists them again.
+   */
+  check: ConsoleSeoCheck | null
 }
 
 /**
@@ -1575,6 +1753,13 @@ export interface ConsoleExtension {
    * `console.slots`.
    */
   themePresets?: readonly ConsoleThemePreset[]
+  /**
+   * The kinds of record this plugin lets the console's search find — see
+   * {@link ConsoleSearchSource}. Loaded with the plugin at the
+   * {@link CONSOLE_SEARCH_LOAD_POINT}, which the plugin declares among its
+   * `console.slots`.
+   */
+  searchSources?: readonly ConsoleSearchSource[]
   /**
    * Pages in the STAFF area (AGL-2939) — see {@link ConsoleStaffPage}.
    * Neither `featureFlag` nor `permission` applies to them.
@@ -1961,6 +2146,105 @@ export function listConsoleThemePresets(
       if (!preset?.id || seen.has(preset.id)) continue
       seen.add(preset.id)
       out.push({ ...preset, pluginId: extension.pluginId })
+    }
+  }
+  return out
+}
+
+/**
+ * A kind of record a plugin lets the console's search find (AGL-3080): the
+ * collection its rows are read from, the fields a row is named and matched
+ * by, and where a row opens.
+ *
+ * The palette reads a source the way it reads the console's own groups — one
+ * capped window per collection, ordered by document id and matched in the
+ * browser — so a source describes a read the Firestore rules already admit
+ * and needs no index of its own. `host` reads `hosts/{hostId}/{collection}`
+ * under the site that is open; `orgData` reads `orgs/{orgId}/{collection}`,
+ * the organization's shared data, through the reader's `visibleTo` tokens
+ * under a site (the predicate the rules evaluate) and unfiltered at the
+ * organization level, where only an org-wide member is offered it.
+ *
+ * Gated as every surface the extension registers is: the plugin must be on
+ * for the workspace and the site, and the extension's `featureFlag` and
+ * `permission` compose with the source's own. A source the reader may not
+ * open is never read, because a row that links to a page the reader is
+ * refused is a dead row.
+ */
+export interface ConsoleSearchSource {
+  /**
+   * The group's id, unique across the palette: its rows, its cache and its
+   * key in the rendered list are held under it. Name it by the plugin's own
+   * words (`contacts`, `products`) and keep it stable.
+   */
+  id: string
+  /** The heading above the group's rows. */
+  group: string
+  /** The kind in a sentence: "Only the first 30 {noun} were searched." */
+  noun: string
+  /** Where the collection hangs, which decides the path and who may read it. */
+  scope: 'host' | 'orgData'
+  /** The collection's name under the scope's root. */
+  collection: string
+  /** The field holding a row's human-readable name. */
+  nameField: string
+  /** The field a row is labeled by when `nameField` is empty. */
+  fallbackNameField?: string
+  /** Further fields a reader may find a row by (an address, a slug). */
+  extraFields?: readonly string[]
+  /**
+   * A plan quota that must be non-zero for the group to be read at all: a
+   * collection the organization cannot hold costs a read to render nothing.
+   */
+  entitlementKey?: string
+  /** A plan flag this group needs beyond the extension's `featureFlag`. */
+  featureFlag?: keyof OrgFeatureFlags
+  /** A permission this group needs beyond the extension's `permission`. */
+  permission?: string
+  /**
+   * Where the group is listed, ascending. The console's own groups hold 10
+   * (sites), 20 (pages), 30 (emails) and 100 to 140 (components, layouts,
+   * templates, content, authors); equal numbers keep registration order.
+   */
+  order: number
+  /**
+   * Where one row opens, or `null` when it cannot be addressed from here — a
+   * row with nowhere to go is dropped rather than drawn dead. `host` is the
+   * open site's subdomain, or `null` at the organization level.
+   */
+  href(
+    row: Readonly<Record<string, unknown>>,
+    context: ConsoleSearchLinkContext,
+  ): string | null
+}
+
+/** The two route params a search row is linked from. */
+export interface ConsoleSearchLinkContext {
+  orgSlug: string
+  host: string | null
+}
+
+/**
+ * The load point a plugin contributing search sources declares in its
+ * `console.slots`, and the palette loads before it lists them.
+ */
+export const CONSOLE_SEARCH_LOAD_POINT = 'consoleSearch'
+
+/**
+ * Every search source the enabled plugins contribute, with the extension
+ * each came from so the caller can apply its gates. A second source with an
+ * id already listed is dropped, so two plugins cannot share one group.
+ */
+export function listConsoleSearchSources(
+  enabledPluginIds?: readonly PluginId[],
+): Array<{ extension: ConsoleExtension; source: ConsoleSearchSource }> {
+  const seen = new Set<string>()
+  const out: Array<{ extension: ConsoleExtension; source: ConsoleSearchSource }> = []
+  for (const extension of listConsoleExtensions(enabledPluginIds)) {
+    for (const source of extension.searchSources ?? []) {
+      if (!source?.id || seen.has(source.id)) continue
+      seen.add(source.id)
+      out.push({ extension, source })
     }
   }
   return out

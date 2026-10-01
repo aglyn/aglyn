@@ -20,9 +20,7 @@ import {
   type HostFunction,
   type HostVariable,
   type HostWebhook,
-  type HostWorkflow,
   resolveOrgEntitlements,
-  runWorkflow,
 } from '@aglyn/aglyn/server'
 import {
   registerPluginApiRoute,
@@ -34,6 +32,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from './model/run-history'
+import { type HostWorkflow, runWorkflow } from './model/workflows'
 import { eventRunSuspension } from './engine/site-suspension'
 import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
@@ -371,3 +370,7 @@ export function registerWorkflowsApi(): void {
  * thing to keep in step with plugins.config.json.
  */
 export { registerWorkflowsConsoleApi } from './server-console'
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { workflowsPlanEntitlements } from './plan-entitlements'

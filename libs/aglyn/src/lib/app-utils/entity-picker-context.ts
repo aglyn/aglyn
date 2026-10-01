@@ -103,12 +103,19 @@ export interface EntityPickerContextValue {
   /** The host's form entities, id-first, feeding FORM_SELECT attributes. */
   forms?: EntityOption[]
   /**
-   * Per-dataset model fields (AGL-556), keyed by dataset id, in model
-   * order: id = stable model fieldId, label = current display name. Feeds
-   * DATASET_FIELD_SELECT attributes (e.g. a form field's "Maps to schema
-   * field" picker).
+   * The fields an entity's documents declare, keyed by kind and then by
+   * entity id, in the order the entity declares them: id = the stable field
+   * id a node persists, label = its current display name (AGL-556).
+   *
+   * Only kinds whose documents carry a field model appear. Two surfaces read
+   * it: a field picker that maps a value onto one of an entity's fields (a
+   * form field's "Maps to schema field"), and the insert-token menu inside a
+   * repeat, which offers `{{item.<field>}}` for each field of the entity the
+   * repeat names (see `RepeatSource.entityKind`).
    */
-  datasetFields?: Record<string, EntityOption[]>
+  entityFields?: Partial<
+    Record<EntityPickerKind, Readonly<Record<string, EntityOption[]>>>
+  >
   /**
    * Declare that a picker of this kind is on screen (AGL-703).
    *

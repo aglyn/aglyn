@@ -84,15 +84,22 @@ describe('AGL-1478 · every creator of a scoped collection stamps the scope', ()
     },
     {
       // The creator this list did not have (AGL-1484). A restore writes new
-      // documents into THREE scoped collections — `datasets`, `media`,
-      // `mediaFolders` — straight past `/api/orgs/datasets`, and it was
-      // missing here because it is spelled as a restore rather than as a
-      // create. It stamps the importing site rather than the org default,
+      // documents into scoped collections — `media` and `mediaFolders` here,
+      // `datasets` through the data plugin's section below — and it was
+      // missing because it is spelled as a restore rather than as a create.
+      // It stamps the importing site rather than the org default,
       // deliberately: a bundle restored into an agency's org must not
       // publish one client's data to the whole roster.
       file: 'apps/console/app/api/hosts/import/route.ts',
       mustContain: ['newResourceScopeFields', 'hostScopeToken'],
       why: 'restoring a site backup into an org',
+    },
+    {
+      // The same restore's datasets, which the data plugin writes for it
+      // (AGL-3080) on the same terms: scoped to the importing site.
+      file: 'libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts',
+      mustContain: ['newResourceScopeFields', 'hostScopeToken'],
+      why: 'restoring a site backup’s datasets into an org',
     },
     {
       // AGL-1478's live-ish hole. The forked copy lands in whatever

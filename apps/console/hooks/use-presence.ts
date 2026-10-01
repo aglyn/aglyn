@@ -210,7 +210,7 @@ export function presenceFaultNotice(fault: PresenceFault | null): PresenceNotice
   // solitude; the second stops a cosmetic failure from reading as data loss.
   const caution =
     'An empty stack does NOT mean you are alone — someone else may be ' +
-    'editing this screen without appearing here. Your own editing is ' +
+    'editing this page without appearing here. Your own editing is ' +
     'unaffected and your work is saved normally.'
   switch (fault?.kind) {
     case 'unconfigured':
@@ -226,14 +226,14 @@ export function presenceFaultNotice(fault: PresenceFault | null): PresenceNotice
     case 'signed-out':
       return {
         title: 'Your sign-in is no longer valid, so live collaboration could not start.',
-        remedy: 'Sign out and sign back in, then reopen this screen.',
+        remedy: 'Sign out and sign back in, then reopen this page.',
         caution,
         detail,
       }
     case 'not-allowed':
       return {
         title:
-          'You can edit this screen, but this account was not admitted to ' +
+          'You can edit this page, but this account was not admitted to ' +
           'its live session.',
         remedy:
           'Ask an admin of this site to check your access, then reload. ' +
@@ -1110,7 +1110,8 @@ function startPresenceAppCheck(app: FirebaseApp): void {
  */
 export function usePresence(options: {
   hostId: string | undefined
-  docType: 'screen' | 'layout' | 'component' | 'template' | 'email' | 'form'
+  /** A platform document kind, or a plugin document's declared `kind`. */
+  docType: string
   docId: string | undefined
   /**
    * The version being edited. Part of the ROOM KEY, so two people on

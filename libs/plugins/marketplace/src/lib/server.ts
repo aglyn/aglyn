@@ -24,6 +24,8 @@ import {
 // does not need, it must not import.
 import { registerPluginRouteMetadata } from '@aglyn/aglyn/plugin-manager/plugin-route-metadata'
 import { registerPluginArtifactInventory } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
+import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+import { registerRevenueSource } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
 import { registerMarketplaceLockdown } from './server/publisher-lockdown'
@@ -44,8 +46,11 @@ import { installThemeHandler } from './server/install-theme'
 import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
 import { marketplaceArtifactInventory } from './server/artifact-inventory'
+import { marketplaceTaxReturnSource } from './server/tax-return-source'
+import { marketplaceRevenueSource } from './server/revenue-source'
 import { marketplaceAdminReports } from './server/admin-reports'
 import { marketplaceAdminReviews } from './server/admin-reviews'
+import { marketplaceAdminOverview } from './server/admin-overview'
 import { marketplaceAdminTrust } from './server/admin-trust'
 import { reportHandler } from './server/report'
 import { reviewsHandler } from './server/reviews'
@@ -118,6 +123,17 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginArtifactInventory(marketplaceArtifactInventory, {
     pluginId: BUNDLE_ID,
   })
+  /*
+   * Its sales on the operator's own sales tax return (AGL-3080): the tax a
+   * marketplace charge adds on the platform's own account. The staff return
+   * awaits this surface before it asks, and refuses to be filed without this
+   * source — the marketplace declares `taxReturnSource`.
+   */
+  registerTaxReturnSource(marketplaceTaxReturnSource, { pluginId: BUNDLE_ID })
+  // …and the commission its sales earn the operator, on the staff revenue
+  // report — declared `revenueSource`, so a missing registration is named as
+  // unread there rather than counted as zero.
+  registerRevenueSource(marketplaceRevenueSource, { pluginId: BUNDLE_ID })
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)
@@ -168,6 +184,11 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute('marketplace/admin/trust', {
     web: marketplaceAdminTrust,
   })
+  // The staff overview's marketplace cards (AGL-3080): purchases and the
+  // refund-reversal recovery queue. Staff-gated like the queues above.
+  registerPluginApiRoute('marketplace/admin/overview', {
+    web: marketplaceAdminOverview,
+  })
   registerPluginApiRoute('marketplace/reviews', reviewsHandler)
   registerPluginApiRoute(
     'marketplace/publisher-profile',
@@ -200,3 +221,7 @@ export function registerMarketplaceConsoleApi(): void {
   // listings (AGL-3365).
   registerMarketplaceLockdown()
 }
+
+// Type-only (AGL-3080): the plugin's entitlement keys, declared by module
+// augmentation, for every program that loads this entry point.
+export type { marketplacePlanEntitlements } from './plan-entitlements'

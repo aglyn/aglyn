@@ -158,6 +158,9 @@ jest.mock('./lead-convert-dialog', () => ({
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The sharing follow-up (AGL-3336) and the bulk bar's manager check.
+  useUser: () => ({ data: null }),
+  useFirestoreDoc: () => ({ data: undefined, status: 'success', fromCache: false }),
   useFirestore: () => ({}),
   // The reader's reach: org-wide, so a site's search folds into its scope.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),

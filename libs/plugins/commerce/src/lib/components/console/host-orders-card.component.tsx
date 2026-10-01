@@ -34,12 +34,8 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  checkEntitlement,
-  ORDERS_CUSTOMER_PARAM,
-  ORDERS_ORDER_PARAM,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
+import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
+import { ORDERS_CUSTOMER_PARAM, ORDERS_ORDER_PARAM } from '../../model/commerce-record-routes'
 import {
   Alert,
   AlertTitle,

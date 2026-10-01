@@ -20,7 +20,7 @@ import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Chip, Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { useMarketingHubPath } from './use-emails-hub-path'
+import { useMarketingHubPath } from './use-marketing-hub-path'
 import {
   campaignConversionId,
   campaignTouchLabel,

@@ -24,7 +24,7 @@
  * that touches `window`/`document` is only ever called client-side.
  */
 
-import { SCROLL_TO_MAX_OFFSET_PX, type ScrollToBehavior } from './actions'
+import { SCROLL_TO_MAX_OFFSET_PX, type ScrollToBehavior } from './site-interactions'
 import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
 import { ELEMENT_HIDDEN_CLASS } from './element-hidden-style'
 import { COMPONENT_NODE_ID_PREFIX } from './reusable-component-keys'

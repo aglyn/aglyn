@@ -22,6 +22,7 @@ import { BOOTSTRAP_THEME } from './bootstrap'
 import { CARBON_THEME } from './carbon'
 import { CUPERTINO_THEME } from './cupertino'
 import { FLUENT_THEME } from './fluent'
+import { MATERIAL_UI_THEME } from './material-ui'
 import { MATERIAL3_THEME } from './material3'
 import { MINIMAL_THEME } from './minimal'
 
@@ -31,18 +32,26 @@ export {
   CARBON_THEME,
   CUPERTINO_THEME,
   FLUENT_THEME,
+  MATERIAL_UI_THEME,
   MATERIAL3_THEME,
   MINIMAL_THEME,
 }
 
 /**
  * The built-in themes, in the order the picker lists them (AGL-3405,
- * AGL-3411).
+ * AGL-3411, AGL-3422). Stock Material UI comes first: it is what every other
+ * one is a variation on.
  *
  * Ids are persisted in every site that picks one, so they are namespaced by
  * this plugin and never renamed.
  */
 export const THEME_PRESETS: readonly ConsoleThemePreset[] = [
+  {
+    id: `${BUNDLE_ID}.material-ui`,
+    name: 'Material UI',
+    description: 'MUI’s own default theme: Roboto, the stock type scale and palette',
+    theme: MATERIAL_UI_THEME,
+  },
   {
     id: `${BUNDLE_ID}.bootstrap`,
     name: 'Bootstrap',

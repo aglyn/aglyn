@@ -196,7 +196,7 @@ describe('a dead screen link (AGL-1893)', () => {
   describe('unresolvedScreenOption — the console picker', () => {
     it('names a stored screen the host no longer has', () => {
       const option = unresolvedScreenOption('r_RYOXo-98', SCREENS)
-      expect(option?.label).toMatch(/Unavailable screen/)
+      expect(option?.label).toMatch(/Unavailable page/)
       expect(option?.label).toContain('r_RYOXo-98')
     })
 
@@ -225,7 +225,7 @@ describe('a dead screen link (AGL-1893)', () => {
       const option = unresolvedScreenOption('/pricing', SCREENS)
       expect(option?.value).toBe('/pricing')
       expect(option?.label).toMatch(/Plain address/)
-      expect(option?.label).not.toMatch(/Unavailable screen/)
+      expect(option?.label).not.toMatch(/Unavailable page/)
     })
 
     it('does not cry "unavailable" before the map has loaded', () => {

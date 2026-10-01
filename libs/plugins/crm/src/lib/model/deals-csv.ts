@@ -32,10 +32,9 @@
  */
 
 /*
- * The columns and the cells moved to `@aglyn/aglyn` under AGL-2662 so the
- * server's whole-collection export can write the same file: the console
- * app may not import a feature plugin, and one feature must not have two
- * file formats. This module keeps its name and its callers.
+ * The columns and the cells are `crm-csv.ts`, which the server's
+ * whole-collection export writes too (AGL-2662): one feature, one file
+ * format. This module keeps its name and its callers.
  */
 export {
   csvAmount,
@@ -44,4 +43,4 @@ export {
   dealsCsv,
   type DealCsvOptions,
   type DealCsvRow,
-} from '@aglyn/aglyn'
+} from './crm-csv'

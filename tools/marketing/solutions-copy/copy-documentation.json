@@ -105,7 +105,7 @@
       "heading": "Docs that keep up with the product.",
       "subheading": null,
       "body": [
-        "Ship doc changes with confidence: roll back any page with versioning, watch which pages get read with per-screen analytics, and let site-wide search do the finding."
+        "Ship doc changes with confidence: roll back any page with versioning, watch which pages get read with per-page analytics, and let site-wide search do the finding."
       ],
       "actions": [],
       "items": [
@@ -120,7 +120,7 @@
           "figmaNodeId": "420:6049",
           "meta": null,
           "title": "See what gets read",
-          "body": "Per-screen analytics show your most-visited docs (Pro and up).",
+          "body": "Per-page analytics show your most-visited docs (Pro and up).",
           "extra": []
         },
         {

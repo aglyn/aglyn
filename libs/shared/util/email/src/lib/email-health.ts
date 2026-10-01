@@ -16,54 +16,26 @@
  */
 
 import { getEmailConfig } from './send-email'
-
-/**
- * Where the credential probe asks its question.
- *
- * Deliberately NOT the send endpoint. A probe aimed at `/emails` is a send
- * attempt however empty its body is: it consumes an API call, and Resend
- * records it in the account's logs as a `422` on `POST /emails` with no
- * recipient, no subject and nothing identifying the caller — a line an
- * operator reading that dashboard has to treat as failed mail. A domain read
- * cannot create a message and cannot be mistaken for one.
- */
-export const RESEND_DOMAINS_ENDPOINT = 'https://api.resend.com/domains'
-
-/**
- * Resend error names that mean the key itself was not accepted, as opposed to
- * a key that authenticated and merely lacks read scope. Matched by NAME, not
- * status: `401` and `403` each cover both meanings.
- */
-const REFUSED_KEY_ERRORS = new Set([
-  'missing_api_key',
-  'validation_error',
-  'suspended_api_key',
-])
-
-/**
- * Resend error names that mean the key authenticated and was then denied this
- * particular read. A sending-scoped key — the shape Aglyn provisions — always
- * lands here, and reaching this answer at all required Resend to recognize
- * the credential, which is exactly what the probe is asking.
- */
-const AUTHENTICATED_BUT_UNSCOPED_ERRORS = new Set([
-  'restricted_api_key',
-  'invalid_permission',
-])
-
-/** The `name` Resend puts on an error body, or `''` for anything else. */
-function resendErrorName(body: string): string {
-  try {
-    const parsed = JSON.parse(body) as { name?: unknown }
-    return typeof parsed?.name === 'string' ? parsed.name : ''
-  } catch {
-    return ''
-  }
-}
+import type { MailProvider } from './mail-provider'
+import {
+  mailProvider,
+  mailProviderProblem,
+  mailProviderReads,
+} from './mail-providers'
 
 export interface EmailConfigReport {
-  /** Both env vars present — mail will at least be attempted. */
+  /** The provider has its settings and a sender is set — mail will at least be attempted. */
   configured: boolean
+  /** The id of the provider mail is handed to — see `mail-providers.ts`. */
+  provider: string
+  /** Settings that provider still needs before it can send, as an operator names them. */
+  missingSettings: string[]
+  /**
+   * Set when the operator chose a provider this process does not have: why
+   * no mail is sent. Not the same as a missing key — see `mailProviderProblem`.
+   */
+  providerProblem: string | null
+  /** The provider has what it needs to send. */
   hasApiKey: boolean
   hasFrom: boolean
   /**
@@ -71,7 +43,7 @@ export interface EmailConfigReport {
    * it appears in the headers of every message we send.
    */
   from: string | null
-  /** Domain part of the sender, which is what must be verified in Resend. */
+  /** Domain part of the sender, which is what must be verified with the provider. */
   fromDomain: string | null
 }
 
@@ -82,13 +54,16 @@ export interface EmailConfigReport {
  * otherwise only answerable by emailing a real person and waiting.
  */
 export function describeEmailConfig(): EmailConfigReport {
-  const { apiKey, from } = getEmailConfig()
+  const { provider, missingSettings, from } = getEmailConfig()
   const match = from?.match(/<([^>]+)>/)
   const address = (match?.[1] ?? from ?? '').trim()
   const domain = address.includes('@') ? address.split('@').pop()! : null
   return {
-    configured: Boolean(apiKey && from),
-    hasApiKey: Boolean(apiKey),
+    configured: !missingSettings.length && Boolean(from),
+    provider,
+    missingSettings,
+    providerProblem: mailProviderProblem(),
+    hasApiKey: !missingSettings.length,
     hasFrom: Boolean(from),
     from: from ?? null,
     fromDomain: domain,
@@ -103,61 +78,40 @@ export type EmailCredentialStatus =
 
 export interface EmailCredentialReport {
   status: EmailCredentialStatus
-  /** HTTP status Resend answered the probe with, when it answered. */
+  /** HTTP status the provider answered the probe with, when it answered. */
   probeStatus?: number
   detail?: string
 }
 
 /**
- * Checks whether `RESEND_API_KEY` is actually accepted by Resend — without
- * sending anything to anybody, and without leaving anything behind that reads
- * as failed mail.
+ * Whether the provider accepts this deployment's credential — asked without
+ * sending anything to anybody, and without leaving anything behind that
+ * reads as failed mail. How it asks is the provider's own (see its
+ * `checkCredentials`).
  *
- * How: a `GET` of the domains collection. The question is only ever "does
- * Resend recognize this credential", so the probe reads the ERROR NAME rather
- * than the status, because `401` and `403` each carry both meanings:
- *
- * - `2xx` — the key is accepted and has read scope → `ok`
- * - `restricted_api_key` / `invalid_permission` — Resend authenticated the
- *   key and then denied it this read. A sending-scoped key, which is what
- *   Aglyn provisions, always answers this way, and getting the answer proves
- *   the credential works → `ok`
- * - `missing_api_key` / `validation_error` / `suspended_api_key` — the key
- *   itself was refused → `invalid-key`
- * - anything else → `unknown`
- *
- * An unrecognized rejection is `unknown`, never `invalid-key`: this feeds a
+ * An answer this cannot get is `unknown`, never `invalid-key`: this feeds a
  * staff diagnostics screen whose whole value is that a red line means
- * something, and a shape we have not seen before is not evidence that a
- * working key is broken.
+ * something. A provider with no probe is `unknown` for the same reason.
  *
  * It cannot confirm that *domain verification* has completed — only a real
  * send does that.
  */
-export async function checkEmailCredentials(): Promise<EmailCredentialReport> {
-  const { apiKey } = getEmailConfig()
-  if (!apiKey) return { status: 'unconfigured' }
-
+export async function checkEmailCredentials(
+  provider: MailProvider = mailProvider(),
+): Promise<EmailCredentialReport> {
+  const problem = mailProviderProblem(provider)
+  if (problem) return { status: 'unconfigured', detail: problem }
+  if (provider.missingSettings().length) return { status: 'unconfigured' }
+  if (!provider.checkCredentials) {
+    return {
+      status: 'unknown',
+      detail:
+        `The "${provider.id}" mail provider has no credential probe; a test ` +
+        'send is the way to know it delivers.',
+    }
+  }
   try {
-    const response = await fetch(RESEND_DOMAINS_ENDPOINT, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${apiKey}` },
-    })
-    const detail = (await response.text().catch(() => '')).slice(0, 300)
-
-    if (response.status >= 200 && response.status < 300) {
-      return { status: 'ok', probeStatus: response.status }
-    }
-    if (response.status === 401 || response.status === 403) {
-      const name = resendErrorName(detail)
-      if (AUTHENTICATED_BUT_UNSCOPED_ERRORS.has(name)) {
-        return { status: 'ok', probeStatus: response.status }
-      }
-      if (REFUSED_KEY_ERRORS.has(name)) {
-        return { status: 'invalid-key', probeStatus: response.status, detail }
-      }
-    }
-    return { status: 'unknown', probeStatus: response.status, detail }
+    return await provider.checkCredentials()
   } catch (error) {
     return {
       status: 'unknown',
@@ -227,13 +181,13 @@ export interface SharedPoolReport {
  * site's transactional mail already failing — which is why the caller treats
  * this as a blocker rather than a note.
  *
- * Read with `RESEND_READ_API_KEY`, deliberately, and never with the sending
- * key. A sending-scoped key has no read permission, so asking it about domains
- * yields an authorization error that says nothing about the domains — which is
- * exactly how a pool the key could not send from reported healthy. Without a
- * read key this answers `unreadable`, which is the honest answer and not a
- * pass: the caller must not treat "I could not look" as "I looked and it was
- * fine".
+ * Read through the provider's READS, deliberately, and never with the
+ * sending credential. A sending-scoped key has no read permission, so asking
+ * it about domains yields an authorization error that says nothing about the
+ * domains — which is exactly how a pool the key could not send from reported
+ * healthy. A provider that cannot read answers `unreadable`, which is the
+ * honest answer and not a pass: the caller must not treat "I could not look"
+ * as "I looked and it was fine".
  *
  * `not-applicable` covers the self-host shape. The pool is a property of the
  * Aglyn platform; an operator running their own deployment sends from their
@@ -241,8 +195,8 @@ export interface SharedPoolReport {
  */
 export async function checkSharedSendingPool(options: {
   pool: string[]
-  readApiKey?: string
-  endpoint?: string
+  /** The provider to ask; the deployment's own by default. */
+  provider?: MailProvider
 }): Promise<SharedPoolReport> {
   const pool = options.pool.filter(Boolean)
   if (!pool.length) {
@@ -254,72 +208,30 @@ export async function checkSharedSendingPool(options: {
     }
   }
 
-  const key = String(options.readApiKey ?? '').trim()
-  if (!key) {
+  const reads = mailProviderReads(options.provider ?? mailProvider())
+  const unmet = reads.unmet()
+  if (unmet) {
     return {
       status: 'unreadable',
       domains: [],
       unusable: [],
       untracked: [],
-      detail:
-        'RESEND_READ_API_KEY is not set, so the shared pool cannot be ' +
-        'inspected. The sending key has no read permission and would report ' +
-        'an authorization error rather than the state of the domains.',
+      detail: `${unmet} The shared pool cannot be inspected without it.`,
     }
   }
 
   try {
-    const response = await fetch(options.endpoint ?? RESEND_DOMAINS_ENDPOINT, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${key}` },
-    })
-    if (response.status < 200 || response.status >= 300) {
-      return {
-        status: 'unreadable',
-        domains: [],
-        unusable: [],
-        untracked: [],
-        detail: `The provider answered ${response.status} to the domain read.`,
-      }
-    }
-    const payload = (await response.json().catch(() => null)) as
-      | {
-          data?: Array<{
-            name?: unknown
-            status?: unknown
-            click_tracking?: unknown
-            open_tracking?: unknown
-          }>
-        }
-      | null
-    /**
-     * A tri-state, and the third state matters: a listing that does not carry
-     * the field must not be reported as the field being false. Off is a fault
-     * somebody should fix; unknown is a question this probe could not ask.
-     */
-    const flag = (value: unknown): boolean | null =>
-      typeof value === 'boolean' ? value : null
-    const byName = new Map<
-      string,
-      { status: string; click: boolean | null; open: boolean | null }
-    >()
-    for (const row of payload?.data ?? []) {
-      const name = String(row?.name ?? '').toLowerCase()
-      if (!name) continue
-      byName.set(name, {
-        status: String(row?.status ?? 'unknown'),
-        click: flag(row?.click_tracking),
-        open: flag(row?.open_tracking),
-      })
-    }
+    const byName = new Map(
+      (await reads.sendingDomains()).map((row) => [row.name.toLowerCase(), row]),
+    )
     const domains = pool.map((domain) => {
       const row = byName.get(domain.toLowerCase())
       return {
         domain,
         status: row?.status ?? 'absent',
         present: row !== undefined,
-        clickTracking: row?.click ?? null,
-        openTracking: row?.open ?? null,
+        clickTracking: row?.clickTracking ?? null,
+        openTracking: row?.openTracking ?? null,
       }
     })
     const unusable = domains

@@ -22,8 +22,8 @@ import {
   hostThemeSource,
   resolveSiteTheme,
   themeOverridePatch,
-} from '@aglyn/aglyn/app-utils/marketplace-theme'
-import { overridePaths } from '@aglyn/aglyn/app-utils/marketplace-overrides'
+} from '@aglyn/aglyn/app-utils/site-theme'
+import { overridePaths } from '@aglyn/aglyn/app-utils/artifact-overrides'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import {
   readThemeColor,

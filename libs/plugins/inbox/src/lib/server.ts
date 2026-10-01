@@ -122,6 +122,10 @@ import {
 // The leaf, not the barrel: this plugin's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// And for the refusal a deleted contact left behind (AGL-3338): the real store
+// and the real merge, under whatever the specs put in the barrels' place.
+import { readRetainedRefusals } from '@aglyn/tenant-data-admin/server/retained-refusals'
+import { refusalsOf, withRetainedRefusals } from '@aglyn/aglyn/app-utils/retained-refusals'
 // The leaf for the same reason: which sites a group's opt-outs live on is the
 // rule, and a spec's barrel double must not be able to stand in for it.
 import { consentGroupOptOutHosts } from '@aglyn/aglyn/app-utils/consent-groups'
@@ -525,6 +529,13 @@ async function resolveAssignmentContext(
  * (AGL-3320): a pass-through carries them onto the membership as the record
  * holds them, rather than re-recording the opt-in over the group as it
  * stands today.
+ *
+ * A refusal outlives the contact it was written on (AGL-3338): what the
+ * org's retained store kept for this address is laid over the contact, or
+ * over no contact at all, before either is read — so a person whose record
+ * was deleted still reads `declined`, and one who signed up again since reads
+ * the newer grant. A retained read that fails falls to `declined` with the
+ * contact read.
  */
 async function storedConsentForAddress(
   hostId: string,
@@ -536,8 +547,14 @@ async function storedConsentForAddress(
 }> {
   try {
     const contacts = await orgDataCollectionForHost(hostId, 'contacts')
-    const found = await findContactByEmail(contacts, email)
-    const data = found ? (found.data() as Record<string, unknown>) : null
+    const [found, retained] = await Promise.all([
+      findContactByEmail(contacts, email),
+      readRetainedRefusals(contacts, [email]),
+    ])
+    const data = withRetainedRefusals(
+      found ? (found.data() as Record<string, unknown>) : null,
+      refusalsOf([...retained.values()][0]),
+    )
     return {
       stored: readMarketingBasis(data, group),
       grants: grantEntriesAsRecorded(data, group),

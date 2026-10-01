@@ -28,6 +28,7 @@ import {
   INBOX_RECORD_ATTRIBUTION_ZONE,
 } from './components/inbox-attribution-zone'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerInboxRecordRoutes } from './model/inbox-record-routes'
 
 /** Code-split: the Inbox console page only loads when opened. */
 const InboxConsolePage = lazy(() => import('./components/inbox-console-page'))
@@ -55,6 +56,7 @@ const InboxGlanceCard = lazy(
  * plugin hosts; the plugin that owns campaigns draws in them.
  */
 export function registerInboxConsole(): void {
+  registerInboxRecordRoutes()
   registerPluginZone(
     {
       zone: INBOX_RECORD_ATTRIBUTION_ZONE,

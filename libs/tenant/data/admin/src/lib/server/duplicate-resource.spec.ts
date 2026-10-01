@@ -32,6 +32,8 @@
 // with the sibling activity spec's identical globals under `tsc`.
 export {}
 
+import { DUPLICABLE_HOST_RESOURCE_KINDS } from '@aglyn/aglyn/app-utils/duplicate-resource'
+import { pluginHostResource } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 import {
   billableScreenIds,
   decodeStoredNodes,
@@ -155,7 +157,7 @@ jest.mock('./workspace-domains', () => ({
   attachWorkspaceDomain: async () => undefined,
 }))
 
-const { duplicateResource } = require('./duplicate-resource') as typeof import('./duplicate-resource')
+const { duplicateResource, recipeFor } = require('./duplicate-resource') as typeof import('./duplicate-resource')
 
 const ORG = 'org-1'
 const HOST = 'host-1'
@@ -300,7 +302,7 @@ describe('a screen', () => {
     expect(result).toEqual({
       ok: false,
       status: 403,
-      error: 'Your plan includes 1 screens — upgrade in Billing for more',
+      error: 'Your plan includes 1 page — upgrade in Billing for more',
     })
     expect(rowsIn(`hosts/${HOST}/screens`)).toHaveLength(1)
     expect(hostRows()).toHaveLength(0)
@@ -313,7 +315,7 @@ describe('a screen', () => {
       expect(await run('screen', { sourceId })).toEqual({
         ok: false,
         status: 400,
-        error: 'Only a page or a collection entry template can be duplicated as a screen',
+        error: 'Only a page or a collection entry template can be duplicated as a page',
       })
     }
     expect(rowsIn(`hosts/${HOST}/screens`)).toHaveLength(3)
@@ -370,8 +372,8 @@ const NON_PAGE_CEILING_REFUSAL = {
   ok: false,
   status: 403,
   error:
-    `This site is at its limit of ${NON_PAGE_SCREEN_MAX_PER_HOST} email and ` +
-    'template screens — delete some to make room',
+    `This site is at its limit of ${NON_PAGE_SCREEN_MAX_PER_HOST} email designs and ` +
+    'template pages — delete some to make room',
 }
 
 /** `count` live email designs, the commonest non-page screen. */
@@ -832,5 +834,44 @@ describe('a workflow', () => {
   it('needs the workflows entitlement', async () => {
     store.set(`hosts/${HOST}/workflows/src`, { name: 'N', steps: [] })
     expect(await run('workflow', { org: FREE })).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
+/**
+ * Every kind the catalog offers has a recipe (AGL-3080): core's own, or the
+ * one the owning plugin declares beside its collection. The catalog is what
+ * the row menus and the AI tool offer, so a kind in it with no recipe is a
+ * button that answers "cannot be duplicated" — refused, never guessed at.
+ */
+describe('the recipe each kind is copied by', () => {
+  it('exists for every kind the catalog offers', () => {
+    for (const kind of DUPLICABLE_HOST_RESOURCE_KINDS) {
+      expect([kind, recipeFor(kind) !== null]).toEqual([kind, true])
+    }
+  })
+
+  it('is the declared one for a kind its plugin owns, met against the create’s own counter', () => {
+    const declared = pluginHostResource('workflow')
+    expect(declared?.duplicate).toBeDefined()
+    expect(recipeFor('workflow')).toEqual({
+      collection: declared?.collection,
+      nameField: declared?.duplicate?.nameField,
+      fields: declared?.duplicate?.fields,
+      quotaKey: declared?.quotaKey,
+      entitlement: declared?.entitlement,
+      stamps: declared?.duplicate?.stamps,
+    })
+  })
+
+  it('is nothing for a kind nobody declared a copy of, and the copy is refused', async () => {
+    expect(recipeFor('nonesuch')).toBeNull()
+    expect(recipeFor('constructor')).toBeNull()
+    // Declared for the create route, but with no copy: not duplicable.
+    expect(recipeFor('webhook')).toBeNull()
+    expect(await run('nonesuch' as never)).toEqual({
+      ok: false,
+      status: 400,
+      error: 'That resource cannot be duplicated',
+    })
   })
 })

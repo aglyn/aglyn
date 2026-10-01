@@ -38,8 +38,7 @@ const mockGetPublishedLayoutVersion = jest.fn()
 const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
-const mockGetDatasets = jest.fn()
-const mockGetWorkflows = jest.fn()
+const mockReadRepeatRows = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetForms = jest.fn()
 
@@ -55,9 +54,15 @@ jest.mock('./get-forms', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetForms(...a),
 }))
-jest.mock('./get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: (...a: unknown[]) => mockGetDatasets(...a),
+  readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
+}))
+// Where a form files its records is the record target's to stamp, and the
+// data plugin's specs hold it; this file is about which design a form renders.
+jest.mock('@aglyn/aglyn/plugin-manager/submission-record-target', () => ({
+  __esModule: true,
+  stampFormRecordTargets: async (nodes: unknown) => nodes,
 }))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
@@ -67,7 +72,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -131,8 +135,7 @@ describe('placed forms on the published page', () => {
     mockGetComponents.mockResolvedValue({ definitions: {} })
     mockGetVariables.mockResolvedValue([])
     mockGetFunctions.mockResolvedValue([])
-    mockGetDatasets.mockResolvedValue([])
-    mockGetWorkflows.mockResolvedValue([])
+    mockReadRepeatRows.mockResolvedValue([])
     mockGetPluginInstalls.mockResolvedValue([])
     mockGetForms.mockResolvedValue({ forms: { contact: CONTACT_DESIGN } })
   })

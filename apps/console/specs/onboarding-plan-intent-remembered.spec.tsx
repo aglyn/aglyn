@@ -86,7 +86,7 @@ jest.mock('@aglyn/aglyn', () => ({
   // parses it off the same `useSearchParams` these cases drive. Real, not
   // stubbed, for the same reason the deep-link parser above is.
   ...jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
   ),
 }))
 jest.mock('@aglyn/shared-data-forms', () => ({

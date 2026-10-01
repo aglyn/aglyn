@@ -85,6 +85,12 @@ route_impl() {
     /api/admin/ai-insights-digest)
       printf '%s' 'libs/plugins/ai/src/lib/server/ai-insight-digest-route.ts'
       ;;
+    /api/crm/daily-digest)
+      printf '%s' 'libs/plugins/crm/src/lib/server/daily-digest-route.ts'
+      ;;
+    /api/crm/task-reminders)
+      printf '%s' 'libs/plugins/crm/src/lib/server/task-reminders-route.ts'
+      ;;
     /api/*)
       printf 'apps/console/app%s/route.ts' "$bare"
       ;;

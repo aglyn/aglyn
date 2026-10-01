@@ -38,7 +38,7 @@ import {
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
-import { stableStringify } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import { stableStringify } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import ColorField from './color-field.component'

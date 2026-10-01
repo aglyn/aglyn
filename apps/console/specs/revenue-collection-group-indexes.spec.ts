@@ -59,6 +59,16 @@ const ROUTE_PATH = join(
   'revenue',
   'route.ts',
 )
+/**
+ * The revenue sources' own reads (AGL-3080). The report asks each plugin that
+ * earns through the platform for its figures, and a source's query is the
+ * report's query as far as an index is concerned: read here by PATH, because
+ * an app spec may not import a plugin, and a path-keyed sweep imports nothing.
+ */
+const SOURCE_PATHS = [
+  join(__dirname, '..', '..', '..', 'libs', 'plugins', 'commerce', 'src', 'lib', 'server', 'revenue-source.ts'),
+  join(__dirname, '..', '..', '..', 'libs', 'plugins', 'marketplace', 'src', 'lib', 'server', 'revenue-source.ts'),
+]
 const INDEX_CONFIG_PATH = join(
   __dirname,
   '..',
@@ -166,8 +176,9 @@ function collectionGroupIndexedFields(): Set<string> {
 }
 
 describe('revenue route collection-group queries', () => {
-  const source = sourceWithoutComments(ROUTE_PATH)
-  const queries = collectionGroupQueries(source)
+  const queries = [ROUTE_PATH, ...SOURCE_PATHS].flatMap((path) =>
+    collectionGroupQueries(sourceWithoutComments(path)),
+  )
 
   it('finds the collection-group queries at all', () => {
     // Guards the PARSER. A regex that silently matched nothing would make

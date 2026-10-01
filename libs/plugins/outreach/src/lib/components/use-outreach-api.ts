@@ -115,9 +115,11 @@ export interface OutreachApi {
     sequenceId: string,
     source: OutreachEnrollSource,
   ): Promise<OutreachEnrollPreviewResponse>
+  /** `startStepIndex` (AGL-3228) is the step everyone begins at, zero-based; the first when absent. */
   enroll(
     sequenceId: string,
     people: OutreachEnrollPersonRequest[],
+    startStepIndex?: number,
   ): Promise<OutreachEnrollResponse>
   actOnEnrollment(
     enrollmentId: string,
@@ -258,10 +260,10 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
           method: 'POST',
           body: { sequenceId, source },
         }),
-      enroll: (sequenceId, people) =>
+      enroll: (sequenceId, people, startStepIndex) =>
         call(OUTREACH_API_ROUTES.enroll, {
           method: 'POST',
-          body: { sequenceId, people },
+          body: { sequenceId, people, ...(startStepIndex ? { startStepIndex } : {}) },
         }),
       actOnEnrollment: (enrollmentId, action, detail) =>
         call(OUTREACH_API_ROUTES.enrollmentsAction, {

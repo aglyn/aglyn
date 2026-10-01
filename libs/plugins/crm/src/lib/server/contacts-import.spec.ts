@@ -71,26 +71,40 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),
 }))
 
+/** Every read the companies collection answered, for the round-trip cases. */
+let companyQueries: unknown[][] = []
+let companyBatches = 0
+
 /** `orgs/org-1/companies`, as much of it as the route touches. */
 const companiesHandle = {
-  where: (fieldPath: string, _op: string, wanted: unknown) => ({
-    limit: () => ({
+  where: (fieldPath: string, op: string, wanted: unknown) => {
+    if (op !== 'in' || !Array.isArray(wanted)) throw new Error(`unexpected filter ${op}`)
+    companyQueries.push(wanted)
+    return {
       get: async () => ({
         docs: Object.entries(companies)
-          .filter(([, data]) => data[fieldPath] === wanted)
+          .filter(([, data]) => wanted.includes(data[fieldPath]))
           .map(([id, data]) => ({ id, get: (key: string) => data[key] })),
       }),
-    }),
-  }),
-  add: async (data: Record<string, unknown>) => {
+    }
+  },
+  doc: () => {
     companySeq += 1
-    const id = `company-${companySeq}`
-    companies[id] = data
-    return { id }
+    return { id: `company-${companySeq}` }
   },
 }
 
 const firestoreHandle = {
+  batch: () => {
+    const sets: [{ id: string }, Record<string, unknown>][] = []
+    return {
+      set: (ref: { id: string }, data: Record<string, unknown>) => sets.push([ref, data]),
+      commit: async () => {
+        companyBatches += 1
+        for (const [ref, data] of sets) companies[ref.id] = data
+      },
+    }
+  },
   collection: (name: string) => ({
     doc: (id: string) => ({
       get: async () => {
@@ -148,22 +162,43 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     declared: false,
   }),
   upsertHostContact: (...args: unknown[]) => upsert(...(args as [])),
-  // The records band is not under test here (AGL-2611); always room, in the
-  // real shape, so no refusal below can be it in disguise.
-  crmRecordsQuotaForOrg: async () => ({
-    allowed: true,
-    included: 100,
-    used: 0,
-    remaining: 100,
-    overageRecords: 0,
-    overageMonthlyUsd: 0,
-    overageRateUsd: null,
-    contactsCount: 0,
-    companiesCount: 0,
-    dealsCount: 0,
-    crmRecordsCount: 0,
-  }),
+  prepareContactCaptureBatch: (...args: unknown[]) =>
+    prepare(...(args as [hostId: string, emails: string[]])),
 }))
+
+/**
+ * The capture batch (AGL-3423). Its reads are `upsert-contact-batch.spec`'s
+ * question; here it is a double that records what the route asked of it, in
+ * order, so the band walk's file order is visible. Every address is new,
+ * nobody is erased, and the band always has room unless a case says so.
+ */
+let bandRoom = Infinity
+let bandCalls: string[] = []
+let lastBatch: Record<string, unknown> | null = null
+const prepare = jest.fn(async (...args: [hostId: string, emails: string[]]) => {
+  const [hostId] = args
+  const admit = () => {
+    if (bandRoom <= 0) return false
+    bandRoom -= 1
+    return true
+  }
+  lastBatch = {
+    hostId,
+    peek: () => null,
+    claim: () => null,
+    erased: () => false,
+    admit: () => {
+      bandCalls.push('company')
+      return admit()
+    },
+    reserve: (email: string) => {
+      bandCalls.push(`contact:${email}`)
+      return admit()
+    },
+    admitCreate: () => true,
+  }
+  return lastBatch
+})
 
 /**
  * The deliverability check's import half (AGL-3328): which addresses' domains
@@ -241,6 +276,12 @@ beforeEach(() => {
   upsert.mockReset()
   upsert.mockImplementation(async () => ({ contactId: 'c-new', created: true }))
   listMembers.mockClear()
+  companyQueries = []
+  companyBatches = 0
+  bandRoom = Infinity
+  bandCalls = []
+  lastBatch = null
+  prepare.mockClear()
 })
 
 describe('the request shape', () => {
@@ -410,6 +451,8 @@ describe('what the door is handed', () => {
         lifecycleStage: 'customer',
       },
       campaignIds: [],
+      // The chunk's one capture batch (AGL-3423), handed to every row.
+      batch: lastBatch,
     })
   })
 
@@ -568,5 +611,102 @@ describe('the plan (AGL-2787)', () => {
     const out = await importRows([{ email: 'a@b.co' }])
     expect(out.code).toBe(200)
     expect(upsert).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * A CHUNK THAT ANSWERS (AGL-3423). On 2026-09-26 this route ran into the
+ * function's sixty seconds four times in a row on a two-hundred-row chunk:
+ * every row paid the door's reads serially, and every company name paid a
+ * read, three counts and a write of its own. What is pinned here is the
+ * route's half — one batch for the chunk, companies in pages, rows in a
+ * bounded pool, and a time budget that answers instead of being cut off.
+ */
+describe('a full chunk (AGL-3423)', () => {
+  const fullChunk = (count: number, companyOf: (at: number) => string | undefined = () => undefined) =>
+    Array.from({ length: count }, (_, at) => ({
+      email: `person${at}@example.com`,
+      ...(companyOf(at) ? { companyName: companyOf(at) } : {}),
+    }))
+
+  it('prepares one capture batch for every address and hands it to every row', async () => {
+    const out = await importRows(fullChunk(200))
+    expect(out.body).toMatchObject({ received: 200, created: 200 })
+    expect(prepare).toHaveBeenCalledTimes(1)
+    expect(prepare.mock.calls[0][0]).toBe(HOST_ID)
+    expect(prepare.mock.calls[0][1]).toHaveLength(200)
+    expect(upsert).toHaveBeenCalledTimes(200)
+    for (const [options] of upsert.mock.calls) expect(options.batch).toBe(lastBatch)
+  })
+
+  it('looks up two hundred different companies in seven reads and creates them in one write', async () => {
+    const out = await importRows(fullChunk(200, (at) => `Company ${at}`))
+    // ceil(200 / 30) pages of the `in` filter, not one query per name.
+    expect(companyQueries).toHaveLength(7)
+    expect(companyBatches).toBe(1)
+    expect(out.body.companiesCreated).toBe(200)
+    expect(Object.keys(companies)).toHaveLength(200)
+    expect(doorCall('person0@example.com').facet.companyName).toBe('Company 0')
+  })
+
+  it("walks the band in file order: a row's company, then its contact", async () => {
+    await importRows([
+      { email: 'a@x.co', companyName: 'Alpha' },
+      { email: 'b@x.co' },
+      { email: 'c@x.co', companyName: 'Gamma' },
+    ])
+    expect(bandCalls).toEqual(['company', 'contact:a@x.co', 'contact:b@x.co', 'company', 'contact:c@x.co'])
+  })
+
+  it('gives a row no company when the band has no room for one', async () => {
+    bandRoom = 0
+    const out = await importRows([{ email: 'a@x.co', companyName: 'Alpha' }])
+    expect(out.body.companiesCreated).toBe(0)
+    expect(companies).toEqual({})
+    expect(doorCall('a@x.co').facet.companyId).toBeUndefined()
+  })
+
+  it('writes rows several at a time, and never more than the pool', async () => {
+    let inFlight = 0
+    let most = 0
+    upsert.mockImplementation(async () => {
+      inFlight += 1
+      most = Math.max(most, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      inFlight -= 1
+      return { contactId: 'c', created: true }
+    })
+    const out = await importRows(fullChunk(40))
+    expect(out.body.created).toBe(40)
+    expect(most).toBeGreaterThan(1)
+    expect(most).toBeLessThanOrEqual(8)
+  })
+
+  it('stops starting rows when the time budget is spent, and names every row it did not reach', async () => {
+    const realNow = Date.now
+    let clock = 1_000_000
+    Date.now = () => clock
+    try {
+      let written = 0
+      upsert.mockImplementation(async () => {
+        written += 1
+        // The first pool's worth of rows takes the whole budget.
+        if (written === 8) clock += 40_000
+        return { contactId: 'c', created: true }
+      })
+      const out = await importRows(fullChunk(20))
+      expect(out.code).toBe(200)
+      expect(upsert).toHaveBeenCalledTimes(8)
+      expect(out.body.created).toBe(8)
+      expect(out.body.skipped).toHaveLength(12)
+      expect(out.body.skipped[0]).toEqual({
+        index: 8,
+        email: 'person8@example.com',
+        reason: 'not-reached',
+      })
+      expect(out.body.skipped.every((row: { reason: string }) => row.reason === 'not-reached')).toBe(true)
+    } finally {
+      Date.now = realNow
+    }
   })
 })

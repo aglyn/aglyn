@@ -25,6 +25,7 @@ import {
 } from './components/email-zones'
 import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerEmailRecordRoutes } from './model/email-record-routes'
 
 /** Code-split: the Emails console page only loads when opened. */
 const EmailsConsolePage = lazy(() => import('./components/emails-console-page'))
@@ -59,6 +60,9 @@ const EmailDesignPreview = lazy(
  * nav or page files.
  */
 export function registerEmailConsole(): void {
+  // Where a message and a sending identity are read (AGL-3080), for the
+  // surfaces that link to them without knowing this page's address.
+  registerEmailRecordRoutes()
   /*
    * The two places this plugin's pages hand over to whichever plugin owns
    * campaigns. A message is one send of a campaign and every action on it is
@@ -84,7 +88,7 @@ export function registerEmailConsole(): void {
       label: 'Who received a template’s emails',
       surface: 'console',
       description:
-        'On one template’s page, under its report. A widget here lists the recipients of every send built from that template; it is handed the site and the template’s screen id.',
+        'On one template’s page, under its report. A widget here lists the recipients of every send built from that template; it is handed the site and the template’s id.',
     },
     { pluginId: BUNDLE_ID },
   )

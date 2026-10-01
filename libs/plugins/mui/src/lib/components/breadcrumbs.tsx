@@ -94,7 +94,7 @@ export const schema: Aglyn.ComponentSchema<BreadcrumbsElementProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Breadcrumbs',
   description:
-    'Trail showing where a page sits. Fill it with Screen Links so it ' +
+    'Trail showing where a page sits. Fill it with Page Links so it ' +
     'survives slug changes.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiSlashForward.path, sx: { color: '#2196f3' } },

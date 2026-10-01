@@ -1,12 +1,12 @@
 ---
 sidebar_position: 1
 title: SEO Toolkit
-description: Per-screen SEO, sitemap and robots, Open Graph/Twitter cards, and structured data.
+description: Per-page SEO, sitemap and robots, Open Graph/Twitter cards, and structured data.
 ---
 
 # SEO Toolkit
 
-The **SEO toolkit** helps your pages rank and share well. Set metadata per screen, and
+The **SEO toolkit** helps your pages rank and share well. Set metadata per page, and
 Aglyn emits the right tags, sitemap, and structured data automatically.
 
 :::info Plan availability
@@ -15,9 +15,9 @@ Aglyn emits the right tags, sitemap, and structured data automatically.
 
 <!-- screenshot: seo/setup-seo-tab.png per SCREENSHOT_PLAN.md (replaces the borrowed custom-domains image) -->
 
-## Per-screen SEO
+## Per-page SEO {#per-screen-seo}
 
-Every screen's detail page has an **SEO** card with four fields:
+Every page's detail view has an **SEO** card with four fields:
 
 - **Search title** — up to 60 characters, published exactly as you type it.
 - **Search description** — up to 155 characters, the meta description.
@@ -37,7 +37,7 @@ with a new version keeps every card that references it working.
 <!-- screenshot: seo/screen-seo-card.png per SCREENSHOT_PLAN.md -->
 
 Anything you leave blank falls back sensibly: the description falls back to the
-screen's own description and then the site's, and the social image to the site-wide
+page's own description and then the site's, and the social image to the site-wide
 one.
 
 ### How a page title is built
@@ -46,14 +46,14 @@ A **search title** you write is the whole title — nothing is appended to it. T
 what lets you keep every page inside the ~60 characters a search result shows, and
 say the brand once rather than twice.
 
-A page with no search title of its own is titled from its **name** — the screen's
+A page with no search title of its own is titled from its **name** — the page's
 display name, a blog post's headline, a collection's name — joined to the site
 **Title** with your **Separator**:
 
 | Page | Rendered title |
 | --- | --- |
 | Search title `About Aglyn — one platform for the open web` | `About Aglyn — one platform for the open web` |
-| Screen named `Contact`, no search title | `Contact – Acme Widgets` |
+| Page named `Contact`, no search title | `Contact – Acme Widgets` |
 | Neither | `Acme Widgets` |
 
 Your brand still travels with every share regardless: `og:site_name` is published on
@@ -66,7 +66,7 @@ A title can name the things it depends on instead of repeating them:
 
 | Variable | What it stands for |
 | --- | --- |
-| `{{page.name}}` | What this page is called — a screen's display name |
+| `{{page.name}}` | What this page is called — its display name |
 | `{{site.separator}}` | Your **Separator** from Setup → SEO |
 | `{{site.name}}` | Your site **Title** from Setup → SEO |
 
@@ -96,7 +96,7 @@ missing one of the pieces never renders a title that starts or ends with a dash.
 
 ### Site-wide defaults
 
-**Setup → SEO** holds the site-level fields every screen inherits: the site **Title**
+**Setup → SEO** holds the site-level fields every page inherits: the site **Title**
 and **Description**, the **Separator** used to join a page's name to the site title
 when that page has no search title of its own (default `–`), the **Title pattern**
 that decides how those pieces are put together, the **Favicon**, an
@@ -141,6 +141,57 @@ names the site it belongs to.
 See [Multilingual](../multilingual/overview.md) for adding a language and a
 language switcher.
 
+## SEO check
+
+**Setup → SEO** starts with an **SEO check** card. Press **Run the check** and it reads
+every page your [sitemap](#sitemap--robots) lists — every published page whose
+visibility is **Public**, without template pages or error pages — and lists what a
+search result or a crawler would find wrong. The check is part of every plan and needs no
+add-on. It changes nothing on your site: fix what it finds in each page's **SEO** card or
+in the designer, publish, and run it again.
+
+A very large site is checked on its first 150 pages, and the card says how many it left
+out. For each page it checks:
+
+| Check | What counts as a finding |
+| --- | --- |
+| **Search title** | Missing, over 60 characters, or the same as another page's. A title with [variables](#variables-so-a-title-is-not-a-copy-of-your-site-name) is checked as it renders. |
+| **Search description** | Missing, over 155 characters, or the same as another page's. |
+| **Main heading** | No `h1`, more than one, or one that says little (`Home`, `Welcome`, a single short word). |
+| **Images** | An image with no description. |
+| **Links** | No other page or shared layout links to the page. The home page never counts. |
+| **Target keywords** | A keyword you named that the page never says. |
+
+It also checks the site as a whole: whether search engines are asked to stay away,
+whether your [structured data](#structured-data) names and describes who publishes the
+site, and whether your [`/llms.txt`](#llmstxt) carries guidance of your own.
+
+Each page gets a score out of 100 — a finding takes off more the more it matters — and
+the site's score is the average. Each page in the list links to its detail page, where
+you fix it.
+
+### Target keywords
+
+The optional **Target keywords by page** box takes one line per page:
+
+```text
+/pricing: pricing, plans
+/lamps: brass desk lamps, dimmable
+```
+
+The check reports where each page already says its keywords, and names a keyword a page
+never says. Use a keyword only where the page is about it. A line for an address the
+check did not cover is reported, not silently dropped.
+
+### Check one page
+
+A page's **SEO** card has a **Check this page** button. It runs the same check and
+lists that page's findings, as the page is published. It checks the whole site to answer,
+because a title another page also uses, or a page nothing links to, shows only from the
+site as a whole.
+
+With the AI add-on, [AI SEO](./seo-by-ai.md) proposes a fix for each finding.
+
 ## Search engine visibility
 
 You decide what search engines are allowed to index, at two levels.
@@ -175,16 +226,16 @@ obeys the disallow never sees the `noindex` that would have stopped it.
 
 ### A single page
 
-Use the page's own **Visibility**, in **Page Access** on the screen's detail page. Only
+Use the page's own **Visibility**, in **Page Access** on the page's detail view. Only
 **Public** pages are offered to search engines. **Unlisted**, **Password protected** and
 **Members only** pages are all kept out of search results and out of the sitemap, while
 staying reachable to whoever has the link or the credentials.
 
-![The Page Access card on a screen's page, with the Visibility menu open on Public, Unlisted, Password protected and Members only](/img/seo/page-access-visibility.png)
+![The Page Access card on a page's detail view, with the Visibility menu open on Public, Unlisted, Password protected and Members only](/img/seo/page-access-visibility.png)
 
-Use the site-wide switch while nothing is ready, and per-screen **Unlisted** once you're
+Use the site-wide switch while nothing is ready, and per-page **Unlisted** once you're
 launching page by page — the switch also covers pages you haven't created yet, which
-per-screen visibility cannot.
+per-page visibility cannot.
 
 :::caution `noindex` is a request, not access control
 Both controls ask search engines not to list a page. Well-behaved crawlers honor that;
@@ -227,7 +278,7 @@ Aglyn generates **`sitemap.xml`** and **`robots.txt`** for your site automatical
 search engines can crawl your site correctly. The sitemap always names your site by its
 real address (your custom domain when you have one), and includes:
 
-- every published screen whose visibility is **Public** — template screens (blog list/
+- every published page whose visibility is **Public** — template pages (blog list/
   entry templates, product page templates) are excluded, since their real URLs are the
   entries and products they render;
 - your **product** and catalog **collection** URLs, once a product-page or
@@ -243,7 +294,7 @@ child sitemap for each part of your site, and each child holds that part's URLs.
 
 ```text
 https://your-site/sitemap.xml
-  ├─ /sitemaps/pages/1.xml          your screens
+  ├─ /sitemaps/pages/1.xml          your pages
   ├─ /sitemaps/products/1.xml       your products
   ├─ /sitemaps/catalog/1.xml        your catalog collections
   ├─ /sitemaps/content-blog/1.xml   the blog, and its published entries
@@ -260,7 +311,7 @@ that outgrows one file simply continues into a second (`/sitemaps/content-blog/2
 and the index names both.
 
 Every URL with a known date carries a last-modified date (`lastmod`) — the day a
-screen was last published, the day an entry, product or catalog collection last
+page was last published, the day an entry, product or catalog collection last
 changed, and for a listing the day of its newest entry — so a crawler can skip what
 has not moved since its last visit. A URL whose date is not known simply has none;
 the sitemap never invents one.
@@ -288,7 +339,7 @@ against them.
 | `og:title`, `og:description` | The page's search title and description |
 | `og:url` | The page's canonical address, always absolute |
 | `og:site_name` | Setup → SEO **Title**, then the **Entity** name, then the site's name |
-| `og:locale` | The page's language — the screen's, then the site's default |
+| `og:locale` | The page's language — its own, then the site's default |
 | `og:image` + `width`, `height`, `alt` | The winning card image, below |
 | `twitter:card`, `title`, `description`, `image` | The same values as the card above |
 | `twitter:site` | The X profile in Setup → Details → **Social links** |
@@ -297,7 +348,7 @@ against them.
 
 | Page | `og:type` | What it adds |
 | --- | --- | --- |
-| Home, and any other screen | `website` | `og:locale:alternate` for each language this page is translated into |
+| Home, and any other page | `website` | `og:locale:alternate` for each language this page is translated into |
 | A collection listing, and a category listing | `website` | — |
 | A blog or collection entry | `article` | `article:published_time`, `article:modified_time`, `article:author` (their author page), `article:section` (its category), `article:tag`, and `twitter:creator` |
 | An author page | `profile` | `profile:username` and `twitter:creator`, from the author's own X profile |
@@ -311,7 +362,7 @@ than a missing one — it is a claim that the answer is "nothing".
 Which image a page uses is decided in this order:
 
 1. the **entry's cover image**, for a blog or collection entry;
-2. the **screen's own social image**, from its SEO panel;
+2. the **page's own social image**, from its SEO panel;
 3. the **site default**, from Setup → SEO;
 4. nothing.
 
@@ -481,5 +532,6 @@ Add your **Google Analytics** ID to track traffic alongside Aglyn's built-in
 
 ## Related
 
+- [AI SEO](./seo-by-ai.md)
 - [Analytics](../../marketing-and-automation/analytics/overview.md)
 - [Content collections & blog](../site-templates/overview.md)

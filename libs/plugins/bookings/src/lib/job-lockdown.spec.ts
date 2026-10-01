@@ -97,6 +97,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 // This file is about the lockdown, so whatever owns the tax rule adds nothing.
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-tax-profile', () => ({
   pluginTaxProfile: () => ({
+    flatRate: async () => undefined,
     flatTax: () => ({ taxCents: 0, label: '', pct: 0 }),
     taxModeOf: () => 'none',
   }),
@@ -233,8 +234,8 @@ jest.mock('@aglyn/tenant-data-admin/server/tenant-write-lockdown', () => ({
   siteLockdownJobGate: () => gate,
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/stripe-account-mode', () => ({
-  connectLinkageIsReady: () => true,
+jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({
+  merchantAccountIsReady: () => true,
 }))
 
 // `require`, not `import`. A static import is hoisted above the module-scope

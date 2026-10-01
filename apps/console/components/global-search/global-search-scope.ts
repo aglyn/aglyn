@@ -67,11 +67,12 @@
  *    closing and reopening the palette, costs nothing further — a longer
  *    query can only ever narrow what a shorter one returned, so it is
  *    answered from memory.
- * 3. **A group nobody is entitled to is never read.** The free plan has no
- *    workflows, products, services or redirects, so a free workspace fans out
- *    to strictly fewer collections than a paid one. Cost scales with what the
- *    org actually owns, which is the right direction for a plan that has to
- *    hard-cap.
+ * 3. **A group nobody is entitled to is never read.** A group whose quota
+ *    or plan flag the workspace lacks is dropped before any read, and a
+ *    plugin's group is offered only where the plugin is on, so a free
+ *    workspace fans out to strictly fewer collections than a paid one. Cost
+ *    scales with what the org actually owns, which is the right direction
+ *    for a plan that has to hard-cap.
  *
  * ## And the honesty, which is load-bearing
  *
@@ -82,71 +83,49 @@
  * was reverified against a real console: a group that matched NOTHING used to
  * be dropped before it could render its caveat, so the one case where the
  * caveat carried information was the one case that hid it. It is also why the
- * window now escalates rather than merely apologising — see
+ * window now escalates rather than merely apologizing — see
  * `SEARCH_ESCALATION_WINDOW`. A group whose read FAILED says that too, rather
  * than rendering as zero matches — a swallowed query that renders as a
  * measured zero is worse than an error, because nothing looks wrong.
  */
 
 import { Route } from '@aglyn/aglyn/app-utils/console-routes'
-import {
-  crmOrgRecordHref,
-  crmOrgSectionHref,
-  crmRecordHref,
-  crmSectionHref,
-  type CrmRecordKind,
-} from '@aglyn/aglyn/app-utils/console-record-links'
-import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
+import type { ConsoleSearchSource } from '@aglyn/aglyn'
 
-/** A class of thing console search can look through. */
-export type GlobalSearchEntity =
+/**
+ * A class of thing console search can look through: one of the console's own
+ * below, or a group a plugin contributes through
+ * `ConsoleExtension.searchSources`, keyed by the id it declares.
+ */
+export type CoreGlobalSearchEntity =
   | 'sites'
   | 'screens'
   | 'emails'
-  | 'contacts'
-  | 'leads'
-  | 'companies'
-  | 'deals'
-  | 'tasks'
-  | 'activities'
   | 'components'
   | 'layouts'
   | 'templates'
   | 'collections'
   | 'authors'
-  | 'workflows'
-  | 'products'
-  | 'redirects'
-  | 'services'
 
-/**
- * Where a collection hangs, which decides BOTH the path and who may read it.
- *
- * `host` collections are `hosts/{hostId}/…` for the site already open, which
- * `HostGuard` has admitted the caller to and which the Firestore rules gate on
- * host membership. `org` collections are `users/{uid}/…` — the caller's OWN
- * projection, which the rules would refuse for anyone else. Nothing here is a
- * top-level collection query, deliberately: a top-level query is the shape
- * that can leak, whatever it filters on.
- */
+export type GlobalSearchEntity = CoreGlobalSearchEntity | (string & {})
+
 /**
  * Where a collection lives, which decides how it is read.
  *
- * `host` is `hosts/{hostId}/…`; `org` is the caller's OWN projection under
- * `users/{uid}/…`, narrowed by `orgId`; `orgData` is the org-shared data root
- * `orgs/{orgId}/…`, whose rules judge every document by its `visibleTo`
- * tokens (AGL-2596) — so an `orgData` read carries the viewer's tokens as an
- * `array-contains-any` filter, the same predicate the rules evaluate, and is
- * refused outright when they are unknown rather than issued unfiltered and
- * denied.
+ * `host` is `hosts/{hostId}/…` for the site already open, which `HostGuard`
+ * has admitted the caller to and which the Firestore rules gate on host
+ * membership. `org` is the caller's OWN projection under `users/{uid}/…`,
+ * narrowed by `orgId` — the rules would refuse it for anyone else. `orgData`
+ * is the org-shared data root `orgs/{orgId}/…`, whose rules judge every
+ * document by its `visibleTo` tokens (AGL-2596) — so an `orgData` read under
+ * a site carries the viewer's tokens as an `array-contains-any` filter, the
+ * same predicate the rules evaluate, and is refused outright when they are
+ * unknown rather than issued unfiltered and denied.
  *
- * `orgHosts` is the fourth and exists only off a site (AGL-2662): a
- * host-scoped collection read once per site the organization has, because
- * the org-level hub shows every site's rows at once and there is no
- * org-level collection to listen to. The site list is the window the
- * `sites` group has already read, so the fan-out costs no read of its own.
+ * Nothing here is a top-level collection query, deliberately: a top-level
+ * query is the shape that can leak, whatever it filters on.
  */
-export type GlobalSearchScopeKind = 'host' | 'org' | 'orgData' | 'orgHosts'
+export type GlobalSearchScopeKind = 'host' | 'org' | 'orgData'
 
 export interface GlobalSearchEntityDef {
   id: GlobalSearchEntity
@@ -160,23 +139,21 @@ export interface GlobalSearchEntityDef {
   /**
    * The document field holding the human-readable name.
    *
-   * Not uniform across the platform and deliberately not normalised here:
-   * screens/layouts/components/templates use `displayName`, the logic and
-   * commerce resources use `name`. Getting this wrong renders a group of rows
-   * all labelled with their document id, which is why every entry is pinned
-   * by a test against the real write path's allow-list.
+   * Not uniform across the platform and deliberately not normalized here:
+   * screens/layouts/components/templates use `displayName`, authors use
+   * `name`. Getting this wrong renders a group of rows all labeled with their
+   * document id, which is why every entry is pinned by a test against the
+   * real write path's allow-list.
    */
   nameField: string
   /**
-   * The field the row is LABELLED by when `nameField` is empty.
-   *
-   * A contact captured by a checkout may carry no name at all, and a row
-   * labelled by its document id is a row nobody recognizes; the email is
-   * what the CRM shows for the same person.
+   * The field the row is LABELED by when `nameField` is empty — a person
+   * captured with no name is recognized by their address, never by a
+   * document id.
    */
   fallbackNameField?: string
   /** Extra fields a reader may legitimately search by (slug, route). */
-  extraFields?: string[]
+  extraFields?: readonly string[]
   /**
    * The plan quota that must be non-zero, or the feature flag that must be
    * on, for this group to be READ AT ALL.
@@ -186,62 +163,28 @@ export interface GlobalSearchEntityDef {
    */
   entitlementKey?: string
   featureKey?: string
+  /** Where the group is listed, ascending — see `ConsoleSearchSource.order`. */
+  order: number
   /**
-   * The console surface this group's rows open on, when that surface is
-   * gated apart from the collection's own scope (AGL-2622).
-   *
-   * Leads are host data by path — any member of the site may read them —
-   * but their rows open in the CRM, and the CRM is offered to a viewer only
-   * when the contacts group is: released for them, and with the permission
-   * its rules read for. A leads row shown to somebody the hub refuses is a
-   * link to a 404, so the group follows the CRM's gate rather than the
-   * collection's. The org-data groups carry the same gate through their
-   * scope kind and need no flag.
+   * Where a row of a plugin's group opens. The console's own groups are
+   * linked by {@link buildResultHref}; a plugin's are linked by the plugin,
+   * because only it knows its addresses.
    */
-  surface?: 'crm'
-  /**
-   * How this group is read when there is NO site (AGL-2662).
-   *
-   * Only a `host` group needs it, and only the one whose rows the org-level
-   * hub shows: a lead lives under its site by path, so the org hub reads
-   * every site's window and merges them. A `host` group without this is
-   * dropped off a site, as it always was — a collection that belongs to one
-   * site has no org-level answer to give.
-   */
-  orgScopeKind?: 'orgHosts'
+  href?: ConsoleSearchSource['href']
 }
 
 /**
- * How one group is actually read from where the caller is standing.
- *
- * The registry names a group's home; this names the read. They differ for
- * exactly one group and exactly one reason — see {@link
- * GlobalSearchEntityDef.orgScopeKind} — and the hook, the cache key and the
- * link builder all ask this rather than each deciding for themselves, so a
- * window fetched one way cannot be keyed or linked as the other.
- */
-export function globalSearchReadKind(
-  definition: GlobalSearchEntityDef,
-  hostId: string | null,
-): GlobalSearchScopeKind {
-  if (definition.scopeKind !== 'host' || hostId) return definition.scopeKind
-  return definition.orgScopeKind ?? 'host'
-}
-
-/**
- * The caller's own site memberships, narrowed to the open workspace.
- *
- * Named because it is read twice: as the `sites` group, and as the site list
- * an `orgHosts` fan-out is bounded by — which is what lets the fan-out cost
- * no read of its own. Two spellings would be two windows.
+ * The caller's own site memberships, narrowed to the open workspace — the
+ * `sites` group's collection.
  */
 export const GLOBAL_SEARCH_SITES_COLLECTION = 'hostMemberships'
 
 /**
- * Everything searchable, in the order groups are shown.
+ * The console's own searchable groups.
  *
  * Ordered by how often the answer is wanted, not alphabetically: somebody
- * typing into a console search box is usually trying to REACH a page.
+ * typing into a console search box is usually trying to REACH a page. A
+ * plugin's groups are placed among these by their `order`.
  */
 export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
   {
@@ -252,6 +195,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     collection: GLOBAL_SEARCH_SITES_COLLECTION,
     nameField: 'displayName',
     extraFields: ['subdomain'],
+    order: 10,
   },
   {
     id: 'screens',
@@ -261,6 +205,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     collection: 'screens',
     nameField: 'displayName',
     extraFields: ['route', 'slug'],
+    order: 20,
   },
   {
     id: 'emails',
@@ -269,115 +214,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     scopeKind: 'host',
     collection: 'screens',
     nameField: 'displayName',
-  },
-  {
-    /*
-     * People, by name, email, phone number or company (AGL-2596). The phone
-     * and the company name are top-level echoes of the viewing holder's
-     * facet, written by every path that sets them, precisely so this read —
-     * which never resolves a facet — can hit them. Gated by the CALLER: the
-     * dialog supplies `orgDataTokens` only when the Contacts surface is
-     * released for the viewer and they hold `data.manage`, which is the read
-     * rule. And by the PLAN, like every CRM group here: the CRM is included
-     * from Starter (AGL-2851), so a workspace without `features.crm` is
-     * never read for it.
-     */
-    id: 'contacts',
-    group: 'Contacts',
-    noun: 'contacts',
-    scopeKind: 'orgData',
-    collection: 'contacts',
-    nameField: 'name',
-    fallbackNameField: 'email',
-    extraFields: ['email', 'phone', 'companyName'],
-    featureKey: 'crm',
-  },
-  {
-    /*
-     * The site's own leads (AGL-2622): people captured here and not yet
-     * qualified, by name or address. Host data by path, so the read is the
-     * plain host window; offered only where the CRM is, because that is
-     * where the row opens.
-     */
-    id: 'leads',
-    group: 'Leads',
-    noun: 'leads',
-    scopeKind: 'host',
-    collection: 'leads',
-    nameField: 'name',
-    fallbackNameField: 'email',
-    extraFields: ['email'],
-    surface: 'crm',
-    featureKey: 'crm',
-    /*
-     * And every site's leads at the org hub (AGL-2662), which is where the
-     * org-level Leads list already shows them. Read a site at a time for
-     * the reason the org-level Leads list once gave: there was no org-level collection, no
-     * `orgId` on the document to group by, and no rule admitting a
-     * collection-group read.
-     */
-    orgScopeKind: 'orgHosts',
-  },
-  {
-    /*
-     * Companies and deals are org data judged by `visibleTo`, exactly as
-     * contacts are (AGL-2622): the same tokens, the same predicate, the
-     * same gate. A company is found by its name or its domain; a deal by
-     * its title. `nameTokens` and `titleLower` are the list filters' keys
-     * and are not read here — the window matcher folds the name itself.
-     */
-    id: 'companies',
-    group: 'Companies',
-    noun: 'companies',
-    scopeKind: 'orgData',
-    collection: 'companies',
-    nameField: 'name',
-    extraFields: ['domain'],
-    featureKey: 'crm',
-  },
-  {
-    id: 'deals',
-    group: 'Deals',
-    noun: 'deals',
-    scopeKind: 'orgData',
-    collection: 'deals',
-    nameField: 'title',
-    featureKey: 'crm',
-  },
-  {
-    /*
-     * The team's own work (AGL-2662): a task by its title, an activity by
-     * the subject a sent message carried or the body a person typed. Both
-     * are org data judged by `visibleTo`, so they are read and gated
-     * exactly as contacts, companies and deals are.
-     *
-     * The collections are the PREFIXED names — `crmTasks`, `crmActivities`
-     * — because `tasks` and `activities` are words the org document wants
-     * for other things; naming them from `CRM_COLLECTIONS` is how this
-     * registry and the rules cannot spell them two ways.
-     */
-    id: 'tasks',
-    group: 'Tasks',
-    noun: 'tasks',
-    scopeKind: 'orgData',
-    collection: CRM_COLLECTIONS.tasks,
-    nameField: 'title',
-    extraFields: ['notes'],
-    featureKey: 'crm',
-  },
-  {
-    id: 'activities',
-    group: 'Activities',
-    noun: 'activities',
-    scopeKind: 'orgData',
-    collection: CRM_COLLECTIONS.activities,
-    // A sent email carries a subject; everything a person logs by hand
-    // carries only the body it was written into, and a row labelled by its
-    // document id is a row nobody recognizes.
-    nameField: 'subject',
-    fallbackNameField: 'body',
-    extraFields: ['body', 'outcome'],
-    featureKey: 'crm',
+    order: 30,
   },
   {
     id: 'components',
@@ -389,6 +226,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     // A boolean feature rather than a numeric quota: the free plan turns
     // reusable components OFF entirely rather than allowing zero of them.
     featureKey: 'reusableComponents',
+    order: 100,
   },
   {
     id: 'layouts',
@@ -398,6 +236,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     collection: 'layouts',
     nameField: 'displayName',
     entitlementKey: 'sharedLayoutsPerHost',
+    order: 110,
   },
   {
     id: 'templates',
@@ -408,6 +247,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     nameField: 'displayName',
     extraFields: ['slug'],
     entitlementKey: 'templatesPerHost',
+    order: 120,
   },
   {
     id: 'collections',
@@ -417,6 +257,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     collection: 'collections',
     nameField: 'displayName',
     extraFields: ['slug'],
+    order: 130,
   },
   {
     id: 'authors',
@@ -425,50 +266,35 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     scopeKind: 'host',
     collection: 'authors',
     nameField: 'name',
-  },
-  {
-    id: 'workflows',
-    group: 'Workflows',
-    noun: 'workflows',
-    scopeKind: 'host',
-    collection: 'workflows',
-    nameField: 'name',
-    entitlementKey: 'workflowsPerHost',
-    featureKey: 'workflows',
-  },
-  {
-    id: 'products',
-    group: 'Products',
-    noun: 'products',
-    scopeKind: 'host',
-    collection: 'products',
-    nameField: 'name',
-    extraFields: ['slug'],
-    entitlementKey: 'productsPerHost',
-    featureKey: 'commerce',
-  },
-  {
-    id: 'redirects',
-    group: 'Redirects',
-    noun: 'redirects',
-    scopeKind: 'host',
-    collection: 'redirects',
-    nameField: 'source',
-    extraFields: ['destination'],
-    entitlementKey: 'redirectsPerHost',
-    featureKey: 'redirects',
-  },
-  {
-    id: 'services',
-    group: 'Services',
-    noun: 'services',
-    scopeKind: 'host',
-    collection: 'services',
-    nameField: 'name',
-    entitlementKey: 'servicesPerHost',
-    featureKey: 'bookings',
+    order: 140,
   },
 ]
+
+/**
+ * A plugin's search source as a group of the palette.
+ *
+ * The source's plan flag and permission are not carried: the caller applies
+ * them with the extension's before the source gets here, the way every other
+ * surface the extension registers is gated. Its quota IS carried, because a
+ * quota is judged against the entitlements the scope already holds.
+ */
+export function searchSourceEntity(
+  source: ConsoleSearchSource,
+): GlobalSearchEntityDef {
+  return {
+    id: source.id,
+    group: source.group,
+    noun: source.noun,
+    scopeKind: source.scope,
+    collection: source.collection,
+    nameField: source.nameField,
+    fallbackNameField: source.fallbackNameField,
+    extraFields: source.extraFields,
+    entitlementKey: source.entitlementKey,
+    order: source.order,
+    href: source.href,
+  }
+}
 
 /** Everything the scope decision depends on. */
 export interface GlobalSearchContext {
@@ -501,30 +327,32 @@ export interface GlobalSearchContext {
   /** True once `entitlements` reflects a real answer rather than a default. */
   entitlementsReady: boolean
   /**
-   * The viewer's scope tokens for the org-shared data root, or null when
-   * `orgData` groups must not be offered at all (AGL-2596).
+   * The viewer's scope tokens for the org-shared data root under the open
+   * site, or null while they are unknown (AGL-2596).
    *
-   * Null covers three situations the resolver cannot tell apart and does not
-   * need to: the tokens are still resolving, the viewer lacks the permission
-   * the rules read for, or the surface those groups belong to is not
-   * released for them. In every case the right answer is the same — no
-   * `orgData` group — and a read attempted anyway would be denied and render
-   * as a failure the reader cannot act on.
+   * Null withholds every `orgData` group under a site: a read attempted
+   * without them would be denied and render as a failure the reader cannot
+   * act on.
    */
   orgDataTokens?: readonly string[] | null
   /**
-   * The viewer may read the organization's CRM with NO scope clause
-   * (AGL-2662) — an org-wide member standing at the org-level hub.
+   * The viewer may read the organization's shared data with NO scope clause
+   * (AGL-2662) — an org-wide member standing at the organization level.
    *
    * The other half of {@link orgDataTokens}, and the only one that answers
    * off a site: the tokens are a consent group's, and a consent group names
    * a site. The rules' `canReadScoped()` short-circuits on
    * `isOrgWideMember()`, so for that reader the clause could only ever
-   * narrow what they are already allowed — which is the same reading the
-   * CRM's own `crmVisibleToClause` makes for its listeners. False under a
-   * site, where the tokens are the question.
+   * narrow what they are already allowed. False under a site, where the
+   * tokens are the question.
    */
-  crmOrgWide?: boolean
+  orgWide?: boolean
+  /**
+   * The groups plugins contribute that the reader may open here — each
+   * plugin on for the workspace and the site, its plan flag held and its
+   * permission granted (see `useGlobalSearchSources`). Absent is none.
+   */
+  sources?: readonly GlobalSearchEntityDef[]
 }
 
 export interface GlobalSearchScope {
@@ -591,43 +419,40 @@ export function resolveGlobalSearchScope(
   const entities: GlobalSearchEntityDef[] = []
   const onHost = Boolean(context.orgId && context.hostReady && context.hostId)
   /*
-   * Whether the CRM's records may be read from where the caller stands: the
-   * viewer's tokens under a site, org-wide membership at the org hub. One
-   * expression because the CRM's own gate is one — every group the hub
-   * shows is offered or withheld together, and a reader admitted to the
-   * contacts window and refused the leads one would be told, wrongly, that
-   * a site has no leads.
+   * Whether the organization's shared data may be read from where the caller
+   * stands: through the viewer's tokens under a site, and unfiltered at the
+   * organization level only by an org-wide member, whom the rules admit
+   * without the clause.
    */
-  const crmReadable = Boolean(
+  const orgDataReadable = Boolean(
     context.orgId &&
       (onHost
         ? context.orgDataTokens?.length
-        : context.hostReady && !context.hostId && context.crmOrgWide),
+        : context.hostReady && !context.hostId && context.orgWide),
   )
+  // Listed by `order`; the sort is stable, so equal numbers keep the order
+  // the console's groups and then the plugins' were given in. A plugin's
+  // group that claims one of the console's ids is dropped: the id keys the
+  // rendered group and its rows, and two groups under one key are one group
+  // drawn twice.
+  const coreIds = new Set(GLOBAL_SEARCH_ENTITIES.map((entity) => entity.id))
+  const candidates = [
+    ...GLOBAL_SEARCH_ENTITIES,
+    ...(context.sources ?? []).filter((source) => !coreIds.has(source.id)),
+  ].sort((a, b) => a.order - b.order)
 
-  for (const definition of GLOBAL_SEARCH_ENTITIES) {
-    // Sites are the only thing searchable off a site, and the thing people
-    // navigate between most.
+  for (const definition of candidates) {
+    // Sites need only the workspace: they are what people navigate between
+    // most, and the one group of the console's own that answers off a site.
     if (definition.scopeKind === 'org' && !context.orgId) continue
     // Host collections belong to ONE site, so they are only offered on a
     // site, and only once the id is settled — a half-resolved host would
-    // address `hosts//screens`. The exception is a group with an org-level
-    // answer of its own: it is read a site at a time instead.
-    if (
-      definition.scopeKind === 'host' &&
-      !onHost &&
-      !(definition.orgScopeKind && crmReadable)
-    ) {
-      continue
-    }
+    // address `hosts//screens`.
+    if (definition.scopeKind === 'host' && !onHost) continue
     // Org data is read through the viewer's scope tokens, and without them
     // the read cannot be filtered the way the rules require — so the group
     // is withheld rather than offered and denied.
-    if (definition.scopeKind === 'orgData' && !crmReadable) continue
-    // A group whose rows open in the CRM follows the CRM's gate, whatever
-    // the collection's own scope. Without it the hub is not offered, so
-    // neither is the group.
-    if (definition.surface === 'crm' && !crmReadable) continue
+    if (definition.scopeKind === 'orgData' && !orgDataReadable) continue
     // An unresolved entitlement answers nothing: hold the gated groups until
     // it is real, rather than letting a loading default decide.
     if (
@@ -695,22 +520,6 @@ export interface GlobalSearchLinkContext {
   hostSubdomain: string | null
 }
 
-/** The record kind each CRM search group opens, for the shared builder. */
-const CRM_RECORD_KIND: Partial<Record<GlobalSearchEntity, CrmRecordKind>> & {
-  // Every kind but a lead is addressable at BOTH levels by id alone, and the
-  // org-level builder refuses `'lead'` in its type for that reason — so the
-  // three are typed narrower here rather than cast at the call site.
-  contacts: Exclude<CrmRecordKind, 'lead'>
-  leads: CrmRecordKind
-  companies: Exclude<CrmRecordKind, 'lead'>
-  deals: Exclude<CrmRecordKind, 'lead'>
-} = {
-  contacts: 'contact',
-  leads: 'lead',
-  companies: 'company',
-  deals: 'deal',
-}
-
 /**
  * Build the href for one result row.
  *
@@ -719,19 +528,26 @@ const CRM_RECORD_KIND: Partial<Record<GlobalSearchEntity, CrmRecordKind>> & {
  * are version-keyed, so there is genuinely nowhere to go. A row that cannot
  * be reached is dropped rather than rendered dead, which is the specific
  * complaint this issue opened with.
+ *
+ * A plugin's group is linked by the plugin (`ConsoleSearchSource.href`),
+ * handed the same two route params, because the console app may not import
+ * a plugin to learn its addresses.
  */
 export function buildResultHref(
-  entity: GlobalSearchEntity,
+  definition: Pick<GlobalSearchEntityDef, 'id' | 'href'>,
   row: Record<string, any>,
   context: GlobalSearchLinkContext,
   buildRoute: (route: Route, payload: Record<string, string>) => string,
 ): string | null {
   const { orgSlug, hostSubdomain } = context
   if (!orgSlug) return null
+  if (definition.href) {
+    return definition.href(row, { orgSlug, host: hostSubdomain || null })
+  }
   const id = String(row.$id ?? '')
   const host = hostSubdomain ?? ''
 
-  switch (entity) {
+  switch (definition.id) {
     case 'sites':
       return row.subdomain
         ? buildRoute(Route.HOST_DASHBOARD, {
@@ -773,79 +589,7 @@ export function buildResultHref(
     case 'collections':
     case 'authors':
       return host ? buildRoute(Route.HOST_CONTENT, { orgSlug, host }) : null
-    case 'workflows':
-      return host ? buildRoute(Route.HOST_AUTOMATION, { orgSlug, host }) : null
-    case 'products':
-      return host ? buildRoute(Route.HOST_PRODUCTS, { orgSlug, host }) : null
-    case 'redirects':
-      return host ? buildRoute(Route.HOST_REDIRECTS, { orgSlug, host }) : null
-    case 'services':
-      return host ? buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }) : null
-    case 'contacts':
-    case 'companies':
-    case 'deals':
-      // The CRM is a plugin hub, which the console app may not import, so
-      // its record pages are addressed through the shared builder the
-      // plugin's own `crmRoutes` is pinned against (AGL-2622) — the site
-      // hub's under a site, the org hub's at the org level (AGL-2662).
-      return host
-        ? crmRecordHref({ orgSlug, host }, CRM_RECORD_KIND[entity], id)
-        : crmOrgRecordHref(orgSlug, CRM_RECORD_KIND[entity], id)
-    case 'leads':
-      if (host) return crmRecordHref({ orgSlug, host }, 'lead', id)
-      // A lead addresses by its id alone at both levels (AGL-3275): it is one
-      // org row, so the person key that used to need a site beside it to say
-      // WHICH copy was meant now names the only one there is.
-      return crmOrgRecordHref(orgSlug, 'lead', id)
-    case 'tasks':
-    case 'activities':
-      return crmWorkHref(entity, row, orgSlug, host)
     default:
       return null
   }
-}
-
-/**
- * Where a task or an activity opens (AGL-2662): the record it was filed
- * under.
- *
- * Neither has a page of its own — a task is a row in a record's Tasks card
- * and in the Tasks list, an activity a line on a timeline — so the useful
- * destination is the person, company or deal it belongs to. The deal is
- * preferred, then the company, then the person: a task filed on a deal is
- * about that deal, and landing on the contact would make the reader find it
- * again.
- *
- * One that names no record at all — a standing task somebody typed into the
- * list — lands on the Tasks section, which is where it is. An activity that
- * names none has nowhere to go and returns null rather than a dead row; the
- * org hub has no activities section either, so the same is true there.
- */
-function crmWorkHref(
-  entity: 'tasks' | 'activities',
-  row: Record<string, any>,
-  orgSlug: string,
-  host: string,
-): string | null {
-  const linked: Array<[Exclude<CrmRecordKind, 'lead'>, string]> = [
-    ['deal', String(row.dealId ?? '')],
-    ['company', String(row.companyId ?? '')],
-    ['contact', String(row.contactId ?? '')],
-  ]
-  const named = linked.find(([, value]) => Boolean(value))
-  if (named) {
-    const [kind, recordId] = named
-    return host
-      ? crmRecordHref({ orgSlug, host }, kind, recordId)
-      : crmOrgRecordHref(orgSlug, kind, recordId)
-  }
-  // An activity logged against a LEAD names its site by path and not on the
-  // document, so only the site hub can address it.
-  if (entity === 'activities' && host && row.leadId) {
-    return crmRecordHref({ orgSlug, host }, 'lead', String(row.leadId))
-  }
-  if (entity !== 'tasks') return null
-  return host
-    ? crmSectionHref({ orgSlug, host }, 'tasks')
-    : crmOrgSectionHref(orgSlug, 'tasks')
 }

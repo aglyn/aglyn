@@ -27,6 +27,7 @@
  * reason rather than swallowed.
  */
 
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { CrmRecipeSiteStatus } from '../constants/api-routes'
@@ -83,6 +84,9 @@ jest.mock('./sending-addresses-card', () => ({
   SendingAddressesCard: () => null,
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The Sharing rules card beside it (AGL-3336) offers campaigns as a condition.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useOrgCampaigns: () => ({ options: [], truncated: false, ready: true }),
   // The viewer's reach, which `useCrmScope` reads only for a site in a
   // declared consent group (AGL-3320); an org-wide member here.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
@@ -186,7 +190,25 @@ const statusRead = async () => {
 /** The drawer's own Install button — named exactly, unlike the rows' "Install <recipe>". */
 const drawerInstall = () => screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement
 
+
+/**
+ * The list of a site's actions is the workflows plugin's (AGL-3080): the card
+ * asks the record-route registry, so this stands in the address that plugin
+ * publishes. What it publishes is held in its own spec.
+ */
+function standInActionRoute() {
+  registerPluginRecordRoute(
+    'action',
+    {
+      list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/automation/actions`,
+      record: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/automation/actions`,
+    },
+    { pluginId: 'workflows' },
+  )
+}
+
 beforeEach(() => {
+  standInActionRoute()
   jest.clearAllMocks()
   window.sessionStorage.clear()
   calls = []

@@ -26,6 +26,7 @@ import {
   registerPluginActivityActions,
   resetPluginActivityActionsForTests,
   isPluginActivityTargetType,
+  pluginActivityTargetLabel,
   pluginActivityTargetNoun,
   PLUGIN_ACTIVITY_GROUP_MAX_ACTIONS,
 } from './plugin-activity-actions'
@@ -148,5 +149,39 @@ describe('a plugin’s namespaced activity target (AGL-2978)', () => {
       expect([type, isPluginActivityTargetType(type)]).toEqual([type, false])
       expect([type, pluginActivityTargetNoun(type)]).toEqual([type, undefined])
     }
+  })
+})
+
+describe('a plugin’s un-namespaced target types (AGL-3080)', () => {
+  beforeEach(() => resetPluginActivityActionsForTests())
+
+  it('answers the noun the owning plugin declared, and nothing for another type', () => {
+    registerPluginActivityActions({
+      pluginId: 'jobs',
+      group: { id: 'jobs', label: 'Jobs' },
+      actions: [],
+      targetTypes: { batchJob: 'Batch job' },
+    })
+    expect(pluginActivityTargetLabel('batchJob')).toBe('Batch job')
+    expect(pluginActivityTargetLabel('screen')).toBeUndefined()
+    expect(pluginActivityTargetLabel(42)).toBeUndefined()
+  })
+
+  it('refuses a type another plugin already declared, keeping the first owner', () => {
+    registerPluginActivityActions({
+      pluginId: 'jobs',
+      group: { id: 'jobs', label: 'Jobs' },
+      actions: [],
+      targetTypes: { batchJob: 'Batch job' },
+    })
+    expect(() =>
+      registerPluginActivityActions({
+        pluginId: 'other',
+        group: { id: 'other', label: 'Other' },
+        actions: [],
+        targetTypes: { batchJob: 'Something else' },
+      }),
+    ).toThrow(/already declared by "jobs"/)
+    expect(pluginActivityTargetLabel('batchJob')).toBe('Batch job')
   })
 })

@@ -174,12 +174,20 @@ describe('the doctrine block', () => {
     // A layout's footer sent "Request a Consultation" to the home screen for want
     // of a consultation screen. The rule names the way out the refusal asks for.
     const rule10 = AI_BUILDING_DOCTRINE.split('\n').find((line) => line.startsWith('10. ')) ?? ''
-    expect(rule10).toContain('A link goes to a screen that does what its words say, or is left out.')
+    expect(rule10).toContain('A link goes to a page that does what its words say, or is left out.')
+  })
+
+  it('says in rule 16 that a player needs the brief to ask and the plan to list it, and gives a template none in rule 17 (AGL-3433)', () => {
+    // The 9/22 article template reached for a Video embed its brief never
+    // asked for, while rule 17 told it a template may carry one.
+    const rule = (n: number) => AI_BUILDING_DOCTRINE.split('\n').find((line) => line.startsWith(`${n}. `)) ?? ''
+    expect(rule(16)).toContain('no third-party player unless the brief asks for one and the plan lists it')
+    expect(rule(17)).toContain('a template at most 400 elements, 60 KB stored, 1.5 MB of images, no embeds')
   })
 
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      '234655edf7e3143960df5af93a664ea5697c20247d8f93e891dcd5b190b9b5d1',
+      '076f7a49597a403a154d5ee25fcfccd7a9ab06f00a6f6b8c375d31ca708535c7',
     )
   })
 
@@ -558,7 +566,7 @@ describe('runValidatedGeneration — a plan', () => {
     if (result.status !== 'needs_input') return
     expect(result.violations.map((violation) => violation.code)).toEqual(['plan-screen-without-layout'])
     expect(result.message).toBe(
-      `This could not be built within the building rules. Rule 2 (${AI_DOCTRINE_RULES[2]}): A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one.`,
+      `This could not be built within the building rules. Rule 2 (${AI_DOCTRINE_RULES[2]}): A page names no layout the site has or the plan creates. Put every page in the site's layout, or plan one.`,
     )
   })
 

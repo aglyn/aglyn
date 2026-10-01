@@ -16,7 +16,6 @@
  */
 
 import {
-  crmContactByEmailHref,
   crmHubHref,
   crmOrgHubHref,
   crmOrgRecordHref,
@@ -49,9 +48,9 @@ describe('crmRoutes agrees with the console-side builders', () => {
     expect(routes.deal('d1')).toBe(crmRecordHref(context, 'deal', 'd1'))
   })
 
-  it('asks the Contacts list to open one address with the same key', () => {
+  it('asks the Contacts list to open one address by its email key', () => {
     expect(routes.contactByEmail('ada@example.test')).toBe(
-      crmContactByEmailHref(context, 'ada@example.test'),
+      '/acme/hosts/shop/crm/contacts?email=ada%40example.test',
     )
   })
 })

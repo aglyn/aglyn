@@ -30,3 +30,12 @@
  * agreement across a bundle move.
  */
 export const BUNDLE_ID = 'forms'
+
+/**
+ * The segment a form's pages live under on a site, as `plugins.config.json`
+ * declares it in `besignerDocuments`: the form's own page is the hub's
+ * `forms/<formId>`, and the console's plugin-document editor and preview
+ * serve `forms/<formId>/versions/<versionId>/…`. In URLs already shared, so
+ * never renamed.
+ */
+export const FORMS_DOCUMENT_SEGMENT = 'forms'

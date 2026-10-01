@@ -346,6 +346,12 @@ export const AI_EMAIL_CLIP_BYTES = 102_000
  * page loads, so it carries the least imagery; a form is fields and a
  * button; an email is held to the clipping threshold on its rendered HTML.
  * No kind names a font beyond the theme's.
+ *
+ * A third-party player is a page's or a component's to carry, and only where
+ * a confirmed plan lists it (rule 16). A template is rendered for every
+ * record it serves and a layout around every page, so neither carries one
+ * (AGL-3433): an embed there loads a stranger's code on every page of a
+ * collection or a site.
  */
 export const AI_OUTPUT_BUDGETS: Record<AiOutputKind, AiOutputBudget> = {
   page: {
@@ -359,7 +365,7 @@ export const AI_OUTPUT_BUDGETS: Record<AiOutputKind, AiOutputBudget> = {
     nodes: 400,
     bytes: 60_000,
     imageBytes: 1_500_000,
-    embeds: 1,
+    embeds: 0,
     fontFamilies: 0,
   },
   component: {

@@ -324,7 +324,7 @@ export enum FieldComponentType {
   /**
    * Select listing the model fields of the nearest ancestor node's chosen
    * dataset (AGL-556): the editor resolves options from
-   * EntityPickerContext.datasetFields using the ancestor's `datasetId`
+   * EntityPickerContext.entityFields using the ancestor's `datasetId`
    * (or legacy `datasetName` matched by label) and persists the stable
    * model fieldId — field renames never break the mapping.
    */

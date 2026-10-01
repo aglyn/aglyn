@@ -7,7 +7,7 @@ description: Set your site's colors, fonts, and light/dark schemes with a live p
 # Theme Builder
 
 The **theme builder** controls how your whole site looks — colors, fonts, and light/dark
-schemes — applied consistently across every screen.
+schemes — applied consistently across every page.
 
 :::info Plan availability
 **Free**. Theming is core to every site.
@@ -17,8 +17,8 @@ schemes — applied consistently across every screen.
 
 ## Edit your theme
 
-- Pick a theme — **Material UI (default)**, a built-in theme, one of your own, or one from
-  the marketplace — and preview it before it goes live.
+- Pick a theme — the platform's default, stock **Material UI**, another built-in theme, one of
+  your own, or one from the marketplace — and preview it before it goes live.
 - Open the **theme editor** under **Setup**. Your changes are stored on top of the theme
   you picked, so it can always be restored or saved as a theme of your own.
 - Set your palette and typography; changes render in a **live preview**.
@@ -36,4 +36,4 @@ so previews match the live site.
 ## Related
 
 - [The Besigner](../besigner/overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

@@ -36,6 +36,8 @@
  *   history row already says it.
  * - **The gateway hold** (AGL-3326), and its release.
  * - **The enrollment**, with who enrolled them, and each curated step.
+ * - **The steps it skipped** (AGL-3228), when it began past the first: one
+ *   entry naming them, never a "sent" — nothing of ours went out for them.
  *
  * Client-safe and free of React: the view renders these entries, and the
  * spec reads them.
@@ -62,6 +64,7 @@ import {
 /** What kind of thing an entry is, which the view draws an icon for. */
 export type OutreachTimelineKind =
   | 'enrolled'
+  | 'skipped'
   | 'curated'
   | 'sent'
   | 'task'
@@ -180,7 +183,8 @@ const TIE_ORDER: Record<OutreachTimelineKind, number> = {
   task: 5,
   sent: 5,
   curated: 6,
-  enrolled: 7,
+  skipped: 7,
+  enrolled: 8,
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
@@ -213,6 +217,24 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
         enrollment.target === 'lead' ? 'As a lead' : 'As a contact',
         enrollment.cold ? 'Cold — confirmed by the member who enrolled them' : null,
       ].filter((fact): fact is string => Boolean(fact)),
+      tone: 'default',
+    })
+  }
+
+  // ── Skipped at enrollment (AGL-3228) ───────────────────────────────────
+  const skipped = (enrollment.skippedSteps ?? []).filter((entry) => Number.isInteger(entry?.stepIndex))
+  if (skipped.length) {
+    const start = enrollment.startStepIndex ?? skipped.length
+    entries.push({
+      key: 'skipped',
+      kind: 'skipped',
+      atMs: skipped[0].atMs || enrollment.createdAtMs,
+      title:
+        skipped.length === 1
+          ? `Began at step ${start + 1} — step 1 skipped`
+          : `Began at step ${start + 1} — steps 1–${skipped.length} skipped`,
+      detail: 'Already done by hand before they were enrolled, so the sequence never sent them.',
+      facts: skipped.map((entry) => outreachStepName(steps, entry.stepIndex)),
       tone: 'default',
     })
   }
@@ -455,7 +477,7 @@ export function outreachEnrollmentTimeline(input: OutreachTimelineInput): Outrea
       key: 'finished',
       kind: 'finished',
       atMs: last?.atMs ?? enrollment.updatedAtMs,
-      title: 'Finished — every step ran',
+      title: enrollment.skippedSteps?.length ? 'Finished — every remaining step ran' : 'Finished — every step ran',
       facts: [],
       tone: 'success',
     })

@@ -41,7 +41,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffChurnReportCard from '../../../../components/staff-churn-report-card.component'
-import StaffReversalRecoveryCard from '../../../../components/staff-reversal-recovery-card.component'
+import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -54,10 +54,11 @@ function formatDate(ms: number | null): string {
 }
 
 /**
- * Staff overview (AGL-135/238): headline metrics, newest organizations,
- * purchase feed, and top usage rollups — read-only over
- * /api/admin/overview (staff-claim gated); mutations stay on the audited
- * Organizations page.
+ * Staff overview (AGL-135/238): headline metrics, newest organizations and
+ * top usage rollups — read-only over /api/admin/overview (staff-claim gated);
+ * mutations stay on the audited Organizations page. What a plugin holds
+ * across every workspace (the marketplace's purchase feed) is drawn by that
+ * plugin in the `staffOverview` zone (AGL-3080).
  */
 const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
@@ -262,7 +263,9 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                 ),
               })),
               {
-                size: { xs: 12, md: 6 },
+                // Full width since the purchase feed beside it became the
+                // marketplace's widget below (AGL-3080).
+                size: { xs: 12 },
                 children: (
                   <CardDisplay
                     header={'Newest organizations'}
@@ -309,61 +312,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                 ),
               },
               {
-                size: { xs: 12, md: 6 },
-                children: (
-                  <CardDisplay
-                    header={'Marketplace purchases'}
-                    help={docsHelp('publisherHandbook', {
-                      anchor: '#getting-paid',
-                      excerpt:
-                        'Recent paid plugin purchases with the platform fee taken from each sale.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    {(data?.purchases ?? []).length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {'No purchases yet.'}
-                      </Typography>
-                    ) : (
-                      <Stack spacing={0.5}>
-                        {(data?.purchases ?? []).map((purchase: any) => (
-                          <Stack
-                            key={purchase.$id}
-                            direction="row"
-                            sx={{ justifyContent: 'space-between' }}
-                          >
-                            <Typography
-                              variant="body2"
-                              noWrap
-                              sx={{ maxWidth: '60%' }}
-                            >
-                              {purchase.listingId ?? purchase.$id}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {`$${(purchase.amountCents / 100).toFixed(2)}` +
-                                ` (fee $${(purchase.feeCents / 100).toFixed(
-                                  2,
-                                )}) · ${formatDate(purchase.createdAt)}`}
-                            </Typography>
-                          </Stack>
-                        ))}
-                      </Stack>
-                    )}
-                  </CardDisplay>
-                ),
-              },
-              {
                 size: { xs: 12 },
-                children: (
-                  <StaffReversalRecoveryCard
-                    rows={data?.reversalRecovery}
-                    owedCents={metrics?.reversalOwedCents}
-                  />
-                ),
+                // The marketplace's cards — recent purchases and the refund-
+                // reversal recovery queue (AGL-2309) — read from its own
+                // collection through its own staff route (AGL-3080).
+                children: <PluginWidgetSlot slot="staffOverview" />,
               },
               {
                 size: { xs: 12 },

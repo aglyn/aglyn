@@ -405,7 +405,6 @@ const recipientsOf = (entry: { to: string[] | string }): string[] =>
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
-  delete process.env.USAGE_ALERT_APPROACH_PCT
   delete process.env.BILL_ASSIST_TOKENS_FROM
   delete process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD
   delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
@@ -1151,7 +1150,9 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     expect(assistAlerts()).toHaveLength(1)
     const [alert] = assistAlerts()
     expect(alert.title).toContain('extra credits are now billed')
-    expect(alert.body).toContain('3,000 of 2,750 credits used')
+    expect(alert.body).toContain(
+      'has used 3,000 AI assist credits — more than the 2,750 your plan includes this month',
+    )
     expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
     expect(alert.body).toContain('unless you set a stop under Billing → Usage')
     expect(alert.body).not.toContain('stops here until next month')
@@ -1182,7 +1183,9 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     expect(assistAlerts()).toHaveLength(1)
     const [alert] = assistAlerts()
     expect(alert.title).toContain('extra credits are now billed')
-    expect(alert.body).toContain('5,250 of 4,750 credits used')
+    expect(alert.body).toContain(
+      'has used 5,250 AI assist credits — more than the 4,750 your plan includes this month',
+    )
     expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
     expect(alert.body).not.toContain('$0.00 per 1,000')
   })
@@ -1202,7 +1205,9 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     expect(assistAlerts()).toHaveLength(1)
     const [alert] = assistAlerts()
     expect(alert.title).toContain('extra credits are now billed')
-    expect(alert.body).toContain('1,000 of 750 credits used')
+    expect(alert.body).toContain(
+      'has used 1,000 AI assist credits — more than the 750 your plan includes this month',
+    )
     expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
   })
 

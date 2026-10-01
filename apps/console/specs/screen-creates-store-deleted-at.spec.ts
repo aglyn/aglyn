@@ -91,6 +91,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'tools/scripts/backfill-reconstructed-activity.mjs': 'writes activity entries about screens',
   'tools/scripts/backfill-scheme-dark.mjs': 'rewrites themes on hosts; updates artifacts that exist',
   'tools/scripts/backfill-theme-history.mjs': 'writes theme history; names screens in its rules fixture',
+  'tools/scripts/generate-plugin-manifests.mjs':
+    'writes generated source files; names `screens` as a site-export bundle key no plugin may take',
 }
 
 /** The collection, spelled as a literal. */

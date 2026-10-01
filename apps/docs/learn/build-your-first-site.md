@@ -17,8 +17,8 @@ order; each links to the full how-to.
    components onto the canvas, arrange the hierarchy, and edit text inline.
 4. **[Style responsively](/building-sites/besigner/responsive-styling)** — set
    styles per breakpoint and control visibility per device.
-5. **[Publish your first screen](/getting-started/publish-your-first-screen)** —
-   push a screen live.
+5. **[Publish your first page](/getting-started/publish-your-first-screen)** —
+   push a page live.
 6. **[Connect a custom domain](/building-sites/custom-domains/overview)** — point
    your own domain at the site.
 7. **[Set up SEO](/building-sites/seo/overview)** — titles, descriptions, sitemap,

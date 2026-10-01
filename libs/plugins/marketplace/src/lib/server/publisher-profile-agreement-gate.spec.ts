@@ -40,8 +40,8 @@ const mockTimestampSentinel = Symbol('serverTimestamp')
  */
 const mockPublished = { value: false }
 
-jest.mock('@aglyn/aglyn/app-utils/publisher-agreement', () => ({
-  ...jest.requireActual('@aglyn/aglyn/app-utils/publisher-agreement'),
+jest.mock('../model/publisher-agreement', () => ({
+  ...jest.requireActual('../model/publisher-agreement'),
   publisherAgreementIsPublished: () => mockPublished.value,
 }))
 
@@ -80,7 +80,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-import * as agreement from '@aglyn/aglyn/app-utils/publisher-agreement'
+import * as agreement from '../model/publisher-agreement'
 import { publisherProfileSaveHandler } from './publisher-profile-save'
 
 const writes = () =>
@@ -172,7 +172,7 @@ describe('accepting the publisher agreement (AGL-1660)', () => {
     // route refuses in production too — and when the page is published, the
     // same assertion expects 200 without anyone editing this file.
     const real = jest.requireActual(
-      '@aglyn/aglyn/app-utils/publisher-agreement',
+      '../model/publisher-agreement',
     ) as typeof agreement
     mockPublished.value = real.publisherAgreementIsPublished()
     const res = makeRes()

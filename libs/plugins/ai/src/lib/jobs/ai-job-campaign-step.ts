@@ -42,7 +42,6 @@ import {
 } from './ai-job-generation'
 import {
   AI_EMAIL_DESIGN_RESOURCE,
-  AI_EMAIL_PLUGIN_ID,
   AI_EMAIL_SAVE_FAILURE_COPY,
   AI_JOB_EMAIL_STEP_BUDGETS,
   aiEmailDesignContent,
@@ -94,9 +93,6 @@ import { registerAiJobStep } from './ai-jobs'
  * reported, a design alone is drafted into a campaign from the copy the
  * design already stores, and neither spends.
  */
-
-/** The id the marketing plugin is registered under. */
-export const AI_CAMPAIGN_PLUGIN_ID = 'marketing'
 
 /** The resource the marketing plugin writes a draft campaign under. */
 export const AI_CAMPAIGN_RESOURCE = 'campaign'
@@ -183,8 +179,8 @@ export const aiCampaignJobAdmission: AiJobAdmission = (context) =>
   aiPluginDraftAdmissionRefusal(context, {
     kind: 'campaign',
     drafts: [
-      { resource: AI_EMAIL_DESIGN_RESOURCE, pluginId: AI_EMAIL_PLUGIN_ID, label: 'Email' },
-      { resource: AI_CAMPAIGN_RESOURCE, pluginId: AI_CAMPAIGN_PLUGIN_ID, label: 'Marketing' },
+      { resource: AI_EMAIL_DESIGN_RESOURCE, label: 'Email' },
+      { resource: AI_CAMPAIGN_RESOURCE, label: 'Marketing' },
     ],
     ownCheck: async () =>
       aiCampaignPlanAllows(context.org)
@@ -250,7 +246,7 @@ export function createAiJobCampaignStep(deps: AiJobCampaignStepDeps = {}): AiJob
     // Who it is for and when to send it: read from the site, told to the
     // person, and never sent to the model.
     const list = await suggestAiCampaignList({ hostId, brief: job.brief })
-    const sendTime = list ? await readAiListSendTime(firestore, { orgId: job.orgId, hostId, listId: list.id }) : null
+    const sendTime = list ? await readAiListSendTime({ ...context, listId: list.id }) : null
     const note = aiCampaignAudienceNote(list, sendTime)
 
     // A design an earlier run wrote is drafted into its campaign, unspent.
@@ -270,7 +266,7 @@ export function createAiJobCampaignStep(deps: AiJobCampaignStepDeps = {}): AiJob
 
     const [inventory, products] = await Promise.all([
       readInventory(job.orgId, hostId, { firestore }),
-      resolveAiEmailProducts(firestore, { hostId, brief: job.brief, inputs: job.inputs }),
+      resolveAiEmailProducts({ hostId, brief: job.brief, inputs: job.inputs }),
     ])
     const refusal = await design.refusal(context)
     if (refusal) {

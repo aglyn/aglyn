@@ -1511,8 +1511,13 @@ running it.
 
 SEO by AI (AGL-2910): `src/lib/jobs/ai-job-seo-step.ts`, its generation call in
 `src/lib/runtime/seo-fields.ts`, its strict tools and their answer checks in
-`src/lib/tools/ai-seo-tool.ts`, and the audit's scoring — no model — in
-`src/lib/runtime/seo-audit.ts`. `inputs.target` names the work:
+`src/lib/tools/ai-seo-tool.ts`, and the audit's queue of pages owed generated
+fixes in `src/lib/runtime/seo-audit.ts`. The findings and the scores are not the
+plugin's: they are the platform's SEO check (`@aglyn/aglyn/app-utils/seo-audit`,
+read through `seo-site-scan` and `seo-page-facts`), which the site's SEO section
+draws for every owner through `GET /api/hosts/seo-check`, with or without this
+plugin. The audit card sits in the `hostSeo` zone under that check, is handed its
+report as `check`, and lists only the fixes. `inputs.target` names the work:
 
 - `screen` (`screenId`, `versionId`, `fields`, `keywords`): one page's search
   listing, written from the version's text. Asked by the "Write SEO" card in
@@ -1521,7 +1526,8 @@ SEO by AI (AGL-2910): `src/lib/jobs/ai-job-seo-step.ts`, its generation call in
   `fields`): one product's listing, from what the product editor handed over.
   The step never reads a product document; the commerce plugin's editor hosts
   the same zone through `useConsoleWidgetSlot`.
-- `site` (`keywords`, one `/path: keyword, keyword` line a page): the audit.
+- `site` (`keywords`, one `/path: keyword, keyword` line a page — the lines the
+  SEO check was last run with): the audit.
 
 Every output is `resource: 'seo'` with a `proposal` (`src/lib/model/ai-seo.ts`),
 and the step writes nothing. `generateSeoFields` is the stable entry point a page
@@ -1529,8 +1535,9 @@ generator calls for a new page's title and description.
 
 **An audit continues.** The first pass reads the pages the sitemap lists — the
 routing map less template, status and non-public screens, through the shared
-predicates — with their published versions and the shared layouts; scores every
-page; records `audit:report`; and runs the first unit of generated work. Each
+predicates — with their published versions and the shared layouts, through the
+platform scan the SEO check uses; scores every page through the check; records
+`audit:report`; and runs the first unit of generated work. Each
 later pass runs one more unit — `audit:site` (structured data and the agent
 guidance `/llms.txt` leads with), then `audit:fixes:{n}` batches of pages — and
 returns `continue: true` while units remain. The machine records a continuing
@@ -2086,14 +2093,18 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,053 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,060 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
   palette learned the layout elements' Color scheme (AGL-3284): 20 estimated
-  tokens on every document door's cached prefix, the page's now 4,618. Three
-  tokens now separate the ceiling from the wall, so the next palette line a
-  section pass carries has to pay for itself. A two-person introduction drawn
+  tokens on every document door's cached prefix, the page's then 4,618. Three
+  tokens then separated the ceiling from the wall, so the next palette line a
+  section pass carries has to pay for itself — and the Video element's did
+  (AGL-3433): the catalog stopped printing a name that only spells its id
+  again (`image (Image)`, `searchBox (Search Box)`), which, with the copy that
+  calls a screen a page (AGL-3430), brought the page's prefix to 4,601 and left
+  ten. A two-person introduction drawn
   roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
   real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,

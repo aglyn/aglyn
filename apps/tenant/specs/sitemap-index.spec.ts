@@ -99,7 +99,25 @@ const mockSite: {
   products: Row[]
   collections: Row[]
   screens: Row[]
-} = { store: {}, products: [], collections: [], screens: [] }
+  /** Collections whose every read rejects, as a Firestore outage would. */
+  broken: string[]
+} = { store: {}, products: [], collections: [], screens: [], broken: [] }
+
+const mockBrokenQuery = (): any => {
+  const failed = async () => {
+    throw new Error('unavailable')
+  }
+  const query: any = {
+    where: () => query,
+    orderBy: () => query,
+    select: () => query,
+    offset: () => query,
+    limit: () => query,
+    count: () => ({ get: failed }),
+    get: failed,
+  }
+  return query
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -118,6 +136,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
                   }),
                 }
               }
+              if (mockSite.broken.includes(name)) return mockBrokenQuery()
               if (name === 'screens') return mockQuery(mockSite.screens)
               if (name === 'products') return mockQuery(mockSite.products)
               if (name === 'collections') return mockQuery(mockSite.collections)
@@ -146,6 +165,7 @@ const givenSite = (options: {
   store?: Record<string, unknown>
   products?: Row[]
   collections?: Row[]
+  broken?: string[]
 }) => {
   mockGetHost.mockResolvedValue({
     host: {
@@ -161,6 +181,7 @@ const givenSite = (options: {
   mockSite.products = options.products ?? []
   mockSite.collections = options.collections ?? []
   mockSite.screens = options.screenDocs ?? []
+  mockSite.broken = options.broken ?? []
 }
 
 const entryRows = (count: number, prefix = 'post'): Row[] =>
@@ -373,6 +394,25 @@ describe('sitemap index (AGL-2520)', () => {
 
     expect(locsOf(await fetchXml('/sitemaps/products/1.xml'))).toEqual([
       `${BASE}/products/mug`,
+    ])
+  })
+
+  it('keeps every other section in the index when one declared section cannot be read', async () => {
+    // Each declared section is counted on its own: products failing to count
+    // must not take the catalog, or the content sections, out with it.
+    givenSite({
+      store: { pdpScreenId: 'pdp', collectionScreenId: 'plp' },
+      broken: ['products'],
+      collections: [
+        { id: 'c1', data: { kind: 'catalog', slug: 'sale' } },
+        { id: 'c2', data: { kind: 'content', slug: 'blog' }, entries: entryRows(1) },
+      ],
+    })
+
+    expect(locsOf(await fetchXml(''))).toEqual([
+      `${BASE}/sitemaps/pages/1.xml`,
+      `${BASE}/sitemaps/catalog/1.xml`,
+      `${BASE}/sitemaps/content-blog/1.xml`,
     ])
   })
 

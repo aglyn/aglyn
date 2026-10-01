@@ -1973,7 +1973,8 @@ export function EntryDetailPage() {
                       excerpt:
                         'The film an entry is about, played in place of the ' +
                         'cover image at the top of the entry. Choose one from ' +
-                        'the media library or paste a video or Wistia link.',
+                        'the media library or paste a link to a video file ' +
+                        'or to a video host.',
                     })}
                     contentGutterX
                     contentGutterY
@@ -2137,7 +2138,7 @@ export function EntryDetailPage() {
                       title: 'The stored document',
                       excerpt:
                         'Every field this entry holds, exactly as saved — the ' +
-                        'names a template screen’s entry tokens read from.',
+                        'names a template page’s entry tokens read from.',
                     })}
                     // Gutters and the content border belong to the CONTENT, so
                     // they come off with it. Left on, a closed card draws an

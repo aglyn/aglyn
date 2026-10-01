@@ -63,7 +63,10 @@ export function isDuplicableResourceKind(
 
 /**
  * The kinds that live under a site and are copied by the core server module;
- * the other two belong to the plugins that own their collections.
+ * the other two belong to the plugins that own their collections. A copy is
+ * made by the platform's own recipe for its kinds, and by the recipe the
+ * owning plugin declares beside its collection for the rest (a workflow's,
+ * in `plugins.config.json`); a kind here with neither is refused.
  */
 export const DUPLICABLE_HOST_RESOURCE_KINDS = [
   'screen',
@@ -92,7 +95,7 @@ export const DUPLICATE_BUSY_MESSAGE = 'That copy is still being made'
 
 /** What a person calls one of each, in the dialog and the feed. */
 export const DUPLICABLE_RESOURCE_NOUNS: Record<DuplicableResourceKind, string> = {
-  screen: 'screen',
+  screen: 'page',
   component: 'component',
   layout: 'layout',
   template: 'template',
@@ -116,11 +119,11 @@ export const DUPLICATE_COPIES: Record<DuplicableResourceKind, readonly string[]>
   component: [
     'The definition and its properties',
     'The latest version as a new draft',
-    'No instances — screens keep pointing at the original',
+    'No instances — pages keep pointing at the original',
   ],
   layout: [
     'The latest version, with its full element tree and properties',
-    'A new draft — no screen uses the copy yet',
+    'A new draft — no page uses the copy yet',
   ],
   template: [
     'The element tree, placeholders and properties',

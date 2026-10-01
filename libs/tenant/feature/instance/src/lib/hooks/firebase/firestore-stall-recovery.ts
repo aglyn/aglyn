@@ -21,6 +21,8 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 
+import { browserWedgeEscalationFor } from './firestore-multitab-wedge'
+
 /**
  * RECOVERING A FIRESTORE CLIENT THAT HAS STOPPED SYNCING (AGL-3373).
  *
@@ -89,6 +91,19 @@ import {
  *   a page stalls together, and one cycle serves them all. A concurrent
  *   request shares the cycle already running.
  * - **The network is always re-enabled**, including when disabling fails.
+ * - **Each step is bounded by {@link NETWORK_STEP_TIMEOUT_MS}.** Both calls are
+ *   queued on the client's AsyncQueue, and when another tab has locked the
+ *   shared IndexedDB they queue behind an operation that never finishes
+ *   (AGL-3428). Unbounded, the first such cycle never settled, and every
+ *   later recovery request shared it forever.
+ *
+ * ## When the cycle is not enough (AGL-3428)
+ *
+ * A tab frozen partway through an IndexedDB transaction holds every store the
+ * SDK uses, and the election the cycle forces cannot run. For a client on the
+ * durable multi-tab cache the cycle is followed by the lease check in
+ * `firestore-multitab-wedge.ts`, which moves the tab to a memory cache when
+ * the lease shows the wedge.
  */
 
 /**
@@ -102,6 +117,12 @@ export const FIRESTORE_STALL_MS = 8_000
 /** The least time between two recoveries of the same client. */
 export const STALL_RECOVERY_COOLDOWN_MS = 30_000
 
+/**
+ * The longest `disableNetwork` or `enableNetwork` may take. Both finish in
+ * milliseconds on a client whose queue is moving.
+ */
+export const NETWORK_STEP_TIMEOUT_MS = 5_000
+
 /** What a recovery request did. */
 export type StallRecoveryOutcome =
   /** The browser reports no network: the cache is the right answer. */
@@ -112,8 +133,10 @@ export type StallRecoveryOutcome =
   | 'cooling'
   /** The network was cycled. */
   | 'recovered'
-  /** The cycle threw; the network was still re-enabled if at all possible. */
+  /** The cycle threw or timed out; the network was still re-enabled if at all possible. */
   | 'failed'
+  /** The multi-tab cache was wedged and this tab is moving to the memory cache. */
+  | 'fell-back'
 
 export interface StallRecoveryDeps {
   /** Take the client off the network. */
@@ -126,6 +149,13 @@ export interface StallRecoveryDeps {
   isVisible?: () => boolean
   now?: () => number
   cooldownMs?: number
+  /** The bound on each of `disable` and `enable`. */
+  stepTimeoutMs?: number
+  /**
+   * Runs after every cycle; resolves `true` when it has moved the tab off
+   * the shared cache. Only a multi-tab client has one.
+   */
+  afterCycle?: () => Promise<boolean>
 }
 
 export interface StallRecovery {
@@ -147,21 +177,40 @@ export function createStallRecovery(deps: StallRecoveryDeps): StallRecovery {
     isVisible = documentVisible,
     now = Date.now,
     cooldownMs = STALL_RECOVERY_COOLDOWN_MS,
+    stepTimeoutMs = NETWORK_STEP_TIMEOUT_MS,
+    afterCycle,
   } = deps
   let lastStartedAt: number | undefined
   let running: Promise<StallRecoveryOutcome> | undefined
 
+  /** Whether `step` settled successfully within `stepTimeoutMs`. */
+  const bounded = (step: () => Promise<void>): Promise<boolean> =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), stepTimeoutMs)
+      const done = (ok: boolean) => {
+        clearTimeout(timer)
+        resolve(ok)
+      }
+      try {
+        step().then(
+          () => done(true),
+          () => done(false),
+        )
+      } catch {
+        done(false)
+      }
+    })
+
   const cycle = async (): Promise<StallRecoveryOutcome> => {
     let outcome: StallRecoveryOutcome = 'recovered'
-    try {
-      await disable()
-    } catch {
-      outcome = 'failed'
-    }
-    try {
-      await enable()
-    } catch {
-      outcome = 'failed'
+    if (!(await bounded(disable))) outcome = 'failed'
+    if (!(await bounded(enable))) outcome = 'failed'
+    if (afterCycle) {
+      try {
+        if (await afterCycle()) return 'fell-back'
+      } catch {
+        // The escalation is best effort; the cycle's own outcome stands.
+      }
     }
     return outcome
   }
@@ -202,6 +251,7 @@ export function recoverStalledFirestore(
     recovery = createStallRecovery({
       disable: () => disableNetwork(firestore),
       enable: () => enableNetwork(firestore),
+      afterCycle: browserWedgeEscalationFor(firestore),
     })
     recoveries.set(firestore, recovery)
   }

@@ -363,7 +363,7 @@ emulator-host env vars** so it can never touch production):
 - Host-scoped: root-level media (with `createdAt`), bookings (with
   `startsAtMs`), a service, a blog collection + entry, variables/functions/
   workflows/actions, an overlay, a sent campaign, a lead.
-- The CRM (AGL-2610), from `tools/scripts/lib/crm-fixtures.mjs`: a bakery's
+- The CRM (AGL-2610), from `libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs`: a bakery's
   wholesale book — six contacts under the `demo` facet (one with a phone
   number, custom-field values, an order history), a company, a Sales
   pipeline with a card in every open stage and a won one, a Renewals
@@ -377,7 +377,7 @@ emulator-host env vars** so it can never touch production):
   `LEGAL_DOCUMENT_VERSION` names) is seeded beside them
   so no page opens under the re-acceptance banner.
 - A workspace on Free (AGL-2809), from
-  `tools/scripts/lib/crm-free-plan-fixtures.mjs`: auth user
+  `libs/plugins/crm/scripts/fixtures/crm-free-plan-fixtures.mjs`: auth user
   `e2e-free-owner@aglyn.test` / `E2e-Password-1` (uid `e2e-free-owner`,
   **no** `staff` claim), org `e2e-free-owner` (slug `e2e-free`,
   `plan: 'free'`, no subscription), site `free-demo`, three captured contacts

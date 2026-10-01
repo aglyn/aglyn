@@ -197,8 +197,8 @@ export function screenSlugHasPathSeparator(
  * "nest me" and the hierarchy is what actually composes the longer path.
  */
 export const SCREEN_SLUG_PATH_SEPARATOR_MESSAGE =
-  'A slug is one path segment — remove the "/" and nest the screen under a ' +
-  'parent screen instead'
+  'A slug is one path segment — remove the "/" and nest the page under a ' +
+  'parent page instead'
 
 /** Minimal screen shape the hierarchy helpers need. */
 export interface ScreenRouteNode {

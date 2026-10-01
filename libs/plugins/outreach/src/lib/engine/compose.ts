@@ -81,6 +81,7 @@ import {
   isInThreadEmailStep,
   OUTREACH_PERSONAL_LINE_FIELD,
   outreachSubjectHasReplyPrefix,
+  outreachThreadStartSubject,
 } from './sequence-validation'
 
 /** The way out every email offers, word for word. */
@@ -154,7 +155,7 @@ export interface ComposeOutreachEmailInput {
     OutreachEnrollment,
     'email' | 'stepIndex' | 'personalLine' | 'threadSubject' | 'messageIds' | 'gmailThreadId'
   > &
-    Partial<Pick<OutreachEnrollment, 'stepOverrides'>>
+    Partial<Pick<OutreachEnrollment, 'stepOverrides' | 'startStepIndex'>>
   orgSettings: Pick<OutreachOrgSettings, 'legalName' | 'brandName' | 'postalAddress'> | null | undefined
   /**
    * What the CRM resolver reads: the contact, the sending site's group id,
@@ -340,7 +341,13 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
   const override = outreachStepOverrideFor(input.enrollment, stepIndex)
 
   const email: ComposedOutreachEmail = { to, subject: '', text: '', trackedLinks: [] }
-  if (isInThreadEmailStep(steps, stepIndex)) {
+  // An enrollment that began past the first step (AGL-3228) starts its
+  // thread with the first email it sends, under the subject the person
+  // already had by hand when the step was written as a reply.
+  const startStepIndex = Number.isInteger(input.enrollment.startStepIndex)
+    ? Math.max(0, Number(input.enrollment.startStepIndex))
+    : 0
+  if (isInThreadEmailStep(steps, stepIndex, startStepIndex)) {
     const threadSubject = crmThreadSubject(input.enrollment.threadSubject)
     const messageIds = (input.enrollment.messageIds ?? [])
       .map(outreachMessageIdHeader)
@@ -357,7 +364,7 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     email.inReplyTo = messageIds[messageIds.length - 1]
     email.references = messageIds.join(' ')
   } else {
-    const subject = oneLine(render(String(override?.subject ?? step.subject ?? '')))
+    const subject = oneLine(render(String(override?.subject ?? outreachThreadStartSubject(steps, stepIndex))))
     if (!subject) return refuse('missing_subject', 'This email has no subject.')
     if (outreachSubjectHasReplyPrefix(subject)) {
       return refuse(

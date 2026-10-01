@@ -22,7 +22,7 @@ design: the surface is small and curated, and each entry needs semantics
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleStaffPages()` / `resolveConsoleStaffPage(id)` | How the shell draws a plugin's staff pages: a tab after the staff strip's own, and a page at `/admin/{id}` from the generic staff route. Two plugins claiming one id resolve to nothing, and say so. |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
-| `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
+| `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in page docs — never rename**. |
 | `CONSOLE_WIDGET_SLOTS` | The typed injection-zone catalog. A widget with a `column: { header, sortKey?, align? }` is a column of a shell-owned table on the zones documented as column zones. |
 
 `ConsoleExtension` fields: `pluginId`, `displayName`, `featureFlag?`
@@ -36,7 +36,8 @@ receives `hostId: null` and an `orgMount` naming the organization and its
 sites, and the shell admits only a member whose access spans the whole
 organization; an `href` that names one of the console's own organization
 routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
-`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`.
+`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`,
+`searchSources?`.
 
 `ConsoleExtension.themePresets?` adds built-in themes to every site's theme
 picker (**Setup → Theme**): each `{ id, name, description?, theme }` is a
@@ -47,6 +48,47 @@ theme stores it. Picking copies the theme onto the site and the site's edits
 are an override on that copy, so a later version of your plugin never
 repaints a site. Declare `hostThemePresets` in your `console.slots` so the
 theme page loads your plugin, and nothing else does.
+
+`ConsoleExtension.searchSources?` lets the console's search palette find
+your records. Each source is one group of results:
+
+```ts
+searchSources: [
+  {
+    id: 'bottles', // unique across the palette; keep it stable
+    group: 'Bottles', // the heading above the rows
+    noun: 'bottles', // "Only the first 30 bottles were searched."
+    scope: 'host', // `hosts/{hostId}/bottles`; or 'orgData': `orgs/{orgId}/…`
+    collection: 'bottles',
+    nameField: 'name',
+    fallbackNameField: 'label', // when a row has no name
+    extraFields: ['vintage'], // further fields a row is found by
+    entitlementKey: 'bottlesPerHost', // a plan quota that must be non-zero
+    order: 150, // where the group is listed
+    href: (row, { orgSlug, host }) =>
+      host ? `/${orgSlug}/hosts/${host}/cellar/${row.$id}` : null,
+  },
+],
+```
+
+- The palette reads a capped window of the collection, ordered by document
+  id, and matches it in the browser, so a source needs no index. A `host`
+  source is read only on a site. An `orgData` source is the organization's
+  shared data: it is read through the viewer's `visibleTo` tokens on a site,
+  and unfiltered at the organization level, where only an org-wide member is
+  offered it.
+- A source is offered only where your pages would open: your plugin on for
+  the workspace and the site, the extension's `featureFlag` and `permission`
+  held, and the source's own `featureFlag?` and `permission?` with them. A
+  quota in `entitlementKey` that is zero keeps the collection from being read.
+- `order` places the group among the console's own: sites 10, pages 20,
+  emails 30, then components, layouts, templates, content and authors at 100
+  to 140.
+- `href` gets the row (`$id` and its fields) and the two route params; `host`
+  is `null` at the organization level. Answer `null` for a row that has
+  nowhere to open, and the palette drops it rather than drawing a dead link.
+- Declare `consoleSearch` in your `console.slots` so the palette loads your
+  plugin when it opens.
 
 `ConsoleExtension.staffPages?` adds pages to the staff area: each
 `{ id, label, header?: { title, icon?, docsTopic? }, Component }` becomes a
@@ -88,6 +130,26 @@ never reachable when its surface is not. Omitting `sections` keeps the nav
 item matched exactly as before — a path beneath it does not resolve. See
 [Building feature plugins → Routed sections](../building-feature-plugins.md).
 
+A section or hub that is renamed keeps its old address answering. A
+first-party plugin declares the rule in `plugins.config.json`, in Next's own
+redirect shape, and the console's build config compiles every plugin's rules
+into its redirects:
+
+```json
+"consoleRedirects": [
+  {
+    "source": "/:orgSlug/hosts/:host/cellar/bottles/:path*",
+    "destination": "/:orgSlug/hosts/:host/cellar/wines/:path*",
+    "permanent": true
+  }
+]
+```
+
+Both paths are console paths, `permanent` is stated outright (a browser keeps
+a permanent redirect for good), one address has one rule, and the destination
+lies under one of the plugin's own `contributes.console` routes: a plugin
+moves only its own pages.
+
 ## Loading — `plugin-loader`
 
 | API | Semantics |
@@ -121,9 +183,44 @@ a component the first did not still reaches the plugin.
 | `registerPluginApiRoute(path, handler, options?)` | Registers a path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. `path` may carry `:name` segments (`ai/jobs/:jobId/cancel`); an exact registration wins over a pattern. `options.subject` names the organization (and, for a signed tokenless redirect, the account) a request is for when it names no site — see [Naming the subject](../guides/server-apis.md#route-subject). |
 | `resolvePluginApiRequestSubject(path, request)` | What a dispatcher asks before its release gate when no `hostId` was named: the declared resolver's answer, read from a clone, or `null` for an undeclared route, a resolver that threw, or ids that are not plain path segments. |
 | `options.recipientLink` / `isPluginRecipientLinkRoute(path)` | A route that answers a link the platform mailed to somebody — an unsubscribe in a `List-Unsubscribe` header. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown and the rate limit still apply. An opt-out has to keep working after its plugin is paused for the workspace (CAN-SPAM holds it open for thirty days after the send), so the route authenticates the link itself, by a signature it verifies. |
+| `options.machine` / `isPluginMachineRoute(path)` | A route a machine calls — a scheduler's sweep on the cron secret, a provider's signed webhook — that names no site and no member. Both dispatchers skip their per-site enablement and release gates for it, and exempt it from their write limit and cross-origin check (`isMachinePluginApiPath` answers `true` for it); lockdown still applies. The flag grants nothing by itself: the route authenticates its caller, and judges the plugin's release and plan for each organization it resolves. |
+| `options.portability` / `isPluginPortabilityRoute(path)` | A route that hands a workspace the records the plugin keeps for it — a data-portability export — which the workspace is owed whether or not the plugin is switched on or released for it now. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown, the email-verification gate and the write limit still apply. The flag grants nothing by itself: the route authenticates the member, and asks the plugin's release and plan itself of anything it serves beyond what the workspace is owed. |
 | `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
 | `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
+
+## Customer REST API resources — `api-v1-resources` (data layer, console server)
+
+A plugin that models records an integration reads and writes serves them on
+the customer REST API, `/v1/<resource>/…`, from its
+`consoleServerDeclarations`, with the handler loaded on the first request:
+
+```ts
+registerApiV1Resource(
+  'bookings',
+  {
+    handle: async (request, ctx, segments, url) =>
+      (await import('./server/api-v1/bookings')).handleBookings(request, ctx, segments, url),
+    entitlement: { feature: 'bookings', message: 'Bookings are not included in this organization’s plan' },
+  },
+  { pluginId: 'acme-bookings' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerApiV1Resource(resource, { handle, entitlement? }, { pluginId? })` | Serves every request under `/v1/<resource>`. The name is one lowercase path segment; the platform's own resources (`datasets`, `sites`, `media`, `usage`, `me`) and a resource another plugin already serves are refused, naming both, and the incumbent keeps serving. The same plugin registering again replaces its own. |
+| `apiV1Resource(resource)` | What the router asks after the platform's own resources: the serving plugin and its registration, or `null`. A name nobody registered is asked once more after the app's declarations step runs, so a process whose boot failed repairs itself rather than answering `404`. |
+| `handle(request, ctx, segments, url)` | Runs after the pipeline admitted the request — the API key, the plan's API access, the request quota, the rate limit. `ctx` is the `ApiV1Context`; the handler asks for its own scopes with `requireScope` and answers in the published envelope (`apiJson`, `ApiErrors`). |
+| `entitlement` | The plan feature the resource needs. The router refuses an organization without it — `402 plan_required`, the feature as the `code`, the registration's sentence as the message — before the handler runs and before any scope is asked, so a key minted while the plan carried the feature cannot outlive it. |
+| `describe` | Loads the resource's description — tag, record schema, writable members, operations — in the terms of `@aglyn/tenant-data-admin/server/api-v1-description`. The OpenAPI document at `/api/v1/openapi.json`, and the MCP tools derived from it, list every resource the build serves and nothing it does not; a description that fails to load is left out and logged. `apiV1Resources()` lists the registrations, and the API root's `resources` names them. |
+| `registerApiV1UsageFigures(read, { pluginId? })` | Adds the plugin's members to `GET /v1/usage` — a band its records are metered on, the sizes an integration plans a sync by — read with the platform's on every call (`usageBand` gives one its published shape). A member the platform or another plugin already names is dropped and logged. |
+
+The helpers every handler shares — `claimWrite` (the idempotency claim),
+`paginate`, `serialize`, `readJsonBody`, `orgOwnsHost`, `requireScope` and
+`usageBand` —
+are `@aglyn/tenant-data-admin/server/api-v1-kit`'s, so a cursor or an
+idempotency key means the same thing on every resource whoever serves it.
 
 ## Site pipeline — `site-runtime`, `site-page-hooks` (`/server` for hooks)
 
@@ -132,7 +229,9 @@ a component the first did not still reaches the plugin.
 | `registerSiteRuntime({runtimeId, Component})` | Components rendered on every published page (overlay engines, experiment runners); they read back the props their server enricher wrote. |
 | `registerSiteRedirectResolver(fn)` | Runs before route resolution; first non-null redirect wins. |
 | `registerSitePageResolver(fn)` | Composes plugin-owned pages (commerce PDP/PLP). |
-| `registerSitePageEnricher(fn)` | Contributes page-prop slices to every page that renders nodes — published screens, collection routes, designed auth screens and a resolver's own page alike; a resolver's keys win, and `pageData` merges per plugin. Gated screens (password-protected, members-only) enrich behind the gate and deliver the slice with their nodes. The designed 404 body sets `pathUnknown` — it is cached per host, so contribute only what does not depend on a path and never substitute one. Maintenance, lockdown and bandwidth-containment notices are not enriched. **Enricher errors are isolated** — a broken plugin drops its slice, never the page. |
+| `registerSitePageEnricher(fn)` | Contributes page-prop slices to every page that renders nodes — published pages, collection routes, designed auth pages and a resolver's own page alike; a resolver's keys win, and `pageData` merges per plugin. Gated screens (password-protected, members-only) enrich behind the gate and deliver the slice with their nodes. The designed 404 body sets `pathUnknown` — it is cached per host, so contribute only what does not depend on a path and never substitute one. Maintenance, lockdown and bandwidth-containment notices are not enriched. **Enricher errors are isolated** — a broken plugin drops its slice, never the page. |
+| `registerRepeatRowReader(sourceId, reader, { pluginId })` (`plugin-manager/repeat-rows`) | Answers the rows a published page repeats an element over: the composition calls `readRepeatRows({ hostId, keys })` with the keys its tree repeats over and renders what comes back, naming no collection itself. Register from your `serverDeclarations` entry, loading the reader with `import()` inside the function, and declare the same source in `plugins.config.json` (`"repeatSource": { "id": … }`, one plugin at most). A declared source with no registered reader is **refused, not emptied**: the app's declarations step runs once more and the render then throws, so a broken boot keeps the last good page instead of turning every list into one row. A key your reader cannot answer is left out, and that element renders once, as written. The editor's canvas preview is the separate `registerRepeatSource` (`app-utils/repeat-sources`); give that source an `entityKind` naming the entity picker kind its keys are, and the insert-token menu inside a repeat offers `{{item.<field>}}` for each field the picker reports for that entity (`entityFields`). |
+| `registerFormRecordTarget({ stamp, write }, { pluginId })` (`plugin-manager/submission-record-target`) | Makes your plugin the place a form's submissions are also filed as records. `stamp(nodes, hostId)` runs on the tree a page ships and marks each form you write for with whatever you will trust when it comes back — the submit route is public, so never trust the body alone; `write({ hostId, orgId, orgBilling, body, fields })` runs after the submission is stored and answers the `routing` note the Inbox shows (where it went, or why not). Register from `serverDeclarations` with the work behind `import()`, and declare `"formRecordTarget": { "id": … }` in `plugins.config.json` (one plugin at most). A declared target that is not registered fails loud: a page with a form throws at render, and a submission is kept with `routing.recordTargetUnavailable`. |
 
 ## Stylesheets — `plugin-styles`
 
@@ -328,7 +427,7 @@ registerPluginHostCollections([
 | `mediaScan` | `generic` (the default) flattens each document and searches it; `own` means a pass that knows its shape already reads it; `none` needs `mediaScanReason`, and a declaration without one is refused. |
 | `pluginHostCollectionsScannedGenerically()` / `pluginHostCollectionsExcludedFromMediaScan()` | What the scan reads, and what it skips with the reason given. |
 | `pluginHostCollectionRouteSlug(name)` / `pluginHostCollectionLabel(name)` | A reference row's deep link and its wording. The label is derived from the name when the owner declares none (`productCategories` → "Product category"), so a new collection reads correctly with no second list. |
-| `pluginHostArtifactCollections()` | The collections whose documents a site counts beside its screens, layouts and components. |
+| `pluginHostArtifactCollections()` | The collections whose documents a site counts beside its pages, layouts and components. |
 | `listPluginHostCollections()` / `pluginHostCollection(name)` / `pluginIdForHostCollection(name)` | Everything declared, one by name, and its owner. |
 | `listPluginOrgCollections()` / `pluginOrgCollection(name)` / `pluginOrgCollectionsScannedGenerically()` | Storage that lives on the ORGANIZATION (`orgs/{orgId}/…`) rather than on a site, declared by a first-party plugin in the `orgCollections` block of `plugins.config.json` and compiled, with no runtime door. Scanned by default like a host collection (`mediaScan` is `generic` or `none`); `siteField` names the document field that says which site a row belongs to, so a reference row can name the site and link into its hub. Marketing's email sends are the first: `orgs/{orgId}/campaigns`, each carrying `hostId`. Deleting a site deletes the documents that name it. `holdsTransferWhile: { field, values }` (needs `siteField`) names the states in which such a document is work still in flight — Marketing's is `status` in `scheduled` or `sending` — and staff cannot move the site to another organization while any matches. |
 
@@ -338,6 +437,200 @@ schema nobody wrote down, and a collection nobody has thought about is READ, so
 a plugin shipping a media-bearing collection is covered the day it lands. A
 declaration names no FIELDS — the scan flattens generically, and a field list
 would be the same staleness trap one level down.
+
+### Creating a document — `resource`, and `plugin-host-resources`
+
+Clients create quota-governed site documents through one platform route,
+`POST /api/hosts/resources`: the security rules refuse a client `create` on
+those collections, and the route holds the field allow-list, meets the plan
+count inside the write's transaction, and stamps who made the document. A
+first-party plugin whose collection is created that way declares the KIND
+beside the collection, in the `hostCollections` block of `plugins.config.json`:
+
+```json
+{
+  "name": "bottles",
+  "routeSlug": "cellar",
+  "resource": {
+    "kind": "bottle",
+    "label": "bottles",
+    "activityNoun": "bottle",
+    "quotaKey": "bottlesPerHost",
+    "entitlement": "cellar",
+    "fields": ["name", "vintage", "notes"],
+    "duplicate": { "nameField": "name", "fields": ["vintage", "notes"] }
+  }
+}
+```
+
+| Field | Semantics |
+| --- | --- |
+| `kind` | What a caller names as `resource`. One owner per kind, and none of the platform's own (`screen`, `template`, `layout`, `reusableComponent`, `form`, `entry`, `author`). |
+| `fields` | The keys a client may send; anything else is dropped. `createdAt`, `updatedAt`, `createdBy` and `deletedAt` are never on it — the server stamps them. |
+| `quotaKey` / `entitlement` | The plan counter and feature, as KEYS the platform's plan table resolves. A declaration carries no number. |
+| `platformCap` | A flat cap no plan varies, named by the platform constant that holds it (`ACTIONS_MAX_PER_HOST`). A kind needs this or a `quotaKey`: a create nothing counts is unbounded documents from a browser. |
+| `softDeletes` | Deleting stamps `deletedAt`, so the cap counts live documents. |
+| `requiresPublishRole` | Creating needs the publishing role rather than the write role — for a kind that changes the live site the moment it exists. |
+| `stamps` | Constant values every create writes, never from the client (`"deletedAt": null` for a kind born live). |
+| `externalDestination: { field, approvedByField }` | A destination that may leave the site: when it is not a site path, the creator's verified uid is stamped into `approvedByField`. Only with `requiresPublishRole`. |
+| `livePathField` | The site path the document answers at; a create drops it from the site cache. |
+| `duplicate: { nameField, fields, stamps? }` | How a whole copy is made: a subset of `fields`, a unique name, and what the copy is born with (a cleared trigger). |
+
+The declarations are COMPILED, not registered: the route and the duplicator
+read them with no plugin loaded, and a kind nobody declared is refused as an
+unknown resource — never written with an open field list. The generator checks
+every rule above; `registerPluginHostCollections` refuses a declaration that
+carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
+(`@aglyn/aglyn/plugin-manager/plugin-host-resources`) read them.
+
+### In the site backup — `siteExport`, and `plugin-site-export`
+
+A site admin on a plan with site export downloads one JSON bundle of the
+site and restores it later, into the same site or another. The platform's own
+documents are always in it. A plugin collection is in it only when the
+collection says so, beside its `resource`:
+
+```json
+{
+  "name": "bottles",
+  "resource": { "kind": "bottle", "quotaKey": "bottlesPerHost", "…": "…" },
+  "siteExport": {
+    "limit": 100,
+    "fields": ["name", "vintage", "notes", "cellarId"]
+  }
+}
+```
+
+| Field | Semantics |
+| --- | --- |
+| `limit` | The most live documents one bundle carries (1–1000). The export reads no more, and a restore writes no more. |
+| `fields` | The keys a restore writes back, with `merge: false` — so it is every key a LIVE document carries, not what a create sends, and a key left off is erased from every restored document. `createdAt`, `updatedAt`, `createdBy`, `deletedAt`, `visibleTo` and an external destination's approver field are refused: a restore stamps or scopes them itself. |
+
+The export writes the collection's live documents under the collection's name,
+and a restore writes them back by id and counts the result against the
+`resource` — its `quotaKey`, or its `platformCap` — before the first write,
+so a `siteExport` on a collection with no `resource` is refused. A collection
+may not take a key the platform's bundle already uses (`screens`, `media`,
+…) or another plugin's. Compiled like `resource`, and refused at runtime:
+`listPluginSiteExportCollections()`
+(`@aglyn/aglyn/plugin-manager/plugin-site-export`) reads them.
+
+## Site backup sections — `plugin-site-bundle` (`/server`)
+
+Some plugin data a backup must carry is not a plain host collection: it lives
+under the organization and is narrowed to the site, it has documents beneath
+it, a restore checks it against its own model, or its count is sold as an
+add-on. The plugin declares a SECTION of the bundle in `plugins.config.json`
+and answers for it from its `serverDeclarations` entry:
+
+```json
+"siteBundleSections": [{ "key": "cellarLogs", "limit": 50 }]
+```
+
+```ts
+registerPluginSiteBundleSection(
+  'cellarLogs',
+  {
+    export: async (request) => (await import('./server/backup')).exportLogs(request),
+    refusal: async (request) => (await import('./server/backup')).logsRefusal(request),
+    import: async (request) => (await import('./server/backup')).importLogs(request),
+  },
+  { pluginId: 'acme-cellar' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `export({ hostId, orgId, limit })` | The site's share, at most `limit` items, each a document with its `$id` and whatever it carries beneath it. Read whole or throw: a short list is a backup that lies. `orgId` is `null` for a site with no organization. |
+| `refusal({ …, org, items })` | Optional. Asked before the restore writes anything, with the bundle's items already capped at `limit`; answers the sentence the restore refuses with (403), or `null`. Sections are asked before the platform's own caps. |
+| `import({ …, write, stamps, loadPluginSurfaces })` | Writes the items back through `write(documentPath, data)` — whole documents, on the restore's batches and in its count, and only under the site's or its organization's tree — dated with `stamps()`. `loadPluginSurfaces()` loads every plugin's console server surface, for a check against something other plugins register there (a custom field type). Answers the rows the restore reports without refusing. |
+| `listDeclaredSiteBundleSections()` / `resolveSiteBundleSections()` | The declarations, and the declarations joined to their registered answers. A section declared and not registered runs the app's declarations step once; still missing, `resolveSiteBundleSections` throws, and the export or restore fails rather than leaving the section out. |
+
+One owner per key, never one the platform's bundle or a host collection's
+`siteExport` already uses, a `limit` from 1 to 1000, and a plugin with a
+`serverDeclarations` entry — the generator refuses anything else. The data
+plugin's `datasets` is the first.
+
+## Sitemap sections — `plugin-sitemap-sections`
+
+A site's `/sitemap.xml` is an index over one child per section. The pages,
+content collections and authors are the platform's; a plugin whose documents
+are pages of their own declares the section they fill, in a
+`sitemapSections` block of `plugins.config.json`:
+
+```json
+"sitemapSections": [
+  {
+    "section": "bottles",
+    "collection": "bottles",
+    "where": { "field": "status", "equals": "listed" },
+    "enabledBy": { "doc": "settings/cellar", "field": "bottleScreenId" },
+    "path": "/cellar/{slug}",
+    "skipWhen": "deletedAt",
+    "lastmod": ["updatedAtMs", "createdAtMs"]
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `section` | The child's path segment, `/sitemaps/{section}/{page}.xml`. One owner per section, and never `pages`, `authors` or a `content-` collection's. |
+| `collection` / `where` | The host subcollection whose documents are the pages, and the one equality they must meet. |
+| `enabledBy` | A `collection/doc` under the site and a field that must be set — the template the pages render through. Unset, the section is left out rather than listing addresses that 404. |
+| `path` / `slugField` | The page's address with one `{slug}`, and the field holding it (`slug` by default). A row with no slug addresses nothing and is left out. |
+| `skipWhen` | A field whose truthy value leaves the row out — a soft delete the filter cannot see. |
+| `lastmod` | The fields a row's date is read from, first present wins. |
+
+The sections are COMPILED, not registered: the sitemap is what a search engine
+is told the site holds, and a section missing from a process that had not
+loaded the plugin would read to a crawler as pages that no longer exist.
+`listPluginSitemapSections()` / `pluginSitemapSection(section)` read them.
+
+## Documents authored in the besigner — `besigner-documents`
+
+Pages, layouts and components are the platform's own Besigner documents. A
+plugin can keep one too — a node tree under `hosts/{hostId}/{collection}/{docId}`,
+its working copies under `versions/{versionId}` and the published copy on the
+document itself — and the console serves its editor and its preview without
+naming it, at `/{orgSlug}/hosts/{host}/{segment}/{docId}/versions/{versionId}/besigner`
+and `…/preview`. The plugin declares the kind in a `besignerDocuments` block of
+`plugins.config.json`:
+
+```json
+"besignerDocuments": [
+  {
+    "kind": "bottle-label",
+    "segment": "labels",
+    "collection": "labels",
+    "noun": "label",
+    "publish": { "path": "/api/hosts/labels/promote", "idField": "labelId" }
+  }
+]
+```
+
+| Field | Semantics |
+| --- | --- |
+| `kind` | What presence rooms, saved drafts and previews key on — a stored value, never renamed. One owner per kind. |
+| `segment` | The URL segment under a site. The document's own page is the plugin's hub at `<segment>/<docId>` (declare `ownsSubtree` on the nav item), where the editor's Back and Close land. Never one the console routes itself (`screens`, `layouts`, `components`, `templates`, `emails`, `theme`). |
+| `collection` | The host subcollection the documents live in; it must also be in the same plugin's `hostCollections`. |
+| `noun` | What one is called in the editor's sentences, lower case. |
+| `publish` | The console route that makes a version the one the site serves, and the body field that carries the document id. |
+
+The editor saves the working version itself; publishing is the plugin's. It
+POSTs `{ hostId, [idField]: docId, versionId }` to `publish.path`, a server
+route that reads the stored version itself (nothing about the design crosses
+the wire), refuses a design that breaks what the document promises, writes the
+published copy and drops the live pages that place it. A refusal answers
+`{ error, violations?: [{ message }] }`; the editor shows the first violation
+in full with a count of the rest (`besignerPublishRefusal`). A version the site
+already serves is published again when an author asks to publish with nothing
+new saved, which is how the live pages are refreshed.
+
+The kinds are COMPILED, not registered: the route resolves its segment in a
+server layout that loads no plugin code, and a segment nobody declared is a
+404. `besignerDocuments()` / `besignerDocumentForSegment(segment)`
+(`@aglyn/aglyn/plugin-manager/besigner-documents`) read them, and
+`useHostDocumentVersion` (`@aglyn/tenant-feature-instance`) reads a version.
 
 ## Record addresses — `plugin-record-routes`
 
@@ -376,6 +669,16 @@ asks for the organization-level address. **Every answer can be `null`**: no
 plugin publishes the kind, or the owner has no address at that scope. Render
 text, which is what these surfaces already do while their route params settle.
 A link is not access: the page at the far end applies its own gates.
+
+The first-party kinds: `contact`, `lead`, `company`, `deal` and `task` (CRM),
+`product` and `order` (Commerce), `booking` (Bookings), `formSubmission`
+(Inbox), `campaign` (Marketing), `emailMessage`, `emailTemplate` and
+`sendingIdentity` (Email), `form` (Forms), and `workflow`, `action` and
+`webhook` (Workflows). The console's activity feeds link any of them the same
+way: an entry whose target type is a published kind opens at its owner's
+address. A plugin that links to another plugin's page asks for
+one of these; `check:plugin-domain-in-core` refuses one that spells the other
+plugin's slug or core route itself.
 
 ## Record cards — `plugin-record-cards` (`/server`)
 
@@ -425,22 +728,103 @@ every plugin's server entry before a plugin handler runs, so a reader
 registered from a server registrar is there wherever a handler asks. Import it
 by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-cards`).
 
+## Record indexes — `plugin-record-index` (`/server`)
+
+The records a plugin keeps, LISTED and READ for another plugin that works over
+them — an AI job enriching a catalog, a composer binding the products an email
+names — without that plugin reaching for the owner's collection. Keyed by
+record kind, like the card, the facts reader and the route; a card says how a
+record LOOKS, an index finds records and reads what the owner shares about
+them.
+
+```ts
+// the owner, from its serverDeclarations (so every server process has it)
+registerPluginRecordIndex('bottle', {
+  async list({ hostId, limit }) {
+    const rows = await readBottles(hostId, limit + 1)
+    return {
+      records: rows.slice(0, limit).map((b) => ({ id: b.id, name: b.name, facts: { vintage: b.vintage } })),
+      truncated: rows.length > limit,
+    }
+  },
+  async get({ hostId, id }) {
+    const b = await readBottle(hostId, id)
+    return b ? { id: b.id, name: b.name, facts: { vintage: b.vintage } } : null
+  },
+})
+
+// any other plugin's server code
+const bottles = pluginRecordIndex('bottle')?.index
+const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { records: [] }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordIndex(kind, index, { pluginId? })` | A kind another plugin keeps throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `pluginRecordIndex(kind)` | `{ pluginId, index }`, or **`null` when no plugin keeps the kind here** — a reader treats that as "none here", never as a reason to read the collection itself. The `pluginId` is also how a reader asks whether the keeper is switched on for a site. |
+| `index.list({ orgId?, hostId?, limit })` / `index.get({ orgId?, hostId?, id })` | Live, named records only — the owner decides what "deleted" is — each `{ id, name, facts }`, with `facts` in the shape the owner documents. `truncated` says the scope holds more. |
+
+Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
+Commerce publishes `product` and `productCategory`; Workflows publishes a site's
+`workflow`, `webhook` and `action` records (a webhook's facts never carry its URL
+or secret).
+
+## What depends on a thing — `plugin-dependents` (`/server`)
+
+The console's "Used by" scan (`/api/hosts/where-used`, asked through
+`@aglyn/aglyn/app-utils/where-used`) tells a person what they would break by
+renaming or deleting a site's variable, function or workflow. It reads the
+published pages itself. What refers to the thing from inside a plugin's own
+records is answered by that plugin: register a dependents source for the kinds
+of thing your records point at, and the scan lists what it finds beside its
+own.
+
+```ts
+// your plugin's serverDeclarations entry
+registerPluginDependentsSource(
+  {
+    kinds: ['function'],
+    find: async (request) => (await import('./server/recipe-dependents')).find(request),
+  },
+  { pluginId: 'cellar' },
+)
+
+// find({ hostId, kind, id, name? }) answers
+// { dependents: [{ type: 'recipe', id, name, via: ['id'] }], truncated: false }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginDependentsSource(source, { pluginId?, key? })` | `source.kinds` names the kinds it answers for; `find` answers one site's referring records. Owner = the loader's marker, else `pluginId`; no owner or no kind throws. The same plugin re-registering the same `key` replaces its own. |
+| `findPluginDependents({ hostId, kind, id, name? })` | What the scan calls: every source for the kind, in registration order. `{ dependents, complete }`, and `complete` is **false** when a source was truncated or threw — the scan then never says "nothing uses this". No source for the kind is a complete, empty answer. |
+
+A dependent's `type` is the word the scan lists it under (`variable`,
+`workflow`), and `via` says how it refers: `id` survives a rename, `name` does
+not. Workflows answers for a `function` (the workflows whose steps call it);
+Logic answers for a `workflow` (the variables it computes), which is how the
+Automation page learns what a workflow's deletion would leave on its fallback
+value without either plugin importing the other.
+
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
 More than one plugin takes money, and a merchant has one tax profile. The
-plugin that keeps it answers what a flat rate adds to a charge and which regime
-a settled payment was taxed under; any other plugin that charges asks here
-instead of importing the owner's model.
+plugin that keeps it answers the merchant's rate for a kind of charge, what a
+flat rate adds to a charge and which regime a settled payment was taxed under;
+any other plugin that charges asks here instead of importing the owner's model
+or reading the owner's settings.
 
 ```ts
 // the owner, from each of its server registrars
 registerPluginTaxProfile({
+  flatRate: (hostId, charge) => readStoredRate(hostId, charge),
   flatTax: (rate, chargeCents, fallbackLabel) => resolveFlatTax(rate, chargeCents, fallbackLabel),
   taxModeOf: (settledPayment, manualTaxCents) => modeOf(settledPayment, manualTaxCents),
 })
 
 // a plugin that charges
-const tax = pluginTaxProfile().flatTax(settings.service, chargeCents, 'Service tax')
+const profile = pluginTaxProfile()
+const rate = await profile.flatRate(hostId, 'service')
+const tax = profile.flatTax(rate, chargeCents, 'Service tax')
 const total = chargeCents + tax.taxCents
 ```
 
@@ -448,6 +832,7 @@ const total = chargeCents + tax.taxCents
 | --- | --- |
 | `registerPluginTaxProfile(profile, { pluginId? })` | A slot: a workspace has one tax profile, so a second plugin's is refused and the incumbent keeps serving. |
 | `pluginTaxProfile()` | The rule — and it **throws** when no plugin registered one. |
+| `flatRate(hostId, charge)` | The merchant's flat rate for one kind of charge on a site (`service` for an appointment), read where the owner keeps it, to be handed to `flatTax`. `undefined` for a rate nobody set or a kind the owner keeps none for. The contract's one read; a caller never reads the owner's settings itself. |
 | `flatTax(rate, chargeCents, fallbackLabel)` | `{ taxCents, label, pct }`, exclusive and rounded to the cent. `rate` is the merchant's stored setting passed as read; an absent, zero, negative or out-of-range one answers all-zero and never throws. |
 | `taxModeOf(settledPayment, manualTaxCents?)` | The regime as the owner records it. `manualTaxCents` is tax the caller added as a line of its own, which the processor reports as none. |
 | `pluginTaxProfileOwner()` | The owner's plugin id, or `null` — for a caller that only wants to know who it is. |
@@ -460,6 +845,135 @@ working build — both apps load every plugin's server entry before a plugin
 handler, a cron or the billing webhook runs — and
 `tax-profile-is-registered.spec.ts` in each app runs the real registrars and
 holds the real rule, because a plugin's own spec may not import the owner.
+
+## Sales on the operator's tax return — `plugin-tax-return-sources`
+
+The operator of a deployment files a sales tax return for the sales it
+FACILITATED, not only its own. If your plugin sells through the platform's own
+account — tax Stripe computes against the operator's registrations lands in the
+operator's balance — your sales belong on that return. The return is the
+platform's: the period, the jurisdiction and registration, the verdict and the
+export. What you sold, how each row classifies and who is liable for it, and
+the words a preparer reads about it, are yours.
+
+```ts
+import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+
+// from your consoleApi registrar
+registerTaxReturnSource({
+  // One period, worded for request.filing (the jurisdiction being filed),
+  // read under request.rowCap.
+  read: async (request) => ({
+    id: 'tickets', name: 'Ticket', title: 'Ticket sales tax', help: '…', intro: '…',
+    truncated: false,      // true when you stopped at request.rowCap
+    undatedRows: 0,        // rows no date range can reach
+    findings: [{ id: 'ticketTaxHeld', severity: 'blocking', count: 825, label: '…', detail: '…' }],
+    filingLines: [],       // lines beneath the filing figures, for request.filing.form
+    tables: [], figures: [],
+    exports: [{ placement: 'sections', rows: [['Ticket tax'], ['Held', '8.25']] }],
+    summary, rows,         // your own figures and rows, carried whole for the audit
+  }),
+}, { pluginId: 'tickets' })
+```
+
+And declare it, in `plugins.config.json`:
+
+```json
+{ "id": "tickets", "taxReturnSource": true }
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readTaxReturnSources(request)` | Every source's answer, declared sources first. **Never throws, never drops a declared source.** |
+| `PLUGIN_TAX_RETURN_SOURCES` | The plugins that declared `taxReturnSource`, compiled from the config. |
+
+**An unread source refuses the return.** A declared plugin that registered no
+source, a source that threw, and an answer with a malformed finding each come
+back `outcome: 'refused'`, and the return raises a blocking "do not file"
+finding. So do a read that stopped at the cap and rows no period can reach,
+whatever the source's own findings say. The declaration is what makes a
+missing registration a refusal: a registry alone cannot tell "nothing
+registered" from "nothing sold". `sales-sources-are-registered.spec.ts`
+runs the real registrars through the console's manifest.
+
+## Earnings on the operator's revenue report — `plugin-revenue-sources`
+
+The staff revenue report states what the deployment actually kept. If your
+plugin earns the operator a take — a commission, an application fee — on
+sales through the platform's account, it answers for that take here: what it
+earned net of everything that is not the operator's, the gross-to-net lines
+that show why, and who produced it.
+
+```ts
+import {
+  groupRevenueAttribution,
+  registerRevenueSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
+
+registerRevenueSource({
+  read: async (request) => {
+    // Page your own period query under the report's ceiling…
+    const { docs, truncated } = await request.sweep(query, 'createdAt')
+    // …group by who earned it, capped at the report's own limit…
+    const byTicket = groupRevenueAttribution(entries, request.attributionLimit, 'Ticket not recorded')
+    // …and name only the rows that will be shown.
+    await request.nameRows(byTicket.rows, { collection: 'tickets', nameField: 'title', detailField: 'venue' })
+    return {
+      id: 'tickets', name: 'ticket sales',
+      earned: { label: 'Ticket commission', cents, note: '…' },
+      grossToNet: [/* { label, cents, deduction, note } */],
+      notes: [], attribution: [{ id: 'byTicket', heading: '…', unit: 'Ticket', countLabel: 'Sales', empty: '…', ...byTicket }],
+      truncated, failure: null, summary,
+    }
+  },
+}, { pluginId: 'tickets' })
+```
+
+Declare it with `"revenueSource": true` in `plugins.config.json`. A declared
+source that registered nothing, threw or answered a malformed report comes back
+`outcome: 'refused'`; the report counts none of its earnings and says whose
+are missing. A read that could not run at all answers `failure` rather than a
+cap — "we read none of it" and "we read part of it" have different remedies.
+
+## Installed templates — `plugin-template-sources`
+
+If your plugin installs templates into a site's library, the template document
+carries a server-managed `source.type` that says where it came from. `authored`
+(saved on the site) and `starter` are the platform's own values; every other
+value is the stamp of the plugin that installed the template, and that plugin
+declares it in `plugins.config.json`:
+
+```json
+{
+  "id": "gallery",
+  "templateSource": {
+    "type": "gallery",
+    "label": "Gallery",
+    "description": "Installed from the template gallery"
+  }
+}
+```
+
+Your install route stamps `source: { type: 'gallery', listingId, version }` on
+every template it writes. The library's Source badge and its Source filter, the
+template's own page and the "Your templates" shelf of the template gallery then
+name it in your words, and the gallery's shelf asks for it by value.
+
+| API | Semantics |
+| --- | --- |
+| `PLUGIN_TEMPLATE_SOURCES` | Every declared template source, compiled from the config. |
+| `INSTALLED_TEMPLATE_SOURCE_TYPES` | Their `type` values. |
+| `installedTemplateSource(type)` | The declaration behind a stored `source.type`, or `null` for `authored`, `starter`, a missing stamp and a type no plugin in this build declares. |
+| `isInstalledTemplateSource(type)` | Whether a stamp is an installer's, declared or not. |
+
+**A declaration, not a registration.** The gallery's shelf is a Firestore
+`source.type in [...]` query, asked before any plugin code loads; a registry
+the page had not filled yet would drop every installed template from it
+without a word. A `type` belongs to one plugin, and `authored` and `starter`
+cannot be declared. A template whose stamp no plugin in the build declares —
+installed by a plugin since removed — still reads as **Installed**, never as
+something the site authored.
 
 ## Recurring charges — `plugin-recurring-charges` (`/server`)
 
@@ -631,6 +1145,194 @@ carry the org, site, scope and media id a URL was minted for, and grant nothing.
 A video is served from the provider only when the `release_video_delivery` flag,
 off by default, is on for its org and a copy of its current bytes exists;
 everything else serves from the platform exactly as before.
+
+## Site analytics tags — `analytics-provider`
+
+A site can send its visitors' measurement to an analytics vendor it chose, by
+saving an id in its analytics settings. The platform owns everything around
+that tag — whether the visitor may be measured, the consent banner, the
+first-party pageview beacon that meters the site — and names no vendor. A
+plugin's adapter knows the vendor: what its tag looks like on the page, how a
+resident tag is told the visitor's answer changed, and how an event reaches it.
+
+The adapter is declared in `plugins.config.json`, not registered from code:
+
+```json
+"analyticsProvider": {
+  "module": "analytics-provider",
+  "settings": ["gaMeasurementId", "gtmContainerId"]
+}
+```
+
+- `settings` are the site analytics settings the adapter mounts a tag for. They
+  are compiled into core (`ANALYTICS_PROVIDERS_DECLARED`), because the consent
+  gate asks "does this site run a tag?" during render, before any adapter has
+  loaded. A setting no provider declares configures nothing, and a site with no
+  tag asks its visitors nothing. Two providers may not declare one setting.
+- `module` is the adapter's subpath. The generator writes it into each app's
+  `plugins.analytics.generated.ts` as an `import()`: a published page fetches it
+  only when its site configures a tag, and the console fetches it for the tag
+  its own analytics SDK injects. The module exports `analyticsProvider`.
+
+| API | Semantics |
+| --- | --- |
+| `provider.mounts(host, { consentRequired, advertising })` | The tags a granted pageview mounts, in order: `{ id, boot, src, library? }`. The page renders each as an inline `${id}-init` and a library `${id}-src`, under the consent gate, with the request's nonce. `boot` is inline script, built from constants and format-checked ids only. |
+| `provider.applyConsent({ analytics, advertising })` | Make every resident tag of the vendor agree with the answer; returns the ids it acted on. Called when a visitor's answer changes, and on registration with the last answer given in the document. |
+| `provider.resident()` / `provider.sendEvent(name, params, { measurementOnly? })` | Whether a tag is resident, and one event to it. `measurementOnly` addresses the measurement property only, not an advertising destination sharing the library. |
+| `hostConfiguresAnalyticsTag(host)` (`visitor-consent`) | Whether a declared setting is present and well formed. |
+| `applyAnalyticsConsent(grants)`, `sendAnalyticsProviderEvent(...)`, `analyticsTagResident()` | Core's side: what the consent writer and the Core Web Vitals reporter call. |
+
+The pageview beacon (`/api/analytics/collect`) is not a tag and never goes
+through this contract: it is the platform's metered door.
+
+## Notification categories and digests — `notifications`
+
+A notification's category is the prefix of its type (`marketplace.review` is
+filed under `marketplace`), and a person's preferences are stored per category:
+muted or not, in the console and by email, for their account, a workspace or a
+site. The core owns six categories. A plugin whose notifications need their own
+row on the settings page declares it in `plugins.config.json`:
+
+```json
+"notificationCategories": [
+  {
+    "id": "marketplace",
+    "label": "Marketplace",
+    "description": "Decisions on plugin listings you submitted for review.",
+    "defaults": { "console": true, "email": false }
+  }
+]
+```
+
+- The declaration is compiled into core (`PLUGIN_NOTIFICATION_CATEGORIES_DECLARED`),
+  because the fan-out resolves a recipient's channels in server processes that
+  load no plugin. A type whose prefix nothing declares is filed under `system`.
+- `id` keys every stored preference. It may not be a core category or another
+  plugin's, and it is never renamed: a renamed id would leave everyone's
+  preferences under a key nothing reads.
+- `defaults` says what each channel does before anybody says. Declared rows are
+  listed after the workspace's own work and before the platform's notices.
+
+A digest the plugin sends on its own schedule is declared the same way, so the
+settings page draws its switch without loading the plugin:
+
+```json
+"notificationDigests": [
+  { "key": "crmDaily", "label": "Daily CRM digest", "description": "Each morning: …" }
+]
+```
+
+The switch is stored under `key` in `users/{uid}.digestPrefs` and is on until
+the person turns it off. The sender reads it with
+`digestEnabled(prefs, key)`; the settings page writes it under the same key.
+
+## Interaction steps — `site-interactions`
+
+An interaction is what a published page does when a visitor does something: a
+trigger (a click, a hover, an element scrolled into view, a server event) and
+an ordered list of steps. The platform owns the shape and its own client steps
+— showing and hiding elements, menus and drawers, classes and ARIA attributes,
+scrolling, a video, an alert, a redirect, an analytics event — and treats every
+step it does not know as the server's, handed to whichever host-event listener
+owns it.
+
+A plugin whose step the besigner's interaction builder should offer declares it
+in `plugins.config.json`, not from code:
+
+```json
+"interactionSteps": [
+  {
+    "type": "runWorkflow",
+    "label": "Run a workflow",
+    "picks": {
+      "collection": "workflows",
+      "limit": 100,
+      "idField": "workflowId",
+      "nameField": "workflowName",
+      "label": "Workflow",
+      "missing": "pick a workflow"
+    }
+  }
+]
+```
+
+- `type` is the name the step is stored under; one plugin declares each type.
+- `picks`, for a step that acts on one of the plugin's records: the builder
+  lists them from `collection` (one the SAME plugin declares under
+  `hostCollections`), stores the pick's id in `idField` and its name, as a
+  display hint, in `nameField`. `validateInteraction` refuses a step that names
+  neither, with `Step N: <missing>`.
+- The declarations are compiled into core (`declaredInteractionSteps()`),
+  because the builder and every validator read them with no plugin loaded.
+
+| API | Semantics |
+| --- | --- |
+| `SiteInteraction<Step>` / `InteractionTrigger` / `InteractionStepBase` | The stored shape. `Step` is the platform's client vocabulary (`ClientInteractionStep`) unless a reader names more. |
+| `validateInteraction(interaction, { validateStep? })` | The name, the trigger and its conditions, the step count, each step's guard, the client steps and every declared pick. `validateStep` is the owner's check for its own step types. |
+| `isClientActionStep(step)` / `isClientStepEntitled(step, tiers)` | Whether the page runs a step, and whether the site's plan lets it. |
+| `SiteAlert` | What a `siteAlert` step, or a listener, hands back to the visitor's page. |
+
+## Host events — `host-events`
+
+A host event is what happened on a site that an automation can start on: a
+form submitted, a booking made, a contact moved stage. A server door raises one
+with `emitHostEvent(hostId, type, payload, { actor })` beside the write it
+performed; nothing watches the database. The platform raises `pageView` itself.
+A plugin whose doors raise others declares them in `plugins.config.json`, so
+the trigger pickers, the run history and every validator know them with no
+plugin loaded:
+
+```json
+"hostEvents": [
+  {
+    "type": "booking",
+    "order": 70,
+    "label": "New booking",
+    "payloadKeys": ["serviceName", "email", "startsAtMs"]
+  }
+]
+```
+
+- `type` is what a stored trigger names: never rename it. One plugin declares
+  each type, and none may take the platform's `pageView`.
+- `order` places it in every picker; `pageView` is 20.
+- `payloadKeys` (optional) lists what the event puts in scope for a filter or a
+  condition; leave it out when the door documents none.
+
+The declarations compile into `app-utils/plugin-host-events.generated.ts`.
+
+| API | Semantics |
+| --- | --- |
+| `HOST_EVENTS` / `HOST_EVENT_TYPES` | Every event, the platform's and the plugins', in `order`. `HostEventType` is their union. |
+| `hostEventLabel(type)` / `hostEventPayloadHint(type)` | The picker's words, falling back to the type itself for a custom event; the "In scope: …" line, or `null` where nothing is documented. |
+
+## Computed variables — `computed-variables` (`/server`)
+
+A site variable is bound into a page with `{{var:id}}` and resolved when the
+page is composed. A COMPUTED variable takes its value from a record a plugin
+keeps, with its stored value as the fallback. The plugin that computes it
+registers a variable computer, in two halves so its reads overlap the page's
+own:
+
+```ts
+// your plugin's serverDeclarations entry
+registerVariableComputer(
+  {
+    prepare: async (hostId) => (await import('./server/rates')).prepareRates(hostId),
+  },
+  { pluginId: 'cellar' },
+)
+
+// prepareRates reads what it needs for the site, then answers a computation:
+// ({ variables, functions }) => variables, with the computed ones' values filled in
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerVariableComputer(computer, { pluginId? })` | Owner = the loader's marker, else `pluginId`; no owner throws. Registering again replaces the plugin's own. |
+| `prepareComputedVariables(hostId)` | What the compose pipeline calls beside its variable and function reads: every computer's `prepare`, resolved to their computations applied in registration order. A computer that fails, or none registered, leaves each variable its stored value; with none registered, the app's declarations step is run once more first. |
+
+Workflows registers one: a variable that names a workflow takes its result.
 
 ## Platform events — `plugin-events` (`/server`)
 
@@ -1056,9 +1758,9 @@ nothing in the core names a bottle.
 **`Required` is over the CORE halves.** `CoreOrgEntitlements` and
 `CoreOrgFeatureFlags` are what `PLAN_ENTITLEMENTS` declares and what
 `ResolvedOrgEntitlements` keeps exhaustive — a plan that forgets a platform
-quota or gate does not compile. A plugin's band comes from its own seat add-on
-declaration instead, so it joins as declared: present, and optional, because a
-workspace without the plugin has no value for it.
+quota or gate does not compile. A plugin's figure per plan comes from its own
+plan declaration (below) instead, so it joins as declared: present, and
+optional, because the core compiles without the plugin's type.
 
 **No prices here.** A seat add-on's price stays a `PLAN_PRICING` row that the
 Stripe wiring reads and `check-pricing-drift` reconciles. Two places holding a
@@ -1070,6 +1772,93 @@ the Firestore write-deny rules, so a field declared from a plugin's own file
 would be a hole in a rules-coverage guard. A plugin's settings block goes
 through `registerPluginConfigSchema` into `pluginSettings/{pluginId}`, which is
 its own document under its own rule.
+
+
+## Plan figures — `plugin-plan-entitlements`
+
+The VALUE half of a typed key: what each plan includes of it. A first-party
+plugin names a function under `register.planEntitlements` in
+`plugins.config.json`; the manifest generator loads
+`${package}/plan-entitlements`, calls it and compiles the answer into
+`first-party-plugins.generated.ts`, and `PLAN_ENTITLEMENTS` composes it into
+every plan row. `/pricing`, the plan comparison and every quota gate read the
+composed table, so a figure reads the same whether core or a plugin wrote it.
+
+```ts
+// libs/plugins/cellar/src/lib/plan-entitlements.ts
+export function cellarPlanEntitlements(): PluginPlanEntitlementsDeclaration {
+  return {
+    quotas: [
+      {
+        key: 'bottlesPerHost',
+        label: 'Bottles per site',
+        byPlan: { free: 0, starter: 50, pro: 500 /* …every plan */ },
+      },
+    ],
+    features: [
+      { key: 'cellarTastings', label: 'Tasting notes', byPlan: { free: false /* … */ } },
+    ],
+  }
+}
+```
+
+| API | Semantics |
+| --- | --- |
+| `register.planEntitlements` | The function's name. Called by the generator, never at runtime — the pricing tables and the plan comparison read the table without loading a plugin, so a runtime registry would be one they had not filled. |
+| `quotas[]` / `features[]` | `{ key, label, byPlan }`. `byPlan` names every plan (the compiled rows are typed per plan, so a missing one does not compile); a quota is a non-negative number or `Infinity` (`UNLIMITED`), a feature a boolean. A quota that is a percentage of a sale says `price: true`, which keeps an uncapped plan comp from lifting it. |
+| `pluginPlanQuotas()` / `pluginPlanFeatures()` / `pluginPlanEntitlementOwner(key)` | Every compiled declaration, and who declared a key. |
+| `planQuotaOf(entitlements, key)` | A resolved quota by key, for core code that compiles without the plugin's type. An undeclared key reads as `0` — nothing included — never as unlimited. |
+
+The generator refuses a key two plugins declare, a declaration naming a
+different set of plans from the others, and a figure that is not a number or a
+boolean. A key the platform's own rows already carry keeps the platform's
+figure, and `plugin-plan-entitlements.spec.ts` fails on it. A plugin's entry
+points re-export the declaring function as a type (`export type { … }`), which
+brings the key's augmentation into every program that loads the package.
+
+## Usage axes — `plugin-usage-axes`
+
+The meters a plugin contributes to the platform's ONE cost model
+(`orgMonthlyCogsUsd`, which the discount guardrail and the staff org page
+read) and to the staff utilization table. A first-party plugin names a
+function under `register.usageAxes`; the manifest generator loads
+`${package}/usage-axes`, validates the answer and compiles it into
+`first-party-plugins.generated.ts`, beside the plan figures.
+
+```ts
+// libs/plugins/cellar/src/lib/usage-axes.ts
+export function cellarUsageAxes(): PluginUsageAxesDeclaration {
+  return {
+    costAxes: [
+      { id: 'tastings', order: 35, fields: ['tastingsRun'], rate: 'perRun' },
+    ],
+    bands: [
+      {
+        id: 'tastingsRun',
+        label: 'Tastings',
+        order: 45,
+        fields: ['tastingsRun'],
+        entitlement: 'tastingsPerMonth',
+        perHost: true,
+      },
+    ],
+  }
+}
+```
+
+| Field | Semantics |
+| --- | --- |
+| `register.usageAxes` | The function's name. Called by the generator, never at runtime — the guardrail and the staff page price a rollup without loading a plugin, and a meter a registry had not filled would price at nothing, which approves a discount. |
+| `costAxes[]` | `{ id, order, fields, fallbackFields?, recordedFields?, rate?, live? }`. `fields` are summed from the month's usage rollup; `fallbackFields` are read only when a rollup carries none of `fields` (an older, narrower basis — a measured zero never falls back); `recordedFields` ride along so the sum stays legible and are never priced. `rate` names a key of `ORG_COGS_UNIT_RATES_USD` — never a number: the money stays core's, beside the billed table it reconciles against — or is left out when the fields are already dollars. `live: { collection, fields }` names `orgs/{orgId}/{collection}/{month}`, whose first positive field replaces the rollup's snapshot wherever a reader fetches it. |
+| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. |
+| `pluginCostAxes()` / `pluginUsageBands()` / `pluginCostAxisFields()` | Every compiled declaration, and every rollup field the cost axes read or record (`orgCogsInputFrom` forwards them). |
+| `declaredMeterReading(rollup, declared)` / `liveMeterReading(doc, live)` | The one reading of a declared meter: a positive finite number, or nothing. |
+
+The generator refuses an id or an `order` another axis or band already holds
+(the platform's own sit at multiples of ten), a field name that is not plain,
+and a `rate` that is not a key. A rate key core does not carry throws when the
+model prices it, rather than pricing the meter at zero, and
+`plugin-usage-axes.spec.ts` holds every declared key to a rate that exists.
 
 ## Enablement, flags, config, fields, permissions, jobs
 

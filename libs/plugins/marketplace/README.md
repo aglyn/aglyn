@@ -14,12 +14,17 @@ Peer dependencies: `react`, `@mui/material`, `firebase`, `next`, and `firebase-a
 
 **On a published site.** Nothing of its own. What a listing installs (a component, site template, layout, theme, dataset schema, email template, email starter or plugin) is copied into the site's own collections and renders through the normal pipeline, so there is no separate site bundle.
 
-**Console** (`registerMarketplaceConsole`, the `console` registrar in `plugins.config.json`). The plugin adds no nav item. It exposes its UI through widget slots that the console app renders without importing the plugin:
+**Console** (`registerMarketplaceConsole`, the `console` registrar in `plugins.config.json`). The Marketplace hub at `/[orgSlug]/marketplace` is one `orgNavItems` entry, served by the console's generic org plugin route: browse, installed, licenses, and the seller sections. The report and review queues are `staffPages`. On console pages that are not the marketplace, it draws into widget slots the console renders without importing the plugin:
 
-- `orgMarketplace`: browse and install, at organization scope.
-- `marketplaceListing`: the content of one listing's detail page.
-- `orgAddons`: the installed add-ons card, with upgrade, uninstall and sharing an install with the whole organization.
+- `hostArtifactPublish`: the publish dialog for something a console page holds (a layout, a theme, a site template).
+- `orgPluginInstalls`: the workspace's installed marketplace plugins, on its Plugins page.
+- `pluginInstallStatus`: whether an installation runs the newest installable version, on its installation page.
 - `pluginSiteSet`: which sites one installation applies to.
+- `staffOverview`: recent purchases and the refund-reversal recovery queue, on the staff overview.
+- `templateGallery`: the "Marketplace templates" shelf of a site's template gallery, installing through `install-template`.
+- `templateInstallStatus`: "Update available" on a library row whose template it installed, re-installing through `install-template`.
+
+It declares `templateSource` in `plugins.config.json`: the `source.type` its template install stamps, and the "Marketplace" badge a site's library shows for it.
 
 It also registers a `rating` custom field type (`registerCustomFieldType`) with a starred input.
 

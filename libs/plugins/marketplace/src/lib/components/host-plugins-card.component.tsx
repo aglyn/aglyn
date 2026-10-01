@@ -39,7 +39,6 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import {
-  compareArtifactVersions,
   isPluginRevoked,
   lockdownRefusalText,
   offeredPluginVersion,
@@ -53,6 +52,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { compareArtifactVersions } from '../model/update-state'
 
 export interface HostPluginsCardProps {
   hostId: string
@@ -427,7 +427,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
         {installs.length === 0 && orgInstalls.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'No marketplace plugins installed. Install one from the ' +
-              'marketplace, then add a Plugin element to a screen and set ' +
+              'marketplace, then add a Plugin element to a page and set ' +
               'its listing id.'}
           </Typography>
         ) : (
@@ -611,7 +611,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
           )
         })}
         <Typography variant="caption" color="text.secondary">
-          {`Place a plugin on a screen with the Plugin element (component id ` +
+          {`Place a plugin on a page with the Plugin element (component id ` +
             `"${PLUGIN_COMPONENT_ID}"), set to the listing id above.`}
         </Typography>
       </Stack>

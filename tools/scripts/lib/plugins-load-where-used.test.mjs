@@ -41,6 +41,7 @@ import {
   evaluatePluginPresence,
   modulesInChunks,
   pluginOf,
+  analyticsProviderSpecifier,
   siteClosures,
   siteEntrySpecifier,
   undeclaredSiteModules,
@@ -82,6 +83,25 @@ test('the site surface loads from `modules.site`, and the root without one', () 
   assert.equal(siteEntrySpecifier(BOTH), '@aglyn/plugins-forms/site')
   assert.equal(siteEntrySpecifier({ ...BOTH, modules: undefined }), '@aglyn/plugins-forms')
   assert.equal(siteEntrySpecifier(CONSOLE_ONLY), null)
+})
+
+test('a declared analytics provider is a site surface too (AGL-3080)', () => {
+  const withTag = {
+    ...BOTH,
+    analyticsProvider: { module: 'analytics-provider', settings: ['gaMeasurementId'] },
+  }
+  assert.equal(analyticsProviderSpecifier(withTag), '@aglyn/plugins-forms/analytics-provider')
+  assert.equal(analyticsProviderSpecifier(BOTH), null)
+  const adapter = 'libs/plugins/forms/src/lib/analytics-provider.ts'
+  const presence = (plugin) =>
+    evaluatePluginPresence({
+      modules: new Map([[adapter, 'static/chunks/t.js']]),
+      closures: siteClosures({ plugins: [plugin], root: ROOT, read: () => '', resolve }),
+      consoleModules: new Map(),
+    })
+  assert.equal(presence(withTag).ok, true)
+  // Forced red: without the declaration the adapter is code no surface loads.
+  assert.equal(presence(BOTH).ok, false)
 })
 
 test('RULE 1 — one module for both surfaces is refused, with or without a build', () => {

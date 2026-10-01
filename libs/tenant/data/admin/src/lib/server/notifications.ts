@@ -423,10 +423,17 @@ export async function notifyStaffConsole(
   }
 }
 
-/** Notifies the org's owner + admins (billing, membership, org events). */
+/**
+ * Notifies the org's owner + admins (billing, membership, org events).
+ *
+ * `skipEmail` is for a caller that emails the same notice to the same people
+ * itself — the usage alerts do (AGL-3431) — so an admin who switched the
+ * email channel on is not sent it twice.
+ */
 export async function notifyOrgAdmins(
   orgId: string,
   payload: NotificationPayload,
+  options: Pick<NotifyUsersOptions, 'skipEmail'> = {},
 ): Promise<void> {
   try {
     const members = await listOrgMembers(orgId)
@@ -442,7 +449,7 @@ export async function notifyOrgAdmins(
     await notifyUsers(
       admins.map((member) => member.$id),
       { ...payload, orgId },
-      { emails },
+      { emails, ...(options.skipEmail ? { skipEmail: true } : {}) },
     )
   } catch (error) {
     console.error('org admin notification failed', error)

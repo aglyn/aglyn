@@ -549,7 +549,7 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
       name: 'loading',
       description:
         'Lazy waits to load the image until a visitor scrolls near it; ' +
-        'pick Eager for the first image at the top of a screen so it ' +
+        'pick Eager for the first image at the top of a page so it ' +
         'shows immediately.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Loading',
@@ -561,16 +561,16 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
     {
       name: 'screenId',
       description:
-        'Optional: navigate to this screen when the image is clicked — ' +
-        'follows the published path like a Screen Link.',
+        'Optional: navigate to this page when the image is clicked — ' +
+        'follows the published path like a Page Link.',
       component: Aglyn.FieldComponentType.SCREEN_SELECT,
-      label: 'Link to screen',
+      label: 'Link to page',
     },
     {
       name: 'href',
       description:
         'Makes the image a link to somewhere off this site. Ignored while ' +
-        'Link to screen names one. Leave both blank and the image is not ' +
+        'Link to page names one. Leave both blank and the image is not ' +
         'clickable at all.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',

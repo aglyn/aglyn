@@ -295,12 +295,11 @@ async function run() {
 
 const screenAlerts = (orgId: string) =>
   mockNotifications.filter(
-    (entry) => entry.orgId === orgId && entry.title.includes('screens on a site'),
+    (entry) => entry.orgId === orgId && entry.title.includes('pages on a site'),
   )
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
-  delete process.env.USAGE_ALERT_APPROACH_PCT
   jest.clearAllMocks()
   mockHosts = []
   mockOrgs = []
@@ -378,9 +377,10 @@ describe('the alert names the over-cap sites', () => {
     expect(screenAlerts('org-a')[0].body).toContain('host-gone')
   })
 
-  it('says nothing about sites when none are over', async () => {
-    // An org AT its cap is an org using what it bought — the approach alert
-    // still fires, and "Over the cap: ." would be worse than saying nothing.
+  it('names the one site when none is over, and never prints an empty list', async () => {
+    // Nothing recorded as over the cap, and the workspace has one site — so
+    // that site is the one the figure is about (AGL-3431). "Over the cap: ."
+    // would be worse than saying nothing.
     mockOrgs = [{ id: 'org-a', plan: 'starter', rollup: freshRollup([]) }]
     mockHosts = [{ id: 'host-a1', orgId: 'org-a', subdomain: 'alpha-blog' }]
 
@@ -390,6 +390,7 @@ describe('the alert names the over-cap sites', () => {
     // The alert itself still happened — otherwise this assertion proves
     // nothing about the sentence.
     expect(alert).toBeTruthy()
+    expect(alert.body).toContain('Your site alpha-blog')
     expect(alert.body).not.toContain('Over the cap')
   })
 })
@@ -407,7 +408,7 @@ describe('both channels carry the same sentence', () => {
     await run()
 
     const email = mockEmails.find((entry) =>
-      entry.subject.includes('screens on a site'),
+      entry.subject.includes('pages on a site'),
     )
     expect(email?.text).toContain('alpha-shop')
   })

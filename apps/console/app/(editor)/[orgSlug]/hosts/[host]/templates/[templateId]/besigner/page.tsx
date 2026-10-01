@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,

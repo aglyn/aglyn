@@ -17,13 +17,13 @@
 'use client'
 
 import {
-  CRM_DAILY_DIGEST_KEY,
-  crmDailyDigestEnabled,
   DIGEST_PREFS_FIELD,
+  digestEnabled,
   INSIGHT_DIGESTS_FIELD,
   insightDigestSubscribed,
   NOTIFICATION_CATEGORY_LABELS,
   NOTIFICATION_CHANNEL_DEFAULTS,
+  NOTIFICATION_DIGESTS,
   NOTIFICATION_SETTINGS_FIELD,
   notificationAccountTypePref,
   notificationCategory,
@@ -353,23 +353,15 @@ const ManageNotificationSettings: NextPageWithLayout<
   )
 
   /*
-   * The digest key comes from the module that reads it, never spelled here
-   * (`check:plugin-domain-in-core`, rule 7).
-   *
-   * A console page may CALL a plugin's seam and must not declare its
-   * vocabulary — and a literal `crmDaily:` written as an object member is a
-   * declaration. Writing it through `CRM_DAILY_DIGEST_KEY` also removes the
-   * second copy of the string: the switch and the reader that answers it now
-   * name the same constant, so they cannot come to disagree.
-   *
-   * The card is still core naming a plugin's schedule, which is the AGL-3227
-   * seam — this page will render whatever digests are registered rather than
-   * the two it knows about.
+   * Each digest's switch is written under the key its plugin declares
+   * (`NOTIFICATION_DIGESTS`), which is the key the plugin's sender reads, so
+   * the page and the sender cannot come to disagree — and the page names no
+   * plugin's schedule: it draws whatever digests are declared.
    */
-  const toggleDigest = () => {
+  const toggleDigest = (key: string) => {
     if (!uid) return
     const next = { ...digestPrefs }
-    next[CRM_DAILY_DIGEST_KEY] = !crmDailyDigestEnabled(digestPrefs)
+    next[key] = !digestEnabled(digestPrefs, key)
     setDigestPrefs(next)
     void setDoc(
       doc(firestore, 'users', uid),
@@ -576,35 +568,36 @@ const ManageNotificationSettings: NextPageWithLayout<
         help={docsHelp('consoleTour', {
           anchor: '#daily-digests',
           excerpt:
-            'The daily CRM digest and the weekly insights: what each ' +
-            'one sends, and when.',
+            'The digests you can receive: what each one sends, and when.',
         })}
         contentGutterX
         contentGutterY
         contentBordered="all"
       >
         <Stack spacing={1.5}>
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
-          >
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={crmDailyDigestEnabled(digestPrefs)}
-                  onChange={toggleDigest}
-                />
-              }
-              label="Daily CRM digest"
-              slotProps={{ typography: { variant: 'caption' } }}
-            />
-            <Typography variant="caption" color="text.secondary">
-              {'Each morning: your overdue and due-today tasks and the ' +
-                'leads nobody has worked, here and by email.'}
-            </Typography>
-          </Stack>
+          {NOTIFICATION_DIGESTS.map((digest) => (
+            <Stack
+              key={digest.key}
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+            >
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={digestEnabled(digestPrefs, digest.key)}
+                    onChange={() => toggleDigest(digest.key)}
+                  />
+                }
+                label={digest.label}
+                slotProps={{ typography: { variant: 'caption' } }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {digest.description}
+              </Typography>
+            </Stack>
+          ))}
           {Object.keys(insightDigests).length ? (
             <Stack
               direction="row"

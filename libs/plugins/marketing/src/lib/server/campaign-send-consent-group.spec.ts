@@ -396,3 +396,40 @@ describe('an org that declared no group', () => {
     expect(batchedReads.some((path) => path.includes(SITE_B))).toBe(false)
   })
 })
+
+/**
+ * SHARING IS NOT CONSENT (AGL-3336). An org manager may share a lead site C
+ * captured with site A: A sees it on its lists, and it enters A's scoped
+ * sweep. It is never A's audience — the record says which of its tokens a
+ * share ADDED (`sharing.added`), and the sweep keeps only what the sending
+ * site holds, whatever the lead's consent map says.
+ */
+describe('a lead shared with the sending site', () => {
+  it('is not mailed, while the same lead held by the site is (the control)', async () => {
+    const SHARED = 'shared@example.com'
+    const grantForA = {
+      [SITE_A]: { marketingConsent: true, marketingConsentAtMs: Date.UTC(2026, 7, 1) },
+    }
+    store.set('orgs/org-1/leads/lead-shared', {
+      email: SHARED,
+      name: 'Shared',
+      hostId: SITE_C,
+      capturedByHostIds: [SITE_C],
+      visibleTo: [`host:${SITE_C}`, `host:${SITE_A}`],
+      sharing: { added: [`host:${SITE_A}`] },
+      marketingConsentByHost: grantForA,
+    })
+
+    await send()
+    expect(addressed()).toEqual([LEFT, STAYED].sort())
+
+    // The control: held by site A, the same lead is mailed.
+    sent.length = 0
+    store.set('orgs/org-1/leads/lead-shared', {
+      ...(store.get('orgs/org-1/leads/lead-shared') as Record<string, unknown>),
+      capturedByHostIds: [SITE_C, SITE_A],
+    })
+    await send()
+    expect(addressed()).toEqual([LEFT, SHARED, STAYED].sort())
+  })
+})

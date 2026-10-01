@@ -28,7 +28,7 @@ start from [Your first API call](../../guides/your-first-api-call.md).
 
 ## Build a form
 
-1. Drop **form components** onto a screen in the Besigner (fields, submit button).
+1. Drop **form components** onto a page in the Besigner (fields, submit button).
 2. Configure the fields and the submit behavior.
 3. Publish — the form posts to Aglyn's submit API.
 
@@ -175,9 +175,10 @@ Build a feedback survey with four fields:
 
 Submissions land in the inbox like any other form — a visitor who ticks two
 checkboxes submits `topics: Products, Pricing`, and the rating arrives as `4`.
-Like every form value it is stored as text, including in a bound
-[dataset](../datasets/overview.md), whose `=` filter still matches it as a number when
-the field is typed as one.
+The Inbox keeps every value as the visitor typed it. A bound
+[dataset](../datasets/overview.md) stores each value as its field's type instead: the
+rating `4` becomes the number 4 in a number field, and `Products, Pricing` becomes a
+two-item list in a list field.
 
 ## After submit
 
@@ -186,14 +187,14 @@ The form's **After submit** setting controls what a successful submission does:
 | Outcome | What the visitor sees |
 | --- | --- |
 | **Show the success message** (default) | The form is replaced by your **Success message** |
-| **Redirect the visitor** | The browser navigates to a **screen** you pick (rename-safe — slug changes never break it) or, with no screen picked, to a **Redirect URL** (a same-site path like `/thanks` or an https URL; anything else is ignored) |
+| **Redirect the visitor** | The browser navigates to a **page** you pick (rename-safe — slug changes never break it) or, with no page picked, to a **Redirect URL** (a same-site path like `/thanks` or an https URL; anything else is ignored) |
 | **Reveal a hidden element** | An element you pick from the canvas — hidden on the published page until then — appears in place of the form |
 
 For the **reveal** outcome, drop the follow-up content (a thank-you block, a download
-link, an embedded video) anywhere on the screen, then select it as the **Element to
+link, an embedded video) anywhere on the page, then select it as the **Element to
 reveal**. It stays hidden for visitors until the form is submitted; in the Besigner it
 stays visible so you can keep editing it. If a redirect target can't be resolved (the
-screen was deleted, the URL was rejected), the form falls back to the success message.
+page was deleted, the URL was rejected), the form falls back to the success message.
 
 ### Example: grow an email list from a signup form
 
@@ -205,7 +206,7 @@ Combine an outcome with a [conditional automation](../../marketing-and-automatio
    the Options setting starts a new box at every comma.
 2. On the form's own page, pick `marketingConsent` as the **Marketing consent field**, so a
    tick is recorded as the person's consent.
-3. Set **After submit** to *Redirect the visitor* and pick your `/thanks` screen.
+3. Set **After submit** to *Redirect the visitor* and pick your `/thanks` page.
 4. On **Automation → Actions**, add an action on **formSubmission** with the condition
    *"A field is not empty" → `marketingConsent`* and the step **Enroll in a list**,
    picking your email audience.
@@ -344,13 +345,19 @@ Open a submission and, under its fields, chips report what actually happened to 
   status: a submission you're looking at is, by definition, in the inbox.
 - **Added to "Leads" dataset** — only when this submission really did become a record in
   that dataset, named as the dataset is named today.
+- **Not added to "Leads" dataset: Seats must be a whole number** — when a submitted value
+  doesn't fit the dataset's model, the record is not written, and the chip names each
+  refused field and why. The visitor still sees your success message; fix the form's
+  field (or the dataset's) and later submissions land.
 
 The rule behind the second chip is worth knowing, because its **absence** is
 informative. It is stamped at submit time, only when a record was genuinely created. If
 the bound dataset had been deleted, or its record quota was full, or none of the
-submitted fields map onto the dataset's fields, the submission is still kept in full —
-it's the record that didn't happen. In that case **no dataset chip appears at all**,
-rather than a chip pointing at a row that doesn't exist. A submission with only **Saved
+submitted fields map onto the dataset's fields, or a value was refused by the dataset's
+model, the submission is still kept in full —
+it's the record that didn't happen. In those cases **no "Added to" chip appears**,
+rather than a chip pointing at a row that doesn't exist; a refused value is the one case
+that says why. A submission with only **Saved
 to Inbox** on a form you bound to a dataset is the signal to go and check the dataset.
 
 #### Replying to a submission {#replying-to-a-submission}

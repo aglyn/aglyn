@@ -140,11 +140,10 @@ jest.mock('@aglyn/tenant-runtime/get-variables', () => ({
   __esModule: true,
   default: jest.fn(async () => ({})),
   getFunctions: jest.fn(async () => ({})),
-  getWorkflows: jest.fn(async () => ({})),
 }))
-jest.mock('@aglyn/tenant-runtime/get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: jest.fn(async () => ({})),
+  readRepeatRows: jest.fn(async () => ({})),
 }))
 jest.mock('@aglyn/tenant-runtime/get-plugin-installs', () => ({
   __esModule: true,
@@ -170,9 +169,9 @@ jest.mock('@aglyn/tenant-runtime/get-screen-version', () => ({
   __esModule: true,
   default: jest.fn(),
 }))
-jest.mock('@aglyn/tenant-runtime/stamp-form-dataset-bindings', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/submission-record-target', () => ({
   __esModule: true,
-  stampFormDatasetBindings: (nodes: unknown) => nodes,
+  stampFormRecordTargets: async (nodes: unknown) => nodes,
 }))
 
 // ── Preview's surroundings ─────────────────────────────────────────────────

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
@@ -582,7 +582,7 @@ function ComponentBesignerPage(props) {
             // published version from their next send (AGL-3287).
             'Published. Every email using this block sends the new version ' +
               'from now on — you do not need to change them.'
-          : 'Published. Every screen using this component is refreshing now — ' +
+          : 'Published. Every page using this component is refreshing now — ' +
               'you do not need to republish them.',
         { variant: 'success', persist: false },
       )

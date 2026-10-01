@@ -49,10 +49,34 @@ by the plugin's API register functions. The declaration is light: the engine
 itself is imported when the first event arrives, or when the plugin's API
 surface loads.
 
-The vocabulary the engine runs — event types, step types, limits, condition
-shapes, validation — stays in the core (`@aglyn/aglyn/app-utils/actions` and
-`@aglyn/aglyn/app-utils/workflows`), because the console, the AI plugin and
-the core's own compose path read it too.
+The same declarations publish the record indexes of a site's `workflow`,
+`webhook` and `action` records (`server/automation-record-index.ts`), so the
+AI plugin reads them without reaching for this plugin's collections, and a
+dependents source (`server/workflow-dependents.ts`) that answers the console's
+"Used by" scan with the workflows calling a function. The readers load on the
+first read. What depends on a workflow — the variables it computes — is the
+logic plugin's to answer; the Automation page asks the same scan.
+
+A site variable that names a workflow takes that workflow's result when a page
+is composed (AGL-129). The same declarations register this plugin's variable
+computer on the core's `computed-variables` seam (`server/workflow-variables.ts`):
+the compose pipeline starts it beside the page's other reads, it reads the
+site's workflows under the site's render cache tag, and it runs them with the
+Workflow Builder model in `model/workflows.ts`. A variable whose workflow is
+gone or fails keeps its stored value.
+
+An action is a site interaction (`@aglyn/aglyn/app-utils/site-interactions`,
+the platform's: the trigger, its conditions, the client steps, validation)
+with this plugin's server steps added. The `runWorkflow` step is declared under
+`interactionSteps` in `plugins.config.json`, so the besigner's interaction
+builder offers it and lists the site's workflows without naming this plugin.
+The events a trigger starts on are the platform's (`app-utils/host-events`):
+the page view is core's own, and every other event is declared under
+`hostEvents` by the plugin whose doors raise it. The automation vocabulary
+itself — server steps, flows, recipes, webhooks — is still in the core
+(`@aglyn/aglyn/app-utils/actions`), because the AI plugin drafts automations
+against it and the CRM plugin installs its recipes, and neither may import
+this plugin.
 
 ## Entry points
 

@@ -153,6 +153,39 @@ export interface PluginApiRouteOptions {
    */
   recipientLink?: boolean
   /**
+   * The route is called by a MACHINE that proves itself with a credential
+   * the route verifies — a scheduler's shared secret, a provider's signed
+   * webhook — and names no site and no member (AGL-3080).
+   *
+   * Such a request has no subject the dispatcher could gate on before the
+   * route has verified it: a sweep spans every organization, and a webhook's
+   * workspace is inside a payload only a verified signature makes worth
+   * reading. Gated anonymously, a plugin on a partial rollout would refuse
+   * every delivery. So both dispatchers skip their per-site enablement and
+   * release gates for it, and — because a chunked sweep posts from one
+   * address, and a provider retries in bursts — their write limit and their
+   * cross-origin check (`isMachinePluginApiPath`); lockdown still applies.
+   * The flag grants nothing by itself: the route authenticates its caller,
+   * and judges the plugin's release and plan for each organization it
+   * resolves from what it verified.
+   */
+  machine?: boolean
+  /**
+   * The route hands a workspace the records a plugin keeps for it — a
+   * data-portability export — which the workspace is owed whether or not the
+   * plugin is switched on or released for it now (AGL-3080).
+   *
+   * Exporting the people a workspace holds is an obligation, not a feature:
+   * a workspace that switched the plugin off, or a plugin paused by its
+   * kill switch, still has to be able to take its data away. So both
+   * dispatchers skip their per-site enablement and release gates for it —
+   * and nothing else: lockdown, the email-verification gate and the rate
+   * limit still apply. The flag grants nothing by itself: the route
+   * authenticates the member, and asks the plugin's release and plan itself
+   * of anything it serves beyond what the workspace is owed.
+   */
+  portability?: boolean
+  /**
    * The route OPENS A CARD PAYMENT for whoever calls it: a Checkout Session,
    * a PaymentIntent or a SetupIntent (AGL-3363).
    *
@@ -316,6 +349,27 @@ export function resolvePluginApiMatch(path: string): PluginApiMatch | undefined 
 export function isPluginRecipientLinkRoute(path: string): boolean {
   const matched = matchRegisteredApiKey(path)
   return matched ? apiRouteOptions.get(matched.key)?.recipientLink === true : false
+}
+
+/**
+ * Whether a request path resolves to a route registered as a
+ * {@link PluginApiRouteOptions.machine} caller's — what both dispatchers ask
+ * before their enablement and release gates, and the write limits before
+ * they count (AGL-3080).
+ */
+export function isPluginMachineRoute(path: string): boolean {
+  const matched = matchRegisteredApiKey(path)
+  return matched ? apiRouteOptions.get(matched.key)?.machine === true : false
+}
+
+/**
+ * Whether a request path resolves to a route registered as a
+ * {@link PluginApiRouteOptions.portability} export — what both dispatchers
+ * ask before their enablement and release gates (AGL-3080).
+ */
+export function isPluginPortabilityRoute(path: string): boolean {
+  const matched = matchRegisteredApiKey(path)
+  return matched ? apiRouteOptions.get(matched.key)?.portability === true : false
 }
 
 /**

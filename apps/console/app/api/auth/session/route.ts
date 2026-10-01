@@ -43,6 +43,7 @@ import {
 // wholesale, and a mocked-away registration is a silent no-op that looks
 // exactly like the collision guard working.
 import { registerProviderAddresses } from '@aglyn/tenant-data-admin/server/account-emails'
+import { claimNewAccountAnnouncement } from '@aglyn/tenant-data-admin/server/new-account-announcement'
 import { after } from 'next/server'
 import {
   parseSignedOut,
@@ -505,39 +506,56 @@ async function handler(request: Request): Promise<Response> {
           address: resolveIdpAddress(decoded),
         }
         after(async () => {
+          // The auth record, read once for the two consumers below: the
+          // account's creation time and the addresses its providers assert.
+          let pooled: Awaited<ReturnType<typeof findUserByUidAcrossPools>> = null
           try {
-            const { created } = await seedUserProfile(uid, seed)
-            /*
-             * A NEW ACCOUNT, told to staff (AGL-3225).
-             *
-             * `created` is the one moment in the product that means this
-             * person did not exist before: the seed writes `users/{uid}` on
-             * first sight and only fills absent fields afterwards. Hanging
-             * the announcement off it rather than off a signup form is what
-             * makes it cover every provider — password, Google, passkey, SSO
-             * — since this is the one path every interactive sign-in takes.
-             *
-             * `notifyStaff` never throws and already respects each staff
-             * member's own preferences, so a claim holder who does not want
-             * to hear about sign-ups switches the category off and nothing
-             * here has to know.
-             */
-            /*
-             * ⚠️ Except the canary's own (AGL-3248).
-             *
-             * The hourly signup walk creates a real account through this
-             * exact path and then deletes it, so every announcement it raises
-             * is a person who no longer exists behind a link to an admin page
-             * that 404s. Nine of the ten most recent staff rows were canary
-             * on 2026-09-22.
-             *
-             * Matched on the ADDRESS because there is nothing else here yet:
-             * no org, no claim, nothing on the token that says CI — the org
-             * comes later, and `/api/orgs/create` excludes itself by its slug.
-             * `tools/e2e/signup-canary.mjs` refuses to start unless its base
-             * address carries the tag this reads.
-             */
-            if (created && !isSignupCanaryEmail(decoded.email)) {
+            pooled = await findUserByUidAcrossPools(uid)
+          } catch (error) {
+            console.error('[auth/session] auth record lookup failed', error)
+          }
+          try {
+            await seedUserProfile(uid, seed)
+          } catch (error) {
+            console.error('[auth/session] profile seed failed', error)
+          }
+          /*
+           * A NEW ACCOUNT, told to staff (AGL-3225).
+           *
+           * Here because this is the one path every interactive sign-in takes
+           * — password, Google, passkey, SSO — so it covers every provider
+           * without a hook per door. Whether the account is NEW comes from
+           * the auth record's creation time, and "once" from a marker that
+           * only the first claim can create; see
+           * `claimNewAccountAnnouncement`. Never from `users/{uid}` being
+           * absent: the sign-up page, the acquisition record and the SSO seed
+           * all write that document before this mint can, so its absence
+           * announced only the sign-ups that happened to win the race.
+           *
+           * `notifyStaff` never throws and already respects each staff
+           * member's own preferences, so a claim holder who does not want to
+           * hear about sign-ups switches the category off and nothing here
+           * has to know.
+           *
+           * ⚠️ Except the canary's own (AGL-3248). The hourly signup walk
+           * creates a real account through this exact path and then deletes
+           * it, so every announcement it raises is a person who no longer
+           * exists behind a link to an admin page that 404s. Matched on the
+           * ADDRESS because there is nothing else here yet: no org, no claim,
+           * nothing on the token that says CI. `tools/e2e/signup-canary.mjs`
+           * refuses to start unless its base address carries the tag this
+           * reads. Checked before the claim, so the canary never spends a
+           * marker write either.
+           */
+          try {
+            const createdAtMs = Date.parse(pooled?.record.metadata.creationTime ?? '')
+            if (
+              !isSignupCanaryEmail(decoded.email) &&
+              (await claimNewAccountAnnouncement({
+                uid,
+                accountCreatedAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,
+              }))
+            ) {
               await notifyStaff({
                 type: 'staff.userSignedUp',
                 title: 'New account',
@@ -546,7 +564,7 @@ async function handler(request: Request): Promise<Response> {
               })
             }
           } catch (error) {
-            console.error('[auth/session] profile seed failed', error)
+            console.error('[auth/session] new-account notice failed', error)
           }
           /*
            * THE ADDRESSES THE PROVIDER ASSERTS, into the uniqueness index.
@@ -570,8 +588,7 @@ async function handler(request: Request): Promise<Response> {
            * anything; a conflict is recorded for staff and left alone.
            */
           try {
-            const record = await findUserByUidAcrossPools(uid)
-            if (record) await registerProviderAddresses(uid, record.record)
+            if (pooled) await registerProviderAddresses(uid, pooled.record)
           } catch (error) {
             console.error('[auth/session] provider address registration failed', error)
           }

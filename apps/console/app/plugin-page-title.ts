@@ -15,35 +15,27 @@
  * limitations under the License.
  */
 
+import {
+  PLUGIN_SURFACE_SECTIONS,
+  PLUGIN_SURFACE_TITLES,
+} from '../constants/plugins.titles.generated'
+
 /**
  * The DISPLAYED name for a console plugin page, from its URL slug (AGL-2184).
  *
- * Deliberately a local table plus Title Case, NOT a call into the plugin
- * registry. Calling `resolveConsolePluginPage` is the obvious fix and it does
- * not build: the only caller is a SERVER layout, and pulling the registry
- * drags the whole plugin graph — every nav item's client component — into the
- * server compile. Measured, not assumed: `nx build console` failed with six
- * Turbopack "Ecmascript file had an error".
- *
- * `plugin-page-title.spec.ts` asserts this module against the registry's own
- * labels for every registered slug, so the copy cannot drift. A second copy
- * nothing checks is duplication; a second copy with a guard is a cache.
+ * Read from the generated titles manifest, NOT from the plugin registry. The
+ * callers are SERVER layouts, and pulling the registry there drags the whole
+ * plugin graph — every nav item's client component — into the server
+ * compile. Measured, not assumed: `nx build console` failed with six
+ * Turbopack "Ecmascript file had an error". The manifest is the plugins' own
+ * nav labels and section lists written down as data by
+ * `tools/scripts/generate-plugin-manifests.mjs`, so a label changes in the
+ * plugin and nowhere else.
  */
 
-/**
- * Slugs whose display name Title Case cannot produce.
- *
- * `pos` is the whole reason this table exists: the registry declares `POS`,
- * and no amount of casing a URL slug recovers an acronym.
- */
-export const PLUGIN_TITLES: Readonly<Record<string, string>> = {
-  pos: 'POS',
-  // The same reason: three letters nobody reads as a word.
-  crm: 'CRM',
-  // A surface whose name is not its slug (AGL-3199): the plugin id, and so
-  // the URL, stays `outreach` because it is stored vocabulary and a live API
-  // prefix; the name every reader sees is Sequences.
-  outreach: 'Sequences',
+/** `record[key]` when `key` is the record's own, never a prototype member. */
+function own<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined
 }
 
 /** `email-campaigns` -> `Email Campaigns`. Wrong for acronyms, by design. */
@@ -55,103 +47,31 @@ export function titleCaseSlug(slug: string): string {
     .join(' ')
 }
 
-/** The tab title for a plugin slug: the table first, then Title Case. */
+/**
+ * The tab title for a plugin slug: its nav item's label, then Title Case for
+ * a slug no plugin declares.
+ */
 export function pluginPageTitle(slug: string): string {
-  return PLUGIN_TITLES[slug] ?? titleCaseSlug(slug)
-}
-
-/**
- * The sections each plugin surface declares, keyed by the surface's URL slug.
- *
- * A local copy for the same reason {@link PLUGIN_TITLES} is one: the only
- * caller is a SERVER layout, and reaching the registry there drags every nav
- * item's client component into the server compile. `plugin-page-title.spec.ts`
- * asserts this against the plugin sources, so a section added, renamed or
- * removed without touching this table turns that suite red.
- *
- * What it is FOR is telling a section from an entity id. The route beneath a
- * plugin surface is a catch-all, so the segment after the surface is a
- * declared section on a hub (`/marketing/campaigns`) and a document id on a
- * surface that owns its subtree (`/forms/{formId}`). Only the first has a name
- * worth putting in a browser tab; the second is looked up by nothing here and
- * left out, which keeps an id off the tab rather than Title Casing it into
- * something that is no longer the id.
- */
-export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
-  products: [
-    'catalog',
-    'orders',
-    'promotions',
-    'reservations',
-    'settings',
-    'analytics',
-  ],
-  emails: [
-    'messages',
-    'templates',
-    'audiences',
-    'topics',
-    'sending',
-    'consent-groups',
-    'suppressions',
-  ],
-  // One table for both levels of the Marketing hub, which declare the same
-  // sections.
-  marketing: [
-    'overview',
-    'campaigns',
-    'conversions',
-    'overlays',
-    'experiments',
-  ],
-  // One table for both levels: the site rail's sections, and `automations`,
-  // which only the organization's hub declares (AGL-3302).
-  automation: ['workflows', 'actions', 'webhooks', 'automations'],
-  inbox: ['submissions', 'contacts', 'campaigns'],
-  crm: ['contacts', 'leads', 'companies', 'deals', 'tasks', 'reports', 'fields', 'settings'],
-  // Sequences, an ORGANIZATION-level surface (AGL-2974), titled by the org
-  // plugin route's layout from this same table.
-  outreach: ['sequences', 'mailboxes', 'compliance'],
-}
-
-/**
- * Section labels Title Case cannot produce, keyed `surface/section`.
- *
- * Scoped to the surface rather than keyed on the section id alone: two
- * surfaces are free to declare a section of the same id, and a flat key would
- * make one of them wear the other's label.
- */
-export const PLUGIN_SECTION_TITLES: Readonly<Record<string, string>> = {
-  // An acronym and a slash, neither of which is in the slug.
-  'marketing/experiments': 'A/B testing',
-  // Two nouns and an ampersand from a one-word slug. The id is the `?tab=`
-  // id the section was deep-linked by and does not move; the rail names both
-  // collections the one table holds.
-  'inbox/contacts': 'Members & leads',
-  // The hub is called Sequences (AGL-3199), so its sequence list cannot be
-  // too: the shell prints section and surface together. The id stays
-  // `sequences`, which is the URL segment.
-  'outreach/sequences': 'All sequences',
-  // The org hub's own section: "Automations" under a surface already called
-  // Automation would say the same word twice (AGL-3302).
-  'automation/automations': 'Org automations',
-  // Sentence case, as every rail label is; Title Case would capitalize both
-  // words (AGL-3320).
-  'emails/consent-groups': 'Consent groups',
+  return own(PLUGIN_SURFACE_TITLES, slug) ?? titleCaseSlug(slug)
 }
 
 /**
  * The display name for a section beneath `surfaceSlug`, or `''` when that
  * segment names no declared section — an entity id, or a typo the page itself
  * answers with a 404.
+ *
+ * What the section list is FOR is telling a section from an entity id. The
+ * route beneath a plugin surface is a catch-all, so the segment after the
+ * surface is a declared section on a hub (`/marketing/campaigns`) and a
+ * document id on a surface that owns its subtree (`/forms/{formId}`). Only the
+ * first has a name worth putting in a browser tab; the second is left out,
+ * which keeps an id off the tab rather than Title Casing it into something
+ * that is no longer the id.
  */
 export function pluginSectionTitle(
   surfaceSlug: string,
   sectionSlug: string,
 ): string {
-  if (!PLUGIN_SECTIONS[surfaceSlug]?.includes(sectionSlug)) return ''
-  return (
-    PLUGIN_SECTION_TITLES[`${surfaceSlug}/${sectionSlug}`] ??
-    titleCaseSlug(sectionSlug)
-  )
+  const sections = own(PLUGIN_SURFACE_SECTIONS, surfaceSlug)
+  return (sections && own(sections, sectionSlug)) ?? ''
 }

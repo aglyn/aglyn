@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostActionAlert } from '@aglyn/aglyn/server'
+import type { SiteAlert } from '@aglyn/aglyn/server'
 
 /**
  * WHO HEARS A HOST EVENT.
@@ -86,21 +86,22 @@ export interface HostEventListener {
     event: string,
     payload: HostEventPayload,
     context?: HostEventContext,
-  ): Promise<readonly HostActionAlert[] | void>
+  ): Promise<readonly SiteAlert[] | void>
   /**
-   * Runs ONE automation, by id, that a published page fired for a site event
-   * it evaluated itself — a scroll depth, a click, exit intent. The page has
-   * already decided the trigger matched, so the listener runs that one
-   * automation rather than every automation on the event; a listener that
-   * does not own the id resolves nothing.
+   * Runs the server half of ONE page interaction, by id, that a published
+   * page fired for a site event it evaluated itself — a scroll depth, a
+   * click, exit intent. The page has already decided the trigger matched, so
+   * the listener runs what that one interaction names rather than everything
+   * listening for the event; a listener that does not own the id resolves
+   * nothing.
    */
   onDispatch?(
     hostId: string,
-    automationId: string,
+    interactionId: string,
     event: string,
     payload: HostEventPayload,
     context?: HostEventContext,
-  ): Promise<readonly HostActionAlert[] | void>
+  ): Promise<readonly SiteAlert[] | void>
 }
 
 interface Registration {
@@ -114,7 +115,7 @@ const registrations: Registration[] = []
 let warnedEmpty = false
 
 /** A listener's answer as a list: nothing it said counts as no alerts. */
-function alertsOf(answer: readonly HostActionAlert[] | void): HostActionAlert[] {
+function alertsOf(answer: readonly SiteAlert[] | void): SiteAlert[] {
   return Array.isArray(answer) ? [...answer] : []
 }
 
@@ -156,7 +157,7 @@ export async function runHostEventListeners(
   event: string,
   payload: HostEventPayload = {},
   context: HostEventContext = {},
-): Promise<HostActionAlert[]> {
+): Promise<SiteAlert[]> {
   if (!registrations.length) {
     /*
      * Said once per process rather than per event. No listener means the
@@ -188,28 +189,28 @@ export async function runHostEventListeners(
 }
 
 /**
- * Hands one page-dispatched automation to the listeners that dispatch, and
+ * Hands one page-dispatched interaction to the listeners that dispatch, and
  * gathers the alerts it produced. Never rejects.
  */
 export async function dispatchHostAutomation(
   hostId: string,
-  automationId: string,
+  interactionId: string,
   event: string,
   payload: HostEventPayload = {},
   context: HostEventContext = {},
-): Promise<HostActionAlert[]> {
-  const alerts: HostActionAlert[] = []
+): Promise<SiteAlert[]> {
+  const alerts: SiteAlert[] = []
   for (const { pluginId, listener } of registrations) {
     if (!listener.onDispatch) continue
     try {
       alerts.push(
         ...alertsOf(
-          await listener.onDispatch(hostId, automationId, event, payload, context),
+          await listener.onDispatch(hostId, interactionId, event, payload, context),
         ),
       )
     } catch (error) {
       console.error(
-        `[host-events] ${pluginId} failed to dispatch ${automationId}`,
+        `[host-events] ${pluginId} failed to dispatch ${interactionId}`,
         hostId,
         error,
       )

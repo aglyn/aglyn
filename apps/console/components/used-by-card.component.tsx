@@ -57,19 +57,19 @@ interface Dependent {
  */
 const SCOPE_NOTE: Record<UsedByKind, string> = {
   component:
-    'Scanned: the published version of every screen, email and layout, plus ' +
+    'Scanned: the published version of every page, email and layout, plus ' +
     'other components — a component can be placed inside another one. ' +
     'Unpublished drafts and library templates are not scanned.',
   layout:
-    'Scanned: every screen that renders inside this layout, and every ' +
-    'layout nested inside it — deleting this one unwraps the screens ' +
+    'Scanned: every page that renders inside this layout, and every ' +
+    'layout nested inside it — deleting this one unwraps the pages ' +
     'under those too. Published or not, everything is scanned.',
   screen:
-    'Scanned: link targets on the published version of every screen and ' +
-    'layout, on every component, the screens nested under this one, and the ' +
+    'Scanned: link targets on the published version of every page and ' +
+    'layout, on every component, the pages nested under this one, and the ' +
     'collections that render their pages through it. Links typed as plain ' +
-    'addresses rather than picked as screens are not scanned — nothing ' +
-    'records which screen those meant.',
+    'addresses rather than picked as pages are not scanned — nothing ' +
+    'records which page those meant.',
 }
 
 /** The artifacts this card can scan. */
@@ -316,8 +316,8 @@ export function UsedByCard({
           <Typography variant="body2" color="text.secondary">
             {`Find every ${
               kind === 'component'
-                ? 'screen, email, layout, and component'
-                : 'screen, layout, and component'
+                ? 'page, email, layout, and component'
+                : 'page, layout, and component'
             } that renders this ${noun} before you change or delete it.`}
           </Typography>
           <Button size="small" variant="outlined" onClick={runScan}>

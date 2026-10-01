@@ -39,7 +39,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 // The leaf, not the barrel: the dispatcher's specs substitute the barrel,
 // and a route's own registration must still be read where it was made.
-import { isPluginRecipientLinkRoute } from '@aglyn/aglyn/app-utils/api-plugins'
+import {
+  isPluginMachineRoute,
+  isPluginPortabilityRoute,
+  isPluginRecipientLinkRoute,
+} from '@aglyn/aglyn/app-utils/api-plugins'
 import {
   conflictingHostIdResponse,
   pluginApiRequestHost,
@@ -79,8 +83,19 @@ async function dispatch(
   // A link mailed to a recipient — an unsubscribe — answers whether or not
   // its plugin is on or released for the workspace now (AGL-2981): an
   // opt-out outlives a rollout. It skips the two gates below and nothing
-  // else; it verifies its own signature.
-  if (pluginId && !isPluginRecipientLinkRoute(path)) {
+  // else; it verifies its own signature. A machine's route — a scheduler's
+  // sweep, a provider's webhook (AGL-3080) — names no subject to gate
+  // before it has verified its caller, so it skips them too and judges the
+  // plugin's gates itself, for each organization it resolves. A workspace's
+  // own records, exported (`portability`), are owed whether or not the
+  // plugin is on or released for it now, so that route skips them as well
+  // and asks the plugin's gates itself of anything beyond them.
+  if (
+    pluginId &&
+    !isPluginRecipientLinkRoute(path) &&
+    !isPluginMachineRoute(path) &&
+    !isPluginPortabilityRoute(path)
+  ) {
     // Two different sites in one request is refused outright (AGL-3360):
     // gating either one lets the other through to a handler that may read
     // it, which is how a suspended workspace could still take a payment.

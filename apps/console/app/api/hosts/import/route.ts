@@ -21,16 +21,12 @@
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
-  ACTIONS_MAX_PER_HOST,
   AUTHORS_MAX_PER_HOST,
-  checkDatasetQuota,
   checkEntitlement,
   checkQuota,
   COLLECTIONS_MAX_PER_HOST,
-  datasetIntegrityFields,
   decodeStoredNodes,
   encodeStoredNodes,
-  effectiveDatasetModel,
   hostScopeToken,
   legacyCollectionKind,
   newResourceScopeFields,
@@ -38,8 +34,12 @@ import {
   resolveOrgEntitlements,
   rewriteBindingTokensDeep,
   screenClaimsToBeAPage,
-  validateDocument,
 } from '@aglyn/aglyn/server'
+import {
+  resolveSiteBundleSections,
+  type ResolvedSiteBundleSection,
+  type SiteBundleReportRow,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -51,6 +51,7 @@ import {
   EXPORT_COLLECTION_LIMITS,
   EXPORTABLE_HOST_FIELDS,
   IMPORTABLE_FIELDS,
+  PLUGIN_SITE_EXPORT_COLLECTIONS,
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
@@ -71,7 +72,6 @@ import {
   nonPageScreenIds,
 } from '../resources/count-billable-screens'
 import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
-import { ensureCustomFieldTypes } from '../../../../utils/ensure-custom-field-types'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -357,7 +357,7 @@ async function screenCapRefusal(options: {
 
   // The plan's allowance first: when two caps are crossed at once, the one
   // worth naming is the one with a price on it (the rule `resourceCapRefusal`
-  // follows for datasets).
+  // follows for a plugin's sections).
   if (Number.isFinite(limit)) {
     const prior = billableScreenIds([...priorScreens.values()], routingMap as any)
     const next = billableScreenIds([...nextScreens.values()], nextRoutingMap)
@@ -365,9 +365,9 @@ async function screenCapRefusal(options: {
       return {
         status: 403,
         error:
-          `This backup holds ${bundleScreens.length} screens and this site has ` +
+          `This backup holds ${bundleScreens.length} pages and this site has ` +
           `${prior.size}, which would put it at ${next.size} of ${limit} ` +
-          'screens. Nothing was imported — upgrade in Billing, or restore into ' +
+          'pages. Nothing was imported — upgrade in Billing, or restore into ' +
           'a site with room.',
       }
     }
@@ -387,8 +387,8 @@ async function screenCapRefusal(options: {
       return {
         status: 403,
         error:
-          `This backup holds ${bundleScreens.length} screens and this site ` +
-          `has ${prior.size} email and template screens, which would put it ` +
+          `This backup holds ${bundleScreens.length} pages and this site ` +
+          `has ${prior.size} email designs and template pages, which would put it ` +
           `at ${next.size} of ${NON_PAGE_SCREEN_MAX_PER_HOST}. Nothing was ` +
           'imported — delete some, or restore into a site with room.',
       }
@@ -403,7 +403,7 @@ async function screenCapRefusal(options: {
  * paired with the quota key `/api/hosts/resources` already enforces them on
  * (AGL-1403).
  *
- * A table rather than five checks because the arithmetic really is the same
+ * A table rather than a check per collection because the arithmetic really is the same
  * for all of them: unlike screens these have no exclusion rule, so the state an
  * import would leave is just `|existing ids ∪ bundle ids|`. The mapping is the
  * only thing worth writing down, and writing it down is what makes the gap
@@ -412,6 +412,12 @@ async function screenCapRefusal(options: {
  * `checkQuota` arrives here for the first time with this table. A cap nothing
  * in the file mentions is a cap nobody reviewing the file can notice is
  * missing.
+ *
+ * The platform's own row is `layouts`. The rest are the collections plugins
+ * declare for the bundle whose `resource` names a plan counter — a site's
+ * workflows, functions, variables and services — read from the declaration
+ * rather than written here, so the counter a restore is met against is the
+ * one the create route meets the same kind against, by construction.
  *
  * `layouts` and `services` are UNLIMITED on every plan that can reach this
  * route, so today they refuse nothing and cost no read. They are in the table
@@ -423,25 +429,35 @@ async function screenCapRefusal(options: {
  *
  * * `screens` — a different rule (`billableScreenIds`, with three exclusions)
  *   and its own check above (AGL-1398).
- * * `actions` — no `RESOURCES` entry and no quota key anywhere; all three
- *   creators write the document client-direct.
+ * * a declared collection counted by a FLAT cap — the table below.
  * * `collections`/`entries` — uncapped by design; AGL-1387 declined
  *   `collectionsPerHost` and this is not the issue that re-opens it.
  * * `components` — `reusableComponents` is a BOOLEAN entitlement, true on
  *   every plan that can reach here. There is no number to compare against.
  * * `media` — the meter is bytes at upload, and an import copies no bytes.
  */
-const CAPPED_HOST_COLLECTIONS = [
-  { collection: 'workflows', quotaKey: 'workflowsPerHost', label: 'workflows' },
-  { collection: 'functions', quotaKey: 'functionsPerHost', label: 'functions' },
-  { collection: 'variables', quotaKey: 'variablesPerHost', label: 'variables' },
+const CAPPED_HOST_COLLECTIONS: ReadonlyArray<{
+  collection: string
+  quotaKey: string
+  label: string
+}> = [
   {
     collection: 'layouts',
     quotaKey: 'sharedLayoutsPerHost',
     label: 'shared layouts',
   },
-  { collection: 'services', quotaKey: 'servicesPerHost', label: 'services' },
-] as const
+  ...PLUGIN_SITE_EXPORT_COLLECTIONS.flatMap((declared) =>
+    'quotaKey' in declared.count
+      ? [
+          {
+            collection: declared.collection,
+            quotaKey: declared.count.quotaKey,
+            label: declared.label,
+          },
+        ]
+      : [],
+  ),
+]
 
 /**
  * The bundle collections bounded by a FLAT PLATFORM cap rather than a plan
@@ -453,6 +469,12 @@ const CAPPED_HOST_COLLECTIONS = [
  * arithmetic is otherwise identical, so the loop below is shared.
  *
  * ## Why this route needs them at all
+ *
+ * The declared collections counted by a flat cap — a site's interactions and
+ * actions, by `ACTIONS_MAX_PER_HOST` — come from their `resource`, resolved by
+ * name the way the create route resolves it; a name core does not hold is
+ * `null`, and a bundle carrying that collection is refused rather than
+ * restored uncapped.
  *
  * AGL-2266 moved `actions` and `entries` creation server-side and gave
  * `collections` a ceiling, which closes the CLIENT door. This route is the
@@ -467,8 +489,22 @@ const CAPPED_HOST_COLLECTIONS = [
  * `entries` is deliberately NOT here, and the reason is a read bill rather
  * than a judgement — see the note at the end of this table's use below.
  */
-const FLAT_CAPPED_HOST_COLLECTIONS = [
-  { collection: 'actions', max: ACTIONS_MAX_PER_HOST, label: 'interactions' },
+const FLAT_CAPPED_HOST_COLLECTIONS: ReadonlyArray<{
+  collection: string
+  max: number | null
+  label: string
+}> = [
+  ...PLUGIN_SITE_EXPORT_COLLECTIONS.flatMap((declared) =>
+    'max' in declared.count
+      ? [
+          {
+            collection: declared.collection,
+            max: declared.count.max,
+            label: declared.label,
+          },
+        ]
+      : [],
+  ),
   // Custom content authors (AGL-2486). Same arithmetic and the same reason:
   // `AUTHORS_MAX_PER_HOST` is enforced on /api/hosts/resources, which closes
   // the CLIENT door, and this route writes with the Admin SDK. A bundle can
@@ -479,7 +515,7 @@ const FLAT_CAPPED_HOST_COLLECTIONS = [
     max: COLLECTIONS_MAX_PER_HOST,
     label: 'collections',
   },
-] as const
+]
 
 /** The ids a collection already holds. A field mask with no fields projects to
  * the document id alone, so this is the cheapest form of the read. */
@@ -508,61 +544,22 @@ function bundleDocIds(items: Array<Record<string, any>>): Set<string> {
  * numeric caps (AGL-1403) — the ones AGL-1398 left standing when it closed the
  * screens leg.
  *
- * This route creates eleven other document classes and checked the quota of
- * none of them. Against Pro, the cheapest plan that can import: `workflows` 100
- * against 25, `functions` 100 against 50, `datasets` 50 against 15 included,
- * and `variables` 100 against 100 — where the caps merely TIE, so it crosses on
- * whatever the site already holds and no check that reads the file alone can
- * see it.
+ * This route creates many other document classes and once checked the quota
+ * of none of them. Against Pro, the cheapest plan that can import: `workflows`
+ * 100 against 25, `functions` 100 against 50, and `variables` 100 against
+ * 100 — where the caps merely TIE, so it crosses on whatever the site already
+ * holds and no check that reads the file alone can see it.
  *
- * ## Datasets lead, because they are the only leg that leaks revenue
+ * ## A plugin's sections lead
  *
- * The others under-meter. Datasets are SOLD — `extraDatasetMonthlyUsd`, org
- * addons on top of the plan's included count — and the import writes them
- * straight to `orgs/{orgId}/datasets/…`, past `/api/orgs/datasets`. There are
- * three create paths for a dataset and this was the only one calling nothing:
- * the console's own route and the marketplace's `installDatasetSchema` both
- * call `checkDatasetQuota`, and the installer's comment already says why —
- * "installing must not be a way around it". A 50-dataset bundle lands a Pro org
- * at its 50-dataset HARD MAXIMUM, unpaid, in one button press.
- *
- * So datasets are checked first and their refusal is the one a bundle
- * busting several caps reports: a restore blocked four times running is worse
- * than one blocked once, and the arithmetic worth naming is the one with a
- * price on it.
- *
- * `checkDatasetQuota` decides, not `checkQuota(org, 'datasetsPerOrg')`. An org
- * that has PAID for extra datasets is entitled to them, and comparing against
- * the plan's included number would refuse a customer their own backup after
- * taking their money for the room to hold it. The escape the refusal names
- * comes from the same helper: addons while `upgradeRequired` is false,
- * upgrading once the addon runway is gone.
- *
- * ## Restore vs copy, when the resource is not host-scoped
- *
- * AGL-1398 identified a restore by document-id COLLISION rather than by the
- * bundle's `sourceHostId`, which is an unsigned string in a file the metered
- * party uploads. The collision argument transfers, but the sentence a collision
- * proves changes with the scope of the METER, and datasets are the case where
- * that matters:
- *
- * * host-scoped rows above — a collision means this SITE already holds the
- *   document, exactly as for screens;
- * * datasets — a collision means this WORKSPACE already holds the dataset.
- *
- * The org boundary is the right one here, and not a weaker version of the host
- * one, because the meter is per-org. Restoring a bundle into a SIBLING host of
- * the same workspace rewrites the same dataset documents the org is already
- * paying for — all it changes is `visibleTo`, from one host scope to another —
- * so it provisions nothing and raises nothing. A copy into a different
- * workspace collides on nothing and provisions all of them, and is refused when
- * it lands that workspace over. An id-collision test keyed on the HOST would
- * have refused the first of those, which is half of what the feature is for.
- *
- * The forgery direction is unchanged: to reach the allow path the bundle's
- * datasets must already be in the workspace, which is to say already bought,
- * and renaming them to ids the workspace holds OVERWRITES those datasets
- * instead of adding any.
+ * A section a plugin answers for (`plugin-site-bundle`) is asked first, and
+ * its sentence is the one a bundle busting several caps reports. Its count is
+ * the ORGANIZATION's, and the one sold as add-ons on top of the plan — a
+ * workspace's datasets — so it is the leg that leaks revenue rather than
+ * under-meters; a restore blocked four times running is worse than one
+ * blocked once, and the arithmetic worth naming is the one with a price on
+ * it. How a section counts, and what an id collision proves at its scope, is
+ * the plugin's to say.
  *
  * ## Before the first write, and for the whole bundle
  *
@@ -584,47 +581,25 @@ function bundleDocIds(items: Array<Record<string, any>>): Set<string> {
  */
 async function resourceCapRefusal(options: {
   hostRef: FirebaseFirestore.DocumentReference
-  /** The owning org's `datasets` collection, or null for a host with no org. */
-  datasetsRef: FirebaseFirestore.CollectionReference | null
+  hostId: string
+  orgId: string | null
   org: unknown
+  sections: readonly ResolvedSiteBundleSection[]
+  sectionItems: (section: ResolvedSiteBundleSection) => Array<Record<string, any>>
   bundleItems: (name: string) => Array<Record<string, any>>
 }): Promise<Response | null> {
-  // Datasets lead. One refusal covers the bundle, and when several caps are
-  // crossed at once the one worth naming is the one with a price on it.
-  return (await datasetCapRefusal(options)) ?? (await hostCapRefusal(options))
-}
-
-/** The org-scoped leg (`orgs/{orgId}/datasets`), addon-aware. */
-async function datasetCapRefusal(options: {
-  datasetsRef: FirebaseFirestore.CollectionReference | null
-  org: unknown
-  bundleItems: (name: string) => Array<Record<string, any>>
-}): Promise<Response | null> {
-  const { datasetsRef, org, bundleItems } = options
-  // `importDatasets` returns early without an org id, so a host with no owning
-  // org writes none and can raise nothing.
-  const bundleDatasets = bundleDocIds(bundleItems('datasets'))
-  if (!datasetsRef || !bundleDatasets.size) return null
-  if (!Number.isFinite(checkDatasetQuota(org as any, 0).limit)) return null
-
-  const existing = await existingDocIds(datasetsRef)
-  const next = new Set([...existing, ...bundleDatasets]).size
-  // `allowed` asks "may I add one more to N", so the post state N is checked as
-  // `N - 1` — the idiom `/api/orgs/datasets` uses for its own bulk path
-  // (`import-records`).
-  const quota = checkDatasetQuota(org as any, next - 1)
-  if (next <= existing.size || quota.allowed) return null
-
-  return Response.json({
-    error:
-      `This backup holds ${bundleDatasets.size} datasets and this workspace ` +
-      `has ${existing.size}, which would put it at ${next} of ${quota.limit} ` +
-      'datasets. Nothing was imported — ' +
-      (quota.upgradeRequired
-        ? 'upgrade in Billing.'
-        : `add extra datasets for $${quota.addonPriceUsd}/mo each, or ` +
-          'upgrade in Billing.'),
-  }, { status: 403 })
+  const { hostId, orgId, org, sections, sectionItems } = options
+  for (const one of sections) {
+    const refusal = await one.section.refusal?.({
+      hostId,
+      orgId,
+      org,
+      limit: one.limit,
+      items: sectionItems(one),
+    })
+    if (refusal) return Response.json({ error: refusal }, { status: 403 })
+  }
+  return hostCapRefusal(options)
 }
 
 /** The host-scoped legs, one row of `CAPPED_HOST_COLLECTIONS` at a time. */
@@ -677,19 +652,25 @@ async function hostCapRefusal(options: {
   for (const capped of FLAT_CAPPED_HOST_COLLECTIONS) {
     const bundleIds = bundleDocIds(bundleItems(capped.collection))
     if (!bundleIds.size) continue
+    const max = capped.max
+    if (max == null) {
+      throw new Error(
+        `hosts/import: "${capped.collection}" names a platform cap core does not hold`,
+      )
+    }
     const ref = hostRef.collection(capped.collection)
     const held = (await ref.count().get()).data().count
-    if (held + bundleIds.size <= capped.max) continue
+    if (held + bundleIds.size <= max) continue
 
     const existing = await existingDocIds(ref)
     const next = new Set([...existing, ...bundleIds]).size
-    if (next <= existing.size || next <= capped.max) continue
+    if (next <= existing.size || next <= max) continue
 
     return Response.json({
       error:
         `This backup holds ${bundleIds.size} ${capped.label} and this site ` +
         `has ${existing.size}, which would put it at ${next} of ` +
-        `${capped.max}. Nothing was imported — delete some, or restore into ` +
+        `${max}. Nothing was imported — delete some, or restore into ` +
         'a site with room.',
     }, { status: 403 })
   }
@@ -775,7 +756,8 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Not a site admin' }, { status: 403 })
     }
     // Plan gate rides the owning org's doc (AGL-238). The org id is kept —
-    // datasets and media restore into the org, not the host (AGL-1046).
+    // media and a plugin's organization data restore into the org, not the
+    // host (AGL-1046).
     const owningOrg = await getOrgForHost(hostId)
     const orgId = owningOrg?.orgId
 
@@ -829,6 +811,18 @@ async function handler(request: Request): Promise<Response> {
     }
 
     /**
+     * The sections plugins answer for themselves, resolved before any count
+     * or write: a section declared and not registered THROWS here, and the
+     * restore fails before it starts rather than skipping the section. Each
+     * one's items are capped at its declared limit, in the same one place.
+     */
+    const bundleSections = await resolveSiteBundleSections()
+    const sectionItems = (one: ResolvedSiteBundleSection): Array<Record<string, any>> => {
+      const items: any[] = Array.isArray(bundle[one.key]) ? bundle[one.key] : []
+      return items.slice(0, one.limit)
+    }
+
+    /**
      * Before the first write, because a half-restored site is worse than a
      * refused one (AGL-1398).
      *
@@ -859,13 +853,15 @@ async function handler(request: Request): Promise<Response> {
     }
 
     // And every OTHER numeric cap this route creates against (AGL-1403) —
-    // datasets first, because they are the one sold as an addon.
+    // a plugin's sections first, because theirs are the counts sold as
+    // add-ons.
     const overResourceCap = await resourceCapRefusal({
       hostRef,
-      datasetsRef: orgId
-        ? firestore.collection('orgs').doc(orgId).collection('datasets')
-        : null,
+      hostId,
+      orgId: orgId ?? null,
       org: owningOrg?.org,
+      sections: bundleSections,
+      sectionItems,
       bundleItems,
     })
     if (overResourceCap) return overResourceCap
@@ -1077,16 +1073,9 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    // Non-conforming rows are imported AND reported (AGL-182) — data is
-    // never silently dropped; the report tells the owner what to fix.
-    const dataReport: Array<{
-      datasetId: string
-      recordId: string
-      errors: Record<string, string>
-    }> = []
     /**
-     * Datasets and media restore into the OWNING ORG (AGL-237), scoped to
-     * the importing site (AGL-1046). They used to be written to
+     * Media restores into the OWNING ORG (AGL-237), scoped to the importing
+     * site (AGL-1046). It used to be written to
      * `hosts/{hostId}/…`, the path AGL-1050 proved nothing reads any more,
      * so a restore appeared to succeed and the data was never seen again.
      *
@@ -1098,16 +1087,12 @@ async function handler(request: Request): Promise<Response> {
      * one click on the sharing control; wide is a leak. The export side
      * strips `visibleTo` for the same reason.
      */
-    const orgScopedRef = (
-      name: 'datasets' | 'media' | 'mediaFolders',
-      id: string,
-    ) =>
+    const orgScopedRef = (name: 'media' | 'mediaFolders', id: string) =>
       firestore.collection('orgs').doc(orgId as string).collection(name).doc(id)
     // Through the AGL-1478 gate since AGL-1484. A restore CREATES documents
-    // in three scoped collections — `datasets`, `media`, `mediaFolders` —
-    // and it was the one dataset creator missing from
-    // `scoped-create-coverage.spec.ts` entirely, because it is spelled as a
-    // restore rather than as a create.
+    // in two scoped collections here — `media`, `mediaFolders` — and was
+    // missing from `scoped-create-coverage.spec.ts` entirely, because it is
+    // spelled as a restore rather than as a create.
     const importedScope = newResourceScopeFields([hostScopeToken(hostId)])
 
     /**
@@ -1266,44 +1251,56 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    const importDatasets = async () => {
-      if (!orgId) return
-      for (const item of bundleItems('datasets')) {
-        if (!item?.$id) continue
-        const docRef = orgScopedRef('datasets', String(item.$id))
-        await write(docRef, { ...cleanDoc('datasets', item), ...importedScope })
-        // v1 exports (no model) validate through the derived text model,
-        // same as the live migration — everything passes, by design.
-        const model = effectiveDatasetModel(item)
-        // A plugin's field validator only runs once its plugin has registered
-        // it, so a bundle's out-of-range rating is reported like any other.
-        await ensureCustomFieldTypes(model)
-        const records: any[] = Array.isArray(item.records) ? item.records : []
-        for (const record of records.slice(0, 1000)) {
-          if (!record?.$id) continue
-          const errors = validateDocument(model, record.values ?? {})
-          if (Object.keys(errors).length) {
-            dataReport.push({
-              datasetId: String(item.$id),
-              recordId: String(record.$id),
-              errors,
-            })
-          }
-          await write(
-            docRef.collection('records').doc(String(record.$id)),
-            {
-              ...cleanDoc('records', record),
-              // DERIVED here rather than allow-listed off the bundle. The
-              // integrity index the delete check queries must describe the
-              // values that were just restored, and a bundle written before
-              // the field existed carries none — accepting the bundle's copy
-              // would restore records the check cannot reach. Records are
-              // re-keyed by their original id, so the ids it holds still
-              // resolve.
-              ...datasetIntegrityFields(model, record.values ?? {}),
-            },
-          )
-        }
+    /**
+     * The sections plugins answer for, each through the restore's own writer
+     * and stamps, so its documents ride these batches and this total. A
+     * section restores what it can and REPORTS what does not conform
+     * (AGL-182) — data is never silently dropped; the report tells the owner
+     * what to fix.
+     */
+    const dataReport: SiteBundleReportRow[] = []
+    /**
+     * A section's document, by its full path — and only inside the trees
+     * this restore owns: the importing site's, and its organization's. A
+     * section writes nothing anywhere else, whatever its bundle says.
+     */
+    const sectionDocument = (path: string): FirebaseFirestore.DocumentReference => {
+      const segments = path.split('/')
+      const inside =
+        (segments[0] === 'hosts' && segments[1] === hostId) ||
+        (Boolean(orgId) && segments[0] === 'orgs' && segments[1] === orgId)
+      if (!inside || segments.length % 2 || segments.some((segment) => !segment)) {
+        throw new Error(`hosts/import: a section may not write "${path}"`)
+      }
+      let ref: any = firestore
+      for (let at = 0; at < segments.length; at += 2) {
+        ref = ref.collection(segments[at]).doc(segments[at + 1])
+      }
+      return ref
+    }
+    const importSections = async () => {
+      for (const one of bundleSections) {
+        const rows = await one.section.import({
+          hostId,
+          orgId: orgId ?? null,
+          org: owningOrg?.org,
+          limit: one.limit,
+          items: sectionItems(one),
+          write: (documentPath, data) => write(sectionDocument(documentPath), data),
+          stamps: () => ({
+            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          }),
+          // The console's server plugin loader, imported here rather than at
+          // module scope because importing it builds the plugin manifest.
+          loadPluginSurfaces: async () => {
+            const { serverPluginLoader } = await import(
+              '../../../../utils/server-plugin-loader'
+            )
+            await serverPluginLoader.ensureAll(['consoleApi'])
+          },
+        })
+        dataReport.push(...rows)
       }
     }
 
@@ -1354,12 +1351,12 @@ async function handler(request: Request): Promise<Response> {
 
     await importVersioned('layouts')
     await importPlain('components')
-    await importPlain('variables')
-    await importPlain('functions')
-    await importPlain('workflows')
-    await importPlain('actions')
+    // The collections plugins declare for the bundle, each through the
+    // field list its declaration names (folded into `IMPORTABLE_FIELDS`).
+    for (const declared of PLUGIN_SITE_EXPORT_COLLECTIONS) {
+      await importPlain(declared.collection)
+    }
     await importAuthors()
-    await importPlain('services')
     // Folders before assets: the tree has to exist before anything points into
     // it, and both reads resolve against the same id set (AGL-1392).
     await importMediaFolders()
@@ -1368,7 +1365,9 @@ async function handler(request: Request): Promise<Response> {
     await importHostLibrary('mediaFolders')
     await importHostLibrary('media')
     await importCollections()
-    await importDatasets()
+    // A plugin's sections last: what they restore may point at what the
+    // platform restored above, never the other way round.
+    await importSections()
     await commit()
 
     /**

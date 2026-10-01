@@ -16,7 +16,7 @@
  */
 
 import { listConsoleThemePresets } from '@aglyn/aglyn'
-import { validateThemeForPublish } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { validateThemeForPublish } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   createResponsiveTheme,
   hostThemeToThemeOptions,
@@ -116,6 +116,7 @@ describe('the Themes plugin (AGL-3405)', () => {
     registerThemesConsole()
     const listed = listConsoleThemePresets(['theme-presets'])
     expect(listed.map((preset) => preset.id)).toEqual([
+      'theme-presets.material-ui',
       'theme-presets.bootstrap',
       'theme-presets.minimal',
       'theme-presets.material3',

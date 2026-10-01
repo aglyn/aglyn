@@ -1,16 +1,16 @@
 ---
 sidebar_position: 4
 title: Members-only areas
-description: Let visitors sign up as members and gate screens so only members can view them.
+description: Let visitors sign up as members and gate pages so only members can view them.
 ---
 
 # Members-only areas
 
 Beyond your team, your **site visitors** can become **members** — and you can restrict
-certain screens to signed-in members only.
+certain pages to signed-in members only.
 
 :::info Plan availability
-**Business** and above. Members-only screens, gated video, and the content
+**Business** and above. Members-only pages, gated video, and the content
 paywall need the content-gating feature; on lower plans (or if a
 subscription lapses) gated content is not served.
 :::
@@ -31,15 +31,15 @@ Every site serves three membership routes out of the box:
 - **`/recover`** — forgotten-password recovery
 
 By default these render simple built-in forms styled with your site theme. To make them
-fully yours, **design them in the besigner** like any other screen:
+fully yours, **design them in the besigner** like any other page:
 
-1. Create a screen and drop in the matching block from the **Members** group of the
+1. Create a page and drop in the matching block from the **Members** group of the
    element picker — **Member sign-in**, **Member sign-up**, or **Password recovery**.
    Add anything else you like around it: your logo, imagery, copy.
-2. Open **Admin → Plugins → User Accounts** and assign the screen to its route on the
+2. Open **Admin → Plugins → User Accounts** and assign the page to its route on the
    **Sign-in & sign-up pages** card.
 
-Assigned screens render through the normal pipeline — your theme, shared layout, and
+Assigned pages render through the normal pipeline — your theme, shared layout, and
 all — and are kept out of search results. Clearing a slot falls back to the built-in
 form.
 
@@ -62,9 +62,9 @@ link on the sign-in form (or by visiting `/recover` directly):
 3. The member sets a new password and signs in with it. Suspended members don't
    receive reset emails.
 
-## Gate a screen
+## Gate a page {#gate-a-screen}
 
-1. Open the screen you want to protect.
+1. Open the page you want to protect.
 2. Mark it **members-only**.
 3. Publish. Only signed-in members can now view it; everyone else is prompted to sign in.
 
@@ -105,10 +105,10 @@ list shows each account's Active/Suspended status at a glance.
 
 ## Tips
 
-- Combine members-only screens with [email campaigns](../../marketing-and-automation/email-campaigns/overview.md) to
+- Combine members-only pages with [email campaigns](../../marketing-and-automation/email-campaigns/overview.md) to
   nurture your member base.
 - For one-off protection without accounts, use a
-  [per-screen password](../../building-sites/site-protection/overview.md) instead.
+  [per-page password](../../building-sites/site-protection/overview.md) instead.
 
 ## Related
 

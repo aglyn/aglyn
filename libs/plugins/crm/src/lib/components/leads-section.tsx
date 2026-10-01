@@ -73,6 +73,7 @@ import {
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { leadPrimaryGroup } from '../model/contact-holder'
 import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import {
@@ -111,6 +112,9 @@ import { LeadOwnerSelect } from './lead-owner-select'
 import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
 import { CrmEmailStateChip } from './crm-email-state-chip'
 import { LeadStatusChip } from './lead-status-chip'
+import { CrmShareChipView } from './record-sharing-card'
+import { crmShareChipFor } from '../model/crm-sharing'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
 import LeadsBulkBar from './leads-bulk-bar'
@@ -153,7 +157,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId, createHostId } = useCrmScope({ hostId, org })
+  const { orgId, createHostId, consentGroup } = useCrmScope({ hostId, org })
+  // The viewing site's group: a row it sees only through a share is chipped
+  // with who shared it (AGL-3336). None at the organization level.
+  const viewingHostIds = consentGroup?.hostIds
   const mount = useCrmOrgMount()
   const roster = useOrgMemberOptions(orgId)
   // The org's lead fields, for the optional columns below (AGL-3272).
@@ -387,6 +394,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     [crmApi, enqueueSnackbar],
   )
 
+  // A client-direct write owes the org's sharing rules a re-evaluation (AGL-3336).
+  const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
   const writeLead = useCallback(
     async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
       if (!orgId) {
@@ -404,6 +413,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             updatedAt: serverTimestamp(),
           },
         )
+        followUpSharing('leads', [lead.leadId])
         enqueueSnackbar(done, { variant: 'success', persist: false })
       } catch (error) {
         enqueueSnackbar(
@@ -414,7 +424,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         )
       }
     },
-    [firestore, enqueueSnackbar],
+    [firestore, enqueueSnackbar, followUpSharing],
   )
 
   const columns = useMemo<GridColDef[]>(
@@ -431,9 +441,12 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             spacing={0}
             sx={{ minWidth: 0, justifyContent: 'center', height: '100%' }}
           >
-            <Typography variant="body2" noWrap>
-              {String(row['name'] || row['email'] || row.$id)}
-            </Typography>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+              <Typography variant="body2" noWrap>
+                {String(row['name'] || row['email'] || row.$id)}
+              </Typography>
+              <CrmShareChipView chip={crmShareChipFor(row, viewingHostIds ?? [])} org={org} />
+            </Stack>
             {row['name'] ? (
               <Typography variant="caption" color="text.secondary" noWrap>
                 {String(row['email'] ?? '')}
@@ -683,6 +696,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       routes,
       writeLead,
       hostId,
+      viewingHostIds,
+      org,
       mount,
       campaignName,
       leadFields.active,
@@ -850,7 +865,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         onClose={() => setConverting(null)}
         hostId={
           hostId ??
-          (Aglyn.leadPrimaryGroup(converting, org as Record<string, unknown>).hostId || null)
+          (leadPrimaryGroup(converting, org as Record<string, unknown>).hostId || null)
         }
         orgId={orgId}
         org={org as Record<string, unknown> | undefined}

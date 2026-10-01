@@ -17,7 +17,7 @@ is checked against them before you see it.
 Open the site you are building for, go to the page that lists what you want built, and
 choose **Describe it** beside its create button:
 
-- a page on **Screens**, or **Describe a page** in **AI jobs** in the Assist panel; see
+- a page on **Pages**, or **Describe a page** in **AI jobs** in the Assist panel; see
   [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md);
 - a page template on **Templates**; see
   [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai);
@@ -37,8 +37,12 @@ Before it generates anything, a build job proposes a **plan**:
 - what it will **reuse** from your site: components, layouts, templates, forms,
   datasets and collections;
 - what it will **create**, and why nothing you already have will do;
-- the **screens** it will build, each with its layout, address, search title and
-  sections.
+- the **pages** it will build, each with its layout, address, search title and
+  sections;
+- any **YouTube or Vimeo player** your brief asks for, the page or component it
+  goes on, and what it costs: a player loads its host's own code when a visitor
+  reaches it, whether or not they press play. A brief that asks for no video gets
+  no player.
 
 A plan only proposes what your workspace can create: what your plan includes, and what
 your site still has room for. A plan the job could not build is stopped before you are
@@ -89,7 +93,7 @@ generated until you confirm.
 9. **Images come from your media library, with alt text.** Images are placed from
    the media library, or left as an empty slot for you to fill, and never linked
    from another website. Every image has alt text or is marked decorative.
-10. **Navigation and SEO travel with a page.** Every new screen gets its own
+10. **Navigation and SEO travel with a page.** Every new page gets its own
     address, a search title and description, and a navigation entry when the brief
     calls for one. A link goes only to a page that does what its words say: when your
     site has no such page yet, the link is left out rather than sent to your home
@@ -113,13 +117,16 @@ generated until you confirm.
     **AI jobs** lists those gaps beside the draft so you can fill them before you
     publish.
 15. **Start from a duplicate of the nearest thing.** When your site has a similar
-    screen, template or email, the job starts from a copy of it, which keeps its
+    page, template or email, the job starts from a copy of it, which keeps its
     bindings and SEO.
 16. **The smallest document that does the job.** Generated pages use the fewest
     elements that render the design: no empty or doubled-up containers, no list item
     or card with nothing in it, text as text, images that load as they are reached,
-    video that plays on click, and no
-    fonts or third-party embeds you did not ask for.
+    video that plays on click behind its poster, and no fonts you did not ask for.
+    A YouTube or Vimeo player appears only where the plan you confirmed lists it,
+    playing the link your brief gave or waiting for you to paste one. A template
+    or a layout never carries one, because it would load on every page it serves;
+    a template plays an entry's featured video only when its plan lists it.
 17. **A measured size for every output.** Each page, component, layout, form and
     email is measured (elements, stored size, image weight, embeds and fonts)
     against a budget for its kind, and an email is kept under the size mail apps

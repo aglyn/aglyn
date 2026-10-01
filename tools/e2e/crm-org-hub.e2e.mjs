@@ -71,7 +71,7 @@ import {
   removeContactsAtAddress,
   removeSiteContactsOutsideFixture,
   seedCrmFixtures,
-} from '../scripts/lib/crm-fixtures.mjs'
+} from '../../libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs'
 import {
   adminFirestore,
   BASE_URL,

@@ -30,7 +30,7 @@ import {
   MEDIA_REF_PREFIX,
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { marketplaceMinPriceUsd } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import type { ListingVerificationRequest } from './listing-verification'
 import {
   offeredPluginVersion,
@@ -51,7 +51,7 @@ import {
   LISTING_CLIENT_WRITABLE_FIELDS,
   LISTING_UNPERSISTED_FIELDS,
   listingArtifactType,
-} from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
+} from './listing-visibility'
 
 export {
   isListingBrowsable,
@@ -265,11 +265,12 @@ export interface MarketplaceListing {
 }
 
 /**
- * Everything an org can publish to the marketplace (AGL-654).
+ * Everything an org can publish to the marketplace (AGL-654): every kind of
+ * content the platform can install.
  *
- * Defined in core and re-exported here (AGL-1016): the console needs it to
- * render update state for installed artifacts, and an app may not depend on an
- * addon lib. Publishing code keeps importing it from this model unchanged.
+ * The union is core's `InstallableArtifactType` — installed content is read by
+ * surfaces that are not the marketplace, through the provenance stamp — and is
+ * re-exported here under the name publishing code has always used.
  */
 export type { MarketplaceArtifactType }
 
@@ -1110,36 +1111,28 @@ export function marketplacePriceRefusal(priceUsd: number): string | undefined {
 }
 
 /**
- * The allowlists and the sanitizer live in core since AGL-2939 — see
- * `@aglyn/aglyn/app-utils/node-definition-sanitizer` — and keep their
- * marketplace names here for the publishers that import them.
+ * The rule a node tree meets before it lands on a canvas that did not author
+ * it is core's (`@aglyn/aglyn/app-utils/node-definition-sanitizer`, AGL-2939),
+ * under neutral names, because a model-generated tree passes through it too.
+ * A publisher reads it as the marketplace's rule, so the marketplace re-exports
+ * it under the names its publish routes and its docs use.
  */
+export {
+  PORTABLE_COMPONENT_ID_ALLOWLIST as MARKETPLACE_COMPONENT_ID_ALLOWLIST,
+  PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST as MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
+  PORTABLE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST as MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
+  sanitizePortableDefinition as sanitizeMarketplaceDefinition,
+  portableDefinitionToNested as marketplaceDefinitionToNested,
+  PORTABLE_SAFE_HREF as MARKETPLACE_SAFE_HREF,
+  PORTABLE_SAFE_SRC as MARKETPLACE_SAFE_SRC,
+  type PortableDefinitionNodes as MarketplaceDefinitionNodes,
+} from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import {
-  MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_DEFINITION_MAX_BYTES,
-  sanitizeMarketplaceDefinition,
-  marketplaceDefinitionToNested,
-  MARKETPLACE_DATASET_FIELD_TYPES,
+  PORTABLE_DATASET_FIELD_TYPES as MARKETPLACE_DATASET_FIELD_TYPES,
+  PORTABLE_DEFINITION_MAX_BYTES as MARKETPLACE_DEFINITION_MAX_BYTES,
 } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
-export {
-  MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_DEFINITION_MAX_BYTES,
-  sanitizeMarketplaceDefinition,
-  marketplaceDefinitionToNested,
-  MARKETPLACE_DATASET_FIELD_TYPES,
-}
-export {
-  MARKETPLACE_SAFE_HREF,
-  MARKETPLACE_SAFE_SRC,
-} from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
-export type {
-  MarketplaceDefinitionNodes,
-} from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
+export { MARKETPLACE_DATASET_FIELD_TYPES, MARKETPLACE_DEFINITION_MAX_BYTES }
 
 /** Field cap on a published schema — mirrors the console's create limit. */
 export const MARKETPLACE_DATASET_MAX_FIELDS = 100
@@ -1331,9 +1324,9 @@ export interface ListingInclusion {
 /** What each artifact type drops into the org when it installs. */
 const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
   plugin: 'A plugin, sandboxed on its own origin with a per-plugin CSP',
-  component: 'An editable component you can place on any screen',
-  template: 'Editable screens you can rework in Besigner',
-  layout: 'An editable layout you can apply to any screen',
+  component: 'An editable component you can place on any page',
+  template: 'Editable pages you can rework in Besigner',
+  layout: 'An editable layout you can apply to any page',
   datasetSchema: 'A new empty dataset with its fields already defined',
   emailTemplate: 'An editable email design you can send campaigns from',
   emailStarter:

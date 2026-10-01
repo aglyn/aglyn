@@ -475,6 +475,7 @@ const loadPageDataCached = cache(
       Aglyn.bandwidthCeilingDegradesHost(
         hostRes.host as any,
         Aglyn.bandwidthCeilingMonthKey(),
+        orgRes.org as any,
       )
     ) {
       const notice = Aglyn.bandwidthCeilingNotice()

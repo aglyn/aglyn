@@ -55,8 +55,8 @@ export interface DatasetRepeatRowsRequest {
 
 /**
  * A dataset's rows for the besigner's canvas preview, read the way the
- * published page's composition reads them (`getDatasets` in the tenant
- * runtime), with the client SDK instead of the Admin one (AGL-3111).
+ * published page's composition reads them (`readPublishedDatasetRows`, beside
+ * this file), with the client SDK instead of the Admin one (AGL-3111).
  *
  * - The key resolves as the page resolves it: an id first, then a display
  *   name within what this site may see. An id that exists but that this site

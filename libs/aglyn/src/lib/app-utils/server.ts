@@ -52,9 +52,9 @@ export * from './child-contract-compose'
 // The one reading of `restrictChildren`/`restrictParent`, shared by the
 // besigner's drop check and the AI plugin's node-tree validator (AGL-2905).
 export * from './lineal-order'
-// What a node tree must satisfy before it lands on a canvas that did not
-// author it (AGL-2939): the marketplace's install sanitizer and the AI
-// plugin's node-tree validator both pass through it.
+// What a portable node tree must satisfy before it lands on a canvas that did
+// not author it (AGL-2939): a tree installed from another workspace and a tree
+// a model generated both pass through it.
 export * from './node-definition-sanitizer'
 export * from './console-routes'
 export * from './console-record-links'
@@ -83,10 +83,6 @@ export * from './crm-email-templates'
 // link carries, the record reference inside it, and the wording and due
 // date of what a booking files back on the record.
 export * from './crm-booking'
-// Two contact documents folded into one (AGL-2625): the plan the console
-// previews and the server writes, reading the facet shape from `contacts`
-// and the company mirror from `crm`.
-export * from './contact-merge'
 // A person's privacy erasure from one workspace (AGL-2623): the request's
 // shape and id, the marker a record carries while it waits, and the lists
 // the dialog and the docs share. Pure like `crm`; the sweep is server-side.
@@ -96,27 +92,14 @@ export * from './person-erasure'
 // and beside it because it reads the stage list and the deal weighting from
 // there rather than restating either.
 export * from './crm-reports'
-// Every CRM CSV, written once (AGL-2662): the column lists and the cells
-// each section's Export button writes, and the server's whole-collection
-// export streams — one implementation, because the console app may not
-// import the plugin whose sections used to hold it.
-export * from './crm-csv'
-// Which holder a cross-site reader sees one contact through (AGL-2630),
-// beside the files that write it: the org-level list and the server's
-// export both flatten a contact this way.
-export * from './contact-holder'
-// What one member is owed this morning — the day's window in a named zone,
-// the task and lead bucketing, and the words the notification and the mail
-// say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
-export * from './crm-digest'
 // A task's reminder at its own time (AGL-2659): which reminder a save
 // leaves, whether one is owed, and the words the notification and the mail
-// say. Pure like `crm-digest`, read by the hourly route and by every
+// say. Pure like `crm-reports`, read by the hourly route and by every
 // writer of the field.
 export * from './crm-task-reminders'
 // Email capture (AGL-2657): the address's shape and token, which of a
 // message's addresses is the correspondent, the excerpt, and the row a
-// captured message becomes. Pure like `crm-digest`; the webhook route and
+// captured message becomes. Pure like `crm-reports`; the webhook route and
 // the address route are the readers with Firestore.
 export * from './crm-inbound'
 // A member's own addresses in a workspace (AGL-2975): the ones they have
@@ -153,6 +136,9 @@ export * from './contact-custom-fields'
 // belongs to.
 export * from './consent-groups'
 export * from './marketing-consent'
+// A refusal kept after the record it was written on is deleted (AGL-3338),
+// read back through the same parser as the record's own.
+export * from './retained-refusals'
 // The ENROLLMENT-time half of the same question, beside its reader for the
 // same reason: `marketing-consent` decides whether a recorded basis lets us
 // mail somebody, and this decides what basis putting them on a list may
@@ -164,7 +150,6 @@ export * from './list-assignment-policy'
 // mechanical screening only, so that an import asks the enrollment question
 // through the same module the one-address add path asks it through rather
 // than answering it a second way.
-export * from './list-import'
 // The dynamic-list rule (§3b/§3c), beside it for the same reasons: pure, and
 // it composes `contacts` for the segment vocabulary rather than restating it.
 export * from './dynamic-list-rule'
@@ -206,7 +191,7 @@ export * from './onboarding-deep-link'
 // Where an account came from (AGL-1731). Beside the plan intent because
 // they are the same hop — the marketing CTA's query string — and both are
 // remembered on `users/{uid}` across the verification wall.
-export * from './campaign-attribution'
+export * from './utm-attribution'
 // The edge between a campaign and the forms, screens and contacts a push is
 // coordinated across. Beside the attribution above because the two answer
 // opposite questions about the same word: attribution records where somebody
@@ -270,7 +255,9 @@ export * from './repeat-infringer'
 export * from './org-override-reason'
 export * from './host-tokens'
 export * from './variables'
-export * from './workflows'
+// What happened on a site that an automation can start on: the platform's
+// own event and the ones plugins declare (AGL-3080).
+export * from './host-events'
 export * from './datasets'
 export * from './expand-repeatables'
 export * from './org-roles'
@@ -298,6 +285,9 @@ export * from './plugin-api-rate-limit'
 // `plugin-api-rate-limit`, whose `isMachinePluginApiPath` it reuses so the
 // two gates exempt exactly the same machine surfaces.
 export * from './plugin-api-cross-origin'
+// What a published page does when a visitor does something (AGL-3080): the
+// platform's interaction vocabulary, which `./actions` builds its automations on.
+export * from './site-interactions'
 export * from './actions'
 export * from './element-animation'
 export * from './attribution-guard'
@@ -315,8 +305,8 @@ export * from './author-css'
 export * from './author-html'
 export * from './dataset-models'
 export * from './dataset-csv'
-export * from './marketplace-provenance'
-export * from './marketplace-update-state'
+export * from './csv-upload'
+export * from './artifact-provenance'
 export * from './dataset-query'
 export * from './plugin-manifest'
 // After `plugin-manifest`, whose revocation predicates it asks the kill

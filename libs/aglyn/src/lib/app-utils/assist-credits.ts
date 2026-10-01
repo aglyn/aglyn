@@ -20,6 +20,7 @@ import {
   resolveOrgEntitlements,
   resolvePlanPricing,
 } from './plan-entitlements'
+import { planQuotaOf } from '../plugin-manager/plugin-plan-entitlements'
 import type { AglynOrgBilling } from '../foundation/definitions/org-billing.types'
 
 /**
@@ -220,7 +221,7 @@ export function assistCreditsFromUsd(usd: number): number {
 export function resolveAssistCreditBudget(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number | null {
-  const credits = Number(resolveOrgEntitlements(org).assistCreditsPerMonth)
+  const credits = planQuotaOf(resolveOrgEntitlements(org), 'assistCreditsPerMonth')
   if (!Number.isFinite(credits) || credits <= 0) return null
   return Math.floor(credits)
 }

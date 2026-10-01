@@ -84,7 +84,7 @@ The latest version of a page was held before visitors saw it.
 
 A held or flagged page shows a status chip in your site's lists: **Held for review**,
 **Flagged — live, under review** or **Not approved**. The chip appears on the page or
-template in **Screens**. If the flagged content comes from a shared layout or component, the
+template in **Pages**. If the flagged content comes from a shared layout or component, the
 chip appears on that layout or component as well. Open the page, template, layout or
 component and a banner at the top says what visitors see now. The banner has three
 actions:

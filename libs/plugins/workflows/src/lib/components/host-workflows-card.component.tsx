@@ -27,10 +27,7 @@ import {
   type HostActionStepType,
   type HostFunction,
   type HostVariable,
-  type HostWorkflowStep,
   pluginDocsHelp,
-  runWorkflow,
-  WORKFLOW_MAX_STEPS,
 } from '@aglyn/aglyn'
 /*
  * The MODULE, not the barrel, for the two PURE helpers — every spec that
@@ -104,6 +101,11 @@ import {
   type WhereUsedResult,
 } from '@aglyn/aglyn/app-utils/where-used'
 import { WORKFLOW_USAGE_ZONE } from './workflow-zones'
+import {
+  type HostWorkflowStep,
+  runWorkflow,
+  WORKFLOW_MAX_STEPS,
+} from '../model/workflows'
 
 /**
  * How many workflows the card reads.

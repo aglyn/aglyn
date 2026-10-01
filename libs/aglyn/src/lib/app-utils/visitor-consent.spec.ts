@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import { ANALYTICS_PROVIDERS_DECLARED } from '../plugin-manager/first-party-plugins.generated'
 import {
   analyticsGrantedByStatus,
   consentGatedCategories,
@@ -35,7 +36,8 @@ import {
   VISITOR_ID_STORAGE_KEY,
   visitorConsentStorageKey,
   resolveGtmContainerId,
-  hostHasGoogleTag,
+  hostConfiguresAnalyticsTag,
+  ANALYTICS_SETTING_PATTERNS,
   hostAsksAboutAdvertising,} from './visitor-consent'
 
 const GA_HOST = { analytics: { gaMeasurementId: 'G-ABCD1234' } }
@@ -275,7 +277,7 @@ describe('a GTM container counts as tracking (AGL-2486)', () => {
   })
 
   it('THE HOLE: a container-only site is consent-gated', () => {
-    expect(hostHasGoogleTag(gtmHost)).toBe(true)
+    expect(hostConfiguresAnalyticsTag(gtmHost)).toBe(true)
     expect(consentGatedCategories(gtmHost)).toEqual(['analytics'])
     expect(hostConsentRequired(gtmHost)).toBe(true)
   })
@@ -284,7 +286,7 @@ describe('a GTM container counts as tracking (AGL-2486)', () => {
     // Nothing loads, so there is nothing to consent to — a banner with no
     // question behind it is decoration that trains visitors to click banners.
     const broken = { analytics: { gtmContainerId: 'nope' } }
-    expect(hostHasGoogleTag(broken)).toBe(false)
+    expect(hostConfiguresAnalyticsTag(broken)).toBe(false)
     expect(consentGatedCategories(broken)).toEqual([])
     expect(hostConsentRequired(broken)).toBe(false)
   })
@@ -303,9 +305,50 @@ describe('a GTM container counts as tracking (AGL-2486)', () => {
   })
 
   it('changes nothing for a GA-only site', () => {
-    expect(hostHasGoogleTag(gaHost)).toBe(true)
+    expect(hostConfiguresAnalyticsTag(gaHost)).toBe(true)
     expect(consentGatedCategories(gaHost)).toEqual(['analytics'])
-    expect(hostHasGoogleTag({ analytics: {} })).toBe(false)
+    expect(hostConfiguresAnalyticsTag({ analytics: {} })).toBe(false)
     expect(consentGatedCategories({})).toEqual([])
+  })
+})
+
+describe('a tag is configured only by a setting a provider declares (AGL-3080)', () => {
+  const gaHost = { analytics: { gaMeasurementId: 'G-TEST1234' } }
+
+  it('reads the COMPILED declarations, so the answer never waits for an adapter', () => {
+    // Forced red: drop `analyticsProvider` from the marketing plugin in
+    // plugins.config.json and regenerate — every site reads as tag-less, and
+    // this and the container cases above go red.
+    expect(ANALYTICS_PROVIDERS_DECLARED.length).toBeGreaterThan(0)
+    expect(hostConfiguresAnalyticsTag(gaHost)).toBe(true)
+  })
+
+  it('configures nothing when no provider is declared — nothing could mount it', () => {
+    expect(hostConfiguresAnalyticsTag(gaHost, [])).toBe(false)
+  })
+
+  it('configures nothing through a setting the provider did not declare', () => {
+    expect(
+      hostConfiguresAnalyticsTag(gaHost, [
+        { pluginId: 'x', settings: ['gtmContainerId'] },
+      ]),
+    ).toBe(false)
+  })
+
+  it('configures nothing through a declared setting with no shape', () => {
+    expect(
+      hostConfiguresAnalyticsTag(
+        { analytics: { somethingElse: 'G-TEST1234' } } as never,
+        [{ pluginId: 'x', settings: ['somethingElse'] }],
+      ),
+    ).toBe(false)
+  })
+
+  it('has a shape for every setting a provider declares', () => {
+    for (const provider of ANALYTICS_PROVIDERS_DECLARED) {
+      for (const field of provider.settings) {
+        expect(ANALYTICS_SETTING_PATTERNS[field]).toBeInstanceOf(RegExp)
+      }
+    }
   })
 })

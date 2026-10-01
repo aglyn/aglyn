@@ -35,7 +35,9 @@
  *  - `update()` needs the document to exist, replaces the value at each
  *    (dotted) path whole, and fails its `lastUpdateTime` precondition when
  *    the document was written since; `create()` fails on an existing one.
- *    The error codes are gRPC's: 5, 6, 9.
+ *    The error codes are gRPC's: 5, 6, 9. A `set()` with `mergeFields`
+ *    replaces the value at each named path whole, and creates the document
+ *    when it is missing.
  *  - `FieldValue` sentinels are applied, not stored: `delete`,
  *    `serverTimestamp` (the fake clock), `increment`, `arrayUnion`,
  *    `arrayRemove`.
@@ -176,6 +178,13 @@ export interface QueryFakeFirestore {
   /** Committed writes since the last reset. */
   writes(): number
   resetWrites(): void
+  /**
+   * Read ROUND TRIPS since the last reset: one per document `get`, query
+   * `get`, `count()`, `getAll` or transaction read, however many documents
+   * it returned — the unit a request's latency is spent in.
+   */
+  reads(): number
+  resetReads(): void
   /** The clock `serverTimestamp()` and every `updateTime` read. */
   setNow(ms: number): void
   /** Makes the next writes to `path` fail with `error` — a stand-in for an outage. */
@@ -191,6 +200,7 @@ export function queryFakeFirestore(
   /** Keeps every write's `updateTime` distinct even on a frozen clock. */
   let tick = 0
   let writeCount = 0
+  let readCount = 0
   const failing = new Map<string, Error>()
   let autoIds = 0
 
@@ -291,8 +301,10 @@ export function queryFakeFirestore(
     }
   }
 
+  type SetOptions = { merge?: boolean; mergeFields?: Array<string | FieldPath> }
+
   type Write =
-    | { type: 'set'; path: string; data: Data; merge: boolean }
+    | { type: 'set'; path: string; data: Data; merge: boolean; fields?: string[] }
     | { type: 'update'; path: string; data: Data; precondition?: { lastUpdateTime?: Timestamp } }
     | { type: 'create'; path: string; data: Data }
     | { type: 'delete'; path: string; precondition?: { lastUpdateTime?: Timestamp } }
@@ -332,6 +344,14 @@ export function queryFakeFirestore(
       store.set(write.path, { data, createTime: existing?.createTime ?? at, updateTime: at })
       return at
     }
+    if (write.type === 'set' && write.fields) {
+      const data = clone(existing?.data ?? {})
+      for (const path of write.fields) {
+        put(data, path.split('.'), clone(valueAt(write.data, path)), valueAt(existing?.data, path))
+      }
+      store.set(write.path, { data, createTime: existing?.createTime ?? at, updateTime: at })
+      return at
+    }
     if (write.type === 'set' && write.merge) {
       const data = clone(existing?.data ?? {})
       mergeInto(data, write.data)
@@ -342,6 +362,16 @@ export function queryFakeFirestore(
     mergeInto(data, write.data)
     store.set(write.path, { data, createTime: existing?.createTime ?? at, updateTime: at })
     return at
+  }
+
+  function setWrite(path: string, data: Data, setOptions?: SetOptions): Write {
+    return {
+      type: 'set',
+      path,
+      data,
+      merge: setOptions?.merge === true,
+      ...(setOptions?.mergeFields ? { fields: setOptions.mergeFields.map(fieldName) } : {}),
+    }
   }
 
   function snapshot(path: string): any {
@@ -365,9 +395,11 @@ export function queryFakeFirestore(
       id: segments[segments.length - 1],
       path,
       collection: (name: string) => collectionRef(`${path}/${name}`),
-      get: async () => snapshot(path),
-      set: async (data: Data, setOptions?: { merge?: boolean }) =>
-        run({ type: 'set', path, data, merge: setOptions?.merge === true }),
+      get: async () => {
+        readCount += 1
+        return snapshot(path)
+      },
+      set: async (data: Data, setOptions?: SetOptions) => run(setWrite(path, data, setOptions)),
       update: async (data: Data, precondition?: { lastUpdateTime?: Timestamp }) =>
         run({ type: 'update', path, data, precondition }),
       create: async (data: Data) => run({ type: 'create', path, data }),
@@ -378,6 +410,7 @@ export function queryFakeFirestore(
     Object.defineProperty(ref, 'parent', {
       get: () => collectionRef(segments.slice(0, -1).join('/')),
     })
+    Object.defineProperty(ref, 'firestore', { get: () => firestore })
     return ref
   }
 
@@ -443,12 +476,14 @@ export function queryFakeFirestore(
       limit: (limit: number) => query({ ...state, limit }),
       count: () => ({
         get: async () => {
+          readCount += 1
           const total = execute({ ...state, limit: null, after: state.after }).length
           const count = state.limit === null ? total : Math.min(total, state.limit)
           return { data: () => ({ count }) }
         },
       }),
       get: async () => {
+        readCount += 1
         const docs = execute(state)
         return { docs, size: docs.length, empty: docs.length === 0, forEach: (fn: any) => docs.forEach(fn) }
       },
@@ -457,9 +492,16 @@ export function queryFakeFirestore(
 
   function collectionRef(path: string): any {
     const base = query({ path, filters: [], orders: [], after: null, limit: null })
+    const segments = path.split('/')
     return {
+      get parent() {
+        return segments.length > 1 ? docRef(segments.slice(0, -1).join('/')) : null
+      },
+      get firestore() {
+        return firestore
+      },
       ...base,
-      id: path.split('/').pop(),
+      id: segments[segments.length - 1],
       path,
       doc: (id: string) => docRef(`${path}/${id ?? nextAutoId()}`),
       add: async (data: Data) => {
@@ -478,13 +520,19 @@ export function queryFakeFirestore(
       return snapshot(path)
     }
     const api: any = {
-      get: async (target: any) =>
-        typeof target?.path === 'string' && target.path.split('/').length % 2 === 0
-          ? read(target.path)
-          : target.get(),
-      getAll: async (...refs: any[]) => refs.map((ref) => read(ref.path)),
-      set: (ref: any, data: Data, setOptions?: { merge?: boolean }) => {
-        writes.push({ type: 'set', path: ref.path, data, merge: setOptions?.merge === true })
+      get: async (target: any) => {
+        if (typeof target?.path === 'string' && target.path.split('/').length % 2 === 0) {
+          readCount += 1
+          return read(target.path)
+        }
+        return target.get()
+      },
+      getAll: async (...refs: any[]) => {
+        readCount += 1
+        return refs.map((ref) => read(ref.path))
+      },
+      set: (ref: any, data: Data, setOptions?: SetOptions) => {
+        writes.push(setWrite(ref.path, data, setOptions))
         return api
       },
       update: (ref: any, data: Data, precondition?: { lastUpdateTime?: Timestamp }) => {
@@ -529,7 +577,10 @@ export function queryFakeFirestore(
   const firestore: QueryFakeFirestore = {
     collection: (path: string) => collectionRef(path),
     doc: (path: string) => docRef(path),
-    getAll: async (...refs: any[]) => refs.map((ref) => snapshot(ref.path)),
+    getAll: async (...refs: any[]) => {
+      readCount += 1
+      return refs.map((ref) => snapshot(ref.path))
+    },
     runTransaction: async (body) => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const { writes, reads, api } = transactionOrBatch()
@@ -560,8 +611,7 @@ export function queryFakeFirestore(
       }
       return {
         create: (ref: any, data: Data) => enqueue({ type: 'create', path: ref.path, data }),
-        set: (ref: any, data: Data, setOptions?: { merge?: boolean }) =>
-          enqueue({ type: 'set', path: ref.path, data, merge: setOptions?.merge === true }),
+        set: (ref: any, data: Data, setOptions?: SetOptions) => enqueue(setWrite(ref.path, data, setOptions)),
         update: (ref: any, data: Data, precondition?: { lastUpdateTime?: Timestamp }) =>
           enqueue({ type: 'update', path: ref.path, data, precondition }),
         delete: (ref: any, precondition?: { lastUpdateTime?: Timestamp }) =>
@@ -592,6 +642,10 @@ export function queryFakeFirestore(
     writes: () => writeCount,
     resetWrites: () => {
       writeCount = 0
+    },
+    reads: () => readCount,
+    resetReads: () => {
+      readCount = 0
     },
     setNow: (ms) => {
       nowMs = ms

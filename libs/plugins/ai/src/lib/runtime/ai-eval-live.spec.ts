@@ -391,6 +391,17 @@ describe('the automation and products recorders (AGL-3074)', () => {
     thinking: request['thinking'],
     effort: request['effort'],
   })
+  /**
+   * A store's categories, answered as the plugin that keeps categories would
+   * (AGL-3080): the step reads them through an index, never the collection.
+   */
+  const categoryIndexOver = (categories: ReadonlyArray<{ id: string; name: string }>) => ({
+    list: async ({ limit }: { limit: number }) => ({
+      records: categories.slice(0, limit).map((category) => ({ ...category, facts: {} })),
+      truncated: categories.length > limit,
+    }),
+    get: async () => null,
+  })
   const requestsFor = (toolName: string) =>
     mockRunAiRequest.mock.calls.map((call) => call[0]).filter((request) => request.tools?.[0]?.name === toolName)
 
@@ -554,7 +565,10 @@ describe('the automation and products recorders (AGL-3074)', () => {
         (mugCopy.product?.categories ?? []).map((category) => [`hosts/${AI_EVAL_SITE_ID}/productCategories/${category.id}`, { name: category.name }]),
       ),
     })
-    await createAiJobProductsStep({ image: { readBytes: async () => ({ buffer: photo, contentType: 'image/jpeg' }) } })({
+    await createAiJobProductsStep({
+      image: { readBytes: async () => ({ buffer: photo, contentType: 'image/jpeg' }) },
+      categoryIndex: categoryIndexOver(mugCopy.product?.categories ?? []),
+    })({
       job: job('products', mugCopy, aiProductsJobInputs({ target: 'product', product: mugCopy.product?.facts as never })),
       stepIndex: 0,
       now: new Date(0),
@@ -626,7 +640,10 @@ describe('the automation and products recorders (AGL-3074)', () => {
       const inputs = evalCase.product
         ? aiProductsJobInputs({ target: 'product', product: evalCase.product.facts })
         : aiProductsJobInputs({ target: evalCase.kind === 'catalog' ? 'catalog' : 'categories' })
-      await createAiJobProductsStep({ image: { readBytes: async () => ({ buffer: photo, contentType: 'image/jpeg' }) } })({
+      await createAiJobProductsStep({
+        image: { readBytes: async () => ({ buffer: photo, contentType: 'image/jpeg' }) },
+        categoryIndex: categoryIndexOver(kept),
+      })({
         job: job('products', evalCase, inputs),
         stepIndex: 0,
         now: new Date(0),
@@ -841,7 +858,7 @@ describe('aiEvalGraderPrompt', () => {
     // planning no screens, which is what the plan step told it to do.
     const kinds = 'a component, layout, template, form or email job'
     expect(AI_JOB_PLAN_INSTRUCTIONS.map((block) => block.text).join('\n')).toContain(
-      `${kinds} plans no screens`,
+      `${kinds} plans no pages`,
     )
     expect(AI_EVAL_PLAN_GRADER_NOTE).toContain(`${kinds} has an empty screens list by design`)
   })
@@ -879,7 +896,7 @@ describe('the grader of a built page (AGL-3073)', () => {
       '  8. request a consultation form',
       // The page as its plan built it: a recording made before the draft's
       // screen was kept says so, and gives what the page step built from.
-      "The page as its plan built it (the recording kept no record of the draft's screen):",
+      "The page as its plan built it (the recording kept no record of the draft page itself):",
       '- address: /about',
       `- search title, as planned: "${plannedScreen.seoTitle}"`,
       `- search description, as planned: "${plannedScreen.seoDescription}"`,

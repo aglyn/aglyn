@@ -22,23 +22,23 @@
 // way — one dropped the target entirely, one printed the raw Firestore doc
 // id when no name was recorded. This module is the single place that turns a
 // stored entry into something a human reads, and into a deep link to the
-// thing that changed. It is deliberately dependency-free (only the string
-// route table) so plugin libs and the console app can both import it via
-// `@aglyn/aglyn/app-utils/activity-presenter`.
+// thing that changed. It is deliberately light (the string route table and
+// the record-route registry) so plugin libs and the console app can both
+// import it via `@aglyn/aglyn/app-utils/activity-presenter`.
 
 import { Route, buildRoute } from './console-routes'
 import {
-  CRM_RECORD_SECTIONS,
-  crmRecordHref,
-  crmSectionHref,
-  type CrmRecordKind,
-} from './console-record-links'
+  pluginRecordHref,
+  pluginRecordListHref,
+  type PluginRecordRouteContext,
+} from '../plugin-manager/plugin-record-routes'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
-import { hostEventLabel } from './workflows'
+import { hostEventLabel } from './host-events'
 import { duplicateActivityActionLabel } from './duplicate-resource'
 import {
   pluginActivityActionLabel,
   pluginActivityGroupForAction,
+  pluginActivityTargetLabel,
   pluginActivityTargetNoun,
 } from '../plugin-manager/plugin-activity-actions'
 
@@ -112,7 +112,7 @@ export interface ActivityLinkContext {
 /** Human, singular noun for a target type. Falls back to the raw type. */
 const TYPE_LABELS: Record<string, string> = {
   host: 'Site',
-  screen: 'Screen',
+  screen: 'Page',
   layout: 'Layout',
   theme: 'Theme',
   media: 'Media',
@@ -126,11 +126,8 @@ const TYPE_LABELS: Record<string, string> = {
   org: 'Organization',
   invite: 'Invitation',
   subscription: 'Subscription',
-  // A custom role's AI permission flipped (AGL-2929).
+  // A custom role's permission flipped (AGL-2929).
   role: 'Role',
-  // A generation job (AGL-2904): the org feed names the job, and each of its
-  // outputs names the resource it produced.
-  aiJob: 'AI generation',
   // CRM records (AGL-2622): a person added, a company or a deal created or
   // deleted, a lead converted — logged into the feed of the site whose
   // console did it, and linked to the record the way a screen is.
@@ -140,17 +137,19 @@ const TYPE_LABELS: Record<string, string> = {
   deal: 'Deal',
 }
 
-/** The activity target types that are CRM records, for the link switch. */
-const CRM_TARGET_KINDS = new Set<string>(Object.keys(CRM_RECORD_SECTIONS))
-
 /**
- * The org-level hub's section for each record kind an org feed entry may
- * name (AGL-2634): the four record kinds, and tasks, which have a section
- * and no page of their own.
+ * A plugin's record, where its owner publishes an address for the kind
+ * (`plugin-record-routes`): its own page, or the list it lives on when the
+ * entry named no id — a deleted record still has a list to land on.
+ * `undefined` for a kind no plugin publishes here.
  */
-const ORG_CRM_SECTIONS: Record<string, string> = {
-  ...CRM_RECORD_SECTIONS,
-  task: 'tasks',
+function pluginRecordActivityHref(
+  type: string | undefined,
+  id: string | undefined,
+  context: PluginRecordRouteContext,
+): string | undefined {
+  if (!type) return undefined
+  return (id ? pluginRecordHref(type, context, id) : pluginRecordListHref(type, context)) ?? undefined
 }
 
 /**
@@ -160,7 +159,7 @@ const ORG_CRM_SECTIONS: Record<string, string> = {
  */
 export function activityTypeLabel(type: string | undefined): string {
   if (!type) return 'Item'
-  const known = TYPE_LABELS[type]
+  const known = TYPE_LABELS[type] ?? pluginActivityTargetLabel(type)
   if (known) return known
   const noun = pluginActivityTargetNoun(type) ?? type
   return noun.charAt(0).toUpperCase() + noun.slice(1)
@@ -364,17 +363,9 @@ export function activityHref(
         // host route.
         return buildRoute(Route.HOST_SETUP, { orgSlug, host })
       default:
-        // A CRM record's own page, or its list when the entry named no id —
-        // a deleted record still has a list to land on. The CRM is a plugin
-        // hub, so its addresses come from the shared builder rather than
-        // the route table, the same door the console's search uses.
-        if (type && CRM_TARGET_KINDS.has(type)) {
-          const kind = type as CrmRecordKind
-          return id
-            ? crmRecordHref({ orgSlug, host }, kind, id)
-            : crmSectionHref({ orgSlug, host }, CRM_RECORD_SECTIONS[kind])
-        }
-        return undefined
+        // A plugin's record — a contact, a deal, an order — at the address
+        // its owner publishes, which the route table does not hold.
+        return pluginRecordActivityHref(type, id, { orgSlug, host })
     }
   }
 
@@ -388,19 +379,12 @@ export function activityHref(
         : buildRoute(Route.MANAGE_TEAM, { orgSlug })
     case 'invite':
       return buildRoute(Route.MANAGE_TEAM, { orgSlug })
-    default: {
-      // A CRM record acted on at the ORGANIZATION level (AGL-2634) — a deal
-      // moved from the org board, a merge, a bulk bar's action — opens in
-      // the org-level hub. A lead's org address needs its site, which the
-      // entry does not carry, and a bulk line names no record: both land
-      // on the section.
-      const section = type ? ORG_CRM_SECTIONS[type] : undefined
-      if (!section) return undefined
-      const hub = `${buildRoute(Route.ORG_CRM, { orgSlug })}/${section}`
-      return id && type !== 'lead' && type !== 'task'
-        ? `${hub}/${encodeURIComponent(id)}`
-        : hub
-    }
+    default:
+      // A plugin's record acted on at the ORGANIZATION level (AGL-2634) — a
+      // deal moved from the org board, a merge, a bulk bar's action — at the
+      // organization address its owner publishes; a bulk line names no
+      // record and lands on the list.
+      return pluginRecordActivityHref(type, id, { orgSlug, host: null })
   }
 }
 
@@ -426,9 +410,9 @@ export interface ActionRunEntryLike extends ActivityEntryLike {
  * `formSubmission` → `Form submitted`.
  *
  * The console rendered the raw camelCase identifier in the trigger select
- * and in every run row. The words are `HOST_EVENT_LABELS` in `workflows.ts`
- * — one map, so the picker an author chose from and the run row they read
- * afterwards cannot name the same event differently.
+ * and in every run row. The words are each event's declared label
+ * (`host-events.ts`) — one map, so the picker an author chose from and the
+ * run row they read afterwards cannot name the same event differently.
  */
 export function actionTriggerLabel(event: string | undefined): string {
   return hostEventLabel(event)

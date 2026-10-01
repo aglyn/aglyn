@@ -17,7 +17,7 @@
 
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
-import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import type { HostThemeSource } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   aiAutomationDraft,
   emptyAiAutomationRecords,
@@ -56,6 +56,15 @@ import type { AiAutomationCapabilities } from '../model/ai-workflow-job'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiEffort, AiUsage } from '../providers/contract'
 import { aiComponentCheck } from '../jobs/ai-job-component-checks'
+import { aiPlanTemplateTokenViolations } from '../jobs/ai-job-plan-conformance'
+import { aiTemplateBindingCheck } from '../jobs/ai-job-template-step'
+import type { AiJobPlan } from '../model/ai-jobs.types'
+import {
+  AI_TEMPLATE_SUBJECT_DEFINITIONS,
+  aiTemplateAddressTokens,
+  type AiTemplateSubject,
+  type AiTemplateSubjectDefinition,
+} from '../model/ai-template-subjects'
 import {
   aiProductMerchantWords,
   type AiProductCategory,
@@ -95,10 +104,12 @@ import {
 import {
   AI_SEO_DESCRIPTION_MAX,
   AI_SEO_TITLE_MAX,
+  aiPlanEmbedBriefViolations,
   detectOffVoiceCopy,
   detectPublishIntent,
   type AiAssetFacts,
   type AiCopyFraming,
+  type AiDoctrineTree,
   type AiDoctrineViolation,
 } from './ai-doctrine-validators'
 import { AI_TEXT_LIMITS, type AiOutputKind } from './ai-palette'
@@ -439,6 +450,12 @@ export interface AiEvalCase {
    * doctrine applies whole.
    */
   capabilities?: AiPlanCapabilities
+  /**
+   * For a template brief (AGL-3433): whose page the template renders, which
+   * holds its answers to the template step's own checks — the tokens that
+   * page fills, and what the candidate's plan promised of them.
+   */
+  templateSubject?: AiTemplateSubject
   expected?: { plan?: AiEvalPlanShape }
   candidates: AiEvalCandidate[]
   controls: AiEvalControl[]
@@ -594,6 +611,7 @@ function readTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknow
   // (AGL-3054).
   const declaresProps = evalCase.kind === 'component' && Array.isArray(input['props'])
   const sections = planSections(evalCase, plan)
+  const subject = templateDefinition(evalCase)
   const check = aiDoctrineTreeCheck(
     outputKind,
     aiDoctrineTreeContext(evalCase.inventory, {
@@ -602,6 +620,7 @@ function readTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknow
       ...(inline ? { reusableComponents: false } : {}),
       ...(declaresProps ? { definesComponent: true } : {}),
       ...(sections.length ? { pageSections: sections } : {}),
+      ...(subject ? { bindingTokens: aiTemplateAddressTokens(subject) } : {}),
     }),
   )
   // A page's repeated item written once is drawn into its copies first, as the
@@ -624,16 +643,37 @@ export function aiEvalAnswerTree(evalCase: AiEvalCase, answer: unknown): AiValid
   return outputKind ? (readTree(evalCase, outputKind, answer).result?.value ?? null) : null
 }
 
+/** The subject a template case's page is for, whose tokens its answers bind. */
+function templateDefinition(evalCase: AiEvalCase): AiTemplateSubjectDefinition | null {
+  return evalCase.kind === 'template' && evalCase.templateSubject
+    ? AI_TEMPLATE_SUBJECT_DEFINITIONS[evalCase.templateSubject]
+    : null
+}
+
 function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown, plan?: unknown): Checked {
   const { input, declaresProps, undrawn, result } = readTree(evalCase, outputKind, answer, plan)
   if (undrawn || !result) {
     return { readable: false, rules: false, budget: false, findings: codes(undrawn ?? []) }
   }
+  const subject = templateDefinition(evalCase)
+  // A template answer is held to the template step's own checks, as that step
+  // holds it: the tokens its page fills, and what its plan promised (AGL-3433).
+  const templated = (tree: AiValidatedTree) =>
+    subject
+      ? [
+          ...aiTemplateBindingCheck(subject)(tree),
+          ...aiPlanTemplateTokenViolations(isRecord(plan) ? (plan as unknown as AiJobPlan) : null, subject, {
+            rootId: tree.rootId,
+            nodes: tree.nodes as unknown as AiDoctrineTree['nodes'],
+          }),
+        ]
+      : []
   const violations = [
     ...result.violations,
     ...(declaresProps && result.value
       ? aiComponentCheck({ inventory: evalCase.inventory, plan: null, onProps: () => undefined })(result.value, input)
       : []),
+    ...(result.value ? templated(result.value) : []),
   ]
   const budget = violations.filter((violation) => violation.rule === 17)
   const rules = violations.filter((violation) => violation.rule !== 17)
@@ -1080,7 +1120,9 @@ export function checkAiEvalPlan(
           .map((entry) => `plan-create-kind:${entry.kind}`)
       : []),
   ]
-  const findings = [...codes(result.violations), ...shapeFindings]
+  // The players a plan lists, against the brief it answers, as the plan step holds them (AGL-3433).
+  const briefFindings = codes(aiPlanEmbedBriefViolations(value, evalCase.brief))
+  const findings = [...codes(result.violations), ...briefFindings, ...shapeFindings]
   return { pass: findings.length === 0, findings }
 }
 
@@ -1315,6 +1357,15 @@ export function readAiEvalCase(raw: unknown, file: string): AiEvalCase {
   for (const [index, control] of (controls as unknown[]).entries()) {
     const fails = isRecord(control) ? control['fails'] : undefined
     if (!Array.isArray(fails) || !fails.length) fail(`controls[${index}] names no check it fails`)
+  }
+  const templateSubject = raw['templateSubject']
+  if (
+    templateSubject !== undefined &&
+    (raw['kind'] !== 'template' ||
+      typeof templateSubject !== 'string' ||
+      !(templateSubject in AI_TEMPLATE_SUBJECT_DEFINITIONS))
+  ) {
+    fail(`templateSubject, where given, is one of ${Object.keys(AI_TEMPLATE_SUBJECT_DEFINITIONS).join(', ')} on a template case`)
   }
   const capabilities =
     raw['capabilities'] === undefined ? undefined : readAiEvalCapabilities(raw['capabilities'], fail)

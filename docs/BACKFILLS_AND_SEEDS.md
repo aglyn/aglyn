@@ -92,7 +92,7 @@ automation references is the expected state for all of them.
 | --- | --- | --- |
 | `backfill-consent-host.mjs` | ⚑ Outstanding | **Do not remove.** `marketing-consent.ts` and `scope-tokens.ts` both name this file as the migration that scopes an unscoped grant, and strict consent depends on it having run. Moves each basis to the host that captured it, and reports rather than guesses where no host can be derived. |
 | `backfill-marketing-consent.mjs` | Outstanding, stage one | Asserts an operator basis over the pre-release corpus and stamps provenance, so a backfilled grant stays distinguishable from one a person gave. It writes the **unscoped** field, which grants to no host on its own — `backfill-consent-host.mjs` is stage two and scopes it. Never touches a stored refusal. `test:deploy-args` reads this file to prove it parses its own arguments. |
-| `backfill-crm-lifecycle-stages.mjs` | Converged, **kept**; stage and lead passes superseded by `backfill-crm-salesforce-model.mjs` since AGL-3232 | Stages, historical leads and company counts — [`CRM_LIFECYCLE_BACKFILL.md`](CRM_LIFECYCLE_BACKFILL.md), which records the production dry runs. Every pass now plans zero. It stays because `lib/crm-lifecycle-backfill.mjs` is more than its decisions: its preconditions read the live tree — seven door files for the floor each sets, eight field-name constants across five libs, `person-key.ts` and `host-visitor-records.ts` — and refuse the run when the tree stops agreeing. `test:crm-lifecycle-backfill` is that guard, and it has no other subject. `--any-form` is also a standing operator decision, not a finished one. |
+| `backfill-crm-lifecycle-stages.mjs` | Converged, **kept**; stage and lead passes superseded by `backfill-crm-salesforce-model.mjs` since AGL-3232 | Stages, historical leads and company counts — [`CRM_LIFECYCLE_BACKFILL.md`](CRM_LIFECYCLE_BACKFILL.md), which records the production dry runs. Every pass now plans zero. It stays because `libs/plugins/crm/scripts/crm-lifecycle-backfill.mjs` is more than its decisions: its preconditions read the live tree — seven door files for the floor each sets, eight field-name constants across five libs, `person-key.ts` and `host-visitor-records.ts` — and refuse the run when the tree stops agreeing. `test:crm-lifecycle-backfill` is that guard, and it has no other subject. `--any-form` is also a standing operator decision, not a finished one. |
 | `backfill-crm-email-state.mjs` | ⚑ Outstanding | Stamps every contact and lead with the `emailState` the senders' lists already hold for its address — the platform suppression list and each org's Outreach do-not-contact list (AGL-3245) — so a record written before the field existed says what the runtime knows. Idempotent: a record holding a verdict as strong as the lists' is left alone. Guarded by `test:email-state-backfill`. Dry run by default; `--org=<id>` narrows, `--apply` writes. |
 | `backfill-crm-salesforce-model.mjs` | ⚑ **Outstanding — Zach's call, after the P-AGL-136 promotion** | The one-record migration: folds every contact that is only a lead onto its lead (archived, then deleted), closes every open lead whose person is already a contact, and points enrollments, activities and tasks at the record the person is — [`CRM_SALESFORCE_BACKFILL.md`](CRM_SALESFORCE_BACKFILL.md). Re-points live sequence enrollments, so it runs between sends and with whoever runs Sequences told. Guarded by `test:one-record-backfill`, whose preconditions refuse `--apply` on a tree without the model. |
 | `backfill-org-campaigns.mjs` | Converged 2026-09-23, **kept** — runs recorded in the runbook | Moves every campaign container, email send (with its `reports/*`) and sequence rollup from `hosts/{hostId}/…` to `orgs/{orgId}/…` under the same ids, stamping the site scope — [`MARKETING_ORG_CAMPAIGNS_BACKFILL.md`](MARKETING_ORG_CAMPAIGNS_BACKFILL.md). The scheduled-send cron leaves a send still under a site alone, so a send scheduled between the deploy and this run waits for it. Guarded by `test:org-campaign-backfill`. |
@@ -184,6 +184,21 @@ with its runbook:
   clean. Sign-up, reset and the console's password set write the credential
   document, and sign-in no longer reads a profile at all, so the fallback went
   with it.
+- `backfill-suspended-flag` (AGL-3416) read 20 organizations and 23 sites on
+  production on 2026-09-30, after the beta.218 promotion and its seven
+  `suspended` composites went READY, and found every one already carrying
+  the flag it computes (orgs 5 true, 15 false; sites 4 true, 19 false). Its
+  `--apply` committed 0 writes. `createOrganization` and `claimHostForOrg`
+  write `false`, and the lockdown core and the abuse-report put-back write
+  it beside the `suspended*` family. `docs/SELF_HOSTING.md` names the tag to
+  restore it from for an install upgrading across that release.
+
+- `backfill-bounced-account-acquisition` (AGL-3426) stamped
+  `acquisition: { source: 'unknown' }` on the two Google accounts the /signin
+  consent bounce left unattributed (AGL-3355), `mSzttXqhnPaAu6VOMVVj6PqHmQU2`
+  and `h2IZUsP7SSfRXtIUiaEnMmbzn4m2`, on 2026-09-30; the second had no user
+  document and the write created it. Its re-run planned 0 of 2. /signin
+  records acquisition at the stand-down now, before it signs the account out.
 
 A module whose only caller was one of those went with it —
 `lib/plugin-id-rename.mjs`, `lib/media-content-sha256-backfill.mjs`,

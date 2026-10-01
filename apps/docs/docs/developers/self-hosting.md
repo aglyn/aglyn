@@ -88,7 +88,7 @@ different-looking ways. Without the composite indexes, queries throw
 `FAILED_PRECONDITION` and the product degrades feature by feature. Without the
 field overrides that exempt the large Besigner `nodes` blobs from indexing,
 Firestore tries to index the blob and **rejects the write** on its 40KB
-index-entry limit — so saving a screen, among the first things you will do,
+index-entry limit — so saving a page, among the first things you will do,
 is among the first things to break.
 
 `deploy-firestore-indexes.mjs` only ever **adds**. Anything live that the file

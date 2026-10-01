@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { wistiaMediaId } from '@aglyn/aglyn/app-utils/wistia-embed'
+import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import * as Aglyn from '@aglyn/aglyn/server'
 
 /** Namespaces the synthetic fallback node ids (never persisted). */
@@ -245,8 +245,9 @@ type AglynNodeEntry = [string, Aglyn.AglynNodeSchema]
  *
  * - a source nothing resolves, such as an empty field or a malformed `media:`
  *   reference;
- * - a Wistia link with no poster. Its player loads only when a visitor
- *   presses the poster, so without one there is nothing to press.
+ * - a hosted player's link (one a plugin declares, core
+ *   `video-embed-provider.ts`) with no poster. Its player loads only when a
+ *   visitor presses the poster, so without one there is nothing to press.
  *
  * The page then renders as a cover article, exactly as it does for an entry
  * with no video.
@@ -269,7 +270,7 @@ function featuredVideoProps(
     return undefined
   }
   const poster = options.posterRenders ? entry.coverImage : undefined
-  if (wistiaMediaId(src) && !poster) return undefined
+  if (videoEmbedOf(src) && !poster) return undefined
   const description = entry.seoDescription || entry.excerpt || ''
   const uploadDate = Aglyn.collectionEntryPublishedAtIso(entry.publishedAt)
   return {

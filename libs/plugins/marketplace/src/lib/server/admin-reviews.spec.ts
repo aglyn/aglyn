@@ -200,7 +200,7 @@ const mockUpdateExisting = jest.requireActual(
   '@aglyn/tenant-data-admin/server/update-existing',
 ).updateExisting
 const mockUpdateState = jest.requireActual(
-  '@aglyn/aglyn/app-utils/marketplace-update-state',
+  '../model/update-state',
 )
 const mockPluginManifest = jest.requireActual(
   '@aglyn/aglyn/app-utils/plugin-manifest',

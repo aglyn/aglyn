@@ -344,9 +344,10 @@ describe('no field on a dataset record is written by every writer', () => {
   it('the form-submit leg writes `createdAt` and no `order`', () => {
     // A public form wired to a dataset. `order` is a count of the rows the
     // console route has created and this leg does not compute one.
+    // The leg is this plugin's form record target (AGL-3080).
     const block = writeBlock(
-      readRepo('apps/tenant/app/api/forms/submit/route.ts'),
-      `.collection('records')\n              .add({`,
+      readRepo('libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts'),
+      `.collection('records').add({`,
     )
     expect(block).toContain('createdAt')
     expect(block).not.toMatch(/\border:/)
@@ -369,10 +370,14 @@ describe('no field on a dataset record is written by every writer', () => {
 
   it('a restored record carries `order` and NO `createdAt`', () => {
     // The mirror image, and why `createdAt` is not the answer either: the
-    // import allow-list decides what a restored record keeps, and it does not
-    // include a timestamp.
-    const permitted = readRepo('apps/console/app/api/_lib/site-export.ts')
-    expect(permitted).toContain(`records: ['values', 'order']`)
+    // restore's allow-list — this plugin's section of the site backup —
+    // decides what a restored record keeps, and it carries no timestamp.
+    const permitted = readRepo(
+      'libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts',
+    )
+    expect(permitted).toContain(
+      `RECORD_RESTORE_FIELDS: readonly string[] = ['values', 'order']`,
+    )
   })
 
   it('the card orders BOTH its record reads on the document NAME', () => {

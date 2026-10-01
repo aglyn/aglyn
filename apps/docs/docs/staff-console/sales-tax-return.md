@@ -56,6 +56,8 @@ so the page states the count out loud and, when it is serious, says **do not fil
 |---|---|
 | **Period exceeded the row cap** | More invoices matched than the route returns. Every total shown is a *lower bound*. File a month at a time instead, or raise the cap in the route. |
 | **Rows outside every period** | These invoices carry no readable paid date. A date-range query cannot match a null field, so these rows are missing from *this* return and from *every* other one — they are not merely in the wrong quarter. |
+| **Sales from a plugin were not read** | A plugin that sells through the platform — the storefront, the marketplace — could not answer for this period, or is not installed on this deployment's server. None of its sales are in any figure, so the return is incomplete. |
+| **Storefront / Marketplace rows exceeded the row cap**, **… rows outside every period** | The same two failures as above, in one plugin's sales rather than in Aglyn's own invoices. That plugin's figures are a *lower bound*. |
 
 **Review** findings mean a human has to decide something:
 

@@ -68,7 +68,7 @@ import {
   pickEnrollment,
   planOrgLeads,
 } from './lib/org-lead-backfill.mjs'
-import { personKey } from './lib/crm-lifecycle-backfill.mjs'
+import { personKey } from '../../libs/plugins/crm/scripts/crm-lifecycle-backfill.mjs'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import { collect, commitAll, connectFirestore } from './lib/firestore-backfill.mjs'
 

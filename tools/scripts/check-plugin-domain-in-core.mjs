@@ -57,6 +57,23 @@
 //  7. DOMAIN DECLARES — ANY declaration in a plugin's vocabulary inside a file:
 //     the platform file with a plugin's rows, keys or types mixed into it.
 //
+// Rule 3 says "nor in another plugin" as well, and two of its breaches are as
+// invisible to `check:lib-boundaries` between plugins as between a plugin and
+// core, because neither is an import. So inside `libs/plugins/<dir>/` two
+// rules hold what one plugin may not do to another:
+//
+//  5. PLUGIN COLLECTION, again — a Firestore collection ANOTHER plugin owns,
+//     addressed from this one. The owner publishes a record index, card,
+//     facts reader or figure reader; the reader asks it.
+//
+//  8. CONSOLE PATH — an address on ANOTHER plugin's console surface, built
+//     here: its nav slug as a `pluginSlug`, a `*_SLUG` constant or a path
+//     segment, or a core route that is its page (`Route.FORM_DETAILS`). The
+//     owner publishes the address under a record kind
+//     (`plugin-record-routes`); the linking plugin asks for the kind. The
+//     slugs are read from each plugin's own `plugin.ts` nav items, so a new
+//     surface is covered the day it lands.
+//
 // ## The allowlist, and why it may only shrink
 //
 // `plugin-domain-in-core-allowlist.json` has one row per file that trips a
@@ -106,12 +123,23 @@ const DOMAIN_DIR = /^apps\/[^/]+\/.*\/(crm|contacts|marketplace|campaigns?|datas
  * Rule 2. `home` is where the literal may live. `everywhere` extends the
  * sweep past the guarded trees, which is the AI rule as AGL-2939 wrote it:
  * no other plugin may grow a model vendor of its own either.
+ *
+ * The mail vendor's home is its provider module behind the platform's
+ * mail-provider contract (`mail-providers.ts` picks it by configuration),
+ * not a plugin: the transactional rail sends password resets, receipts and
+ * operator alerts from every server process with no plugin loaded, and a
+ * provider a plugin registered is one that can be silently absent. The rest
+ * of the rail names no vendor, which is what this rule holds.
  */
 export const VENDOR_LITERALS = [
   { vendor: 'ai', pattern: /api\.anthropic\.com|anthropic-version|\bclaude-[a-z0-9-]+|api\.openai\.com/, home: 'libs/plugins/ai/src/lib/providers/', everywhere: true },
   { vendor: 'ga4', pattern: /googletagmanager\.com|google-analytics\.com|\bgtag\(/ },
   { vendor: 'wistia', pattern: /wistia/i },
-  { vendor: 'resend', pattern: /api\.resend\.com|from\s+['"]resend['"]/ },
+  {
+    vendor: 'resend',
+    pattern: /api\.resend\.com|from\s+['"]resend['"]/,
+    home: 'libs/shared/util/email/src/lib/mail-provider-resend',
+  },
 ]
 
 /**
@@ -173,8 +201,9 @@ export function collectionOwnersAddressed(text) {
 /**
  * Rule 6. A file whose EXPORTS are one plugin's vocabulary, whatever it is
  * called: at least three of them, and at least half of what it exports.
- * `marketing-consent.ts` and `node-definition-sanitizer.ts` name no plugin and
- * export little else. The words are the distinctive ones only — `Product`,
+ * `marketing-consent.ts` names no plugin and exports little else, and
+ * `node-definition-sanitizer.ts` did until its rule was named for what it
+ * guards rather than for the marketplace that first asked. The words are the distinctive ones only — `Product`,
  * `Order`, `Lead` and `Listing` are ordinary English and would flag half the
  * platform — so this rule finds a plugin's module, never a module that
  * happens to mention one.
@@ -218,9 +247,12 @@ export function domainOfExports(text) {
  *
  * A declaration is code that lives here. A USE of another module's symbol is
  * not judged — that is the import graph's — which is what keeps this from
- * flagging every caller of a plugin's seam.
+ * flagging every caller of a plugin's seam. That includes an inline `type`
+ * specifier on a line of its own inside a multi-line `import { … }` or
+ * `export { … }`: it names a symbol declared somewhere else, so a type is a
+ * declaration here only as an alias (`type Name =` or `type Name<`).
  */
-const DECLARATION = /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:default\s+)?(?:function\*?|const|let|type|interface|class|enum)\s+([A-Za-z_$][\w$]*)/
+const DECLARATION = /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:default\s+)?(?:(?:function\*?|const|let|interface|class|enum)\s+([A-Za-z_$][\w$]*)|type\s+([A-Za-z_$][\w$]*)\s*[=<])/
 const MEMBER = /^\s{2,}(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*[:(]/
 
 /** The plugins whose vocabulary a file's code lines DECLARE. */
@@ -228,7 +260,8 @@ export function domainsDeclared(text) {
   const domains = new Set()
   for (const line of text.split('\n')) {
     if (COMMENT_LINE.test(line)) continue
-    const name = DECLARATION.exec(line)?.[1] ?? MEMBER.exec(line)?.[1]
+    const declared = DECLARATION.exec(line)
+    const name = declared?.[1] ?? declared?.[2] ?? MEMBER.exec(line)?.[1]
     if (!name) continue
     for (const [domain, pattern] of Object.entries(DOMAIN_EXPORTS)) if (pattern.test(name)) domains.add(domain)
   }
@@ -242,6 +275,82 @@ const PLUGIN_IMPORT =
   /from\s+['"](@aglyn\/plugins-[a-z-]+)(?:\/[^'"]*)?['"]|import\(\s*['"](@aglyn\/plugins-[a-z-]+)|(?:\.\.\/)+(libs\/plugins\/[a-z-]+)\//
 const COMMENT_LINE = /^\s*(?:\/\/|\*|\/\*)/
 
+/** A plugin's own tree, by its directory under `libs/plugins/`. */
+const PLUGIN_TREE = /^libs\/plugins\/([a-z0-9-]+)\//
+/**
+ * A spec's stand-in for ANOTHER plugin's registration: it imitates the owner
+ * over a spec's Firestore double, on purpose, because the plugin under test
+ * may not load the owner.
+ */
+const STAND_IN = /^libs\/plugins\/[a-z0-9-]+\/src\/lib\/testing\//
+/** A plugin's nav declaration: the file its console surfaces' slugs are read from. */
+const PLUGIN_NAV = /^libs\/plugins\/([a-z0-9-]+)\/src\/(?:.*\/)?plugin\.ts$/
+const CONSOLE_ROUTES = 'libs/aglyn/src/lib/app-utils/console-routes.ts'
+/** A console route whose first segment under the org or the site is a plugin's surface. */
+const ROUTE_SURFACE = /^\/\[orgSlug\](?:\/hosts\/\[host\])?\/([a-z0-9-]+)/
+
+/**
+ * Rule 8's vocabulary, read from the corpus itself: which plugin each console
+ * slug belongs to (every `href: '/slug'` and `legacyHrefs` entry in a plugin's
+ * `plugin.ts`), and which core routes are a plugin's page because their first
+ * segment is one of its slugs.
+ */
+export function consoleAddresses(files, pluginIdOfDir = (dir) => dir) {
+  const slugOwner = new Map()
+  for (const { path, text } of files) {
+    const dir = PLUGIN_NAV.exec(path)?.[1]
+    if (!dir) continue
+    const owner = pluginIdOfDir(dir)
+    for (const match of text.matchAll(/\bhref:\s*['"]\/([a-z0-9-]+)['"]/g)) slugOwner.set(match[1], owner)
+    for (const legacy of text.matchAll(/\blegacyHrefs:\s*\[([^\]]*)\]/g)) {
+      for (const match of legacy[1].matchAll(/['"]\/([a-z0-9-]+)['"]/g)) slugOwner.set(match[1], owner)
+    }
+  }
+  const routeOwner = new Map()
+  const routes = files.find((file) => file.path === CONSOLE_ROUTES)?.text ?? ''
+  for (const [, name, route] of routes.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*'([^']+)'/gm)) {
+    const surface = ROUTE_SURFACE.exec(route)?.[1]
+    if (surface && slugOwner.has(surface)) routeOwner.set(name, slugOwner.get(surface))
+  }
+  const slugs = [...slugOwner.keys()].join('|')
+  const names = [...routeOwner.keys()].join('|')
+  return {
+    slugOwner,
+    routeOwner,
+    // A slug as a `pluginSlug`, as a `*_SLUG` constant, or as a path segment
+    // after an interpolation or opening a literal. A bare quoted word is not
+    // matched: `'data'` and `'forms'` are ordinary strings.
+    slugPattern: slugs
+      ? new RegExp(
+          `\\bpluginSlug:\\s*['"\`](${slugs})['"\`]|\\b[A-Z_]*SLUG\\s*=\\s*['"\`](${slugs})['"\`]|\\}/(${slugs})(?=[/'"\`?#])|['"\`]/(${slugs})(?=[/'"\`?#])`,
+          'g',
+        )
+      : null,
+    routePattern: names ? new RegExp(`\\bRoute\\.(${names})\\b`, 'g') : null,
+  }
+}
+
+/** A literal that is an API path or a Firestore document path, not a page. */
+const NOT_A_PAGE = /\/api\/|['"`](?:hosts|orgs)\//
+
+/** The plugins whose console surfaces a file's CODE lines address. */
+export function consolePathOwners(text, addresses) {
+  const owners = new Set()
+  for (const line of text.split('\n')) {
+    if (COMMENT_LINE.test(line)) continue
+    if (addresses.slugPattern) {
+      for (const match of line.matchAll(addresses.slugPattern)) {
+        if (NOT_A_PAGE.test(line.slice(0, match.index))) continue
+        owners.add(addresses.slugOwner.get(match[1] ?? match[2] ?? match[3] ?? match[4]))
+      }
+    }
+    if (addresses.routePattern) {
+      for (const match of line.matchAll(addresses.routePattern)) owners.add(addresses.routeOwner.get(match[1]))
+    }
+  }
+  return [...owners].sort()
+}
+
 /** Prose is not code: a comment that spells a package or an id is judged by neither rule. */
 function codeLineMatches(text, pattern) {
   return text.split('\n').some((line) => !COMMENT_LINE.test(line) && pattern.test(line))
@@ -252,13 +361,26 @@ export function pluginIdPattern(ids) {
   return distinctive.length ? new RegExp(`['"\`](${distinctive.join('|')})['"\`]`) : null
 }
 
-/** The rules a corpus of {path, text} trips: Map<path, string[]>. */
-export function findFindings(files, pluginIds) {
+/**
+ * The rules a corpus of {path, text} trips: Map<path, string[]>. `pluginIdOfDir`
+ * names the plugin a `libs/plugins/<dir>/` tree is, where the two differ.
+ */
+export function findFindings(files, pluginIds, pluginIdOfDir = (dir) => dir) {
   const idPattern = pluginIdPattern(pluginIds)
+  const addresses = consoleAddresses(files, pluginIdOfDir)
   const findings = new Map()
   const add = (path, rule) => findings.set(path, [...(findings.get(path) ?? []), rule])
   for (const { path, text } of files) {
     if (!SOURCE.test(path) || SPEC.test(path) || GENERATED.test(path)) continue
+    const pluginDir = PLUGIN_TREE.exec(path)?.[1]
+    if (pluginDir && !STAND_IN.test(path)) {
+      // Rules 5 and 8 inside a plugin: another plugin's storage and pages.
+      const self = pluginIdOfDir(pluginDir)
+      for (const owner of collectionOwnersAddressed(text)) if (owner !== self) add(path, `plugin-collection:${owner}`)
+      if (!PLUGIN_NAV.test(path)) {
+        for (const owner of consolePathOwners(text, addresses)) if (owner !== self) add(path, `console-path:${owner}`)
+      }
+    }
     const guarded = GUARDED.test(path)
     // tools/ names hosts and package strings in lint rules and weight budgets;
     // only a domain-named script is evidence there.
@@ -318,6 +440,16 @@ export function firstPartyPluginIds(root = ROOT) {
   return JSON.parse(readFileSync(join(root, 'plugins.config.json'), 'utf8')).plugins.map((plugin) => plugin.id)
 }
 
+/** The plugin id a `libs/plugins/<dir>/` tree registers as (`themes` is `theme-presets`). */
+export function pluginIdsByDir(root = ROOT) {
+  const byDir = new Map()
+  for (const plugin of JSON.parse(readFileSync(join(root, 'plugins.config.json'), 'utf8')).plugins) {
+    const dir = /^@aglyn\/plugins-(.+)$/.exec(plugin.package ?? '')?.[1]
+    if (dir) byDir.set(dir, plugin.id)
+  }
+  return (dir) => byDir.get(dir) ?? dir
+}
+
 function selfTest() {
   // The forced-red fixture: one file per rule, the homes and exemptions beside
   // them, and a list with a stale rule and an unargued `stays` — each must be
@@ -331,6 +463,8 @@ function selfTest() {
     { path: 'libs/plugins/crm/src/lib/summary.ts', text: "fetch('https://api.anthropic.com/v1/messages')\n" },
     { path: 'libs/plugins/ai/src/lib/providers/anthropic.ts', text: "fetch('https://api.anthropic.com/v1/messages')\n" },
     { path: 'libs/tenant/runtime/src/lib/video.ts', text: "const host = 'fast.wistia.net'\n" },
+    { path: 'libs/shared/util/email/src/lib/send-email.ts', text: "fetch('https://api.resend.com/emails')\n" },
+    { path: 'libs/shared/util/email/src/lib/mail-provider-resend.ts', text: "fetch('https://api.resend.com/emails')\n" },
     { path: 'libs/plugins/mui/src/lib/video.ts', text: "const host = 'fast.wistia.net'\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/catalog.ts', text: "const requires = ['commerce']\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/words.ts', text: "const kind = 'data'\n" },
@@ -347,9 +481,23 @@ function selfTest() {
     { path: 'libs/aglyn/src/lib/app-utils/neutral-name.ts', text: 'export const MARKETPLACE_A = 1\nexport function marketplaceB() {}\nexport type MarketplaceC = 1\nexport const other = 2\n' },
     { path: 'libs/aglyn/src/lib/app-utils/plans.ts', text: 'export const seats = 1\nexport const sites = 2\nexport const pages = 3\nexport const members = 4\ninterface Limits {\n  crmEmailsPerDay: number\n}\n' },
     { path: 'libs/aglyn/src/lib/app-utils/caller.ts', text: "import { crmRoutes } from './x'\nexport const href = crmRoutes(base).contact(id)\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/type-user.ts', text: "import {\n  crmRoutes,\n  type CrmDeal,\n  type CrmStage as Stage,\n} from './x'\nexport const deal: CrmDeal | null = null\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/type-alias.ts', text: 'export type CrmDealId = string\ntype CrmStageMap<T> = Record<string, T>\n' },
     { path: 'libs/aglyn/src/lib/app-utils/mentions-one.ts', text: 'export const MARKETPLACE_A = 1\nexport const a = 1\nexport const b = 2\nexport const c = 3\n' },
+    { path: 'libs/plugins/crm/src/lib/plugin.ts', text: "nav: [{ label: 'CRM', href: '/crm', legacyHrefs: ['/contacts'] }]\n" },
+    { path: 'libs/plugins/forms/src/lib/plugin.ts', text: "nav: [{ label: 'Forms', href: '/forms' }]\n" },
+    { path: 'libs/aglyn/src/lib/app-utils/console-routes.ts', text: "export enum Route {\n  FORM_DETAILS = '/[orgSlug]/hosts/[host]/forms/[formId]',\n  HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',\n}\n" },
+    { path: 'libs/plugins/inbox/src/lib/row.tsx', text: 'const href = buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId })\n' },
+    { path: 'libs/plugins/inbox/src/lib/hub.ts', text: "const CRM_SLUG = 'crm'\n" },
+    { path: 'libs/plugins/inbox/src/lib/link.ts', text: 'const href = `${hostsPath}/${sub}/forms/${id}`\n' },
+    { path: 'libs/plugins/inbox/src/lib/legacy.ts', text: "router.push('/contacts?email=' + email)\n" },
+    { path: 'libs/plugins/inbox/src/lib/not-pages.ts', text: "const events = `/api/ai/jobs/${id}/crm?org=${org}`\nconst path = `hosts/${hostId}/forms`\nconst setup = buildRoute(Route.HOST_SETUP, { orgSlug, host })\nconst kind = 'crm'\n" },
+    { path: 'libs/plugins/crm/src/lib/own.ts', text: "const hub = `${base}/crm`\nconst to = buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' })\n" },
+    { path: 'libs/plugins/inbox/src/lib/reads.ts', text: "const rows = await db.collection('orgs').doc(orgId).collection('contacts').get()\n" },
+    { path: 'libs/plugins/shop/src/lib/read.ts', text: "db.collection('products')\n" },
+    { path: 'libs/plugins/inbox/src/lib/testing/stand-in-contacts.ts', text: "db.collection('orgs').doc(orgId).collection('contacts')\n" },
   ]
-  const findings = findFindings(corpus, ids)
+  const findings = findFindings(corpus, ids, (dir) => (dir === 'shop' ? 'commerce' : dir))
   const ok = (label, condition) => {
     if (!condition) {
       console.error(`self-test FAILED: ${label}`)
@@ -365,6 +513,8 @@ function selfTest() {
   ok('the adapter is not reported', !findings.has('libs/plugins/ai/src/lib/providers/anthropic.ts'))
   ok('a video vendor in the runtime is reported', has('libs/tenant/runtime/src/lib/video.ts', 'vendor:wistia'))
   ok('a video vendor inside a plugin is not', !findings.has('libs/plugins/mui/src/lib/video.ts'))
+  ok('a mail vendor on the rail is reported', has('libs/shared/util/email/src/lib/send-email.ts', 'vendor:resend'))
+  ok('the mail provider that is its home is not', !findings.has('libs/shared/util/email/src/lib/mail-provider-resend.ts'))
   ok('a plugin id in core is reported', has('libs/aglyn/src/lib/plugin-manager/catalog.ts', 'plugin-id'))
   ok('an id that is a plain word is not', !findings.has('libs/aglyn/src/lib/plugin-manager/words.ts'))
   ok('an id named in a comment is not', !findings.has('libs/aglyn/src/lib/plugin-manager/prose.ts'))
@@ -381,6 +531,18 @@ function selfTest() {
   ok('one export in a plugin’s words is a declaration, though not most of the file', has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-declares:marketplace') && !has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-exports:marketplace'))
   ok('a plugin’s key mixed into a platform type is reported', has('libs/aglyn/src/lib/app-utils/plans.ts', 'domain-declares:crm'))
   ok('USING a plugin’s symbol declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/caller.ts'))
+  ok('a type named inside a multi-line import declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/type-user.ts'))
+  ok('a type alias in a plugin’s words is a declaration', has('libs/aglyn/src/lib/app-utils/type-alias.ts', 'domain-declares:crm'))
+  ok('a plugin reading another plugin’s collection is reported', has('libs/plugins/inbox/src/lib/reads.ts', 'plugin-collection:crm'))
+  ok('a plugin whose directory is not its id reads its own collection unreported', !findings.has('libs/plugins/shop/src/lib/read.ts'))
+  ok('another plugin’s page, by core route, is reported', has('libs/plugins/inbox/src/lib/row.tsx', 'console-path:forms'))
+  ok('another plugin’s nav slug as a constant is reported', has('libs/plugins/inbox/src/lib/hub.ts', 'console-path:crm'))
+  ok('another plugin’s page, spelled as a path, is reported', has('libs/plugins/inbox/src/lib/link.ts', 'console-path:forms'))
+  ok('a legacy slug is the plugin’s too', has('libs/plugins/inbox/src/lib/legacy.ts', 'console-path:crm'))
+  ok('an API path, a storage path, a core page and a bare word are not pages', !findings.has('libs/plugins/inbox/src/lib/not-pages.ts'))
+  ok('a plugin addressing its own pages is not reported', !findings.has('libs/plugins/crm/src/lib/own.ts'))
+  ok('a plugin’s nav declaration is not reported', !findings.has('libs/plugins/crm/src/lib/plugin.ts'))
+  ok('a spec’s stand-in for another plugin’s seam is not reported', !findings.has('libs/plugins/inbox/src/lib/testing/stand-in-contacts.ts'))
 
   const rows = [
     { path: 'libs/aglyn/src/lib/app-utils/crm-deals.ts', rules: ['domain-name', 'plugin-id'], lane: 'crm' },
@@ -410,7 +572,7 @@ function main(argv) {
 
   const list = JSON.parse(readFileSync(ALLOWLIST, 'utf8'))
   const corpus = loadCorpus(ROOT)
-  const findings = findFindings(corpus, firstPartyPluginIds(ROOT))
+  const findings = findFindings(corpus, firstPartyPluginIds(ROOT), pluginIdsByDir(ROOT))
   const { refused, stale, unargued } = judge(findings, list.files)
 
   if (argv.includes('--prune')) {
@@ -435,10 +597,12 @@ function main(argv) {
     process.exitCode = 1
     return
   }
-  const moving = list.files.filter((row) => row.lane !== 'stays').length
+  const moving = list.files.filter((row) => row.lane !== 'stays' && row.lane !== 'coupling').length
+  const coupled = list.files.filter((row) => row.lane === 'coupling').length
   console.log(
     `check:plugin-domain-in-core: clean (${corpus.length} source files; ${moving} file(s) still to move, ` +
-      `${list.files.length - moving} argued to stay)`,
+      `${coupled} plugin file(s) still reaching into another plugin, ` +
+      `${list.files.length - moving - coupled} argued to stay)`,
   )
 }
 

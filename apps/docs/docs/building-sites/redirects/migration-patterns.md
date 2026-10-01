@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Migration patterns
-description: Common redirect setups when you rename screens or move a site into Aglyn.
+description: Common redirect setups when you rename pages or move a site into Aglyn.
 ---
 
 # Migration patterns
@@ -14,20 +14,20 @@ Redirects earn their keep during change. Here are the patterns you'll reach for 
 
 ![Redirect rules for a migration](/img/redirects/redirects-page.png)
 
-## Renamed a screen
+## Renamed a page {#renamed-a-screen}
 
-When you change a screen's [slug](../screens-and-layouts/screens.md#screens--routing), add a
+When you change a page's [slug](../screens-and-layouts/screens.md#screens--routing), add a
 redirect from the **old** path to the **new** one so existing links and search results keep
 working.
 
 ## Consolidated pages
 
 Merging two pages into one? Redirect the retired path to the survivor. The
-**screen-collision** check keeps you from redirecting a path that's still a live screen.
+**page-collision** check keeps you from redirecting a path that's still a live page.
 
 ## Moved a site into Aglyn
 
-Recreate your highest-traffic old URLs as redirects to their new Aglyn screens. Use the
+Recreate your highest-traffic old URLs as redirects to their new Aglyn pages. Use the
 **hit metrics** to spot old URLs you missed — if a rule is getting traffic, people still
 rely on it.
 
@@ -39,4 +39,4 @@ save is rejected, look for an existing rule that already redirects your destinat
 ## Related
 
 - [Create a redirect](create-a-redirect.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

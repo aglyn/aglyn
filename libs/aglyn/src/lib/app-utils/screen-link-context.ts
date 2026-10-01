@@ -140,7 +140,7 @@ export function unavailableScreenLabel(
   const entry = parseEntryLinkValue(screenId)
   return entry
     ? `⚠ Unavailable entry (${entry.entryId}) — unpublished or deleted`
-    : `⚠ Unavailable screen (${screenId}) — unpublished or deleted`
+    : `⚠ Unavailable page (${screenId}) — unpublished or deleted`
 }
 
 export function unresolvedScreenOption(
@@ -163,7 +163,7 @@ export function unresolvedScreenOption(
     }
   }
   return target.href
-    ? { value: raw, label: `⚠ Plain address (${target.href}) — not a screen` }
+    ? { value: raw, label: `⚠ Plain address (${target.href}) — not a page` }
     : undefined
 }
 
@@ -276,7 +276,7 @@ export const BROKEN_SCREEN_LINK_ATTR = 'data-aglyn-broken-link'
 
 /** What the AUTHOR is told, on the one surface that can fix it. */
 export const BROKEN_SCREEN_LINK_MESSAGE =
-  'Broken link: this points at a screen or collection listing that is ' +
+  'Broken link: this points at a page or collection listing that is ' +
   'unpublished or deleted, so it will not work on the published site. Pick ' +
   'a target again in the attributes panel, or clear the link.'
 

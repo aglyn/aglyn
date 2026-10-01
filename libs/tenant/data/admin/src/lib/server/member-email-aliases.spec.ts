@@ -47,7 +47,7 @@ import {
   addMemberEmailAlias,
   confirmMemberEmailAlias,
   confirmMemberEmailAliasesByProvider,
-  listMemberEmailAliases,
+  loadMemberEmailAliases,
   memberEmailAliasConfirmUrl,
   mintMemberEmailAliasToken,
   readMemberEmailAliasToken,
@@ -137,7 +137,7 @@ describe('adding an address', () => {
       aliases: [{ address: 'avery@example.org', addedAtMs: T0 }],
       updatedAtMs: T0,
     })
-    expect(await listMemberEmailAliases(firestore, ORG, AVERY)).toEqual([
+    expect(await loadMemberEmailAliases(firestore, ORG, AVERY)).toEqual([
       { address: 'avery@example.org', addedAtMs: T0 },
     ])
   })

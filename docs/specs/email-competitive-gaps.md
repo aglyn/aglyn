@@ -188,9 +188,9 @@ Aglyn state is one of:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Many brands under one account, isolated at send | ❌ one account each | ➖ | ➖ | ❌ | ➖ *Enterprise* | ➖ workspaces | **(✔★)** org-scoped contacts with `visibleTo`; the send path **refuses** cross-site reach |
 | Many sending identities under one account | ➖ | ✅ | ✅ | ➖ | ➖ | ➖ | **(✔)** per-org records with a per-host selector, both on screen; a send picks between its site's identity and the shared domain. Several custom identities on ONE site is not modeled |
-| **Self-hostable** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ US/EU regions only | **(C)** SPF and return-path are configurable; **sending is hardcoded to Resend's HTTP API** |
+| **Self-hostable** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ US/EU regions only | **(C)** SPF and return-path are configurable; sending goes through a mail-provider contract — Resend by default, or the operator's own sender behind `AGLYN_MAIL_WEBHOOK_URL` (AGL-3080) — but the delivery feed, reads and CRM capture are Resend-only |
 | Runs on the customer's **own** payment account | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔★)** commerce is Stripe Connect |
-| Provider-agnostic delivery record | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔)** only `normalizeResendDeliveryEvents` knows a vendor wire format |
+| Provider-agnostic delivery record | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔)** only the mail provider's `deliveryEvents` knows a vendor wire format |
 | A ceiling never deletes a person or their data | ❌ contact-tier pricing teaches list deletion | ➖ | ➖ | ❌ | ➖ | ➖ | **(✔★)** enforced at the reduction; the send is refused, the audience is never trimmed |
 
 > **A note on the three named competitors.** Mailchimp and Klaviyo are what a customer
@@ -682,7 +682,7 @@ charged to every other tenant.
 | ~~Two suppression key derivations (**D5**)~~ | ✅ | — | Closed. `server.ts` now keys through `emailSuppressionKey`, and the unsubscribe signer and verifier are one module rather than two implementations of the same HMAC subject — the marketing gate would have been a third |
 | ~~Docs say the send cap is per site (**D7**)~~ | ✅ | — | Closed by `f6480558f`, before this register's work began. The page reads "per workspace" |
 | Docs describe adding list members by hand | — | S | There is no such control |
-| Self-host cannot use SMTP | **(C)** | M | Sending is hardcoded to `RESEND_SEND_ENDPOINT`; an operator must have a Resend account, which contradicts "every dependency configurable" |
+| ~~Self-host cannot use SMTP~~ | ✅ | M | Closed by AGL-3080: `AGLYN_MAIL_PROVIDER=webhook` hands each decided message to the operator's own relay (SMTP, SES, anything). The delivery feed, reads and CRM capture are still Resend-only |
 
 ---
 

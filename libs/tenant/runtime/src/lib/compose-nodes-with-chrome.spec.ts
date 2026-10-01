@@ -48,8 +48,8 @@ const mockGetPublishedLayoutVersion = jest.fn()
 const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
-const mockGetDatasets = jest.fn()
-const mockGetWorkflows = jest.fn()
+const mockReadRepeatRows = jest.fn()
+const mockPrepareComputedVariables = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 
 jest.mock('./get-layout-version', () => ({
@@ -60,9 +60,13 @@ jest.mock('./get-components', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetComponents(...a),
 }))
-jest.mock('./get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: (...a: unknown[]) => mockGetDatasets(...a),
+  readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
+}))
+jest.mock('@aglyn/aglyn/plugin-manager/computed-variables', () => ({
+  __esModule: true,
+  prepareComputedVariables: (...a: unknown[]) => mockPrepareComputedVariables(...a),
 }))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
@@ -72,7 +76,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -157,8 +160,10 @@ const setup = () => {
   mockGetComponents.mockImplementation(tracked('components', { definitions: {} }))
   mockGetVariables.mockImplementation(tracked('variables', []))
   mockGetFunctions.mockImplementation(tracked('functions', []))
-  mockGetDatasets.mockImplementation(tracked('datasets', []))
-  mockGetWorkflows.mockImplementation(tracked('workflows', []))
+  mockReadRepeatRows.mockImplementation(tracked('datasets', []))
+  mockPrepareComputedVariables.mockImplementation(
+    tracked('computed', ({ variables }: { variables: unknown }) => variables),
+  )
   mockGetPluginInstalls.mockImplementation(tracked('installs', []))
 }
 
@@ -187,7 +192,7 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
       'variables',
       'functions',
       'datasets',
-      'workflows',
+      'computed',
       'installs',
     ]) {
       const start = order.indexOf(`${label}:start`)
@@ -234,8 +239,8 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
     expect(mockGetComponents).toHaveBeenCalledTimes(1)
     expect(mockGetVariables).toHaveBeenCalledTimes(1)
     expect(mockGetFunctions).toHaveBeenCalledTimes(1)
-    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
-    expect(mockGetWorkflows).toHaveBeenCalledTimes(1)
+    expect(mockReadRepeatRows).toHaveBeenCalledTimes(1)
+    expect(mockPrepareComputedVariables).toHaveBeenCalledTimes(1)
     expect(mockGetPluginInstalls).toHaveBeenCalledTimes(1)
     // One read per layout in the chain, and no more.
     expect(mockGetPublishedLayoutVersion).toHaveBeenCalledTimes(2)
@@ -245,7 +250,7 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
 /**
  * AGL-1440: the datasets read is paid for only by pages that repeat.
  *
- * `getDatasets` is the largest single term in a cold tenant render — up to two
+ * `readRepeatRows` is the largest single term in a cold tenant render — up to two
  * pages of records for every dataset a page repeats over — and
  * `expandRepeatables` returns its input untouched when nothing on the page
  * carries `repeatDataset`, so a page with no repeatable must not pay for it.
@@ -274,7 +279,7 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
       layoutId: 'L1',
       screenNodes: PLAIN_SCREEN_NODES,
     })
-    expect(mockGetDatasets).not.toHaveBeenCalled()
+    expect(mockReadRepeatRows).not.toHaveBeenCalled()
   })
 
   it('CONTROL — the same compose with a repeatable does read datasets', async () => {
@@ -285,9 +290,9 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
       layoutId: 'L1',
       screenNodes: SCREEN_NODES,
     })
-    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
+    expect(mockReadRepeatRows).toHaveBeenCalledTimes(1)
     // Keyed: the page asks for the datasets it repeats over, not the site's.
-    expect(mockGetDatasets).toHaveBeenCalledWith({ hostId: 'h1', keys: ['Team'] })
+    expect(mockReadRepeatRows).toHaveBeenCalledWith({ hostId: 'h1', keys: ['Team'] })
   })
 
   it('still reads datasets when the repeatable comes from the LAYOUT', async () => {
@@ -302,7 +307,7 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
       layoutId: 'L1',
       screenNodes: PLAIN_SCREEN_NODES,
     })
-    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
+    expect(mockReadRepeatRows).toHaveBeenCalledTimes(1)
   })
 
   it('still reads datasets when the repeatable is grafted in from a component', async () => {
@@ -340,7 +345,7 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
         },
       },
     })
-    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
+    expect(mockReadRepeatRows).toHaveBeenCalledTimes(1)
   })
 
   it('reads a key the layout adds on its own, never re-reading the screen’s', async () => {
@@ -360,7 +365,7 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
       screenNodes: SCREEN_NODES,
     })
     expect(
-      mockGetDatasets.mock.calls.map(([options]) => options.keys),
+      mockReadRepeatRows.mock.calls.map(([options]) => options.keys),
     ).toEqual([['Team'], ['Other']])
   })
 
@@ -377,7 +382,7 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
       layoutId: 'L1',
       screenNodes: SCREEN_NODES,
     })
-    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
+    expect(mockReadRepeatRows).toHaveBeenCalledTimes(1)
   })
 })
 

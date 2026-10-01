@@ -20,6 +20,10 @@ import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { formatBytes } from '@aglyn/aglyn/app-utils/measure-node-map'
 import {
+  pluginRecordHref,
+  pluginRecordListHref,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJobOutput,
   type AiJobStatus,
@@ -123,24 +127,28 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
     return output.versionId ? `${base}/versions/${output.versionId}/besigner` : base
   }
   if (output.resource === 'product') {
-    return `/${orgSlug}/hosts/${host}/products`
+    // The catalog a drafted product lands in: the commerce plugin's address
+    // for it (AGL-3080), or no link where commerce is not loaded.
+    return pluginRecordListHref('product', { orgSlug, host })
   }
   if (output.resource === 'workflow') {
     // A drafted automation is an action (AGL-2919), listed switched off on
-    // the Automation page's Actions.
-    return `${buildRoute(Route.HOST_AUTOMATION, { orgSlug, host })}/actions`
+    // the workflows plugin's list of actions, or no link where it is not loaded.
+    return pluginRecordListHref('action', { orgSlug, host })
   }
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
   if (output.resource === 'form') {
-    // A new form has no version for the besigner to open: its own page mints
-    // the first one, and holds the routing and consent it declares.
-    return buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: output.id })
+    // A new form has no version for the besigner to open: its own page — the
+    // forms plugin's address for it — mints the first one, and holds the
+    // routing and consent it declares.
+    return pluginRecordHref('form', { orgSlug, host }, output.id)
   }
   if (output.resource === 'campaign') {
-    // A campaign's page belongs to the Marketing console, under the site.
-    return `${buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'marketing' })}/campaigns/${output.id}`
+    // A campaign's page is the marketing plugin's, under the site: its
+    // address for the campaign (AGL-3080), or no link where it is not loaded.
+    return pluginRecordHref('campaign', { orgSlug, host }, output.id)
   }
   return null
 }

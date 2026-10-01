@@ -31,7 +31,7 @@ description: The plugin manifest schema, the marketplace listing/version documen
       "slots": ["hostActivity"],  // widget slots and panels it fills
       "routes": [],               // site-level console routes it serves
       "orgRoutes": [],            // organization-level routes
-      "shell": false              // a nav tab or provider on every screen
+      "shell": false              // a nav tab or provider on every page
     }
   },
   "restrictParent": [],       // besigner lineal rules
@@ -57,15 +57,15 @@ events.
 
 A plugin loads only where something uses it. Installing one loads nothing:
 the platform reads `contributes` to decide which published pages and which
-console screens fetch your bundle, and it never runs your code to find out.
+console pages fetch your bundle, and it never runs your code to find out.
 
 | Key | What it declares | Where the plugin then loads |
 | --- | --- | --- |
 | `site.components` | The canvas component ids `register()` registers | A published page whose node tree places one of them, and the Besigner for every site that runs the plugin |
 | `site.features` | The `runtimeId` of each site runtime it mounts | Every page of a site that has the plugin switched on, and the Besigner for that site |
-| `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`assistPanel`, `besignerInspector`) | A console screen that renders one of those slots |
-| `console.routes` / `console.orgRoutes` | The console routes its pages serve (`/my-plugin`) | The screens under those routes |
-| `console.shell` | It adds a nav tab, a provider or a staff page, which the shell draws on every screen | Every screen of the workspace |
+| `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`consoleDock`, `besignerInspector`) | A console page that renders one of those slots |
+| `console.routes` / `console.orgRoutes` | The console routes its pages serve (`/my-plugin`) | The pages under those routes |
+| `console.shell` | It adds a nav tab, a provider or a staff page, which the shell draws on every page | Every page of the workspace |
 
 The Besigner loads a plugin that declares either `site` key for every site
 that runs it, whether or not the page open places one of its elements. That
@@ -106,7 +106,7 @@ The declaration is the whole contract, so it has to be complete:
   and the publish API read what `register()` registers (a widget's `slot`, a
   nav item's `href`, a runtime's `runtimeId`, a component's `$id`) and refuse
   a registration the declaration omits: a slot you forget to declare is a
-  slot whose screens never load your plugin.
+  slot whose pages never load your plugin.
 - **A new version must declare.** A bundle whose `register()` registers
   anything and whose manifest has no `contributes` fails publishing, with the
   declaration the verifier read printed for you to paste. Write the values
@@ -127,7 +127,7 @@ renders your `render()` entry in an iframe wherever an author places it, and
 the frame fetches your bundle, never the page, so it needs no `contributes`
 entry.
 
-### `config` — settings without writing a settings screen
+### `config` — settings without writing a settings page {#config--settings-without-writing-a-settings-screen}
 
 A first-party plugin registers its settings schema by calling
 `registerPluginConfigSchema` at module scope. Your bundle cannot: it runs
@@ -203,7 +203,8 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 The single source mapping plugin ids to packages, register entry points
 per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
 declaration surfaces `declarations`, `serverDeclarations` and
-`consoleServerDeclarations`, and `subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
+`consoleServerDeclarations`, `subprocessors`, `tenantEmails` and
+`videoEmbedProviders`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
 modules that create, transfer or destroy a durable customer object, which
 `check-activity-coverage.mjs` holds to writing an activity entry.
 
@@ -221,8 +222,8 @@ without a valid one, and `apps/console/specs/plugin-contributions-declared.spec.
 runs every registrar and fails when what it registers differs from what the
 entry declares.
 `node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
-generated loader manifests, the three declarations manifests and the
-subprocessors manifest — the only files allowed to reference
+generated loader manifests, the three declarations manifests, the
+subprocessors manifest and the titles manifest — the only files allowed to reference
 `@aglyn/plugins-*` outside `libs/plugins` (an nx boundary rule enforces
 this), and every reference is an `import()` so the apps never depend on a
 plugin statically.
@@ -263,6 +264,39 @@ inventory or another plugin already declares that the plugin's code reaches
 as well: the host keeps its one declaration, and the plugin's reason and
 data are appended to that entry. A use of a host nothing declares is
 refused — declare the host instead.
+
+A **tenantEmails** entry names a function in `@aglyn/plugins-x/tenant-emails`
+that returns the emails a site sends its own customers through the plugin —
+each with its key (the site's template document id), name, description,
+plugin, and whether the site owner designs it in the email besigner, authors
+it elsewhere, or cannot change it yet, with the default subject, merge tokens
+and built-in copy a designable one needs. The generator compiles the answer
+into the email lib's `TENANT_EMAILS` as data, because the send path reads it
+without loading any plugin. A key declared twice, an entry that names another
+plugin, or an `external` entry with no `authoredIn` is refused. Regenerate
+after changing an entry; `--check` refuses a stale catalog.
+
+The **titles manifest** (`apps/console/constants/plugins.titles.generated.ts`)
+is read from a plugin's source rather than from an entry: each console nav
+item's `label` and `href` in its `plugin.ts`, and the `*-console-sections.ts`
+list its `sections` names. The console's plugin layouts title a browser tab
+from it — the surface's label, then the open section's — because they are
+server components and cannot load the console registry. A surface or section
+named two different ways is refused. Regenerate after renaming a nav item or
+a section; `--check` refuses a stale manifest.
+
+A **videoEmbedProviders** entry names a function in
+`@aglyn/plugins-x/video-embed-providers` that returns the video hosts whose
+own player the plugin's Video element frames: the domains a host's links live
+on, the path patterns that carry the media id, the one origin the player is
+framed from, its path and the query it reads. The generator calls it,
+validates the answer and compiles it into core's
+`first-party-plugins.generated.ts`, because its readers — the published
+page, its `VideoObject` and the tenant middleware's `frame-src` — load no
+plugin code. Core's `video-embed-provider.ts` resolves a link from the
+compiled list alone and rebuilds every player address from the media id, so
+a frame is only ever on a declared origin. Regenerate after changing a
+declaration; `--check` refuses a stale copy.
 
 A **staff** entry names the registrar the console's staff area loads,
 usually the same function as `console`. The org routes load each

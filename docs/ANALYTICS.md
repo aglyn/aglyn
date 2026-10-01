@@ -102,7 +102,8 @@ consolidated Platform property, not the archived `G-BQ49X14QCD` — and the
 console's Firebase-injected tag uses the same id. So both ends are one property.
 
 There is deliberately **no `linker` config in our code**, and none is needed:
-`site-analytics.tsx` emits a bare `gtag('config', '<id>')` and the domain list
+the Google tag adapter (`libs/plugins/marketing/src/lib/analytics-provider.ts`,
+which `site-analytics.tsx` mounts) emits a bare `gtag('config', '<id>')` and the domain list
 is delivered to the tag from the GA UI. Grepping for `linker` and concluding
 cross-domain is unconfigured is the wrong inference.
 
@@ -284,7 +285,7 @@ a tenant site pointed at our own property.
 | `org_created`      | `apps/console/components/create-org-dialog.component.tsx`; `provisionSignUpOrg` in the signup page                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `host_created`     | `apps/console/components/create-host-dialog.component.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `site_published`   | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589)                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx`; **server-side** from `libs/tenant/data/admin/…/connect-account-status.ts` when `account.updated` is what first flips `stripeChargesEnabled` on (AGL-1580). Both browser emitters gate on the profile still reading "not connected" at click time, and the AGL-1997 webhook lands while the merchant is still on Stripe's hosted onboarding — so on a deployment that HAS a Connect webhook destination the browser guard is already shut by the time they return, and this was the reason the event had never been seen. The two guards read the same stored flag from opposite sides, so exactly one of them can be open per account |
+| `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx`; **server-side** from `libs/tenant/data/admin/…/payment-provider-stripe-connect-status.ts` when `account.updated` is what first flips `stripeChargesEnabled` on (AGL-1580). Both browser emitters gate on the profile still reading "not connected" at click time, and the AGL-1997 webhook lands while the merchant is still on Stripe's hosted onboarding — so on a deployment that HAS a Connect webhook destination the browser guard is already shut by the time they return, and this was the reason the event had never been seen. The two guards read the same stored flag from opposite sides, so exactly one of them can be open per account |
 | `begin_checkout`   | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout, both the redirect and the in-page-payment branch — AGL-1591); `product-detail.tsx` (buy-now, both branches); `libs/plugins/mui/src/lib/components/product.tsx` (the Commerce Starter block, when its displayed price parses to a positive number); `libs/plugins/commerce/src/lib/components/reservation-widget.tsx` (the DEPOSIT being charged, not the value of the stay); `libs/plugins/bookings/src/lib/components/booking.tsx` (a paid service). Every one fires only after the server returned a session, never on the click                                                                            |
 | `view_item`        | `libs/plugins/commerce/src/lib/components/product-detail.tsx`, when the product payload resolves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `add_to_cart`      | the same file, on a successful add — priced from the resolved variant and the chosen quantity, so `value` is what went IN and not the cart's running total                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -381,9 +382,10 @@ decisions in full live on the issues.
 - **Real-user Core Web Vitals (AGL-1642)** — `web-vitals` (already a
   transitive dep of `@firebase/performance`; 2.6KB gz as a lazy chunk) →
   GA4 events in web.dev's exact shape, from
-  `libs/aglyn/src/lib/app-utils/web-vitals-rum.ts`. Delivery is
-  `window.gtag` on both surfaces, so the tenant consent gate stays
-  structural: no grant, no tag, no hit. Metrics that report before the
+  `libs/aglyn/src/lib/app-utils/web-vitals-rum.ts`. Delivery is to the
+  resident tag through its vendor's adapter (`analytics-provider.ts`, AGL-3080)
+  on both surfaces, so the tenant consent gate stays structural: no grant, no
+  tag, no hit. Metrics that report before the
   late-loading tag are held in memory ~60s and flushed when it arrives; a
   visitor whose tag never appears produces nothing — the hold is NOT the
   forbidden pre-consent queue (`web-vitals-rum.spec.ts` pins both halves).
@@ -890,8 +892,10 @@ code follow. `consent-advertising-copy-drift.spec.ts` is the lock that makes the
 copy move with the rule in either direction — it has now gone red in both.
 
 **Two payload builders, and the split is deliberate.** Both live in
-`libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are
-the **single source** for every declaration — the load-time `default` and the
+`libs/aglyn/src/lib/app-utils/visitor-consent.ts`, the Google tag adapter
+(`libs/plugins/marketing/src/lib/analytics-provider.ts`) builds its snippets
+from them, and between them they are the **single source** for every
+declaration — the load-time `default` and the
 withdrawal `update` alike — so the two directions cannot drift:
 
 - `analyticsConsentSignals(granted)` — the analytics-only path, feeding
@@ -909,8 +913,9 @@ Read the payloads there rather than trusting any restatement here.
 The three mechanisms, in the order a visitor meets them:
 
 - **A consent-mode `default` is declared before the first hit** (AGL-1622).
-  `site-analytics.tsx` (`apps/tenant/app/[host]/[scheme]/[[...slug]]/`) emits it
-  **inside the gated block**, in the same inline script that creates
+  The Google tag adapter puts it in the boot it returns, and
+  `site-analytics.tsx` (`apps/tenant/app/[host]/[scheme]/[[...slug]]/`) emits
+  that boot **inside the gated block**, in the same inline script that creates
   `dataLayer`, ahead of `gtag('js')` and `gtag('config')` — so it exists only
   on a pageview the AGL-1498 gate already permitted, and no hit is ever sent
   before the tag has been told what it may store. It is deliberately **not**
@@ -920,7 +925,8 @@ The three mechanisms, in the order a visitor meets them:
 - **A withdrawal silences the already-resident tag before sweeping**
   (AGL-1608). Unmounting the `<script>` cannot unload `gtag.js`, and enhanced
   measurement re-creates `_ga` on the next scroll. So
-  `setResidentAnalyticsTags` (same module) sets `window['ga-disable-<id>']`
+  `setResidentAnalyticsTags` (same module) tells every registered adapter
+  (`applyAnalyticsConsent`), and the Google one sets `window['ga-disable-<id>']`
   for every resident measurement id AND sends
   `gtag('consent', 'update', analyticsConsentSignals(false))` — two signals
   because they fail differently: the flag reaches a tag that never got a
@@ -2153,7 +2159,7 @@ because **attribution is not retroactive either**: a signup that lands
 unattributed is unattributed forever, and a September ad spend with no
 attribution cannot be evaluated at all.
 
-`libs/aglyn/src/lib/app-utils/campaign-attribution.ts` owns the contract.
+`libs/aglyn/src/lib/app-utils/utm-attribution.ts` owns the contract.
 Three parameters, allowlisted:
 
 | URL parameter  | `sign_up` param   | Stored as  |
@@ -2242,7 +2248,7 @@ one rather than deferring to it.
 **What was actually needed** is per-visitor forwarding: the landing page copies
 the campaign off its OWN inbound URL onto the console-bound href at click time.
 
-**That is what `campaign-forwarding.ts` now does** (`libs/aglyn/src/lib/app-utils/`),
+**That is what `utm-forwarding.ts` now does** (`libs/aglyn/src/lib/app-utils/`),
 installed by `site-analytics.tsx` beside the click and web-vitals listeners.
 `AppLink` (`libs/shared/ui/jsx`) was the obvious seam and is the wrong one
 twice over: it would need `useSearchParams` in a component the console renders

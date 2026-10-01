@@ -149,6 +149,12 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'templates gallery',
     'apps/console/components/templates/template-gallery-dialog.component.tsx',
   ],
+  // The gallery's marketplace shelf, drawn by the marketplace in the
+  // gallery's `templateGallery` zone since AGL-3080.
+  [
+    'templates gallery marketplace shelf',
+    'libs/plugins/marketplace/src/lib/components/template-gallery-shelf.component.tsx',
+  ],
   [
     'datasets records',
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
@@ -1028,6 +1034,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'is no second page for a footer to turn to.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/sharing-rules-card.tsx',
+    'The organization’s record SHARING RULES (AGL-3336) — a settings table, ' +
+      'one row per rule the merchant declared, bounded by ' +
+      '`CRM_SHARING_RULES_MAX` (20): the card refuses a twenty-first. The ' +
+      'bound is what a sharing policy anybody can reason about carries, not ' +
+      'how long the account has existed, so there is no second page for a ' +
+      'footer to turn to.',
+  ],
+  [
     'libs/plugins/crm/src/lib/components/settings-section.tsx',
     'The organization’s owner ASSIGNMENT RULES (AGL-2618) — a settings ' +
       'table, one row per rule the merchant declared, bounded by ' +
@@ -1147,8 +1162,9 @@ const NOT_A_LIST: Array<[string, string]> = [
   [
     'apps/console/app/(app)/admin/tax-return/page.tsx',
     'Form 01-114’s filing lines are fixed by the form, and the breakdowns ' +
-      'beside them run one row per state or jurisdiction. Another agent owns ' +
-      'this file today; the classification is not why it is untouched.',
+      'beside them run one row per state or jurisdiction — the facilitated-' +
+      'sales sources’ tables included, which are one row per liability ' +
+      'bucket or buyer state, read under the return’s own row cap.',
   ],
   [
     'apps/console/components/server-config-card.component.tsx',
@@ -1228,9 +1244,10 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'apps/console/components/interaction-builder-dialog.component.tsx',
-    'A picker dialog: workflows, overlays and screens are read as the ' +
-      'OPTIONS an interaction can be bound to, which is a lookup and not a ' +
-      'surface a reader scans — the same line the ordering guard draws.',
+    'A picker dialog: screens, and the records a plugin-declared step ' +
+      'picks, are read as the OPTIONS an interaction can be bound to, which ' +
+      'is a lookup and not a surface a reader scans — the same line the ' +
+      'ordering guard draws.',
   ],
   [
     'libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx',
@@ -1907,7 +1924,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 68 since the CRM's field definitions joined the list table (AGL-3335):
     // the Fields section pages, sorts, filters and searches under the grid's
     // own footer, so its settings-table row retires.
-    expect(NOT_A_LIST).toHaveLength(68)
+    //
+    // 69 since records can be shared between sites (AGL-3336), and this one
+    // IS a new table: the organization's sharing rules, a settings table the
+    // card caps at `CRM_SHARING_RULES_MAX` (20), like the other CRM settings
+    // rows above it.
+    expect(NOT_A_LIST).toHaveLength(69)
   })
 })
 

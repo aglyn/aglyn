@@ -67,6 +67,7 @@
 import {
   registerPluginOrgEraser,
   resetPluginOrgErasersForTests,
+  standInRequiredOrgErasersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestore'
@@ -102,6 +103,13 @@ jest.mock('firebase-admin/storage', () => ({
 }))
 
 const describeEmulated = EMULATED ? describe : describe.skip
+
+/**
+ * The marketplace's org eraser is REQUIRED (AGL-3080): an erasure refuses to
+ * run without it. It is a plugin's, which this library may not load, so this
+ * spec — about the erasure's own sweeps — stands a no-op in for it.
+ */
+beforeAll(() => standInRequiredOrgErasersForTests())
 
 describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)', () => {
   let db: Firestore
@@ -227,15 +235,17 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       { orgId: ORG, dryRun: true, keyStillStored: true, orgStillStored: true },
       { orgId: ORG, dryRun: false, keyStillStored: true, orgStillStored: true },
     ])
-    expect(result.plugins).toEqual({ [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 } })
+    expect(result.plugins?.[FIXTURE_PLUGIN]).toEqual({ grants: 1, revoked: 1 })
     const audit = await db
       .collection('adminAudit')
       .where('target', '==', `orgs/${ORG}`)
       .where('action', '==', 'org.erased')
       .get()
-    expect(audit.docs.map((doc) => doc.get('after.plugins'))).toContainEqual({
-      [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 },
-    })
+    // Beside the stand-ins for the erasers a workspace erasure requires, which
+    // `standInRequiredOrgErasersForTests` registers and the audit records too.
+    expect(audit.docs.map((doc) => doc.get('after.plugins'))).toContainEqual(
+      expect.objectContaining({ [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 } }),
+    )
   }, 60_000)
 
 
@@ -272,8 +282,9 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       .get()
     expect(rows.size).toBe(0)
     // And the sweep reached the row rather than finding nothing: the seeded
-    // credential is the one the audit count names.
-    expect(result.outreachMailboxCredentials).toBe(1)
+    // credential is the one the audit count names. The collection is the
+    // Outreach plugin's, DECLARED by it and swept by the erasure (AGL-3080).
+    expect(result.pluginCollections?.[MAILBOX_CREDENTIALS]).toBe(1)
   }, 60_000)
 
   it('leaves another org\'s mailbox credential untouched', async () => {

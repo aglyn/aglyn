@@ -21,7 +21,7 @@ import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementChangesSince,
   publisherAgreementPresentation,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,

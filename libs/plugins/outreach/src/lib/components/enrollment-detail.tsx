@@ -21,7 +21,7 @@ import {
   PageHeaderRecord,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
-import { crmOrgRecordHref, crmRecordHref } from '@aglyn/aglyn/app-utils/console-record-links'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiAccountCancelOutline,
   mdiAccountOutline,
@@ -43,6 +43,7 @@ import {
   mdiPlayCircleOutline,
   mdiReply,
   mdiShieldSearch,
+  mdiSkipNext,
   mdiStopCircleOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -143,7 +144,11 @@ export interface OutreachEnrollmentDetailProps {
   mailboxes: OutreachMailboxesResult
 }
 
-/** Where the CRM record the person is lives — the site's own CRM when the site is known. */
+/**
+ * Where the CRM record the person is lives — the site's own CRM when the site
+ * is known, else the organization's — at the address the plugin that keeps
+ * leads and contacts publishes, or `null` where none does.
+ */
 export function outreachCrmRecordHref(
   kind: 'lead' | 'contact',
   id: string | null | undefined,
@@ -151,10 +156,8 @@ export function outreachCrmRecordHref(
   orgMount: Pick<ConsolePluginOrgMount, 'orgSlug' | 'hosts'> | undefined,
 ): string | null {
   if (!id || !orgMount?.orgSlug) return null
-  const host = orgMount.hosts.find((entry) => entry.id === hostId)?.subdomain
-  return host
-    ? crmRecordHref({ orgSlug: orgMount.orgSlug, host }, kind, id)
-    : crmOrgRecordHref(orgMount.orgSlug, kind, id)
+  const host = orgMount.hosts.find((entry) => entry.id === hostId)?.subdomain ?? null
+  return pluginRecordHref(kind, { orgSlug: orgMount.orgSlug, host }, id)
 }
 
 /** A Gmail thread, opened in the mailbox's own account. */
@@ -165,6 +168,7 @@ export function outreachGmailThreadUrl(threadId: string, mailboxEmail: string | 
 
 const KIND_ICONS: Record<OutreachTimelineKind, { path: string }> = {
   enrolled: mdiAccountPlusOutline,
+  skipped: mdiSkipNext,
   curated: mdiPencilOutline,
   sent: mdiEmailOutline,
   task: mdiClipboardCheckOutline,

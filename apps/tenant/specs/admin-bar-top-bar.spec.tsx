@@ -201,7 +201,7 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(screen.getByText('About')).toBeTruthy()
     expect(screen.getByText('Draft changes')).toBeTruthy()
     expect(linkByText('Edit this page').href).toBe(CONTEXT_RESPONSE.editUrl)
-    expect(linkByText('Screens').href).toBe(CONTEXT_RESPONSE.screensUrl)
+    expect(linkByText('Pages').href).toBe(CONTEXT_RESPONSE.screensUrl)
     expect(linkByText('Inbox').href).toBe(CONTEXT_RESPONSE.quickLinks[0].url)
     // Commerce is not in this site's links — nothing draws for it at all.
     expect(screen.queryByText('Orders')).toBeNull()

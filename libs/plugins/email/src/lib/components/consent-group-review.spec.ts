@@ -229,8 +229,8 @@ describe('removing a site', () => {
     { mode: 'edit', groupId: 'g_home', name: 'Home goods', hostIds: ['shop', 'deals'] },
     preview({
       carries: [
-        { toHostId: 'blog', fromHostId: 'shop', siteSuppressions: 5, topicOptOuts: 2, paces: 1 },
-        { toHostId: 'shop', fromHostId: 'blog', siteSuppressions: 1, topicOptOuts: 0, paces: 0 },
+        { toHostId: 'blog', fromHostId: 'shop', siteSuppressions: 5, topicOptOuts: 2, paces: 1, retainedRefusals: 3 },
+        { toHostId: 'shop', fromHostId: 'blog', siteSuppressions: 1, topicOptOuts: 0, paces: 0, retainedRefusals: 0 },
       ],
       pendingHolds: [{ hostId: 'blog', topicId: 'news', count: 4, releasedHostIds: ['shop'] }],
       participants: [
@@ -256,9 +256,11 @@ describe('removing a site', () => {
     )
   })
 
+  // Suppressions, topic opt-outs, the refusals kept after a contact was
+  // deleted (AGL-3338) and the CRM's own: 5 + 2 + 3 + 1 + 2.
   it('copies opt-outs both ways, and counts every copy once', () => {
     expect(said).toContain(
-      'Everyone who opted out on any of Home goods’s sites stays opted out on Blog, and everyone who opted out on Blog stays opted out on Home goods’s other sites (10 opt-outs copied, and 1 email frequency choice kept).',
+      'Everyone who opted out on any of Home goods’s sites stays opted out on Blog, and everyone who opted out on Blog stays opted out on Home goods’s other sites (13 opt-outs copied, and 1 email frequency choice kept).',
     )
   })
 
@@ -293,8 +295,8 @@ describe('removing a site', () => {
 describe('dissolving', () => {
   const answer = preview({
     carries: [
-      { toHostId: 'acme-a', fromHostId: 'acme-b', siteSuppressions: 3, topicOptOuts: 0, paces: 0 },
-      { toHostId: 'acme-b', fromHostId: 'acme-a', siteSuppressions: 4, topicOptOuts: 0, paces: 0 },
+      { toHostId: 'acme-a', fromHostId: 'acme-b', siteSuppressions: 3, topicOptOuts: 0, paces: 0, retainedRefusals: 0 },
+      { toHostId: 'acme-b', fromHostId: 'acme-a', siteSuppressions: 4, topicOptOuts: 0, paces: 0, retainedRefusals: 0 },
     ],
     participants: [CRM([{ id: 'crm.figures', count: 6 }, { id: 'crm.copy', count: 20 }])],
   })

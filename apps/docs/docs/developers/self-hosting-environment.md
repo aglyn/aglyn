@@ -226,7 +226,7 @@ What this protects:
   password-reset mailbombing, identifier resolution, storefront member login and
   member recovery.
 - **Provisioning throttles** — organization creation (the bot-farm control), site
-  creation, screen-password unlock, form submission, newsletter signup, booking
+  creation, page-password unlock, form submission, newsletter signup, booking
   creation, visitor plugin writes, the pre-auth REST budget.
 - **Unauthenticated beacons** — the console and tenant error collectors, CSP
   reports, attribution, analytics collection.
@@ -546,8 +546,9 @@ immediately, so enabling it cannot reach backwards and retro-bill. Format is
 
 ## Email {#email}
 
-**Where to get these:** [resend.com](https://resend.com) → **API Keys**, and
-**Domains** to verify the domain you send from.
+**Where to get these:** with the default provider, [resend.com](https://resend.com)
+→ **API Keys**, and **Domains** to verify the domain you send from. To send
+through anything else, see [Which provider carries your mail](#email-provider).
 
 :::warning The shared pool is yours to create, and nothing works until it exists
 
@@ -569,9 +570,58 @@ members are one label deeper so each one signs for itself.
 
 :::
 
+### Which provider carries your mail {#email-provider}
+
+Everything that decides whether a message may leave — suppressions, the send
+rate, the phishing screen, the sending identity, the unsubscribe footer — runs
+inside the product. The provider only carries the finished message, and you
+choose which one:
+
+| `AGLYN_MAIL_PROVIDER` | What carries the mail |
+| --- | --- |
+| `resend` | Resend, with `RESEND_API_KEY`. The only provider with a delivery feed, a credential probe and a read API, so it is the only one under which open and click statistics, automatic bounce and complaint suppression, the staff delivery history, the shared-pool health check and CRM email capture work. |
+| `webhook` | **Your own sender.** Each message is POSTed as JSON to `AGLYN_MAIL_WEBHOOK_URL` — put a relay there into your SMTP server, Amazon SES, Postmark or anything else. Needs no rebuild: it is read at request time, not built into a bundle. |
+| any other value | A provider a plugin or your own fork registered under that name with `registerMailProvider` from `@aglyn/shared-util-email`. |
+
+Unset, the deployment picks the first provider that has its settings, in the
+order above: `resend` when `RESEND_API_KEY` is set (however else you are
+configured), `webhook` when only `AGLYN_MAIL_WEBHOOK_URL` is, and otherwise
+`resend`, unconfigured, so every send is skipped with a log line naming
+`RESEND_API_KEY`. A value that names no built-in and no registered provider is
+**refused, not replaced**: every send is skipped with an error naming the
+value, and the staff email-health page shows it as a blocker. Falling back to
+another provider would hand your recipients and message bodies to a vendor you
+did not choose because a name was misspelled.
+
+**The webhook's wire format.** `POST $AGLYN_MAIL_WEBHOOK_URL` with
+`Content-Type: application/json` and, when `AGLYN_MAIL_WEBHOOK_TOKEN` is set,
+`Authorization: Bearer <token>`:
+
+```json
+{ "type": "mail.send", "version": 1, "context": "invite",
+  "message": { "from": "\"Bramble\" <hello@example.com>", "to": ["ada@example.org"],
+               "subject": "…", "text": "…", "html": "…",
+               "headers": { "List-Unsubscribe": "<…>" },
+               "tags": [{ "name": "context", "value": "invite" }],
+               "replyTo": "support@example.com" } }
+```
+
+Answer `2xx` once the message is accepted, with `{ "id": "…" }` if your relay
+has an id for it. Answer `429`, with `Retry-After` in seconds, to ask for a
+slower pace: the message is kept and retried, never dropped. Any other status
+refuses that one message, and your response body is logged as the reason. A
+relay that has not answered in 10 seconds is treated as a network failure.
+`from` is always an address this install verified; every header and tag must
+be passed through as given, because the unsubscribe headers are how mailbox
+providers honor a one-click opt-out. Keep the endpoint on your own network:
+each request carries the token, the recipients and the whole message.
+
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
-| `RESEND_API_KEY` | Feature | Runtime | `re_…`. Without it every outbound send — invites, receipts, password resets, campaigns, security alerts — is an inert no-op. Nothing errors; mail simply does not arrive. |
+| `AGLYN_MAIL_PROVIDER` | Optional | Runtime | `resend`, `webhook`, or the name of a registered provider. See [Which provider carries your mail](#email-provider). |
+| `AGLYN_MAIL_WEBHOOK_URL` | Feature, `webhook` only | Runtime | Where each outbound message is POSTed. Setting it with no `RESEND_API_KEY` selects the webhook provider on its own. |
+| `AGLYN_MAIL_WEBHOOK_TOKEN` | Recommended, `webhook` only | Runtime | Sent as `Authorization: Bearer <token>` on every POST, so your relay can refuse anything else. Any random string of 32 characters or more. |
+| `RESEND_API_KEY` | Feature, `resend` only | Runtime | `re_…`. With the `resend` provider and no key, every outbound send — invites, receipts, password resets, campaigns, security alerts — is an inert no-op. Nothing errors; mail simply does not arrive. |
 | `USAGE_EMAIL_FROM` | Feature | Runtime | The verified sender identity for **your install's own** mail — invites, billing, security alerts, console password resets — and the address the "is email configured" check every sender consults reads. A bare address or `Bramble <billing@example.com>`, on a domain you verified in Resend. **A published site never sends from it, under any configuration**: a tenant's list quality must not be charged against the domain your own account mail depends on, so tenant mail resolves its own identity and refuses rather than borrowing this one. Unset, every platform sender no-ops or answers `501` with an actionable message; nothing throws. |
 | `EMAIL_PROVIDER_REQUESTS_PER_SECOND` | Optional | Runtime | How many API requests a second your mail provider accepts, as a whole number. Default **10**, which is Resend's published per-team limit — counted across every key on the account, not per key and not per domain. A campaign sends one request per recipient, so a batch of five hundred is the only thing this deployment does that can approach it; the batch paces itself to one request less than this number, leaving the remainder for transactional mail that lands in the same second. Raise it if Resend has raised your account's limit; a value that is blank, negative or unparsable falls back to the default rather than removing the pace, and `1` paces at one request a second. `0` turns pacing off entirely — set it only when something in front of this process already limits the rate, since without it a large batch earns `429`s. Refused requests are never lost either way: a `429` defers the rest of the batch to the next run rather than dropping those recipients. |
 | `EMAIL_LIST_UNSUBSCRIBE_BULK_THRESHOLD` | Optional | Runtime, console only | The bulk-sender line for campaigns whose **mail-client unsubscribe button** (the `List-Unsubscribe` / `List-Unsubscribe-Post` header pair) has been turned off. A whole number; default **5,000**, the figure Gmail and Yahoo publish for their bulk-sender rules, which require one-click unsubscribe. A campaign email whose organization would reach this many campaign messages in 24 hours — counted as what it sent today and yesterday (UTC), plus everyone the email is about to address — carries the header anyway, and the campaign page says it was turned back on and why. Blank, unparsable, zero or negative falls back to the default: there is no value that switches the guard off. It works the same whatever provider sends your mail, because the header is two ordinary headers on the message. Campaigns that leave the setting on, and all transactional mail, are unaffected. |
@@ -599,8 +649,8 @@ members are one label deeper so each one signs for itself.
 | `OPERATOR_HEALTH_TENANT_ORIGIN` | Optional | Runtime, console only | The origin of one published site, for example `https://demo.sites.example.com`: the operator alerts tick asks the published-site runtime's health endpoints there (serving, the error beacon, the capture funnel, site and marketing rendering), so a site runtime that stops rendering alerts the operator. The console reaches its own endpoints without it. Unset, the tick checks the console only, and the site runtime's health is seen only by an external monitor, if you have one. |
 
 Alarm thresholds. All are integers, all fail to their default on a blank or
-unparsable value, and all are inert unless `RESEND_API_KEY` and
-`USAGE_EMAIL_FROM` are set and there is a staff alert inbox (`STAFF_ALERT_EMAIL`,
+unparsable value, and all are inert unless the mail provider has its settings
+(`RESEND_API_KEY`, or `AGLYN_MAIL_WEBHOOK_URL`) and `USAGE_EMAIL_FROM` is set and there is a staff alert inbox (`STAFF_ALERT_EMAIL`,
 or its fallbacks). Each accepts `-1` as a deliberate
 forced-failure lever for proving the alert path works.
 
@@ -615,7 +665,6 @@ forced-failure lever for proving the alert path works.
 | `APP_CHECK_ATTESTATION_ENABLED` | unset | Set to exactly `1` to have `/api/health/journeys` report `appCheckAttestation` — the share of App Check verifications that were ALLOWED for **real visitors**, sampled hourly from Cloud Monitoring by `tools/e2e/appcheck-attestation.mjs`. Reds when attestation collapses, which is the `recaptcha-allowlist` failure where an origin that is attached and routed but not allowlisted renders a console nobody can sign in to. Left unset the check is absent from the body rather than green, because green would claim a measurement nobody took. Deliberately independent of `SIGNUP_CANARY_ENABLED`: this is what covers the canary's debug-token blindness, so it must not go dark with it. |
 | `EDGE_ADMISSION_ENABLED` | unset | Set to exactly `1` to have `/api/health/journeys` report `edgeAdmission` — how long since the metered page-view total last GREW, sampled by `tools/e2e/edge-admission.mjs`. This is the only check that can see the edge refusing real visitors: every other one carries the `x-aglyn-probe` bypass and would ride past a firewall that had started challenging everybody. It grades an OUTCOME rather than a probe, because a probe cannot answer the question — a non-JS client is challenged from a home connection too, and that is the healthy state. Left unset the check is absent from the body rather than green. |
 | `VERIFICATION_DELIVERY_MIN_ACCOUNTS` | `3` | Accounts created in the trailing day — password signups only, ignoring the last 15 minutes so the delivery feed has time — below which a missing verification delivery event is treated as too little data rather than an outage. Its forced-failure lever is `0`, like the drought check's: at zero any window is graded, so a quiet one reports red. The arm is skipped entirely when `RESEND_WEBHOOK_SECRET` is unset, because nothing records deliveries then. |
-| `USAGE_ALERT_APPROACH_PCT` | `80` | How close to a plan quota a workspace gets before it is warned. Strictly between 0 and 100; you cannot disable the warning with it. The at-cap alert is fixed at 100. |
 
 ### Sequences: a rep's own Google mailbox {#sequences}
 
@@ -729,7 +778,7 @@ your own.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_ADS_CONVERSION_ID` | Aglyn-only / your own | Build | Google Ads conversion id, `AW-` plus digits. Google Ads → **Goals** → *Conversions* → the tag's id. |
-| `NEXT_PUBLIC_ADS_SIGNUP_LABEL` | Aglyn-only / your own | Build | The opaque conversion **label** for the signup action, from the same screen. Fires only when the id is also set. |
+| `NEXT_PUBLIC_ADS_SIGNUP_LABEL` | Aglyn-only / your own | Build | The opaque conversion **label** for the signup action, from the same page. Fires only when the id is also set. |
 | `NEXT_PUBLIC_ADS_SUBSCRIBE_LABEL` | Aglyn-only / your own | Build | The conversion label for the subscribe action. |
 | `NEXT_PUBLIC_META_PIXEL_ID` | Aglyn-only / your own | Build | Meta (Facebook/Instagram) Pixel id — digits only. Loads the pixel **in the console**, and only for a visitor whose recorded consent grants the advertising category. Blank loads nothing. |
 | `NEXT_PUBLIC_LINKEDIN_PARTNER_ID` | Aglyn-only / your own | Build | LinkedIn Insight Tag partner id — digits only, from LinkedIn Campaign Manager → **Analytics** → *Insight Tag*. Same consent gate as the pixel above. Blank loads nothing. |
@@ -1175,7 +1224,7 @@ which is what makes it worth knowing.
 
 Several endpoints send `s-maxage` with little or no browser `max-age`, on the
 assumption that a shared cache honors it — the per-host manifest and `robots.txt`
-at 5 minutes to an hour, sitemaps and feeds at 5 minutes, screen-node and
+at 5 minutes to an hour, sitemaps and feeds at 5 minutes, page-node and
 commerce endpoints at 60–300 seconds. Behind a proxy that caches nothing they are
 simply recomputed per request: correct, slower, and several of them hit Firestore
 each time.

@@ -13,17 +13,22 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 
 | Zone | Where it renders | Props your widget receives |
 | --- | --- | --- |
-| `hostActivity` | Host dashboard + screen-view activity column | `hostId`, `targetId?`, `header?`, `viewAllHref?` |
+| `hostActivity` | Host dashboard + a page's detail view: the activity column | `hostId`, `targetId?`, `header?`, `viewAllHref?` |
 | `hostDashboard` | Host dashboard glance row, one card per capability | `hostId` |
 | `orgDashboard` | The organization's Sites page, above the site grid — the org-level twin of `hostDashboard`, rendered only for an org-wide member who may open the org-level CRM | `hostId` (always `null`), `orgMount`, `basePath` (the org-level hub's path) |
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |
-| `marketplaceListing` | Marketplace listing detail body | `hostId`, `listingId`, `permissions` |
-| `orgAddons` | Plugins & add-ons hub, installs section | `hostId` (the acting site) |
+| `hostArtifactPublish` | Wherever a console page offers to publish something it holds (a site's layouts, the organization's publish panel): the dialog that publishes it. The page keeps the control that opens it, and leaves that control out when no widget is registered here | `artifact` (`{ kind, hostId?, orgId?, artifactId?, displayName?, description? }`, or `null` while nothing is open), `onClose()` |
+| `orgPluginInstalls` | Organization → Plugins, above the built-in plugins: the plugins your plugin installed into the workspace, one row per installation, each linking to `/[orgSlug]/plugins/[pluginRef]` | `orgId`, `orgSlug`, `hosts` (`{ id, label }` for each site the reader can see) |
+| `pluginInstallStatus` | An installation's own page, above where it runs: what the installing plugin says about the version the workspace runs. Drawn only for an installation that exists | `orgSlug`, `pluginRef` (the installation's id), `pin` (one pin of it) |
+| `templateGallery` | The template gallery ("Start from a template" on a site's Pages, Layouts and Components tabs), below the site's own templates and the starters: a shelf of templates your plugin offers to install. Call `reportShelf` with `loading`, `empty` or `shown` so the gallery's "nothing matches" line counts your shelf, and `onInstalled()` once an install lands so the gallery closes | `hostId`, `kind` (`page`, `layout` or `component`), `search` (the word typed in the gallery's search, `''` for none), `onInstalled()`, `reportShelf(shelfId, state)` |
+| `templateInstallStatus` | A row of a site's Templates library whose template a plugin installed, beside its Source badge: what your plugin says about the copy the site holds, such as an update to install. Drawn once per such row; draw nothing for a template you did not install | `hostId`, `template` (the row's template document, `$id` included) |
 | `dashboardFooter` | Bottom of the host dashboard | `hostId` |
 | `orgSettings` | Organization → Settings, below the tabs | `orgId`, `org` |
 | `hostSettings` | Host setup page, below the built-in cards | `hostId` |
+| `hostSeo` | A site's **Setup → SEO**, under the SEO check and above the SEO cards: fixes for what the check found, and values proposed for the cards, which each card's **Update** writes | `hostId`, `orgId`, `orgSlug`, `host`, `seo` (the stored settings), `check` (the SEO check's last report and the keyword lines it ran with; `null` until someone runs it — add to its findings, never list them again), `proposeDraft(values, key)` — puts values in the SEO cards as unsaved edits |
+| `seoFields` | Inside a search listing editor, under its fields: a page's **SEO** card, and the commerce product editor's search engine listing | `hostId`, `orgId`, `orgSlug`, `subject` (the page or the product), `fields`, `values`, `hasImage`, `proposeValues(values, key)` — stages values in the editor as unsaved edits |
 | `adminOrgDetail` | Staff admin org detail page (staff-only) | `orgId` |
 | `orgBillingUsage` | Billing → Usage, below the meters | `orgId`, `org` (the billing-merged org doc), `canManage` |
 | `orgBillingOverview` | Billing → Overview, among the plan and add-on cards | `orgId`, `org`, `plan`, `canManage` |
@@ -35,10 +40,10 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `orgMember` | Team → member detail, below the member's activity | `orgId`, `uid`, `member`, `canManage` |
 | `orgMembersListColumn` | A **column** of the org Team table — see [Column zones](#column-zones) | per row: `member`, `orgId`, `canManage` |
 | `hostMembers` | The site collaborators card: a column of its table when the widget declares `column`, a card beneath it otherwise | per row: `member`, `hostId`, `canManage`; as a card: `hostId`, `canManage` |
-| `assistPanel` | The console shell's assistant dock, above every route boundary in both the app and editor shells | none — resolve your own scope from the URL |
+| `consoleDock` | The console dock: a floating panel above every route boundary in both the app and editor shells (it was `assistPanel` until AGL-3080) | `orgId`, `org`, `orgReady`, `scopedOrgId` (the org a widget may act and be metered for, `undefined` where the page names none), `orgSlug`, `hostId`, `productName`, `releaseVerdict(key)` (`{ visible, staffPreview }` for any release flag, staff bypass applied), `isStaff`, `permissionsOnHost` |
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
-| `hostScreens` | A site's Screens page, beside Templates and Create New Screen: another way to start a screen | `hostId`, `orgId` (`undefined` while the page resolves it) |
+| `hostScreens` | A site's **Pages** list, beside Templates and Create New Page: another way to start a page | `hostId`, `orgId` (`undefined` while the page resolves it) |
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
 | `hostForms` | A site's Forms page, beside Create Form: another way to start a form. The Forms page is the forms plugin's, which hosts the zone — see [Zones a plugin hosts](#zones-a-plugin-hosts) | `hostId`, `orgId` |
@@ -46,9 +51,6 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostAutomations` | The Automation page's Actions, beside **Add action** and **Recipes**: another way to start an automation. Hosted by the workflows plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
 | `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
 | `automationRun` | On each failed run in an automation's run history. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
-| `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes. Hosted by the commerce plugin | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
-| `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them. Hosted by the commerce plugin | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
-| `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land. Hosted by the commerce plugin | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
 | `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
 | `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
 | `importMapping` | Inside a CRM contacts, companies, deals or leads import, under its column matching. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
@@ -78,6 +80,19 @@ The renderer is the same gated slot a console page mounts, so a widget there pas
 same enablement, entitlement and permission gates. Outside the console shell it is `null`,
 and the zone draws nothing.
 
+A plugin that hosts a zone also declares it, with `registerPluginZone` and a token that
+carries the props it hands each widget (see
+[Zones a plugin hosts](./plugin-manager-api.md#zones-a-plugin-hosts--plugin-zones) in the
+plugin-manager reference). The commerce plugin declares these three on its product
+surfaces; a widget from another plugin restates the props it reads rather than importing
+the commerce package:
+
+| Zone | Where it renders | Props your widget receives |
+| --- | --- | --- |
+| `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
+| `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
+| `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
+
 ## How a zone spaces your widget
 
 Most zones are a **stack**. The shell draws their widgets one under another,
@@ -104,7 +119,7 @@ page spaces it there:
   one-to-one composer's message and under an import drawer's column matching.
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
-- `assistPanel`: a floating dock.
+- `consoleDock`: a floating dock.
 - `orgMembersListColumn`, `staffOrgsListColumn` and `staffOrgUsageColumn`: a
   column of a table, or, on `staffOrgUsageColumn`, a line above it.
 

@@ -357,3 +357,35 @@ describe('the tenant loader refuses a contained FREE site (AGL-2155)', () => {
     expect(result.props.lockdown.reason).toBe('security')
   })
 })
+
+describe('an UPGRADE lifts the containment the same month (AGL-3432)', () => {
+  // The owner notice says "Upgrade to bring it straight back" and the visitor
+  // notice says "or sooner if the owner upgrades". The flag's `degraded` is
+  // written once, at trip time, while the org was free — so the promise only
+  // holds if the reader re-derives from the org's CURRENT plan.
+  const freeTrip = () => ({ ...HOST, bandwidthCeiling: tripFor('free', 150_000) })
+
+  it('a site tripped on Free serves again once its org is on a metered plan', async () => {
+    mockGetHost.mockResolvedValue({ host: freeTrip(), error: null })
+    mockGetOrgBilling.mockResolvedValue({
+      org: { $id: 'org-1', plan: 'starter', subscription: { status: 'active' } },
+    })
+    const result: any = await loadPageData('acme', [])
+    expect(result.props?.maintenanceFallback).toBeUndefined()
+    expect(result.props?.lockdown).toBeUndefined()
+  })
+
+  it('CONTROL — the same flag while the org is still on Free stays refused', async () => {
+    mockGetHost.mockResolvedValue({ host: freeTrip(), error: null })
+    mockGetOrgBilling.mockResolvedValue({ org: { $id: 'org-1', plan: 'free' } })
+    const result: any = await loadPageData('acme', [])
+    expect(result.props.lockdown.reason).toBe('bandwidth_ceiling')
+  })
+
+  it('an unreadable org keeps the containment rather than lifting it', async () => {
+    mockGetHost.mockResolvedValue({ host: freeTrip(), error: null })
+    mockGetOrgBilling.mockResolvedValue({ org: null })
+    const result: any = await loadPageData('acme', [])
+    expect(result.props.lockdown.reason).toBe('bandwidth_ceiling')
+  })
+})

@@ -28,6 +28,9 @@ const NewestSiteUsersCard = lazy(
 import { COMMERCE_CONSOLE_SECTIONS } from './components/commerce-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
+import { registerCommerceRecordRoutes } from './model/commerce-record-routes'
+import { registerCommerceZones } from './components/console/product-zones'
+import { COMMERCE_SEARCH_SOURCES } from './model/commerce-search-sources'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
 
 /** Code-split: the Products console page only loads when opened. */
@@ -44,6 +47,11 @@ const CommerceConsolePage = lazy(() => import('./components/commerce-console-pag
  * nav renders the link and the existing named route serves the page.
  */
 export function registerCommerceConsole(): void {
+  // Where a product is read, for surfaces outside this plugin (AGL-3080).
+  registerCommerceRecordRoutes()
+  // The zones its product editor, products hub and CSV import dialog host,
+  // with the props each hands a widget (AGL-2916, AGL-3080).
+  registerCommerceZones()
   // Plugin-declared permissions (AGL-435): tier defaults ride every
   // resolved role set; custom roles override key-by-key.
   Aglyn.registerPluginPermissions(COMMERCE_PERMISSIONS)
@@ -53,6 +61,7 @@ export function registerCommerceConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Commerce',
+    searchSources: COMMERCE_SEARCH_SOURCES,
     // Dashboard/analytics glance card (AGL-419): rendered through the
     // shell's 'commerceGlance' widget slot.
     widgets: [

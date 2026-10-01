@@ -21,8 +21,9 @@
  *
  * The browser hops through `/api/screens/revalidate` because the tenant route
  * is secret-authenticated. A route running on the server already holds that
- * secret, so it announces directly — the arrangement `announceFormPublish`
- * established for a form promotion.
+ * secret, so it announces directly — the arrangement a form promotion
+ * established, which the forms plugin's promote route now makes through the
+ * platform site cache.
  *
  * The "cannot fail the write" half is proved here at the helper rather than
  * at each route, and deliberately: both `announceLivePaths` and
@@ -42,6 +43,7 @@ jest.mock('../utils/server/tenant-revalidate', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { listPluginHostResources } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 import { announceLivePaths } from '../utils/server/announce-live-paths'
 
 /** A host document with a subdomain, and optionally an attached domain. */
@@ -193,9 +195,14 @@ describe('each server route announces what it changed', () => {
   })
 
   it('a new redirect drops the address it captures', () => {
+    // The route announces the path a kind DECLARES live on create, and the
+    // redirect kind — declared by its plugin since AGL-3080 — declares its
+    // source. Both halves, because either one missing stops the announce.
     const source = readRepo(RESOURCES_ROUTE)
-    expect(source).toMatch(/resourceKey === 'redirect'/)
+    expect(source).toMatch(/resource\.livePathField \? doc\[resource\.livePathField\]/)
     expect(source).toMatch(/void announceLivePaths\(\{ hostSnapshot, hostId, paths: \[source\] \}\)/)
+    const redirect = listPluginHostResources().find((one) => one.kind === 'redirect')
+    expect(redirect?.livePathField).toBe('source')
   })
 
   /**

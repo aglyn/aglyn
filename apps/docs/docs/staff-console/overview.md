@@ -492,7 +492,7 @@ at the time. The card is read-only — those records are evidence about the acco
 holder, and nothing in the product can add, amend or delete one.
 
 If the card says the records **could not be read**, that is not the same as "no
-acceptance on file": do not answer a dispute from that screen until it loads. An
+acceptance on file": do not answer a dispute from that page until it loads. An
 account can also legitimately have no record — accounts created before clickwrap
 capture, and SSO/invite doors, never passed a consent checkbox. Those accounts are
 asked to accept by a banner in the console the next time they sign in, as is anyone
@@ -555,7 +555,7 @@ Super staff only, and audited with the device id and the account. The account ho
 has the same control themselves under **Manage account → Security → Recent sign-ins**.
 
 If the card says the registry **could not be read**, that is not the same as "no other
-devices": do not tell anyone their account is clean from that screen until it loads.
+devices": do not tell anyone their account is clean from that page until it loads.
 
 ### Email delivery {#email-delivery}
 
@@ -638,7 +638,7 @@ correct posture for it: a leaked sending key should not be able to list everyone
 ever emailed. Without that variable the card says so and changes nothing.
 
 If the card says the log **could not be read**, that is not the same as "we never
-emailed them": do not tell anyone their mail was or was not sent from that screen until
+emailed them": do not tell anyone their mail was or was not sent from that page until
 it loads.
 
 The record is ours, not the sending service's. It survives that vendor's own retention

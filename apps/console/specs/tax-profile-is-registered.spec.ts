@@ -71,6 +71,9 @@ describe('the tax rule, after this app’s loader has run', () => {
   it('has an owner, and it is the plugin that keeps the merchant’s tax settings', () => {
     expect(pluginTaxProfileOwner()).toBe('commerce')
     expect(() => pluginTaxProfile()).not.toThrow()
+    // A plugin that charges asks the owner for the site's rate as well, and
+    // never reads the owner's settings document itself.
+    expect(typeof pluginTaxProfile().flatRate).toBe('function')
   })
 
   it('adds a flat rate exclusively, rounded to the cent', () => {

@@ -32,7 +32,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin","console":"registerBookingsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["crmRecordBooking"]}},
+    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["consoleSearch","crmRecordBooking"]}},
     load: () => import('@aglyn/plugins-bookings'),
     loads: {
       site: () => import('@aglyn/plugins-bookings/site'),
@@ -42,7 +42,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
     register: {"site":"registerCommercePlugin","console":"registerCommerceConsole"},
-    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","hostDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard"]}},
     load: () => import('@aglyn/plugins-commerce'),
     loads: {
       site: () => import('@aglyn/plugins-commerce/site'),
@@ -52,14 +52,14 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketplace',
     apiPrefixes: ["marketplace"],
     register: {"console":"registerMarketplaceConsole","staff":"registerMarketplaceConsole"},
-    contributes: {"console":{"shell":true,"slots":["hostArtifactPublish","pluginSiteSet"],"orgRoutes":["/marketplace"]}},
+    contributes: {"console":{"shell":true,"slots":["hostArtifactPublish","orgPluginInstalls","pluginInstallStatus","pluginSiteSet","staffOverview","templateGallery","templateInstallStatus"],"orgRoutes":["/marketplace"]}},
     load: () => import('@aglyn/plugins-marketplace'),
   },
   {
     id: 'crm',
     apiPrefixes: ["crm"],
     register: {"console":"registerCrmConsole"},
-    contributes: {"console":{"shell":true,"routes":["/crm"],"slots":["formContactFields","hostDashboard","orgDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/crm"],"slots":["consoleSearch","formContactFields","hostDashboard","orgDashboard"]}},
     load: () => import('@aglyn/plugins-crm'),
   },
   {
@@ -121,21 +121,21 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'redirects',
     register: {"console":"registerRedirectsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/redirects"]}},
+    contributes: {"console":{"shell":true,"routes":["/redirects"],"slots":["consoleSearch"]}},
     load: () => import('@aglyn/plugins-redirects'),
   },
   {
     id: 'workflows',
     apiPrefixes: ["hooks","automations"],
     register: {"console":"registerWorkflowsConsole","staff":"registerWorkflowsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["adminOrgDetail","hostActivity","staffSite"]}},
+    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["adminOrgDetail","consoleSearch","hostActivity","staffSite"]}},
     load: () => import('@aglyn/plugins-workflows'),
   },
   {
     id: 'ai',
     apiPrefixes: ["ai","assist"],
     register: {"console":"registerAiConsole","staff":"registerAiConsole"},
-    contributes: {"console":{"shell":true,"slots":["assistPanel","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","hostAutomations","hostComponents","hostFirstRun","hostForms","hostLayouts","hostMembers","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","orgBillingUsage","orgMember","orgMembersListColumn","orgSites","productEditor","productImport","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
+    contributes: {"console":{"shell":true,"slots":["consoleDock","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","hostAutomations","hostComponents","hostFirstRun","hostForms","hostLayouts","hostMembers","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","orgBillingUsage","orgMember","orgMembersListColumn","orgSites","productEditor","productImport","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
     load: () => import('@aglyn/plugins-ai'),
   },
   {

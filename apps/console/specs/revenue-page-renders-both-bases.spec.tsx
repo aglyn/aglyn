@@ -99,7 +99,139 @@ jest.mock('../constants/route-links', () => ({
   Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_REVENUE: 'ADMIN_REVENUE' },
 }))
 
+import type {
+  RevenueSection,
+  RevenueSourceAnswer,
+} from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import AdminRevenue from '../app/(app)/admin/revenue/page'
+
+/**
+ * The two plugins that earn through the platform, as their revenue sources
+ * answer (AGL-3080). The words and the arithmetic are each plugin's and are
+ * pinned in that plugin's own spec; what THIS page owes a section is to draw
+ * every line, note and table it carries, and nothing it does not.
+ */
+function storefront(over: Partial<RevenueSourceAnswer> = {}): RevenueSection {
+  return {
+    outcome: 'answered',
+    pluginId: 'commerce',
+    id: 'commerce',
+    name: 'storefront orders',
+    earned: {
+      label: 'Storefront commission',
+      cents: 41_000,
+      note:
+        'The advertised take on merchant storefront sales, net of refunds — with Stripe’s card processing removed. The platform fee charged on a storefront sale bundles that processing cost and passes it through at cost; it is a recovery, not earnings.',
+    },
+    grossToNet: [
+      {
+        label: 'Storefront sales (shopper gross)',
+        cents: 1_540_000,
+        deduction: false,
+        note: 'The merchant’s. It transfers straight to their connected account and is shown only for scale.',
+      },
+      {
+        label: 'Storefront platform fee collected',
+        cents: 134_000,
+        deduction: false,
+        note: 'Not all Aglyn’s — see the next line.',
+      },
+      {
+        label: '— less card processing passed through at cost',
+        cents: 93_000,
+        deduction: true,
+        note: 'Stripe’s. On a destination charge Stripe debits Aglyn’s balance for processing, and this half of the fee recovers exactly that. It is a recovery, not earnings, and reporting it as revenue would overstate every storefront sale.',
+      },
+    ],
+    notes: [
+      {
+        label: '4 storefront subscription cycles — one billed before its re-price reports no take',
+        tone: 'warning',
+      },
+    ],
+    attribution: [
+      {
+        id: 'byHost',
+        heading: 'Storefront take by host',
+        unit: 'Storefront',
+        countLabel: 'Orders',
+        empty: "No storefront order settled in this period. Note this is Aglyn's take only — the shopper's spend is the merchant's money and is never counted here.",
+        chartEmpty: 'No storefront earned a take in this period — nothing to plot yet.',
+        rows: [],
+        omittedRows: 0,
+        omittedGainCents: 0,
+        omittedLossCents: 0,
+      },
+    ],
+    truncated: false,
+    failure: null,
+    summary: {},
+    ...over,
+  } as RevenueSection
+}
+
+function marketplace(over: Partial<RevenueSourceAnswer> = {}): RevenueSection {
+  return {
+    outcome: 'answered',
+    pluginId: 'marketplace',
+    id: 'marketplace',
+    name: 'marketplace',
+    earned: {
+      label: 'Marketplace commission',
+      cents: 81_100,
+      note: 'The platform’s cut of plugin sales, at the rate resolved from the seller’s entitlements when each sale settled, net of refunds. The buyer’s gross and the publisher’s transfer are excluded — that money is the publisher’s, not Aglyn’s.',
+    },
+    grossToNet: [
+      {
+        label: 'Marketplace sales (buyer gross)',
+        cents: 240_000,
+        deduction: false,
+        note: 'Mostly the publisher’s. Aglyn keeps only the commission.',
+      },
+      {
+        label: '— less publisher payouts',
+        cents: 146_900,
+        deduction: true,
+        note: 'The publisher’s. Transferred out.',
+      },
+    ],
+    notes: [
+      {
+        label: '~$147.00 of card processing on marketplace sales is NOT recovered — the commission above is gross of it',
+        tone: 'warning',
+      },
+    ],
+    attribution: [
+      {
+        id: 'byListing',
+        heading: 'Marketplace commission by listing',
+        unit: 'Listing',
+        countLabel: 'Sales',
+        empty: "No marketplace sale settled in this period. Aglyn's commission is a share of each sale, so no sales means no commission — not a failed read.",
+        chartEmpty: 'No plugin earned a commission in this period — nothing to plot yet.',
+        rows: [],
+        omittedRows: 0,
+        omittedGainCents: 0,
+        omittedLossCents: 0,
+      },
+      {
+        id: 'byPublisher',
+        heading: 'Marketplace commission by publisher',
+        unit: 'Publisher',
+        countLabel: 'Sales',
+        empty: 'No publisher earned Aglyn a commission in this period.',
+        rows: [],
+        omittedRows: 0,
+        omittedGainCents: 0,
+        omittedLossCents: 0,
+      },
+    ],
+    truncated: false,
+    failure: null,
+    summary: {},
+    ...over,
+  } as RevenueSection
+}
 
 /**
  * Every figure a distinct magnitude, so a match is unambiguous:
@@ -131,27 +263,6 @@ const payload: RevenuePayload = {
       netOfReversalsCents: 310_000,
       internalTrafficCents: 4_500,
     },
-    marketplace: {
-      transactionCount: 7,
-      grossCents: 240_000,
-      taxCents: 12_000,
-      sellerTransferCents: 146_900,
-      commissionCents: 90_000,
-      commissionRefundedCents: 8_900,
-      commissionNetCents: 81_100,
-      estimatedProcessingCostCents: 14_700,
-    },
-    commerce: {
-      transactionCount: 31,
-      grossCents: 1_540_000,
-      applicationFeeCents: 134_000,
-      processingPassThroughCents: 93_000,
-      commissionCents: 41_000,
-      commissionRefundedCents: 0,
-      commissionNetCents: 41_000,
-      subscriptionOrders: 4,
-      truncated: false,
-    },
     totalEarnedCents: 432_100,
   },
   gap: {
@@ -167,11 +278,10 @@ const payload: RevenuePayload = {
     },
     unexplainedCents: 257_000,
   },
-  attention: { rowsOutsideEveryPeriod: 0, commerceTruncated: false },
+  attention: { rowsOutsideEveryPeriod: 0 },
   unbilledMeteredApplies: true,
-  commerceQueryFailed: false,
   subscriptionsTruncated: false,
-  marketplaceTruncated: false,
+  sources: [storefront(), marketplace()],
 }
 
 beforeEach(() => {
@@ -270,7 +380,9 @@ describe('the accounting positions are STATED, not merely computed', () => {
   it('says card processing passed through at cost is not revenue', async () => {
     render(<AdminRevenue />)
     await waitFor(() =>
-      expect(screen.getByText(/It is a recovery, not earnings/i)).toBeTruthy(),
+      expect(
+        screen.getByText(/It is a recovery, not earnings, and reporting it as revenue/i),
+      ).toBeTruthy(),
     )
     // The pass-through is subtracted as its own line…
     expect(screen.getByText('−$930.00')).toBeTruthy()
@@ -335,7 +447,20 @@ describe('a figure that cannot be trusted is never shown as a total', () => {
   it('says a $0 storefront figure means "not counted" when the query failed', async () => {
     global.fetch = jest.fn(async () => ({
       ok: true,
-      json: async () => ({ ...payload, commerceQueryFailed: true }),
+      json: async () => ({
+        ...payload,
+        sources: [
+          storefront({
+            earned: { label: 'Storefront commission', cents: 0, note: '' },
+            failure: {
+              title: 'Storefront orders could not be read',
+              detail:
+                'The storefront commission below reads $0 because the query failed, not because there were no sales.',
+            },
+          }),
+          marketplace(),
+        ],
+      }),
     })) as never
     render(<AdminRevenue />)
     await waitFor(() =>
@@ -345,12 +470,41 @@ describe('a figure that cannot be trusted is never shown as a total', () => {
     )
   })
 
+  it('names a plugin whose earnings could not be read, and counts none of them', async () => {
+    // A refused source is unread, not zero: the page says whose earnings are
+    // missing, and draws no line, note or table for them.
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ...payload,
+        sources: [
+          storefront(),
+          {
+            outcome: 'refused',
+            pluginId: 'marketplace',
+            id: 'marketplace',
+            reason: 'The “marketplace” plugin could not read its earnings for this period.',
+          },
+        ],
+      }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText('Earnings from the “marketplace” plugin could not be read'),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText(/the settled total is a lower bound/i)).toBeTruthy()
+    expect(screen.queryByText('Marketplace commission')).toBeNull()
+    expect(screen.getAllByText('Storefront commission').length).toBeGreaterThan(0)
+  })
+
   it('says undated invoices are invisible to every period', async () => {
     global.fetch = jest.fn(async () => ({
       ok: true,
       json: async () => ({
         ...payload,
-        attention: { rowsOutsideEveryPeriod: 3, commerceTruncated: false },
+        attention: { rowsOutsideEveryPeriod: 3 },
       }),
     })) as never
     render(<AdminRevenue />)
@@ -527,53 +681,55 @@ describe('every figure is traceable to the org behind it', () => {
 })
 
 describe('every source is attributed on its own dimension', () => {
+  const table = (
+    section: RevenueSection,
+    id: string,
+    rows: Array<Record<string, unknown>>,
+  ) =>
+    section.outcome === 'answered'
+      ? section.attribution.map((entry) => (entry.id === id ? { ...entry, rows } : entry))
+      : []
   const withSources = {
     ...payload,
-    attributionByListing: {
-      rows: [
-        {
-          key: 'ChiOYRKDeI',
-          name: 'Office Hours',
-          detail: 'Aglyn LLC',
-          gainCents: 4_100,
-          lossCents: 900,
-          count: 3,
-        },
-      ],
-      omittedRows: 0,
-      omittedGainCents: 0,
-      omittedLossCents: 0,
-    },
-    attributionByPublisher: {
-      rows: [
-        {
-          key: 'jWmGooWE3L',
-          name: 'Aglyn LLC',
-          detail: '',
-          gainCents: 4_100,
-          lossCents: 900,
-          count: 3,
-        },
-      ],
-      omittedRows: 0,
-      omittedGainCents: 0,
-      omittedLossCents: 0,
-    },
-    attributionByHost: {
-      rows: [
-        {
-          key: '4uYCmrbU5t',
-          name: 'Northwind Coffee',
-          detail: 'northwind-coffee',
-          gainCents: 2_600,
-          lossCents: 0,
-          count: 5,
-        },
-      ],
-      omittedRows: 0,
-      omittedGainCents: 0,
-      omittedLossCents: 0,
-    },
+    sources: [
+      storefront({
+        attribution: table(storefront(), 'byHost', [
+          {
+            key: '4uYCmrbU5t',
+            name: 'Northwind Coffee',
+            detail: 'northwind-coffee',
+            gainCents: 2_600,
+            lossCents: 0,
+            count: 5,
+          },
+        ]) as never,
+      }),
+      marketplace({
+        attribution: table(
+          { ...(marketplace() as any), attribution: table(marketplace(), 'byListing', [
+            {
+              key: 'ChiOYRKDeI',
+              name: 'Office Hours',
+              detail: 'Aglyn LLC',
+              gainCents: 4_100,
+              lossCents: 900,
+              count: 3,
+            },
+          ]) } as RevenueSection,
+          'byPublisher',
+          [
+            {
+              key: 'jWmGooWE3L',
+              name: 'Aglyn LLC',
+              detail: '',
+              gainCents: 4_100,
+              lossCents: 900,
+              count: 3,
+            },
+          ],
+        ) as never,
+      }),
+    ],
   }
 
   it('names the plugin, the publisher and the storefront', async () => {
@@ -607,7 +763,7 @@ describe('every source is attributed on its own dimension', () => {
   it('says an empty source table is a real answer, not a failed read', async () => {
     global.fetch = jest.fn(async () => ({
       ok: true,
-      json: async () => ({ ...payload, attributionByListing: { rows: [] } }),
+      json: async () => payload,
     })) as never
     render(<AdminRevenue />)
     await waitFor(() =>

@@ -22,12 +22,12 @@ import {
   overrideWriteValue,
   readArtifactOverride,
   resolveOverride,
-} from './marketplace-overrides'
+} from './artifact-overrides'
 import {
   resolveSiteTheme,
   themeArtifactContent,
   type ThemeHostDocument,
-} from './marketplace-theme'
+} from './site-theme'
 
 /**
  * A site's theme library (AGL-3404): the themes a site can switch between,
@@ -123,8 +123,15 @@ export const DEFAULT_THEME_ENTRY_ID = 'default'
  */
 export const SITE_THEME_ENTRY_ID = 'site-theme'
 
-/** The default's name when nothing else names it. */
-export const DEFAULT_THEME_NAME = 'Material UI'
+/**
+ * The default's name, wherever the library names it.
+ *
+ * Not "Material UI": the platform default keeps MUI's palette but draws it in
+ * the platform's own type and component defaults, and stock Material UI is a
+ * built-in theme of its own (AGL-3422). A console shows the operator's brand
+ * name in its place.
+ */
+export const DEFAULT_THEME_NAME = 'Platform default'
 
 /** A preset's entry id, which holds only its stash. */
 export function presetEntryId(presetId: string): string {
@@ -175,11 +182,13 @@ export function readThemeSelection(
     return {
       kind: stored['kind'] as ThemeLibraryKind,
       id: stored['id'],
+      // The default is always named by the constant: a selection stored
+      // before AGL-3422 calls it "Material UI", which is now another theme.
       name:
-        typeof stored['name'] === 'string' && stored['name']
-          ? stored['name']
-          : stored['kind'] === 'default'
-            ? DEFAULT_THEME_NAME
+        stored['kind'] === 'default'
+          ? DEFAULT_THEME_NAME
+          : typeof stored['name'] === 'string' && stored['name']
+            ? stored['name']
             : 'Theme',
     }
   }

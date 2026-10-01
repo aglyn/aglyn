@@ -16,9 +16,9 @@
  */
 
 import {
-  ASSIST_PROVIDER_COST_FIELD,
-  assistProviderCostUsd,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+  liveMeterReading,
+  pluginCostAxes,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { orgCogsInputFrom, orgMonthlyCogsUsd } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
@@ -32,25 +32,24 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * price the same org differently once already — the comment inside about one
  * shared field list (AGL-1134) is the scar from that.
  *
- * Reads the newest `orgs/{id}/usage/{month}` rollup and prices ALL SIX metered
- * dimensions through `orgMonthlyCogsUsd` — the metering estimate on the
- * document itself covers only storage, page views and form submissions.
+ * Reads the newest `orgs/{id}/usage/{month}` rollup and prices every metered
+ * dimension through `orgMonthlyCogsUsd` — the platform's own and each one a
+ * plugin declares (`plugin-usage-axes.ts`) — where the metering estimate on
+ * the document itself covers only storage, page views and form submissions.
  *
- * PLUS Aglyn Assist provider spend for that same month (AGL-2280), read live
- * from `orgs/{id}/assistUsage/{month}` — its provider figure, which is what
- * the tokens cost us rather than what they drew (AGL-3015). Assist cost had five
- * writers and two readers — the budget alert and the billing card — and
- * neither of them is the margin model, so the one cost line that can actually
- * clear the $2/site floor never reached the discount guardrail at all. the * standing constraint is that Assist must not eat margins; a guardrail that
- * cannot see Assist cannot enforce it.
+ * PLUS the LIVE reading of each cost axis a plugin declares one for, for that
+ * same month: today the AI plugin's provider spend, which is what the tokens
+ * cost us rather than what they drew (AGL-3015), and the one cost line that
+ * can clear the $2/site floor on its own. A guardrail that could not see it
+ * could not keep it from eating the margin (AGL-2280).
  *
  * SAME MONTH as the rollup, not "now". The cron writes the CLOSED month, so
- * pairing its rollup with the current month's Assist spend would report two
+ * pairing its rollup with the current month's live reading would report two
  * different periods as one figure — the exact mistake `/api/billing/
  * usage-budget` refuses one field over.
  *
- * The live read wins over any `assistCostUsd` the rollup itself carries: the
- * rollup is a snapshot taken when the cron ran, and Assist keeps spending
+ * The live reading wins over the figure the rollup itself carries: the
+ * rollup is a snapshot taken when the cron ran, and the meter keeps counting
  * after it.
  *
  * Returns null when there is no rollup, which is the honest answer:
@@ -82,14 +81,16 @@ export async function latestMeasuredCogsUsd(
     // six meters do. `month` is written on every rollup; the id is the same
     // string and is the fallback for a document written before it was.
     const month = String(rollup.get('month') ?? rollup.id)
-    const assist = await orgRef.collection('assistUsage').doc(month).get()
-    // What we PAID, not what the org drew (AGL-3015). A cost of goods priced
-    // at the billed rate would count our own markup as a cost and refuse a
-    // discount the margin actually supports.
-    const assistCostUsd = assistProviderCostUsd(
-      assist.get('estCostUsd'),
-      assist.get(ASSIST_PROVIDER_COST_FIELD),
-    )
+    // The LIVE reading of each cost axis a plugin declares one for, from the
+    // same month — the AI plugin's provider spend, what the tokens cost us
+    // rather than what they drew (AGL-3015).
+    const live: Record<string, number> = {}
+    for (const axis of pluginCostAxes()) {
+      if (!axis.live) continue
+      const snapshot = await orgRef.collection(axis.live.collection).doc(month).get()
+      const reading = liveMeterReading(snapshot, axis.live)
+      if (reading !== undefined) live[axis.fields[0]!] = reading
+    }
     const { measuredUsd } = orgMonthlyCogsUsd(
       {
         // One shared list of priced fields (AGL-1134) rather than a copy per
@@ -97,9 +98,7 @@ export async function latestMeasuredCogsUsd(
         ...orgCogsInputFrom(rollup.data()),
         // Live, and therefore last — see the note above about the snapshot
         // going stale between cron runs.
-        ...(Number.isFinite(assistCostUsd) && assistCostUsd > 0
-          ? { assistCostUsd }
-          : {}),
+        ...live,
       },
       // Site count comes from `checkDiscountMargin`, which applies the flat
       // floor itself — passing 0 here keeps this the MEASURED half only, so

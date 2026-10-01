@@ -16,6 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { resolveSiteBundleSections } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import { checkEntitlement, decodeStoredNodes } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -29,6 +30,7 @@ import {
 import {
   EXPORT_COLLECTION_LIMITS,
   EXPORTABLE_HOST_FIELDS,
+  PLUGIN_SITE_EXPORT_COLLECTIONS,
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
@@ -38,12 +40,14 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 /**
  * Whole-site export (AGL-163): one JSON bundle of everything designable —
  * host settings, screens/layouts with their PUBLISHED versions, reusable
- * components, variables/functions/workflows/actions, services, content
- * collections + entries, datasets + records, and a media manifest
- * (metadata + URLs; bytes stay in storage). Never includes admins,
- * tenant linkage, domain, bookings/leads/submissions (PII), or secrets
- * (webhooks stay behind). HubSpot famously has no site backup — this is
- * the differentiator. Pro+ (`siteExport` flag).
+ * components, authors, content collections + entries, a media manifest
+ * (metadata + URLs; bytes stay in storage), every host collection a plugin
+ * declares for the bundle (a site's variables, functions, workflows,
+ * interactions and services), each under its own name, and every section a
+ * plugin answers for itself (a site's datasets, with their records). Never
+ * includes admins, tenant linkage, domain, bookings/leads/submissions (PII),
+ * or secrets (webhooks are declared out). HubSpot famously has no site
+ * backup — this is the differentiator. Pro+ (`siteExport` flag).
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -76,7 +80,8 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Not a site admin' }, { status: 403 })
     }
     // Plan gate rides the owning org's doc (AGL-238). The org id is kept —
-    // datasets and media are read from the org, not the host (AGL-1046).
+    // media and a plugin's organization data are read from the org, not the
+    // host (AGL-1046).
     const owningOrg = await getOrgForHost(hostId)
     const orgId = owningOrg?.orgId
 
@@ -211,11 +216,11 @@ async function handler(request: Request): Promise<Response> {
     }
 
     /**
-     * Datasets and media are ORG-owned (AGL-237) and narrowed to what this
-     * host may see (AGL-1046). Both used to be read off `hosts/{hostId}/…`,
-     * which AGL-237 emptied and AGL-1050 confirmed holds nothing in
-     * production — so a "whole-site backup" had been silently shipping zero
-     * datasets and an empty media manifest for every org-wired site. Fixing
+     * Media is ORG-owned (AGL-237) and narrowed to what this host may see
+     * (AGL-1046). It used to be read off `hosts/{hostId}/…`, which AGL-237
+     * emptied and AGL-1050 confirmed holds nothing in production — so a
+     * "whole-site backup" had been silently shipping an empty media manifest
+     * for every org-wired site. Fixing
      * the path and applying the scope are the same edit: an agency's export
      * of a client site must contain that client's data and no other's.
      *
@@ -229,7 +234,7 @@ async function handler(request: Request): Promise<Response> {
       return { $id: doc.id, ...data }
     }
     const exportOrgCollection = async (
-      name: 'datasets' | 'media' | 'mediaFolders',
+      name: 'media' | 'mediaFolders',
       cap: number,
     ) => {
       // A host with no owning org genuinely has no org data — that is a
@@ -272,62 +277,38 @@ async function handler(request: Request): Promise<Response> {
       return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
     }
 
-    const withRecords = async () => {
-      const datasets = await exportOrgCollection(
-        'datasets',
-        EXPORT_COLLECTION_LIMITS['datasets'] ?? 100,
-      )
-      return Promise.all(
-        datasets.map(async (item: any) => ({
-          ...item,
-          records: (
-            await firestore
-              .collection('orgs')
-              .doc(orgId as string)
-              .collection('datasets')
-              .doc(item.$id)
-              .collection('records')
-              .limit(1000)
-              .get()
-          ).docs.map((doc) => ({ $id: doc.id, ...doc.data() })),
-        })),
-      )
-    }
+    /**
+     * The sections plugins answer for themselves — organization data narrowed
+     * to this site, with what it carries beneath it. Resolved before anything
+     * is read: a section declared and not registered THROWS here, and the
+     * export fails out loud rather than shipping a backup without it.
+     */
+    const bundleSections = await resolveSiteBundleSections()
 
     const [
       screens,
       layouts,
       components,
-      variables,
-      functions,
-      workflows,
-      actions,
       authors,
-      services,
       collections,
-      datasets,
       media,
       mediaFolders,
       hostMedia,
       hostMediaFolders,
+      declared,
+      sections,
     ] = await Promise.all([
       withPublishedVersion('screens'),
       withPublishedVersion('layouts'),
       exportCollection('components'),
-      exportCollection('variables'),
-      exportCollection('functions'),
-      exportCollection('workflows'),
-      exportCollection('actions'),
       // The bylines `entries.authorId` points at (AGL-2486). A referenced
       // collection nobody added to the manifest is the AGL-1046/1050/1392
       // shape, and here it would restore every post's author as a dangling id.
       exportCollection('authors'),
-      exportCollection('services'),
       withEntries(),
-      withRecords(),
       // Media manifest only — bytes stay in storage; URLs keep working
       // because download tokens are stable. Org-owned and scope-filtered
-      // for the same reason as datasets (AGL-1046). The cap reads from the
+      // (AGL-1046). The cap reads from the
       // shared table rather than a literal: this side said 500 and the
       // import side fell through to its `?? 100` default, so every manifest
       // over 100 assets restored short and silently (AGL-1382).
@@ -351,6 +332,16 @@ async function handler(request: Request): Promise<Response> {
         'mediaFolders',
         EXPORT_COLLECTION_LIMITS['hostMediaFolders'],
       ),
+      // The collections plugins declare for the bundle, read exactly like the
+      // platform's plain ones: capped, live documents only, trees readable.
+      Promise.all(
+        PLUGIN_SITE_EXPORT_COLLECTIONS.map((one) => exportCollection(one.collection)),
+      ),
+      Promise.all(
+        bundleSections.map((one) =>
+          one.section.export({ hostId, orgId: orgId ?? null, limit: one.limit }),
+        ),
+      ),
     ])
 
     const bundle = {
@@ -362,14 +353,14 @@ async function handler(request: Request): Promise<Response> {
       screens,
       layouts,
       components,
-      variables,
-      functions,
-      workflows,
-      actions,
+      ...Object.fromEntries(
+        PLUGIN_SITE_EXPORT_COLLECTIONS.map((one, index) => [one.collection, declared[index]]),
+      ),
       authors,
-      services,
       collections,
-      datasets,
+      ...Object.fromEntries(
+        bundleSections.map((one, index) => [one.key, sections[index]]),
+      ),
       media,
       mediaFolders,
       // Two libraries, two arrays: the scope is where the document LIVES, not

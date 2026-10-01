@@ -125,6 +125,7 @@ export const AI_JOB_TEMPLATE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'Everything that differs from one record to the next is a binding token, never typed copy. The request names what the page is for, the tokens that page fills and the blocks that fill themselves there; bind only those tokens.',
       'The page’s one h1 holds the title token the request names. Copy that reads the same on every record, such as a section heading, is written in the site’s voice.',
       'A link or media prop holds exactly one token from the request’s link and media tokens, such as an Image whose src is {{entry.coverImage}}; its alt text may combine words and tokens.',
+      'A template carries no third-party player. It plays a video token only when the confirmed plan lists it, in a Video (video) whose src is that token and whose poster is the cover image token.',
       'The page renders inside the site’s layout, so it carries no header, navigation or footer of its own.',
     ].join('\n'),
   },

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
 import {
   authorizedFetch,
   type MaybeTokenSource,

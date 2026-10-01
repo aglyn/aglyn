@@ -183,15 +183,15 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
   const help = docsHelp('analytics', {
     anchor: '#per-screen-traffic',
     excerpt:
-      'Every screen’s pageviews over the selected window, compared ' +
-      'side by side, with each screen’s leading device.',
+      'Every page’s pageviews over the selected window, compared ' +
+      'side by side, with each page’s leading device.',
   })
 
   if (!orgReady) {
     // `hasEntitlement(undefined)` answers "no" (AGL-1380), and this card's
     // "no" is an upsell — never show it while the plan is still loading.
     return (
-      <CardDisplay header={'Screens'} help={help} contentGutterX contentGutterY>
+      <CardDisplay header={'Pages'} help={help} contentGutterX contentGutterY>
         <Typography variant="body2" color="text.secondary">
           {'Checking your plan…'}
         </Typography>
@@ -201,7 +201,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
 
   if (!entitled) {
     return (
-      <CardDisplay header={'Screens'} help={help} contentGutterX contentGutterY>
+      <CardDisplay header={'Pages'} help={help} contentGutterX contentGutterY>
         <Alert
           severity="info"
           action={
@@ -215,7 +215,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
             </AppLink>
           }
         >
-          {'Comparing traffic across screens is a Pro feature. Data is ' +
+          {'Comparing traffic across pages is a Pro feature. Data is ' +
             'already being collected, so history is waiting the moment ' +
             'you upgrade.'}
         </Alert>
@@ -232,7 +232,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
 
   return (
     <CardDisplay
-      header={'Screens'}
+      header={'Pages'}
       help={help}
       contentGutterX
       contentGutterY
@@ -258,14 +258,14 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
         <LinearProgress />
       ) : rows.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          {'No per-screen pageviews recorded in this range yet.'}
+          {'No per-page pageviews recorded in this range yet.'}
         </Typography>
       ) : (
         <>
           <ScrollTable size="small">
             <TableHead>
               <TableRow>
-                <TableCell>{'Screen'}</TableCell>
+                <TableCell>{'Page'}</TableCell>
                 <TableCell align="right">{'Views'}</TableCell>
                 <TableCell align="right">{'Share'}</TableCell>
                 <TableCell>{'Top device'}</TableCell>

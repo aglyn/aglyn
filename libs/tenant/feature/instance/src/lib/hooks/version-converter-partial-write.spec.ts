@@ -43,7 +43,7 @@ const HOOKS_DIR = join(__dirname)
 /**
  * Every converter that compresses `nodes`, by path from this directory.
  *
- * `use-form-version.tsx`, `use-host-template.tsx` and the shared
+ * `use-host-document-version.tsx`, `use-host-template.tsx` and the shared
  * `besigner-nodes-converter.ts` joined the original three as compression
  * reached the rest of the besigner kinds (AGL-1151). The list is the point:
  * the guard below is what each of them has to carry, and a converter added
@@ -53,7 +53,7 @@ const VERSION_HOOKS = [
   'use-screen-version.tsx',
   'use-layout-version.tsx',
   'use-component-version.tsx',
-  'use-form-version.tsx',
+  'use-host-document-version.tsx',
   'use-host-template.tsx',
   'helpers/besigner-nodes-converter.ts',
 ]

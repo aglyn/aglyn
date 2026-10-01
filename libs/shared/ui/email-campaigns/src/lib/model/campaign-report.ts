@@ -501,7 +501,7 @@ export function campaignReport(stats: CampaignStats | undefined): CampaignReport
  * LINK-LEVEL CLICKS.
  *
  * Resend's `email.clicked` payload carries `data.click.link`, the destination
- * the recipient followed; `normalizeResendDeliveryEvents` already reads it
+ * the recipient followed; the mail provider's `deliveryEvents` already reads it
  * into `EmailDeliveryEvent.link`, and the per-recipient delivery log already
  * stores it. What did not exist was an aggregate — which is what "link
  * clicks" means, and it cannot be produced from the delivery log without

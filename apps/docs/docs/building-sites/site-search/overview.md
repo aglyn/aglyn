@@ -27,19 +27,19 @@ published content directly when the visitor searches.
 A search matches the query as a case-insensitive substring across three kinds of
 content:
 
-- **Screens** — the screen's name, description, and [SEO](../seo/overview.md)
+- **Pages** — the page's name, description, and [SEO](../seo/overview.md)
   title and description.
 - **Blog & collection entries** — published entries' title, excerpt, and body
   (see [collections](../site-templates/build-a-blog.md)).
 - **Dataset records** — a record's [dataset](../../content-and-data/datasets/overview.md)
-  values. A record only appears in results when a published screen
+  values. A record only appears in results when a published page
   [repeats over that dataset](../../content-and-data/datasets/overview.md#repeatable-components),
   so the result can link to a real page.
 
-Results are listed in that order (screens, then entries, then records), up to
+Results are listed in that order (pages, then entries, then records), up to
 50 matches. There's no relevance ranking — matching is a straight substring
 test — so clear titles and descriptions make results more useful. The `/search`
-results page is excluded from search engines, and `search` is a reserved screen
+results page is excluded from search engines, and `search` is a reserved page
 slug.
 
 ## The layout built-in pages use

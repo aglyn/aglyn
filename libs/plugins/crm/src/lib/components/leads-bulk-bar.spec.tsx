@@ -63,6 +63,8 @@ jest.mock('firebase/firestore', () => ({
 const filings = () => ops.filter((op) => op.kind === 'set' && op.path.startsWith('orgs/org-1/crmActivities/'))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The member document behind "Share with sites…" (AGL-3336): not a manager here.
+  useFirestoreDoc: () => ({ data: undefined, status: 'success', fromCache: false }),
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-a' } }),
   useUserName: () => 'Ada Lovelace',

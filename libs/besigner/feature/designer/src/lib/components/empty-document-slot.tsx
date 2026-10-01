@@ -98,7 +98,7 @@ export function EmptyDocumentSlot() {
     >
       <MdiIcon path={mdiPlusBoxOutline.path} sx={{ color: SLOT_ACCENT }} />
       <Box component="span" sx={{ color: SLOT_ACCENT, fontWeight: 700 }}>
-        {'This screen is empty'}
+        {'This page is empty'}
       </Box>
       <Box component="span" sx={{ fontSize: 13 }}>
         {'Drag an element here, or click to add one'}

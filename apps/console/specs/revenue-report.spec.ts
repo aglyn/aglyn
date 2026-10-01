@@ -17,19 +17,14 @@
 
 import {
   PLAN_PRICING,
-  STOREFRONT_PROCESSING_FIXED_CENTS,
   resolveTransactionFeeCents,
   storefrontProcessingCostCents,
 } from '@aglyn/aglyn/server'
+import type { RevenueSection } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import {
   classifyOrgRevenueState,
-  commerceSettledSummary,
-  commerceHostAttribution,
   contractedSummary,
-  marketplaceListingAttribution,
-  marketplacePublisherAttribution,
   orgAttribution,
-  marketplaceSettledSummary,
   revenueGap,
   subscriptionSettledSummary,
   totalEarnedCents,
@@ -192,155 +187,6 @@ describe('settled subscription revenue is net of tax and every reversal', () => 
   })
 })
 
-describe('marketplace commission', () => {
-  it('reads the stored fee rather than re-deriving it from today rate', () => {
-    const out = marketplaceSettledSummary([
-      // Transfer and fee disagree, as they would if the rate had moved since
-      // the sale. The STORED fee must win.
-      { id: 'm1', amountCents: 10000, taxCents: 0, feeCents: 2000, transferCents: 5000 },
-    ])
-    expect(out.commissionNetCents).toBe(2000)
-    expect(out.commissionNetCents).not.toBe(10000 - 5000)
-  })
-
-  it('falls back to gross minus tax minus transfer on a legacy row', () => {
-    const out = marketplaceSettledSummary([
-      { id: 'm1', amountCents: 11000, taxCents: 1000, transferCents: 8000 },
-    ])
-    expect(out.commissionNetCents).toBe(11000 - 1000 - 8000)
-  })
-
-  it('sees a PARTIAL refund, which never writes refundedCents', () => {
-    const partial = marketplaceSettledSummary([
-      {
-        id: 'm1',
-        amountCents: 10000,
-        taxCents: 0,
-        feeCents: 2000,
-        partialRefundedCents: 5000,
-      },
-    ])
-    // Reading only `refundedCents` would report the full 2000 here.
-    expect(partial.commissionNetCents).toBe(1000)
-    expect(partial.commissionNetCents).not.toBe(2000)
-  })
-
-  it('does not double-reverse a sale carrying both refund fields', () => {
-    const out = marketplaceSettledSummary([
-      {
-        id: 'm1',
-        amountCents: 10000,
-        taxCents: 0,
-        feeCents: 2000,
-        partialRefundedCents: 4000,
-        refundedCents: 10000,
-      },
-    ])
-    // Summing the two fields would reverse 14000 against a 10000 sale.
-    expect(out.commissionNetCents).toBe(0)
-  })
-
-  it('reports the uncovered processing cost it cannot recover', () => {
-    const out = marketplaceSettledSummary([
-      { id: 'm1', amountCents: 10000, taxCents: 0, feeCents: 2000, transferCents: 8000 },
-    ])
-    // Marketplace charges carry no application fee, so this cost is real and
-    // unrecovered. Derived from the same helper the storefront path uses.
-    expect(out.estimatedProcessingCostCents).toBe(
-      storefrontProcessingCostCents(10000),
-    )
-    expect(out.estimatedProcessingCostCents).toBeGreaterThan(0)
-  })
-})
-
-describe('storefront commission excludes the processing pass-through', () => {
-  const org = payingOrg()
-
-  it('reports the advertised take, not the whole application fee', () => {
-    const chargeCents = 20000
-    const fee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents)
-    const out = commerceSettledSummary([
-      { id: 'o1', amountCents: chargeCents, feeCents: fee },
-    ])
-    // The take is what is left once Stripe's cost is removed — derived from
-    // the same two helpers that CHARGED the fee, so a change to either rate
-    // moves both sides of this assertion together.
-    expect(out.commissionCents).toBe(
-      fee - storefrontProcessingCostCents(chargeCents),
-    )
-    // The whole fee is still reported, and it is strictly larger. If the code
-    // reported the fee as earnings this would be an equality.
-    expect(out.applicationFeeCents).toBe(fee)
-    expect(out.commissionCents).toBeLessThan(out.applicationFeeCents)
-    // Specifically, at least Stripe's fixed 30¢ smaller — the component a
-    // percentage-only model would silently keep as margin.
-    expect(out.applicationFeeCents - out.commissionCents).toBeGreaterThanOrEqual(
-      STOREFRONT_PROCESSING_FIXED_CENTS,
-    )
-  })
-
-  it('never reports a 0%-take sale as earnings', () => {
-    // A plan whose advertised storefront take is 0: the entire fee is Stripe
-    // cost recovery, so the earned figure must be exactly 0 — not the 30¢+
-    // the pass-through collected.
-    const zeroTakeOrg = payingOrg({
-      plan: 'starter',
-      entitlements: { transactionFeePhysicalPct: 0 },
-    })
-    const chargeCents = 20000
-    const fee = resolveTransactionFeeCents(
-      zeroTakeOrg,
-      'physical',
-      chargeCents,
-      chargeCents,
-    )
-    const out = commerceSettledSummary([
-      { id: 'o1', amountCents: chargeCents, feeCents: fee },
-    ])
-    expect(out.commissionCents).toBe(0)
-    expect(out.applicationFeeCents).toBeGreaterThan(0)
-  })
-
-  it('nets the pass-through out of a subscription cycle too (AGL-2655)', () => {
-    // A storefront SUBSCRIPTION cycle carries `subscriptionId`, and since
-    // AGL-2655 its fee carries the card cost folded into
-    // `application_fee_percent`. Reporting that fee whole would book Stripe's
-    // charge as margin on every cycle, the AGL-2152 mistake over again.
-    const chargeCents = 20000
-    const passThrough = storefrontProcessingCostCents(chargeCents)
-    const out = commerceSettledSummary([
-      {
-        id: 'o1',
-        amountCents: chargeCents,
-        feeCents: 400 + passThrough,
-        subscriptionId: 'sub_1',
-      },
-    ])
-    expect(out.commissionCents).toBe(400)
-    expect(out.processingPassThroughCents).toBe(passThrough)
-    expect(out.subscriptionOrders).toBe(1)
-    // The one cycle this understates, stated rather than hidden: a cycle
-    // billed at the bare take, before the renewal re-price carried the
-    // subscription onto the pass-through, clamps to no take at all. It is
-    // still COUNTED, which is how the page shows how much of the book that is.
-    const legacy = commerceSettledSummary([
-      { id: 'o1', amountCents: chargeCents, feeCents: 400, subscriptionId: 'sub_1' },
-    ])
-    expect(legacy.commissionCents).toBe(0)
-    expect(legacy.subscriptionOrders).toBe(1)
-  })
-
-  it('reverses a refunded order pro-rata', () => {
-    const chargeCents = 20000
-    const fee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents)
-    const full = commerceSettledSummary([
-      { id: 'o1', amountCents: chargeCents, feeCents: fee, refundedCents: chargeCents },
-    ])
-    expect(full.commissionNetCents).toBe(0)
-    expect(full.commissionCents).toBeGreaterThan(0)
-  })
-})
-
 describe('the gap between the two bases is decomposed, not left to subtract', () => {
   it('compares COLLECTING contracted against settled, not the whole book', () => {
     const contracted = contractedSummary([
@@ -408,6 +254,26 @@ describe('the gap between the two bases is decomposed, not left to subtract', ()
   })
 })
 
+/**
+ * A source's earned line as the report adds it: the plugin's own fold is
+ * proved in that plugin (commission and take, net of what is not the
+ * operator's); what the TOTAL owes it is exactly its earned cents, and a
+ * refused source nothing.
+ */
+const earning = (id: string, cents: number): RevenueSection => ({
+  outcome: 'answered',
+  pluginId: id,
+  id,
+  name: id,
+  earned: { label: id, cents, note: '' },
+  grossToNet: [],
+  notes: [],
+  attribution: [],
+  truncated: false,
+  failure: null,
+  summary: {},
+})
+
 describe('the earned total excludes everything that is not Aglyn margin', () => {
   it('leaves out tax, seller transfers and the processing pass-through', () => {
     const chargeCents = 20000
@@ -420,22 +286,36 @@ describe('the earned total excludes everything that is not Aglyn margin', () => 
     const subscriptions = subscriptionSettledSummary([
       { id: 'i1', grossCents: 10825, taxCents: 825 },
     ])
-    const marketplace = marketplaceSettledSummary([
-      { id: 'm1', amountCents: 11000, taxCents: 1000, feeCents: 2000, transferCents: 8000 },
-    ])
-    const commerce = commerceSettledSummary([
-      { id: 'o1', amountCents: chargeCents, feeCents: fee },
-    ])
-    const earned = totalEarnedCents({ subscriptions, marketplace, commerce })
+    // The marketplace's commission on an 11000 sale with 1000 tax and an 8000
+    // transfer, and the storefront's take on a 20000 order once Stripe's cost
+    // is out — each its plugin's own figure.
+    const sources = [
+      earning('marketplace', 2000),
+      earning('commerce', fee - storefrontProcessingCostCents(chargeCents)),
+    ]
+    const earned = totalEarnedCents({ subscriptions, sources })
     expect(earned).toBe(
       10000 + 2000 + (fee - storefrontProcessingCostCents(chargeCents)),
     )
     // Each exclusion asserted as a strict inequality, so a regression that
     // folded any of them in fails here rather than merely shifting a total.
-    const naive =
-      subscriptions.grossCents + marketplace.grossCents + commerce.applicationFeeCents
+    const naive = subscriptions.grossCents + 11000 + fee
     expect(earned).toBeLessThan(naive)
-    expect(earned).toBeLessThan(naive - marketplace.sellerTransferCents)
+    expect(earned).toBeLessThan(naive - 8000)
+  })
+
+  it('adds nothing for a source that could not be read — unread is not zero', () => {
+    const subscriptions = subscriptionSettledSummary([
+      { id: 'i1', grossCents: 10825, taxCents: 825 },
+    ])
+    const earned = totalEarnedCents({
+      subscriptions,
+      sources: [
+        earning('marketplace', 2000),
+        { outcome: 'refused', pluginId: 'commerce', id: 'commerce', reason: 'It threw.' },
+      ],
+    })
+    expect(earned).toBe(10000 + 2000)
   })
 })
 
@@ -544,116 +424,6 @@ describe('orgAttribution', () => {
   })
 })
 
-/**
- * Attribution by listing, publisher and host (AGL-2486).
- *
- * The reconciliation assertions are the point: "a plugin table that does not
- * sum to the marketplace line is worse than no plugin table".
- */
-describe('attribution by source', () => {
-  const sale = (
-    listingId: string,
-    sellerOrgId: string,
-    amountCents: number,
-    feeCents: number,
-    refundedCents = 0,
-  ) => ({
-    id: `cs_${listingId}_${amountCents}`,
-    listingId,
-    sellerOrgId,
-    amountCents,
-    taxCents: 0,
-    feeCents,
-    transferCents: amountCents - feeCents,
-    refundedCents,
-  })
-  const order = (
-    hostId: string,
-    amountCents: number,
-    feeCents: number,
-    refundedCents = 0,
-  ) => ({
-    id: `o_${hostId}_${amountCents}`,
-    hostId,
-    amountCents,
-    feeCents,
-    refundedCents,
-  })
-
-  it('sums listing rows to the marketplace commission line exactly', () => {
-    const rows = [
-      sale('office-hours', 'pub1', 10_000, 1_500),
-      sale('office-hours', 'pub1', 4_000, 600),
-      sale('promo-countdown', 'pub2', 8_000, 1_200, 8_000),
-    ]
-    const total = marketplaceSettledSummary(rows)
-    const byListing = marketplaceListingAttribution(rows)
-    const summed = byListing.rows.reduce((s, r) => s + r.gainCents, 0)
-
-    expect(summed).toBe(total.commissionNetCents)
-    expect(byListing.rows).toHaveLength(2)
-    // Losses carry a name too — the fully refunded sale is attributable.
-    const refundRow = byListing.rows.find((r) => r.key === 'promo-countdown')
-    expect(refundRow?.lossCents).toBe(1_200)
-    expect(refundRow?.gainCents).toBe(0)
-  })
-
-  it('sums publisher rows to the same marketplace line', () => {
-    const rows = [
-      sale('a', 'pub1', 10_000, 1_500),
-      sale('b', 'pub2', 4_000, 600),
-    ]
-    const total = marketplaceSettledSummary(rows)
-    const byPublisher = marketplacePublisherAttribution(rows)
-    expect(byPublisher.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
-      total.commissionNetCents,
-    )
-    // Two groupings of the SAME money must agree with each other.
-    const byListing = marketplaceListingAttribution(rows)
-    expect(byPublisher.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
-      byListing.rows.reduce((s, r) => s + r.gainCents, 0),
-    )
-  })
-
-  it('sums host rows to the storefront commission line exactly', () => {
-    const rows = [
-      order('host-a', 20_000, 2_000),
-      order('host-a', 5_000, 700),
-      order('host-b', 9_000, 1_100, 9_000),
-      // A zero-fee order: counted, but there is no take to attribute.
-      order('host-c', 3_000, 0),
-    ]
-    const total = commerceSettledSummary(rows)
-    const byHost = commerceHostAttribution(rows)
-    expect(byHost.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
-      total.commissionNetCents,
-    )
-    expect(byHost.rows.find((r) => r.key === 'host-c')?.gainCents).toBe(0)
-  })
-
-  it('keeps a row whose entity id is missing rather than dropping the money', () => {
-    // Dropping it would make the rows sum BELOW the total — the exact fault
-    // these tables exist to avoid.
-    const rows = [{ id: 'x', amountCents: 10_000, feeCents: 1_500 }]
-    const total = marketplaceSettledSummary(rows)
-    const byListing = marketplaceListingAttribution(rows)
-    expect(byListing.rows).toHaveLength(1)
-    expect(byListing.rows[0].key).toBe('Listing not recorded')
-    expect(byListing.rows[0].gainCents).toBe(total.commissionNetCents)
-  })
-
-  it('carries the omitted remainder as figures when capped', () => {
-    const rows = Array.from({ length: 4 }, (_, index) =>
-      sale(`l${index}`, 'pub', (index + 1) * 10_000, (index + 1) * 1_000),
-    )
-    const total = marketplaceSettledSummary(rows)
-    const capped = marketplaceListingAttribution(rows, 2)
-    const shown = capped.rows.reduce((s, r) => s + r.gainCents, 0)
-    expect(capped.omittedRows).toBe(2)
-    expect(shown + capped.omittedGainCents).toBe(total.commissionNetCents)
-  })
-})
-
 describe('a signup that never paid is neither revenue nor a comp', () => {
   // `incomplete_expired` is what Stripe leaves behind when a first payment is
   // never authenticated. It has collected nothing, so it cannot appear in the
@@ -742,54 +512,5 @@ describe('a signup that never paid is neither revenue nor a comp', () => {
     // And a healthy one, so the controls cannot pass on a stub that answers
     // the same bucket for everything.
     expect(classifyOrgRevenueState(payingOrg())).toBe('collecting')
-  })
-})
-
-/**
- * A REHEARSAL IS NOT REVENUE, ON THE STAFF PAGE TOO.
- *
- * The only order in production is a `cs_test_…` smoke-test checkout Stripe
- * never moved money for, and this summary counted it as a settled storefront
- * sale Aglyn had taken commission on. Every case carries a LIVE order beside
- * the test one: with only a test row in the fixture, a filter that dropped
- * everything would be indistinguishable from one that worked.
- */
-describe('test-mode orders are not settled revenue', () => {
-  const live = { id: 'cs_live_real', amountCents: 10000, feeCents: 300 }
-  const test = { id: 'cs_test_smoke', amountCents: 1800, feeCents: 36 }
-
-  it('leaves the rehearsal out and keeps the real sale', () => {
-    const out = commerceSettledSummary([live, test])
-
-    expect(out.grossCents).toBe(10000)
-    // Skipped entirely, not counted at zero: `transactionCount` is read as
-    // "how many sales", and a rehearsal is not one.
-    expect(out.transactionCount).toBe(1)
-    expect(out.applicationFeeCents).toBe(300)
-  })
-
-  it('CONTROL: the same order counts once its id is a live session', () => {
-    const out = commerceSettledSummary([live, { ...test, id: 'cs_live_two' }])
-
-    expect(out.grossCents).toBe(11800)
-    expect(out.transactionCount).toBe(2)
-  })
-
-  it('CONTROL: a recorded livemode beats a test-shaped id', () => {
-    const out = commerceSettledSummary([live, { ...test, livemode: true }])
-
-    expect(out.grossCents).toBe(11800)
-    expect(out.transactionCount).toBe(2)
-  })
-
-  it('CONTROL: an order with no Stripe id at all is real money', () => {
-    // A POS cash sale. Answering "test" for anything unidentifiable would
-    // erase genuine revenue from the staff figures.
-    const out = commerceSettledSummary([
-      { id: 'aBcD1234auto', amountCents: 5000, feeCents: 150 },
-    ])
-
-    expect(out.grossCents).toBe(5000)
-    expect(out.transactionCount).toBe(1)
   })
 })

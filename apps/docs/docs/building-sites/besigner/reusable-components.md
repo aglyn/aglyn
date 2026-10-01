@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 title: Reusable components
-description: Promote a subtree into a reusable component, give it properties, and insert instances across screens.
+description: Promote a subtree into a reusable component, give it properties, and insert instances across pages.
 ---
 
 # Reusable components
@@ -43,13 +43,13 @@ old copy.
 
 :::note
 **Save as reusable component** appears only on an element that is not already an instance
-and is not locked by a shared layout. Elements a layout frames are locked on the screens
+and is not locked by a shared layout. Elements a layout frames are locked on the pages
 that use it — open the layout to promote from there.
 :::
 
 ## Insert instances
 
-Insert instances from **Your components** in the element drawer, on any screen, layout,
+Insert instances from **Your components** in the element drawer, on any page, layout,
 template or other component. Emails have their own: see
 [Reusable email blocks](#reusable-email-blocks).
 
@@ -115,7 +115,7 @@ one is missing. A **Checkbox** with no answers is a single tick box; given answe
 list a page ticks several of.
 
 A **Link** property is a target picker at both ends — in the dialog's **Default** column and
-in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
+in each instance's Attributes panel — exactly like a Button's own **Link to page** field.
 It stores the target's id, not its address, so the link keeps working when a slug or parent
 changes. Type in it and it searches four kinds of target: your pages, each content
 collection's listing page (**Blog (/blog) — collection listing**), their RSS feeds, and the
@@ -126,7 +126,7 @@ Choose **External URL or path…** for anything that is none of them; a typed ad
 verbatim and does not follow a rename.
 
 Link properties written before the picker existed hold a typed address. They keep working
-unchanged — but they are still typed addresses, so pick the screen again if you want them to
+unchanged — but they are still typed addresses, so pick the page again if you want them to
 survive a rename.
 
 **Help** is shown beside the property's field wherever a page sets it.
@@ -176,11 +176,11 @@ lists the component's own properties under **Properties**, so you can pick one i
 typing the token.
 
 A Link property can be bound into either of a linking element's two fields — **Link to
-screen** or **External URL** — and resolves the same way in both.
+page** or **External URL** — and resolves the same way in both.
 
 Whatever a page sets on a property bound into an address — a link's **External URL**, an
 image's **Image source** — has to be one when the page renders: a web address, a path, a
-`mailto:` or `tel:` link, or a screen; for an image, an `https://` address, a path or a
+`mailto:` or `tel:` link, or a page; for an image, an `https://` address, a path or a
 media library pick. Anything else, such as a `javascript:` address, is left off the element,
 which renders as though that field were empty.
 
@@ -192,7 +192,7 @@ properties that hold the kind of value that field holds:
 | Switch or a single checkbox | Yes / no, Checkbox |
 | Dropdown | Choice, Radio buttons, Toggle buttons |
 | Dropdown that takes several answers, checkbox list or pick list | Choice that takes several answers, Checkbox with answers, Pick list |
-| Screen picker | Link |
+| Page picker | Link |
 | Icon picker | Icon |
 | Slider | Number, Slider |
 | Formatted document | Long text, Formatted document |
@@ -216,7 +216,7 @@ answers, a theme color token — never the same value written as text.
    published version it is a draft stored with the site, offered to whoever opens the
    component next with **Open draft** and **Discard**.
 3. **Save & publish**, in the toolbar's save menu or the File menu — *"Published. Every
-   screen using this component is refreshing now — you do not need to republish them."*
+   page using this component is refreshing now — you do not need to republish them."*
    If a saved draft is on offer, open or discard it first.
 
 Publishing the component is enough. You do not republish the pages that use it.
@@ -240,7 +240,7 @@ decision back to the component's default.
 
 A conditional property's field appears only while its condition holds for this instance.
 
-Shared layouts take properties the same way, and each screen sets them in Screen
+Shared layouts take properties the same way, and each page sets them in Page
 Properties — see [Layout properties](../screens-and-layouts/layouts.md#layout-properties).
 
 ### Restyle it on one page only {#restyle-one-instance}
@@ -322,7 +322,7 @@ Two things deliberately can't be changed here:
 - **Styles**, which have their own place on the [Styles](#restyle-one-instance) tab. One
   place per kind of change, so the two can never disagree about what a page shows.
 
-A handful of settings are not offered per page either — icon pickers, screen links,
+A handful of settings are not offered per page either — icon pickers, page links,
 gradients and plugin settings. Change those in the component, or [detach](#detach).
 
 A form placed from the Forms page works the same way: **Which part?** starts at
@@ -381,7 +381,7 @@ of it, so deleting one is not a guess.
 
 Everywhere the renderer expands an instance is searched:
 
-- the **published version** of every screen, the emails you design for campaigns included,
+- the **published version** of every page, the emails you design for campaigns included,
 - the **published version** of every layout,
 - **other reusable components** — a component can be placed inside another one, so one
   used nowhere else can still be very much in use,
@@ -399,7 +399,7 @@ than emptied: a missing definition never takes a published page down.
 
 From the site's **Components** page you can **rename**, edit the description, open the
 besigner, or **delete** a reusable component. The component's **ID** is persisted inside
-every screen that places it and never changes.
+every page that places it and never changes.
 
 You can also give a component its own **icon**, from the same picker the besigner uses for
 icon elements — either in the **Edit component** dialog on the Components page, or on the
@@ -425,7 +425,7 @@ why. See
 To start a new component from an existing one, choose **Duplicate…** in its
 row menu on the Components page, or **More → Duplicate** on its detail page.
 The copy carries the definition, its properties and the latest saved version,
-under the name you give it. It has no instances: every screen keeps pointing
+under the name you give it. It has no instances: every page keeps pointing
 at the original, and you place the copy where you want it. Duplicating needs
 the same plan as creating a component.
 
@@ -529,5 +529,5 @@ follow.
 
 - [Copy & paste elements](copy-paste.md)
 - [The Besigner](overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)
 - [Generate a reusable component with Aglyn AI](../components/generate-a-component-with-aglyn-ai.md)

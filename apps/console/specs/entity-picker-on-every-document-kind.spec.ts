@@ -72,7 +72,9 @@ const DOCUMENT_KINDS: Record<string, string> = {
   layout: join(HOST_ROUTE, 'layouts', '[layoutId]'),
   component: join(HOST_ROUTE, 'components', '[componentId]'),
   template: join(HOST_ROUTE, 'templates', '[templateId]'),
-  form: join(HOST_ROUTE, 'forms', '[formId]'),
+  // Every plugin document (a form, today) is served by the one editor the
+  // console keeps for them, under the segment its plugin declares.
+  form: join(HOST_ROUTE, '[documentSegment]', '[docId]'),
   email: join(HOST_ROUTE, 'emails', '[templateKey]'),
 }
 

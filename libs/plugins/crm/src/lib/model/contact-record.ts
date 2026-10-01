@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { type CrmShareChip, crmShareChipFor } from './crm-sharing'
 import type {
   AglynPostalAddress,
   ConsentGroup,
@@ -114,17 +115,21 @@ export interface ContactRecord {
    * like the address it is about.
    */
   emailState: Aglyn.EmailState | null
+  /**
+   * Why the viewing group sees this person when the answer is a share
+   * (AGL-3336) — `null` when it holds them, and at the organization level.
+   */
+  shareChip?: CrmShareChip | null
   createdAt?: unknown
   updatedAt?: unknown
 }
 
 /*
- * `NO_HOLDER_GROUP` and `contactPrimaryGroup` moved to `@aglyn/aglyn`
- * under AGL-2662 so the server's whole-collection export can flatten a
- * contact the way the organization-level list does — the console app may
- * not import this plugin. Re-exported here, so every caller is unchanged.
+ * Which holder a cross-site reader sees one contact through (AGL-2630) —
+ * `contact-holder.ts`, shared with the server's whole-collection export so
+ * the file and the organization-level list flatten a contact one way.
  */
-export { contactPrimaryGroup, NO_HOLDER_GROUP } from '@aglyn/aglyn'
+export { contactPrimaryGroup, NO_HOLDER_GROUP } from './contact-holder'
 
 /** A document off the wire, flattened through one group's facet. */
 export function contactRecordFromDoc(
@@ -174,6 +179,7 @@ export function contactRecordFromDoc(
         : null,
     nextTaskAtMs: Aglyn.readNextTaskAtMs(row as { nextTaskAtMs?: unknown }),
     emailState: Aglyn.readEmailState(row),
+    shareChip: crmShareChipFor(row, group.hostIds),
     createdAt: row['createdAt'],
     updatedAt: row['updatedAt'],
   }

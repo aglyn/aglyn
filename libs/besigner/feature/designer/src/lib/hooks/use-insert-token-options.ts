@@ -23,16 +23,21 @@ import {
   COLLECTION_TOKEN_CATALOG,
   COMPONENT_PROP_NAME_PATTERN,
   COMPONENT_PROP_TOKEN_PREFIX,
-  datasetItemToken,
   EntityPickerContext,
   entityValueNeedsResolution,
   ENTRY_TOKEN_CATALOG,
   readYesNoValue,
+  repeatItemToken,
   reusablePropDefaultValue,
   reusablePropHasAnswers,
   reusablePropValueClass,
 } from '@aglyn/aglyn'
-import { useContext, useEffect, useMemo } from 'react'
+import {
+  getRepeatSourcesVersion,
+  repeatSourceOf,
+  subscribeRepeatSources,
+} from '@aglyn/aglyn/app-utils/repeat-sources'
+import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import {
   BindingPickerContext,
@@ -45,7 +50,7 @@ export interface InsertTokenOptionsResult {
    * The full grouped picker list (AGL-583): host bindings first (AGL-100),
    * then the data-placeholder catalogs. Entry/Collection stay browsable
    * even out of context — with a hint saying where they resolve — while
-   * the Dataset item group only appears inside a resolvable repeatable.
+   * the item group only appears inside a repeat whose entity resolves.
    */
   options: BindingOption[]
   /** Display-name resolution inputs for pill rendering (AGL-586). */
@@ -71,7 +76,7 @@ export function componentPropBindingOptions(
       group: 'Properties',
       groupHint:
         owner === 'layout'
-          ? 'Set per screen in the Screen Properties of each screen using this layout'
+          ? 'Set per page in the Page Properties of each page using this layout'
           : // Pages and emails alike: an email block is a component too
             // (AGL-3287), and its values are set in each email it is in.
             'Set in the Attributes panel wherever this component is used',
@@ -127,11 +132,15 @@ export function componentPropDefaultPreview(
 /**
  * Assembles the insert-picker options for a canvas node from ITS context
  * (AGL-583, extracted for AGL-586 so the attributes panel and the inline
- * text editor share one walk): the ancestor chain is scanned for a
- * repeatable container (dataset-item tokens need its model fields) and for
- * a Collection entries block (entry tokens resolve right there, not only
- * on entry pages). `repeatDataset` persists a dataset id OR a legacy
- * display name — either resolves against the entity picker options.
+ * text editor share one walk): the ancestor chain is scanned for the
+ * nearest repeat (its item tokens need the fields of the entity it repeats
+ * over) and for a Collection entries block (entry tokens resolve right
+ * there, not only on entry pages).
+ *
+ * A repeat is found through the registered repeat sources, never by a prop
+ * name: the source says which prop holds its key and which entity picker
+ * kind the key names (`RepeatSource.entityKind`). A key may be an entity id
+ * OR a legacy display name — either resolves against the picker's options.
  */
 export function useInsertTokenOptions(
   node?: Aglyn.NodeSchema<any> | null,
@@ -144,88 +153,85 @@ export function useInsertTokenOptions(
     componentPropsOwner,
   } = useContext(BindingPickerContext)
   const entityOptions = useContext(EntityPickerContext)
+  // A plugin registers its repeat source when its console bundle loads,
+  // which can be after this node was selected; the walk is redone then.
+  const repeatSourcesVersion = useSyncExternalStore(
+    subscribeRepeatSources,
+    getRepeatSourcesVersion,
+    getRepeatSourcesVersion,
+  )
 
   const insertContext = useMemo(() => {
     const nodes = (canvas.toJSON().nodes ?? {}) as Record<string, any>
-    let repeatDatasetKey: string | undefined
+    let repeat: ReturnType<typeof repeatSourceOf> = undefined
     let inCollectionEntries = false
     let current = node?.$id ? nodes[node.$id] : undefined
     for (let hops = 0; current && hops < 100; hops += 1) {
-      const props = current.props ?? {}
-      if (
-        !repeatDatasetKey &&
-        typeof props.repeatDataset === 'string' &&
-        props.repeatDataset.trim()
-      ) {
-        repeatDatasetKey = props.repeatDataset.trim()
-      }
+      repeat ??= repeatSourceOf(current)
       if (current.componentId === COLLECTION_ENTRIES_COMPONENT_ID) {
         inCollectionEntries = true
       }
       current = current.parentId ? nodes[current.parentId] : undefined
     }
-    const datasets = entityOptions.datasets ?? []
+    const kind = repeat?.source.entityKind
+    const key = kind ? repeat?.key : undefined
+    const listed = kind ? entityOptions[kind] ?? [] : []
     /*
-     * The browse window is a PAGE of the org's datasets, so a repeat bound to
+     * The browse window is a PAGE of the site's entities, so a repeat bound to
      * one outside it matches nothing here — and this is where the token menu
-     * would silently stop offering that dataset's fields on exactly the
-     * orgs with enough datasets to need them. A resolution counts as a match,
-     * which is the same keyed read the attributes panel already spends on a
+     * would silently stop offering that entity's fields on exactly the sites
+     * with enough of them to need them. A resolution counts as a match, which
+     * is the same keyed read the attributes panel already spends on a
      * picker's stored value.
      */
-    const dataset = repeatDatasetKey
-      ? datasets.find((candidate) => candidate.id === repeatDatasetKey) ??
-        datasets.find((candidate) => candidate.label === repeatDatasetKey) ??
-        entityOptions.resolved?.datasets?.[repeatDatasetKey] ??
-        undefined
-      : undefined
+    const entity =
+      kind && key
+        ? listed.find((candidate) => candidate.id === key) ??
+          listed.find((candidate) => candidate.label === key) ??
+          entityOptions.resolved?.[kind]?.[key] ??
+          undefined
+        : undefined
     return {
       inCollectionEntries,
-      datasetLabel: dataset?.label,
-      datasetFields: dataset
-        ? entityOptions.datasetFields?.[dataset.id] ?? []
-        : [],
-      // Carried out of the walk so the effect below can ask for the dataset
+      // What the repeat's items are called in the menu — the source's own
+      // name for what it repeats over.
+      itemNoun: repeat?.source.label,
+      entityLabel: entity?.label,
+      itemFields:
+        kind && entity ? entityOptions.entityFields?.[kind]?.[entity.id] ?? [] : [],
+      // Carried out of the walk so the effect below can ask for the entity
       // list without repeating it.
-      repeatDatasetKey,
+      entityKind: kind,
+      entityKey: key,
     }
-  }, [
-    node,
-    entityOptions.datasets,
-    entityOptions.datasetFields,
-    entityOptions.resolved,
-  ])
+    // `repeatSourcesVersion` is read by `repeatSourceOf` through the registry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node, entityOptions, repeatSourcesVersion])
 
   /**
-   * Ask for the dataset list, and only when this node is inside a repeat
-   * bound to one (AGL-703).
+   * Ask for the repeated entity's list, and only when this node is inside a
+   * repeat whose source names one (AGL-703).
    *
    * This hook runs on every selection — the props form and the inline text
    * editor both call it — so requesting unconditionally would put the
-   * provider back to reading datasets on every click. `repeatDatasetKey` is
-   * the precise condition: without it there is no dataset to name and the
-   * token menu offers none.
+   * provider back to reading a list on every click. The repeat's key is the
+   * precise condition: without it there is no entity to name and the token
+   * menu offers no item tokens.
    */
   const requestEntities = entityOptions.request
   const resolveEntity = entityOptions.resolve
   useEffect(() => {
-    const key = insertContext.repeatDatasetKey
-    if (!key) return
-    requestEntities?.('datasets')
-    // Nothing to look up once the dataset is named. `repeatDataset` may hold
-    // a legacy DISPLAY NAME, which the label match above answers from the
-    // window — reading a document at that name as though it were an id would
-    // be a read that could only ever miss.
-    if (insertContext.datasetLabel) return
-    const id = entityValueNeedsResolution(entityOptions, 'datasets', key)
-    if (id) resolveEntity?.('datasets', id)
-  }, [
-    requestEntities,
-    resolveEntity,
-    entityOptions,
-    insertContext.repeatDatasetKey,
-    insertContext.datasetLabel,
-  ])
+    const { entityKind: kind, entityKey: key } = insertContext
+    if (!kind || !key) return
+    requestEntities?.(kind)
+    // Nothing to look up once the entity is named. A key may be a legacy
+    // DISPLAY NAME, which the label match above answers from the window —
+    // reading a document at that name as though it were an id would be a
+    // read that could only ever miss.
+    if (insertContext.entityLabel) return
+    const id = entityValueNeedsResolution(entityOptions, kind, key)
+    if (id) resolveEntity?.(kind, id)
+  }, [requestEntities, resolveEntity, entityOptions, insertContext])
 
   const options = useMemo(() => {
     const assembled: BindingOption[] = [...(bindingOptions ?? [])]
@@ -271,13 +277,15 @@ export function useInsertTokenOptions(
         groupHint: 'Resolves on author pages',
       })
     }
-    for (const field of insertContext.datasetFields) {
+    for (const field of insertContext.itemFields) {
       assembled.push({
-        group: 'Dataset item',
+        group: `${insertContext.itemNoun ?? 'Repeat'} item`,
         label: field.label,
-        token: datasetItemToken(field.id),
-        ...(insertContext.datasetLabel
-          ? { groupHint: `From dataset "${insertContext.datasetLabel}"` }
+        token: repeatItemToken(field.id),
+        ...(insertContext.entityLabel
+          ? {
+              groupHint: `From ${(insertContext.itemNoun ?? 'repeat').toLowerCase()} "${insertContext.entityLabel}"`,
+            }
           : {}),
       })
     }
@@ -289,9 +297,9 @@ export function useInsertTokenOptions(
       options,
       variables: bindingVariables as TokenLabelContext['variables'],
       functions: bindingFunctions as TokenLabelContext['functions'],
-      datasetFields: insertContext.datasetFields,
+      itemFields: insertContext.itemFields,
     }),
-    [options, bindingVariables, bindingFunctions, insertContext.datasetFields],
+    [options, bindingVariables, bindingFunctions, insertContext.itemFields],
   )
 
   return useMemo(

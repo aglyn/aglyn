@@ -32,11 +32,13 @@
  * per-site store read across a group. A new store fails here until it is
  * carried or argued.
  *
- * Two more halves of the same promise are pinned beside it: the declaration
+ * Three more halves of the same promise are pinned beside it: the declaration
  * is written by the executor's declare step and nowhere else, because a write
- * anywhere else would flip a group without a carry; and a per-site REFUSAL is
+ * anywhere else would flip a group without a carry; a per-site REFUSAL is
  * a contact's alone, because that is the only record the CRM's participant
- * carries one on.
+ * carries one on; and a refusal kept after its contact was deleted — the
+ * organization's retained store, which the list gate reads across the group
+ * — is carried by every carry step (AGL-3338).
  */
 
 import { execFileSync } from 'node:child_process'
@@ -218,7 +220,7 @@ describe('a per-site refusal is recorded on a contact and nowhere else', () => {
     'libs/tenant/data/admin/src/lib/server/host-visitor-records.ts',
     'libs/tenant/data/admin/src/lib/server/list-members.ts',
     'libs/plugins/commerce/src/lib/server/membership-register.ts',
-    'libs/tenant/runtime/src/lib/convert-host-lead.ts',
+    'libs/plugins/crm/src/lib/server/convert-host-lead.ts',
   ]
 
   it('only a contact writer records one', () => {
@@ -236,5 +238,37 @@ describe('a per-site refusal is recorded on a contact and nowhere else', () => {
       expect(code.length).toBeGreaterThan(200)
       expect(refusal.test(code) ? path : null).toBeNull()
     }
+  })
+})
+
+/*==========================================
+ * A refusal kept after its contact is carried too (AGL-3338)
+ *=========================================*/
+
+describe('the retained refusals a stored-basis reader merges in are carried', () => {
+  const STORE_MODULE = 'libs/tenant/data/admin/src/lib/server/retained-refusals.ts'
+  const readers = trackedSource('readRetainedRefusals\\(').filter(
+    (path) => path !== STORE_MODULE && /readRetainedRefusals\(/.test(codeOf(read(path))),
+  )
+
+  it('finds the readers it is about', () => {
+    expect(readers).toEqual(
+      expect.arrayContaining([
+        'libs/plugins/email/src/lib/server-list-gate.ts',
+        'libs/plugins/inbox/src/lib/server.ts',
+      ]),
+    )
+  })
+
+  it('carries the store on every carry step, beside the per-site stores', () => {
+    const code = codeOf(read(EXECUTOR))
+    expect(code).toMatch(/carryRetainedRefusals\(/)
+    // Built inside the per-carry unit list, which the carry, both catch-ups
+    // and the sweep all run — a unit anywhere else would skip one of them.
+    const from = code.indexOf('const carries = (sinceMs')
+    const to = code.indexOf('const participants = (phase')
+    expect(from).toBeGreaterThan(-1)
+    expect(to).toBeGreaterThan(from)
+    expect(code.slice(from, to)).toMatch(/kind: 'retained'/)
   })
 })

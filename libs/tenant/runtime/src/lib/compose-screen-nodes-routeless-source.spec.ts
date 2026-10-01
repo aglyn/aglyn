@@ -35,8 +35,7 @@ const mockGetPublishedLayoutVersion = jest.fn()
 const mockGetComponents = jest.fn()
 const mockGetVariables = jest.fn()
 const mockGetFunctions = jest.fn()
-const mockGetDatasets = jest.fn()
-const mockGetWorkflows = jest.fn()
+const mockReadRepeatRows = jest.fn()
 const mockGetPluginInstalls = jest.fn()
 const mockGetForms = jest.fn()
 const mockGetPublishedCollectionSource = jest.fn()
@@ -53,9 +52,9 @@ jest.mock('./get-forms', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetForms(...a),
 }))
-jest.mock('./get-datasets', () => ({
+jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
-  default: (...a: unknown[]) => mockGetDatasets(...a),
+  readRepeatRows: (...a: unknown[]) => mockReadRepeatRows(...a),
 }))
 jest.mock('./get-plugin-installs', () => ({
   __esModule: true,
@@ -65,7 +64,6 @@ jest.mock('./get-variables', () => ({
   __esModule: true,
   default: (...a: unknown[]) => mockGetVariables(...a),
   getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
-  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
 }))
 jest.mock('./get-collection-content', () => ({
   __esModule: true,
@@ -118,11 +116,10 @@ beforeEach(() => {
   mockGetPublishedLayoutVersion.mockResolvedValue({ version: null })
   mockGetComponents.mockResolvedValue({ components: [] })
   mockGetForms.mockResolvedValue({ forms: [] })
-  mockGetDatasets.mockResolvedValue({ datasets: [] })
+  mockReadRepeatRows.mockResolvedValue({ datasets: [] })
   mockGetPluginInstalls.mockResolvedValue({ installs: [] })
   mockGetVariables.mockResolvedValue({ variables: [] })
   mockGetFunctions.mockResolvedValue({ functions: [] })
-  mockGetWorkflows.mockResolvedValue({ workflows: [] })
   mockGetPublishedCollectionSource.mockResolvedValue({
     collection: { slug: 'blog' },
     entries: [entry('post-a')],

@@ -681,3 +681,70 @@ describe('curating for one person (AGL-3324)', () => {
     expect((within(first).getByLabelText('Email') as HTMLTextAreaElement).value).toBe('Hi {{contact.firstName}},')
   })
 })
+
+describe('enrolling: starting at a later step (AGL-3228)', () => {
+  const toPreview = async () => {
+    renderDialog()
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Saved Contacts view' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Warm leads' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check people' }))
+    await screen.findByText('1 eligible · 1 need you · 1 blocked')
+  }
+  const startAt = (label: string) => {
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Start at' }))
+    fireEvent.click(screen.getByRole('option', { name: label }))
+  }
+
+  it('starts at step 1 unless the rep picks another, and names no step when they do not', async () => {
+    api.enroll.mockResolvedValue({ ok: true, enrolled: 1, results: [] })
+    await toPreview()
+    expect(screen.getByRole('combobox', { name: 'Start at' }).textContent).toBe('Email 1 · step 1 — from the start')
+    expect(screen.getByText('Everyone starts at step 1, after its delay.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enroll 1 person' }))
+    await waitFor(() => expect(api.enroll).toHaveBeenCalled())
+    expect(api.enroll.mock.calls[0]).toHaveLength(2)
+  })
+
+  it('enrolls from the step picked, says what happens to the steps before it, and previews the first email sent from there', async () => {
+    api.enroll.mockResolvedValue({ ok: true, enrolled: 1, results: [] })
+    api.previewEmail.mockResolvedValue({
+      ok: true,
+      stepIndex: 2,
+      subject: 'Your second location, Casey',
+      text: 'Following up.',
+      unresolvedFields: [],
+      error: null,
+    })
+    await toPreview()
+    startAt('Email 2 · step 3')
+    expect(
+      screen.getByText(
+        'For people who already had the earlier steps by hand. Steps 1–2 are marked skipped and never sent; step 3 goes out after its own delay, counted from now, and starts the email thread.',
+      ),
+    ).toBeTruthy()
+    fireEvent.click(within(row('Casey Morgan')).getByRole('button', { name: 'Preview the first email' }))
+    await waitFor(() =>
+      expect(api.previewEmail).toHaveBeenCalledWith({
+        sequenceId: 'seq-1',
+        contactId: 'c-warm',
+        personalLine: '',
+        startStepIndex: 2,
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Enroll 1 person' }))
+    await waitFor(() => expect(api.enroll).toHaveBeenCalled())
+    expect(api.enroll).toHaveBeenCalledWith('seq-1', [{ contactId: 'c-warm', personalLine: '', attestations: [] }], 2)
+  })
+
+  it('offers no copy of a step the person skips', async () => {
+    api.curateDrafts.mockRejectedValue(new Error('AI drafting is not available in this workspace.'))
+    await toPreview()
+    startAt('Step 2 · Call')
+    const casey = row('Casey Morgan')
+    fireEvent.click(within(casey).getByRole('button', { name: 'Curate for this person' }))
+    await within(casey).findByText('AI drafting is not available in this workspace.')
+    fireEvent.click(within(casey).getByRole('button', { name: 'Write them yourself' }))
+    expect(within(casey).queryByLabelText('Email 1 · step 1 — draft')).toBeNull()
+    expect(within(casey).getByLabelText('Email 2 · step 3 — draft')).toBeTruthy()
+  })
+})

@@ -195,7 +195,7 @@ export const AI_INVENTORY_KIND_HEADINGS: Readonly<Record<AiInventoryKind, string
   forms: 'Forms (id \u00b7 name \u00b7 fields)',
   datasets: 'Datasets (id \u00b7 name \u00b7 fields)',
   collections: 'Content collections (id \u00b7 name \u00b7 slug)',
-  screens: 'Screens (id \u00b7 name \u00b7 slug)',
+  screens: 'Pages (id \u00b7 name \u00b7 slug)',
 }
 
 /**

@@ -1331,8 +1331,20 @@ export const SIGNUP_CANARY_DOC_ID = 'signupCanary_production'
 /** How long a recorded walk survives the sweep. */
 const SIGNUP_CANARY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
+/**
+ * Budget for a single marker-document read on the journeys health path.
+ *
+ * The journeys sweep runs every probe in parallel, and on a fresh instance
+ * they all share one cold Firestore client whose first connect has measured
+ * ~3 s. At 2 s these reads lost that race on the first sweep after a deploy,
+ * and the memoized red paged for two minutes while every marker was fresh
+ * (AGL-3421). Five seconds fits the cold connect, matches the journeys rules
+ * fetch, and still reds a read that is actually hung.
+ */
+const HEALTH_MARKER_READ_BUDGET_MS = 5_000
+
 /** Budget for the single-document read on the health path. */
-const SIGNUP_CANARY_READ_BUDGET_MS = 2_000
+const SIGNUP_CANARY_READ_BUDGET_MS = HEALTH_MARKER_READ_BUDGET_MS
 
 export interface SignupCanaryVerdict {
   /** Whether every step of the walk succeeded. */
@@ -1440,7 +1452,7 @@ export async function readSignupCanaryWalk(options?: {
 export const EDGE_ADMISSION_DOC_ID = 'edgeAdmission_production'
 
 /** Budget for the single-document read on the health path. */
-const EDGE_ADMISSION_READ_BUDGET_MS = 2_000
+const EDGE_ADMISSION_READ_BUDGET_MS = HEALTH_MARKER_READ_BUDGET_MS
 
 /**
  * Read the last metered-traffic sample.
@@ -1489,7 +1501,7 @@ export const APP_CHECK_ATTESTATION_DOC_ID = 'appCheckAttestation_production'
 const APP_CHECK_ATTESTATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 /** Budget for the single-document read on the health path. */
-const APP_CHECK_ATTESTATION_READ_BUDGET_MS = 2_000
+const APP_CHECK_ATTESTATION_READ_BUDGET_MS = HEALTH_MARKER_READ_BUDGET_MS
 
 /**
  * Record one sampling of the App Check verification counts.

@@ -60,10 +60,15 @@ export async function evaluateEmailHealth(options: { probe: boolean }) {
 
   // What an operator should do next, in the order it blocks delivery.
   const blockers: string[] = []
-  if (!config.hasApiKey) {
+  if (config.providerProblem) {
+    blockers.push(config.providerProblem)
+  } else if (!config.hasApiKey) {
+    // The settings the deployment's mail provider still needs, by the names
+    // an operator types — the provider says which (see `mail-providers.ts`).
     blockers.push(
-      'RESEND_API_KEY is not set on this project — add it in Vercel ' +
-        '(the Resend integration sets it per project, not team-wide).',
+      `${config.missingSettings.join(' and ')} is not set on this project — ` +
+        `the "${config.provider}" mail provider needs it to send. Add it where ` +
+        'this deployment keeps its environment (per project, not team-wide).',
     )
   }
   if (!config.hasFrom) {
@@ -80,7 +85,10 @@ export async function evaluateEmailHealth(options: { probe: boolean }) {
     )
   }
   if (credentials?.status === 'invalid-key') {
-    blockers.push('Resend rejected RESEND_API_KEY — rotate or re-scope it.')
+    blockers.push(
+      `The "${config.provider}" mail provider rejected its credential — ` +
+        'rotate or re-scope it.',
+    )
   }
 
   /*
@@ -99,10 +107,7 @@ export async function evaluateEmailHealth(options: { probe: boolean }) {
    */
   const pool =
     options.probe
-      ? await checkSharedSendingPool({
-          pool: sharedSendingPool(),
-          readApiKey: process.env['RESEND_READ_API_KEY'],
-        })
+      ? await checkSharedSendingPool({ pool: sharedSendingPool() })
       : null
 
   /*

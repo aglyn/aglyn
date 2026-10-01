@@ -348,7 +348,7 @@ export const collectionEntryBodySchema: Aglyn.ComponentSchema<CollectionEntryBod
         label: 'Markdown',
         description:
           'Markdown-lite content. Keep {{entry.body}} on entry-template ' +
-          "screens so each entry's body renders here.",
+          "pages so each entry's body renders here.",
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
     ],

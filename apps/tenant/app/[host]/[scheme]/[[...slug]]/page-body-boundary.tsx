@@ -17,7 +17,7 @@
 
 'use client'
 
-import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
+import { recoverStaleBuildOrReport } from '@aglyn/aglyn/app-utils/stale-build-error'
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import type { ReactNode } from 'react'
 
@@ -66,6 +66,13 @@ import type { ReactNode } from 'react'
  * outcome and not what this addresses: the realistic reject is client-only,
  * because the server has the chunk the stale browser is missing.
  *
+ * ## The stale-build reload (AGL-3279)
+ *
+ * That classic reject is exactly the tab a reload fixes, and an empty body is
+ * the worst place to leave it. So a caught stale-build error takes the same
+ * one-reload-per-half-hour recovery as the root boundaries, and only an
+ * error that recovery does not cure is re-dispatched to the beacon.
+ *
  * The fallback is an empty fragment rather than `null` — the shared boundary
  * defaults an absent fallback to visible "Something went wrong…" text via
  * `??`, and `null` is absent as far as `??` is concerned.
@@ -76,7 +83,14 @@ export default function PageBodyBoundary({
   children: ReactNode
 }) {
   return (
-    <ErrorBoundaryComponent fallback={<></>} onCatch={redispatchCaughtError}>
+    <ErrorBoundaryComponent
+      fallback={<></>}
+      // Wrapped rather than passed: `onCatch` also hands over React's
+      // errorInfo, which must not land in the recovery's `reload` parameter.
+      onCatch={(error) => {
+        recoverStaleBuildOrReport(error)
+      }}
+    >
       {children}
     </ErrorBoundaryComponent>
   )

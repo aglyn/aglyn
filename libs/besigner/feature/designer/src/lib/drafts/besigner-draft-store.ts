@@ -75,7 +75,12 @@ export interface BesignerDraftIds {
    * that have no host.
    */
   scope: string
-  kind: 'screen' | 'layout' | 'component' | 'template' | 'email' | 'form'
+  /**
+   * The document's kind: one of the platform's own (`screen`, `layout`,
+   * `component`, `template`, `email`) or the `kind` a plugin declared for a
+   * document it authors in the besigner (`besignerDocuments`).
+   */
+  kind: string
   docId: string
   /**
    * Which version of the document is open. Keeping this in the key is what

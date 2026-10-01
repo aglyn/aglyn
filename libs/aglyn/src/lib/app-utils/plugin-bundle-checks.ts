@@ -717,7 +717,7 @@ function compareContributions(
     'a widget in the console slot',
     found.console?.slots,
     declared.console?.slots,
-    'a screen that renders the slot would never load the plugin',
+    'a console page that renders the slot would never load the plugin',
   )
   missing(
     'the console route',
@@ -736,9 +736,9 @@ function compareContributions(
       'error',
       'contributions',
       'register() adds a nav tab, a provider or another entry the console ' +
-        'shell draws on every screen, and the manifest does not declare ' +
+        'shell draws on every page, and the manifest does not declare ' +
         '"console": { "shell": true } — the shell would draw it only on ' +
-        'screens that happened to load the plugin for something else',
+        'pages that happened to load the plugin for something else',
     )
   }
   if (detected.unresolved.length) {

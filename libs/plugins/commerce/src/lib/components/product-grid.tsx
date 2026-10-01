@@ -848,7 +848,7 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
       label: 'Collection',
       description:
         'Pick the collection — stored by id, so renaming it never breaks ' +
-        'this grid. Leave empty on collection template screens to follow ' +
+        'this grid. Leave empty on collection template pages to follow ' +
         'the /collections/{slug} URL.',
       component: Aglyn.FieldComponentType.COLLECTION_SELECT,
     },

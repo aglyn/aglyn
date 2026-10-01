@@ -16,6 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 import {
   COMMERCE_BUNDLE,
@@ -133,5 +135,37 @@ describe('the commerce console surfaces declare their own authorization', () => 
     expect(Aglyn.resolveRolePermissions('admin')[key]).toBe(true)
     expect(Aglyn.resolveRolePermissions('editor')[key]).toBe(true)
     expect(Aglyn.resolveRolePermissions('viewer')[key]).toBe(false)
+  })
+})
+
+describe('where a product is read (AGL-3080)', () => {
+  it('publishes the site catalog as a product’s address, and none at the org level', () => {
+    registerCommerceConsole()
+    const route = pluginRecordRoute('product')?.route
+    expect(route?.list({ orgSlug: 'acme', host: 'shop' })).toBe('/acme/hosts/shop/products')
+    // The catalog has no page per product, so a product's address is the
+    // catalog it is edited in.
+    expect(route?.record({ orgSlug: 'acme', host: 'shop' }, 'prod-1')).toBe(
+      '/acme/hosts/shop/products',
+    )
+    expect(route?.list({ orgSlug: 'acme', host: null })).toBeNull()
+    expect(route?.record({ orgSlug: 'acme', host: null }, 'prod-1')).toBeNull()
+  })
+})
+
+describe('the zones its product surfaces host (AGL-2916, AGL-3080)', () => {
+  it('declares each under the id widgets register for, owned here and laid out bare', () => {
+    registerCommerceConsole()
+    for (const id of ['productEditor', 'productsHub', 'productImport']) {
+      const zone = pluginZone(id)
+      // A section among fields, above a table, inside a dialog: the page
+      // spaces it, so a wrapper would add a gap it already has.
+      expect(`${id}: ${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe(
+        `${id}: ${BUNDLE_ID} bare console`,
+      )
+    }
+    // The shell's catalog no longer names them: the plugin that draws them
+    // says what they are.
+    expect(Object.values(Aglyn.CONSOLE_WIDGET_SLOTS)).not.toContain('productEditor')
   })
 })

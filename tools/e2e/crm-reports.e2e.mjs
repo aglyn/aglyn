@@ -37,7 +37,7 @@
 //
 //   node tools/e2e/crm-reports.e2e.mjs
 
-import { CRM_FIXTURE, seedCrmFixtures } from '../scripts/lib/crm-fixtures.mjs'
+import { CRM_FIXTURE, seedCrmFixtures } from '../../libs/plugins/crm/scripts/fixtures/crm-fixtures.mjs'
 import {
   adminFirestore,
   cardNamed,

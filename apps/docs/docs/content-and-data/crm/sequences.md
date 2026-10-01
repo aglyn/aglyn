@@ -81,6 +81,12 @@ administrators included. Connecting the same Google account again updates the
 mailbox you already have and keeps its settings. Each member can connect up to
 five mailboxes.
 
+If Mailboxes says the Google account does not have Gmail turned on, the
+account exists but Gmail is not running for it yet. A Google Workspace user
+created that day can take up to a day before Gmail is ready; otherwise the
+Workspace administrator turns Gmail on for the account. Then connect again.
+Nothing was saved by the attempt that was refused.
+
 If Mailboxes says connecting a Google mailbox isn't configured, your deployment
 has no Google OAuth client set up. On a self-hosted install, see
 [Environment variables](../../developers/self-hosting-environment.md#sequences).
@@ -103,7 +109,7 @@ The **display name** is the name recipients see beside the address.
 ### Daily cap, warm-up and sending window {#daily-cap}
 
 - **Daily cap** — the most the mailbox sends in one day. It starts at **20**
-  and can be set up to **50**.
+  and can be set up to **100**.
 - **Warm-up** — a newly connected mailbox ramps up: at most **10** a day in
   its first week, **20** in its second and **30** from its third. The daily
   cap still applies, so a mailbox capped at 20 never sends more than 20.
@@ -505,6 +511,28 @@ Beside each person, **Preview the first email** shows the email they would
 get with your personal line in it, and **Send me this as a test** sends that
 email to your own inbox first — see
 [Send yourself a test of a step](#send-a-test).
+
+### Start at a later step {#start-at-step}
+
+When someone already had the first email — you wrote it by hand, before the
+sequence existed — pick the step they begin at in **Start at**, above the
+people. Everyone you enroll in that batch begins there:
+
+- The steps before it are marked **skipped** on the enrollment and never sent.
+  The person's record and the enrollment's history both say which ones.
+- The step you picked waits its own delay, counted from the moment you
+  enroll — a step set to 3 business days goes out 3 business days from now.
+- The first email sent from there starts its own email thread, under your
+  first email's subject when the step was written as a reply, since there is
+  no earlier email of the sequence's for it to answer. The emails after it
+  reply in that thread as usual.
+- A reply, a bounce or an opt-out stops the enrollment from the moment you
+  enroll, as it does after a send, and the unsubscribe link works the same.
+
+**Preview the first email** and **Send me this as a test** show the first
+email sent from the step you picked. A curated copy of a skipped step is left
+out. Leave **Start at** on step 1 to start from the beginning, which is the
+default; a step past the sequence's last is refused.
 
 ### Before you enroll: mail gateways {#mail-gateways}
 

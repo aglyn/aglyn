@@ -345,7 +345,7 @@ export function collectionTemplatePublishMessage(
   // Still not a page, so still must not be described as one.
   if (options?.isTemplateScreen) {
     return (
-      'Published — this screen is a collection template, so it is not ' +
+      'Published — this is a collection template, so it is not ' +
       'served at a path of its own'
     )
   }

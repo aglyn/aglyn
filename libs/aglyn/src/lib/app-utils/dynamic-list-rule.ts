@@ -216,7 +216,7 @@ export interface DynamicListDimensions {
    * attribution record; this says which campaign the merchant FILED the
    * record under. The two are different facts about different acts and a
    * single dimension over both would answer neither question — see
-   * `campaign-attribution.ts` for the other one.
+   * `utm-attribution.ts` for the other one.
    *
    * ⛔ And membership is not consent. A person selected by this dimension has
    * opted in to nothing: they are here because a merchant put a form in a

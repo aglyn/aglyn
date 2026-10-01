@@ -76,7 +76,7 @@ export function registerOutreachConsole(): void {
       {
         label: 'Sequences',
         // The URL slug stays `outreach`: it is the plugin id the console
-        // resolves the surface by, and `PLUGIN_TITLES` carries the name.
+        // resolves the surface by, and this label is the name its tab carries.
         href: '/outreach',
         sections: OUTREACH_CONSOLE_SECTIONS,
         // The release flag's tab id: `release_outreach` names it, and the org

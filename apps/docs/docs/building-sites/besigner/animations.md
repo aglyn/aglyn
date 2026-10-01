@@ -6,7 +6,7 @@ description: Add fade, slide and zoom motion to any element, stagger a row of ca
 
 # Element animations
 
-Any element on a screen can animate. Pick a preset, choose when it plays,
+Any element on a page can animate. Pick a preset, choose when it plays,
 and adjust a few numbers — there is no CSS to write.
 
 ## Add an animation

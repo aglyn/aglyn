@@ -24,7 +24,7 @@ import {
   CLIENT_ACTION_STEP_TYPES,
   HOST_ACTION_STEP_LABELS,
 } from '@aglyn/aglyn/app-utils/actions'
-import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/workflows'
+import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/host-events'
 import {
   isOrgAutomationStepType,
   isOrgAutomationTriggerEvent,

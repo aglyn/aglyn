@@ -49,7 +49,8 @@ compose a screen on the server:
 - `@aglyn/tenant-runtime/compose-screen-nodes` (`composeScreenNodes`,
   `composeNodesWithChrome`)
 - the loaders behind them: `get-layout-version`, `get-components`,
-  `get-variables`, `get-datasets`, `get-forms`, `get-plugin-installs`
+  `get-variables`, `get-forms`, `get-plugin-installs` — a repeat's rows come
+  from the plugin that keeps them, through `@aglyn/aglyn/plugin-manager/repeat-rows`
 - page composers for collection, author and search pages:
   `compose-collection-page`, `compose-author-page`, `compose-search-page`
 - `apply-publish-schedule` (`applyDuePublishSchedule`)

@@ -24,11 +24,11 @@ import { type DatasetFieldEntry, humanizeDatasetFieldId } from './datasets'
  * referenced design doc — this module is the single runtime source of
  * truth). A model lives on the dataset doc
  * (`orgs/{orgId}/datasets/{id}.model`) and drives the typed editor, import
- * and site-restore validation, and the console and `/v1` record writes
- * through the shared `validateDocument`/`coerceDocumentValues` pair so they
- * can't disagree. Form submissions and automation steps write through
- * `buildDatasetRecordValues` instead, which stores each value as text and
- * validates nothing.
+ * and site-restore validation, and every record write — the console, `/v1`,
+ * a bound form's submission and an automation step — through the shared
+ * `validateDocument`/`coerceDocumentValues` pair so they can't disagree. The
+ * form and the automation step reach the pair through
+ * `prepareDatasetRecordWrite` (AGL-2773).
  *
  * Storage conventions (Firestore-safe): timestamps as epoch millis
  * numbers, coordinates as `{ latitude, longitude }`, `sorted` as arrays,
@@ -373,6 +373,9 @@ export function datasetValueToInput(
   return String(value)
 }
 
+const BOOL_TRUE_WORDS = new Set(['true', 'yes', 'on', '1'])
+const BOOL_FALSE_WORDS = new Set(['false', 'no', 'off', '0'])
+
 /**
  * Coerces user-input strings (form fields, CSV cells) into storage form
  * per the field type. Unparseable input is passed through untouched so
@@ -392,10 +395,17 @@ export function coerceDocumentValues(
       continue
     }
     switch (field.type) {
-      case 'bool':
-        values[fieldId] =
-          raw === 'true' ? true : raw === 'false' ? false : raw
+      case 'bool': {
+        // The words a form control or a CSV cell says yes and no with: a
+        // lone checkbox posts `on`, a spreadsheet exports `TRUE` or `1`.
+        const word = raw.trim().toLowerCase()
+        values[fieldId] = BOOL_TRUE_WORDS.has(word)
+          ? true
+          : BOOL_FALSE_WORDS.has(word)
+            ? false
+            : raw
         break
+      }
       case 'int32':
       case 'int64': {
         const parsed = Number(raw)

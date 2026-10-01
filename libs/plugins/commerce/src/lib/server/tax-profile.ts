@@ -16,18 +16,20 @@
  */
 
 import { registerPluginTaxProfile } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { type FlatTaxRate, resolveFlatTaxCents } from '../model'
+import { type FlatTaxRate, resolveFlatTaxCents, type TaxSettings } from '../model'
 import { storefrontTaxModeOf } from './storefront-tax'
 
 /**
  * The merchant's tax rule, published for every plugin that charges.
  *
- * A merchant sets tax once, in the store settings this plugin keeps. A plugin
- * that sells something else — an appointment — prices its own charge, and used
- * to import `resolveFlatTaxCents` and `storefrontTaxModeOf` from here to do it.
- * It asks the tax-profile contract now, and gets these same two functions: one
- * rounding rule, one reading of a settled payment, wherever money is taken.
+ * A merchant sets tax once, in the store settings this plugin keeps
+ * (`hosts/{hostId}/settings/store`, under `tax`). A plugin that sells
+ * something else — an appointment — prices its own charge by asking the
+ * tax-profile contract: for the site's rate for that kind of charge, read
+ * here, and for these same two functions over it — one rounding rule, one
+ * reading of a settled payment, wherever money is taken.
  *
  * Registered from BOTH server registrars, because a booking is priced in the
  * tenant app and confirmed by the console's billing webhook.
@@ -35,6 +37,7 @@ import { storefrontTaxModeOf } from './storefront-tax'
 export function registerCommerceTaxProfile(): void {
   registerPluginTaxProfile(
     {
+      flatRate: (hostId, charge) => readFlatRate(hostId, charge),
       flatTax: (rate, chargeCents, fallbackLabel) =>
         resolveFlatTaxCents(
           rate as FlatTaxRate | undefined | null,
@@ -46,4 +49,34 @@ export function registerCommerceTaxProfile(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+}
+
+/**
+ * The flat rates the store settings keep, by the kind of charge a caller
+ * names. A kind not listed has no rate here, and answers `undefined`.
+ */
+const FLAT_RATE_CHARGES: Readonly<Record<string, keyof TaxSettings>> = {
+  service: 'service',
+  lodging: 'lodging',
+}
+
+/** One site's stored flat rate for a kind of charge, as stored. */
+export async function readFlatRate(
+  hostId: string,
+  charge: string,
+): Promise<unknown> {
+  const field = FLAT_RATE_CHARGES[charge]
+  if (!hostId || !field) return undefined
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('settings')
+    .doc('store')
+    .get()
+  const tax = (snapshot.exists ? snapshot.get('tax') : undefined) as
+    | TaxSettings
+    | undefined
+  return tax?.[field]
 }

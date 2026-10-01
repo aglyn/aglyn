@@ -16,39 +16,55 @@
  */
 'use client'
 
+import { loadAnalyticsProviders } from '@aglyn/aglyn/app-utils/analytics-provider'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import { platformAnalyticsAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
+import { ANALYTICS_PROVIDER_LOADERS } from '../constants/plugins.analytics.generated'
 
 /**
  * Real-user Core Web Vitals for the console (AGL-1642) — the `ErrorBeacon`
  * shape: module-scope install, null render, mounted from the root layout
  * OUTSIDE every page boundary so a wedged page still measures.
  *
- * Delivery is `window.gtag` — the tag Firebase Analytics injects at runtime
- * on this surface (`G-YW5PG16YTM`). The module holds metrics reported before
- * that injection lands and flushes when it does, so TTFB survives the boot
- * window. The AGL-1582 `traffic_type: 'internal'` stamp rides these hits too:
- * `setDefaultEventParameters` issues a global `gtag('set')`, which applies to
- * direct gtag events as well as Firebase `logEvent` ones.
+ * Delivery is to the analytics tag the console's analytics SDK injects at
+ * runtime, through its vendor's adapter (`analytics-provider.ts`). The module
+ * holds metrics reported before that injection lands and flushes when it
+ * does, so TTFB survives the boot window. The AGL-1582
+ * `traffic_type: 'internal'` stamp rides these hits too: the SDK's
+ * `setDefaultEventParameters` sets it on the tag itself, which applies to
+ * every event the tag sends.
+ *
+ * ## Why the adapters are loaded here
+ *
+ * The console's tag is not one this app mounts, so nothing else would fetch
+ * the adapter that speaks to it — and two things need it on every console
+ * page: this module's delivery, and a consent withdrawal, which has to tell
+ * the resident tag because a page cannot unload a script. The root layout
+ * renders this component on every page, so its module is where the fetch
+ * starts. A withdrawal made before the adapter lands is handed to it the
+ * moment it registers.
  *
  * ## Why this one needs its own consent gate
  *
  * Because it is the console's only analytics path that does NOT go through
- * `deliver()`. Everything else in the console reaches GA through the
+ * `deliver()`. Everything else in the console reaches the tag through the
  * transport the layout registers, so withholding consent there is enough —
- * the layout swaps in a transport that drops. This module calls
- * `window.gtag` itself, and on this surface that global outlives a
- * withdrawal: Firebase injected gtag.js and a page cannot unload a script.
- * Without the gate a visitor who opts out mid-session keeps reporting their
- * vitals until they navigate away.
+ * the layout swaps in a transport that drops. This module hands events to
+ * the tag itself, and on this surface the tag outlives a withdrawal: the SDK
+ * injected it and a page cannot unload a script. Without the gate a visitor
+ * who opts out mid-session keeps reporting their vitals until they navigate
+ * away.
  *
  * A visitor who was never granted needs nothing extra — no consent, no tag,
- * no `window.gtag` to find, and the module drops what it held after its wait
- * expires. The gate is for the ones who had it and took it back.
+ * nothing resident to deliver to, and the module drops what it held after
+ * its wait expires. The gate is for the ones who had it and took it back.
  *
  * Install is guarded per page load inside the module, so this component
  * rendering twice (strict mode, remounts) registers nothing twice.
  */
+if (typeof window !== 'undefined') {
+  void loadAnalyticsProviders(ANALYTICS_PROVIDER_LOADERS)
+}
 installWebVitalsReporting({
   surface: 'console',
   allowed: platformAnalyticsAllowed,

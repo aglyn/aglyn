@@ -783,6 +783,8 @@ export interface ConsentGroupChangeCounts {
   siteSuppressions: number
   topicOptOuts: number
   paces: number
+  /** Refusals kept after their record was deleted, in `retainedRefusals` (AGL-3338). */
+  retainedRefusals: number
 }
 
 /** A job's state, as the route answers it and the progress panel renders it. */
@@ -922,6 +924,8 @@ export interface ConsentGroupChangePreview {
     siteSuppressions: number
     topicOptOuts: number
     paces: number
+    /** The organization's retained refusals for the source site (AGL-3338). */
+    retainedRefusals: number
   }>
   /** Per joining site, the refusals on its new siblings it starts honoring. */
   inherited: Array<{ hostId: string; refusals: number }>

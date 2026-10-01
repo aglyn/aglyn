@@ -21,7 +21,8 @@
  */
 
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
-import { ESTIMATED_PAGE_TRANSFER_BYTES, FREE_AI_TASTE_CREDITS_PER_MONTH } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   AI_FREE_PAGE_BUILT_PLAN,
@@ -45,6 +46,7 @@ import {
   aiDanglingWord,
   aiDoctrineViolationText,
   aiFreePageSectionsWithin,
+  aiPlanEmbedBriefViolations,
   aiNamesMatch,
   aiTreeCopy,
   detectAdHocWidths,
@@ -65,6 +67,7 @@ import {
   detectOffBrandEmail,
   detectOffVoiceCopy,
   detectOverBudget,
+  detectPlanEmbeds,
   detectPlanInlineForms,
   detectPlanLayoutRegions,
   detectPlanLiteralColors,
@@ -929,7 +932,7 @@ describe('rule 10 — a link goes to a screen that does what its words say, or i
         rule: 10,
         code: 'link-unrelated-screen',
         message:
-          '"Request a Consultation" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.',
+          '"Request a Consultation" links the home page, which does not do what its words say. Link the page that does, or leave the link out when the site has none.',
         nodeIds: ['n2'],
       },
     ])
@@ -963,13 +966,13 @@ describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
         rule: 10,
         code: 'link-without-destination',
         message:
-          '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
+          '"Request a Consultation" goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
         nodeIds: ['n2'],
       },
     ])
     const unlabeled = { componentId: 'muiScreenLink', props: { renderAs: 'link' } }
     expect(detectLinksWithoutDestination(tree(page(section(unlabeled))), 'layout')).toMatchObject([
-      { code: 'link-without-destination', message: expect.stringMatching(/^A Screen Link goes nowhere\./), nodeIds: ['n2'] },
+      { code: 'link-without-destination', message: expect.stringMatching(/^A Page Link goes nowhere\./), nodeIds: ['n2'] },
     ])
   })
 
@@ -1011,7 +1014,7 @@ describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
       {
         code: 'link-fragment',
         message:
-          '"Request a Consultation" links "#consultation", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.',
+          '"Request a Consultation" links "#consultation", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.',
         nodeIds: [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')],
       },
     ])
@@ -1050,7 +1053,7 @@ describe('rule 10 — a link to a section of its own page (AGL-3097)', () => {
     expect(found({ href: '#contact' })).toEqual([
       {
         code: 'link-fragment',
-        message: `"Request a Consultation" links "#contact", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`,
+        message: `"Request a Consultation" links "#contact", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. Otherwise give it the "screenId" of a page the site has that does what its words say, or take it out.`,
       },
     ])
     // A scrollTo that names a section is read before an anchor that names none, and one that names none is the fault.
@@ -1061,7 +1064,7 @@ describe('rule 10 — a link to a section of its own page (AGL-3097)', () => {
     expect(found({})).toEqual([
       {
         code: 'link-without-destination',
-        message: `"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. When none of these fits, take it out.`,
+        message: `"Request a Consultation" goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. When none of these fits, take it out.`,
       },
     ])
     // With no plan to name sections, a scrollTo goes nowhere, and says nothing of sections.
@@ -1592,10 +1595,130 @@ describe('rule 16 — the smallest document that does the job', () => {
     expect(codes(detectHeavyDocument(video, 'page'))).toEqual(['autoplay-video'])
   })
 
-  it('passes an embed the plan named, and a lean section', () => {
-    expect(
-      detectHeavyDocument(tree(page(section(text('h1', 'Roofs', 'h1')), { componentId: 'videoEmbed', props: { url: 'https://video.example.com/x' } })), 'page', { allowEmbeds: true }),
-    ).toEqual([])
+  describe('a third-party player (AGL-3433)', () => {
+    const YOUTUBE = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    const player = (url?: string) => ({ componentId: 'videoEmbed', props: url ? { url } : {} })
+    const planned = [{ host: 'youtube' as const, url: 'https://youtu.be/dQw4w9WgXcQ' }]
+
+    it('passes the player the plan lists, at the brief’s link however it is spelled, and a lean section', () => {
+      expect(
+        detectHeavyDocument(tree(page(section(text('h1', 'Roofs', 'h1')), player(YOUTUBE))), 'page', {
+          plannedEmbeds: planned,
+        }),
+      ).toEqual([])
+    })
+
+    it('passes a planned player whose link is left for the site owner to paste', () => {
+      expect(detectHeavyDocument(tree(page(player())), 'page', { plannedEmbeds: planned })).toEqual([])
+    })
+
+    it('refuses a player the plan does not list, and names what the model can do instead', () => {
+      const found = detectHeavyDocument(tree(page(player(YOUTUBE))), 'page')
+      expect(codes(found)).toEqual(['third-party-embed'])
+      expect(found[0].message).toContain('Remove it')
+      expect(found[0].message).toContain('Video (video)')
+      expect(found[0].message).not.toContain('in the plan')
+    })
+
+    it('refuses the 9/22 template’s player whether its link was the featured-video token or a made-up one', () => {
+      for (const url of ['{{entry.coverVideo}}', 'https://www.youtube.com/watch?v=abcdefghijk']) {
+        expect(codes(detectHeavyDocument(tree(page(player(url))), 'template'))).toEqual(['third-party-embed'])
+      }
+    })
+
+    it('refuses a planned player that plays a video the brief did not give', () => {
+      const found = detectHeavyDocument(tree(page(player('https://vimeo.com/123456789'))), 'page', {
+        plannedEmbeds: planned,
+      })
+      expect(codes(found)).toEqual(['embed-link-unplanned'])
+    })
+
+    it('passes a featured video bound to the library player behind a poster', () => {
+      const bound = tree(
+        page({ componentId: 'video', props: { src: '{{entry.coverVideo}}', poster: '{{entry.coverImage}}' } }),
+      )
+      expect(detectHeavyDocument(bound, 'template')).toEqual([])
+    })
+  })
+})
+
+describe('rule 16 (plan) — a third-party player the brief asks for (AGL-3433)', () => {
+  const BRIEF =
+    'An About page for the crew. Put our intro video from YouTube at the top: https://youtu.be/dQw4w9WgXcQ'
+  const embed = (patch: Partial<NonNullable<AiBuildPlan['embeds']>[number]> = {}) => ({
+    host: 'youtube' as const,
+    where: '/services/roof-repair',
+    asked: 'our intro video from YouTube',
+    url: 'https://youtu.be/dQw4w9WgXcQ',
+    ...patch,
+  })
+  const creation = (kind: AiBuildPlan['create'][number]['kind'], name: string) => ({
+    kind,
+    name,
+    why: 'Nothing the site has shows it.',
+    duplicateOf: null,
+    fields: [],
+  })
+
+  it('passes a player on a screen the plan builds or a component it creates, with the brief’s own words and link', () => {
+    const plan = planOf({
+      create: [creation('component', 'crew-video')],
+      embeds: [embed(), embed({ where: 'new:crew-video', url: null })],
+    })
+    expect(detectPlanEmbeds(plan)).toEqual([])
+    expect(aiPlanEmbedBriefViolations(plan, BRIEF)).toEqual([])
+  })
+
+  it('refuses a player on a template or a layout, which would load it on every page it serves', () => {
+    const plan = planOf({
+      create: [creation('template', 'article'), creation('layout', 'site')],
+      embeds: [embed({ where: 'new:article' }), embed({ where: 'new:site' })],
+    })
+    const found = detectPlanEmbeds(plan)
+    expect(codes(found)).toEqual(['plan-embed-refused'])
+    expect(found[0].paths).toEqual(['embeds[0].where', 'embeds[1].where'])
+  })
+
+  it('refuses a player planned where the plan builds nothing, more players than a page carries, and a link of another host', () => {
+    const plan = planOf({
+      embeds: [
+        embed({ where: '/nowhere' }),
+        embed(),
+        embed({ asked: 'intro video' }),
+        embed({ host: 'vimeo' }),
+      ],
+    })
+    expect(codes(detectPlanEmbeds(plan))).toEqual([
+      'plan-embed-nowhere',
+      'plan-embed-over-budget',
+      'plan-embed-link-host',
+    ])
+  })
+
+  it('refuses a player the brief never asks for, and a link the brief never gives', () => {
+    const plan = planOf({
+      embeds: [
+        embed({ asked: 'a short list of related reading', url: null }),
+        embed({ asked: 'the crew', url: null }),
+        embed({ url: 'https://www.youtube.com/watch?v=abcdefghijk' }),
+      ],
+    })
+    const found = aiPlanEmbedBriefViolations(plan, BRIEF)
+    expect(codes(found)).toEqual(['plan-embed-not-asked', 'plan-embed-link-not-given'])
+    expect(found[0].paths).toEqual(['embeds[0].asked', 'embeds[1].asked'])
+    expect(found[1].paths).toEqual(['embeds[2].url'])
+  })
+
+  it('refuses the 9/22 article template’s player: its brief asked for no video', () => {
+    const brief =
+      'A page template for each of our insights articles: the headline, the author and date, the article body, and a short list of related reading.'
+    const plan = planOf({ embeds: [embed({ asked: 'the article body', url: null })] })
+    expect(codes(aiPlanEmbedBriefViolations(plan, brief))).toEqual(['plan-embed-not-asked'])
+  })
+
+  it('runs with every plan rule', () => {
+    const plan = planOf({ create: [creation('template', 'article')], embeds: [embed({ where: 'new:article' })] })
+    expect(codes(validateAiBuildPlan(plan, INVENTORY))).toContain('plan-embed-refused')
   })
 })
 
@@ -1882,7 +2005,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 2,
         code: 'plan-layout-in-section',
         message:
-          "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+          "A section places a layout. A layout frames a whole page and is never placed inside one: name it as the page's layout, and take it out of the section's uses.",
         paths: ['screens[0].sections[0].uses[0]', 'screens[0].sections[1].uses[1]'],
       },
     ])
@@ -1897,7 +2020,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 2,
         code: 'plan-screen-without-layout',
         message:
-          'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
+          'A page names no layout the site has, and this job may not create one. Put every page in a layout the site has.',
         paths: ['screens[0].layout'],
       },
     ])
@@ -1913,7 +2036,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 4,
         code: 'plan-template-in-section',
         message:
-          "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+          "A section places a template. A template is applied to a whole page and is never placed inside one: take it out of the section's uses, and name it as the page's template only when the whole page is built from it.",
         paths: ['screens[0].sections[0].uses[0]'],
       },
     ])
@@ -2016,12 +2139,12 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 7,
         code: 'plan-creation-undeclared',
         message:
-          'The screen "Roof repair" applies a template named "Service page", but the plan never creates it, and a page job does not build one. Leave the screen\'s template empty, or apply a template the site already has.',
+          'The page "Roof repair" applies a template named "Service page", but the plan never creates it, and a page job does not build one. Leave the page\'s template empty, or apply a template the site already has.',
         paths: ['screens[0].template'],
       },
     ])
     expect(detectPlanUndeclaredCreations(plan, INVENTORY)[0].message).toBe(
-      'The screen "Roof repair" applies a template named "Service page", but the plan never creates it. Declare it in create as a template, with why nothing the site has will do, or leave the screen\'s template empty.',
+      'The page "Roof repair" applies a template named "Service page", but the plan never creates it. Declare it in create as a template, with why nothing the site has will do, or leave the page\'s template empty.',
     )
   })
 
@@ -2070,7 +2193,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
           rule: 2,
           code: 'plan-layout-in-section',
           message:
-            "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+            "A section places a layout. A layout frames a whole page and is never placed inside one: name it as the page's layout, and take it out of the section's uses.",
           paths: ['screens[0].sections[0].uses[0]'],
         },
         {

@@ -40,7 +40,7 @@ import { resolveSiteTimeZone } from '@aglyn/aglyn'
  *    because the save still reports "Saved!".
  * (A host field that nobody classifies is CLIENT-WRITABLE in production
  * whatever anyone intended, since the rules deny only what they name — but
- * that property has its own guard, `host-listing-write-deny-coverage`, which
+ * that property has its own guard, `host-write-deny-coverage`, which
  * fails the build naming the field. It is not restated here.)
  *
  * Read as source rather than rendered: the form needs a Firestore listener, a

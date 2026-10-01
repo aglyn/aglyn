@@ -11,7 +11,7 @@ other — avatars, cursors, and selections — and edits flow between you live. 
 tab crashes or closes with unsaved work, the besigner keeps a local draft and offers
 it back.
 
-This works in every besigner editor: **screens, layouts, reusable components,
+This works in every Besigner editor: **pages, layouts, reusable components,
 templates, and designed emails**.
 
 :::info Plan availability
@@ -75,7 +75,7 @@ never collided keeps its color, including across reloads.
 Presence and live editing are scoped to **one version of one document** — not to the
 document as a whole.
 
-That matters in practice: if a teammate is editing **version 3** of a screen and you
+That matters in practice: if a teammate is editing **version 3** of a page and you
 open **version 4**, you will not see each other. No avatar, no cursor, no selection
 box, and none of their typing arrives on your canvas.
 
@@ -92,7 +92,7 @@ one template shares a single room.
 You don't have to open a document to find out someone is already in it. Small avatars
 appear on the row itself in:
 
-- the **Screens** list,
+- the **Pages** list,
 - the **Layouts** list,
 - the **Components** card,
 - the **Templates** card, and
@@ -182,7 +182,7 @@ Two situations do not pass that check, and both are real:
 Either way the besigner tells you immediately — not twenty minutes later when you
 press Save:
 
-> Someone else saved this screen while you were editing. Saving is paused so their
+> Someone else saved this page while you were editing. Saving is paused so their
 > work is not overwritten — reload to pick up their changes. Nothing you have done
 > here is lost until you do.
 
@@ -209,7 +209,7 @@ or closed. If the tab crashes, the machine sleeps at the wrong moment, or you ju
 close without saving, the next time you open that document you're offered the work
 back:
 
-> Unsaved changes to this screen from 3 minutes ago were recovered from this
+> Unsaved changes to this page from 3 minutes ago were recovered from this
 > browser. Restoring puts them back on the canvas without saving; you can undo it.
 
 <!-- screenshot: besigner/draft-recovery-alert.png per SCREENSHOT_PLAN.md -->
@@ -245,5 +245,5 @@ saved", or the conflict warning), never silence.
 ## Related
 
 - [The Besigner](overview.md)
-- [Screens & layouts — versions](../screens-and-layouts/versions-and-publishing.md)
+- [Pages & layouts — versions](../screens-and-layouts/versions-and-publishing.md)
 - [Teams, roles & membership](../../workspace-and-billing/teams-and-roles/overview.md)

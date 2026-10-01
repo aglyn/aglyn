@@ -9903,18 +9903,85 @@ describe('contacts are per-site, and letting go of one is not a delete', () => {
     )
   })
 
-  it('allows the LAST holder to delete, and the detach in between', async () => {
-    await assertSucceeds(
+  /*
+   * LETTING GO IS THE SERVER'S (AGL-3338). A refusal of marketing email
+   * must outlive the delete, which takes a write to `retainedRefusals` no
+   * client may make, and a detach must keep a refusal a rule cannot tell
+   * from a grant. So the last holder's delete and the detach both go
+   * through `crm/contact-remove`, and neither is left to a client.
+   */
+  it('refuses even the LAST holder’s delete, and the detach, to a client', async () => {
+    await assertFails(
       deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'mine')),
     )
-    // The detach: the same collaborator drops their own half of the shared
-    // row, which is an update and is allowed.
-    await assertSucceeds(
+    await assertFails(
+      deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'mine')),
+    )
+    await assertFails(
       updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
         'facets.host-a': deleteField(),
       }),
     )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
+        'marketingConsentByHost.host-a': deleteField(),
+      }),
+    )
   })
+
+  it('keeps staff’s writes, for support — the control for the refusals above', async () => {
+    await assertSucceeds(
+      updateDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', 'shared'), {
+        'facets.host-a': deleteField(),
+      }),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', 'mine')),
+    )
+  })
+})
+
+/**
+ * A REFUSAL KEPT AFTER ITS CONTACT WAS DELETED (AGL-3338).
+ *
+ * `orgs/{orgId}/retainedRefusals/{personKey}` is written by the Admin SDK in
+ * a contact's delete and read by the list gate. Closed to every client,
+ * staff included: a write could clear somebody's "no", and a list would be
+ * a roster of the people who refused.
+ */
+describe('retained refusals are closed to every client', () => {
+  const KEY = 'person-key-1'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'retainedRefusals', KEY), {
+        marketingConsentByHost: { [HOST]: { marketingConsent: false } },
+      })
+      // The control: the same owner reads a contact, so a refusal below is
+      // about this collection and not about the owner.
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'control'), {
+        email: 'control@acme.test',
+        visibleTo: ['org'],
+      })
+    })
+  })
+
+  it('lets the owner read a contact — the control', async () => {
+    await assertSucceeds(getDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'control')))
+  })
+
+  for (const [label, db] of [
+    ['the owner', () => authed(OWNER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+  ]) {
+    it(`refuses ${label} a read, a list, a write and a delete`, async () => {
+      const ref = doc(db(), 'orgs', ORG, 'retainedRefusals', KEY)
+      await assertFails(getDoc(ref))
+      await assertFails(getDocs(collection(db(), 'orgs', ORG, 'retainedRefusals')))
+      await assertFails(setDoc(ref, { marketingConsentByHost: {} }))
+      await assertFails(deleteDoc(ref))
+    })
+  }
 })
 
 /**
@@ -11207,8 +11274,9 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
  * from a phone number inside a facet, and a plan check on the suite's fields
  * would check nothing. Every facet edit the console makes goes through
  * `crm/contact-update` or `crm/contact-stage`, where the plan is asked about
- * the fields a save carries, and a client update may do the one thing left:
- * let a holder go.
+ * the fields a save carries, and letting a holder go is `crm/contact-remove`
+ * (AGL-3338), which keeps the person's refusal of marketing email. A client
+ * updates no contact at all.
  *
  * Asserted on Free AND on Starter, because the refusal is not a plan
  * question: a client does not write a facet on any plan.
@@ -11319,22 +11387,33 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
     })
 
   /**
-   * THE CONTROL: the one update a client still makes, on a plan that carries
-   * the CRM. Every refusal above would pass against a rule that denied
-   * contact updates outright, which would take "Remove from this site" away
-   * from every paying workspace.
+   * THE CONTROL: staff keep the update, for support. Every refusal here
+   * would pass against a rule that denied the document outright, and this
+   * is what says it is the client being refused.
    */
-  it('lets a holder go on Starter', async () => {
+  it('lets staff let a holder go — the control', async () => {
     await setOrg({ plan: 'starter' })
-    await mustAllow("the owner removing site B's half of a shared contact on Starter", letSiteBGo())
+    await mustAllow(
+      "staff removing site B's half of a shared contact",
+      updateDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', SHARED), {
+        'facets.host-b': deleteField(),
+      }),
+    )
   })
 
-  // "Remove from this site" is a CRM act, and the CRM is included from Starter (AGL-2851).
-  it('refuses a holder going on Free, and on a paid plan whose subscription died', async () => {
-    await setOrg({ plan: 'free' })
-    await mustDeny("the owner removing site B's half of a shared contact on Free", letSiteBGo())
-    await setOrg({ plan: 'pro', billingStatus: 'canceled' })
-    await mustDeny("the owner removing site B's half on a canceled Pro subscription", letSiteBGo())
+  /*
+   * "Remove from this site" is `crm/contact-remove` since AGL-3338: a detach
+   * has to keep a refusal a rule cannot tell from a grant, so a client lets
+   * no holder go on any plan.
+   */
+  it('refuses a client letting a holder go, on every plan', async () => {
+    for (const fields of [{ plan: 'starter' }, { plan: 'free' }, { plan: 'pro', billingStatus: 'canceled' }]) {
+      await setOrg(fields)
+      await mustDeny(
+        `the owner removing site B's half of a shared contact on ${JSON.stringify(fields)}`,
+        letSiteBGo(),
+      )
+    }
   })
 
   it('refuses a holder going in the same write as an edit to a holder that stays', async () => {
@@ -11347,19 +11426,27 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
     )
   })
 
-  it("keeps the last holder's delete open on Free", async () => {
-    await setOrg({ plan: 'free' })
+  /*
+   * The last holder's delete stays open on Free — in `crm/contact-remove`,
+   * which keeps the person's refusal in the same commit (AGL-3338). From a
+   * client it is refused on every plan.
+   */
+  it("refuses the last holder's delete to a client, on every plan", async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'only-mine'), {
         email: 'only-mine@acme.test',
         visibleTo: [`host:${HOST}`],
+        marketingConsentByHost: { [HOST]: { marketingConsent: false } },
         facets: { [HOST]: { sources: {}, interactions: [], ownerUid: EDITOR } },
       })
     })
-    await mustAllow(
-      'a site editor deleting a contact only their site holds, on Free',
-      deleteDoc(contact(EDITOR, 'only-mine')),
-    )
+    for (const plan of ['free', 'starter']) {
+      await setOrg({ plan })
+      await mustDeny(
+        `a site editor deleting a contact only their site holds, on ${plan}`,
+        deleteDoc(contact(EDITOR, 'only-mine')),
+      )
+    }
   })
 })
 
@@ -11368,8 +11455,10 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
  *
  * `marketingConsentByHost` is the stored basis list enrollment carries across
  * as the person's own opt-in (`assignmentBasis`). A client that could add or
- * change an entry could mint an opt-in nobody gave. Letting a holder go
- * removes that holder's entries, and removing is all a client may do.
+ * change an entry could mint an opt-in nobody gave. And a client that could
+ * REMOVE one could drop a refusal, which is the one entry an operator's
+ * attestation cannot overrule (AGL-3338) — so a client writes no entry at
+ * all, and letting a holder go is `crm/contact-remove`, which keeps it.
  */
 describe("a contact's consent entries only shrink from the client (AGL-2821)", () => {
   const PERSON = 'consent-person'
@@ -11412,14 +11501,32 @@ describe("a contact's consent entries only shrink from the client (AGL-2821)", (
     )
   })
 
-  it('lets a holder go with its consent entries — the control', async () => {
-    await mustAllow(
-      "the owner removing site B's half, consent included",
+  it('refuses a client removing a consent entry — a refusal most of all (AGL-3338)', async () => {
+    await mustDeny(
+      "the owner dropping this site's recorded refusal",
+      updateDoc(contact(OWNER), {
+        [`facets.${HOST}`]: deleteField(),
+        [`marketingConsentByHost.${HOST}`]: deleteField(),
+        visibleTo: arrayRemove(`host:${HOST}`),
+        capturedByHostIds: arrayRemove(HOST),
+      }),
+    )
+    await mustDeny(
+      "the owner removing site B's half, grant included",
       updateDoc(contact(OWNER), {
         'facets.host-b': deleteField(),
         'marketingConsentByHost.host-b': deleteField(),
         visibleTo: arrayRemove('host:host-b'),
         capturedByHostIds: arrayRemove('host-b'),
+      }),
+    )
+  })
+
+  it('lets staff remove an entry — the control', async () => {
+    await mustAllow(
+      "staff removing site B's grant",
+      updateDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', PERSON), {
+        'marketingConsentByHost.host-b': deleteField(),
       }),
     )
   })
@@ -11846,8 +11953,6 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
       await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'c-seeded'), {
         email: 'buyer@acme.test',
         visibleTo: ['org', `host:${HOST}`],
-        // One site's half, which a member lets go of: the one contact write
-        // a client still makes (AGL-2804, AGL-2819).
         facets: { [HOST]: { sources: {}, interactions: [] } },
       })
     })
@@ -11863,12 +11968,6 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
         doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
         { screenId: 'screen-1', nodes: { root: { type: 'Text' } } },
       ),
-    )
-    await mustAllow(
-      'a verified owner letting a site go from a contact in the audience',
-      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
-        [`facets.${HOST}`]: deleteField(),
-      }),
     )
     await mustAllow(
       'a verified owner creating the list a campaign sends to',
@@ -11907,12 +12006,6 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
   })
 
   it('refuses the AUDIENCE — contacts, segments, topics, lists and datasets', async () => {
-    await mustDeny(
-      'an unverified owner letting a site go from a contact',
-      updateDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
-        [`facets.${HOST}`]: deleteField(),
-      }),
-    )
     await mustDeny(
       'an unverified owner saving a segment — a campaign audience',
       setDoc(doc(unverified(OWNER), 'orgs', ORG, 'contactSegments', 'seg-new'), {
@@ -12529,6 +12622,135 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
     await mustAllow(
       "an editor's retire of a form with no mirror",
       updateDoc(ref, { archivedAt: Date.now(), retired: true, updatedAt: new Date() }),
+    )
+  })
+})
+
+
+
+/**
+ * CRM SHARING (AGL-3336).
+ *
+ * A manager's share widens `visibleTo`, so a record shared with a site is
+ * READ there by the same `array-contains-any` list every site already sends —
+ * and nothing about who may WRITE it moves unless the share granted edit:
+ * a shared record carries `writeTo`, and a scoped member's update and delete
+ * are admitted against it. `sharing` and `writeTo` are the server's, and the
+ * tokens a share ADDED never count as a holder, so a share can neither keep
+ * a record alive past its last holder nor be undone from a browser.
+ */
+describe('CRM sharing: a share is read where it lands and written only as granted (AGL-3336)', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  const shared = (access) => ({
+    grants: {
+      manual_a: { source: 'manual', tokens: [MINE], access, byUid: OWNER, atMs: 1 },
+    },
+    tokens: [MINE],
+    added: [MINE],
+    ruleIds: [],
+    orgWideHeldBy: [],
+  })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      const createdAt = new Date('2026-09-30T12:00:00Z')
+      // Held by site B, shared read-only with this editor's site.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'shared-read'), {
+        email: 'r@acme.test', hostId: 'host-b', status: 'new', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS], sharing: shared('read'),
+      })
+      // …and one shared with edit.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'shared-edit'), {
+        email: 'e@acme.test', hostId: 'host-b', status: 'new', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS, MINE], sharing: shared('edit'),
+      })
+      // Held by this editor's site, shared out to site B.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'mine-shared-out'), {
+        email: 'm@acme.test', hostId: HOST, status: 'new', createdAt,
+        visibleTo: [MINE, THEIRS], writeTo: [MINE],
+        sharing: { ...shared('read'), tokens: [THEIRS], added: [THEIRS] },
+      })
+      // Held by both sites — a real second holder, the control.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'co-held'), {
+        email: 'c@acme.test', hostId: HOST, status: 'new', createdAt,
+        visibleTo: [MINE, THEIRS],
+      })
+      // Held by site B alone and never shared — invisible here.
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'theirs'), {
+        email: 't@acme.test', hostId: 'host-b', status: 'new', createdAt,
+        visibleTo: [THEIRS],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'deals', 'deal-shared-read'), {
+        title: 'Theirs', hostId: 'host-b', stageId: 's1', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS], sharing: shared('read'),
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'companies', 'company-shared-edit'), {
+        name: 'Theirs Co', hostId: 'host-b', createdAt,
+        visibleTo: [THEIRS, MINE], writeTo: [THEIRS, MINE], sharing: shared('edit'),
+      })
+    })
+  })
+
+  const lead = (uid, id) => doc(authed(uid), 'orgs', ORG, 'leads', id)
+
+  it('lists a record shared with the site on the site’s own scoped query, and not one that is not', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'orgs', ORG, 'leads'),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(
+      snapshot.docs.map((entry) => entry.id).sort(),
+      ['co-held', 'mine-shared-out', 'shared-edit', 'shared-read'],
+    )
+    await assertFails(getDoc(lead(EDITOR, 'theirs')))
+  })
+
+  it('refuses a read-only share’s update from the target site, and admits an edit share’s', async () => {
+    await mustDeny('an update of a read-only share', updateDoc(lead(EDITOR, 'shared-read'), { status: 'working' }))
+    await mustAllow('an update of an edit share', updateDoc(lead(EDITOR, 'shared-edit'), { status: 'working' }))
+    // An org-wide member writes as they always have.
+    await mustAllow('the owner’s update of the read-only share', updateDoc(lead(OWNER, 'shared-read'), { status: 'working' }))
+    await mustDeny(
+      'a read-only deal share’s update',
+      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read'), { stageId: 's2' }),
+    )
+    await mustAllow(
+      'an edit company share’s update',
+      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'companies', 'company-shared-edit'), { name: 'Renamed' }),
+    )
+  })
+
+  it('keeps `sharing` and `writeTo` the server’s, for every client', async () => {
+    await mustDeny('widening writeTo from the target', updateDoc(lead(EDITOR, 'shared-edit'), { writeTo: ['org'] }))
+    await mustDeny('an owner dropping the grants', updateDoc(lead(OWNER, 'shared-read'), { sharing: deleteField() }))
+    await mustDeny('an owner setting writeTo', updateDoc(lead(OWNER, 'co-held'), { writeTo: [MINE] }))
+    await mustDeny(
+      'a deal created with a grant',
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-new'), {
+        title: 'New', hostId: HOST, stageId: 's1', visibleTo: [MINE],
+        sharing: shared('edit'),
+      }),
+    )
+  })
+
+  it('never counts a site a record was shared with as a holder', async () => {
+    // A share out does not stop the holding site's delete (a contact's is
+    // the server's since AGL-3338, and counts holders the same way)…
+    await mustAllow('deleting a lead held here and shared out', deleteDoc(lead(EDITOR, 'mine-shared-out')))
+    // …while a real second holder still does (the control)…
+    await mustDeny('deleting a lead another site also holds', deleteDoc(lead(EDITOR, 'co-held')))
+    // …and the target site cannot delete what was only shared with it.
+    await mustDeny('deleting a read-only share from the target', deleteDoc(lead(EDITOR, 'shared-read')))
+    await mustDeny(
+      'deleting a read-only deal share from the target',
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read')),
     )
   })
 })

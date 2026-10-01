@@ -148,7 +148,7 @@ export function validateExperiment(
     (experiment.target === 'screen' || experiment.target === 'section') &&
     !experiment.screenId?.trim()
   ) {
-    return 'Pick the screen under test'
+    return 'Pick the page under test'
   }
   if (experiment.autoWinner) {
     const { minExposures, confidence } = experiment.autoWinner

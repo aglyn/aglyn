@@ -239,7 +239,6 @@ let consoleError: jest.SpyInstance
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
-  delete process.env.USAGE_ALERT_APPROACH_PCT
   delete process.env.AUTO_LOCK_BILLING_FROM
   resetUsageAlertContributorsForTests()
   orgStore = {}

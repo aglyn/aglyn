@@ -25,6 +25,11 @@ import PluginReviewsSurface from './components/plugin-reviews-surface.component'
 import MarketplacePaymentsNotice from './components/marketplace-payments-notice.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
+import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
+import PluginInstallStatus from './components/plugin-install-status.component'
+import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
+import TemplateGalleryShelf from './components/template-gallery-shelf.component'
+import TemplateInstallStatus from './components/template-install-status.component'
 import PublishArtifactDialog from './components/publish-artifact-dialog.component'
 import { MarketplaceListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -74,6 +79,43 @@ export function registerMarketplaceConsole(): void {
         slot: 'hostArtifactPublish',
         widgetId: 'marketplace-publish-artifact',
         Component: PublishArtifactDialog,
+      },
+      // The workspace's Plugins page and an installation's own page
+      // (AGL-3080). The shell owns both pages and the built-in half of the
+      // inventory; what this plugin installed — its pins, whether a newer
+      // version may be installed, whether a kill switch is thrown — is read
+      // from this plugin's own collections, so this plugin draws it.
+      {
+        slot: 'orgPluginInstalls',
+        widgetId: 'marketplace-org-plugin-installs',
+        Component: OrgPluginInstallsCard,
+      },
+      {
+        slot: 'pluginInstallStatus',
+        widgetId: 'marketplace-plugin-install-status',
+        Component: PluginInstallStatus,
+      },
+      // The staff overview (AGL-3080): recent purchases and the
+      // refund-reversal recovery queue, from this plugin's own purchases.
+      {
+        slot: 'staffOverview',
+        widgetId: 'marketplace-staff-overview',
+        Component: StaffMarketplaceOverview,
+      },
+      // A site's templates (AGL-3080). The gallery and the library are the
+      // shell's; the site templates this plugin lists, the route that
+      // installs one, and whether a template it installed has a newer
+      // version are read from this plugin's listings, so this plugin draws
+      // them: a shelf of the gallery, and a chip on the library's row.
+      {
+        slot: 'templateGallery',
+        widgetId: 'marketplace-template-gallery',
+        Component: TemplateGalleryShelf,
+      },
+      {
+        slot: 'templateInstallStatus',
+        widgetId: 'marketplace-template-install-status',
+        Component: TemplateInstallStatus,
       },
     ],
     /**

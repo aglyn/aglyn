@@ -65,7 +65,7 @@ const ALLOWED = new Map<string, string>([
   // and re-captured under a new version, that snapshot must NOT need this
   // exemption; do not widen this entry to the whole legal directory.
   [
-    'libs/aglyn/src/lib/app-utils/legal/publisher-agreement/2026-08-14.1/marketplace-publisher-agreement.txt',
+    'libs/plugins/marketplace/src/lib/model/legal/publisher-agreement/2026-08-14.1/marketplace-publisher-agreement.txt',
     'Verbatim capture of the published page; the live page carries the stale name — AGL-1840.',
   ],
   // ---- The forum. This is the meaning the rename exists to protect. ----
@@ -400,8 +400,19 @@ describe('the marketplace no longer calls itself community (AGL-975)', () => {
     expect(entry?.package).toBe('@aglyn/plugins-marketplace')
 
     for (const exported of Object.values(entry?.register ?? {})) {
+      // Each register surface has its own entry file: the API registrars in
+      // `server.ts`, the boot declarations in `declarations.server.ts`, the
+      // plan figures the manifest generator compiles in
+      // `plan-entitlements.ts`, the console registrars in `plugin.ts`.
+      const file = exported.endsWith('Api')
+        ? 'server.ts'
+        : exported.endsWith('ServerDeclarations')
+          ? 'declarations.server.ts'
+          : exported.endsWith('PlanEntitlements')
+            ? 'plan-entitlements.ts'
+            : 'plugin.ts'
       const source = readFileSync(
-        join(REPO_ROOT, 'libs/plugins/marketplace/src/lib', exported.endsWith('Api') ? 'server.ts' : 'plugin.ts'),
+        join(REPO_ROOT, 'libs/plugins/marketplace/src/lib', file),
         'utf8',
       )
       expect(`${exported}: ${source.includes(`export function ${exported}(`)}`).toBe(

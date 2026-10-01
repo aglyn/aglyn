@@ -21,7 +21,7 @@ import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fiel
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
-import { AI_BUILD_PLAN_LIMITS, type AiBuildPlanScreen } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_LIMITS, aiPlanEmbedsFor, type AiBuildPlanScreen } from '../model/ai-build-plan'
 import {
   AI_PAGE_CREATE_KINDS,
   aiPageCreationRefusal,
@@ -522,7 +522,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const reusableComponents = checkEntitlement(org, 'reusableComponents')
     // A link may take a visitor to a section of this page, by its name in the plan (AGL-3097).
     const sections = screen.sections.map((section) => section.name)
-    const context = aiPageCheckContext(inventory, { reusableComponents, sections })
+    // A third-party player the confirmed plan lists for this page is the only one it may embed (AGL-3433).
+    const embeds = aiPlanEmbedsFor(plan, { slug: screen.slug })
+    const context = aiPageCheckContext(inventory, { reusableComponents, sections, embeds })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {

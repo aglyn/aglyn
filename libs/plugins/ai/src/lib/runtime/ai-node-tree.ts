@@ -49,7 +49,7 @@ import {
   isAiComponentPropToken,
 } from './ai-component-bindings'
 
-import { sanitizeMarketplaceDefinition } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
+import { sanitizePortableDefinition } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
 /**
  * The one path an AI-emitted node tree takes into storage (AGL-2905).
@@ -508,7 +508,7 @@ function sanitizeString(
     case 'screen': {
       if (screenIds ? !screenIds.has(value) : !SCREEN_ID.test(value)) {
         repairs.push(
-          `${nodeId}.${name} names a screen this site does not have; dropped`,
+          `${nodeId}.${name} names a page this site does not have; dropped`,
         )
         return undefined
       }
@@ -1069,7 +1069,7 @@ function validate(
     refs.componentIds && INSTANCE_SURFACES.has(surface)
       ? [...definition.allow, REUSABLE_INSTANCE_COMPONENT_ID]
       : definition.allow
-  const sanitized = sanitizeMarketplaceDefinition(
+  const sanitized = sanitizePortableDefinition(
     { rootId, nodes: forSanitizer },
     { componentIds: allow },
   )

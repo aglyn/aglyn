@@ -37,6 +37,7 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { crmClientListFields } from '../model/crm-list-query'
+import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 /** The list field a campaign filing moves (AGL-3321). */
 const LEAD_CAMPAIGN_LIST_FIELDS = ['scopedCampaignIds'] as const
@@ -113,6 +114,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
   // The lead's collection is the org's now (AGL-3275); the site still names
   // the surface, and the scope hook resolves the org from it.
   const { orgId } = useCrmScope({ hostId })
+  const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const stored = readCampaignIds(lead)
@@ -155,6 +157,8 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
       },
     )
     setSaving(false)
+    // A rule may share by campaign (AGL-3336).
+    if (verdict.ok) followUpSharing('leads', [leadId])
     if (!verdict.ok) {
       enqueueSnackbar(verdict.message ?? 'The filing could not be saved.', { variant: 'warning' })
       return

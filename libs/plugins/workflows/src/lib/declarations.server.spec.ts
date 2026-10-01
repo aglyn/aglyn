@@ -55,6 +55,13 @@ jest.mock('./engine/run-event-actions', () => ({
     (mockRunSingleAction as (...a: unknown[]) => unknown)(...args),
 }))
 
+import { VARIABLE_COMPUTERS } from '@aglyn/aglyn/plugin-manager/computed-variables'
+import { PLUGIN_DEPENDENTS_SOURCES } from '@aglyn/aglyn/plugin-manager/plugin-dependents'
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import {
+  resetPluginServicesForTests,
+  resolvePluginServices,
+} from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
   dispatchHostAutomation,
@@ -68,6 +75,7 @@ const REPO_ROOT = join(__dirname, '../../../../..')
 
 beforeEach(() => {
   resetHostEventListenersForTests()
+  resetPluginServicesForTests()
   mockRunEventAutomations.mockClear()
   mockRunSingleAction.mockClear()
 })
@@ -82,6 +90,32 @@ describe('the server declarations', () => {
     registerWorkflowsServerDeclarations()
     registerWorkflowsServerDeclarations()
     expect(listHostEventListeners()).toEqual([BUNDLE_ID])
+  })
+
+  it('publish the workflow, webhook and action indexes as this plugin’s (AGL-3080)', () => {
+    registerWorkflowsServerDeclarations()
+    expect(pluginRecordIndex('workflow')?.pluginId).toBe(BUNDLE_ID)
+    expect(pluginRecordIndex('webhook')?.pluginId).toBe(BUNDLE_ID)
+    expect(pluginRecordIndex('action')?.pluginId).toBe(BUNDLE_ID)
+    // Registering again — boot, then an API register function — refuses nothing.
+    expect(() => registerWorkflowsServerDeclarations()).not.toThrow()
+  })
+
+  it('answer the "Used by" scan for a function, once however often they run (AGL-3080)', () => {
+    registerWorkflowsServerDeclarations()
+    registerWorkflowsServerDeclarations()
+    const sources = resolvePluginServices(PLUGIN_DEPENDENTS_SOURCES)
+    expect(sources.map(({ pluginId, impl }) => [pluginId, impl.kinds])).toEqual([
+      [BUNDLE_ID, ['function']],
+    ])
+  })
+
+  it('compute the site variables a workflow backs, once however often they run (AGL-3080)', () => {
+    registerWorkflowsServerDeclarations()
+    registerWorkflowsServerDeclarations()
+    expect(resolvePluginServices(VARIABLE_COMPUTERS).map(({ pluginId }) => pluginId)).toEqual([
+      BUNDLE_ID,
+    ])
   })
 
   it('carry an event raised by the runtime to the engine, and its alerts back', async () => {

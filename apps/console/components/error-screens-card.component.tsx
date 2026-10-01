@@ -167,12 +167,12 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
       })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) {
-        enqueueSnackbar(result?.error ?? 'Could not set the error screen', {
+        enqueueSnackbar(result?.error ?? 'Could not set the error page', {
           variant: 'error',
         })
         return
       }
-      enqueueSnackbar(value ? 'Error screen set' : 'Error screen cleared', {
+      enqueueSnackbar(value ? 'Error page set' : 'Error page cleared', {
         variant: 'success',
         persist: false,
       })
@@ -192,7 +192,7 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
     async (screenId: string) => {
       await unpublishScreenRoute(firestore, { hostId, screenId, user })
       enqueueSnackbar(
-        'Address removed — this screen no longer counts against your plan',
+        'Address removed — this page no longer counts against your plan',
         { variant: 'success', persist: false },
       )
     },
@@ -233,7 +233,7 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
       enqueueSnackbar(
         enabled
           ? landed
-            ? 'Maintenance mode on — visitors see the 503 screen'
+            ? 'Maintenance mode on — visitors see the 503 page'
             : 'Maintenance mode on — live pages may take a few minutes to switch over'
           : landed
             ? 'Maintenance mode off'
@@ -253,21 +253,21 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
       header="Error pages"
       help={docsHelp('errorScreens', {
         excerpt:
-          'Assign a designed screen per status code — the maintenance ' +
-          'toggle shows the 503 screen everywhere while it is on.',
+          'Assign a designed page per status code — the maintenance ' +
+          'toggle shows the 503 page everywhere while it is on.',
       })}
       contentGutterX
       contentGutterY
     >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {'Design these like any screen, then assign them here. Assigned ' +
-          'screens are kept out of search results, and they do not count ' +
-          'against your plan\u2019s screen allowance.'}
+        {'Design these like any page, then assign them here. Assigned ' +
+          'pages are kept out of search results, and they do not count ' +
+          'against your plan\u2019s page allowance.'}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {'Leave a slot on the built-in fallback and visitors still get a ' +
           'page under your theme, carrying your logo, links to your public ' +
-          'top-level pages and site search — but only a screen you design ' +
+          'top-level pages and site search — but only a page you design ' +
           'here can show the header, navigation and footer you built.'}
       </Typography>
       <Stack spacing={2}>
@@ -318,9 +318,9 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
                     </Button>
                   }
                 >
-                  {`This screen is also published at ${
+                  {`This page is also published at ${
                     routedAt === '/' ? '/' : `/${routedAt}`
-                  }, so it still counts against your screen allowance. ` +
+                  }, so it still counts against your page allowance. ` +
                     'Remove its address and it stops counting — it will ' +
                     'still render for this status.'}
                 </Alert>
@@ -338,7 +338,7 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
               }
             />
           }
-          label="Maintenance mode — show the 503 screen on every page"
+          label="Maintenance mode — show the 503 page at every address"
         />
       </Stack>
     </CardDisplay>

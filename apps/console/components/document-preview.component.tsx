@@ -23,7 +23,7 @@ import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 // resolver is not on the client barrel, and the besigner editors reach it by
 // this same path. One resolver for every surface that draws a site's
 // appearance, so a fallback preview cannot style differently from the editor.
-import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 // Deep import for the same reason as `consent-banner-ui` above (AGL-2486):
 // the plugin-manager barrel is server-reachable and this hook is not.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
@@ -84,7 +84,7 @@ const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
 export const DEFINITIONS_TIMEOUT_MS = 8000
 
 const KIND_LABEL: Record<PreviewKind, string> = {
-  screen: 'screen',
+  screen: 'page',
   component: 'component',
   layout: 'layout',
   template: 'template',

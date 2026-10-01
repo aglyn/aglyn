@@ -19,7 +19,13 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
 } from '@aglyn/aglyn/app-utils/reusable-component-keys'
-import type { AiBuildPlanCreate, AiBuildPlanCreateKind } from '../model/ai-build-plan'
+import {
+  AI_BUILD_PLAN_EMBED_HOST_NAMES,
+  AI_PLAN_NEW_REF_PREFIX,
+  isAiPlanNewRef,
+  type AiBuildPlanCreate,
+  type AiBuildPlanCreateKind,
+} from '../model/ai-build-plan'
 import type {
   AiJob,
   AiJobOutput,
@@ -88,7 +94,7 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
   if (!plan) return []
   const lines = ['Confirmed plan:']
   for (const entry of plan.reuse) {
-    lines.push(`- reuse the ${entry.kind} ${referenceOf(plan, entry.id)}: ${entry.purpose}`)
+    lines.push(`- reuse the ${entry.kind === 'screen' ? 'page' : entry.kind} ${referenceOf(plan, entry.id)}: ${entry.purpose}`)
   }
   for (const entry of plan.create) {
     const from = entry.duplicateOf ? `, from a copy of ${referenceOf(plan, entry.duplicateOf)}` : ''
@@ -97,7 +103,15 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
   }
   for (const screen of plan.screens) {
     const sections = screen.sections.map((section) => section.name).join(', ')
-    lines.push(`- the screen "${screen.title}" at ${screen.slug}${sections ? `: ${sections}` : ''}`)
+    lines.push(`- the page "${screen.title}" at ${screen.slug}${sections ? `: ${sections}` : ''}`)
+  }
+  // The one place a Video embed is admitted (AGL-3433): where the plan lists it, at the brief's link or none.
+  for (const embed of plan.embeds ?? []) {
+    const where = isAiPlanNewRef(embed.where)
+      ? `the component "${embed.where.slice(AI_PLAN_NEW_REF_PREFIX.length)}"`
+      : embed.where
+    const link = embed.url ? `, url ${embed.url}` : ', url left empty for the site owner to paste'
+    lines.push(`- embed a ${AI_BUILD_PLAN_EMBED_HOST_NAMES[embed.host]} player (videoEmbed) on ${where}${link}`)
   }
   return lines.length > 1 ? lines : []
 }

@@ -196,7 +196,7 @@ between those elements is whatever you build.
 ## Where-used & safety
 
 Before you rename or delete a variable or function, run the **where-used scan** to see
-every screen and prop that references it, so changes are safe.
+every page and prop that references it, so changes are safe.
 
 ## Workflows
 

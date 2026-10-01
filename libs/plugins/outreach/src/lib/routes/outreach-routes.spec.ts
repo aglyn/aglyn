@@ -34,6 +34,7 @@ import { outreachLocalDay } from '../mailboxes/mailbox-settings'
 import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.types'
 import { FakeGmail } from '../runtime/fixtures/fake-gmail'
 import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
+import { gmailApiError, OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE } from '../transport/gmail-errors'
 import { createOutreachDoNotContactDomainsRoute, OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY } from './do-not-contact-routes'
 import { createOutreachCurateRoutes, OUTREACH_CURATION_PURPOSE, outreachCuratedActivity } from './curate-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
@@ -1308,6 +1309,113 @@ describe('outreach/enroll (AGL-2980)', () => {
   })
 })
 
+describe('outreach/enroll at a later step (AGL-3228)', () => {
+  const stored = (sequenceId: string, personId: string) =>
+    docs.get(org(`outreachEnrollments/${sequenceId}_${personId}`)) as Record<string, unknown> | undefined
+
+  it('begins at step 1 when no step is named: nothing skipped, the first step’s delay from now', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { body } = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }] })
+    expect(body.enrolled).toBe(1)
+    const enrollment = stored(sequenceId, 'c-warm')
+    expect(enrollment).toMatchObject({ stepIndex: 0, lastSentAtMs: null })
+    expect(enrollment).not.toHaveProperty('startStepIndex')
+    expect(enrollment).not.toHaveProperty('skippedSteps')
+    // A delay of 0 is the window's next opening: 10:00 on a Tuesday is inside it.
+    expect(new Date(enrollment?.['nextDueAtMs'] as number).toISOString().slice(0, 10)).toBe('2026-09-15')
+    expect(filed.map((entry) => entry.body)).toEqual(['Enrolled in Second locations'])
+  })
+
+  it('begins at the step named for someone who had the earlier ones by hand: those marked skipped, never sent, and that step’s own delay counted from now', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { status, body } = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [{ contactId: 'c-warm' }],
+      startStepIndex: 2,
+    })
+    expect(status).toBe(200)
+    expect(body.results[0]).toMatchObject({ outcome: 'enrolled', enrollmentId: `${sequenceId}_c-warm` })
+    const enrollment = stored(sequenceId, 'c-warm')
+    expect(enrollment).toMatchObject({
+      status: 'active',
+      stepIndex: 2,
+      startStepIndex: 2,
+      skippedSteps: [
+        { stepIndex: 0, stepId: 'step-a', kind: 'email', atMs: AT },
+        { stepIndex: 1, stepId: 'step-b', kind: 'task', atMs: AT },
+      ],
+      // Nothing of ours went out, so there is no thread yet and no send on record…
+      gmailThreadIds: [],
+      threadSubject: null,
+      messageIds: [],
+      // …but the sync watches the mailbox for their reply, bounce or opt-out
+      // from the enrollment on, as it does from a send.
+      lastSentAtMs: AT,
+    })
+    expect(enrollment?.['stepRecords']).toBeUndefined()
+    // Step 3 waits three business days, from Tuesday the 15th: Friday the 18th.
+    expect(new Date(enrollment?.['nextDueAtMs'] as number).toISOString().slice(0, 10)).toBe('2026-09-18')
+    expect(filed.map((entry) => entry.body)).toEqual([
+      'Enrolled in Second locations\nBegan at step 3 — steps 1–2 skipped, already done by hand',
+    ])
+  })
+
+  it('previews and tests the first email sent from the step named, starting the thread under the first email’s subject', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { body } = await post(createOutreachPreviewRoute(deps()), REP, {
+      sequenceId: saved.body.sequence.id,
+      contactId: 'c-warm',
+      startStepIndex: 1,
+    })
+    // Step 2 is a call, so the first email from there is step 3, which
+    // answers nothing of ours and so opens the thread.
+    expect(body.stepIndex).toBe(2)
+    expect(body.subject).toBe('Your second location, Casey')
+    expect(body.text.startsWith('Following up, Casey.')).toBe(true)
+  })
+
+  it('refuses a step past the last, and anything that is not a step’s place, enrolling no one', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const past = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [{ contactId: 'c-warm' }],
+      startStepIndex: 3,
+    })
+    expect(past).toMatchObject({
+      status: 400,
+      body: { reason: 'invalid-start-step', error: "This sequence has 3 steps, so enrolling can't start at step 4." },
+    })
+    for (const startStepIndex of [-1, 1.5, '2']) {
+      const refused = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }], startStepIndex })
+      expect(refused).toMatchObject({ status: 400, body: { reason: 'invalid-start-step' } })
+    }
+    expect(stored(sequenceId, 'c-warm')).toBeUndefined()
+    expect(filed).toEqual([])
+  })
+
+  it('refuses a curated copy of a step the person skips, since it would never be sent', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const refused = await post(enroll().confirm, REP, {
+      sequenceId,
+      startStepIndex: 2,
+      people: [
+        {
+          contactId: 'c-warm',
+          stepOverrides: [{ stepIndex: 0, subject: 'Hello, Casey', body: 'Hi Casey.', source: 'member' }],
+        },
+      ],
+    })
+    expect(refused).toMatchObject({ status: 400, body: { reason: 'invalid-override' } })
+    expect(refused.body.error).toBe('Step 1 is skipped for this person, so it has nothing to curate.')
+    expect(stored(sequenceId, 'c-warm')).toBeUndefined()
+  })
+})
+
 // ── Enrollment actions ──────────────────────────────────────────────────────
 
 describe('outreach/enrollments/action (AGL-2980)', () => {
@@ -1698,6 +1806,54 @@ describe('outreach/steps/test (AGL-3325)', () => {
     })
     expect(refused).toMatchObject({ status: 400, body: { reason: 'invalid-override' } })
     expect(gmail.sent).toHaveLength(1)
+  })
+
+  it('answers a Google refusal about the account with a 4xx, and only an outage with a 502 (AGL-3423)', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    const sequenceId = saved.body.sequence.id
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    gmail.failNextSend = gmailApiError(400, {
+      error: {
+        code: 400,
+        message: 'Mail service not enabled',
+        errors: [{ reason: 'failedPrecondition' }],
+        status: 'FAILED_PRECONDITION',
+      },
+    })
+    const noGmail = await post(test(), REP, { sequenceId })
+    expect(noGmail).toMatchObject({
+      status: 422,
+      body: { reason: 'mail-service-unavailable', error: OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE },
+    })
+
+    gmail.failNextSend = gmailApiError(403, { error: { code: 403, message: 'Delegation denied.', errors: [{ reason: 'forbidden' }] } })
+    const barred = await post(test(), REP, { sequenceId })
+    expect(barred.status).toBe(422)
+    expect(barred.body.reason).toBe('google-refused')
+    expect(barred.body.error).toContain('Delegation denied.')
+
+    gmail.failNextSend = gmailApiError(429, { error: { code: 429, errors: [{ reason: 'rateLimitExceeded' }] } })
+    expect((await post(test(), REP, { sequenceId })).status).toBe(429)
+
+    gmail.failNextSend = gmailApiError(503, { error: { code: 503, message: 'Backend Error' } })
+    const down = await post(test(), REP, { sequenceId })
+    expect(down).toMatchObject({ status: 502, body: { reason: 'google-unavailable' } })
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('step test send'),
+      expect.objectContaining({ code: 'mail_service_unavailable', status: 400, providerReason: 'failedPrecondition' }),
+    )
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('step test send'),
+      expect.objectContaining({ code: 'unavailable', status: 503 }),
+    )
+    // None of these is the grant gone: the mailbox stays connected.
+    expect(fieldOf(docs.get(org(`outreachMailboxes/${MAILBOX}`)), 'status')).not.toBe('reconnect_required')
+    expect(gmail.sent).toHaveLength(0)
+    warn.mockRestore()
+    error.mockRestore()
   })
 
   it('says why the mailbox cannot be opened, and marks it for reconnecting', async () => {

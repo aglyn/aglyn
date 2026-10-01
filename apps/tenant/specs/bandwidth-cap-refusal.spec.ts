@@ -122,6 +122,8 @@ import {
   BANDWIDTH_CAP_CODE,
   bandwidthCapMonthKey,
   bandwidthCapNotice,
+  bandwidthCeilingMonthKey,
+  bandwidthCeilingNotice,
 } from '@aglyn/aglyn/server'
 import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import { GET as lockdownVerdict } from '../app/api/lockdown-verdict/route'
@@ -338,5 +340,50 @@ describe('THE NOTICE PAGE the middleware rewrites to', () => {
     })
     const html = await (await fetchNotice()).text()
     expect(html).not.toContain(bandwidthCapNotice().title)
+  })
+})
+
+describe('THE CEILING at the edge releases on an upgrade too (AGL-3432)', () => {
+  // The host-level abuse ceiling, tripped while the org was on Free. Its
+  // stored `degraded: true` is never rewritten, so the edge verdict and the
+  // notice page have to ask the org's CURRENT plan, as the cap above does.
+  const CEILING = {
+    month: bandwidthCeilingMonthKey(),
+    ceiling: 100_000,
+    used: 150_000,
+    trippedAtMs: 1,
+    degraded: true,
+  }
+  const trippedHost = { ...HOST, bandwidthCeiling: CEILING }
+  const setHost = (host: unknown) => {
+    mockGetHost.mockResolvedValue({ host, error: null })
+    mockGetHostNamed.mockResolvedValue({ host, error: null })
+  }
+  const verdict = async () =>
+    (await (
+      await lockdownVerdict(
+        new Request('https://acme.aglyn.app/api/lockdown-verdict?host=acme'),
+      )
+    ).json()) as Record<string, unknown>
+  const noticeHtml = async () =>
+    (
+      await lockedNotice(
+        new Request('https://acme.aglyn.app/api/locked', {
+          headers: { 'x-aglyn-tenant-host': 'acme' },
+        }),
+      )
+    ).text()
+
+  it('the verdict is contained while the org is on Free', async () => {
+    setHost(trippedHost)
+    expect(await verdict()).toMatchObject({ contained: true })
+    expect(await noticeHtml()).toContain(bandwidthCeilingNotice().body)
+  })
+
+  it('the verdict clears once the org is on a metered plan', async () => {
+    setHost(trippedHost)
+    setOrg({ $id: 'org-1', plan: 'starter', subscription: { status: 'active' } })
+    expect(await verdict()).toMatchObject({ contained: false })
+    expect(await noticeHtml()).not.toContain(bandwidthCeilingNotice().body)
   })
 })

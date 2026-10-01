@@ -40,7 +40,7 @@ jest.mock('../utils/get-host', () => ({
   default: (...args: unknown[]) => mockGetHost(...args),
 }))
 
-jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
+jest.mock('@aglyn/aglyn/app-utils/site-theme', () => ({
   __esModule: true,
   resolveSiteTheme: (site: { theme?: unknown }) => site?.theme,
 }))

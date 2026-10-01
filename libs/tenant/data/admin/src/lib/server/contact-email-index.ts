@@ -200,3 +200,132 @@ export async function findContactByEmail(
   }
   return hit
 }
+
+/** The most values one Firestore `in` filter may carry. */
+const IN_FILTER_LIMIT = 30
+
+/** The most references handed to one `getAll`, and the most writes in one batch. */
+const PAGE_LIMIT = 500
+
+function pagesOf<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let at = 0; at < items.length; at += size) out.push(items.slice(at, at + size))
+  return out
+}
+
+async function getAllPaged(
+  firestore: FirebaseFirestore.Firestore,
+  refs: readonly FirebaseFirestore.DocumentReference[],
+): Promise<FirebaseFirestore.DocumentSnapshot[]> {
+  if (!refs.length) return []
+  const pages = await Promise.all(
+    pagesOf(refs, PAGE_LIMIT).map((page) => firestore.getAll(...page)),
+  )
+  return pages.flat()
+}
+
+/**
+ * {@link findContactByEmail} for a whole file of addresses (AGL-3423).
+ *
+ * The same answer per address — the index first, the contact it names only
+ * if that still exists, the `email` query when the index has nothing — paid
+ * in a number of round trips that does not grow with the file: one `getAll`
+ * of the index entries, one `getAll` of the contacts they name, and one
+ * `in` query per thirty addresses the index missed, every page at once. A
+ * row found by the query gets its index entry the way a single lookup
+ * writes one, in one batch for the whole file.
+ *
+ * Unscoped, like the capture door's own lookup: one human who touched two
+ * sites is one person, and the door decides visibility, not the lookup.
+ *
+ * The map is keyed by normalized address. An address ABSENT from it is one
+ * this call could not answer — its page of the query failed — and a caller
+ * asks {@link findContactByEmail} for it rather than taking it as new;
+ * `null` is an address that resolves to nobody. When the query returns two
+ * documents for one address, the first in document order is the answer, as
+ * `limit(1)` gives the single lookup.
+ */
+export async function findContactsByEmail(
+  contactsRef: FirebaseFirestore.CollectionReference,
+  emails: readonly unknown[],
+): Promise<Map<string, FirebaseFirestore.DocumentSnapshot | null>> {
+  const found = new Map<string, FirebaseFirestore.DocumentSnapshot | null>()
+  const wanted = [
+    ...new Set(
+      emails
+        .map((email) => normalizeContactEmail(email))
+        .filter((email): email is string => !!email),
+    ),
+  ]
+  if (!wanted.length) return found
+  const firestore = contactsRef.firestore
+  const index = emailIndexBeside(contactsRef)
+
+  if (index) {
+    try {
+      const keyed = wanted
+        .map((email) => ({ email, key: personKey(email) }))
+        .filter((entry): entry is { email: string; key: string } => !!entry.key)
+      const entries = await getAllPaged(
+        firestore,
+        keyed.map((entry) => index.doc(entry.key)),
+      )
+      const pointers = keyed
+        .map((entry, at) => ({
+          email: entry.email,
+          contactId: entries[at]?.exists ? String(entries[at].get('contactId') ?? '') : '',
+        }))
+        .filter((pointer) => pointer.contactId)
+      const contacts = await getAllPaged(
+        firestore,
+        pointers.map((pointer) => contactsRef.doc(pointer.contactId)),
+      )
+      pointers.forEach((pointer, at) => {
+        if (contacts[at]?.exists) found.set(pointer.email, contacts[at])
+      })
+    } catch (error) {
+      console.error('[contact-email-index] bulk lookup failed', error)
+    }
+  }
+
+  const missed = wanted.filter((email) => !found.has(email))
+  const repaired: { email: string; contactId: string }[] = []
+  await Promise.all(
+    pagesOf(missed, IN_FILTER_LIMIT).map(async (page) => {
+      try {
+        const snapshot = await contactsRef.where('email', 'in', page).get()
+        for (const doc of snapshot.docs) {
+          const email = String(doc.get('email') ?? '')
+          if (!page.includes(email) || found.get(email)) continue
+          found.set(email, doc)
+          repaired.push({ email, contactId: doc.id })
+        }
+        for (const email of page) if (!found.has(email)) found.set(email, null)
+      } catch (error) {
+        console.error('[contact-email-index] bulk query failed', error)
+      }
+    }),
+  )
+
+  if (index && repaired.length) {
+    try {
+      for (const page of pagesOf(repaired, PAGE_LIMIT)) {
+        const batch = firestore.batch()
+        for (const { email, contactId } of page) {
+          const key = personKey(email)
+          if (!key) continue
+          const entry: ContactEmailIndexEntry & { updatedAt: unknown } = {
+            email,
+            contactId,
+            updatedAt: FieldValue.serverTimestamp(),
+          }
+          batch.set(index.doc(key), entry, { merge: true })
+        }
+        await batch.commit()
+      }
+    } catch (error) {
+      console.error('[contact-email-index] bulk write failed', error)
+    }
+  }
+  return found
+}

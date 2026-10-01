@@ -52,9 +52,12 @@
  * renders what it returns; the spec feeds it fixtures.
  */
 
+import { centsToDollars } from '@aglyn/aglyn/app-utils/tax-jurisdiction-figures'
 import type {
-  MarketplaceTaxSummary,
-  StorefrontTaxSummary,
+  TaxReturnFinding,
+  TaxReturnSection,
+} from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+import type {
   TaxReturnRowFinding,
   TaxReturnSummary,
 } from './server/tx-return'
@@ -67,7 +70,7 @@ import {
   type TaxFilingJurisdiction,
 } from './tax-jurisdictions'
 
-export { TAX_REGISTRATION_UNSET, TX_JURISDICTION }
+export { centsToDollars, TAX_REGISTRATION_UNSET, TX_JURISDICTION }
 
 /**
  * The filer's registration identifiers — OPERATOR CONFIGURATION, never
@@ -258,57 +261,6 @@ export interface TaxReturnRow {
   findings?: TaxReturnRowFinding[]
 }
 
-/** One row of the storefront listing (AGL-1904). */
-export interface StorefrontTaxRow {
-  id: string
-  hostId: string | null
-  orgId: string | null
-  paidAt: string | null
-  taxMode: string | null
-  taxLiability: string | null
-  grossCents: number
-  taxCents: number
-  taxableSalesCents: number
-  state: string | null
-  country: string | null
-}
-
-/**
- * The storefront half of the response (AGL-1904) — tax charged on MERCHANTS'
- * sales, which for a `mode: 'stripe'` store Stripe computes against AGLYN's
- * registrations because the Checkout Session is created on Aglyn's own
- * platform account. Optional so a payload from before AGL-1904 still reads.
- */
-export interface StorefrontTaxSection {
-  summary: StorefrontTaxSummary
-  truncated: boolean
-  undatedRows: number
-  rows: StorefrontTaxRow[]
-}
-
-/** One row of the marketplace listing (AGL-2137). */
-export interface MarketplaceTaxRow {
-  id: string
-  sellerOrgId: string | null
-  createdAt: string | null
-  grossCents: number
-  taxCents: number
-  refundedCents: number
-}
-
-/**
- * The marketplace half of the response (AGL-2137) — the THIRD bucket. Kept
- * apart from Aglyn's own invoices and from merchant storefronts because a
- * marketplace row's gross is mostly the PUBLISHER's money, while the tax on
- * it is charged `exclusive` on the PLATFORM's own charge and stays
- * platform-side. Optional so a payload from before AGL-2137 still reads.
- */
-export interface MarketplaceTaxSection {
-  summary: MarketplaceTaxSummary
-  truncated: boolean
-  rows: MarketplaceTaxRow[]
-}
-
 /** The `/api/admin/tax-return` response. */
 export interface TaxReturnPayload {
   period: string
@@ -332,10 +284,16 @@ export interface TaxReturnPayload {
    * changes nothing about what an unentered period reports.
    */
   taxablePurchases?: TaxablePurchasesEntry | null
-  /** AGL-1904. Absent on a payload predating it. */
-  storefront?: StorefrontTaxSection | null
-  /** AGL-2137. Absent on a payload predating it. */
-  marketplace?: MarketplaceTaxSection | null
+  /**
+   * THE SALES THE OPERATOR FACILITATED FOR OTHERS (AGL-3080): one section per
+   * plugin that sells through the platform's account, each read and worded by
+   * that plugin — or refused, with the reason. Never summed with `summary` or
+   * with each other.
+   *
+   * Absent is NOT "none": a response that carries no list at all read no
+   * source, and the verdict blocks on it. See {@link taxReturnSourceItems}.
+   */
+  sources?: TaxReturnSection[] | null
   /**
    * AGL-2021. The filer's Texas registration, from server-only env on the
    * route. Optional because an unconfigured deployment is a legitimate state,
@@ -344,45 +302,91 @@ export interface TaxReturnPayload {
   registration?: TaxReturnRegistration | null
 }
 
-/**
- * Storefront tax in the FILING jurisdiction that Stripe computed against the
- * platform's own registrations.
- *
- * The one figure that decides whether this period can be filed from the filing
- * lines alone: it is money sitting in the platform's balance under the
- * platform's registration, and it is NOT in `summary`, which sums the
- * platform's own sales only. Deliberately excludes `merchantManual` — a
- * merchant's own configured rate never touched those registrations.
- *
- * Read against the configured jurisdiction rather than Texas, because a
- * hard-coded key answers `0.00` everywhere else — and a zero here is read as
- * "nothing to decide" on the one finding that blocks filing.
- */
-export function storefrontPlatformLiableCents(
-  payload: TaxReturnPayload | null,
-): number {
-  const bucket = payload?.storefront?.summary?.aglynLiable
-  const filing = taxReturnFilingJurisdiction(payload)
-  const figures = bucket?.byJurisdiction?.[filing.code]
-  const cents = Number(figures?.taxCollectedCents ?? 0)
-  return Number.isFinite(cents) ? cents : 0
-}
-
-/** `12345` → `"123.45"`. Dollars, because a return is filed in dollars. */
-export function centsToDollars(cents: unknown): string {
-  const parsed = Number(cents ?? 0)
-  return ((Number.isFinite(parsed) ? parsed : 0) / 100).toFixed(2)
-}
-
 export type TaxReturnAttentionSeverity = 'blocking' | 'review'
 
-export interface TaxReturnAttentionItem {
-  id: string
-  severity: TaxReturnAttentionSeverity
-  count: number
-  label: string
-  /** What it means for the return, and what to do — not a restatement. */
-  detail: string
+/** One finding, the platform's or a source's — the same shape either way. */
+export type TaxReturnAttentionItem = TaxReturnFinding
+
+/** The sections that answered, in the order the return reads them. */
+export function taxReturnAnsweredSources(
+  payload: TaxReturnPayload | null,
+): Array<Extract<TaxReturnSection, { outcome: 'answered' }>> {
+  return (Array.isArray(payload?.sources) ? payload.sources : []).filter(
+    (section): section is Extract<TaxReturnSection, { outcome: 'answered' }> =>
+      section?.outcome === 'answered',
+  )
+}
+
+/**
+ * Every finding the facilitated-sales sources raise, and the ones the
+ * platform raises ABOUT them.
+ *
+ * A source words its own findings; it cannot word its way out of these. A
+ * refused source, a truncated one and one holding rows no period can reach
+ * each BLOCK, because each is a return whose totals are short by an amount
+ * nobody can see — and a payload carrying no list of sources at all read
+ * none of them.
+ */
+function taxReturnSourceItems(payload: TaxReturnPayload): TaxReturnAttentionItem[] {
+  if (!Array.isArray(payload.sources)) {
+    return [
+      {
+        id: 'sourcesUnread',
+        severity: 'blocking',
+        count: 1,
+        label: 'Facilitated sales were not read',
+        detail:
+          'This response carries no list of the sales the platform facilitated ' +
+          'for others, so every one of them is missing from it. Do not file ' +
+          'from this — reload the period.',
+      },
+    ]
+  }
+  return payload.sources.flatMap((section): TaxReturnAttentionItem[] => {
+    if (section?.outcome !== 'answered') {
+      return [
+        {
+          id: `${section?.id ?? 'source'}Unavailable`,
+          severity: 'blocking',
+          count: 1,
+          label: `Sales from the “${section?.pluginId ?? 'unknown'}” plugin were not read`,
+          detail:
+            `${section?.reason ?? ''} None of its sales are in any figure on ` +
+            'this page, so this return is incomplete. Do not file from this.',
+        },
+      ]
+    }
+    return [
+      {
+        id: `${section.id}Truncated`,
+        severity: 'blocking',
+        // A boolean stated as a count, as the platform's own cap is.
+        count: section.truncated ? 1 : 0,
+        label: `${section.name} rows exceeded the row cap`,
+        detail:
+          `The ${section.name.toLowerCase()} figures are a LOWER BOUND — rows ` +
+          'past the cap were not summed. Do not file from this. Narrow the ' +
+          'period, or raise ROW_CAP in the route.',
+      },
+      {
+        id: `${section.id}UndatedRows`,
+        severity: 'blocking',
+        count: Number(section.undatedRows ?? 0),
+        label: `${section.name} rows outside every period`,
+        detail:
+          'These rows carry no readable date, so NO period query can reach ' +
+          'them — they are missing from this return and from every other ' +
+          'one. Fix the rows before filing.',
+      },
+      ...(section.findings ?? []).map((finding) => ({
+        id: finding.id,
+        severity: finding.severity,
+        count: Number(finding.count ?? 0),
+        label: finding.label,
+        detail: finding.detail,
+      })),
+    ]
+  })
 }
 
 /**
@@ -517,124 +521,8 @@ export function taxReturnAttentionItems(
         'Summed at face value with the dollar rows. A return is filed in ' +
         'dollars — convert these before relying on the totals.',
     },
-    {
-      // AGL-1904, and BLOCKING on purpose. Every storefront checkout is
-      // created on Aglyn's own platform account, so a `mode: 'stripe'`
-      // store's shopper is charged tax Stripe computes against AGLYN's
-      // registrations — measured, not inferred. That money is in Aglyn's
-      // balance and is NOT in the Webfile lines below, which sum Aglyn's own
-      // sales only. Filing those lines without deciding what to do with this
-      // figure is exactly the shortfall an auditor finds.
-      //
-      // It states the mechanics and asks for a decision. It does NOT assert a
-      // marketplace-facilitator position — that attaches by operation of law
-      // and belongs to counsel, not to this report.
-      id: 'storefrontAglynLiableTax',
-      severity: 'blocking',
-      count: storefrontPlatformLiableCents(payload),
-      label: `${filing.label} storefront tax collected under Aglyn’s registration`,
-      detail:
-        'Cents. Charged to shoppers on merchants’ storefront sales, computed ' +
-        'by Stripe Tax against THE PLATFORM’s registrations (the session is ' +
-        'created on the platform account), and settled into the platform’s ' +
-        `balance. It is NOT included in ${filing.figuresName} below. Decide ` +
-        'with counsel how it is reported before filing — do not file as if ' +
-        'it were zero.',
-    },
-    {
-      id: 'storefrontUnclassified',
-      severity: 'blocking',
-      count: Number(
-        payload.storefront?.summary?.attention?.rowsUnclassified ?? 0,
-      ),
-      label: 'Storefront rows with an unrecognised tax mode',
-      detail:
-        'Not counted in any storefront bucket, so they are in no figure at ' +
-        'all. Classify them before filing.',
-    },
-    {
-      id: 'storefrontMissingTaxableBase',
-      severity: 'review',
-      count: Number(
-        payload.storefront?.summary?.attention?.rowsMissingTaxableBase ?? 0,
-      ),
-      label: 'Storefront rows with tax but no stated base',
-      detail:
-        'Tax was collected but Stripe’s taxable_amount could not be read, so ' +
-        'the storefront taxable-sales figure understates the base. Re-read ' +
-        'the session in Stripe with the tax breakdown expanded.',
-    },
-    {
-      // AGL-2137, BLOCKING for the same reason the storefront figure is, and
-      // more directly: marketplace checkout adds Stripe Tax `exclusive` on
-      // the PLATFORM's own charge and the publisher's transfer is computed
-      // from the PRE-tax price, so the whole of this tax stays in Aglyn's
-      // balance. It is in no Webfile line below.
-      //
-      // Stated as the PLATFORM TOTAL, with the per-jurisdiction split beside
-      // it in the marketplace figures rather than folded into this count.
-      // Purchases recorded before the webhook stored a jurisdiction state
-      // none and never will (`rowsMissingJurisdiction`), so a "Texas
-      // marketplace tax" figure presented as the whole answer would be a
-      // guess wearing a total's clothes. The total is what every period can
-      // honestly state; the split is what the attributable part of it says.
-      id: 'marketplaceTaxCollected',
-      severity: 'blocking',
-      count: Number(payload.marketplace?.summary?.taxCollectedCents ?? 0),
-      label: 'Marketplace tax collected under Aglyn’s registration',
-      detail:
-        'Cents, net of refunds. Charged on marketplace purchases as an ' +
-        'EXCLUSIVE addition to the platform’s own charge, so none of it went ' +
-        'to the publisher and all of it is in the platform’s balance. It is ' +
-        `NOT in ${filing.figuresName} below. Decide with counsel how it is ` +
-        'reported before filing — do not file as if it were zero.',
-    },
-    {
-      id: 'marketplaceTruncated',
-      severity: 'blocking',
-      count: payload.marketplace?.truncated ? 1 : 0,
-      label: 'Marketplace rows exceeded the row cap',
-      detail:
-        'The marketplace figures are a LOWER BOUND — purchases past the cap ' +
-        'were not summed. Narrow the period, or raise ROW_CAP in the route.',
-    },
-    {
-      id: 'marketplaceOverRefunded',
-      severity: 'blocking',
-      count: Number(
-        payload.marketplace?.summary?.attention?.rowsOverRefunded ?? 0,
-      ),
-      label: 'Marketplace rows refunded past their own charge',
-      detail:
-        'A refund larger than the charge is a data fault. The refunded tax ' +
-        'is clamped so the figure is never netted below zero — which means ' +
-        'these rows may OVERSTATE what was given back. Read them in Stripe.',
-    },
-    {
-      id: 'marketplaceMissingJurisdiction',
-      severity: 'review',
-      count: Number(
-        payload.marketplace?.summary?.attention?.rowsMissingJurisdiction ?? 0,
-      ),
-      label: 'Marketplace rows with no stated jurisdiction',
-      detail:
-        'Their tax cannot be placed in a state, so it is in the marketplace ' +
-        'total and in no state’s figure. Purchases recorded before the ' +
-        'webhook stored a jurisdiction state none permanently — the address ' +
-        'they were taxed from is in Stripe, and copying it back would ' +
-        'attribute a filed period after the fact. Read them there instead.',
-    },
-    {
-      id: 'marketplaceMissingCreatedAt',
-      severity: 'review',
-      count: Number(
-        payload.marketplace?.summary?.attention?.rowsMissingCreatedAt ?? 0,
-      ),
-      label: 'Marketplace rows with no readable date',
-      detail:
-        'Period assignment fell back to the query bounds, so these purchases ' +
-        'may belong to a neighboring period.',
-    },
+    // Every facilitated-sales source, in the order the return reads them.
+    ...taxReturnSourceItems(payload),
     {
       id: 'rowsMissingPaidAt',
       severity: 'review',
@@ -990,6 +878,24 @@ function taxablePurchasesLine(
 }
 
 /**
+ * The facilitated-sales sources' lines beneath the filing figures, worded by
+ * each source for the jurisdiction being filed. A refused source has none —
+ * and its refusal is a blocking finding above them.
+ */
+function taxReturnSourceFilingLines(
+  payload: TaxReturnPayload | null,
+): TaxReturnWebfileLine[] {
+  return taxReturnAnsweredSources(payload).flatMap((section) =>
+    (section.filingLines ?? []).map((line) => ({
+      item: line.item,
+      label: line.label,
+      dollars: line.dollars,
+      note: line.note,
+    })),
+  )
+}
+
+/**
  * The Texas figures, in the order the Webfile form asks for them.
  *
  * Texas only — `byJurisdiction['US-TX']`, never the platform totals. Selling
@@ -1035,35 +941,11 @@ export function taxReturnWebfileLines(
       dollars: payload ? String(tx?.transactionCount ?? 0) : null,
       note: 'Invoices in the period with a Texas billing address.',
     },
-    {
-      // AGL-1904. Stated as its own line rather than folded into Item 1 or 2:
-      // this report does not decide how storefront receipts are reported, and
-      // adding them to a Webfile item would be deciding it silently.
-      item: '—',
-      label: 'Texas storefront tax under Aglyn’s registration (NOT in Items 1–3)',
-      dollars: payload
-        ? centsToDollars(storefrontPlatformLiableCents(payload))
-        : null,
-      note:
-        'Collected from shoppers on merchants’ sales and held in Aglyn’s ' +
-        'balance. Excluded from every item above. Its treatment on the ' +
-        'return is a question for counsel — see AGL-1904.',
-    },
-    {
-      item: '—',
-      label: 'Texas storefront tax under the MERCHANT’s own rate (not Aglyn’s)',
-      dollars: payload
-        ? centsToDollars(
-            payload.storefront?.summary?.merchantManual?.byJurisdiction?.[
-              TX_JURISDICTION
-            ]?.taxCollectedCents ?? 0,
-          )
-        : null,
-      note:
-        'A manual-mode store’s own configured rate. Aglyn’s registrations ' +
-        'played no part in computing it. Shown so it is visibly NOT the line ' +
-        'above — the two must never be added together.',
-    },
+    // Each facilitated-sales source's own lines, stated beside the form
+    // items and never folded into one: this report does not decide how a
+    // facilitated sale is reported, and adding it to an item would be
+    // deciding it silently.
+    ...taxReturnSourceFilingLines(payload),
   ]
 }
 
@@ -1117,32 +999,7 @@ export function taxReturnBreakdownLines(
       dollars: payload ? String(figures?.transactionCount ?? 0) : null,
       note: `Invoices in the period with a ${filing.code} billing address.`,
     },
-    {
-      item: '—',
-      label: `${filing.code} storefront tax under the platform’s registration (NOT in the figures above)`,
-      dollars: payload
-        ? centsToDollars(storefrontPlatformLiableCents(payload))
-        : null,
-      note:
-        'Collected from shoppers on merchants’ sales and held in the ' +
-        'platform’s balance. Excluded from every figure above. Its treatment ' +
-        'on the return is a question for the operator’s own counsel.',
-    },
-    {
-      item: '—',
-      label: `${filing.code} storefront tax under the MERCHANT’s own rate`,
-      dollars: payload
-        ? centsToDollars(
-            payload.storefront?.summary?.merchantManual?.byJurisdiction?.[
-              filing.code
-            ]?.taxCollectedCents ?? 0,
-          )
-        : null,
-      note:
-        'A manual-mode store’s own configured rate. The platform’s ' +
-        'registrations played no part in computing it. Shown so it is ' +
-        'visibly NOT the line above — the two must never be added together.',
-    },
+    ...taxReturnSourceFilingLines(payload),
   ]
 }
 
@@ -1330,283 +1187,38 @@ function csvCell(value: unknown): string {
 }
 
 /**
- * THE THREE BUCKETS, as rows to render (AGL-2163).
- *
- * `/api/admin/tax-return` computes three separate sets of figures and the
- * screen showed one — the storefront bucket (AGL-1904) reached the page only
- * as an attention count and two Webfile footnotes, and the marketplace bucket
- * (AGL-2137) did not reach it at all. Two of the three buckets a human files
- * this return from existed only in a JSON response nobody sees, which is the
- * same "reachable only by curling a route is not shipped" rule this page was
- * raised under.
- *
- * NO GRAND TOTAL, ever, and that is the whole reason these are three tables
- * and not one. `aglynLiable` is money Aglyn holds under Aglyn's own
- * registrations; `merchantManual` is a merchant's own configured rate that
- * never touched them; marketplace tax is a third thing again. A reader who
- * adds them has made precisely the mistake the response shape exists to
- * prevent, so nothing here offers a column that invites it.
+ * The CSV rows of every facilitated-sales block placed at `placement`, each
+ * followed by the blank row that separates blocks — and, after the working
+ * papers, a block for each REFUSED source, so the file a return is filed from
+ * says which sales it does not contain.
  */
-export interface TaxBucketRow {
-  id: string
-  label: string
-  /** Who owes it — the sentence that decides whether it is on this return. */
-  liability: string
-  transactionCount: number
-  grossDollars: string
-  taxableSalesDollars: string
-  taxCollectedDollars: string
-  /** True when this row is money in Aglyn's balance under its registration. */
-  aglynLiable: boolean
-}
-
-/** The storefront section's three liability buckets (AGL-1904). */
-export function taxReturnStorefrontRows(
-  payload: TaxReturnPayload | null,
-): TaxBucketRow[] {
-  const summary = payload?.storefront?.summary
-  if (!summary) return []
-  const buckets: Array<{
-    id: keyof Pick<
-      StorefrontTaxSummary,
-      'aglynLiable' | 'merchantManual' | 'connectedAccountLiable'
-    >
-    label: string
-    liability: string
-    aglynLiable: boolean
-  }> = [
-    {
-      id: 'aglynLiable',
-      label: 'Computed against Aglyn’s registrations',
-      liability:
-        'In Aglyn’s balance. Stripe Tax computed it on Aglyn’s platform account.',
-      aglynLiable: true,
-    },
-    {
-      id: 'merchantManual',
-      label: 'Merchant’s own configured rate',
-      liability:
-        'The merchant’s. It never touched an Aglyn registration and is not Aglyn’s to remit.',
-      aglynLiable: false,
-    },
-    {
-      id: 'connectedAccountLiable',
-      label: 'Stripe Tax named the connected account liable',
-      liability: 'The connected account’s. Empty today.',
-      aglynLiable: false,
-    },
-  ]
-  return buckets.map((bucket) => {
-    const figures = summary[bucket.id]
-    return {
-      id: bucket.id,
-      label: bucket.label,
-      liability: bucket.liability,
-      transactionCount: Number(figures?.transactionCount ?? 0),
-      grossDollars: centsToDollars(figures?.grossCents),
-      taxableSalesDollars: centsToDollars(figures?.taxableSalesCents),
-      taxCollectedDollars: centsToDollars(figures?.taxCollectedCents),
-      aglynLiable: bucket.aglynLiable,
-    }
-  })
-}
-
-/** One state's facilitated storefront sales, for the nexus question. */
-export interface TaxReturnFacilitatedJurisdictionRow {
-  jurisdiction: string
-  /** True for the one jurisdiction this deployment files a return in. */
-  isFilingJurisdiction: boolean
-  transactionCount: number
-  totalSalesDollars: string
-  taxCollectedDollars: string
-  /** The part of `taxCollectedDollars` Aglyn holds and must remit. */
-  aglynLiableTaxDollars: string
-  /** True when NO tax was collected on any sale into this state. */
-  untaxed: boolean
-}
-
-/**
- * FACILITATED SALES BY STATE — the economic-nexus question (AGL-1956).
- *
- * Aglyn is a marketplace facilitator, so the question a state asks is "how much
- * did you facilitate INTO this state, and in how many transactions" — not "how
- * much tax did you collect there". A state Aglyn is not registered in collects
- * nothing by definition, which is exactly why collection cannot be the
- * measure: the states worth watching are the ones showing $0 tax and a rising
- * sales figure.
- *
- * So this SUMS the three liability buckets per jurisdiction. That is not a
- * violation of the rule that `platformRevenue` and `storefrontTaxCollected`
- * must never be summed — that rule is about two different COLLECTIONS
- * describing two different taxpayers' money, and it still holds: nothing here
- * touches `payload.summary`, which is Aglyn's own SaaS revenue. Within the
- * storefront collection the buckets differ only in WHO REMITS, and a nexus
- * threshold counts the sale whoever remits it.
- *
- * Who remits is still carried, per row, as `aglynLiableTaxDollars` — because
- * the two questions ("do we have nexus here" and "what do we owe here") are
- * answered off the same rows and must not be allowed to blur into each other.
- *
- * ⚠️ This is a LOWER BOUND, and deliberately so rather than silently:
- * `storefront-tax-record.ts` files no row at all for a sale whose `taxMode`
- * resolves to `none`, so a wholly untaxed storefront sale is invisible here.
- * That is the population nexus detection most needs, and closing it is a
- * write-side change recorded on AGL-1956 rather than smuggled into a report.
- * The filing jurisdiction does not depend on any of this — a filer registered
- * where it is established has no in-state threshold left to cross, so that
- * obligation is unconditional whatever this table says.
- */
-export function taxReturnFacilitatedJurisdictionRows(
-  payload: TaxReturnPayload | null,
-): TaxReturnFacilitatedJurisdictionRow[] {
-  const summary = payload?.storefront?.summary
-  if (!summary) return []
-  const filing = taxReturnFilingJurisdiction(payload)
-  const totals = new Map<
-    string,
-    { count: number; salesCents: number; taxCents: number; aglynCents: number }
-  >()
-  const buckets: Array<['aglynLiable' | 'merchantManual' | 'connectedAccountLiable', boolean]> =
-    [
-      ['aglynLiable', true],
-      ['merchantManual', false],
-      ['connectedAccountLiable', false],
-    ]
-  for (const [id, aglynLiable] of buckets) {
-    const byJurisdiction = summary[id]?.byJurisdiction ?? {}
-    for (const [jurisdiction, figures] of Object.entries(byJurisdiction)) {
-      const entry = totals.get(jurisdiction) ?? {
-        count: 0,
-        salesCents: 0,
-        taxCents: 0,
-        aglynCents: 0,
-      }
-      const taxCents = Number(figures?.taxCollectedCents ?? 0)
-      entry.count += Number(figures?.transactionCount ?? 0)
-      entry.salesCents += Number(figures?.totalSalesCents ?? 0)
-      entry.taxCents += taxCents
-      if (aglynLiable) entry.aglynCents += taxCents
-      totals.set(jurisdiction, entry)
-    }
+function taxReturnSourceExportRows(
+  payload: TaxReturnPayload,
+  placement: 'jurisdictions' | 'sections',
+): string[][] {
+  if (!Array.isArray(payload.sources)) {
+    return placement === 'sections'
+      ? [
+          ['Facilitated sales — NOT READ'],
+          ['This response carries no list of facilitated-sales sources. Do not file from this.'],
+          [],
+        ]
+      : []
   }
-  return [...totals.entries()]
-    .map(([jurisdiction, entry]) => ({
-      jurisdiction,
-      isFilingJurisdiction: jurisdiction === filing.code,
-      transactionCount: entry.count,
-      totalSalesDollars: centsToDollars(entry.salesCents),
-      taxCollectedDollars: centsToDollars(entry.taxCents),
-      aglynLiableTaxDollars: centsToDollars(entry.aglynCents),
-      untaxed: entry.taxCents === 0,
-    }))
-    .sort(
-      (a, b) =>
-        // The filing jurisdiction first — it is the one obligation that does
-        // not wait on a threshold — then by the figure a threshold is
-        // actually measured against.
-        Number(b.isFilingJurisdiction) - Number(a.isFilingJurisdiction) ||
-        Number(b.totalSalesDollars) - Number(a.totalSalesDollars) ||
-        a.jurisdiction.localeCompare(b.jurisdiction),
-    )
-}
-
-/** One label/value line of the marketplace figures (AGL-2137). */
-export interface TaxFigureLine {
-  label: string
-  value: string
-  note: string
-}
-
-/**
- * The marketplace bucket's figures (AGL-2137).
- *
- * Charged and refunded are stated ALONGSIDE the net, never folded into it:
- * "we charged X and gave back Y" is the sentence a return needs, and a single
- * number that could be either is what this shape refuses to print.
- */
-export function taxReturnMarketplaceLines(
-  payload: TaxReturnPayload | null,
-): TaxFigureLine[] {
-  const summary = payload?.marketplace?.summary
-  if (!summary) return []
-  const filing = taxReturnFilingJurisdiction(payload)
-  const figuresLine = filing.form === 'tx-webfile' ? 'Webfile' : 'breakdown'
-  return [
-    {
-      label: 'Purchases in period',
-      value: String(Number(summary.transactionCount ?? 0)),
-      note: 'Rows swept from marketplacePurchases.',
-    },
-    {
-      label: 'Gross paid by buyers',
-      value: `$${centsToDollars(summary.grossCents)}`,
-      note: 'Tax included, and mostly the publisher’s money — not Aglyn revenue.',
-    },
-    {
-      label: 'Taxable base',
-      value: `$${centsToDollars(summary.taxableSalesCents)}`,
-      note: 'Gross less tax.',
-    },
-    {
-      label: 'Tax charged',
-      value: `$${centsToDollars(summary.taxChargedCents)}`,
-      note: 'Added EXCLUSIVE on the platform’s own charge; the publisher’s transfer is computed pre-tax.',
-    },
-    {
-      label: 'Tax refunded',
-      value: `$${centsToDollars(summary.taxRefundedCents)}`,
-      note: 'Pro rata against each row’s own gross. Never remitted.',
-    },
-    {
-      label: 'Tax collected, net',
-      value: `$${centsToDollars(summary.taxCollectedCents)}`,
-      note: `The remittable figure — and it is in NO ${figuresLine} line above.`,
-    },
-    // WHERE THAT FIGURE IS OWED. The total above is the only number every
-    // period can state, because rows recorded before the webhook stored a
-    // jurisdiction have none and are not given one. These lines say how much
-    // of it CAN be placed, and `unknown` says how much cannot — stated as its
-    // own line rather than dropped, so the split always sums to the total.
-    ...marketplaceJurisdictionLines(summary, filing.code),
-  ]
-}
-
-/**
- * The marketplace tax split by jurisdiction, one line each (AGL-2137).
- *
- * Filing jurisdiction first — it is the one obligation that does not wait on
- * a threshold — then dearest first, and `unknown` last wherever it falls.
- * `unknown` is deliberately not sorted among the states: it is not a place,
- * it is the part of the total that has none.
- */
-function marketplaceJurisdictionLines(
-  summary: MarketplaceTaxSummary,
-  filingCode: string,
-): TaxFigureLine[] {
-  const entries = Object.entries(summary.byJurisdiction ?? {})
-  if (entries.length === 0) return []
-  return entries
-    .sort(
-      ([aKey, aFigures], [bKey, bFigures]) =>
-        Number(bKey !== 'unknown') - Number(aKey !== 'unknown') ||
-        Number(bKey === filingCode) - Number(aKey === filingCode) ||
-        Number(bFigures?.taxCollectedCents ?? 0) -
-          Number(aFigures?.taxCollectedCents ?? 0) ||
-        aKey.localeCompare(bKey),
-    )
-    .map(([jurisdiction, figures]) => ({
-      label:
-        jurisdiction === 'unknown'
-          ? 'Tax collected — no stated jurisdiction'
-          : `Tax collected — ${jurisdiction}`,
-      value: `$${centsToDollars(figures?.taxCollectedCents)}`,
-      note:
-        jurisdiction === 'unknown'
-          ? `${Number(figures?.transactionCount ?? 0)} purchase(s) that state no jurisdiction. In the total above and in no state’s figure.`
-          : `${Number(figures?.transactionCount ?? 0)} purchase(s), $${centsToDollars(figures?.totalSalesCents)} of sales excluding tax.${
-              jurisdiction === filingCode ? ' The filing jurisdiction.' : ''
-            }`,
-    }))
+  return payload.sources.flatMap((section): string[][] => {
+    if (section?.outcome !== 'answered') {
+      return placement === 'sections'
+        ? [
+            [`Sales from the “${section?.pluginId ?? 'unknown'}” plugin — NOT READ`],
+            [`${section?.reason ?? ''} Do not file from this.`],
+            [],
+          ]
+        : []
+    }
+    return (section.exports ?? [])
+      .filter((block) => block?.placement === placement)
+      .flatMap((block) => [...(block.rows ?? []).map((row) => row.map(String)), []])
+  })
 }
 
 /**
@@ -1748,34 +1360,12 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       row.taxCollectedDollars,
     ]),
     [],
-    // MERCHANTS' sales, by where the shopper was — the nexus evidence
-    // (AGL-1956). A different taxpayer's money from the section above and
-    // never summed with it, which is why it is its own block rather than more
-    // rows. The export is the contemporaneous record behind a filed return, so
-    // the figure a state would ask about belongs in it.
-    ['Facilitated sales by buyer state (merchants’ storefronts)'],
-    [
-      'Buyer state',
-      'Sales',
-      'Total sales (USD)',
-      'Tax collected (USD)',
-      'Of which Aglyn owes (USD)',
-    ],
-    ...(taxReturnFacilitatedJurisdictionRows(payload).length
-      ? taxReturnFacilitatedJurisdictionRows(payload).map((row) => [
-          row.jurisdiction,
-          String(row.transactionCount),
-          row.totalSalesDollars,
-          row.taxCollectedDollars,
-          row.aglynLiableTaxDollars,
-        ])
-      : [['—', '0', '0.00', '0.00', '0.00']]),
-    [
-      'LOWER BOUND — a storefront sale that collected no tax files no row, ' +
-        `so it is absent here. ${filing.code} needs no threshold: the filer ` +
-        'is established there.',
-    ],
-    [],
+    // FACILITATED sales, by where the buyer was — each source's nexus
+    // evidence (AGL-1956). A different taxpayer's money from the section
+    // above and never summed with it, which is why each is its own block
+    // rather than more rows. The export is the contemporaneous record behind
+    // a filed return, so the figure a state would ask about belongs in it.
+    ...taxReturnSourceExportRows(payload, 'jurisdictions'),
     /*
      * THE WORKING PAPERS (AGL-2329).
      *
@@ -1829,42 +1419,8 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       ]),
     ),
     [],
-    [
-      'Storefront commerce tax by liability (AGL-1904) — NOT in ' +
-        (texas ? 'the Webfile figures' : 'the breakdown above'),
-    ],
-    [
-      'Bucket',
-      'Who owes it',
-      'Transactions',
-      'Gross (USD)',
-      'Taxable sales (USD)',
-      'Tax collected (USD)',
-    ],
-    ...(taxReturnStorefrontRows(payload).length
-      ? taxReturnStorefrontRows(payload).map((row) => [
-          row.label,
-          row.liability,
-          String(row.transactionCount),
-          row.grossDollars,
-          row.taxableSalesDollars,
-          row.taxCollectedDollars,
-        ])
-      : [['—', 'No storefront figures in this payload', '0', '', '', '']]),
-    [],
-    [
-      'Marketplace tax (AGL-2137) — NOT in ' +
-        (texas ? 'the Webfile figures' : 'the breakdown above'),
-    ],
-    ['Figure', 'Amount', 'Note'],
-    ...(taxReturnMarketplaceLines(payload).length
-      ? taxReturnMarketplaceLines(payload).map((line) => [
-          line.label,
-          line.value,
-          line.note,
-        ])
-      : [['—', 'No marketplace figures in this payload', '']]),
-    [],
+    // Each facilitated-sales source's own figures, NOT in the filing lines.
+    ...taxReturnSourceExportRows(payload, 'sections'),
     ['Invoice rows'],
     [
       'invoiceId',

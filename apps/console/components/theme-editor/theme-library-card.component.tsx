@@ -22,8 +22,8 @@ import {
   parseLockdownRefusal,
   THEME_PRESETS_LOAD_POINT,
 } from '@aglyn/aglyn'
-import { resolveOverride, readArtifactOverride } from '@aglyn/aglyn/app-utils/marketplace-overrides'
-import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveOverride, readArtifactOverride } from '@aglyn/aglyn/app-utils/artifact-overrides'
+import { describeTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   DEFAULT_THEME_ENTRY_ID,
   hasThemeEdits,
@@ -34,6 +34,7 @@ import {
   type ThemeLibraryHost,
   type ThemeLibraryKind,
 } from '@aglyn/aglyn/app-utils/theme-library'
+import { BRAND } from '@aglyn/shared-data-enums'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -163,9 +164,12 @@ export function ThemeLibraryCard(props: {
   const selection = readThemeSelection(host)
   const currentKey = optionKey(selection.kind, selection.id)
   const edits = hasThemeEdits(host)
-  const defaultName = wearsPlatformBrand(siteKey)
-    ? 'Platform brand'
-    : 'Material UI'
+  // The default is the platform's theme, named after the platform — never
+  // "Material UI", which is a built-in theme of its own (AGL-3422). A site on
+  // one of the operator's own hosts wears the operator's brand; every other
+  // site gets MUI's colors in the platform's type and component defaults.
+  const brandHost = wearsPlatformBrand(siteKey)
+  const defaultName = brandHost ? `${BRAND.ORG_NAME} brand` : `${BRAND.ORG_NAME} default`
 
   const options = useMemo(() => {
     const library = entries ?? {}
@@ -176,8 +180,10 @@ export function ThemeLibraryCard(props: {
         key: optionKey('default', DEFAULT_THEME_ENTRY_ID),
         kind: 'default',
         id: DEFAULT_THEME_ENTRY_ID,
-        name: `${defaultName} (default)`,
-        description: 'The platform’s own theme',
+        name: defaultName,
+        description: brandHost
+          ? 'The platform’s own brand theme — what a site runs until it picks another'
+          : 'MUI’s colors in the platform’s type and components — what a site runs until it picks another',
         theme: {},
         edited: stashed(DEFAULT_THEME_ENTRY_ID),
       },
@@ -249,6 +255,9 @@ export function ThemeLibraryCard(props: {
     options.find((option) => option.key === candidateKey) ??
     options.find((option) => option.key === currentKey)
   const current = options.find((option) => option.key === currentKey)
+  // What every sentence below calls the theme in use: the name the list
+  // shows, so the default reads as the platform's rather than as its id.
+  const themeName = current?.name ?? selection.name
   const previewing = Boolean(candidate && candidate.key !== currentKey)
 
   const [previewScheme, setPreviewScheme] = useState<HostThemeScheme>('light')
@@ -336,7 +345,7 @@ export function ThemeLibraryCard(props: {
       confirm === 'restore'
         ? await call(
             { action: 'restore' },
-            `${selection.name} is back to how it was picked.`,
+            `${themeName} is back to how it was picked.`,
           )
         : await call(
             { action: 'delete', id: candidate?.id },
@@ -346,7 +355,7 @@ export function ThemeLibraryCard(props: {
       setConfirm(null)
       if (confirm === 'delete') setCandidateKey(currentKey)
     }
-  }, [confirm, call, selection.name, candidate, currentKey])
+  }, [confirm, call, themeName, candidate, currentKey])
 
   const summary = describeTheme((host?.theme ?? undefined) as HostTheme | undefined)
   const sourceChip: ReactNode =
@@ -513,10 +522,10 @@ export function ThemeLibraryCard(props: {
               </Stack>
               <Typography variant="body2" color="text.secondary">
                 {edits
-                  ? `Your edits are stored on top of ${selection.name}, which ` +
+                  ? `Your edits are stored on top of ${themeName}, which ` +
                     'itself is unchanged. Restore it to drop them, or save the ' +
                     'result as a theme of your own.'
-                  : `This site runs ${selection.name} as it was picked. ` +
+                  : `This site runs ${themeName} as it was picked. ` +
                     'Anything you change below is stored as your edit on top ' +
                     'of it.'}
               </Typography>
@@ -527,7 +536,7 @@ export function ThemeLibraryCard(props: {
                   disabled={busy}
                   onClick={() => {
                     setName(
-                      edits ? `${selection.name} (edited)` : `${selection.name} copy`,
+                      edits ? `${themeName} (edited)` : `${themeName} copy`,
                     )
                     setNameDialog('save-as')
                   }}
@@ -540,10 +549,10 @@ export function ThemeLibraryCard(props: {
                     variant="outlined"
                     disabled={busy}
                     onClick={() =>
-                      call({ action: 'update' }, `${selection.name} is updated.`)
+                      call({ action: 'update' }, `${themeName} is updated.`)
                     }
                   >
-                    {`Update ${selection.name}`}
+                    {`Update ${themeName}`}
                   </Button>
                 ) : null}
                 {edits ? (
@@ -554,7 +563,7 @@ export function ThemeLibraryCard(props: {
                     disabled={busy}
                     onClick={() => setConfirm('restore')}
                   >
-                    {`Restore ${selection.name}`}
+                    {`Restore ${themeName}`}
                   </Button>
                 ) : null}
                 {selection.kind === 'custom' ? (
@@ -563,7 +572,7 @@ export function ThemeLibraryCard(props: {
                     color="inherit"
                     disabled={busy}
                     onClick={() => {
-                      setName(selection.name)
+                      setName(themeName)
                       setNameDialog('rename')
                     }}
                   >
@@ -588,10 +597,10 @@ export function ThemeLibraryCard(props: {
         <DialogContent>
           {nameDialog === 'save-as' ? (
             <DialogContentText sx={{ mb: 2 }}>
-              {`The theme as it looks now — ${selection.name}` +
+              {`The theme as it looks now — ${themeName}` +
                 (edits ? ' with your edits' : '') +
                 ' — becomes a theme of your own, and this site switches to it. ' +
-                `${selection.name} stays in the list as it was.`}
+                `${themeName} stays in the list as it was.`}
             </DialogContentText>
           ) : null}
           <TextField
@@ -623,14 +632,14 @@ export function ThemeLibraryCard(props: {
       <Dialog open={confirm !== null} onClose={() => !busy && setConfirm(null)}>
         <DialogTitle>
           {confirm === 'restore'
-            ? `Restore ${selection.name}?`
+            ? `Restore ${themeName}?`
             : `Delete ${candidate?.name ?? 'this theme'}?`}
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             {confirm === 'restore'
               ? 'Your edits to this theme are dropped and the live site shows ' +
-                `${selection.name} as it was picked. To keep them, save them as a ` +
+                `${themeName} as it was picked. To keep them, save them as a ` +
                 'custom theme first.'
               : 'It is removed from this site’s list, along with any edits ' +
                 'kept on it. This cannot be undone.'}

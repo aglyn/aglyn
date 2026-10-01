@@ -29,7 +29,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Collapse,
   Stack,
@@ -37,13 +36,11 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import {
-  AI_SEO_FINDING_LABELS,
   aiSeoApplyCounts,
   aiSeoAuditView,
   type AiSeoPageFix,
@@ -52,10 +49,14 @@ import {
 import { readEventFrames } from './assist-jobs-drawer.component'
 
 /**
- * The site SEO audit (AGL-2910), on the site's SEO section through the
- * `hostSeo` zone. A person runs it; an `seo` job checks every published page
- * the sitemap lists, proposes a fix per finding, and drafts the structured
- * data and the agent guidance `/llms.txt` leads with.
+ * SEO fixes (AGL-2910), on the site's SEO section through the `hostSeo` zone,
+ * under the platform's SEO check. The check lists what is wrong for every
+ * site owner; this card adds what only a model can: a person asks, and an
+ * `seo` job audits the same pages through the same check, proposes a fix per
+ * finding, and drafts the structured data and the agent guidance
+ * `/llms.txt` leads with. The findings are never listed here — the check
+ * above draws them — so this card shows the fixes, page by page. The target
+ * keywords are the ones the check was last run with (`check.keywords`).
  *
  * Nothing it shows is saved. "Put in the form" stages the site-wide proposal
  * in the SEO form below as unsaved edits, and the form's Update is the write.
@@ -67,8 +68,6 @@ import { readEventFrames } from './assist-jobs-drawer.component'
 
 /** How many recent jobs the card reads to find this site's last audit. */
 const RECENT_JOBS_READ = 20
-
-const KEYWORDS_MAX_CHARS = 3_000
 
 type Verdict = 'checking' | 'ready' | 'hidden'
 
@@ -108,7 +107,8 @@ function fixSummary(fix: AiSeoPageFix | undefined): string {
 }
 
 export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
-  const { hostId, orgId, orgSlug, host, proposeDraft } = props
+  const { hostId, orgId, orgSlug, host, proposeDraft, check } = props
+  const keywords = check?.keywords ?? ''
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
@@ -116,7 +116,6 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
 
   const [verdict, setVerdict] = useState<Verdict>('checking')
   const [notice, setNotice] = useState<string | null>(null)
-  const [keywords, setKeywords] = useState('')
   const [busy, setBusy] = useState(false)
   const [job, setJob] = useState<AiJobSummary | null>(null)
   const [siteStaged, setSiteStaged] = useState<string | null>(null)
@@ -219,7 +218,7 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
           orgId,
           hostId,
           kind: 'seo',
-          brief: 'Audit the SEO of this site',
+          brief: 'Propose fixes for the SEO of this site',
           inputs: { target: 'site', keywords: keywords.trim() },
         }),
       })
@@ -290,11 +289,14 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
 
   const running = Boolean(job && !isTerminal(job))
   const report = view?.report ?? null
-  const findings = report ? report.pages.reduce((sum, entry) => sum + entry.findings.length, report.site.length) : 0
   const owedBatches = report ? Math.ceil(report.queue.length / Math.max(1, report.batchSize)) : 0
   const counts = view ? aiSeoApplyCounts(view) : { pagesWithContent: 0, pagesWithValues: 0 }
   const somethingToApply = counts.pagesWithContent + counts.pagesWithValues + siteFields.length > 0
-  const pageRows = report ? report.pages.slice(page * pageSize, (page + 1) * pageSize) : []
+  // The pages a fix was proposed for, or is still owed to; the check above lists the rest.
+  const fixRows = report
+    ? report.pages.filter((entry) => view?.fixes[entry.screenId] || report.queue.includes(entry.screenId))
+    : []
+  const pageRows = fixRows.slice(page * pageSize, (page + 1) * pageSize)
   const names = new Map((report?.pages ?? []).map((entry) => [entry.screenId, entry]))
   const pageLink = (screenId: string, versionId: string | null, surface: 'view' | 'besigner') =>
     host && versionId
@@ -305,33 +307,24 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
       <CardDisplay
         contentGutterX
         contentGutterY
-        header="SEO audit"
+        header="SEO fixes"
         help={pluginDocsHelp('aiSeo', {
-          anchor: '#audit-the-whole-site',
+          anchor: '#fix-what-the-seo-check-finds',
           excerpt:
-            'Check every published page and get a proposed fix for each finding. Nothing changes on your live site until you save or publish.',
+            'Get a proposed fix for each finding of the SEO check. Nothing changes on your live site until you save or publish.',
         })}
       >
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            {'Checks every published page for what search results and AI agents need, and proposes a fix for each finding. Nothing changes on your live site until you save or publish it.'}
+            {keywords
+              ? 'Proposes a fix for each finding of the SEO check above, using the target keywords it was run with. Nothing changes on your live site until you save or publish it.'
+              : 'Proposes a fix for each finding of the SEO check above. Nothing changes on your live site until you save or publish it.'}
           </Typography>
-          <TextField
-            multiline
-            minRows={2}
-            fullWidth
-            label="Target keywords by page (optional)"
-            placeholder={'/pricing: pricing, plans\n/lamps: brass desk lamps'}
-            helperText="One line per page. A keyword is used only where the page is about it."
-            value={keywords}
-            onChange={(event) => setKeywords(event.target.value.slice(0, KEYWORDS_MAX_CHARS))}
-            disabled={busy || running}
-          />
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Button variant="contained" disabled={busy || running || !orgId} onClick={() => void run()}>
-              {report ? 'Run the audit again' : 'Run audit'}
+              {report ? 'Propose fixes again' : 'Propose fixes'}
             </Button>
-            {running ? <CircularProgress size={18} aria-label="Auditing the site" /> : null}
+            {running ? <CircularProgress size={18} aria-label="Proposing fixes" /> : null}
             {running && report ? (
               <Typography variant="caption" color="text.secondary">
                 {`Proposing fixes: ${view?.batches ?? 0} of ${owedBatches} batches`}
@@ -342,25 +335,12 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
           {job?.error ? <Alert severity={job.status === 'failed' ? 'error' : 'warning'}>{job.error}</Alert> : null}
 
           {report && job ? (
-            <Stack spacing={2} aria-label="SEO audit results">
-              <Typography variant="subtitle1">
-                {`Score ${report.score} of 100 · ${report.pages.length} ${report.pages.length === 1 ? 'page' : 'pages'} · ${findings} ${findings === 1 ? 'finding' : 'findings'}`}
-              </Typography>
+            <Stack spacing={2} aria-label="SEO fixes">
               {job.creditsSpent > 0 ? (
                 <Typography variant="caption" color="text.secondary">
-                  {`This audit used ${job.creditsSpent} ${job.creditsSpent === 1 ? 'credit' : 'credits'}.`}
+                  {`These fixes used ${job.creditsSpent} ${job.creditsSpent === 1 ? 'credit' : 'credits'}.`}
                 </Typography>
               ) : null}
-              {report.skipped > 0 ? (
-                <Alert severity="info">
-                  {`${report.skipped} more published ${report.skipped === 1 ? 'page was' : 'pages were'} not audited this time.`}
-                </Alert>
-              ) : null}
-              {[...report.site.map((entry) => entry.message), ...report.notes].map((line) => (
-                <Typography key={line} variant="body2">
-                  {line}
-                </Typography>
-              ))}
 
               {view?.site ? (
                 <Stack spacing={1} aria-label="Structured data and agent guidance">
@@ -410,14 +390,12 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
                 </Stack>
               ) : null}
 
-              {report.pages.length ? (
+              {fixRows.length ? (
                 <Box>
-                  <ScrollTable size="small" aria-label="Audited pages">
+                  <ScrollTable size="small" aria-label="Proposed fixes">
                     <TableHead>
                       <TableRow>
                         <TableCell>{'Page'}</TableCell>
-                        <TableCell align="right">{'Score'}</TableCell>
-                        <TableCell>{'Found'}</TableCell>
                         <TableCell>{'Proposed'}</TableCell>
                       </TableRow>
                     </TableHead>
@@ -430,31 +408,9 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
                               {row.path}
                             </Typography>
                           </TableCell>
-                          <TableCell align="right">{row.score}</TableCell>
-                          <TableCell>
-                            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
-                              {row.findings.length ? (
-                                row.findings.map((entry) => (
-                                  <Chip
-                                    key={`${entry.code}:${entry.keyword ?? ''}`}
-                                    size="small"
-                                    variant="outlined"
-                                    color={entry.severity === 'high' ? 'error' : entry.severity === 'medium' ? 'warning' : 'default'}
-                                    label={entry.keyword ? `${AI_SEO_FINDING_LABELS[entry.code]}: ${entry.keyword}` : AI_SEO_FINDING_LABELS[entry.code]}
-                                    title={entry.message}
-                                  />
-                                ))
-                              ) : (
-                                <Typography variant="caption" color="text.secondary">
-                                  {'Nothing found'}
-                                </Typography>
-                              )}
-                            </Stack>
-                          </TableCell>
                           <TableCell>
                             <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-                              {fixSummary(view?.fixes[row.screenId]) ||
-                                (row.findings.length && running ? 'Being proposed…' : '')}
+                              {fixSummary(view?.fixes[row.screenId]) || (running ? 'Being proposed…' : '')}
                             </Typography>
                           </TableCell>
                         </TableRow>
@@ -465,7 +421,7 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
                     page={page}
                     pageSize={pageSize}
                     rowCount={pageRows.length}
-                    count={report.pages.length}
+                    count={fixRows.length}
                     onPageChange={setPage}
                     onPageSizeChange={(size) => {
                       setPageSize(size)
@@ -474,7 +430,11 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
                   />
                 </Box>
               ) : (
-                <Typography variant="body2">{'This site has no published public pages to audit.'}</Typography>
+                <Typography variant="body2">
+                  {report.pages.length
+                    ? 'No page needs a written fix.'
+                    : 'This site has no published public pages to fix.'}
+                </Typography>
               )}
 
               <Stack spacing={1}>

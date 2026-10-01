@@ -356,7 +356,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
         {events.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'Create events here, then drop an Event List element on any ' +
-              'screen — published events render with SEO Event markup.'}
+              'page — published events render with SEO Event markup.'}
           </Typography>
         ) : (
           visibleEvents.map((event) => (

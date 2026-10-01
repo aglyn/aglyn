@@ -38,6 +38,8 @@ import { DEAL_STATUS_LABELS, formatMoney } from '../model/deal-board-model'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { RecordActivityCard } from './record-activity-card'
+import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
+import { crmShareChipFor } from '../model/crm-sharing'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { DealEditDrawer } from './deal-edit-drawer'
 import { DealProductsCard } from './deal-products-card'
@@ -193,6 +195,14 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                   }
                 />
                 <CrmRecordChip label="Owner" value={roster.nameOf(deal.ownerUid) || undefined} />
+                {/* Seen here only through a share (AGL-3336). */}
+                <CrmShareChipView
+                  chip={crmShareChipFor(
+                    deal as unknown as Record<string, unknown>,
+                    scope.consentGroup?.hostIds ?? [],
+                  )}
+                  org={org}
+                />
               </>
             ) : null
           }
@@ -246,6 +256,16 @@ export function DealDetailPage(props: CrmDetailPageProps) {
               recordId={deal.$id}
               mediaIds={deal.mediaIds}
               topic="deals"
+            />
+            {/* Where the deal is visible and why, and a manager's share (AGL-3336). */}
+            <RecordSharingCard
+              object="deals"
+              id={deal.$id}
+              record={deal as unknown as Record<string, unknown>}
+              hostId={hostId ?? null}
+              orgId={scope.orgId}
+              org={org}
+              viewingHostIds={scope.consentGroup?.hostIds}
             />
             <RecordActivityCard hostId={hostId} org={org} dealId={deal.$id} />
           </>

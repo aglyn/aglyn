@@ -15,7 +15,7 @@ design draws and what the form declares always agree, so every field has its own
 every submission arrives with all of its answers.
 
 The form arrives as a new draft on the **Forms** page, and **Open draft** on the job opens the
-form's page. No screen places it, so nothing on the live site changes. It counts against your
+form's page. No page on your site places it, so nothing on the live site changes. It counts against your
 forms allowance like a form you create yourself, and when your plan has no room for another
 form the job says so before it starts, not after it has spent anything.
 
@@ -58,8 +58,8 @@ studio, for you to fill in before the form goes on a page.
 ## Nothing is live until you place it
 
 The job creates the form and nothing else. Review it on its page and in the Besigner, then
-place it on a screen with a **Form** element when you are ready. A form placed on a published
-screen starts collecting straight away, so check its fields and its consent box first.
+place it on a page with a **Form** element when you are ready. A form placed on a published
+page starts collecting straight away, so check its fields and its consent box first.
 
 ## Who can use it
 

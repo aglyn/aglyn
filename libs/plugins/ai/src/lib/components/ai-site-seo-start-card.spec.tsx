@@ -106,6 +106,7 @@ const zoneProps = (patch: Partial<ConsoleHostSeoZoneProps> = {}): ConsoleHostSeo
   host: 'demo-legal',
   seo: undefined,
   proposeDraft: mockProposeDraft,
+  check: null,
   ...patch,
 })
 

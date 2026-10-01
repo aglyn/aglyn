@@ -21,7 +21,7 @@ import {
   HOST_EVENT_LABELS,
   HOST_EVENT_TYPES,
   type HostEventType,
-} from '@aglyn/aglyn/app-utils/workflows'
+} from '@aglyn/aglyn/app-utils/host-events'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /**
@@ -219,9 +219,6 @@ export const AI_AUTOMATION_UNSUPPORTED_COPY: Readonly<Record<AiAutomationUnsuppo
 }
 
 // ── What a job tells a person ─────────────────────────────────────────────
-
-/** The id the workflows plugin is registered under. */
-export const AI_WORKFLOWS_PLUGIN_ID = 'workflows'
 
 /** The resource the workflows plugin writes a drafted automation under. */
 export const AI_AUTOMATION_RESOURCE = 'automation'

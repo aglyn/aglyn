@@ -28,9 +28,13 @@ import {
   servedPageVersion,
 } from '@aglyn/tenant-data-admin/server/hosted-page-review'
 import type { HostedPagePart } from '@aglyn/tenant-data-admin/server/held-page-subject'
+// By path: the contracts a repeat's rows and a form's record target are
+// asked through, both server-only.
+import { stampFormRecordTargets } from '@aglyn/aglyn/plugin-manager/submission-record-target'
+import { readRepeatRows } from '@aglyn/aglyn/plugin-manager/repeat-rows'
+import { prepareComputedVariables } from '@aglyn/aglyn/plugin-manager/computed-variables'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
-import getDatasets from './get-datasets'
 import getForms from './get-forms'
 import getMediaAssetFacts from './get-media-asset-facts'
 import {
@@ -38,7 +42,7 @@ import {
   type PublishedCollectionSource,
 } from './get-collection-content'
 import getPluginInstalls from './get-plugin-installs'
-import getVariables, { getFunctions, getWorkflows } from './get-variables'
+import getVariables, { getFunctions } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
 import getScreenVersion from './get-screen-version'
 import {
@@ -46,7 +50,6 @@ import {
   socialImageAssetFacts,
   socialImageRefs,
 } from './social-image-facts'
-import { stampFormDatasetBindings } from './stamp-form-dataset-bindings'
 
 /**
  * Content-collection context for a compose (AGL-551): the collection the
@@ -189,7 +192,7 @@ function scanCollectionBlocks(
  * tree work itself accounts for under 2 ms of that at 50 entries. The gap is
  * this read, waiting for reads it shares nothing with.
  *
- * Same shape as `screenDatasetsPromise` directly below, and the same caveat
+ * Same shape as `screenRepeatRowsPromise` directly below, and the same caveat
  * applies: the SCREEN's own nodes are a fast path, NOT the correctness gate. A
  * collection block can arrive from a layout or a grafted reusable component,
  * neither of which exists yet at this point, so the real scan still runs
@@ -529,12 +532,12 @@ export async function composeNodesWithChrome(options: {
    * instrumentation, and a regression would be visible in the same place.
    */
   /**
-   * Does the SCREEN itself repeat over a dataset (AGL-1440)?
+   * Does the SCREEN itself repeat (AGL-1440)?
    *
    * Asked as soon as the nodes are in hand — which since AGL-1428 is after
    * the fan-out has been ISSUED rather than before — so the overwhelmingly
    * common case still keeps the AGL-1225 shape: a page that repeats almost
-   * always says so on its own document, and its datasets read goes out
+   * always says so on its own document, and its rows read goes out
    * alongside the remaining chrome reads instead of after them.
    *
    * It is deliberately NOT the correctness gate — a repeatable can arrive from
@@ -552,8 +555,8 @@ export async function composeNodesWithChrome(options: {
    * purpose: that is the line that makes the two independent, and moving the
    * await above it silently gives the whole saving back.
    *
-   * `getDatasets` is the one read that genuinely depends on the nodes, so it
-   * cannot join the bundle. It does not have to wait for the bundle either —
+   * The repeat rows are the one read that genuinely depends on the nodes, so
+   * they cannot join the bundle. It does not have to wait for the bundle either —
    * it is issued the moment the nodes resolve and awaited after, so it still
    * overlaps whatever is left of the chrome reads instead of costing the
    * extra serial round trip that dropping it from the batch would imply.
@@ -563,21 +566,22 @@ export async function composeNodesWithChrome(options: {
     getComponents({ hostId }),
     // Host variable + function bindings (AGL-91/93): {{name}} and
     // {{fn:name(args)}} in string props resolve to values; unknown tokens
-    // and failed runs stay literal.
+    // and failed runs stay literal. Whatever computes a variable's value
+    // starts its reads here too.
     Promise.all([
       getVariables({ hostId }),
       getFunctions({ hostId }),
-      getWorkflows({ hostId }),
+      prepareComputedVariables(hostId),
       getPluginInstalls({ hostId }),
     ]),
   ])
   const screenNodes = await options.screenNodes
-  const screenDatasetKeys = Aglyn.repeatDatasetKeys(screenNodes)
-  const screenDatasetsPromise = screenDatasetKeys.length
-    ? getDatasets({ hostId, keys: screenDatasetKeys })
+  const screenRepeatKeys = Aglyn.repeatKeys(screenNodes)
+  const screenRepeatRowsPromise = screenRepeatKeys.length
+    ? readRepeatRows({ hostId, keys: screenRepeatKeys })
     : undefined
   // Does the SCREEN itself place a form entity? Gated and re-asked exactly
-  // like the datasets read beside it (AGL-1440): most pages carry no form, and
+  // like the repeat rows read beside it (AGL-1440): most pages carry no form, and
   // the ones that do usually say so on their own document, so the read goes
   // out here alongside the chrome reads instead of as a serial tail. It is not
   // the correctness gate — a placed form can arrive from a layout or a grafted
@@ -585,7 +589,7 @@ export async function composeNodesWithChrome(options: {
   const screenFormsPromise = Aglyn.placesFormEntity(screenNodes)
     ? getForms({ hostId })
     : undefined
-  // Issued HERE, beside the datasets read and before the chrome bundle is
+  // Issued HERE, beside the repeat rows read and before the chrome bundle is
   // awaited, so the collection read overlaps it instead of trailing it.
   const prefetchedSources = prefetchCollectionSources(
     hostId,
@@ -593,8 +597,8 @@ export async function composeNodesWithChrome(options: {
     options.collection,
   )
   const [layoutChain, componentsRes, bulk] = await chromeBundle
-  const [rawVariables, functions, workflows, pluginInstalls] = bulk
-  const screenDatasets = await screenDatasetsPromise
+  const [rawVariables, functions, computeVariables, pluginInstalls] = bulk
+  const screenRepeatRows = await screenRepeatRowsPromise
   // Settled by now: it is read off the same version document the layout
   // binding the walk above waited on came from.
   const layoutPropValues = await options.layoutPropValues
@@ -642,35 +646,36 @@ export async function composeNodesWithChrome(options: {
         [Aglyn.placedFormPlacement(forms as any)],
       )
     : graftedComponents
-  // Computed variables (AGL-129): workflow-backed values resolve once per
-  // compose; failures keep each variable's stored fallback.
-  const variables = Aglyn.resolveComputedVariables(
-    rawVariables,
-    functions,
-    workflows,
-  )
+  // Computed variables (AGL-129): the plugin that computes a variable's
+  // value fills it in once per compose; a failure keeps its stored fallback.
+  const variables = computeVariables({ variables: rawVariables, functions })
   // Repeatables (AGL-103) expand after grafting (so they work inside
   // reusable components) and before bindings (so {{name}} tokens inside
   // cloned items still resolve).
   //
-  // Only the datasets this tree repeats over are read (AGL-1440), and the tree
+  // Only the rows this tree repeats over are read (AGL-1440), and the tree
   // asked is the composed one — after grafting — because that is the map the
   // expansion reads: a repeatable living in a layout or a reusable component
   // is invisible in `screenNodes`, and reading only the screen's keys would
   // silently render one template row where the author put a list. The
   // screen's own keys were issued beside the chrome reads above; a key only a
   // layout or a component adds is read here, for that key alone.
-  const datasetKeys = Aglyn.repeatDatasetKeys(grafted as any)
-  const unreadDatasetKeys = datasetKeys.filter(
-    (key) => !screenDatasetKeys.includes(key),
+  //
+  // The rows come from the plugin that keeps them, through the repeat-rows
+  // contract; this composition names no collection. A declared source whose
+  // reader is missing THROWS rather than answering "no rows", so a broken boot
+  // keeps the last good render instead of replacing every list with one row.
+  const composedRepeatKeys = Aglyn.repeatKeys(grafted as any)
+  const unreadRepeatKeys = composedRepeatKeys.filter(
+    (key) => !screenRepeatKeys.includes(key),
   )
-  const datasets = unreadDatasetKeys.length
+  const repeatRows = unreadRepeatKeys.length
     ? {
-        ...screenDatasets,
-        ...(await getDatasets({ hostId, keys: unreadDatasetKeys })),
+        ...screenRepeatRows,
+        ...(await readRepeatRows({ hostId, keys: unreadRepeatKeys })),
       }
-    : screenDatasets
-  const repeated = Aglyn.expandRepeatables(grafted as any, datasets)
+    : screenRepeatRows
+  const repeated = Aglyn.expandRepeatables(grafted as any, repeatRows)
   // Collection entries blocks (AGL-551) expand alongside repeatables:
   // per-entry {{entry.*}} tokens substitute inside the clones here, while
   // page-level tokens wait for resolveNamedTokens below.
@@ -732,12 +737,17 @@ export async function composeNodesWithChrome(options: {
   // the page actually ships — a slot grafted from a layout chain, an element
   // an author chose — rather than the screen as stored.
   const withLandmark = Aglyn.stampDocumentLandmark(finalNodes as any)
-  // Each form's dataset binding, signed so the submit route can trust it
-  // (AGL-2773). Read off THIS tree, the one the page ships, so a form grafted
-  // from a layout, a component or a form entity is signed as it renders; and
-  // after every stage that rewrites props, so nothing changes what the
-  // signature covers.
-  const withFormBindings = stampFormDatasetBindings(withLandmark, hostId)
+  // Each form the record target writes for, stamped with what that target
+  // trusts at submit time (AGL-2773) — a signed binding, today. Read off THIS
+  // tree, the one the page ships, so a form grafted from a layout, a component
+  // or a form entity is stamped as it renders; and after every stage that
+  // rewrites props, so nothing changes what the stamp covers. A declared
+  // target that is missing THROWS here rather than shipping forms that
+  // silently write nowhere.
+  const withFormBindings = await stampFormRecordTargets(
+    withLandmark as Record<string, unknown>,
+    hostId,
+  )
   const denormalized = Aglyn.canvas.processNodesToDenormalized(
     withFormBindings as any,
   )

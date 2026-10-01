@@ -27,7 +27,7 @@
  *
  *   - The live side is the served HTML of `aglyn.com/legal/<slug>`. Text is
  *     taken the way the clickwrap capture does (see
- *     `libs/aglyn/src/lib/app-utils/publisher-agreement.ts`): text content
+ *     `libs/plugins/marketplace/src/lib/model/publisher-agreement.ts`): text content
  *     minus script/style, content block only — first `Last updated: …` line
  *     through the document's own closing `© …` line, which excludes the site
  *     chrome and the "On this page" TOC (both sit outside that span; the

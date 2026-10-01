@@ -50,7 +50,8 @@ const PLUGIN = 'libs/plugins/workflows/src/lib/plugin.ts'
 const PAGE =
   'libs/plugins/workflows/src/lib/components/workflows-console-sections.ts'
 const NEXT_CONFIG = 'apps/console/next.config.js'
-const RELEASE_FLAGS = 'libs/aglyn/src/lib/app-utils/release-flags.ts'
+/** The plugins' old addresses, compiled from `consoleRedirects`; the config spreads it. */
+const REDIRECTS = 'apps/console/constants/plugins.redirects.generated.json'
 /**
  * The switchboard row, where the plugin declares it: the generator compiles
  * each `catalog` block into the core's catalog, so this is the one place the
@@ -58,7 +59,14 @@ const RELEASE_FLAGS = 'libs/aglyn/src/lib/app-utils/release-flags.ts'
  */
 const switchboardRow = (id: string) => {
   const config = JSON.parse(readRepo('plugins.config.json')) as {
-    plugins: { id: string; catalog?: { label?: string } }[]
+    plugins: {
+      id: string
+      catalog?: {
+        label?: string
+        releaseFlag?: string
+        releaseFlagDefinition?: { label?: string; navTabId?: string }
+      }
+    }[]
   }
   return config.plugins.find((plugin) => plugin.id === id)
 }
@@ -97,7 +105,9 @@ describe('the automation section', () => {
     // The staff flags screen and the workspace plugin switchboard name the
     // same section, so a rename that stops at the nav leaves two screens
     // calling it something the console no longer does.
-    expect(readRepo(RELEASE_FLAGS)).toContain(`label: 'Automation'`)
+    expect(
+      switchboardRow('workflows')?.catalog?.releaseFlagDefinition?.label,
+    ).toBe('Automation')
     expect(switchboardRow('workflows')?.catalog?.label).toBe('Automation')
   })
 
@@ -108,11 +118,15 @@ describe('the automation section', () => {
      * written out here: a redirect whose source drifts from the address it is
      * meant to rescue rescues nothing, and it would look right doing it.
      */
-    const config = readRepo(NEXT_CONFIG)
-    expect(config).toContain(`source: '${asNextSource(Route.HOST_WORKFLOWS)}'`)
-    expect(config).toContain(
-      `destination: '${asNextSource(Route.HOST_AUTOMATION)}'`,
+    expect(readRepo(NEXT_CONFIG)).toContain(
+      "require('./constants/plugins.redirects.generated.json')",
     )
+    expect(JSON.parse(readRepo(REDIRECTS))).toContainEqual({
+      pluginId: 'workflows',
+      source: asNextSource(Route.HOST_WORKFLOWS),
+      destination: asNextSource(Route.HOST_AUTOMATION),
+      permanent: true,
+    })
   })
 
   it('THE CONTROL: the route table really moved', () => {
@@ -127,7 +141,7 @@ describe('the automation section', () => {
     // The redirect is for links already out in the world. Anything the
     // console emits today should arrive without a bounce.
     const emitters = [
-      'apps/console/components/global-search/global-search-scope.ts',
+      'libs/plugins/workflows/src/lib/model/workflows-search-sources.ts',
       'libs/aglyn/src/lib/app-utils/activity-presenter.ts',
     ]
     for (const path of emitters) {
@@ -150,9 +164,12 @@ describe('the automation section', () => {
     const plugin = readRepo(PLUGIN)
     expect(plugin).toContain(`featureFlag: 'workflows'`)
     expect(plugin).toContain(`navTabId: 'nav-tab-workflows'`)
-    expect(readRepo(RELEASE_FLAGS)).toContain(`key: 'release_workflows'`)
-    expect(readRepo(RELEASE_FLAGS)).toContain(`navTabId: 'nav-tab-workflows'`)
-    expect(switchboardRow('workflows')?.catalog).toBeDefined()
+    expect(switchboardRow('workflows')?.catalog?.releaseFlag).toBe(
+      'release_workflows',
+    )
+    expect(
+      switchboardRow('workflows')?.catalog?.releaseFlagDefinition?.navTabId,
+    ).toBe('nav-tab-workflows')
     expect(tabIds(readRepo(PAGE))).toEqual(['workflows', 'actions', 'webhooks'])
   })
 })

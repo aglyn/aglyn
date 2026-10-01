@@ -16,8 +16,8 @@ The map is held in these places, and they agree by construction:
 | `eslint.config.mjs` | `@nx/enforce-module-boundaries` takes those constraints, so every file is judged at lint; a project on the allowlist spreads `boundaryOverridesFor(import.meta.url)` from its own `eslint.config.mjs`, which allows exactly its listed targets and nothing more |
 | `tools/scripts/check-lib-boundaries.mjs` | `check:lib-boundaries` judges the same constraints over `nx graph`, checks this document has a row for every project, and checks every lib `package.json` |
 | `tools/scripts/lib-boundaries-allowlist.json` | the edges that break the map today, one row each; the guard is red for a row that is missing **and** for a row the graph no longer has |
-| `tools/scripts/check-plugin-domain-in-core.mjs` | `check:plugin-domain-in-core` holds Rule 3, which the import graph cannot see, in any tree that is not a plugin: a domain-named file or route directory, a vendor literal, a first-party plugin id, a static plugin import, **a Firestore collection one plugin owns addressed from outside it**, **exports that are mostly one plugin's vocabulary**, and **any declaration in a plugin's vocabulary mixed into a platform file**. The last three read the CODE rather than the name; two content sweeps added them after names alone had missed 111 files, the largest group being platform files with a plugin's rows, keys and types written into them (`plan-entitlements.ts`, `org-billing.types.ts`, `usage-budget.ts`) |
-| `tools/scripts/plugin-domain-in-core-allowlist.json` | the files that carry a plugin's domain outside its plugin today, each with the AGL-3080 lane that moves it, or `stays` and the argument; red for a finding with no row **and** for a row nothing trips (`--prune`) |
+| `tools/scripts/check-plugin-domain-in-core.mjs` | `check:plugin-domain-in-core` holds Rule 3, which the import graph cannot see, in any tree that is not a plugin: a domain-named file or route directory, a vendor literal, a first-party plugin id, a static plugin import, **a Firestore collection one plugin owns addressed from outside it**, **exports that are mostly one plugin's vocabulary**, and **any declaration in a plugin's vocabulary mixed into a platform file**. The last three read the CODE rather than the name; two content sweeps added them after names alone had missed 111 files, the largest group being platform files with a plugin's rows, keys and types written into them (`plan-entitlements.ts`, `org-billing.types.ts`, `usage-budget.ts`). Inside `libs/plugins/**` it holds the "nor in another plugin" half: **another plugin's Firestore collection** addressed from this one, and **another plugin's console page** built here — its nav slug as a `pluginSlug`, a `*_SLUG` constant or a path segment, or a core route that is its page. The owner publishes a record index, card, facts or figure reader, and a record route; the other plugin asks for the kind |
+| `tools/scripts/plugin-domain-in-core-allowlist.json` | the files that carry a plugin's domain outside its plugin today, each with the AGL-3080 lane that moves it, or `stays` and the argument, and the plugin files that still reach into another plugin (`coupling`); red for a finding with no row **and** for a row nothing trips (`--prune`) |
 
 ```sh
 npm run check:lib-boundaries                        # the guard (a few seconds; runs `nx graph`)
@@ -247,7 +247,9 @@ needs it starts.
 1. **`plugins-bookings` → `plugins-commerce`.** Gone (AGL-3080). Two plugins
    that take money need one tax rule. Commerce registers it through
    `registerPluginTaxProfile` from both of its server registrars, and a booking
-   is priced and confirmed by asking `pluginTaxProfile()`. That contract throws
+   is priced and confirmed by asking `pluginTaxProfile()` — for the site's
+   service rate too (`flatRate`), so bookings no longer reads the store
+   settings document commerce keeps its rates in. That contract throws
    rather than answer zero when no plugin owns the rule, and
    `tax-profile-is-registered.spec.ts` in each app runs the real registrars
    through the manifest to prove the owner is there. The number stays.
@@ -373,12 +375,14 @@ needs it starts.
     The number stays.
 17. **`plugins-workflows` → `plugins-logic`.** Gone (AGL-3080). What crossed
     was a client and a dialog. The client called a route the console itself
-    serves (`/api/hosts/where-used`), which scans variables, functions and
-    workflows alike, so it was never logic's: it lives in the core beside the
-    route, at `@aglyn/aglyn/app-utils/where-used`, and both plugins ask the
-    platform. The dialog is a widget logic registers in the `workflowUsage`
-    zone the Automation page hosts; with nothing registered the page gives the
-    answer in words. The number stays.
+    serves (`/api/hosts/where-used`), so it was never logic's: it lives in the
+    core beside the route, at `@aglyn/aglyn/app-utils/where-used`, and both
+    plugins ask the platform. The route reads published pages itself and asks
+    the plugins for the rest through `plugin-dependents`: logic answers which
+    variables a workflow computes, workflows which workflows call a function.
+    The dialog is a widget logic registers in the `workflowUsage` zone the
+    Automation page hosts; with nothing registered the page gives the answer
+    in words. The number stays.
 
 **Plugin → designer UI.** Gone (AGL-3080). No shipped file in `plugins-mui`
 imported the designer any more; two specs did, to draw the mui image and video
@@ -392,10 +396,12 @@ A plugin can be used without the designer UI, which is what the map asks.
 finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the
 campaign domain model — `model/campaign-container.ts`,
 `campaign-conversions.ts`, `campaign-report.ts`, `campaign-revenue.ts`,
-`campaign-send-time.ts`, `email-record.ts`,
-`components/campaign-picker.component.tsx`, `components/report-figures.tsx` —
-and `campaign-container.ts` opens by naming the Firestore path a send is stored
-at. Five plugins read it, plus both apps. The guard cannot see it: `plugin` →
+`email-record.ts`, `components/campaign-picker.component.tsx` — and
+`campaign-container.ts` opens by naming the Firestore path a send is stored
+at. Five plugins read it, plus both apps. The send-time rule has left it
+(AGL-3080): it is the marketing plugin's, and the AI plugin asks for a list's
+send time through `plugin-record-facts` (`listSendTime`) instead of reading
+the sends. The guard cannot see it: `plugin` →
 `shared` is a legal edge on the map, so there is no allowlist row and this
 document is the only place the finding can live.
 

@@ -23,6 +23,7 @@ import type {
 } from '@aglyn/aglyn/app-utils/repeat-sources'
 import { useFirestore, useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { useEffect, useState } from 'react'
+import { DATASET_REPEAT_SOURCE_ID } from '../constants/bundle-common'
 import { readDatasetRepeatRows } from './dataset-repeat-rows'
 
 /**
@@ -78,9 +79,10 @@ export function useDatasetRepeatRows(
  * plugin loader calls by name.
  */
 export const DATASET_REPEAT_SOURCE: RepeatSource = {
-  id: 'dataset',
+  id: DATASET_REPEAT_SOURCE_ID,
   label: 'Dataset',
   keyProp: DATASET_REPEAT_KEY_PROP,
+  entityKind: 'datasets',
   keyAttribute: {
     component: FieldComponentType.DATASET_SELECT,
     label: 'Repeat over dataset',

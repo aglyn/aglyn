@@ -33,11 +33,8 @@
  */
 
 import { generateMetadata } from '../app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/layout'
-import {
-  PLUGIN_SECTIONS,
-  pluginPageTitle,
-  pluginSectionTitle,
-} from '../app/plugin-page-title'
+import { PLUGIN_SURFACE_SECTIONS } from '../constants/plugins.titles.generated'
+import { pluginPageTitle, pluginSectionTitle } from '../app/plugin-page-title'
 
 const HOST = 'aglyn-marketing'
 
@@ -135,9 +132,9 @@ describe('a plugin surface titles its sections apart', () => {
  */
 describe('no section repeats the name of its surface', () => {
   it('names every section something other than its surface', () => {
-    const repeated = Object.entries(PLUGIN_SECTIONS)
+    const repeated = Object.entries(PLUGIN_SURFACE_SECTIONS)
       .flatMap(([surface, ids]) =>
-        ids.map((id) => ({
+        Object.keys(ids).map((id) => ({
           surface,
           id,
           section: pluginSectionTitle(surface, id),
@@ -149,8 +146,8 @@ describe('no section repeats the name of its surface', () => {
       .sort()
 
     // Fix by renaming the section in the plugin's `*-console-sections.ts` —
-    // id and label together, with the old path kept alive by a redirect in
-    // `next.config.js` — and mirroring the new id in `PLUGIN_SECTIONS`.
+    // id and label together, with the old path kept alive by a redirect the
+    // plugin declares (`consoleRedirects`) — and regenerating the manifests.
     expect(repeated).toEqual([])
   })
 })

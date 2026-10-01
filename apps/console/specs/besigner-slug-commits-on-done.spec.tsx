@@ -206,7 +206,7 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   isFirstPublishedRoute: () => false,
   trackEvent: () => undefined,
 }))
-jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
+jest.mock('@aglyn/aglyn/app-utils/site-theme', () => ({
   resolveSiteTheme: () => undefined,
 }))
 jest.mock('@aglyn/besigner', () => ({
@@ -570,7 +570,7 @@ describe('Screen Properties ▸ Slug · the helper line (AGL-2570)', () => {
     ).toBeNull()
     expect(
       screen.getByText(
-        /Not published — Publish puts this screen at \/alternatives\/webflow/,
+        /Not published — Publish puts this page at \/alternatives\/webflow/,
       ),
     ).toBeTruthy()
   })

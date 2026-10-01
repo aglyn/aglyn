@@ -18,6 +18,9 @@
 import {
   defaultScopeForNewResource,
   describeScope,
+  grantedScopeTokens,
+  heldByHost,
+  heldScopeTokens,
   hostQualifiedCdnPath,
   scopeCovers,
   hostIdsFromScope,
@@ -34,6 +37,7 @@ import {
   scopeForHosts,
   scopeToStore,
   scopeTokensForHost,
+  seenOnlyThroughGrant,
   storedScope,
   visibleToHost,
   visibleToTokens,
@@ -465,5 +469,44 @@ describe('storedScope (AGL-1480)', () => {
     // asking what a person chose. The two answers differ, and an editor that
     // took the permission answer would offer no choice at all.
     expect(visibleToHost(undefined, 'h1')).toBe(false)
+  })
+})
+
+/**
+ * SEEN, AND HELD (AGL-3336). A share widens `visibleTo` and records what it
+ * added under `sharing.added`; holding is `visibleTo` without those tokens.
+ */
+describe('held scope tokens', () => {
+  const shared = { visibleTo: ['host:a', 'host:b', 'org'], sharing: { added: ['host:b', 'org'] } }
+
+  it('reads the grant tokens, and nothing from a document never shared', () => {
+    expect(grantedScopeTokens(shared)).toEqual(['host:b', 'org'])
+    expect(grantedScopeTokens({ visibleTo: ['host:a'] })).toEqual([])
+    expect(grantedScopeTokens({ sharing: { added: 'org' } })).toEqual([])
+    expect(grantedScopeTokens(null)).toEqual([])
+  })
+
+  it('holds by visibleTo less the grants — and by nothing without visibleTo', () => {
+    expect(heldScopeTokens(shared)).toEqual(['host:a'])
+    expect(heldScopeTokens({ visibleTo: ['host:a', 'org'] })).toEqual(['host:a', 'org'])
+    expect(heldScopeTokens({ sharing: { added: ['host:b'] } })).toEqual([])
+  })
+
+  it('keeps a site that captured the person as a holder, whatever the grants say', () => {
+    const capturedLater = { ...shared, capturedByHostIds: ['a', 'b'] }
+    expect(heldScopeTokens(capturedLater)).toEqual(['host:a', 'host:b'])
+    expect(seenOnlyThroughGrant(capturedLater, 'b')).toBe(false)
+    expect(heldScopeTokens({ ...shared, hostId: 'b' })).toEqual(['host:a', 'host:b'])
+  })
+
+  it('tells a site that holds a document from one that only sees it', () => {
+    expect(visibleToHost(shared.visibleTo, 'b')).toBe(true)
+    expect(heldByHost(shared, 'b')).toBe(false)
+    expect(heldByHost(shared, 'a')).toBe(true)
+    expect(seenOnlyThroughGrant(shared, 'b')).toBe(true)
+    expect(seenOnlyThroughGrant(shared, 'a')).toBe(false)
+    // A document with no grants answers exactly as before: never "only a grant".
+    expect(seenOnlyThroughGrant({ visibleTo: ['host:a'] }, 'b')).toBe(false)
+    expect(seenOnlyThroughGrant({}, 'b')).toBe(false)
   })
 })

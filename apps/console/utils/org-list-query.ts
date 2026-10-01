@@ -143,8 +143,8 @@ export const ORG_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     /*
      * Suspended or not: an equality on the stored `suspended` flag, which
      * every organization carries (`createOrganization` writes `false`, the
-     * lockdown core writes it beside the `suspended*` family, and
-     * `tools/scripts/backfill-suspended-flag.mjs` stamps the older ones).
+     * lockdown core writes it beside the `suspended*` family, and a one-time
+     * backfill stamped the older ones — see `docs/SELF_HOSTING.md`).
      * Not `suspendedAt`: `!= null` would be a second range, and a timed
      * suspension lapses with no write at all. The route clears the flag on
      * every lapsed lock before it runs a query that asks about it

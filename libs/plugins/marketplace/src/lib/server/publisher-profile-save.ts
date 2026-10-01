@@ -23,7 +23,7 @@ import {
   PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementIsPublished,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
+} from '../model/publisher-agreement'
 import {
   isValidPublisherHandle,
   validatePublisherProfileContent,

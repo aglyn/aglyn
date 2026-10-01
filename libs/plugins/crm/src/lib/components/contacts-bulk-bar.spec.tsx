@@ -70,6 +70,8 @@ const COMPANY_ROWS = [
   { $id: 'c-globex', name: 'Globex', nameLower: 'globex' },
 ]
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The member document behind "Share with sites…" (AGL-3336): not a manager here.
+  useFirestoreDoc: () => ({ data: undefined, status: 'success', fromCache: false }),
   // The viewer's reach, which `useCrmScope` reads only for a site in a
   // declared consent group (AGL-3320); an org-wide member here.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
@@ -106,6 +108,19 @@ let refuseRoute: Set<string>
 jest.mock('../components/use-crm-api', () => ({
   useCrmApi: () => async (route: string, payload: Record<string, any>) => {
     posted.push({ route, payload })
+    if (route === 'contact-remove') {
+      return {
+        response: { ok: true, status: 200 },
+        payload: {
+          ok: true,
+          results: (payload['contactIds'] as string[]).map((contactId) =>
+            refuseRoute.has(contactId)
+              ? { contactId, ok: false, error: 'not permitted' }
+              : { contactId, ok: true, removed: contactId === 'c1' ? 'deleted' : 'detached' },
+          ),
+        },
+      }
+    }
     if (route !== 'contact-update') {
       return { response: { ok: true, status: 200 }, payload: { ok: true } }
     }
@@ -419,25 +434,38 @@ describe('a refused row', () => {
 })
 
 describe('removing the selection from this site', () => {
-  it('deletes a row this site alone holds and detaches from a shared one, after the confirm', async () => {
+  /*
+   * Through `crm/contact-remove` (AGL-3338): the route decides detach or
+   * delete against the stored document and keeps any refusal, so the bar
+   * writes nothing to the store itself.
+   */
+  const removals = () =>
+    posted.filter((call) => call.route === 'contact-remove').map((call) => call.payload)
+
+  it('asks the route to let the rows go, after the confirm, and writes nothing itself', async () => {
     render(<Harness initial={['c1', 'c2']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove from this site' }))
-    await waitFor(() => expect(ops).toHaveLength(2))
+    await waitFor(() => expect(removals()).toHaveLength(1))
     expect(confirmSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Remove 2 contacts?',
         confirmationText: 'Remove contacts',
       }),
     )
-    expect(ops[0]).toMatchObject({ kind: 'delete', path: 'orgs/org-1/contacts/c1' })
-    expect(ops[1]).toMatchObject({ kind: 'update', path: 'orgs/org-1/contacts/c2' })
-    // Letting a holder go is the one facet change left to the client.
-    expect(ops[1].data[`facets.${GROUP.groupId}`]).toEqual({ op: 'delete' })
-    expect(ops[1].data.visibleTo).toEqual({ op: 'remove', values: ['host:host-1'] })
+    expect(removals()[0]).toEqual({ contactIds: ['c1', 'c2'] })
+    expect(ops).toEqual([])
     // The rows are gone from the table, so the selection lets go of them.
-    expect(onSelectedChange).toHaveBeenLastCalledWith([])
+    await waitFor(() => expect(onSelectedChange).toHaveBeenLastCalledWith([]))
     expect(notices).toContain('2 contacts removed from this site')
     expect(updates()).toEqual([])
+  })
+
+  it('keeps a row the route refused selected, and names it', async () => {
+    refuseRoute = new Set(['c2'])
+    render(<Harness initial={['c1', 'c2']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from this site' }))
+    await waitFor(() => expect(onSelectedChange).toHaveBeenLastCalledWith(['c2']))
+    expect(screen.getByText(/not permitted/)).toBeTruthy()
   })
 
   it('writes nothing when the confirm is cancelled', async () => {
@@ -447,6 +475,7 @@ describe('removing the selection from this site', () => {
     await waitFor(() => expect(confirmSpy).toHaveBeenCalled())
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(ops).toEqual([])
+    expect(posted.filter((call) => call.route === 'contact-remove')).toEqual([])
     expect(onSelectedChange).not.toHaveBeenCalled()
   })
 })

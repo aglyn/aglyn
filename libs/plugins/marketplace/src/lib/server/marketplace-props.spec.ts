@@ -86,7 +86,7 @@ jest.mock('./provenance', () => {
     }) => {
       const key = `sha-${++sha}`
       const { ARTIFACT_BASE_COLLECTION } = jest.requireActual(
-        '@aglyn/aglyn/app-utils/marketplace-provenance',
+        '@aglyn/aglyn/app-utils/artifact-provenance',
       ) as { ARTIFACT_BASE_COLLECTION: string }
       await input.firestore
         .collection(ARTIFACT_BASE_COLLECTION)

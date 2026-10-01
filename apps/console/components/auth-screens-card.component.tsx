@@ -45,17 +45,17 @@ const AUTH_SLOTS: Array<{
 }> = [
   {
     key: 'signinScreenId',
-    label: 'Sign-in screen',
+    label: 'Sign-in page',
     hint: 'Rendered at /signin — drop a Member sign-in block on it',
   },
   {
     key: 'signupScreenId',
-    label: 'Sign-up screen',
+    label: 'Sign-up page',
     hint: 'Rendered at /signup — drop a Member sign-up block on it',
   },
   {
     key: 'recoveryScreenId',
-    label: 'Password recovery screen',
+    label: 'Password recovery page',
     hint: 'Rendered at /recover — drop a Password recovery block on it',
   },
 ]
@@ -93,7 +93,7 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
       await updateHostDocument(firestore, { user, hostId }, {
         [`authScreens.${key}`]: value || deleteField(),
       })
-      enqueueSnackbar(value ? 'Auth screen set' : 'Auth screen cleared', {
+      enqueueSnackbar(value ? 'Auth page set' : 'Auth page cleared', {
         variant: 'success',
         persist: false,
       })
@@ -119,7 +119,7 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
         anchor: '#2-the-built-in-sign-in-and-sign-up-pages',
         excerpt:
           'Replace the built-in membership forms at /signin, /signup, ' +
-          'and /recover with screens you design.',
+          'and /recover with pages you design.',
       })}
       contentGutterX
       contentGutterY
@@ -128,7 +128,7 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
         {'Design your own membership pages with the Members blocks ' +
           '(Member sign-in, Member sign-up, Password recovery), then ' +
           'assign them here to replace the built-in forms at /signin, ' +
-          '/signup, and /recover. Assigned screens are kept out of ' +
+          '/signup, and /recover. Assigned pages are kept out of ' +
           'search results.'}
       </Typography>
       {!userAccountsOn && (

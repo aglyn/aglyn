@@ -25,10 +25,8 @@ import {
   MEDIA_CDN_VARIANT_WIDTHS,
   parseMediaRef,
 } from '@aglyn/aglyn/app-utils/media-ref'
-import {
-  ESTIMATED_PAGE_TRANSFER_BYTES,
-  FREE_AI_TASTE_CREDITS_PER_MONTH,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
@@ -36,11 +34,18 @@ import {
 import { parseBreakpointSpan } from '@aglyn/shared-data-enums/breakpoint-span'
 import { renderEmailHtml } from '@aglyn/shared-util-email/email-render'
 import {
+  AI_BUILD_PLAN_CREATION_NOUNS,
+  AI_BUILD_PLAN_EMBED_HOST_NAMES,
+  AI_PLAN_ASKS_FOR_VIDEO,
+  aiEmbedHostOf,
+  aiEmbedVideoKey,
   aiPlanCreateFor,
+  aiPlanSlugKey,
   aiPlanUndeclaredRefs,
   isAiPlanNewRef,
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
+  type AiBuildPlanEmbed,
   type AiBuildPlanSection,
   type AiPlanUndeclaredRef,
 } from '../model/ai-build-plan'
@@ -196,8 +201,12 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
   brand?: { colors: Record<string, string>; fonts: string[] } | null
   /** Placed library assets by media id. */
   assets?: Record<string, AiAssetFacts>
-  /** The plan named a third-party embed the brief asked for, and its cost. */
-  allowEmbeds?: boolean
+  /**
+   * The third-party players the confirmed plan lists for this output
+   * (AGL-3433): a Video embed is admitted only where one is listed, playing
+   * the link the brief gave or none. Absent or empty admits none.
+   */
+  plannedEmbeds?: readonly Pick<AiBuildPlanEmbed, 'host' | 'url'>[]
   framing?: AiCopyFraming
   /**
    * Whether the workspace keeps reusable components and saved forms
@@ -1622,7 +1631,7 @@ export function detectUnrelatedScreenLinks(
     {
       rule: 10,
       code: 'link-unrelated-screen',
-      message: `"${sent[0].label}" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.`,
+      message: `"${sent[0].label}" links the home page, which does not do what its words say. Link the page that does, or leave the link out when the site has none.`,
       nodeIds: unique(sent.map((entry) => entry.id)),
     },
   ]
@@ -1705,8 +1714,8 @@ export function detectLinksWithoutDestination(
       code: 'link-fragment',
       message: `${wordsOf(first)} links "${first.value}", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. ${
         context.pageSections
-          ? `${toSection} Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`
-          : 'Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.'
+          ? `${toSection} Otherwise give it the "screenId" of a page the site has that does what its words say, or take it out.`
+          : 'Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.'
       }`,
       nodeIds: unique(fragments.map((entry) => entry.id)),
     })
@@ -1730,7 +1739,7 @@ export function detectLinksWithoutDestination(
     violations.push({
       rule: 10,
       code: 'link-without-destination',
-      message: `${wordsOf(first)} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
+      message: `${wordsOf(first)} goes nowhere. Give it the "screenId" of a page the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
       nodeIds: unique(dead.map((entry) => entry.id)),
     })
   }
@@ -2099,11 +2108,30 @@ const DUPLICATE_SX_MIN_KEYS = 2
 const DUPLICATE_SX_MIN_NODES = 4
 
 /**
+ * Whether a third-party player is one the confirmed plan lists (AGL-3433). A
+ * Video embed is admitted where the plan lists a player, playing the video
+ * the brief gave or none yet, which the site owner pastes. Raw HTML never is.
+ */
+function embedVerdict(
+  node: AiDoctrineNode,
+  planned: readonly Pick<AiBuildPlanEmbed, 'host' | 'url'>[],
+): 'planned' | 'unplanned' | 'unplanned-link' {
+  if (node.componentId !== 'videoEmbed' || !planned.length) return 'unplanned'
+  const url = typeof node.props?.['url'] === 'string' ? node.props['url'].trim() : ''
+  if (!url) return 'planned'
+  const key = aiEmbedVideoKey(url)
+  return key && planned.some((embed) => embed.url && aiEmbedVideoKey(embed.url) === key)
+    ? 'planned'
+    : 'unplanned-link'
+}
+
+/**
  * Rule 16. The flattest tree that renders the design: no container that
  * wraps one other container and adds nothing, no empty containers, no inline
  * style repeated where a token or a component prop would carry it, no font
  * beyond the theme's, images lazy below the first, video by poster rather
- * than autoplay, and no third-party embed the plan did not name.
+ * than autoplay, no third-party player the confirmed plan does not list, and
+ * none playing a video the brief did not give.
  */
 export function detectHeavyDocument(
   tree: AiDoctrineTree,
@@ -2117,6 +2145,7 @@ export function detectHeavyDocument(
   const eager: string[] = []
   const video: string[] = []
   const embeds: string[] = []
+  const embedLinks: string[] = []
   const sxSeen = new Map<string, string[]>()
   let images = 0
   for (const { id, node } of visits) {
@@ -2150,7 +2179,11 @@ export function detectHeavyDocument(
     ) {
       video.push(id)
     }
-    if (EMBED_COMPONENTS.has(node.componentId) && !context.allowEmbeds) embeds.push(id)
+    if (EMBED_COMPONENTS.has(node.componentId)) {
+      const verdict = embedVerdict(node, context.plannedEmbeds ?? [])
+      if (verdict === 'unplanned') embeds.push(id)
+      if (verdict === 'unplanned-link') embedLinks.push(id)
+    }
     const sx = node.sx ?? {}
     if (Object.keys(sx).length >= DUPLICATE_SX_MIN_KEYS) {
       const key = JSON.stringify(Object.keys(sx).sort().map((name) => [name, sx[name]]))
@@ -2189,7 +2222,12 @@ export function detectHeavyDocument(
   add(
     'third-party-embed',
     embeds,
-    'This embeds a third-party player or script, which loads its own code on every visit. Use a Video from the media library, or name the embed and its cost in the plan.',
+    "This embeds a third-party player, which loads its host's code on every visit, and the confirmed plan lists none here. Remove it; a film from the media library plays in a Video (video).",
+  )
+  add(
+    'embed-link-unplanned',
+    embedLinks,
+    'This player plays a video the brief did not give. Use the link the plan lists, or leave the link empty for the site owner to paste.',
   )
   return violations
 }
@@ -2800,7 +2838,7 @@ export function detectPlanRepeats(
     violations.push({
       rule: 1,
       code: 'plan-section-across-screens',
-      message: `The "${entries[0].section.name}" section is planned on ${screens.size} screens. Plan it as one reusable component and place it on each.`,
+      message: `The "${entries[0].section.name}" section is planned on ${screens.size} pages. Plan it as one reusable component and place it on each.`,
       paths: entries.map((entry) => entry.path),
     })
   }
@@ -2947,10 +2985,10 @@ export function detectPlanLayoutRegions(
       rule: 2,
       code: 'plan-screen-without-layout',
       message: noLayoutToName
-        ? 'A screen names a layout the site does not have, and this job may not create one. Leave the layout empty.'
+        ? 'A page names a layout the site does not have, and this job may not create one. Leave the layout empty.'
         : mayCreateLayout
-          ? "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one."
-          : 'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
+          ? "A page names no layout the site has or the plan creates. Put every page in the site's layout, or plan one."
+          : 'A page names no layout the site has, and this job may not create one. Put every page in a layout the site has.',
       paths: unlaid.map(({ index }) => `screens[${index}].layout`),
     })
   }
@@ -2962,7 +3000,7 @@ export function detectPlanLayoutRegions(
       rule: 2,
       code: 'plan-layout-region-section',
       message:
-        'A screen plans its own header, navigation or footer. Those live in the layout; take the section off the screen.',
+        'A page plans its own header, navigation or footer. Those live in the layout; take the section off the page.',
       paths: regions.map((entry) => entry.path),
     })
   }
@@ -2972,7 +3010,7 @@ export function detectPlanLayoutRegions(
       rule: 2,
       code: 'plan-layout-in-section',
       message:
-        "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+        "A section places a layout. A layout frames a whole page and is never placed inside one: name it as the page's layout, and take it out of the section's uses.",
       paths: placed,
     })
   }
@@ -3037,7 +3075,7 @@ export function detectUntemplatedSimilarPages(
     violations.push({
       rule: 4,
       code: 'plan-similar-pages',
-      message: `${indexes.length} screens share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection.`,
+      message: `${indexes.length} pages share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection.`,
       paths: indexes.map((index) => `screens[${index}].template`),
     })
   }
@@ -3047,7 +3085,7 @@ export function detectUntemplatedSimilarPages(
       rule: 4,
       code: 'plan-template-in-section',
       message:
-        "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+        "A section places a template. A template is applied to a whole page and is never placed inside one: take it out of the section's uses, and name it as the page's template only when the whole page is built from it.",
       paths: placed,
     })
   }
@@ -3207,17 +3245,17 @@ export function detectPlanUndeclaredCreations(
     const refused = capabilities ? aiPlanUncreatableKind(plan, kind, capabilities) : null
     const where = section
       ? `${section.name ? `The "${section.name}" section` : 'A section'} places a creation named "${first.name}", but the plan never creates it`
-      : `${screen.title ? `The screen "${screen.title}"` : 'A screen'} applies a template named "${first.name}", but the plan never creates it`
+      : `${screen.title ? `The page "${screen.title}"` : 'A page'} applies a template named "${first.name}", but the plan never creates it`
     let message: string
     if (!refused) {
       const otherwise = section
         ? `place ${aiCreationNoun(kind)} the site already has by its id`
-        : "leave the screen's template empty"
+        : "leave the page's template empty"
       message = `${where}. Declare it in create as ${aiCreationNoun(kind)}, with why nothing the site has will do, or ${otherwise}.`
     } else if (section) {
       message = `${where}, and ${refused.reason}. ${refused.instead} Take it out of the section's uses.`
     } else {
-      message = `${where}, and ${refused.reason}. Leave the screen's template empty, or apply a template the site already has.`
+      message = `${where}, and ${refused.reason}. Leave the page's template empty, or apply a template the site already has.`
     }
     return { rule: 7, code: 'plan-creation-undeclared', message, paths: refs.map((ref) => ref.path) }
   })
@@ -3311,7 +3349,7 @@ export function detectMissingNavAndSeo(
       rule: 10,
       code: 'plan-slug',
       message:
-        'A screen has no usable address. Give each one a slug of lowercase words joined by hyphens.',
+        'A page has no usable address. Give each one a slug of lowercase words joined by hyphens.',
       paths: badSlugs,
     })
   }
@@ -3320,7 +3358,7 @@ export function detectMissingNavAndSeo(
       rule: 10,
       code: 'plan-slug-taken',
       message:
-        'A screen reuses an address the site or the plan already uses. Give each screen its own slug.',
+        'A page reuses an address the site or the plan already uses. Give each page its own slug.',
       paths: collisions,
     })
   }
@@ -3328,7 +3366,7 @@ export function detectMissingNavAndSeo(
     violations.push({
       rule: 10,
       code: 'plan-seo',
-      message: `A screen is missing its search title or description, or runs past ${AI_SEO_TITLE_MAX} and ${AI_SEO_DESCRIPTION_MAX} characters. Write both for every screen.`,
+      message: `A page is missing its search title or description, or runs past ${AI_SEO_TITLE_MAX} and ${AI_SEO_DESCRIPTION_MAX} characters. Write both for every page.`,
       paths: seo,
     })
   }
@@ -3371,7 +3409,7 @@ export function detectMissedDuplicate(
       violations.push({
         rule: 15,
         code: 'plan-missed-duplicate',
-        message: `The site already has "${nearest.name}". Start the new screen from a duplicate of it, which keeps its bindings and SEO, and edit that.`,
+        message: `The site already has "${nearest.name}". Start the new page from a duplicate of it, which keeps its bindings and SEO, and edit that.`,
         paths: [`screens[${index}].duplicateOf`],
       })
     }
@@ -3540,6 +3578,142 @@ export function detectPlanUnreadableRegions(plan: AiBuildPlan): AiDoctrineViolat
 }
 
 /**
+ * Rule 16 (plan): a third-party player is planned where it can play
+ * (AGL-3433). A screen of the plan or a component it creates carries at most
+ * its kind's budget. A template renders for every record it serves and a
+ * layout around every page, so neither carries one, and a form, an email or a
+ * dataset has nowhere to. A link the plan gives is one its host plays.
+ */
+export function detectPlanEmbeds(plan: AiBuildPlan): AiDoctrineViolation[] {
+  const nowhere: string[] = []
+  const elsewhere: Array<{ kind: AiBuildPlanCreateKind; path: string }> = []
+  const wrongHost: string[] = []
+  const placed = new Map<string, { label: string; kind: 'page' | 'component'; paths: string[] }>()
+  ;(plan.embeds ?? []).forEach((embed, index) => {
+    const path = `embeds[${index}]`
+    if (embed.url !== null && aiEmbedHostOf(embed.url) !== embed.host) wrongHost.push(`${path}.url`)
+    let target: { key: string; label: string; kind: 'page' | 'component' } | null = null
+    if (isAiPlanNewRef(embed.where)) {
+      const creation = aiPlanCreateFor(plan, embed.where)
+      if (creation && creation.kind !== 'component') {
+        elsewhere.push({ kind: creation.kind, path: `${path}.where` })
+        return
+      }
+      if (creation) target = { key: embed.where.trim().toLowerCase(), label: creation.name, kind: 'component' }
+    } else {
+      const screen = plan.screens.find((row) => aiPlanSlugKey(row.slug) === aiPlanSlugKey(embed.where))
+      if (screen) target = { key: aiPlanSlugKey(screen.slug), label: screen.slug, kind: 'page' }
+    }
+    if (!target) {
+      nowhere.push(`${path}.where`)
+      return
+    }
+    const entry = placed.get(target.key) ?? { label: target.label, kind: target.kind, paths: [] }
+    entry.paths.push(path)
+    placed.set(target.key, entry)
+  })
+  const violations: AiDoctrineViolation[] = []
+  if (nowhere.length) {
+    violations.push({
+      rule: 16,
+      code: 'plan-embed-nowhere',
+      message:
+        'A player is planned where the plan builds nothing. Name a screen of the plan by its slug, or new:<name> of a component it creates.',
+      paths: nowhere,
+    })
+  }
+  if (elsewhere.length) {
+    const nouns = [...new Set(elsewhere.map((entry) => AI_BUILD_PLAN_CREATION_NOUNS[entry.kind].noun))]
+    violations.push({
+      rule: 16,
+      code: 'plan-embed-refused',
+      message: `Only a page or a component carries a third-party player, and this plan puts one on a ${nouns.join(
+        ' and a ',
+      )}. A template or a layout would load the player's code on every page it serves. Place it on a page or a component, or leave it off.`,
+      paths: elsewhere.map((entry) => entry.path),
+    })
+  }
+  for (const entry of placed.values()) {
+    const limit = AI_OUTPUT_BUDGETS[entry.kind].embeds
+    if (entry.paths.length <= limit) continue
+    violations.push({
+      rule: 16,
+      code: 'plan-embed-over-budget',
+      message: `${entry.label} is planned ${entry.paths.length} players, and a ${entry.kind} carries at most ${limit}. Keep the one the brief asks for most.`,
+      paths: entry.paths,
+    })
+  }
+  if (wrongHost.length) {
+    violations.push({
+      rule: 16,
+      code: 'plan-embed-link-host',
+      message: `A planned player's link is not a video link of its host, ${Object.values(
+        AI_BUILD_PLAN_EMBED_HOST_NAMES,
+      ).join(' or ')}. Give the brief's own link for that host, or null.`,
+      paths: wrongHost,
+    })
+  }
+  return violations
+}
+
+/** Text as two copies of one phrase compare: lowercase, no quotes, one space. */
+function phraseKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[“”"‘’'`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Rule 16 (plan, against the brief): a player is planned only where the brief
+ * asks for one (AGL-3433). The plan quotes the brief's words, and those words
+ * are found in the brief and ask for a video; a link it gives is one the brief
+ * gives. The plan step holds this, being the one door that reads the brief
+ * beside the plan.
+ */
+export function aiPlanEmbedBriefViolations(plan: AiBuildPlan, brief: string): AiDoctrineViolation[] {
+  const said = phraseKey(brief)
+  const given = new Set(
+    (brief.match(/https:\/\/\S+/g) ?? [])
+      .map((link) => aiEmbedVideoKey(link.replace(/[).,;!?]+$/, '')))
+      .filter((key): key is string => key !== null),
+  )
+  const unasked: string[] = []
+  const ungiven: string[] = []
+  ;(plan.embeds ?? []).forEach((embed, index) => {
+    const asked = phraseKey(embed.asked)
+    if (!asked || !said.includes(asked) || !AI_PLAN_ASKS_FOR_VIDEO.test(asked)) {
+      unasked.push(`embeds[${index}].asked`)
+    }
+    if (embed.url !== null) {
+      const key = aiEmbedVideoKey(embed.url)
+      if (!key || !given.has(key)) ungiven.push(`embeds[${index}].url`)
+    }
+  })
+  const violations: AiDoctrineViolation[] = []
+  if (unasked.length) {
+    violations.push({
+      rule: 16,
+      code: 'plan-embed-not-asked',
+      message:
+        'A player is planned that the brief does not ask for: its words are not words of the brief asking for a video. Take it off the plan; a film from the media library plays in a Video.',
+      paths: unasked,
+    })
+  }
+  if (ungiven.length) {
+    violations.push({
+      rule: 16,
+      code: 'plan-embed-link-not-given',
+      message:
+        "A planned player's link is not one the brief gives. Give the brief's own link, or null for the site owner to paste.",
+      paths: ungiven,
+    })
+  }
+  return violations
+}
+
+/**
  * Every plan rule, against the site inventory the plan was made from and,
  * where the job read them, what it may create there (AGL-3030). `null`
  * capabilities restrict nothing: the doctrine applies whole.
@@ -3559,6 +3733,7 @@ export function validateAiBuildPlan(
     ...detectPlanInlineForms(plan, inventory, capabilities),
     ...detectUntemplatedSimilarPages(plan, inventory),
     ...detectPlanLiteralColors(plan),
+    ...detectPlanEmbeds(plan),
     ...detectCreateBeforeReuse(plan, inventory),
     ...detectPlanUncreatable(plan, capabilities),
     ...detectPlanUndeclaredCreations(plan, inventory, capabilities),

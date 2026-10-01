@@ -6,7 +6,7 @@ description: Set colors, fonts, and light/dark schemes with a live preview.
 
 # Edit your theme
 
-Your **theme** controls how the whole site looks — applied consistently across every screen
+Your **theme** controls how the whole site looks — applied consistently across every page
 and previewed live as you edit.
 
 :::info Plan availability
@@ -24,8 +24,10 @@ immediately.
 
 The **Theme** card at the top of the page picks the theme your site runs:
 
-- **Built-in** — **Material UI (default)** and seven themes modeled on the design systems
-  people know best, plus any your plugins add:
+- **Built-in** — the platform's **default** theme, what every site runs until it picks another
+  (MUI's colors in the platform's own type and component defaults); stock **Material UI**; and
+  seven themes modeled on the design systems people know best, plus any your plugins add:
+  - **Material UI** — MUI's own default theme: Roboto, the stock type scale and palette.
   - **Bootstrap** — Bootstrap 5's blue, system fonts, flat bordered cards and focus rings.
   - **Minimal** — neutral and quiet, in the style of shadcn/ui.
   - **Material 3** — Material Design 3's tonal surfaces and pill buttons.
@@ -121,9 +123,9 @@ nothing is saved until you save it. See
 - Prefer theme color *references* over fixed hex values when styling elements; references
   adapt per scheme, fixed colors don't (though the Besigner can scope custom colors per
   scheme too).
-- The theme also styles screen previews and published pages, so there's one source of truth.
+- The theme also styles previews in the Besigner and published pages, so there's one source of truth.
 
 ## Related
 
 - [The Besigner](../besigner/overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md)
+- [Pages & layouts](../screens-and-layouts/overview.md)

@@ -17,6 +17,8 @@
 
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import { hostContentCollectionLabel } from '../foundation/definitions/host-content-collections'
+import type { PluginHostResourceDeclaration } from './plugin-host-resources'
+import type { PluginHostCollectionSiteExport } from './plugin-site-export'
 import {
   PLUGIN_HOST_COLLECTIONS_DECLARED,
   PLUGIN_ORG_COLLECTIONS_DECLARED,
@@ -126,6 +128,21 @@ export interface PluginHostCollectionDeclaration {
    * counters total beside its screens, layouts, components and templates.
    */
   artifact?: boolean
+  /**
+   * The kind a client CREATES a document here as, through the platform's
+   * generic create route — see `plugin-host-resources.ts`. Compiled only: a
+   * runtime registration carrying one is refused, because the route is the
+   * writable-field allow-list and must never depend on a registry a process
+   * may not have filled.
+   */
+  resource?: PluginHostResourceDeclaration
+  /**
+   * How the whole-site export carries this collection, and what a restore
+   * writes back — see `plugin-site-export.ts`. Compiled only, like
+   * `resource`: a backup that depended on a registry a process had not
+   * filled would be missing the collection with nothing to say so.
+   */
+  siteExport?: PluginHostCollectionSiteExport
 }
 
 /** A declaration with the plugin that made it. */
@@ -155,6 +172,20 @@ export function registerPluginHostCollections(
   const prepared = collections.map((declaration) => {
     const name = declaration.name?.trim() ?? ''
     if (!name) throw new Error('a host collection needs a name')
+    if (declaration.resource) {
+      throw new Error(
+        `host collection "${name}" declares a resource kind at runtime: the ` +
+          'create route reads only the compiled declarations in ' +
+          'plugins.config.json, so a kind registered here could never be created',
+      )
+    }
+    if (declaration.siteExport) {
+      throw new Error(
+        `host collection "${name}" declares a site export at runtime: the ` +
+          'export and restore read only the compiled declarations in ' +
+          'plugins.config.json, so a backup would silently leave it out',
+      )
+    }
     if (declaration.mediaScan === 'none' && !declaration.mediaScanReason?.trim()) {
       throw new Error(
         `host collection "${name}" is not scanned for media and says no ` +

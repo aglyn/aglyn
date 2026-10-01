@@ -128,12 +128,12 @@ jest.mock('@aglyn/aglyn', () => ({
   // campaign off the same `useSearchParams` these cases already drive, and a
   // stub that invented params would change what this file's assertions see.
   // These URLs name no campaign, so the honest answer is "none".
-  parseCampaignAttribution: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
-  ).parseCampaignAttribution,
-  campaignEventParams: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
-  ).campaignEventParams,
+  parseUtmAttribution: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
+  ).parseUtmAttribution,
+  utmEventParams: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/utm-attribution',
+  ).utmEventParams,
 }))
 jest.mock('@aglyn/shared-data-forms', () => ({
   FIELD_SCHEMA_EMAIL: { name: 'email' },

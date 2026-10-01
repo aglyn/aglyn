@@ -29,6 +29,7 @@ import {
   GOOGLE_OAUTH_ENDPOINTS,
 } from '../transport/google-oauth'
 import { GMAIL_API_BASE } from '../transport/gmail-client'
+import { OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE } from '../transport/gmail-errors'
 import { parseConnectReturnFragment } from './mailbox-api'
 import { refreshTokenSealContext } from './mailbox-credentials'
 import {
@@ -175,6 +176,8 @@ interface GoogleScript {
   tokenStatus: number
   tokenBody: (form: URLSearchParams) => unknown
   profileEmail: string
+  /** A Gmail API failure `users.getProfile` answers with, in place of the profile. */
+  profileError: { status: number; body: unknown } | null
   sendAs: unknown[]
   sendStatus: number
   sendBody: unknown
@@ -199,7 +202,11 @@ const fakeFetch = (async (input: string | URL, init?: RequestInit) => {
     return json(google.tokenStatus, google.tokenBody(new URLSearchParams(body ?? '')))
   }
   if (url === GOOGLE_OAUTH_ENDPOINTS.revoke) return json(google.revokeStatus, google.revokeStatus === 200 ? {} : { error: 'server_error' })
-  if (url === `${GMAIL_API_BASE}/profile`) return json(200, { emailAddress: google.profileEmail, historyId: '1' })
+  if (url === `${GMAIL_API_BASE}/profile`) {
+    return google.profileError
+      ? json(google.profileError.status, google.profileError.body)
+      : json(200, { emailAddress: google.profileEmail, historyId: '1' })
+  }
   if (url === `${GMAIL_API_BASE}/settings/sendAs`) return json(200, { sendAs: google.sendAs })
   if (url === `${GMAIL_API_BASE}/messages/send`) return json(google.sendStatus, google.sendBody)
   throw new Error(`unscripted request to ${url}`)
@@ -385,6 +392,7 @@ beforeEach(() => {
     tokenStatus: 200,
     tokenBody: exchangeAnswer(),
     profileEmail: 'avery@rep.example.com',
+    profileError: null,
     sendAs: [
       { sendAsEmail: 'avery@rep.example.com', displayName: 'Avery Rep', isPrimary: true, isDefault: true },
       { sendAsEmail: 'sales@rep.example.com', displayName: 'Acme Sales', verificationStatus: 'accepted' },
@@ -636,6 +644,73 @@ describe('connect/complete (AGL-2978)', () => {
     expect(googleCalls.some((call) => call.url === GOOGLE_OAUTH_ENDPOINTS.revoke)).toBe(false)
   })
 
+  it('refuses an account with no Gmail as the person’s to fix, not as a Google outage', async () => {
+    // A Workspace user whose Gmail is off, or not yet provisioned, passes the
+    // consent screen and the code exchange; Gmail refuses its first read.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    google.profileError = {
+      status: 400,
+      body: {
+        error: {
+          code: 400,
+          message: 'Mail service not enabled',
+          errors: [{ message: 'Mail service not enabled', domain: 'global', reason: 'failedPrecondition' }],
+          status: 'FAILED_PRECONDITION',
+        },
+      },
+    }
+    const refused = await complete(await consent())
+    expect(refused.status).toBe(422)
+    expect(refused.body).toEqual({ error: OUTREACH_MAIL_SERVICE_UNAVAILABLE_MESSAGE, reason: 'mail-service-unavailable' })
+    expect([...docs.keys()].some((key) => key.includes('/outreachMailboxes/'))).toBe(false)
+    expect(googleCalls.some((call) => call.url === GOOGLE_OAUTH_ENDPOINTS.revoke)).toBe(false)
+    // What Google said is in the runtime log, where an operator can read it.
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('connect/complete'),
+      expect.objectContaining({ code: 'mail_service_unavailable', status: 400, providerReason: 'failedPrecondition' }),
+    )
+    warn.mockRestore()
+  })
+
+  it('answers an account Google bars, or is limiting, with a 4xx; only an outage is a 502', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    google.profileError = {
+      status: 403,
+      body: { error: { code: 403, message: 'Access denied by the domain administrator.', errors: [{ reason: 'forbidden' }] } },
+    }
+    const barred = await complete(await consent())
+    expect(barred.status).toBe(422)
+    expect(barred.body.reason).toBe('google-refused')
+    expect(barred.body.error).toContain('Access denied by the domain administrator.')
+
+    google.profileError = { status: 429, body: { error: { code: 429, errors: [{ reason: 'rateLimitExceeded' }] } } }
+    const limited = await complete(await consent())
+    expect(limited.status).toBe(429)
+    expect(limited.body.reason).toBe('rate-limited')
+
+    google.profileError = { status: 503, body: { error: { code: 503, message: 'Backend Error' } } }
+    const down = await complete(await consent())
+    expect(down.status).toBe(502)
+    expect(down.body).toEqual({ error: 'Google did not answer. Try again in a moment.', reason: 'google-unavailable' })
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('connect/complete'),
+      expect.objectContaining({ code: 'unavailable', status: 503 }),
+    )
+
+    google.profileError = null
+    google.tokenStatus = 400
+    google.tokenBody = () => ({ error: 'invalid_scope' })
+    const scope = await complete(await consent())
+    expect(scope.status).toBe(422)
+    expect(scope.body.reason).toBe('scopes-missing')
+
+    expect([...docs.keys()].some((key) => key.includes('/outreachMailboxes/'))).toBe(false)
+    warn.mockRestore()
+    error.mockRestore()
+  })
+
   it('refuses a new mailbox past the member’s limit, but not a reconnect of one they have', async () => {
     const mailbox = await connectMailbox()
     for (let index = 1; index < OUTREACH_MAX_MAILBOXES_PER_MEMBER; index += 1) {
@@ -725,12 +800,12 @@ describe('settings and status (AGL-2978)', () => {
     expect(bad.status).toBe(400)
   })
 
-  it('refuses an unverified send-as, a cap over 50, an empty window and an unknown timezone', async () => {
+  it('refuses an unverified send-as, a cap over 100, an empty window and an unknown timezone', async () => {
     const mailbox = await connectMailbox()
     const refuse = async (patch: Record<string, unknown>) =>
       (await run('settings', post('outreach/mailboxes/settings', { orgId: ORG, mailboxId: mailbox.id, ...patch }))).body
     expect((await refuse({ sendAs: 'unconfirmed@rep.example.com' })).reason).toBe('invalid-settings')
-    expect((await refuse({ dailyCap: 51 })).error).toBe('The daily cap must be a whole number from 1 to 50.')
+    expect((await refuse({ dailyCap: 101 })).error).toBe('The daily cap must be a whole number from 1 to 100.')
     expect((await refuse({ dailyCap: 2.5 })).reason).toBe('invalid-settings')
     expect((await refuse({ window: { days: [], startMinute: 0, endMinute: 60 } })).reason).toBe('invalid-settings')
     expect((await refuse({ window: { days: [1], startMinute: 600, endMinute: 600 } })).reason).toBe('invalid-settings')

@@ -209,7 +209,7 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Button',
   description:
-    'A button — or a link styled as one, if you point it at a screen or URL.',
+    'A button — or a link styled as one, if you point it at a page or URL.',
   category: Aglyn.ComponentCategory.INPUT,
   icon: {
     path: mdiGestureTapButton.path,
@@ -250,16 +250,16 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
     {
       name: 'screenId',
       description:
-        'Optional: navigate to this screen when clicked — the address ' +
-        'follows the published path like a Screen Link (AGL-139).',
+        'Optional: navigate to this page when clicked — the address ' +
+        'follows the published path like a Page Link (AGL-139).',
       component: Aglyn.FieldComponentType.SCREEN_SELECT,
-      label: 'Link to screen',
+      label: 'Link to page',
     },
     {
       name: 'href',
       description:
         'Where the button goes when it points off this site. Ignored while ' +
-        'Link to screen names one — that field wins, so clear it to use a ' +
+        'Link to page names one — that field wins, so clear it to use a ' +
         'URL. Absolute (https://…) for another site, or a path for one of ' +
         'your own routes.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
@@ -275,7 +275,7 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
         'What this announces as once it links somewhere. Button is for ' +
         'calls to action; pick "Link (button styling)" for a chip that only ' +
         'navigates, so it keeps this look but announces as the link it is. ' +
-        'Ignored when there is no screen or URL to point at.',
+        'Ignored when there is no page or URL to point at.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Render as',
       // `'button'` is a REAL SENTINEL, not a deletion (AGL-1453). Unlike the

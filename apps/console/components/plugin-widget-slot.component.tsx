@@ -88,6 +88,13 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   orgData: 'bare',
   // A dialog that portals out of the page it is opened from.
   hostArtifactPublish: 'bare',
+  // A card of the Plugins page, and a notice above an installation's cards.
+  orgPluginInstalls: 'stack',
+  pluginInstallStatus: 'stack',
+  // A shelf among the template gallery's own, spaced from the one above it.
+  templateGallery: 'stack',
+  // A control in a cell of the Templates library, beside the Source badge.
+  templateInstallStatus: 'bare',
   // A notice above a subtree, spaced by the layout that draws it.
   // The body of the ƒx dialog, which spaces its own contents.
   besignerFunctions: 'bare',
@@ -98,6 +105,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // own cards as any other card on it would be.
   hostFirstRun: 'stack',
   hostTheme: 'stack',
+  // The marketplace's cards among the overview's own, as one block.
+  staffOverview: 'stack',
   adminOrgDetail: 'stack',
   orgBillingUsage: 'stack',
   orgBillingOverview: 'stack',
@@ -113,7 +122,7 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // The card beneath the collaborators table; its columns never render here.
   hostMembers: 'stack',
   // A floating dock, positioned by the widget itself.
-  assistPanel: 'bare',
+  consoleDock: 'bare',
   // Controls in the besigner's Attributes panel and its toolbar.
   besignerInspector: 'bare',
   besignerToolbar: 'bare',
@@ -133,12 +142,6 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   hostAutomations: 'bare',
   automationEditor: 'bare',
   automationRun: 'bare',
-  // Sections the commerce plugin places inside its own spaced layouts: the
-  // product editor's fields, above the products hub's catalog table, and the
-  // CSV import dialog's options.
-  productEditor: 'bare',
-  productsHub: 'bare',
-  productImport: 'bare',
   // A card among a CRM record page's own cards, which the CRM plugin hosts.
   recordInsights: 'stack',
   // Sections the CRM plugin places inside its own spaced layouts: under the
