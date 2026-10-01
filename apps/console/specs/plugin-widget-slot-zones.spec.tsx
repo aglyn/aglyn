@@ -55,6 +55,8 @@ const mockStartBlank = jest.fn()
 /** The template gallery's doors (AGL-3080), passed through by identity. */
 const mockGalleryInstalled = jest.fn()
 const mockReportShelf = jest.fn()
+/** The Interactions section's report door (AGL-3080), passed through by identity. */
+const mockReportSectionExperiments = jest.fn()
 /** The CRM record zones' proposal doors (AGL-2917), passed through by identity. */
 const mockProposeTask = jest.fn()
 const mockProposeStage = jest.fn()
@@ -385,6 +387,17 @@ Object.assign(MOUNTS, {
     file: 'apps/console/components/templates/host-templates-card.component.tsx',
     how: 'slot',
     props: { hostId: 'host-1', template: { $id: 'tpl-1', source: { type: 'installer' } } },
+  },
+  // AGL-3080: the section experiments a plugin runs, reported to the
+  // besigner's Interactions section rather than drawn.
+  besignerInteractions: {
+    file: 'apps/console/components/interactions-provider.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      screenId: 'screen-1',
+      reportSectionExperiments: mockReportSectionExperiments,
+    },
   },
   // AGL-3080: what a plugin holds across every workspace, on the staff
   // overview. No props — the overview is about the platform, not one org.

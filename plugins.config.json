@@ -1290,6 +1290,7 @@
           ],
           "slots": [
             "adminOrgDetail",
+            "besignerInteractions",
             "crmRecordAttribution",
             "emailMessages",
             "emailTemplateRecipients",

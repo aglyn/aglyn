@@ -74,6 +74,11 @@ const RecordAttributionWidget = lazy(
   () => import('./components/record-attribution-widget'),
 )
 
+/** The site's section experiments, reported to the besigner's Interactions section. */
+const BesignerSectionExperiments = lazy(
+  () => import('./components/besigner-section-experiments'),
+)
+
 /**
  * Marketing feature plugin (AGL-395). Console-only — overlays and popups
  * render on published sites through the tenant runtime, not a canvas
@@ -212,6 +217,14 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-inbox-record-attribution',
         title: 'Campaign attribution',
         Component: RecordAttributionWidget,
+      },
+      // The section experiments the besigner's Interactions section badges an
+      // element with and starts on a page's element; reported, never drawn.
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.besignerInteractions,
+        widgetId: 'marketing-besigner-section-experiments',
+        title: 'Section experiments',
+        Component: BesignerSectionExperiments,
       },
       // The staff organization page's sends and campaigns (AGL-3380), read
       // only: staff see what the organization sent without joining it.

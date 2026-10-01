@@ -44,6 +44,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `consoleDock` | The console dock: a floating panel above every route boundary in both the app and editor shells (it was `assistPanel` until AGL-3080) | `orgId`, `org`, `orgReady`, `scopedOrgId` (the org a widget may act and be metered for, `undefined` where the page names none), `orgSlug`, `hostId`, `productName`, `releaseVerdict(key)` (`{ visible, staffPreview }` for any release flag, staff bypass applied), `isStaff`, `permissionsOnHost` |
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
+| `besignerInteractions` | The besigner's Interactions section, on every editor that offers one. Your widget draws nothing: it reads the section experiments your plugin runs on the site and calls `reportSectionExperiments` from an effect, and the section badges an element that has one and offers to start one from your `create`. Report `null` to withdraw | `hostId`, `screenId` (`null` on a layout or a component, which is no page to run one on: report no `create` there), `reportSectionExperiments(reporterId, { experiments, create? } \| null)` |
 | `hostScreens` | A site's **Pages** list, beside Templates and Create New Page: another way to start a page | `hostId`, `orgId` (`undefined` while the page resolves it) |
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
@@ -122,6 +123,8 @@ page spaces it there:
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
 - `consoleDock`: a floating dock.
+- `besignerInteractions`: nothing; a widget there reports to the section and
+  renders `null`.
 - `orgMembersListColumn`, `staffOrgsListColumn` and `staffOrgUsageColumn`: a
   column of a table, or, on `staffOrgUsageColumn`, a line above it.
 

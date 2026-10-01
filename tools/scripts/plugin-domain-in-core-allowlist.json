@@ -114,13 +114,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/components/interactions-provider.component.tsx",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "apps/console/components/notifications-menu.component.tsx",
       "rules": [
         "plugin-id"

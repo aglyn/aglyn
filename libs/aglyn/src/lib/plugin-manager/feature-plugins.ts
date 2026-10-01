@@ -925,6 +925,20 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   besignerInspector: 'besignerInspector',
   /**
+   * The besigner's Interactions section, on every editor that offers one
+   * (AGL-3080): the section experiments a plugin runs on a page's elements.
+   * Props: {@link ConsoleBesignerInteractionsZoneProps}.
+   *
+   * The section is the designer's, and so are an element's own interactions:
+   * they live on its node and ride the document's save. A section experiment
+   * is not a node's: it is a record of whichever plugin runs experiments,
+   * stored where that plugin keeps them. So a widget here draws nothing. It
+   * reads its own records and REPORTS them, and the section badges an element
+   * and offers to start one from what was reported. With no widget the
+   * section offers none, which is a workspace with no plugin that runs them.
+   */
+  besignerInteractions: 'besignerInteractions',
+  /**
    * Inside a SEARCH LISTING editor (AGL-2910), under its fields. Props:
    * {@link ConsoleSeoFieldsZoneProps} — what the listing describes, the
    * fields the editor edits and what they hold, and `proposeValues`, which
@@ -1275,6 +1289,42 @@ export interface ConsoleSiteMemberZoneProps {
    * site.
    */
   member: Readonly<Record<string, unknown>> & { $id: string }
+}
+
+/** One section experiment, as the besigner's Interactions section lists it (AGL-3080). */
+export interface ConsoleBesignerSectionExperiment {
+  id: string
+  name?: string
+  /** The element the experiment varies. */
+  nodeId: string
+  status?: string
+}
+
+/** What one plugin reports to the besigner's Interactions section (AGL-3080). */
+export interface ConsoleBesignerSectionExperiments {
+  experiments: ConsoleBesignerSectionExperiment[]
+  /**
+   * Starts a draft experiment on an element. Reported only where the editor's
+   * document is a page (`screenId` is set): a layout or a component is no
+   * page for an experiment to run on.
+   */
+  create?: (options: { nodeId: string }) => void
+}
+
+/** What the `besignerInteractions` zone hands each widget (AGL-3080). */
+export interface ConsoleBesignerInteractionsZoneProps {
+  /** The site whose editor this is. */
+  hostId: string
+  /** The page under edit, or `null` on a layout or a component. */
+  screenId: string | null
+  /**
+   * Hands the section what this plugin runs, keyed by a name the widget
+   * chooses and keeps; `null` withdraws it. Call it from an effect.
+   */
+  reportSectionExperiments: (
+    reporterId: string,
+    report: ConsoleBesignerSectionExperiments | null,
+  ) => void
 }
 
 /** What the `templateInstallStatus` zone hands each widget (AGL-3080). */

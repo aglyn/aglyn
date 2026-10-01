@@ -128,6 +128,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // Controls in the besigner's Attributes panel and its toolbar.
   besignerInspector: 'bare',
   besignerToolbar: 'bare',
+  // Nothing drawn: a widget reports to the Interactions section it sits in.
+  besignerInteractions: 'bare',
   // A panel among a search listing editor's own fields.
   seoFields: 'bare',
   hostSeo: 'stack',
