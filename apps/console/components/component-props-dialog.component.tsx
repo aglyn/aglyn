@@ -53,7 +53,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useContentStable } from '@aglyn/shared-ui-jsx/hooks/use-content-stable'
 
 /**
  * Kinds whose default is free text in one shape or another — a word, a
@@ -559,17 +560,31 @@ export function cleanComponentProps(
  * A kind's answers, edited as rows of plain fields: the label a page author
  * picks from, and the value the bound field receives.
  */
-function ChoiceOptionsEditor(props: {
+const ChoiceOptionsEditor = memo(function ChoiceOptionsEditor(props: {
   options: Aglyn.ReusableComponentPropOption[]
   error: string
   optional?: boolean
   onChange: (options: Aglyn.ReusableComponentPropOption[]) => void
 }) {
-  const { options, error, optional, onChange } = props
-  const edit = (index: number, patch: Partial<Aglyn.ReusableComponentPropOption>) =>
-    onChange(
-      options.map((option, i) => (i === index ? { ...option, ...patch } : option)),
-    )
+  const { options, error, optional } = props
+  // The rows edit through the latest list and handler, so a row whose choice
+  // did not change keeps its props and does not redraw (AGL-3423).
+  const latest = useRef(props)
+  latest.current = props
+  const edit = useCallback(
+    (index: number, patch: Partial<Aglyn.ReusableComponentPropOption>) =>
+      latest.current.onChange(
+        latest.current.options.map((option, i) =>
+          i === index ? { ...option, ...patch } : option,
+        ),
+      ),
+    [],
+  )
+  const remove = useCallback(
+    (index: number) =>
+      latest.current.onChange(latest.current.options.filter((_, i) => i !== index)),
+    [],
+  )
   return (
     <Stack spacing={1}>
       <Typography variant="caption" color="text.secondary">
@@ -579,35 +594,19 @@ function ChoiceOptionsEditor(props: {
         {optional ? ' Leave the list empty for a single tick box.' : ''}
       </Typography>
       {options.map((option, index) => (
-        <Stack key={index} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <TextField
-            label="Label"
-            size="small"
-            value={option.label ?? ''}
-            placeholder={option.value}
-            onChange={(event) => edit(index, { label: event.target.value })}
-            sx={{ flex: 1 }}
-          />
-          <TextField
-            label="Value"
-            size="small"
-            value={option.value ?? ''}
-            onChange={(event) => edit(index, { value: event.target.value })}
-            sx={{ flex: 1 }}
-          />
-          <IconButton
-            aria-label={`Remove choice ${option.label || option.value || index + 1}`}
-            onClick={() => onChange(options.filter((_, i) => i !== index))}
-          >
-            <MdiIcon path={mdiDelete.path} />
-          </IconButton>
-        </Stack>
+        <ChoiceOptionRow
+          key={index}
+          index={index}
+          option={option}
+          onEdit={edit}
+          onRemove={remove}
+        />
       ))}
       <Box>
         <Button
           size="small"
           startIcon={<MdiIcon path={mdiPlus.path} />}
-          onClick={() => onChange([...options, { value: '', label: '' }])}
+          onClick={() => latest.current.onChange([...options, { value: '', label: '' }])}
         >
           {'Add choice'}
         </Button>
@@ -615,7 +614,49 @@ function ChoiceOptionsEditor(props: {
       {error ? <FormHelperText error>{error}</FormHelperText> : null}
     </Stack>
   )
-}
+})
+
+const ChoiceOptionRow = memo(function ChoiceOptionRow(props: {
+  index: number
+  option: Aglyn.ReusableComponentPropOption
+  onEdit: (index: number, patch: Partial<Aglyn.ReusableComponentPropOption>) => void
+  onRemove: (index: number) => void
+}) {
+  const { index, option, onEdit, onRemove } = props
+  const setLabel = useCallback(
+    (event: { target: { value: string } }) => onEdit(index, { label: event.target.value }),
+    [index, onEdit],
+  )
+  const setValue = useCallback(
+    (event: { target: { value: string } }) => onEdit(index, { value: event.target.value }),
+    [index, onEdit],
+  )
+  return (
+    <Stack direction="row" spacing={1} sx={CENTERED_ROW}>
+      <MemoTextField
+        label="Label"
+        size="small"
+        value={option.label ?? ''}
+        placeholder={option.value}
+        onChange={setLabel}
+        sx={FILL}
+      />
+      <MemoTextField
+        label="Value"
+        size="small"
+        value={option.value ?? ''}
+        onChange={setValue}
+        sx={FILL}
+      />
+      <IconButton
+        aria-label={`Remove choice ${option.label || option.value || index + 1}`}
+        onClick={() => onRemove(index)}
+      >
+        <MdiIcon path={mdiDelete.path} />
+      </IconButton>
+    </Stack>
+  )
+})
 
 /** The value a rule compares against, edited with the named property's control. */
 function RuleOperandField(props: {
@@ -698,8 +739,10 @@ function RuleOperandField(props: {
  * When a property shows and applies: rules over the other properties, all or
  * any of which must hold — the attribute schema's condition, edited as rows.
  */
-function PropertyConditionEditor(props: {
-  prop: Aglyn.ReusableComponentProp
+const PropertyConditionEditor = memo(function PropertyConditionEditor(props: {
+  /** The property the condition is on, which is never one of its own operands. */
+  name: string | undefined
+  condition: Aglyn.ReusableComponentProp['condition']
   declared: readonly Aglyn.ReusableComponentProp[]
   error: string
   noun: PropertyOwnerNoun
@@ -707,10 +750,10 @@ function PropertyConditionEditor(props: {
   place: PlacementNoun
   onChange: (condition: Aglyn.ReusableComponentProp['condition']) => void
 }) {
-  const { prop, declared, error, noun, place, onChange } = props
-  const draft = useMemo(() => readPropertyCondition(prop.condition), [prop.condition])
+  const { name, condition, declared, error, noun, place, onChange } = props
+  const draft = useMemo(() => readPropertyCondition(condition), [condition])
   const others = declared.filter(
-    (candidate) => candidate.name && candidate.name !== prop.name,
+    (candidate) => candidate.name && candidate.name !== name,
   )
   if (!draft) {
     return (
@@ -856,17 +899,32 @@ function PropertyConditionEditor(props: {
       {error ? <FormHelperText error>{error}</FormHelperText> : null}
     </Stack>
   )
-}
+})
 
 /** A kind's settings, edited with the Attributes panel's own controls. */
-function PropertySettingsEditor(props: {
-  prop: Aglyn.ReusableComponentProp
+interface PropertySettingsEditorProps {
+  type: Aglyn.ReusableComponentProp['type']
+  /** Read when the form mounts, as the form itself reads its values. */
+  settings: Aglyn.ReusableComponentProp['settings']
   declared: readonly Aglyn.ReusableComponentProp[]
   error: string
   onChange: (settings: Aglyn.ReusableComponentProp['settings']) => void
-}) {
-  const { prop, declared, error, onChange } = props
-  const kind = reusablePropKind(prop.type)
+}
+
+const PropertySettingsEditor = memo(
+  PropertySettingsEditorView,
+  // `settings` seeds the form at mount and is not read after; comparing it
+  // would redraw these fields on every keystroke typed into them.
+  (before, after) =>
+    before.type === after.type &&
+    before.declared === after.declared &&
+    before.error === after.error &&
+    before.onChange === after.onChange,
+)
+
+function PropertySettingsEditorView(props: PropertySettingsEditorProps) {
+  const { type, settings, declared, error, onChange } = props
+  const kind = reusablePropKind(type)
   const fields = useMemo(
     () =>
       (kind.settings ?? []).map((setting) => ({
@@ -894,7 +952,7 @@ function PropertySettingsEditor(props: {
     <Stack spacing={0.5}>
       <AttributeFieldsForm
         fields={fields}
-        values={{ settings: prop.settings ?? {} }}
+        values={{ settings: settings ?? {} }}
         onChange={(values) =>
           onChange(
             (values['settings'] as Aglyn.ReusableComponentProp['settings']) ?? {},
@@ -929,6 +987,277 @@ function defaultPatch(
       : (value as Aglyn.ReusableComponentPropValue),
   }
 }
+
+/** A change to one property, or a function of it as it stands. */
+type PropertyPatch =
+  | Partial<Aglyn.ReusableComponentProp>
+  | ((prop: Aglyn.ReusableComponentProp) => Partial<Aglyn.ReusableComponentProp>)
+
+type FieldChange = { target: { value: string } }
+
+/** A text field that redraws only when what it shows changes (AGL-3423). */
+const MemoTextField = memo(TextField) as typeof TextField
+
+const FILL = { flex: 1 } as const
+const CENTERED_ROW = { alignItems: 'center' } as const
+const ROW_HEADER = { alignItems: 'flex-start' } as const
+const TYPE_FIELD = { minWidth: 170 } as const
+const ROW_BODY = {
+  pl: { sm: 2 },
+  borderLeft: { sm: 2 },
+  borderColor: { sm: 'divider' },
+} as const
+
+/** Every kind, under a heading per group, built once. */
+const TYPE_MENU = TYPES_BY_GROUP.flatMap(({ group, types }) => [
+  // A disabled heading row rather than a list subheader: the select makes
+  // every child it is given pickable, and a group name is not a kind.
+  <MenuItem
+    key={`group-${group}`}
+    value={`group:${group}`}
+    disabled
+    sx={{
+      typography: 'overline',
+      lineHeight: 2,
+      '&.Mui-disabled': { opacity: 1 },
+    }}
+  >
+    {group}
+  </MenuItem>,
+  ...types.map((type) => (
+    <MenuItem key={type} value={type}>
+      {REUSABLE_PROP_KINDS[type].label}
+    </MenuItem>
+  )),
+])
+
+const PropertyTypeField = memo(function PropertyTypeField(props: {
+  value: string
+  onChange: (event: FieldChange) => void
+}) {
+  return (
+    <TextField
+      select
+      label="Type"
+      size="small"
+      value={props.value}
+      onChange={props.onChange}
+      sx={TYPE_FIELD}
+    >
+      {TYPE_MENU}
+    </TextField>
+  )
+})
+
+interface PropertyDefaultFieldProps {
+  declared: readonly Aglyn.ReusableComponentProp[]
+  /** Read when the form mounts, as the form itself reads its values. */
+  initialValue: unknown
+  noun: PropertyOwnerNoun
+  place: PlacementNoun
+  onChange: (value: unknown) => void
+}
+
+/**
+ * A property's Default, drawn with the control a page sets it with. It
+ * redraws when what the control is built from changes, not when the default
+ * typed into it does: the form holds that value itself.
+ */
+const PropertyDefaultField = memo(
+  function PropertyDefaultField(props: PropertyDefaultFieldProps) {
+    const { onChange } = props
+    return (
+      <Stack spacing={0.5}>
+        <PropertyValuesForm
+          declared={props.declared}
+          role="default"
+          noun={props.noun}
+          values={{ value: props.initialValue }}
+          onChange={(values) => onChange(values['value'])}
+        />
+        <Typography variant="caption" color="text.secondary">
+          {`Used where ${withArticle(props.place)} sets nothing.`}
+        </Typography>
+      </Stack>
+    )
+  },
+  (before, after) =>
+    before.declared === after.declared &&
+    before.noun === after.noun &&
+    before.place === after.place &&
+    before.onChange === after.onChange,
+)
+
+interface PropertyRowProps {
+  index: number
+  prop: Aglyn.ReusableComponentProp
+  nameError: string
+  choicesError: string
+  settingsError: string
+  conditionError: string
+  /** The other properties as the settings and condition read them. */
+  declared: readonly Aglyn.ReusableComponentProp[]
+  noun: PropertyOwnerNoun
+  place: PlacementNoun
+  onUpdate: (index: number, patch: PropertyPatch) => void
+  onRemove: (index: number) => void
+}
+
+/**
+ * One property's row: its name, kind and label, then its help, choices,
+ * settings, default and condition.
+ *
+ * ## Memoized, down to each field (AGL-3423)
+ *
+ * The dialog keeps every row in one draft, so a keystroke anywhere used to
+ * redraw every field in every row: 17 inputs and some 800 components for one
+ * letter in a three-property dialog. When each keystroke costs that much,
+ * typed input queues, and a multi-answer Choice redrawn by every one of them
+ * left React's nested-update count climbing until it threw #185. Each row,
+ * and each field in it, now redraws only when what it shows changes, with
+ * handlers that keep their identity and read the property as it stands.
+ */
+const PropertyRow = memo(function PropertyRow(props: PropertyRowProps) {
+  const { index, prop, declared, noun, place, onUpdate, onRemove } = props
+  const kind = reusablePropKind(prop.type)
+
+  const setName = useCallback(
+    (event: FieldChange) => onUpdate(index, { name: event.target.value }),
+    [index, onUpdate],
+  )
+  const setType = useCallback(
+    (event: FieldChange) =>
+      onUpdate(index, (current) =>
+        retypeComponentProp(
+          current,
+          event.target.value as Aglyn.ReusableComponentPropType,
+        ),
+      ),
+    [index, onUpdate],
+  )
+  const setLabel = useCallback(
+    (event: FieldChange) => onUpdate(index, { label: event.target.value }),
+    [index, onUpdate],
+  )
+  const setHelp = useCallback(
+    (event: FieldChange) => onUpdate(index, { description: event.target.value }),
+    [index, onUpdate],
+  )
+  const setOptions = useCallback(
+    (options: Aglyn.ReusableComponentPropOption[]) => onUpdate(index, { options }),
+    [index, onUpdate],
+  )
+  const setSettings = useCallback(
+    (settings: Aglyn.ReusableComponentProp['settings']) =>
+      onUpdate(index, { settings }),
+    [index, onUpdate],
+  )
+  const setDefault = useCallback(
+    (value: unknown) => onUpdate(index, (current) => defaultPatch(current, value)),
+    [index, onUpdate],
+  )
+  const setCondition = useCallback(
+    (condition: Aglyn.ReusableComponentProp['condition']) =>
+      onUpdate(index, { condition }),
+    [index, onUpdate],
+  )
+
+  // The Default is built from the property without its default (and without
+  // the words around it): the form holds the default itself, so typing one
+  // must not rebuild the control it is typed into.
+  const defaultDeclared = useContentStable([
+    {
+      ...prop,
+      name: 'value',
+      label: 'Default',
+      description: undefined,
+      condition: undefined,
+      defaultValue: undefined,
+      defaultIconPath: undefined,
+    } as Aglyn.ReusableComponentProp,
+  ])
+
+  return (
+    <Stack spacing={1.5}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={ROW_HEADER}>
+        <MemoTextField
+          label="Name"
+          size="small"
+          value={prop.name ?? ''}
+          error={Boolean(props.nameError)}
+          helperText={props.nameError || `{{prop.${prop.name || '…'}}}`}
+          onChange={setName}
+          sx={FILL}
+        />
+        <PropertyTypeField value={prop.type ?? 'text'} onChange={setType} />
+        <MemoTextField
+          label="Label"
+          size="small"
+          value={prop.label ?? ''}
+          helperText={
+            noun === 'layout' ? 'Shown in Screen Properties' : 'Shown in Attributes'
+          }
+          onChange={setLabel}
+          sx={FILL}
+        />
+        <IconButton
+          aria-label={`Remove ${prop.name || 'property'}`}
+          onClick={() => onRemove(index)}
+        >
+          <MdiIcon path={mdiDelete.path} />
+        </IconButton>
+      </Stack>
+      <Stack spacing={1.5} sx={ROW_BODY}>
+        <MemoTextField
+          label="Help"
+          size="small"
+          value={prop.description ?? ''}
+          helperText="Shown beside the field wherever it is set"
+          onChange={setHelp}
+          fullWidth
+        />
+        {kind.options ? (
+          <ChoiceOptionsEditor
+            options={prop.options ?? NO_OPTIONS}
+            error={props.choicesError}
+            optional={kind.options === 'optional'}
+            onChange={setOptions}
+          />
+        ) : null}
+        <PropertySettingsEditor
+          key={`settings:${prop.type ?? 'text'}`}
+          type={prop.type}
+          settings={prop.settings}
+          declared={declared}
+          error={props.settingsError}
+          onChange={setSettings}
+        />
+        <PropertyDefaultField
+          key={`default:${prop.type ?? 'text'}:${JSON.stringify(
+            prop.options ?? [],
+          )}:${JSON.stringify(prop.settings ?? {})}`}
+          declared={defaultDeclared}
+          initialValue={defaultFormValue(prop)}
+          noun={noun}
+          place={place}
+          onChange={setDefault}
+        />
+        <PropertyConditionEditor
+          name={prop.name}
+          condition={prop.condition}
+          declared={declared}
+          error={props.conditionError}
+          noun={noun}
+          place={place}
+          onChange={setCondition}
+        />
+      </Stack>
+    </Stack>
+  )
+})
+
+/** A property with no answers yet, the same list on every render. */
+const NO_OPTIONS: Aglyn.ReusableComponentPropOption[] = []
 
 export interface ComponentPropsDialogProps {
   open: boolean
@@ -998,16 +1327,41 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
     return [...originalNames].filter((name) => name && !next.has(name))
   }, [draft, originalNames])
 
-  const update = (index: number, patch: Partial<Aglyn.ReusableComponentProp>) =>
-    setDraft((current) => {
-      const before = current[index]?.name ?? ''
-      const edited = current.map((prop, i) =>
-        i === index ? { ...prop, ...patch } : prop,
-      )
-      return typeof patch.name === 'string' && patch.name !== before
-        ? renameConditionReferences(edited, before, patch.name)
-        : edited
-    })
+  // One identity for the life of the dialog, so a memoized row redraws only
+  // when its own property does. A patch may be a function of the property as
+  // it stands, so no row's handler has to hold a copy of it.
+  const update = useCallback(
+    (index: number, patch: PropertyPatch) =>
+      setDraft((current) => {
+        const prior = current[index]
+        if (!prior) return current
+        const resolved = typeof patch === 'function' ? patch(prior) : patch
+        const before = prior.name ?? ''
+        const edited = current.map((prop, i) =>
+          i === index ? { ...prop, ...resolved } : prop,
+        )
+        return typeof resolved.name === 'string' && resolved.name !== before
+          ? renameConditionReferences(edited, before, resolved.name)
+          : edited
+      }),
+    [],
+  )
+  const remove = useCallback((index: number) => {
+    setDraft((current) => current.filter((_, i) => i !== index))
+    setRowKeys((current) => current.filter((_, i) => i !== index))
+  }, [])
+  /*
+   * What a row's settings and condition read of the OTHER properties, held by
+   * content: everything but each one's default and help, which are what most
+   * keystrokes change and which neither reads. So typing a Default or a Help
+   * redraws that one field, not every row (AGL-3423).
+   */
+  const declared = useContentStable(
+    draft.map(
+      ({ defaultValue: _value, defaultIconPath: _path, description: _help, ...rest }) =>
+        rest as Aglyn.ReusableComponentProp,
+    ),
+  )
 
   const handleSave = async () => {
     if (hasErrors || saving) return
@@ -1046,160 +1400,22 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
         ) : null}
 
         <Stack spacing={2} divider={<Divider flexItem />}>
-          {draft.map((prop, index) => {
-            const kind = reusablePropKind(prop.type)
-            const rowKey = rowKeys[index] ?? index
-            return (
-              <Stack key={rowKey} spacing={1.5}>
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={1}
-                  sx={{ alignItems: 'flex-start' }}
-                >
-                  <TextField
-                    label="Name"
-                    size="small"
-                    value={prop.name ?? ''}
-                    error={Boolean(errors[index]?.name)}
-                    helperText={
-                      errors[index]?.name || `{{prop.${prop.name || '…'}}}`
-                    }
-                    onChange={(event) =>
-                      update(index, { name: event.target.value })
-                    }
-                    sx={{ flex: 1 }}
-                  />
-                  <TextField
-                    select
-                    label="Type"
-                    size="small"
-                    value={prop.type ?? 'text'}
-                    onChange={(event) =>
-                      update(
-                        index,
-                        retypeComponentProp(
-                          prop,
-                          event.target.value as Aglyn.ReusableComponentPropType,
-                        ),
-                      )
-                    }
-                    sx={{ minWidth: 170 }}
-                  >
-                    {TYPES_BY_GROUP.flatMap(({ group, types }) => [
-                      // A disabled heading row rather than a list subheader:
-                      // the select makes every child it is given pickable,
-                      // and a group name is not a kind.
-                      <MenuItem
-                        key={`group-${group}`}
-                        value={`group:${group}`}
-                        disabled
-                        sx={{
-                          typography: 'overline',
-                          lineHeight: 2,
-                          '&.Mui-disabled': { opacity: 1 },
-                        }}
-                      >
-                        {group}
-                      </MenuItem>,
-                      ...types.map((type) => (
-                        <MenuItem key={type} value={type}>
-                          {REUSABLE_PROP_KINDS[type].label}
-                        </MenuItem>
-                      )),
-                    ])}
-                  </TextField>
-                  <TextField
-                    label="Label"
-                    size="small"
-                    value={prop.label ?? ''}
-                    helperText={
-                      noun === 'layout' ? 'Shown in Screen Properties' : 'Shown in Attributes'
-                    }
-                    onChange={(event) =>
-                      update(index, { label: event.target.value })
-                    }
-                    sx={{ flex: 1 }}
-                  />
-                  <IconButton
-                    aria-label={`Remove ${prop.name || 'property'}`}
-                    onClick={() => {
-                      setDraft((current) => current.filter((_, i) => i !== index))
-                      setRowKeys((current) => current.filter((_, i) => i !== index))
-                    }}
-                  >
-                    <MdiIcon path={mdiDelete.path} />
-                  </IconButton>
-                </Stack>
-                <Stack
-                  spacing={1.5}
-                  sx={{
-                    pl: { sm: 2 },
-                    borderLeft: { sm: 2 },
-                    borderColor: { sm: 'divider' },
-                  }}
-                >
-                  <TextField
-                    label="Help"
-                    size="small"
-                    value={prop.description ?? ''}
-                    helperText="Shown beside the field wherever it is set"
-                    onChange={(event) =>
-                      update(index, { description: event.target.value })
-                    }
-                    fullWidth
-                  />
-                  {kind.options ? (
-                    <ChoiceOptionsEditor
-                      options={prop.options ?? []}
-                      error={errors[index]?.choices ?? ''}
-                      optional={kind.options === 'optional'}
-                      onChange={(options) => update(index, { options })}
-                    />
-                  ) : null}
-                  <PropertySettingsEditor
-                    key={`settings:${prop.type ?? 'text'}`}
-                    prop={prop}
-                    declared={draft}
-                    error={errors[index]?.settings ?? ''}
-                    onChange={(settings) => update(index, { settings })}
-                  />
-                  <Stack spacing={0.5}>
-                    <PropertyValuesForm
-                      key={`default:${prop.type ?? 'text'}:${JSON.stringify(
-                        prop.options ?? [],
-                      )}:${JSON.stringify(prop.settings ?? {})}`}
-                      declared={[
-                        {
-                          ...prop,
-                          name: 'value',
-                          label: 'Default',
-                          description: undefined,
-                          condition: undefined,
-                        },
-                      ]}
-                      role="default"
-                      noun={noun}
-                      values={{ value: defaultFormValue(prop) }}
-                      onChange={(values) =>
-                        update(index, defaultPatch(prop, values['value']))
-                      }
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      {`Used where ${withArticle(place)} sets nothing.`}
-                    </Typography>
-                  </Stack>
-                  <PropertyConditionEditor
-                    prop={prop}
-                    declared={draft}
-                    error={errors[index]?.condition ?? ''}
-                    noun={noun}
-                    place={place}
-                    onChange={(condition) => update(index, { condition })}
-                  />
-                </Stack>
-              </Stack>
-            )
-          })}
+          {draft.map((prop, index) => (
+            <PropertyRow
+              key={rowKeys[index] ?? index}
+              index={index}
+              prop={prop}
+              nameError={errors[index]?.name ?? ''}
+              choicesError={errors[index]?.choices ?? ''}
+              settingsError={errors[index]?.settings ?? ''}
+              conditionError={errors[index]?.condition ?? ''}
+              declared={declared}
+              noun={noun}
+              place={place}
+              onUpdate={update}
+              onRemove={remove}
+            />
+          ))}
         </Stack>
 
         <Button
