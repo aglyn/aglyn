@@ -38,7 +38,7 @@
  * `behavior` figures are contact fields; `formNames` is the `formName` a
  * submission already stores; `createdAfterMs`/`createdBeforeMs` read the
  * `createdAt` all three person silos already stamp; `campaignIds` reads the
- * membership `campaign-membership.ts` defines, which the forms console writes
+ * membership `container-membership.ts` defines, which the forms console writes
  * and the submit route propagates.
  *
  * ⚠️ A rule selects an AUDIENCE. It does not grant consent — a person matched
@@ -46,7 +46,7 @@
  * basis are separate joins and `marketing-consent.ts` owns the second one.
  */
 
-import { normalizeCampaignIds } from './campaign-membership'
+import { normalizeContainerIds } from './container-membership'
 import {
   CONTACT_SOURCE_LABELS,
   contactMatchesSegment,
@@ -543,7 +543,7 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
   // coercion: the cap, the dedupe and the trim are properties of the stored
   // membership, and a second reading of them here would let a rule name more
   // campaigns than any record is allowed to be filed under.
-  const campaignIds = normalizeCampaignIds(value['campaignIds'])
+  const campaignIds = normalizeContainerIds(value['campaignIds'])
   const createdAfterMs = asPositiveNumber(value['createdAfterMs'])
   const createdBeforeMs = asPositiveNumber(value['createdBeforeMs'])
   const inListIds = asStringArray(value['inListIds']).slice(

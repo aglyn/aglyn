@@ -197,6 +197,46 @@ describe('StaffOrgActions (AGL-939)', () => {
     expect(mockBatchWrites).toEqual([])
   })
 
+  /*
+   * The AI pause is two levers and one staff action: ONE request naming
+   * both, so the workspace's owners get one email rather than one per
+   * lever (AGL-3442).
+   */
+  it('pauses AI in one lockdown request naming both levers', async () => {
+    const onChanged = jest.fn()
+    render(<StaffOrgActions org={org()} onChanged={onChanged} aiPaused={false} />)
+    fireEvent.click(screen.getByText('Pause AI'))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByText('Pause AI'))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    const calls = (global.fetch as jest.Mock).mock.calls as Array<[string, { body: string }]>
+    expect(calls.map(([url]) => url)).toEqual(['/api/admin/lockdown'])
+    expect(JSON.parse(calls[0][1].body)).toEqual({
+      scope: 'feature',
+      targetIds: ['ai-assist', 'ai-generate'],
+      orgId: 'org-1',
+      action: 'lock',
+      reason: 'billing',
+    })
+  })
+
+  it('resumes AI in one lockdown request naming both levers', async () => {
+    const onChanged = jest.fn()
+    render(<StaffOrgActions org={org()} onChanged={onChanged} aiPaused />)
+    fireEvent.click(screen.getByText('Resume AI'))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByText('Resume AI'))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    const calls = (global.fetch as jest.Mock).mock.calls as Array<[string, { body: string }]>
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(calls[0][1].body)).toEqual({
+      scope: 'feature',
+      targetIds: ['ai-assist', 'ai-generate'],
+      orgId: 'org-1',
+      action: 'unlock',
+    })
+  })
+
   it('unsuspend posts action:unlock to the same route — still no direct write', async () => {
     const onChanged = jest.fn()
     render(

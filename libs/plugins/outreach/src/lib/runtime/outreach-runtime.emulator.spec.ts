@@ -45,9 +45,10 @@ import type {
   PluginRecordTaskRequest,
   PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
-import { EMAIL_TOPIC_SALES, readTopicSubscriptionState } from '@aglyn/aglyn/app-utils/email-topics'
+import { readTopicSubscriptionState } from '@aglyn/aglyn/app-utils/subscription-topics'
+import { SALES_TOPIC_ID } from '../model/sales-topic'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
-import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-confirmation'
+import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/topic-subscriptions'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEnrollment, OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import { FakeGmail } from './fixtures/fake-gmail'
@@ -146,7 +147,7 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
       filed.feed.push({ action, target })
     },
     optOutOfSalesTopic: async ({ hostId, email }) => {
-      await recordTopicOptOut(hostId, email, EMAIL_TOPIC_SALES, { firestore })
+      await recordTopicOptOut(hostId, email, SALES_TOPIC_ID, { firestore })
     },
     suppressBouncedEmail: async ({ email, hostId }) => {
       await suppressEmail({ email, reason: 'bounce', context: 'outreach', hostId, firestore })
@@ -968,7 +969,7 @@ describeEmulated('the sync job (AGL-2981)', () => {
       source: 'runtime',
     })
     const topics = (await firestore.collection('hosts').doc(HOST).collection('topicOptOuts').doc(key).get()).get('topics')
-    expect(readTopicSubscriptionState(topics?.[EMAIL_TOPIC_SALES])).toBe('opted-out')
+    expect(readTopicSubscriptionState(topics?.[SALES_TOPIC_ID])).toBe('opted-out')
   })
 })
 
@@ -985,7 +986,7 @@ describeEmulated('the one-click unsubscribe (AGL-2981)', () => {
       enrollmentId: person.id,
     })
     const topics = (await firestore.collection('hosts').doc(HOST).collection('topicOptOuts').doc(key).get()).get('topics')
-    expect(readTopicSubscriptionState(topics?.[EMAIL_TOPIC_SALES])).toBe('opted-out')
+    expect(readTopicSubscriptionState(topics?.[SALES_TOPIC_ID])).toBe('opted-out')
   }
 
   it('GET stops the enrollment and suppresses the address, and says so on a plain page', async () => {

@@ -143,8 +143,8 @@ PROJECTS=(
   libs/plugins/workflows
   # The Data plugin proves a repeat's scoped sharing against the real rules.
   libs/plugins/data
-  # The CRM plugin files inbound email by a member's confirmed aliases; the
-  # spec moved here from libs/tenant/data/admin with the capture code.
+  # The CRM files a BCC from a member's send-as alias on the prospect, and its
+  # spec moved here with the capture path (AGL-3080).
   libs/plugins/crm
 )
 

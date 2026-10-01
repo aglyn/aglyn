@@ -106,6 +106,10 @@ import {
 import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
 import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
 import {
+  PAYMENT_METHOD_UPDATE_FLOW,
+  UPDATE_PAYMENT_METHOD_ANCHOR,
+} from '../../../../../utils/update-payment-method-link'
+import {
   clearSubscribeCheckoutPending,
   markSubscribeCheckoutPending,
   reportPlatformAdConversion,
@@ -531,6 +535,44 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       dequeue()
     }
   }, [subscriptionRequest, queueLoading])
+
+  /**
+   * Update payment method (AGL-3442): Stripe's portal, opened straight on its
+   * add-a-payment-method step and returning here once the method is saved.
+   * The failed-payment email and the past-due banner both say to update the
+   * payment method in Billing, and link to this button by its anchor.
+   *
+   * Offered once the profile read finds a Stripe customer, which is what the
+   * route needs to open the flow. A workspace without one has no payment
+   * method to update; it adds its first in the Settings section. Read
+   * off the profile itself rather than its load state, which goes back to
+   * pending on every reload and would take the button away and back.
+   */
+  const canUpdatePaymentMethod =
+    can('billing.manage') && Boolean(billingProfile.state?.customer)
+  const handleUpdatePaymentMethod = useCallback(async () => {
+    const dequeue = queueLoading()
+    try {
+      const payload = await subscriptionRequest({
+        action: 'portal',
+        flow: PAYMENT_METHOD_UPDATE_FLOW,
+      })
+      if (payload?.url) window.location.assign(payload.url)
+    } finally {
+      dequeue()
+    }
+  }, [subscriptionRequest, queueLoading])
+  // A link that names the button arrives as `#update-payment-method`. The
+  // button renders only after the profile read, so the browser's own jump to
+  // the fragment has already happened against a page without it; it is
+  // brought into view, and focused, once it exists.
+  useEffect(() => {
+    if (!canUpdatePaymentMethod || typeof window === 'undefined') return
+    if (window.location.hash !== `#${UPDATE_PAYMENT_METHOD_ANCHOR}`) return
+    const button = document.getElementById(UPDATE_PAYMENT_METHOD_ANCHOR)
+    button?.scrollIntoView?.({ block: 'center' })
+    button?.focus({ preventScroll: true })
+  }, [canUpdatePaymentMethod])
 
   /**
    * Cancel/resume (AGL-269), asymmetric by design (AGL-1859).
@@ -1369,6 +1411,30 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       'Your subscription tier and its headline limits — ' +
                       'every plan\'s full entitlements are in the docs.',
                   })}
+                  HeaderProps={
+                    canUpdatePaymentMethod
+                      ? {
+                          action: (
+                            // Contained while a payment is failing, when it
+                            // is the one thing on the page that matters.
+                            <Button
+                              id={UPDATE_PAYMENT_METHOD_ANCHOR}
+                              size="small"
+                              color="primary"
+                              variant={
+                                subscriptionStatus === 'past_due' ||
+                                subscriptionStatus === 'unpaid'
+                                  ? 'contained'
+                                  : 'outlined'
+                              }
+                              onClick={() => void handleUpdatePaymentMethod()}
+                            >
+                              {'Update payment method'}
+                            </Button>
+                          ),
+                        }
+                      : undefined
+                  }
                   contentGutterX
                   contentGutterY
                 >
@@ -1495,14 +1561,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       {/*
                         A button that says "manage payment methods" goes to
-                        the surface that manages payment methods. It opened
-                        the Stripe Billing Portal — a different product, in a
-                        new tab — because the portal used to be the only place
-                        a card could be changed. It is not: the Settings
-                        section has the cards, in our own design, and the
-                        portal stays reachable from Outstanding where dunning
-                        recovery actually needs it. One button was doing two
-                        jobs; this is the one it is named after.
+                        the surface that manages payment methods: the Settings
+                        section, which lists, adds, removes and defaults the
+                        cards in our own design. Replacing the card that is
+                        billed in one step is Update payment method, in this
+                        card's header, which opens Stripe's own flow for it.
                       */}
                       <AppLink
                         componentVariant="button"

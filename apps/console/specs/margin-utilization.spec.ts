@@ -57,7 +57,12 @@ import {
 } from '@aglyn/aglyn'
 import type { OrgPlan } from '@aglyn/aglyn'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { ASSIST_CREDIT_COST_USD } from '@aglyn/aglyn/app-utils/assist-credits'
+import { pluginUsageBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+
+/** What one AI credit costs, as the AI plugin declares its credits band. */
+const ASSIST_CREDIT_COST_USD = pluginUsageBands().find(
+  (band) => band.id === 'assistCredits',
+)?.unitCostUsd as number
 import {
   UTILIZATION_BANDS,
   bandUtilization,

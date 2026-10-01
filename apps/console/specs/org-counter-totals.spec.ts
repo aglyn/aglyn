@@ -79,17 +79,20 @@ describe('orgCounterTotals', () => {
       }),
       [hostRef('siteA'), hostRef('siteB')],
       '2026-07',
+      undefined,
+      // A counter a plugin's usage band is measured by, summed under its name.
+      ['workflowRuns'],
     ).then((totals) => {
       // Hand-computed: 120+80, 40+5, 7+3. Neighbouring months are present in
       // the fixture precisely so that reading the wrong field is a failure
       // and not an identical number.
       expect(totals).toEqual({
         emailSends: 200,
-        workflowRuns: 45,
         actionRuns: 10,
         // Bytes, not a count — see the org-library block below. Zero here
         // because no `orgRef` was supplied.
         orgLibraryBytes: 0,
+        counters: { workflowRuns: 45 },
       })
     })
   })
@@ -142,9 +145,9 @@ describe('orgCounterTotals', () => {
     )
     expect(totals).toEqual({
       emailSends: 0,
-      workflowRuns: 0,
       actionRuns: 0,
       orgLibraryBytes: 0,
+      counters: {},
     })
     expect(Number.isFinite(totals.emailSends)).toBe(true)
   })
@@ -225,9 +228,9 @@ describe('orgCounterTotals', () => {
     const totals = await orgCounterTotals(firestore, [], '2026-07')
     expect(totals).toEqual({
       emailSends: 0,
-      workflowRuns: 0,
       actionRuns: 0,
       orgLibraryBytes: 0,
+      counters: {},
     })
     expect(spy).not.toHaveBeenCalled()
   })
@@ -239,7 +242,7 @@ describe('orgCounterTotals', () => {
    * summed host counters only, so those bytes were gated at upload and then
    * dropped before invoicing.
    *
-   * DIFFERENT UNIT from the three counts beside it, and named so: BYTES,
+   * DIFFERENT UNIT from the counts beside it, and named so: BYTES,
    * cumulative, read off the counter's `bytes` field rather than a `YYYY-MM`
    * one. It rides this helper because it rides the same `getAll` — not because
    * it is the same kind of number.
@@ -260,7 +263,7 @@ describe('orgCounterTotals', () => {
       expect(totals.orgLibraryBytes).toBe(25_953_123)
     })
 
-    it('does not fold org bytes into any of the three counts', async () => {
+    it('does not fold org bytes into any of the counts', async () => {
       const totals = await orgCounterTotals(
         fakeFirestore({
           siteA: { emailSends: { '2026-07': 12 } },
@@ -275,7 +278,6 @@ describe('orgCounterTotals', () => {
       // appended ref landing on `emailSends` would bill an org for its photos
       // as if it had emailed them.
       expect(totals.emailSends).toBe(12)
-      expect(totals.workflowRuns).toBe(0)
       expect(totals.actionRuns).toBe(0)
     })
 

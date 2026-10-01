@@ -17,13 +17,13 @@
 
 import type { AglynOrgBilling, OrgPlan } from '../foundation'
 import {
-  MARKETPLACE_PROCESSING_FIXED_CENTS,
-  MARKETPLACE_PROCESSING_PERCENT_BNPL,
-  MARKETPLACE_PROCESSING_PERCENT_CARD,
+  PROCESSING_FIXED_CENTS,
+  BNPL_PROCESSING_PERCENT,
+  CARD_PROCESSING_PERCENT,
   PLAN_ENTITLEMENTS,
   resolveTransactionFeeCents,
   resolveTransactionFeePct,
-  storefrontProcessingCostCents,
+  saleProcessingCostCents,
 } from './plan-entitlements'
 
 /**
@@ -43,7 +43,7 @@ import {
 /** What Stripe debits from the PLATFORM's balance for one destination charge. */
 function stripeCostCents(chargeCents: number, percent: number): number {
   return (
-    Math.round((chargeCents * percent) / 100) + MARKETPLACE_PROCESSING_FIXED_CENTS
+    Math.round((chargeCents * percent) / 100) + PROCESSING_FIXED_CENTS
   )
 }
 
@@ -91,7 +91,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
             cents,
           )
           const net =
-            fee - stripeCostCents(cents, MARKETPLACE_PROCESSING_PERCENT_BNPL)
+            fee - stripeCostCents(cents, BNPL_PROCESSING_PERCENT)
           expect({ plan, productType, cents, net: net >= 0 }).toEqual({
             plan,
             productType,
@@ -115,7 +115,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
       const cents = 10000
       const fee = resolveTransactionFeeCents(orgOn(plan), 'physical', cents, cents)
       const net =
-        fee - stripeCostCents(cents, MARKETPLACE_PROCESSING_PERCENT_BNPL)
+        fee - stripeCostCents(cents, BNPL_PROCESSING_PERCENT)
       expect(net).toBeGreaterThanOrEqual(Math.round((cents * pct) / 100))
     }
   })
@@ -139,7 +139,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
           takeOnly -
             stripeCostCents(
               STRIPE_MIN_CHARGE_CENTS,
-              MARKETPLACE_PROCESSING_PERCENT_CARD,
+              CARD_PROCESSING_PERCENT,
             ),
         ).toBeLessThan(0)
       }
@@ -154,7 +154,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
   it('the old take-only fee lost more on a bigger Starter order, not less', () => {
     const takeOnlyNet = (cents: number) =>
       Math.round((cents * PLAN_ENTITLEMENTS.starter.transactionFeePhysicalPct) / 100) -
-      stripeCostCents(cents, MARKETPLACE_PROCESSING_PERCENT_CARD)
+      stripeCostCents(cents, CARD_PROCESSING_PERCENT)
     expect(takeOnlyNet(10000)).toBeLessThan(0)
     expect(takeOnlyNet(100000)).toBeLessThan(takeOnlyNet(10000))
   })
@@ -181,10 +181,10 @@ describe('storefront processing recovery (AGL-2152)', () => {
     )
     expect(onCharge).toBeGreaterThan(onGoods)
     expect(
-      onGoods - stripeCostCents(chargeCents, MARKETPLACE_PROCESSING_PERCENT_BNPL),
+      onGoods - stripeCostCents(chargeCents, BNPL_PROCESSING_PERCENT),
     ).toBeLessThan(0)
     expect(
-      onCharge - stripeCostCents(chargeCents, MARKETPLACE_PROCESSING_PERCENT_BNPL),
+      onCharge - stripeCostCents(chargeCents, BNPL_PROCESSING_PERCENT),
     ).toBeGreaterThanOrEqual(0)
   })
 
@@ -200,7 +200,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
       expect(fee).toBeLessThanOrEqual(cents)
       expect(fee).toBe(
         Math.round((cents * PLAN_ENTITLEMENTS.starter.transactionFeePhysicalPct) / 100) +
-          storefrontProcessingCostCents(cents),
+          saleProcessingCostCents(cents),
       )
     }
   })
@@ -215,20 +215,20 @@ describe('storefront processing recovery (AGL-2152)', () => {
     expect(
       resolveTransactionFeeCents(orgOn('business'), 'physical', 1000, undefined),
     ).toBe(resolveTransactionFeeCents(orgOn('business'), 'physical', 1000, 1000))
-    expect(storefrontProcessingCostCents(0)).toBe(0)
-    expect(storefrontProcessingCostCents(NaN)).toBe(0)
+    expect(saleProcessingCostCents(0)).toBe(0)
+    expect(saleProcessingCostCents(NaN)).toBe(0)
   })
 
   /** Rounded UP, so the recovery is never a cent short of Stripe's debit. */
   it('rounds the percentage up rather than to nearest', () => {
     // 101¢ × 6% = 6.06¢ — a `Math.round` would answer 6 and leave a cent short.
-    expect(storefrontProcessingCostCents(101)).toBe(
-      Math.ceil((101 * MARKETPLACE_PROCESSING_PERCENT_BNPL) / 100) +
-        MARKETPLACE_PROCESSING_FIXED_CENTS,
+    expect(saleProcessingCostCents(101)).toBe(
+      Math.ceil((101 * BNPL_PROCESSING_PERCENT) / 100) +
+        PROCESSING_FIXED_CENTS,
     )
-    expect(storefrontProcessingCostCents(101)).toBeGreaterThanOrEqual(
-      (101 * MARKETPLACE_PROCESSING_PERCENT_BNPL) / 100 +
-        MARKETPLACE_PROCESSING_FIXED_CENTS,
+    expect(saleProcessingCostCents(101)).toBeGreaterThanOrEqual(
+      (101 * BNPL_PROCESSING_PERCENT) / 100 +
+        PROCESSING_FIXED_CENTS,
     )
   })
 })

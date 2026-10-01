@@ -68,6 +68,11 @@ beforeEach(() => {
       options: [{ name: 'finish', values: ['Brass', 'Black'] }],
       mediaUrls: ['media://lamp.jpg'],
       seo: { title: 'Lamp', description: 'A lamp' },
+      priceUsd: 40,
+      variants: [
+        { id: 'v-brass', options: { finish: 'Brass' }, priceUsd: 40 },
+        { id: 'v-black', options: { finish: 'Black' }, priceUsd: '35.5' },
+      ],
     },
     'hosts/h1/products/gone': { name: 'Old', deletedAt: 123 },
     'hosts/h1/products/unnamed': { name: '' },
@@ -90,6 +95,11 @@ describe('the product index', () => {
         imageUrl: 'media://lamp.jpg',
         seoTitle: 'Lamp',
         seoDescription: 'A lamp',
+        priceUsd: 40,
+        variants: [
+          { id: 'v-brass', options: { finish: 'Brass' }, priceUsd: 40 },
+          { id: 'v-black', options: { finish: 'Black' }, priceUsd: 35.5 },
+        ],
       },
     })
   })

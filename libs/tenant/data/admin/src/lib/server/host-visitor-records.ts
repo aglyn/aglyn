@@ -33,6 +33,9 @@ import {
   personKey,
   readMarketingBasis,
   submissionMonthKey,
+  VISITOR_RECORD_NOTICE_SENT_FIELD,
+  visitorRecordAcceptFillsCeiling,
+  visitorRecordCeilingAnnounced,
   visitorRecordRefusedCounterId,
   type VisitorRecordKind,
 } from '@aglyn/aglyn/server'
@@ -221,13 +224,19 @@ export async function leadForWrite(
  *    so the record cannot be edited away by the site it describes, and host
  *    admins can already READ it — which is what lets the inbox console page
  *    render it with no rules change.
- *  - One in-app notification to the site's managers, on the FIRST refusal of
- *    the month only. A notification per refused bot request would be the
- *    flood again, delivered.
+ *  - One notification to the site's managers per CROSSING (AGL-3442): on the
+ *    first refusal after the site reaches the ceiling, and not again while it
+ *    stays there. A notification per refused bot request would be the flood
+ *    again, delivered, and one a month would repeat an alarm about a state a
+ *    site can sit in for months. {@link rearmVisitorRecordCeilingNotice}
+ *    re-arms it once the site is seen below the ceiling, so reaching it again
+ *    is announced again.
  *
  * The counter is month-keyed even though the CEILING is a total, because the
  * two facts are different: the ceiling is "how many records exist" and this is
- * "how many were turned away recently". Only the second is worth a notice.
+ * "how many were turned away recently". The inbox reports the second; the
+ * notice announces the first, which is why it follows the crossing and not
+ * the month.
  *
  * Best-effort throughout: bookkeeping that failed must never turn a contained
  * refusal into a 500, because a 500 is an invitation to retry.
@@ -246,17 +255,23 @@ export async function recordVisitorRecordCeilingTrip(options: {
       .collection('counters')
       .doc(visitorRecordRefusedCounterId(kind))
     const refusedSnapshot = await refusedRef.get()
-    const alreadyRefused = Number(refusedSnapshot.get(monthKey) ?? 0)
+    // Announced already for this crossing, by this writer or by the
+    // month-scoped one before it — see `visitorRecordCeilingAnnounced`.
+    const announced = visitorRecordCeilingAnnounced(refusedSnapshot.data())
+    const now = Date.now()
     await refusedRef.set(
       {
         [monthKey]: FieldValue.increment(1),
         // Explicit values only — Firestore rejects `undefined`.
         ceiling,
-        lastRefusedAtMs: Date.now(),
+        lastRefusedAtMs: now,
+        // Marked in the same write as the refusal, so the next refusal reads
+        // the crossing as announced without a write of its own.
+        ...(announced ? {} : { [VISITOR_RECORD_NOTICE_SENT_FIELD]: now }),
       },
       { merge: true },
     )
-    if (alreadyRefused === 0) {
+    if (!announced) {
       const leads = kind === 'leads'
       /*
        * What is refused, said exactly (AGL-3432). A lead door — a form
@@ -290,6 +305,45 @@ export async function recordVisitorRecordCeilingTrip(options: {
     }
   } catch (error) {
     console.error('visitor record ceiling bookkeeping failed', error)
+  }
+}
+
+/**
+ * Re-arm the ceiling notice when an accepted record shows the site was below
+ * the ceiling (AGL-3442).
+ *
+ * Called by every writer that judges a new record against the ceiling, with
+ * the count it judged. It does nothing unless the record it just accepted took
+ * the site's LAST free slot: a site that dropped below the ceiling can reach
+ * it again only through that accept, so it is where the re-arm is observed,
+ * and every other accept pays nothing for it. That accept reads the refusal
+ * counter, and clears the notice marker only when the previous crossing was
+ * announced, so a site that never reached the ceiling gains no document.
+ *
+ * Best-effort and never throws, for the reason the trip's bookkeeping is: the
+ * record is already stored, and a failure here only costs a notice.
+ */
+export async function rearmVisitorRecordCeilingNotice(options: {
+  hostRef: FirebaseFirestore.DocumentReference
+  kind: VisitorRecordKind
+  /** The live count the accept was judged against, before its own record. */
+  used: number
+  ceiling: number
+}): Promise<void> {
+  const { hostRef, kind, used, ceiling } = options
+  if (!visitorRecordAcceptFillsCeiling(used, ceiling)) return
+  try {
+    const refusedRef = hostRef
+      .collection('counters')
+      .doc(visitorRecordRefusedCounterId(kind))
+    const refusedSnapshot = await refusedRef.get()
+    if (!visitorRecordCeilingAnnounced(refusedSnapshot.data())) return
+    await refusedRef.set(
+      { [VISITOR_RECORD_NOTICE_SENT_FIELD]: null },
+      { merge: true },
+    )
+  } catch (error) {
+    console.error('visitor record ceiling re-arm failed', error)
   }
 }
 
@@ -438,12 +492,15 @@ export async function addHostLeadOutcome(options: {
     let created = false
     let sourceAdded = false
     let predicted = false
+    // The count a new person was judged against, for the notice re-arm.
+    let usedBeforeCreate: number | null = null
     const refused = await firestore.runTransaction(async (tx) => {
       // Reset per attempt: a contended transaction re-runs its body, and a
       // flag left standing from an aborted attempt would credit a campaign
       // with a person who turned out to exist already.
       created = false
       sourceAdded = false
+      usedBeforeCreate = null
       // ALL READS BEFORE THE WRITE, which Firestore requires.
       const existing = await tx.get(leadRef)
       // Whether the lead already reads "Would bounce", for the check below.
@@ -480,6 +537,7 @@ export async function addHostLeadOutcome(options: {
           await tx.get(scopedToHost(leadsRef, hostId).count())
         ).data().count
         if (checkVisitorRecordCeiling(used, maxPerHost).exceeded) return true
+        usedBeforeCreate = used
       }
       /*
        * Consent is carried forward and never cleared.
@@ -612,6 +670,14 @@ export async function addHostLeadOutcome(options: {
         ceiling: maxPerHost,
       })
       return NOT_STORED
+    }
+    if (created && usedBeforeCreate !== null) {
+      await rearmVisitorRecordCeilingNotice({
+        hostRef,
+        kind: 'leads',
+        used: usedBeforeCreate,
+        ceiling: maxPerHost,
+      })
     }
     /*
      * ATTRIBUTED ON CREATION ONLY.

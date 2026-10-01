@@ -392,6 +392,7 @@ export async function notifyStaff(payload: NotificationPayload): Promise<void> {
       await raiseOperatorAlert(alert, {
         subject: payload.title,
         ...(payload.body ? { body: payload.body } : {}),
+        ...(payload.level ? { level: payload.level } : {}),
         ...(payload.link ? { url: payload.link } : {}),
         ...(payload.orgId ? { orgId: payload.orgId } : {}),
         ...(payload.hostId ? { hostId: payload.hostId } : {}),

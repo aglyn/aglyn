@@ -87,6 +87,12 @@ if (pasted.error) console.warn(pasted.error)
 if (canMoveNodeOut(first)) moveNodeOut(first)
 ```
 
+A complete app built this way, with its own outline, toolbar and preview,
+is [`examples/consumers/logic-only`](https://github.com/aglyn/aglyn/tree/main/examples/consumers/logic-only)
+in the monorepo. It installs this package and `@aglyn/aglyn` from npm with
+`react` and nothing else, and Aglyn's CI builds it and runs it in a browser
+on every release.
+
 ## How it fits
 
 This is the `besigner` scope of the package map: the designer's logic,

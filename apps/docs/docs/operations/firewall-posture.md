@@ -119,6 +119,8 @@ Per project:
 | every declared bypass rule is **still scoped** | see below |
 | every declared **path and group shape** is present | see below — added 2026-09-03 |
 | no **undeclared** bypass rule exists | an undeclared hole is an unreviewed hole |
+| every declared **rate-limit rule** is present, scoped, and carries its declared window, limit, key and past-the-limit action | a raised limit or a `challenge` past it changes who is refused |
+| every declared rate-limit rule sits **ahead of the bypass it precedes** | a matched bypass skips every later custom rule — see [the media CDN rate limit](#the-media-cdn-rate-limit-agl-2812) |
 
 ### Why scope, not just presence
 
@@ -171,13 +173,13 @@ repo are world-readable.
 
 ## Current posture
 
-Measured 2026-09-10.
+Measured 2026-10-01.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules, 1 rate limit (log mode) |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 4 scoped bypass rules |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 8 scoped bypass rules |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 8 scoped bypass rules, 1 rate limit (log mode) |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
 
 ### How the console was closed, and why the order mattered
@@ -559,9 +561,97 @@ same defect on the console's `/api/v1` a day earlier, by hand, and nothing
 looked at the tenant. A fix applied by hand to one surface is not a fix for the
 class — the guard is.
 
+### The media CDN rate limit (AGL-2812)
+
+`/api/media/cdn` skips the bot challenge on both mounts, and that bypass stays:
+link-preview crawlers and Gmail's image proxy cannot solve a challenge. The
+per-caller limit inside `serveMediaCdn` bounds what one address is **served**,
+but it runs in the function, so every refusal is still an invocation and a
+Firestore transaction, and a cache-busted flood is nothing but misses.
+`Media CDN per-IP rate limit` counts the same path at the edge, before any
+function runs. It went in on 2026-10-01 on `aglyn-tenant` and `aglyn-console`:
+
+| | |
+| --- | --- |
+| scope | `path pre /api/media/cdn`, the bypass's own scope |
+| count | fixed window, **1,500 requests per 60 s per IP** |
+| past the limit | **`log`**: recorded, nobody refused |
+| position | directly **ahead of** `Public asset delivery bypass` |
+
+**Position is the whole rule.** A request matching a custom bypass "is allowed
+through any custom or managed rules", so a rate limit behind the bypass it
+shares a path with counts nothing, while reading back present, active and
+valid. `rules.insert` appends, so the rule was inserted and then moved with
+`PATCH rules.priority` (its id, and the bypass's 0-based index). Under the
+limit, and in log mode past it, evaluation continues into the bypass, so the
+challenge stays lifted for every caller the limit admits. The checker asserts
+the position, and fails a rate limit found behind its bypass.
+
+**The number** is set against the full request stream, edge hits and 304s
+included, because the firewall runs in front of the cache. Measured
+2026-10-01:
+
+| measured | requests a minute |
+| --- | ---: |
+| the heaviest public page (61 images, all `srcset`), scrolled end to end | 58 |
+| the same page with every `srcset` width fetched for every image | 244 |
+| tenant mount, busiest minute, every caller together, 7 days (4,991 requests) | 66 |
+| tenant mount, busiest single client | 53 |
+| console mount, busiest minute, every caller together, 23 hours | 7 |
+| whole route, busiest minute on 2026-09-11 | 236 |
+
+1,500 is 25 times the heavy page and more than six times anything the route has
+been measured serving to every caller at once. It is also above the 780 a minute
+the function serves one address (600 images, 180 other files), so the edge
+never refuses a caller the function would still have served. A video is not a
+burst here: the route answers a player's `bytes=0-` with the whole file, so a
+play is one request and each seek one more; no asset took more than 5 requests
+from one client in a minute.
+
+**Verified the day it went in**, and the second result is the one to remember:
+
+```text
+anonymous  /api/media/cdn/…      200   the bypass still lifts the challenge
+anonymous  /                     429   the page challenge still stands
+burst      1,650 in 9 s          200 × 1,650, logged NOWHERE
+burst      3,300 in 11 s         200 × 3,300, logged NOWHERE
+probe      limit 10, enforcing   1–10 reached the app, 11–30 → 429, x-vercel-mitigated: deny
+```
+
+⛔ **In log mode this rule is invisible.** Vercel reports a log "if no other
+rule matches and acts on the request", and the bypass directly behind it acts
+on every request, so a past-the-limit log is reported as a bypass and dropped.
+Both bursts show in the request logs as `wafAction: bypass` with the asset
+bypass's rule id, and the dashboard's **Logged** count stayed at zero. The probe
+is what proves the rule works where it sits: a temporary enforcing rule in the
+same position, scoped to one nonexistent path **and** one test User-Agent, was
+counted and enforced exactly at its limit, then removed, leaving the config
+deep-equal to what it was.
+
+So **a quiet Logged count proves nothing here.** Judge false positives from
+traffic instead: Firewall → Traffic, narrowed to `/api/media/cdn`, **Top IPs**.
+An address can only cross 1,500 in some minute if it sent at least 1,500 in the
+whole window, so a window in which no address reaches 1,500 is a window the
+limit would have refused nobody in. The two test bursts above, under the
+User-Agent `aglyn-agl2812-burst-check/1.0`, are in the 2026-10-01 data and are
+not visitors.
+
+**Switching it to enforce** is one `PATCH rules.update` per project that
+changes only `rateLimit.action` from `log` to `rate_limit` (a 429), plus
+`exceeded: 'rate_limit'` in the posture table in the same change. Until both
+move together, `check:firewall-posture` reports the difference. Never
+`challenge` or `deny` past this limit: the callers this path serves without a
+browser can answer neither.
+
+What it does not bound: the bytes in one request, a caller spread across many
+addresses, and an org's total delivery. The function folds an IPv6 address to
+its /64; Vercel does not document whether its `ip` key does, so a caller
+rotating addresses inside one /64 is bounded by the function, not by this rule. Signed or referrer-checked URLs and a
+per-org byte cap wait on the delivery-platform decision (AGL-2824, AGL-2825).
+
 ## Guarding the guard
 
-`npm run test:firewall-posture` runs 56 cases, each damaging exactly one thing
+`npm run test:firewall-posture` runs 81 cases, each damaging exactly one thing
 in a known-good config and asserting the **specific** finding — not merely that
 the result is false. A test that only checks `ok === false` passes just as
 happily when the detector has collapsed into `return false`.

@@ -31,8 +31,13 @@ import {
 
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 
-import DDFSelectImport from '@data-driven-forms/common/select'
-import parseInternalValue from '@data-driven-forms/common/select/parse-internal-value'
+// Both from the FOLDER entry, whose `module` field is the ESM build. The deep
+// file `select/parse-internal-value` is CommonJS whose default export sits on
+// `exports.default`, and a bundler reading this package's ESM output under
+// Node's rules hands a default import the whole `exports` object, so the
+// published editor threw "is not a function" the moment a select rendered
+// (AGL-3201).
+import DDFSelectImport, { parseInternalValue } from '@data-driven-forms/common/select'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
 import FormFieldGrid, {

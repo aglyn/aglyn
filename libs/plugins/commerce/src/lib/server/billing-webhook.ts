@@ -3258,7 +3258,24 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             .slice(0, 16)
           const nights = Number(reservation['nights'] ?? 0)
           const nightsText = `${nights} night${nights === 1 ? '' : 's'}`
-          const paid = `$${(paidCents / 100).toFixed(2)}`
+          /*
+           * WHAT THE GUEST WAS CHARGED TODAY, tax included (AGL-3442).
+           *
+           * `paidCents` is the money applied to the STAY and leaves out the
+           * merchant's lodging tax, so a guest told only that figure is told
+           * less than their card was charged. The two together are Stripe's
+           * session total, and the tax is the figure `reserve.ts` charged as
+           * its own line, named so the guest can match it to their receipt.
+           * The balance below is the stay's alone: the tax is charged on what
+           * is collected at booking, and nothing computes one on what is
+           * collected at the property.
+           */
+          const charged = `$${((paidCents + taxCents) / 100).toFixed(2)}`
+          const taxIncluded =
+            taxCents > 0
+              ? `, including $${(taxCents / 100).toFixed(2)} lodging tax`
+              : ''
+          const paid = `${charged}${taxIncluded}`
           // What the guest still owes for the stay: the console's
           // reservations card collects `totalCents - paidCents` at the
           // property, so the guest is told it too (AGL-3432).
@@ -3292,7 +3309,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             // (AGL-3432).
             body:
               `${reservedBy} reserved ${resourceName || 'a stay'} on {site}: check-in ` +
-              `${checkInShort}, ${nightsText}. ${paid} was paid` +
+              `${checkInShort}, ${nightsText}. ${charged} was paid${taxIncluded}` +
               (balanceCents > 0
                 ? `; ${balance} is still to collect at the property.`
                 : '.'),

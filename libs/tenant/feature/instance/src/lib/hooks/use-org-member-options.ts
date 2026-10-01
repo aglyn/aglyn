@@ -71,7 +71,7 @@ export function orgMemberOptions(
  *
  * ## It is OFF unless a caller asks
  *
- * `enabled` defaults to false, the way `useHostCampaigns` does and for the
+ * `enabled` defaults to false, the way `useSiteContainerOptions` does and for the
  * same reason: the picker this feeds sits on surfaces a reader opens for
  * something else, and a roster fetched on every arrival at the contacts list
  * is a request for a control nobody has opened. Callers turn it on when the

@@ -143,6 +143,12 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 import HostReferenceHealthCard from './host-reference-health-card.component'
 import HostVariablesCard from './host-variables-card.component'
+import { standInDatasetList } from '../testing/stand-in-dataset-list'
+import { standInWorkflowList } from '../testing/stand-in-workflow-list'
+
+// The datasets and workflows these cards read are other plugins' (AGL-3080).
+standInDatasetList()
+standInWorkflowList()
 
 const ORG = { $id: 'org-1', plan: 'scale' } as any
 

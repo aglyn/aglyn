@@ -16,12 +16,11 @@
  */
 
 import type { PluginFigureRead, PluginFigureReader, PluginFigureTable } from '@aglyn/aglyn/plugin-manager/plugin-figures'
-import { AI_DATASET_MAX_GROUP_VALUES, AI_DATASET_MIN_GROUP, aiDatasetCatalog, aiFigureReaders } from './ai-figure-readers'
+import { aiFigureReaders } from './ai-figure-readers'
 
 /**
  * The readers for the platform's own records (AGL-2915): what each table
- * holds, that it is aggregates and never a record, and that a dataset reads
- * only what the asking member may see, on the site's own terms.
+ * holds, and that it is aggregates and never a record.
  */
 
 type Data = Record<string, unknown>
@@ -172,97 +171,5 @@ describe('forms', () => {
       { form: 'Newsletter', views: 100, submissions: 5, completion: 5, leads: null },
     ])
     expect(table.period).toEqual({ from: '2026-09-01', to: '2026-09-16', days: 16 })
-  })
-})
-
-describe('datasets', () => {
-  const records = (entries: Data[]) =>
-    Object.fromEntries(entries.map((values, index) => [`orgs/org-1/datasets/orders/records/r${String(index).padStart(3, '0')}`, { values }]))
-  const docs = {
-    'orgs/org-1/members/owner': { role: 'owner' },
-    'orgs/org-1/members/collab': { role: 'editor', allHosts: false, hostAccess: { 'host-2': 'editor' }, scopeTokens: ['org', 'host:host-2'] },
-    'orgs/org-1/datasets/orders': {
-      displayName: 'Wholesale orders',
-      visibleTo: ['host:host-1'],
-      model: {
-        order: ['buyer', 'state', 'total'],
-        fields: { buyer: { name: 'Buyer', type: 'text' }, state: { name: 'State', type: 'text' }, total: { name: 'Order total', type: 'float' } },
-      },
-    },
-    'orgs/org-1/datasets/team': { displayName: 'Team', visibleTo: ['org'], model: { order: ['name'], fields: { name: { name: 'Name', type: 'text' } } } },
-    ...records([
-      { buyer: 'Avery', state: 'TX', total: 400 },
-      { buyer: 'Blake', state: 'TX', total: 420 },
-      { buyer: 'Casey', state: 'TX', total: 380 },
-      { buyer: 'Devon', state: 'OK', total: 100 },
-      { buyer: 'Emery', state: 'LA', total: 300 },
-    ]),
-  }
-
-  it('lists what the member may see, and on a site only what is shared with it', async () => {
-    const all = await tableOf(docs, 'datasets.summary', { hostId: null, uid: 'owner' })
-    expect(all.rows).toEqual([
-      { dataset: 'Team', records: 0, fields: 1 },
-      { dataset: 'Wholesale orders', records: 5, fields: 3 },
-    ])
-    const onSite = await tableOf(docs, 'datasets.summary', { hostId: 'host-2', uid: 'collab' })
-    expect(onSite.rows).toEqual([{ dataset: 'Team', records: 0, fields: 1 }])
-    expect((await aiDatasetCatalog(firestoreOf(docs), { orgId: 'org-1', hostId: 'host-2', uid: 'collab' })).map((entry) => entry.name)).toEqual(['Team'])
-  })
-
-  it('summarizes a dataset’s fields without a single value of a text field', async () => {
-    const table = await tableOf(docs, 'datasets.summary', { hostId: null, uid: 'owner', params: { dataset: 'Wholesale orders' } })
-    expect(table.rows).toEqual([
-      { field: 'Buyer', type: 'text', filled: 100, distinct: 5, lowest: null, average: null, highest: null },
-      { field: 'State', type: 'text', filled: 100, distinct: 3, lowest: null, average: null, highest: null },
-      { field: 'Order total', type: 'float', filled: 100, distinct: 5, lowest: 100, average: 320, highest: 420 },
-    ])
-    expect(JSON.stringify(table)).not.toContain('Avery')
-  })
-
-  it('groups records by a field, folding every group too small to be anyone but a person', async () => {
-    const table = await tableOf(docs, 'datasets.breakdown', {
-      hostId: null,
-      uid: 'owner',
-      params: { dataset: 'orders', group: 'state', measure: 'Order total', operation: 'average' },
-    })
-    expect(table.columns.map((column) => column.label)).toEqual(['State', 'Records', 'Average of Order total'])
-    expect(table.rows).toEqual([
-      { group: 'TX', records: 3, value: 400 },
-      { group: `Other (2 groups under ${AI_DATASET_MIN_GROUP} records)`, records: 2, value: 200 },
-    ])
-    // Grouped by a field that names each buyer, nobody's name survives.
-    const byBuyer = await tableOf(docs, 'datasets.breakdown', { hostId: null, uid: 'owner', params: { dataset: 'orders', group: 'buyer' } })
-    expect(byBuyer.rows).toEqual([{ group: `Other (5 groups under ${AI_DATASET_MIN_GROUP} records)`, records: 5 }])
-  })
-
-  it('refuses a dataset the member may not read, a field it lacks, and a sum over text', async () => {
-    const reader = readerOf(docs, 'datasets.breakdown')
-    const ask = (uid: string, params: Record<string, string>) =>
-      reader.read({ orgId: 'org-1', hostId: null, days: 0, now: NOW, uid, params })
-    expect(await ask('collab', { dataset: 'orders', group: 'state' })).toMatchObject({ ok: false, status: 404 })
-    expect(await ask('owner', { dataset: 'orders', group: 'region' })).toMatchObject({ ok: false, status: 400 })
-    expect(await ask('owner', { dataset: 'orders', group: 'state', measure: 'buyer', operation: 'sum' })).toMatchObject({
-      ok: false,
-      status: 400,
-    })
-  })
-
-  it('refuses to group by a field that tells records apart', async () => {
-    const many = {
-      ...docs,
-      ...records(
-        Array.from({ length: AI_DATASET_MAX_GROUP_VALUES + 1 }, (_, index) => ({
-          buyer: `Buyer ${index}`,
-          state: index % 2 ? 'TX' : 'OK',
-          total: 10,
-        })),
-      ),
-    }
-    const reader = readerOf(many, 'datasets.breakdown')
-    const ask = (params: Record<string, string>) =>
-      reader.read({ orgId: 'org-1', hostId: null, days: 0, now: NOW, uid: 'owner', params })
-    expect(await ask({ dataset: 'orders', group: 'buyer' })).toMatchObject({ ok: false, status: 400 })
-    expect(await ask({ dataset: 'orders', group: 'state' })).toMatchObject({ ok: true })
   })
 })

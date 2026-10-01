@@ -26,7 +26,7 @@ import {
   campaignTouchLabel,
   type CampaignConversionKind,
   type CampaignConversionRecord,
-} from '@aglyn/shared-ui-email-campaigns/model/campaign-conversions'
+} from '../model/campaign-conversions'
 
 /**
  * WHERE THIS RECORD CAME FROM — attribution on the converted record itself.

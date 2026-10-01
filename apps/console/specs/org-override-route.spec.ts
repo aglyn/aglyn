@@ -74,10 +74,6 @@ import {
   resolveOrgEntitlements,
   resolvePlanPricing,
 } from '@aglyn/aglyn/server'
-import {
-  assistBandRefuses,
-  resolveAssistOverageRateUsdPer1k,
-} from '@aglyn/aglyn/app-utils/assist-credits'
 
 /** Orgs whose tenant pages the route asked to drop, in order (AGL-3034). */
 let mockRevalidatedOrgs: string[] = []
@@ -1221,9 +1217,10 @@ describe('a plan with no live subscription behind it is a comp (AGL-3034)', () =
     await post(compBody())
     const org = storedOrg() as never
     expect(resolveEffectivePlan(org)).toBe('pro')
-    // The AI overage charge claims only what this rate prices, and the
-    // usage sweep bills only what the plan's rates price.
-    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
+    // The AI overage charge claims only what the plan's rate prices, and
+    // the usage sweep bills only what the plan's rates price; a comp sells
+    // nothing (the AI plugin's own comp spec holds its band to that).
+    expect(resolvePlanPricing(org).extraAssistCreditsUsdPer1k).toBeNull()
     expect(isBillingSubscription(org)).toBe(false)
   })
 })
@@ -1292,8 +1289,11 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     expect(resolveOrgEntitlements(org).contactsPerHost).toBe(Number.POSITIVE_INFINITY)
     expect(resolveOrgEntitlements(org).hostLimit).toBe(Number.POSITIVE_INFINITY)
     expect(checkQuota(org, 'hostLimit', 1_000_000).allowed).toBe(true)
-    expect(assistBandRefuses(org)).toBe(false)
-    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
+    // The AI band too: unlimited, and priced at nothing.
+    expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(
+      Number.POSITIVE_INFINITY,
+    )
+    expect(resolvePlanPricing(org).extraAssistCreditsUsdPer1k).toBeNull()
     expect(resolvePlanPricing(org).meteredInfraPassThrough).toBe(false)
     expect(isBillingSubscription(org)).toBe(false)
 
@@ -1425,7 +1425,9 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     expect(resolved.contactsPerHost).toBe(50)
     expect(resolved.hostLimit).toBe(PLAN_ENTITLEMENTS.enterprise.hostLimit)
     expect(checkQuota(org, 'hostLimit', PLAN_ENTITLEMENTS.enterprise.hostLimit).allowed).toBe(false)
-    expect(assistBandRefuses(org)).toBe(true)
+    // The AI band is finite again, and nothing is sold past it.
+    expect(Number.isFinite(resolved.assistCreditsPerMonth)).toBe(true)
+    expect(resolvePlanPricing(org).extraAssistCreditsUsdPer1k).toBeNull()
     const payload = await response.json()
     expect(payload.planEffect).toMatchObject({ compChange: 'capped', uncapped: false })
     expect(payload.planEffect.summary).toMatch(

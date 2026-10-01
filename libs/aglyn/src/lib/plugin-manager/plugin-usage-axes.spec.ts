@@ -22,9 +22,15 @@ import {
 } from '../app-utils/plan-entitlements'
 import { UTILIZATION_BANDS } from '../app-utils/margin-utilization'
 import {
+  countedPluginBands,
   declaredMeterReading,
   liveMeterReading,
+  meteredBandField,
+  meteredBandVerdictFields,
+  meteredPluginBands,
   pluginCostAxes,
+  pluginCostAxisFields,
+  pluginCostAxisProjection,
   pluginUsageBands,
 } from './plugin-usage-axes'
 
@@ -98,6 +104,43 @@ describe('a plugin declares the meters it contributes to the cost model (AGL-308
   })
 })
 
+describe('a band billed as an infrastructure meter, and a band only counted', () => {
+  /*
+   * The invoice sweep, the Billing card, the monthly summary and the staff
+   * usage rows each read these lists and name no band themselves, so the
+   * split is pinned here by plugin.
+   */
+  it('bills the forms plugin’s submissions and counts the workflows plugin’s runs', () => {
+    expect(meteredPluginBands().map((band) => [band.pluginId, band.id])).toEqual([
+      ['forms', 'formSubmissions'],
+    ])
+    expect(countedPluginBands().map((band) => [band.pluginId, band.id, band.hostCounter])).toEqual([
+      ['workflows', 'workflowRuns', 'workflowRuns'],
+    ])
+  })
+
+  it('records a metered band’s count, and a withheld one’s verdict, under the names the rollup has always used', () => {
+    const [forms] = meteredPluginBands()
+    expect(meteredBandField(forms!)).toBe('formSubmissions')
+    expect(meteredBandVerdictFields(forms!)).toEqual({
+      billed: 'formSubmissionsBilled',
+      withheldUsd: 'formSubmissionsOverageWithheldUsd',
+    })
+  })
+
+  it('never lists a band as both, and lists every band with a counter as one or the other', () => {
+    const metered = meteredPluginBands().map((band) => band.id)
+    const counted = countedPluginBands().map((band) => band.id)
+    expect(metered.filter((id) => counted.includes(id))).toEqual([])
+    expect(
+      pluginUsageBands()
+        .filter((band) => band.hostCounter)
+        .map((band) => band.id)
+        .sort(),
+    ).toEqual([...metered, ...counted].sort())
+  })
+})
+
 describe('reading a declared meter', () => {
   const crmLike = { fields: ['records'], fallbackFields: ['contacts'] }
 
@@ -121,6 +164,59 @@ describe('reading a declared meter', () => {
     expect(liveMeterReading(doc({ provider: 0, billed: 3 }), live)).toBe(3)
     expect(liveMeterReading(doc({}), live)).toBeUndefined()
     expect(liveMeterReading(null, live)).toBeUndefined()
+  })
+})
+
+describe('a month as the staff usage rows serve it', () => {
+  const projectionOf = (values: Record<string, unknown>) =>
+    pluginCostAxisProjection((field) => values[field])
+
+  it('serves every field an axis reads, records or hands its staff columns', () => {
+    const fields = Object.keys(projectionOf({}))
+    for (const axis of pluginCostAxes()) {
+      for (const field of [
+        ...axis.fields,
+        ...(axis.fallbackFields ?? []),
+        ...(axis.recordedFields ?? []),
+        ...(axis.staffFields ?? []),
+      ]) {
+        expect([axis.id, field, fields.includes(field)]).toEqual([axis.id, field, true])
+      }
+    }
+  })
+
+  it('reads an unwritten priced field as zero, and one whose absence selects a fallback as null', () => {
+    const served = projectionOf({ contactsCount: 400 })
+    for (const axis of pluginCostAxes()) {
+      const fallsBack = Boolean(axis.fallbackFields?.length)
+      for (const field of axis.fields) {
+        expect([field, served[field]]).toEqual([field, fallsBack ? null : 0])
+      }
+    }
+    // The older basis is a priced field like any other: a value when written.
+    expect(served['contactsCount']).toBe(400)
+  })
+
+  it('reads an unwritten recorded or staff field as null, and a written zero as zero', () => {
+    const extra = pluginCostAxes().flatMap((axis) => [
+      ...(axis.recordedFields ?? []),
+      ...(axis.staffFields ?? []),
+    ])
+    // ANTI-VACUITY: the catalog declares fields of both kinds.
+    expect(extra.length).toBeGreaterThan(0)
+    const unwritten = projectionOf({})
+    const zero = projectionOf(Object.fromEntries(extra.map((field) => [field, 0])))
+    for (const field of extra) {
+      expect([field, unwritten[field], zero[field]]).toEqual([field, null, 0])
+    }
+  })
+
+  it('never hands a staff field to the cost model', () => {
+    const staff = pluginCostAxes().flatMap((axis) => axis.staffFields ?? [])
+    expect(staff.length).toBeGreaterThan(0)
+    for (const field of staff) expect(pluginCostAxisFields()).not.toContain(field)
+    const input = orgCogsInputFrom(Object.fromEntries(staff.map((field) => [field, 1000])))
+    for (const field of staff) expect([field, input[field]]).toEqual([field, undefined])
   })
 })
 

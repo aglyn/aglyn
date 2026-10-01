@@ -278,7 +278,7 @@ import { AI_JOB_SEO_STEP_MINIMUM_MS } from './ai-job-seo-budget'
 import { AI_JOB_TEXT_STEP_MINIMUM_MS } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
-import { assistFreeTasteRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistFreeTasteRefusalText } from '../usage/assist-credits'
 import {
   ASSIST_EXCHANGE_RETENTION_DAYS,
   assistUsageDay,

@@ -50,7 +50,7 @@ import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useOrgCampaigns, useOrgMemberOptions } from '@aglyn/tenant-feature-instance'
+import { useOrgContainerOptions, useOrgMemberOptions } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Box,
@@ -560,7 +560,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
   const nowMs = useOutreachNowMs()
   const enrollment = loaded.data
   const sequence = loadedSequence.data
-  const campaigns = useOrgCampaigns(orgId, {
+  const campaigns = useOrgContainerOptions('campaign', orgId, {
     enabled: detailsOpen && Boolean(enrollment?.campaignIds?.length),
   })
   const steps = useMemo(() => sequence?.steps ?? [], [sequence])

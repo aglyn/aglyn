@@ -775,6 +775,25 @@ const CONSOLE_DAILY_CRONS = {
     route: '/api/crm/task-reminders',
   },
   /*
+   * HOURLY ACROSS THE FIRST TWO DAYS of the month, and idle for the rest
+   * (AGL-2409). The route mails each org last month's usage summary in
+   * resumable chunks, and every send asks the platform send-rate governor; a
+   * run that meets the hourly ceiling stops without stamping the orgs it did
+   * not reach, and the next hour's run mails exactly those. Forty-eight
+   * windows are what let a low ceiling during a domain warm-up still drain
+   * every org before the month's summaries would be lost.
+   *
+   * On GitHub Actions until 2026-10-01, when the hourly entry fired at 03:52
+   * and 10:40 and nowhere between (AGL-3439): two of the forty-eight windows
+   * gone by mid-morning, and the row red on `/api/health/crons`. `emailedAt`
+   * on each org's rollup is the idempotence key, so a manual dispatch beside
+   * this tick never mails an org twice.
+   */
+  'usage-email': {
+    schedule: '0 * 1-2 * *',
+    route: '/api/billing/usage-email',
+  },
+  /*
    * Hourly, at quarter past (AGL-3368): a workspace that crossed its hourly
    * allowance of risk notices gets ONE summary of the rest when its hour
    * closes. The next notice sends it too, but an attack that simply stops
@@ -834,6 +853,7 @@ export const consoleReapUnverifiedOrgs = consoleDailyCron('reap-unverified-orgs'
 export const consoleAiInsightsDigest = consoleDailyCron('ai-insights-digest')
 export const consoleCrmTaskReminders = consoleDailyCron('crm-task-reminders')
 export const consoleRiskNoticeDigests = consoleDailyCron('risk-notice-digests')
+export const consoleUsageEmail = consoleDailyCron('usage-email')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

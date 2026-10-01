@@ -2440,7 +2440,7 @@ export interface CrmLeadFields extends CrmLeadProfile {
   /**
    * The campaigns the lead is filed under (AGL-3254): container ids from
    * `orgs/{orgId}/emailCampaigns`, at the top of the document the way a
-   * form carries them (`campaign-membership.ts`), never names. Written by
+   * form carries them (`container-membership.ts`), never names. Written by
    * the New lead drawer, the import, the bulk bar and a sequence's enroll;
    * handed to the contact's facet when the lead converts.
    */

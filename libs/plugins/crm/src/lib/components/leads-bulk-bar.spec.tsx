@@ -70,7 +70,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUserName: () => 'Ada Lovelace',
   // The campaigns the Add to campaign picker offers (AGL-3254): those
   // placed on the site under a site, and every one in the org above them.
-  useHostCampaigns: () => ({
+  useSiteContainerOptions: () => ({
     options: [
       { value: 'founder-icp1', label: 'Founder · ICP 1' },
       { value: 'founder-icp2', label: 'Founder · ICP 2' },
@@ -78,7 +78,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     truncated: false,
     ready: true,
   }),
-  useOrgCampaigns: () => ({
+  useOrgContainerOptions: () => ({
     options: [
       { value: 'founder-icp1', label: 'Founder · ICP 1' },
       { value: 'founder-icp2', label: 'Founder · ICP 2' },

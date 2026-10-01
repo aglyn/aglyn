@@ -415,7 +415,8 @@ rule:
 Every field above maps to a value **already written** on the contact document.
 Nothing new is collected.
 
-`campaignIds` is the membership `campaign-membership.ts` defines — the field
+`campaignIds` is the membership of the `campaign` container kind
+(`container-membership.ts`: a member holds a kind in `<kind>Ids`) — the field
 the forms and screens consoles write, propagated onto a submission and onto
 the capturing holder's contact facet by the submit route. It is **not** the
 campaign a visitor was attributed to: a touch says which ad brought somebody

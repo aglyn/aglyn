@@ -9,6 +9,130 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.220 — 2026-10-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.219...v1.0.0-beta.220)
+
+### Added
+
+- **examples:** two consumer apps, and the proof builds and runs them ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **plugins:** a plugin's band can be billed beside storage and bandwidth; the estimate, the invoice sweep, the summary and the staff rows read it from the declaration ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1688](https://linear.app/aglyn/issue/AGL-1688))
+- **plugins:** the CRM and the data plugin measure their own month in the usage sweep; plugin bands are summed from their host counters ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2399](https://linear.app/aglyn/issue/AGL-2399))
+- **plugins:** a plugin measures its own usage in the monthly sweep; the AI plugin bills its overage there ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin's bands warn the workspace through the usage-alerts sweep ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin adds its own line to a workspace's usage budget; the AI's spend guards are the AI plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **firewall:** count the media CDN per IP at the edge, in log mode ([AGL-2812](https://linear.app/aglyn/issue/AGL-2812))
+- **billing:** an Update payment method button on Billing, where failed-payment mail and the past-due banner now land ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **plugins:** a plugin reports the section experiments it runs to the besigner's Interactions section ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin counts its own site beacons; the collector hands them over after its gates ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** each plugin declares the streams its mail is sent under; the topic catalog is the Email plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a campaign is a container kind its plugin declares; records are filed under it through core's generic seam ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **billing:** page views past the plan's allowance bill at $0.36 per 1,000 ([AGL-1879](https://linear.app/aglyn/issue/AGL-1879))
+- **notifications:** every notification carries an alert level, and the bell and the notifications page color rows by it ([AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
+- **notifications:** a site manager's notice can name its site with {site} ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **commerce:** a site user's purchases are drawn by commerce in the drawer's siteMember zone ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **ui:** a spec can count what one keystroke re-rendered ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+
+### Fixed
+
+- **tools:** the emulator sweep runs the CRM plugin's member-alias spec ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **billing:** the usage sweep visits a workspace with no sites, so its org-level usage is metered ([AGL-3445](https://linear.app/aglyn/issue/AGL-3445))
+- **release:** the second dist-tag waits out the biggest packages ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **libs:** the svg-icons build never packs the previous release's manifest ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **libs:** shared-util-tools ships no direct eval ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **libs:** the published editor's inspector renders in a browser ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **libs:** a framework peer is a range a consumer can satisfy ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **libs:** the logic packages install without the Firebase SDK ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **marketing:** the overlay beacon brings the Admin SDK with its own module, so no app loads the data layer lazily ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **notifications:** the level legend and its comments spell gray and white-labeled the American way ([AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
+- **lockdown:** a staff feature pause sends one email that names each feature the way a customer would ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **marketplace:** the extended payout notice says each payout lands 14 days after the sale, until the workspace is 30 days old ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **risk:** site managers told a review opened are told it closed ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **risk:** a card-testing warning always arrives whole, never folded into the hourly digest ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **email:** a site's mail to its visitors is sent under the site's own name, not "Aglyn" ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **commerce:** a reservation's "Paid today" is what the guest's card was charged, lodging tax included ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **visitor-records:** a site hears once that it reached its lead or member safety limit, not every month it stays there ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **ai:** the subprocessor list says a generation job sends the site's pages, not its screens ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **crm:** a site's leads by first sighting have their index, both directions ([AGL-3443](https://linear.app/aglyn/issue/AGL-3443), [AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
+- **billing:** the monthly usage summary waits for the closed-month sweep ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442), [AGL-3439](https://linear.app/aglyn/issue/AGL-3439))
+- **branding:** an entitled org that has set no brand mails in the platform's ([AGL-3440](https://linear.app/aglyn/issue/AGL-3440), [AGL-2428](https://linear.app/aglyn/issue/AGL-2428))
+- **crons:** the monthly usage summaries run on Cloud Scheduler, not GitHub Actions ([AGL-3439](https://linear.app/aglyn/issue/AGL-3439), [AGL-3351](https://linear.app/aglyn/issue/AGL-3351))
+- **commerce:** store emails and notices name the store, the order and what is true ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **bookings:** booking emails tell the time in the booking's zone, named, and say who it is with ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **alerts:** staff alerts name the workspace or site and say what happened without the title ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **tenant:** site-limit, form and lead notices name the site and say what is lost ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **notifications:** a self-sent email's switch says what governs it, and settings name the four alert steps ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432), [AGL-3431](https://linear.app/aglyn/issue/AGL-3431))
+- **crm, ai:** CRM and AI mail names the workspace, the person and the real due time ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **marketplace:** a review verdict names the plugin and version and says what happened to it ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **risk-notices:** every hold, lock and review notice names its site and says only what happens ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **team:** team and SSO notices name the workspace and say what to do ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **billing:** billing mail names the workspace and says what each event means ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+- **email:** a workspace notice and a staff alert open with their subject ([AGL-3432](https://linear.app/aglyn/issue/AGL-3432))
+
+### Performance
+
+- **email:** a keystroke on the audience rule form draws the field it lands in ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **forms:** a keystroke in a create drawer draws the field it lands in ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **commerce:** a keystroke in a catalog editor redraws its own field, not the card ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **commerce:** a keystroke in the product editor redraws its own field, not the dialog ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **outreach:** a keystroke on Compliance redraws its own field, not the page ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **outreach:** a keystroke in the sequence editor redraws its own field, not every step ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **besigner:** a keystroke in the Properties dialog redraws its own field, not every row ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+
+### Changed
+
+- **plugins:** the Forms and Automation page zones are declared by the plugins that draw them ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a deleted campaign comes off the CRM's leads and contacts through the detacher the CRM registers ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **marketing:** the automation editor lists a site's overlays through the source the marketing plugin publishes ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin reads the campaigns it files under where the container kind's declaration says ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **ai:** the AI's palette generator, page-width recorder and overage drill live in the AI plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** the Billing usage page meters each counted plugin band per site from its declaration ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** the staff usage rows serve every field a plugin's cost axis reads, records or hands its staff columns ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1134](https://linear.app/aglyn/issue/AGL-1134), [AGL-2321](https://linear.app/aglyn/issue/AGL-2321))
+- **ai:** assist credits are the AI plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** the listing price floor is the marketplace's; the processing rates every sale shares are named for a sale ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **aglyn:** the visitor's arrival touch is named for the web's UTM labels it carries ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **aglyn:** the enrollment basis is named for the consent rule it is, not for the Email plugin's lists ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a captured person is filed under what the capture surface is filed under, by container kind ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **marketing:** what a campaign caused and earned is the marketing plugin's model ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **marketplace:** the marketplace learns which datasets a workspace installed through the data plugin's list source ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a picker lists another plugin's records through the list source its owner publishes ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **aglyn:** core keeps no copy of the CRM's console addresses ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **data:** the AI reads datasets through the data plugin's index and figure readers ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **bookings:** a booking files its meeting through the record-timeline seam, and finds no CRM in core ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2660](https://linear.app/aglyn/issue/AGL-2660), [AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **crm:** the CRM's organization hub is served by the console's generic org route ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2630](https://linear.app/aglyn/issue/AGL-2630), [AGL-2974](https://linear.app/aglyn/issue/AGL-2974))
+- **plugins:** a plugin's quota is labeled by its plugin, and the record timeline files on a person ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **crm:** email capture is the CRM's; reading a received email is the platform's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **crm:** a send's engagement is stamped by the record system, through its seam ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2616](https://linear.app/aglyn/issue/AGL-2616), [AGL-3245](https://linear.app/aglyn/issue/AGL-3245))
+- **crm:** the CRM's reports math and its old address book link are the CRM's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2604](https://linear.app/aglyn/issue/AGL-2604), [AGL-2630](https://linear.app/aglyn/issue/AGL-2630))
+- **commerce:** the shop starters are commerce's, compiled into the starter list like every plugin declaration ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** core's route table names no plugin's page; each plugin builds its own hub address ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** a site user's row opens their contact where the plugin that keeps contacts admits the reader ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **tenant:** site search finds the rows a page repeats over through the repeat-rows contract ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1039](https://linear.app/aglyn/issue/AGL-1039), [AGL-1396](https://linear.app/aglyn/issue/AGL-1396))
+- **data:** /v1/datasets is the data plugin's resource, served through the /v1 registry ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **aglyn:** a repeat's filter, sort and limit are the repeat's query, not a dataset's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+- **data:** a dataset's CSV writer is the data plugin's; core keeps the one CSV parser and escaper ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **data:** the organization's datasets API is the data plugin's, at the same addresses ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **workflows:** what only the automation engine reads leaves core actions.ts ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **variables:** a site variable names no workflow; the computing plugin types it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-129](https://linear.app/aglyn/issue/AGL-129), [AGL-261](https://linear.app/aglyn/issue/AGL-261))
+
+### Documentation
+
+- **ai:** the dataset figure readers are named as the data plugin's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+<details>
+<summary>Also in this release: 4 test, 3 chore, 1 ci</summary>
+
+- **release:** the consumer proof runs on the promotion PR and after publish ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **billing:** the metering sweep records why moving a subscription onto a new default card is unmetered ([AGL-3442](https://linear.app/aglyn/issue/AGL-3442))
+- **tools:** the org document's AI cap switch is argued to stay, and plan-entitlements' remaining quota checks are the CRM lane's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3124](https://linear.app/aglyn/issue/AGL-3124))
+- **tools:** raise the Linear id ceiling to AGL-3443, read from the workspace ([AGL-3443](https://linear.app/aglyn/issue/AGL-3443), [AGL-3442](https://linear.app/aglyn/issue/AGL-3442), [AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
+- **tools:** raise the Linear id ceiling to AGL-3437, read from the workspace ([AGL-3437](https://linear.app/aglyn/issue/AGL-3437))
+- **aglyn:** the spread-question fixture of the docs gate names no plugin seam ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** the record kinds one plugin's picker lists from another have a source once the console boots ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **jsx:** a keystroke-cost spec sets its fresh-registry timeout file-wide ([AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+
+</details>
+
 ## v1.0.0-beta.219 — 2026-10-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.218...v1.0.0-beta.219)

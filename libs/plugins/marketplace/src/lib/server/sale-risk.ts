@@ -52,6 +52,8 @@ import {
   isYoungPublisher,
   publisherPayoutDelayDays,
   type SaleRiskSignal,
+  YOUNG_PUBLISHER_DAYS,
+  YOUNG_PUBLISHER_PAYOUT_DELAY_DAYS,
   YOUNG_PUBLISHER_REVIEW_SALE_CENTS,
 } from '../model/publisher-risk'
 
@@ -271,8 +273,8 @@ export async function notifySaleRisk(
 
 /**
  * Tell the publisher's owners and admins their payout timing changed
- * (AGL-3365) — when a hold starts, and when it ends — through the risk
- * notice seam (AGL-3368). Never the rule that set it. Never throws.
+ * (AGL-3365) — when a hold starts, with the schedule it puts them on, and
+ * when it ends — through the risk notice seam (AGL-3368). Never throws.
  */
 export async function notifyPublisherPayoutSchedule(
   publisherOrgId: string,
@@ -283,6 +285,10 @@ export async function notifyPublisherPayoutSchedule(
     kind: held ? 'publisher-payouts-held' : 'publisher-payouts-standard',
     orgId: publisherOrgId,
     item: { label: 'your marketplace payouts', path: '/org/marketplace/payouts' },
+    // The schedule the publisher is on, in the same numbers the policy set.
+    ...(held
+      ? { payout: { delayDays: YOUNG_PUBLISHER_PAYOUT_DELAY_DAYS, untilWorkspaceAgeDays: YOUNG_PUBLISHER_DAYS } }
+      : {}),
   }).catch(() => undefined)
 }
 

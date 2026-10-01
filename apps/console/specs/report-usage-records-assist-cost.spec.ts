@@ -20,7 +20,7 @@
 // Without a top-level import or export TypeScript treats this file as a global
 // script, so its top-level `const`s collide with identically-named ones in
 // sibling specs (TS2451/TS2393). The marker makes it a module.
-import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
+import { PLAN_ENTITLEMENTS, PLAN_PRICING } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
  * THE ROLLUP HAS TO CARRY THE ASSIST BILL (AGL-2280).
@@ -180,7 +180,7 @@ jest.mock('../utils/org-counter-totals', () => ({
   __esModule: true,
   orgCounterTotals: async () => ({
     emailSends: 0,
-    workflowRuns: 0,
+    counters: {},
     actionRuns: 0,
     orgLibraryBytes: 0,
   }),
@@ -355,13 +355,19 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
     expect(inside['costUsd']).toBeCloseTo(none['costUsd'], 10)
 
     const huge = await rollupFor(1_204.5)
-    const overage = assistMonthOverage({ plan: 'business' }, 1_204.5)
-    expect(overage.overageCredits).toBe(1_204_500 - 7_500)
-    expect(overage.overageMonthlyUsd).toBeGreaterThan(0)
+    // $1,204.50 of billed spend is 1,204,500 credits; Business includes
+    // 7,500 and sells the rest at its per-1,000 rate.
+    const band = PLAN_ENTITLEMENTS.business.assistCreditsPerMonth
+    expect(band).toBe(7_500)
+    expect(huge['assistCreditsOverage']).toBe(1_204_500 - band)
+    const overageUsd =
+      ((1_204_500 - band) / 1000) *
+      (PLAN_PRICING.business.extraAssistCreditsUsdPer1k as number)
+    expect(overageUsd).toBeGreaterThan(0)
+    expect(huge['assistOverageUsd']).toBeCloseTo(overageUsd, 2)
     expect(huge['billedCents']).toBe(
-      none['billedCents'] + Math.round(overage.overageMonthlyUsd * 100),
+      none['billedCents'] + Math.round(huge['assistOverageUsd'] * 100),
     )
-    expect(huge['assistOverageUsd']).toBeCloseTo(overage.overageMonthlyUsd, 6)
     // The recorded cost estimate — the one that feeds `billedCents` for every
     // other metered line — has not absorbed the Assist bill on either side:
     // the overage is its own line, never a markup folded into COGS.

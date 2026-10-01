@@ -52,12 +52,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
-  useHostCampaigns: () => ({
+  useSiteContainerOptions: () => ({
     options: [{ id: 'spring', label: 'Spring push' }],
     truncated: false,
     ready: true,
   }),
-  useOrgCampaigns: () => ({
+  useOrgContainerOptions: () => ({
     options: [{ id: 'spring', label: 'Spring push' }],
     truncated: false,
     ready: true,
@@ -72,7 +72,7 @@ jest.mock('./crm-attribution-zone', () => ({
   useHasCrmRecordAttribution: () => false,
 }))
 /* The picker has a spec of its own; here it files the person under one campaign. */
-jest.mock('@aglyn/shared-ui-email-campaigns/components/campaign-picker.component', () => ({
+jest.mock('@aglyn/tenant-feature-instance/components/container-picker', () => ({
   __esModule: true,
   default: (props: { onChange: (ids: string[]) => void }) => (
     <button type="button" onClick={() => props.onChange(['spring'])}>

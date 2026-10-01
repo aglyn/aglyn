@@ -66,7 +66,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { METERED_MARKUP, METERED_UNIT_RATES_USD } from '../utils/usage-metering'
+import {
+  METERED_BILLED_RATES_USD,
+  METERED_MARKUP,
+  METERED_UNIT_RATES_USD,
+} from '../utils/usage-metering'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
   PLAN_ENTITLEMENTS,
@@ -1075,10 +1079,39 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(METERED_MARKUP).toBe(1.3)
     })
 
-    it('Page views (bandwidth + reads) — $0.21 / 1,000', () => {
-      expect(
-        METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP * 1000,
-      ).toBeCloseTo(0.21, 6)
+    /**
+     * PINNED APART ON PURPOSE (AGL-1879, 2026-10-01).
+     *
+     * A billed page view now carries the CDN's per-request charge past the
+     * hosting plan's allowance as well as its weight, so the code bills $0.36
+     * per 1,000 while the page — transcribed from the live `/pricing` on
+     * 2026-10-01, screen `v0clP6xQl-` — still reads "$0.21 / 1,000". That is
+     * the code AHEAD of the page, the direction `docs/PRICING_SURFACES.md`
+     * calls urgent, so the page is republished with the production promotion
+     * that carries this rate.
+     *
+     * When it is: set `PUBLISHED` to 0.36, delete the gap case, and record the
+     * version id here. Until then the gap is named rather than hidden, the way
+     * the campaign-email row carried its gap until its republish.
+     */
+    describe('Page views (bandwidth + reads) — the page reads $0.21, the code bills $0.36', () => {
+      /** What the live page says, per 1,000 views. */
+      const PUBLISHED = 0.21
+
+      it('the code bills $0.36 / 1,000: weight plus CDN requests, at cost + 30%', () => {
+        expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.36, 6)
+      })
+
+      it('GAP: the page has not caught up — republish it, then fold this back into one row', () => {
+        expect(
+          Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100,
+        ).not.toBe(PUBLISHED)
+        // The figure the page carries is the weight term alone, marked up —
+        // what the meter billed before the request term existed.
+        expect(
+          Math.round(METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP * 1000 * 100) / 100,
+        ).toBe(PUBLISHED)
+      })
     })
 
     /**
@@ -1129,7 +1162,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `npm run check:page-view-rate` holds the peg; this asserts the two
      * agree, so the record cannot drift from the rate it describes.
      */
-    it('the $0.21 basis covers the page, by the margin that was signed off', () => {
+    it('the weight basis covers the page, by the margin that was signed off', () => {
       const { wireCalibration } = JSON.parse(
         readFileSync(
           join(__dirname, '..', '..', '..', 'tools', 'tenant-page-budget.json'),
@@ -1167,8 +1200,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         METERED_UNIT_RATES_USD.perPageView * wireCalibration.acceptedWeightRatio,
         6,
       )
-      // Rounded the way a published figure is: the basis lands on $0.21 per
-      // 1,000, which is what the page states.
+      // Rounded the way a published figure is: the weight basis lands on $0.21
+      // per 1,000. A billed view adds the CDN request term to it.
       expect(
         Math.round(
           ((0.0001 * wireCalibration.pricedForKb) / 627) *

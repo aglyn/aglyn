@@ -67,7 +67,7 @@
  * nowhere rather than discovering it weeks later.
  */
 
-import { CAMPAIGN_MEMBERSHIP_CAP } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { CONTAINER_MEMBERSHIP_CAP } from '@aglyn/aglyn/app-utils/container-membership'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_LEAD_STATUS_LABELS,
@@ -275,7 +275,7 @@ export const LEAD_IMPORT_SKIP_LABELS: Record<LeadImportSkipReason, string> = {
 }
 
 /** The most campaigns one row may name — the membership field's own cap. */
-export const LEAD_IMPORT_CAMPAIGNS_MAX = CAMPAIGN_MEMBERSHIP_CAP
+export const LEAD_IMPORT_CAMPAIGNS_MAX = CONTAINER_MEMBERSHIP_CAP
 
 /** One row, ready for the server to resolve and write. */
 export interface LeadImportRow {

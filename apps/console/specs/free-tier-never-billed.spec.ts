@@ -222,7 +222,7 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     // `included.metered ?` ternary in `estimateMonthlyUsageCost` — the free
     // org was billed $8.45, which is the whole failure in one number.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 250 * GB, pageViews: 0, formSubmissions: 0 }],
+      [{ storageBytes: 250 * GB, pageViews: 0, meters: { formSubmissions: 0 } }],
       freeOrg(),
     )
     expect(estimate.billableStorageGb).toBeCloseTo(249.756, 2) // measured…
@@ -240,7 +240,7 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     // reverted or failed open — which they do on purpose, on every unreadable
     // org doc.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 0, pageViews: 1_000_000, formSubmissions: 0 }],
+      [{ storageBytes: 0, pageViews: 1_000_000, meters: { formSubmissions: 0 } }],
       freeOrg(),
     )
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
@@ -270,10 +270,10 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
 
   it('form submissions: 500× the band, still $0', () => {
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 0, pageViews: 0, formSubmissions: 10_000 }],
+      [{ storageBytes: 0, pageViews: 0, meters: { formSubmissions: 10_000 } }],
       freeOrg(),
     )
-    expect(estimate.billableFormSubmissions).toBe(10_000 - 20)
+    expect(estimate.billableMeters.formSubmissions).toBe(10_000 - 20)
     expect(estimate.billedCents).toBe(0)
   })
 
@@ -338,7 +338,7 @@ describe("THE INVOICE: every band blown at once, and it is exactly zero", () => 
           // meter far past every band.
           storageBytes: 250 * GB,
           pageViews: 1_000_000,
-          formSubmissions: 10_000,
+          meters: { formSubmissions: 10_000 },
         },
       ],
       org as never,
@@ -387,15 +387,21 @@ describe("THE INVOICE: every band blown at once, and it is exactly zero", () => 
     // So: assert the usage IS measured and IS past the band on the free org,
     // and that only the pricing step zeroes it.
     const estimate = estimateMonthlyUsageCost(
-      [{ storageBytes: 250 * GB, pageViews: 1_000_000, formSubmissions: 10_000 }],
+      [
+        {
+          storageBytes: 250 * GB,
+          pageViews: 1_000_000,
+          meters: { formSubmissions: 10_000 },
+        },
+      ],
       freeOrg(),
     )
     expect(estimate.storageGb).toBeCloseTo(250, 6)
     expect(estimate.pageViews).toBe(1_000_000)
-    expect(estimate.formSubmissions).toBe(10_000)
+    expect(estimate.meters.formSubmissions).toBe(10_000)
     expect(estimate.billableStorageGb).toBeGreaterThan(249)
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
-    expect(estimate.billableFormSubmissions).toBe(9_980)
+    expect(estimate.billableMeters.formSubmissions).toBe(9_980)
     // COGS is real and truthful — under-reporting our own cost is what makes
     // the discount guardrail too generous, so free's zero must NOT reach here.
     expect(estimate.costUsd).toBeGreaterThan(100)

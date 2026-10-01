@@ -39,6 +39,8 @@ The CRM is console-only. Its records live in Firestore and it has no canvas comp
 
 `registerCrmConsoleApi()` from `@aglyn/plugins-crm/server` (the `consoleApi` surface) registers routes under the `crm` prefix for contact stage and field updates, contact creation and merge, lead conversion, deal stages, tasks, CSV imports of contacts, companies, deals, tasks and leads, one-to-one email and a contact's email history, erasing a person, organization-level activity, recipes, and the workspace's inbound email capture address. It also registers the CRM on two core seams, so another plugin can read a record's facts or file an item on a record's timeline without importing this package.
 
+At the console's boot (`registerCrmConsoleServerDeclarations`) it registers a membership detacher (`plugin-membership-detach`): when the plugin that keeps a container — a campaign — removes it, the container comes off every lead and every contact facet that names it, and the records stay.
+
 ### Entry points
 
 | import | contents |

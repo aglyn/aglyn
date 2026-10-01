@@ -567,7 +567,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     const feeCents =
       payment === 'link'
         ? takeFeeCents +
-          Aglyn.storefrontProcessingCostCents(chargedItemsCents + taxCents)
+          Aglyn.saleProcessingCostCents(chargedItemsCents + taxCents)
         : takeFeeCents
     const totals = CommerceModel.computeOrderTotals(lineItems, {
       discountCents,

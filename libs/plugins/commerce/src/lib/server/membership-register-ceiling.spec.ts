@@ -43,6 +43,8 @@ const mockState: {
   credentials: Array<{ id: string; data: Record<string, unknown> }>
   leads: Array<Record<string, unknown>>
   trips: Array<Record<string, unknown>>
+  /** Every notice re-arm the handler asked for, with the count it judged. */
+  rearms: Array<Record<string, unknown>>
   existingMembers: number
   duplicateEmail: boolean
   countsInsideTransaction: number
@@ -52,6 +54,7 @@ const mockState: {
   credentials: [],
   leads: [],
   trips: [],
+  rearms: [],
   existingMembers: 0,
   duplicateEmail: false,
   countsInsideTransaction: 0,
@@ -125,6 +128,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     recordVisitorRecordCeilingTrip: async (options: Record<string, unknown>) => {
       mockState.trips.push(options)
+    },
+    rearmVisitorRecordCeilingNotice: async (options: Record<string, unknown>) => {
+      mockState.rearms.push(options)
     },
   }
 })
@@ -203,6 +209,7 @@ beforeEach(() => {
   mockState.credentials = []
   mockState.leads = []
   mockState.trips = []
+  mockState.rearms = []
   mockState.existingMembers = 0
   mockState.duplicateEmail = false
   mockState.countsInsideTransaction = 0
@@ -294,6 +301,27 @@ describe('the sign-up ceiling (AGL-1529)', () => {
       kind: 'siteMembers',
       ceiling: SITE_MEMBERS_MAX_PER_HOST,
     })
+  })
+
+  it('hands an accepted sign-up’s count to the notice re-arm', async () => {
+    // The re-arm decides for itself whether this accept took the last slot
+    // (AGL-3442); what the handler owes it is the count the account was
+    // judged against, and only for an account it actually created.
+    mockState.existingMembers = SITE_MEMBERS_MAX_PER_HOST - 1
+    await register()
+    expect(mockState.rearms).toEqual([
+      expect.objectContaining({
+        kind: 'siteMembers',
+        used: SITE_MEMBERS_MAX_PER_HOST - 1,
+        ceiling: SITE_MEMBERS_MAX_PER_HOST,
+      }),
+    ])
+
+    mockState.rearms = []
+    mockState.members = []
+    mockState.existingMembers = SITE_MEMBERS_MAX_PER_HOST
+    await register()
+    expect(mockState.rearms).toHaveLength(0)
   })
 
   it('takes the count INSIDE the transaction that creates', async () => {

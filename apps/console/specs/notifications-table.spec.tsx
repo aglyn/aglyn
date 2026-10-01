@@ -159,6 +159,38 @@ describe('NotificationsTable (AGL-3045)', () => {
     })
   })
 
+  /*
+   * A fraud signal, a degraded check and a recovery used to read alike. Each
+   * row now carries its notification's level, drawn as an icon the reader
+   * can hear and a class the grid paints (AGL-3437).
+   */
+  it('draws each row at the level of its notification', () => {
+    const recovered = {
+      $id: 'n-4',
+      type: 'system.operatorAlert',
+      level: 'success',
+      title: 'Ways in recovered',
+      body: 'Ways in is healthy again after 8 min.',
+      createdAt: at('2026-09-30T13:15:09Z'),
+      readAt: null,
+    }
+    const degraded = {
+      ...recovered,
+      $id: 'n-5',
+      level: 'warning',
+      title: 'Ways in is degraded',
+    }
+    renderTable({ rows: [unread, read, recovered, degraded] })
+    // A failed payment is critical by its type; nothing had to stamp it.
+    expect(rowOf('Your payment failed').className).toContain('notification-level-critical')
+    expect(within(rowOf('Your payment failed')).getByTitle('Critical')).toBeTruthy()
+    expect(rowOf('Your invoice is ready').className).toContain('notification-level-neutral')
+    // One type, two levels: the stamp decides, not the type.
+    expect(rowOf('Ways in recovered').className).toContain('notification-level-success')
+    expect(within(rowOf('Ways in recovered')).getByTitle('Good news')).toBeTruthy()
+    expect(rowOf('Ways in is degraded').className).toContain('notification-level-warning')
+  })
+
   it('opens a notification from its row', () => {
     const { onOpen } = renderTable()
     fireEvent.click(within(rowOf('Your invoice is ready')).getByText('Invoice available'))

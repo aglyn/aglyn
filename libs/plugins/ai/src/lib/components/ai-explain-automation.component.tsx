@@ -18,10 +18,6 @@
  */
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import type {
-  ConsoleAutomationEditorZoneProps,
-  ConsoleAutomationRunZoneProps,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -39,6 +35,10 @@ import {
 import { useState } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { aiJobProblem, useAiJobRun, useAiJobsVerdict, type AiJobRun } from './use-ai-job-run'
+import type {
+  ConsoleAutomationEditorZoneProps,
+  ConsoleAutomationRunZoneProps,
+} from './ai-automation-zones'
 
 /**
  * "Explain it" in the editor of a saved automation, and "Why did this fail?"

@@ -17,7 +17,8 @@
 'use client'
 
 import {
-  NOTIFICATION_TYPE_LABELS,
+  loudestNotificationLevel,
+  notificationLevel,
   type AglynNotification,
 } from '@aglyn/aglyn'
 import {
@@ -54,6 +55,13 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
+import {
+  NOTIFICATION_LEVEL_COLORS,
+  NotificationLevelIcon,
+  notificationLevelRowStyle,
+  notificationLevelTextSx,
+  notificationTypeLabel,
+} from './notification-level.component'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostIndexEntries from '../hooks/use-host-index-entries'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
@@ -149,6 +157,21 @@ export function NotificationsMenu() {
     const explicit = unreadDocs?.length ?? 0
     const implicit = (recent ?? []).filter((item) => !item.readAt).length
     return Math.max(explicit, implicit)
+  }, [unreadDocs, recent])
+  // The badge takes the color of the loudest unread notification (AGL-3437),
+  // so an unread fraud signal turns the bell red before anybody opens it.
+  // Read from the same two windows as the count.
+  const badgeColor = useMemo(() => {
+    const unread = [
+      ...(unreadDocs ?? []),
+      ...(recent ?? []).filter((item) => !item.readAt),
+    ]
+    const loudest = loudestNotificationLevel(unread.map(notificationLevel))
+    return loudest === 'critical'
+      ? 'error'
+      : loudest === 'warning'
+        ? 'warning'
+        : 'primary'
   }, [unreadDocs, recent])
 
   // ---- Alerts (AGL-650): sound, desktop notification, tab badge ----------
@@ -332,7 +355,7 @@ export function NotificationsMenu() {
           onClick={(event) => setAnchor(event.currentTarget)}
         >
           <Badge
-            color="primary"
+            color={badgeColor}
             badgeContent={unreadCount > 99 ? '99+' : unreadCount}
             invisible={unreadCount === 0}
           >
@@ -430,71 +453,81 @@ export function NotificationsMenu() {
               </Typography>
             </Stack>
           ) : (
-            shown.map((notification) => (
-              <Box
-                key={notification.$id}
-                onClick={() => handleOpenItem(notification)}
-                sx={{
-                  display: 'flex',
-                  gap: 1.25,
-                  px: 2,
-                  py: 1.25,
-                  cursor: 'pointer',
-                  borderBottom: 1,
-                  borderColor: 'divider',
-                  '&:hover': { backgroundColor: 'action.hover' },
-                }}
-              >
+            shown.map((notification) => {
+              const level = notificationLevel(notification)
+              return (
                 <Box
-                  sx={{
-                    width: 8,
-                    flexShrink: 0,
-                    display: 'flex',
-                    justifyContent: 'center',
-                    pt: 0.75,
-                  }}
+                  key={notification.$id}
+                  onClick={() => handleOpenItem(notification)}
+                  sx={[
+                    {
+                      display: 'flex',
+                      gap: 1.25,
+                      px: 2,
+                      py: 1.25,
+                      cursor: 'pointer',
+                      borderBottom: 1,
+                      borderColor: 'divider',
+                      '&:hover': { backgroundColor: 'action.hover' },
+                    },
+                    // The level's bar and wash (AGL-3437), the same as the
+                    // notifications page draws the row.
+                    (theme) => notificationLevelRowStyle(theme, level),
+                  ]}
                 >
+                  <NotificationLevelIcon level={level} sx={{ mt: 0.25 }} />
+                  <Stack sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: notification.readAt ? 400 : 600 }}
+                    >
+                      {notification.title}
+                    </Typography>
+                    {notification.body ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {notification.body}
+                      </Typography>
+                    ) : null}
+                    <Typography variant="caption" color="text.secondary">
+                      <Box
+                        component="span"
+                        sx={[
+                          NOTIFICATION_LEVEL_COLORS[level]
+                            ? { fontWeight: 'medium' }
+                            : {},
+                          notificationLevelTextSx(level),
+                        ]}
+                      >
+                        {notificationTypeLabel(notification.type)}
+                      </Box>
+                      {' · '}
+                      {notification.createdAt?.toDate?.().toLocaleString() ?? ''}
+                    </Typography>
+                  </Stack>
                   {notification.readAt ? null : (
                     <Box
                       sx={{
                         width: 8,
                         height: 8,
+                        mt: 0.75,
+                        flexShrink: 0,
                         borderRadius: '50%',
                         bgcolor: 'primary.main',
                       }}
                     />
                   )}
                 </Box>
-                <Stack sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography
-                    variant="body2"
-                    sx={{ fontWeight: notification.readAt ? 400 : 600 }}
-                  >
-                    {notification.title}
-                  </Typography>
-                  {notification.body ? (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {notification.body}
-                    </Typography>
-                  ) : null}
-                  <Typography variant="caption" color="text.secondary">
-                    {(NOTIFICATION_TYPE_LABELS as any)[notification.type] ??
-                      notification.type}
-                    {' · '}
-                    {notification.createdAt?.toDate?.().toLocaleString() ?? ''}
-                  </Typography>
-                </Stack>
-              </Box>
-            ))
+              )
+            })
           )}
         </Box>
 

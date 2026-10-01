@@ -66,8 +66,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] as const, orgId: 'org-1' }),
-  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
-  useOrgCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useSiteContainerOptions: () => ({ options: [], truncated: false, ready: true }),
+  useOrgContainerOptions: () => ({ options: [], truncated: false, ready: true }),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   useFirestoreDoc: () => ({ data: { total: 0 }, status: 'success', fromCache: false }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')

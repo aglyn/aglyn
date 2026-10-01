@@ -16,6 +16,7 @@
  */
 
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { usageNotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin/server/email-metering'
@@ -225,6 +226,7 @@ export async function announceAiAllotmentAlerts(
           type: 'billing.usage',
           title: copy.title,
           body: copy.body,
+          level: usageNotificationLevel(threshold),
           orgId: input.orgId,
           ...(link ? { link } : {}),
         },
@@ -237,6 +239,7 @@ export async function announceAiAllotmentAlerts(
             type: 'billing.usage',
             title: ownCopy.title,
             body: ownCopy.body,
+            level: usageNotificationLevel(threshold),
             orgId: input.orgId,
           },
           { skipEmail: true },

@@ -51,7 +51,7 @@ import {
   type OutreachSequence,
   type OutreachStopReason,
 } from '../model/outreach.types'
-import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import { normalizeOutreachPersonalLine } from './gates'
 import { effectiveOutreachWindow, type OutreachRandom, scheduleOutreachDue } from './schedule'
 import { isInThreadEmailStep } from './sequence-validation'
@@ -353,7 +353,7 @@ export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): Outreac
     lastSentAtMs: null,
     // The sequence's campaigns as they stand now (AGL-3254): what this
     // enrollment's outcomes are credited to, whatever the sequence joins later.
-    campaignIds: normalizeCampaignIds(draft.sequence.campaignIds),
+    campaignIds: normalizeContainerIds(draft.sequence.campaignIds),
     createdAtMs: draft.nowMs,
     updatedAtMs: draft.nowMs,
   }

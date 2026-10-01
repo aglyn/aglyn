@@ -324,13 +324,30 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
     expect(billingLinks()).toEqual([])
   })
 
-  it('keeps Fix payment for an org-wide viewer', async () => {
+  it('sends an org-wide viewer to the Update payment method button when payment is past due', async () => {
+    // The sentence asks for a new payment method, so the button is named for
+    // it and lands on the Billing button that does it (AGL-3442).
     scope.loaded = true
     scope.orgWide = true
     currentOrg.org = { plan: 'business', subscription: { status: 'past_due' } }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/Update your payment method/)
-    expect(billingLinks()[0].textContent).toBe('Fix payment')
+    expect(billingLinks()).toHaveLength(1)
+    expect(billingLinks()[0].textContent).toBe('Update payment method')
+    expect(billingLinks()[0].getAttribute('href')).toBe(
+      '/acme/billing#update-payment-method',
+    )
+  })
+
+  it('keeps Fix billing, to Billing itself, once the plan has lapsed', async () => {
+    // Control for the case above: the anchor is the past-due answer only.
+    scope.loaded = true
+    scope.orgWide = true
+    currentOrg.org = { plan: 'business', subscription: { status: 'unpaid' } }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/your plan has stopped/)
+    expect(billingLinks()[0].textContent).toBe('Fix billing')
+    expect(billingLinks()[0].getAttribute('href')).toBe('/acme/billing')
   })
 })
 
@@ -549,9 +566,18 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
    * fetch that never answered — which the seats effect swallows and the
    * credits effect would too, leaving these cases unfalsifiable.
    */
-  function answerCredits(credits: { used: number; limit: number } | null) {
+  /**
+   * `stopsAtBand` is the route's verdict on what happens at the band — the
+   * reservation's own predicate, `assistBandRefuses`, over the workspace —
+   * and is left off the wire when not given, as an older route would.
+   */
+  function answerCredits(
+    credits: { used: number; limit: number } | null,
+    stopsAtBand?: boolean,
+  ) {
     answerCreditsBody({
       credits: credits && { ...credits, remaining: Math.max(0, credits.limit - credits.used) },
+      ...(stopsAtBand === undefined ? {} : { stopsAtBand }),
     })
   }
 
@@ -591,7 +617,7 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
   it('at the band on a plan that sells past it: billed at the rate unless a stop is set, with a Usage link', async () => {
     // FORCED RED by rendering the generic "upgrade to keep adding" for this
     // row: the sentence would tell a Business org it was stuck.
-    answerCredits({ used: 2_800, limit: 2_750 })
+    answerCredits({ used: 2_800, limit: 2_750 }, false)
     render(<QuotaWarningsBanner />)
     await screen.findByText(/extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage/)
     const links = billingLinks()
@@ -601,31 +627,42 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
 
   it('at the band on Starter WITH the AI add-on: billed past it, not "nothing is billed" (AGL-3014)', async () => {
     // Starter lists no rate on `PLAN_PRICING`; the add-on's comes from the
-    // resolver `assistBandRefuses` asks. A banner that read the table would
-    // tell this workspace nothing is billed while its invoice bills $3.00
-    // per 1,000 past the add-on's 4,000 credits.
+    // resolver `assistBandRefuses` asks, which the credits route answers
+    // with. A banner that read the table would tell this workspace nothing is
+    // billed while its invoice bills $3.00 per 1,000 past the add-on's 4,000
+    // credits.
     currentOrg.org = { plan: 'starter', seatAddons: { aiAddon: 1 } }
-    answerCredits({ used: 4_100, limit: 4_000 })
+    answerCredits({ used: 4_100, limit: 4_000 }, false)
     const { unmount } = render(<QuotaWarningsBanner />)
     await screen.findByText(/extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage/)
     expect(screen.queryByText(/nothing is billed/)).toBeNull()
     unmount()
     // The control: the same workspace with its switch on is the wall.
     currentOrg.org = { plan: 'starter', seatAddons: { aiAddon: 1 }, assistOverage: { hardCap: true } }
+    answerCredits({ used: 4_100, limit: 4_000 }, true)
     render(<QuotaWarningsBanner />)
     await screen.findByText(/AI assist stops until next month or an upgrade, and nothing is billed/)
   })
 
   it('at the band with the org’s own switch on: AI stops, nothing billed', async () => {
     currentOrg.org = { plan: 'business', assistOverage: { hardCap: true } }
-    answerCredits({ used: 2_800, limit: 2_750 })
+    answerCredits({ used: 2_800, limit: 2_750 }, true)
     render(<QuotaWarningsBanner />)
     await screen.findByText(/AI assist stops until next month or an upgrade, and nothing is billed/)
   })
 
   it('at the band on a plan with no rate: the same wall wording', async () => {
     currentOrg.org = { plan: 'enterprise' }
-    answerCredits({ used: 90_000, limit: 87_000 })
+    answerCredits({ used: 90_000, limit: 87_000 }, true)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/AI assist stops until next month or an upgrade/)
+    expect(screen.queryByText(/billed at your plan/)).toBeNull()
+  })
+
+  it('a route that does not say what happens at the band reads as the wall', async () => {
+    // Promising a charge the plan may not bill is the worse sentence, so an
+    // answer without the verdict never says "billed".
+    answerCredits({ used: 2_800, limit: 2_750 })
     render(<QuotaWarningsBanner />)
     await screen.findByText(/AI assist stops until next month or an upgrade/)
     expect(screen.queryByText(/billed at your plan/)).toBeNull()

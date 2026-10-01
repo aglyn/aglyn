@@ -638,6 +638,44 @@ server layout that loads no plugin code, and a segment nobody declared is a
 (`@aglyn/aglyn/plugin-manager/besigner-documents`) read them, and
 `useHostDocumentVersion` (`@aglyn/tenant-feature-instance`) reads a version.
 
+## Container kinds — `plugin-containers`
+
+A container is a document other records are FILED UNDER: a form, a screen, a
+lead or a contact filed under a campaign. The member holds the edge, as an
+array of container ids on its own document, so reading "what is this filed
+under" costs nothing on a page that already read the record, and deleting a
+member leaves nothing behind. The plugin that keeps a kind declares it in the
+`containers` block of `plugins.config.json`, compiled like the collections
+above:
+
+```json
+"containers": [
+  {
+    "kind": "tasting",
+    "label": "Tasting",
+    "pluralLabel": "Tastings",
+    "orgCollection": "tastings",
+    "nameField": "title"
+  }
+]
+```
+
+| API | Semantics |
+| --- | --- |
+| `pluginContainerKind(kind)` / `listPluginContainerKinds()` | One declared kind with its owner and its owner's catalog label, or `null` when no plugin keeps it; and every declared kind. |
+| `containerMembershipField(kind)` (`app-utils/container-membership`) | The field a member holds its containers in: `<kind>Ids`. Derived, not declared, so a record page in one plugin files itself under a kind another plugin keeps by the kind's name alone. |
+| `readContainerIds(record, kind)` / `readContactContainerIds(contact, groupId, kind)` / `contactContainerFieldPath(groupId, kind)` | Read a host record's membership, read one holder's filing of a contact, and the facet path to write it — a contact is shared by every site, so what one merchant filed a person under lives in that merchant's facet. |
+| `normalizeContainerIds(raw)` / `containerMembershipValue(selected)` / `containerMembershipUnchanged(stored, selected)` | The cleaning every reader applies (deduped, trimmed, capped at `CONTAINER_MEMBERSHIP_CAP`), the value a save stores (an empty selection is stored as `[]`, never removed), and an order-insensitive "nothing to save". |
+| `useSiteContainerOptions(kind, hostId, { enabled })` / `useOrgContainerOptions(kind, orgId, { enabled })` (`@aglyn/tenant-feature-instance`) | The containers a picker offers: the org collection the kind declares, narrowed on a site to the ones placed on it (`visibleTo`), retired ones (`deletedAt`) left out, named by `nameField`, ceilinged at fifty. Off until `enabled`; a kind no plugin keeps settles with nothing. |
+| `ContainerPicker` (`@aglyn/tenant-feature-instance/components/container-picker`) | The one control that files a record: `kind`, `options`, `value`, `onChange`. Its words are the kind's labels, and an empty site is told where one is created. |
+| `readOrgContainers(firestore, kind, orgId, ids)` / `listOrgContainers(firestore, kind, orgId, ceiling)` / `findOrgContainersByName(firestore, kind, orgId, name, limit)` (`@aglyn/tenant-data-admin/server/org-containers`) | The server's read of an org's containers, for a plugin that files under a kind it does not keep: one `{ id, exists, live, name, visibleTo }` per id asked, in order; a window of the kind's containers; or the ones carrying a name. Read where the declaration says, as a projection of those fields, retired ones marked rather than dropped. A kind no plugin keeps reads nothing. |
+
+The owner removes a container by clearing its id from every member it can
+name; a plugin whose members it cannot name registers a detacher
+(`plugin-membership-detach`), which is handed the kind's field. The CRM
+clears its leads and each site's contact facet that way, and Outreach its
+sequences and enrollments.
+
 ## Record addresses — `plugin-record-routes`
 
 Where a plugin's records are read, published by the plugin that owns them, so
@@ -773,7 +811,10 @@ const { records } = bottles ? await bottles.list({ hostId, limit: 20 }) : { reco
 Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`).
 Commerce publishes `product` and `productCategory`; Workflows publishes a site's
 `workflow`, `webhook` and `action` records (a webhook's facts never carry its URL
-or secret).
+or secret); Data publishes the workspace's `dataset` records, narrowed to a site
+to the ones shared with it, with their fields, their scope tokens and the
+listing an installed one came from (never a record of one), from its
+console-only server declarations.
 
 ## What depends on a thing — `plugin-dependents` (`/server`)
 
@@ -810,6 +851,51 @@ not. Workflows answers for a `function` (the workflows whose steps call it);
 Logic answers for a `workflow` (the variables it computes), which is how the
 Automation page learns what a workflow's deletion would leave on its fallback
 value without either plugin importing the other.
+
+## Record lists — `plugin-record-lists` (console)
+
+The browser's half of the record index: the records of a kind, LISTED in the
+console for another plugin's picker or check — an automation step choosing a
+dataset, a reference check confirming a workflow still exists, a deal
+searching the catalog — without that plugin querying the owner's collection
+from the browser itself.
+
+```ts
+// the owner, from its console registrar
+registerPluginRecordListSource('bottle', {
+  query: (firestore, { hostId, search, limit: max }) =>
+    hostId
+      ? query(collection(firestore, 'hosts', hostId, 'bottles'), orderBy(documentId()), limit(max))
+      : null,
+  record: (id, data) => (data.deletedAt ? null : { id, name: String(data.name ?? id), facts: {} }),
+})
+
+// any other plugin's console code, with its own listener
+const { data } = useFirestoreCollection(
+  () => (open ? pluginRecordListQuery('bottle', firestore, { hostId, limit: 101 }) : null),
+  [firestore, hostId, open],
+  { idField: '$id' },
+)
+const bottles = pluginRecordsFromRows('bottle', data)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordListSource(kind, source, { pluginId? })` | A kind another plugin lists throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. |
+| `source.record(id, data)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed). |
+| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows)` | The reader's half: the query to listen to, and the rows read back through the owner. Both answer nothing where no plugin keeps the kind here. |
+
+The reader runs the query with the console's own collection listener, so the
+read is bounded, retried and reported like every other list. Import it by its
+own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-lists`). Data lists the
+workspace's `dataset` records (a site's narrowed by its scope tokens, a scoped
+member's by theirs), each with the listing an installed one came from, which
+is how the marketplace knows what a workspace has installed; Workflows lists a
+site's `workflow`, `webhook` and `action` records, Marketing lists a site's
+`overlay` records (its announcement bars and popups), and Commerce FINDS a
+site's active `product` records by the first word typed, each with its price
+and priced variants.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
@@ -1067,6 +1153,14 @@ person or returning visit, what a stage, an owner, a company or a tag means,
 and what a new person sets off. The silo reports what it saw. Like
 `plugin-record-timeline`, the registry authenticates nobody: the silo has
 already decided the capture is the workspace's to record.
+
+**`containers` is what the capture SURFACE is filed under, by container
+kind** (`plugin-containers`, above) — `{ campaign: ids }` for a form its
+merchant filed under campaigns. It is true of everybody who
+uses that surface, which is what makes it a different fact from where this
+visitor arrived from. The owner files the person under the kinds it keeps and
+ignores the rest. Filing is not consent: `marketingConsent` is the only input
+that records one.
 
 ## Record timeline — `plugin-record-timeline` (`/server`)
 
@@ -1373,28 +1467,69 @@ recognizes its own by it; every other handler ignores the event. They are
 awaited in the route rather than deferred, because a plugin's decision about
 whether a workspace may keep spending must not lag the payment that settled it.
 
-## A meter line a plugin bills itself — `plugin-metered-lines` (`/server`)
+## Site beacons — `plugin-site-beacons` (`/server`)
 
-The monthly usage sweep prices several lines into one figure and posts it as a
-single Stripe meter event. A plugin that bills one of those lines its own way
-claims it, and the sweep leaves it out of the metered figure from the month the
-claim names — so one month's usage reaches exactly one invoice.
+A published page reports what visitors did through one collector, and the
+collector owns what every beacon owes before anything is counted: the host must
+exist, a lockdown refuses it silently, and the per-address rate limit applies.
+What a plugin's site runtime reports beyond a pageview — an announcement bar
+seen, a popup dismissed — is the plugin's to count, in its own documents. It
+claims the body FIELD that marks its beacons, from `serverDeclarations`, and
+imports its counting code on the first beacon:
+
+```ts
+registerPluginSiteBeacon(
+  {
+    field: 'tasting',
+    count: async (request) => (await import('./server/tasting-beacon')).count(request),
+  },
+  { pluginId: 'cellar' },
+)
+```
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginMeteredLine({ lineId, billsFrom, closeMonth?, pluginId? })` | Claims a line. `billsFrom()` answers the first `YYYY-MM` the plugin bills, or `null` while it is registered and not yet switched on; it is called per question, so a deployment change takes effect without a restart. One plugin per line — a second claimant throws. |
-| `pluginBillsMeteredLine(lineId, month)` | What the sweep asks. `false` for an unclaimed line, a month before the claim, an unparseable start month, and a claim that throws — so every failure bills through the sweep, which already works. |
-| `runPluginMeteredLineClose(lineId, context)` | Run by the sweep once a month has CLOSED, per workspace, with `{ orgId, month, org, stripeCustomerId }` — the remainder of a line charged as it accrues is owed whether or not the meter reported. Errors are logged, never the sweep's. |
-| `pluginMeteredLineOwner(lineId)` | The claiming plugin, for diagnostics. |
+| `registerPluginSiteBeacon({ field, count }, { pluginId? })` | Claims a field. One owner per field: a second plugin throws naming both and the incumbent keeps it; the owner registering again replaces its own. |
+| `count({ hostId, day, dayExpiresAt, body })` | One beacon, after the collector's gates. `day` is the collector's UTC day bucket and `dayExpiresAt` the platform's retention for that day's analytics document — an owner that writes there stamps it. `body` is what the browser sent: validate every field read. The collector answers 204 and counts no pageview; a throw is logged, never surfaced. |
+| `pluginSiteBeaconFor(body)` | The owner of a beacon, or `null` when no claimed field holds a non-empty string. |
 
-Only the BILLING moves. A claimed line is still measured, still priced and
-still written to the month's audit fields, so a month's usage history reads the
-same either way and the handover is countable from the rows.
+The site runtime posts with `sendAnalyticsBeacon({ hostId, tasting: 'poured' })`.
+Marketing's announcement bar and popup are the first: `{ overlay, overlayId? }`.
 
 | API | Semantics |
 | --- | --- |
 | `registerPluginEventHandler(event, handler, { pluginId? })` | Subscribes; attributed to the registering plugin. Idempotence is the subscriber's to keep — check `listPluginEventHandlers(event)` before subscribing again after a registry reset. |
 | `runPluginEventHandlers(event, payload)` | What the core route calls after its write: every handler in registration order, a failure logged and counted (`{ handled, failed }`), never the route's failure. |
+
+## Usage meters — `plugin-usage-meters` (`/server`)
+
+The monthly usage sweep writes one rollup per workspace and month
+(`orgs/{orgId}/usage/{month}`) and posts the month's billed figure as one
+Stripe meter event. A plugin whose usage is measured in its own storage and
+priced by its own band registers a meter from its `serverDeclarations` entry,
+and the sweep asks it once per workspace; the plugin also declares the meter's
+id under `usageAxes` → `meters`, so the sweep refuses to bill a month while a
+declared meter is unregistered — the workspace fails loudly for that pass and
+is swept again the next day, rather than billed without it. Import the
+registry by its subpath; it is not on a barrel.
+
+```ts
+registerPluginUsageMeter({
+  pluginId: 'cellar',
+  id: 'tastings',
+  measure: async (context) => {
+    const { measureTastings } = await import('./billing/tastings-meter')
+    return measureTastings(context)
+  },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginUsageMeter({ id, measure, closeMonth?, pluginId? })` | Idempotent per plugin and id. A meter with no owner, no id or no `measure` throws. |
+| `measure(context)` | `context` is `{ orgId, org, month, closed, previous, releaseFlagOn(key) }` — `previous` is the month's rollup as it stood before this run, for a stock meter's period-end reading. Answers `{ fields, periodEndFields?, billedUsd, periodEndBasis? }`: `fields` are written onto the rollup on every run, under the names the plugin's usage axes read, and never over a field the platform writes; `periodEndFields` only while the month is open; `billedUsd` enters the billed figure, rounded to cents. A throw fails that workspace's pass. |
+| `closeMonth(context)` | Run for every workspace of a CLOSED month, every day the sweep runs, before its already-reported skip — for a plugin that bills part of its usage itself and settles the remainder at the month's end. `context.stripeCustomerId()` reads the workspace's billing document only when called. Errors are logged, never the sweep's. |
+| `listPluginUsageMeters()` / `unregisteredPluginUsageMeters()` | What the sweep runs, declared meters first in catalog order; and every declared meter nothing registered, as `pluginId:id`. |
 
 ## Account erasure — `plugin-user-erasure` (`/server`)
 
@@ -1524,6 +1659,43 @@ writes nothing. Register from the server declarations, not the API register
 function, so the participant is in place in every process that works a
 change — the scheduled job that finishes an abandoned one included.
 
+## Subscription topics — `subscriptionTopics`, `app-utils/subscription-topics`
+
+Every marketing-purpose message names the stream it is sent under, its
+unsubscribe link carries that stream, and the send path refuses a recipient
+who left it. The state and the policy are the mail rail's; a plugin brings the
+streams its mail is sent under, declared in the `subscriptionTopics` block of
+`plugins.config.json` and compiled, because the unsubscribe and preference
+pages name a stream whether or not the sending plugin has loaded:
+
+```json
+"subscriptionTopics": [
+  {
+    "id": "tastings",
+    "name": "Tasting invitations",
+    "description": "Invitations to our tastings and cellar events.",
+    "order": 50
+  }
+]
+```
+
+`id` is a wire value — a Firestore path component and a component of the
+unsubscribe link's signed subject — so it is never renamed, and it may carry
+no `/` or `:`. `order` is the stream's place on the preference page. One
+plugin marks its stream `default`: the stream a campaign or a scheduled
+automated email belongs to when it names none.
+
+| API | Semantics |
+| --- | --- |
+| `DECLARED_SUBSCRIPTION_TOPICS` / `DEFAULT_SUBSCRIPTION_TOPIC_ID` | The declared streams in preference-page order — the floor of every org's catalog, present with no write anywhere — and the default stream's id (`''` when none is declared). |
+| `mergeSubscriptionTopics(stored)` / `activeSubscriptionTopics(topics)` / `resolveSubscriptionTopic(id, topics)` | The catalog a reader sees (the floor, overlaid by what the org stored, plus its own topics), the same without retired ones, and the stream a message belongs to — an unknown or missing id resolves to the default. |
+| `readTopicSubscriptionState(entry)` / `topicRequiresDoubleOptIn(topic, siteDefault)` / `TOPIC_OPT_OUTS_SUBCOLLECTION` | One recipient's standing on one stream (`subscribed`, `pending`, `opted-out`) from `hosts/{hostId}/topicOptOuts`, and whether joining needs a confirmation click. Written through `@aglyn/tenant-data-admin/server/topic-subscriptions`. |
+
+The catalog an org authors is kept by the Email plugin, which publishes it as
+the `subscriptionTopic` record index (facts `{ description, archived,
+doubleOptIn? }`). A plugin that has to ask what the org made of a stream reads
+that index, never the collection.
+
 ## Email streams — `plugin-email-streams` (`/server`)
 
 A slot one plugin holds (`core.email-streams`, built on the service contracts
@@ -1613,14 +1785,25 @@ and no function deploy.
 The usage-alerts sweep walks every org once, reads its usage, and sends core's
 own alerts: the plan quotas, the customer's budget and the free plan's
 bandwidth cap. A plugin that meters a cost or enforces a ceiling core knows
-nothing about adds staff alerts to the same sweep by registering a contributor
-from its `serverDeclarations` entry, importing the rule itself lazily. Import
-the registry by its subpath; it is not on a barrel.
+nothing about adds to the same sweep by registering a contributor from its
+`serverDeclarations` entry, importing the rule itself lazily: `quotaChecks`
+for the bands the WORKSPACE is warned about, `evaluate` for STAFF alerts, or
+both. Import the registry by its subpath; it is not on a barrel.
+
+A band that needs no code — a monthly host counter against what the plan
+includes of an entitlement — is declared on the plugin's usage band instead
+(`bands[].alert`, [Usage axes](#usage-axes--plugin-usage-axes)), and an org
+capacity a plugin declares (`plugin-org-capacity`) is warned about as it
+fills with no contributor at all.
 
 ```ts
 registerUsageAlertContributor({
   pluginId: 'acme-sms',
   id: 'carrier-spend',
+  quotaChecks: async (context) => {
+    const { smsQuotaChecks } = await import('./usage/sms-quota-checks')
+    return smsQuotaChecks(context)
+  },
   evaluate: async (context) => {
     const { evaluateCarrierSpend } = await import('./usage/carrier-spend-alerts')
     await evaluateCarrierSpend(context)
@@ -1630,7 +1813,8 @@ registerUsageAlertContributor({
 
 | API | Semantics |
 | --- | --- |
-| `registerUsageAlertContributor(contributor)` | Idempotent per plugin and id: the same pair again replaces the earlier contributor in place. A contributor with no plugin id, no id or no `evaluate` throws. |
+| `registerUsageAlertContributor(contributor)` | Idempotent per plugin and id: the same pair again replaces the earlier contributor in place. A contributor with no plugin id, no id, or neither `evaluate` nor `quotaChecks` throws. |
+| `quotaChecks(context)` | Answers `{ key, label, noun, used, limit, cadence, outcome, reached, approach, reachedTitle? }[]` for one org, from `context.org`, `spend` and `month`. `cadence` is `crossing` (something the workspace has: announced once when reached, again only after usage falls back) or `monthly` (a meter that resets on the 1st); `outcome` is `stops`, `bills` or `continues`; `reached` and `approach` are the sentences that say what happens at the band. The sweep opens every notice itself — the workspace, the figures, then `noun` — and runs the checks after its own through the same approach threshold, guard map, first-sweep seeding, console notification and email, so a plugin's band warns exactly as a platform band does. A throw costs only that contributor's checks. |
 | `listUsageAlertContributors()` | What the sweep runs for each org, after the budget alert and before the bandwidth cap: `FIRST_PARTY_PLUGINS` catalog order, then any other plugin id, then registration order within a plugin. |
 | `context.recordAlert(key, threshold)` | Records the dedupe guard and answers whether the alert may be sent. On an org's first, silent evaluation it records the guard and answers `false`. Guard keys share one map with core's checks, so name yours for what it measures. |
 | `context.alertStaff(alert)` | The sweep's own sender: the staff bell, the staff inbox with the same words, and a row in the run's report. It sends nothing on an org's first, silent evaluation. |
@@ -1693,7 +1877,8 @@ registerPluginEntitlements({
   lockdownFeatures: [
     {
       key: 'ai-generate',
-      label: 'AI generation',
+      label: 'AI generation', // the staff checklist
+      customerName: 'AI generation', // the customer's mail: "our team paused AI generation"
       staffBypass: true,
       notice: { title: 'AI generation is temporarily unavailable', body: '…' },
       apiPaths: { prefixes: ['ai/generate'] },
@@ -1720,7 +1905,7 @@ registerPluginEntitlements({
 | `hostRoleDefaults` on a catalog key | Makes the key per-site for a site collaborator: `resolveCollaboratorHostPermissions` and `resolveMemberHostPermissions` decide it from the host role, refined by the per-site toggle on the member document, and `projectHostMemberPermissions` stamps the site's `memberPermissions` projection. On the server, `memberHasPermissionOnHost`, `permissionRefusal` and `setHostPermissions` are a door's rung, its 403 and the toggle write. |
 | `listPluginSeatAddons()` / `pluginSeatAddon(key)` | What `resolveOrgEntitlements` folds: the quota named gains `perUnitByPlan[plan] × units` and the features switch on, after the org's overrides and before nothing. `pluginSeatAddonUnits(org.seatAddons, key)` / `hasPluginSeatAddon(org, key)` in `plan-entitlements` are the readings every surface shares. |
 | `listPluginFeatures()` | A declared feature's `defaultByPlan` fills the plan tables where they are silent; a key the tables already carry keeps their answer. |
-| `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |
+| `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, the owners' pause email names it by `customerName` (`lockdownFeatureCustomerName`) and never by the staff `label`, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |
 
 Registration order is deterministic: `FIRST_PARTY_PLUGINS` catalog order,
 then any other id alphabetically — plugin modules load in parallel, and a
@@ -1835,7 +2020,7 @@ brings the key's augmentation into every program that loads the package.
 
 The meters a plugin contributes to the platform's ONE cost model
 (`orgMonthlyCogsUsd`, which the discount guardrail and the staff org page
-read) and to the staff utilization table. A first-party plugin names a
+read), to the staff utilization table, and to a workspace's usage budget. A first-party plugin names a
 function under `register.usageAxes`; the manifest generator loads
 `${package}/usage-axes`, validates the answer and compiles it into
 `first-party-plugins.generated.ts`, beside the plan figures.
@@ -1864,9 +2049,13 @@ export function cellarUsageAxes(): PluginUsageAxesDeclaration {
 | Field | Semantics |
 | --- | --- |
 | `register.usageAxes` | The function's name. Called by the generator, never at runtime — the guardrail and the staff page price a rollup without loading a plugin, and a meter a registry had not filled would price at nothing, which approves a discount. |
-| `costAxes[]` | `{ id, order, fields, fallbackFields?, recordedFields?, rate?, live? }`. `fields` are summed from the month's usage rollup; `fallbackFields` are read only when a rollup carries none of `fields` (an older, narrower basis — a measured zero never falls back); `recordedFields` ride along so the sum stays legible and are never priced. `rate` names a key of `ORG_COGS_UNIT_RATES_USD` — never a number: the money stays core's, beside the billed table it reconciles against — or is left out when the fields are already dollars. `live: { collection, fields }` names `orgs/{orgId}/{collection}/{month}`, whose first positive field replaces the rollup's snapshot wherever a reader fetches it. |
-| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. |
-| `pluginCostAxes()` / `pluginUsageBands()` / `pluginCostAxisFields()` | Every compiled declaration, and every rollup field the cost axes read or record (`orgCogsInputFrom` forwards them). |
+| `costAxes[]` | `{ id, order, fields, fallbackFields?, recordedFields?, staffFields?, rate?, live? }`. `fields` are summed from the month's usage rollup; `fallbackFields` are read only when a rollup carries none of `fields` (an older, narrower basis — a measured zero never falls back); `recordedFields` ride along so the sum stays legible and are never priced; `staffFields` are what the plugin's usage sweep writes beside the meter for its own staff columns to read — served on the staff usage rows (`null` where a rollup never wrote one) and never handed to the cost model. `rate` names a key of `ORG_COGS_UNIT_RATES_USD` — never a number: the money stays core's, beside the billed table it reconciles against — or is left out when the fields are already dollars. `live: { collection, fields }` names `orgs/{orgId}/{collection}/{month}`, whose first positive field replaces the rollup's snapshot wherever a reader fetches it. |
+| `bands[]` | `{ id, label, order, fields, fallbackFields?, entitlement, perHost?, unitCostUsd?, hostCounter?, alert?, metered? }`. `entitlement` is the resolved key holding what the plan includes (read with `planQuotaOf`, so an undeclared key is nothing included); `perHost` expands it by the host limit; `unitCostUsd` is set when the band is sold in a unit OF cost and the rollup records dollars, and usage is then the dollars over it, rounded up. `hostCounter` names the per-site monthly counter the band is measured by (`hosts/{hostId}/counters/{hostCounter}`, field `{month}`). `alert: { label, noun, outcome, reached, approach }` warns the workspace as it approaches and reaches the band, from that counter, once per threshold per month: `label` names the band in the title, `noun` in the opening sentence, and `outcome`, `reached` and `approach` say what happens at it. `metered: { rate, quotedPer, noun, withheldUntil? }` makes the band an infrastructure meter, billed past what the plan includes at our cost × `METERED_MARKUP` beside storage and bandwidth — on the invoice sweep, the Billing card's estimate, the monthly usage summary and the staff usage rows. It needs one field and its `hostCounter`: `rate` names a key of the console's `METERED_UNIT_RATES_USD` (never a number), `quotedPer` is the count a published price is quoted per (`1000` reads "per 1,000"), `noun` is the band in running prose, and `withheldUntil` names a release flag the overage waits behind — while it is off for a workspace the units are counted and the charge is recorded as withheld (`{field}Billed`, `{field}OverageWithheldUsd`) rather than billed. A band with a `hostCounter` and no `metered` is counted: summed by the usage sweep, recorded under its first field and shown on the staff usage rows. |
+| `spendLines[]` | `{ id, label, live: { collection, field }, billedFromEnv, unit? }`. A line of the workspace's monthly spend on its usage budget: `orgs/{orgId}/{collection}/{month}`'s `field`, in the dollars it is billed at. It is always shown and counts toward the budget only from the month the deployment variable `billedFromEnv` names (anything that is not a `YYYY-MM` bills nothing). `unit: { costUsd, label }` is set when the stored dollars are the platform's cost: the customer's browser then receives `ceil(dollars / costUsd)` of the unit and never the dollars. |
+| `meters[]` | `{ id }` of each meter the plugin registers with the monthly usage sweep ([Usage meters](#usage-meters--plugin-usage-meters-server)). The code is registered at runtime; the declaration is what lets the sweep refuse to bill a month the registration is missing from. |
+| `pluginCostAxes()` / `pluginUsageBands()` / `pluginSpendLines()` / `pluginCostAxisFields()` | Every compiled declaration, and every rollup field the cost axes read or record (`orgCogsInputFrom` forwards them). |
+| `meteredPluginBands()` / `countedPluginBands()` / `meteredBandField(band)` / `meteredBandVerdictFields(band)` | The bands billed as infrastructure meters and the bands only counted, in band order; the rollup field a metered band records its count under, and the two fields a withheld band records its verdict under. |
+| `pluginCostAxisProjection(get)` | A month's rollup as the staff usage rows serve it: every field the axes read, record or serve to staff. A priced field reads `0` where the rollup lacks it, except one whose absence selects a fallback basis, which reads `null`, as does a recorded or staff field the rollup never wrote. |
 | `declaredMeterReading(rollup, declared)` / `liveMeterReading(doc, live)` | The one reading of a declared meter: a positive finite number, or nothing. |
 
 The generator refuses an id or an `order` another axis or band already holds

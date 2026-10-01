@@ -1944,7 +1944,7 @@ service cloud.firestore {
         // way afterwards to tell it from one somebody actually gave. So the
         // create and the update belong to the route
         // (`plugins-email/server-console.ts` and the Inbox's assign-list),
-        // which runs the shared `list-assignment-policy` and writes through
+        // which runs the shared `enrollment-basis` and writes through
         // `enrollListMember`.
         //
         // `write` covered all three until AGL-254's console surface gained an

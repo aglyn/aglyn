@@ -126,6 +126,10 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import {
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import ListingReviews from './listing-reviews.component'
 import ReportTarget from './report-target.component'
 import PluginSiteSet from './plugin-site-set.component'
@@ -769,20 +773,19 @@ export function MarketplaceListingContent({
    *
    * `documentId()` is what the existing composite index on
    * (`source.listingId`, `visibleTo`) already orders by — Firestore appends the
-   * document name to every index — so this needs no new one.
+   * document name to every index — so this needs no new one. The datasets are
+   * the data plugin's, asked through the source it publishes (AGL-3080),
+   * which orders them the same way.
    */
   const { data: datasetInstalls } = useFirestoreCollection<any>(
     () =>
       orgId && scopeLoaded
-        ? query(
-            collection(firestore, 'orgs', orgId, 'datasets'),
-            where('source.listingId', '==', listingId || '-missing-'),
-            ...(needsScope
-              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-              : []),
-            orderBy(documentId()),
-            limit(ARTIFACT_INSTALL_CEILING),
-          )
+        ? pluginRecordListQuery('dataset', firestore, {
+            orgId,
+            installedFrom: listingId || '-missing-',
+            memberScope: needsScope ? scopeTokens : null,
+            limit: ARTIFACT_INSTALL_CEILING,
+          })
         : null,
     [firestore, orgId, scopeLoaded, listingId, needsScope, scopeTokens],
     // Same mutable-predicate exposure as the browse datasets query:
@@ -811,8 +814,9 @@ export function MarketplaceListingContent({
   )
   const artifactInstall = useMemo(() => {
     if (artifactType === 'datasetSchema') {
-      const hit = (datasetInstalls ?? []).find((entry: any) => !entry.deletedAt)
-      return hit ? { version: hit.source?.version ?? null } : undefined
+      const hit = pluginRecordsFromRows('dataset', datasetInstalls)[0]
+      const origin = hit?.facts['installedFrom'] as { version?: string | number | null } | null | undefined
+      return hit ? { version: origin?.version ?? null } : undefined
     }
     if (artifactType === 'emailTemplate') {
       const hit = (emailInstalls ?? []).find((entry: any) => !entry.deletedAt)

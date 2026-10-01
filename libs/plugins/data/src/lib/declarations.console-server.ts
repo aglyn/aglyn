@@ -15,18 +15,26 @@
  * limitations under the License.
  */
 
-// The registry's own module, not the data layer's barrel: boot needs one
-// registry, not the whole server surface.
+// The registries' own modules, not the data layer's or the plugin-manager's
+// barrel: boot needs these registries, not the whole server surface or the
+// console's client contexts.
+import {
+  registerPluginRecordIndex,
+  type PluginRecordIndex,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import {
   registerApiV1Resource,
   registerApiV1UsageFigures,
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerDatasetFigureReaders } from './server/dataset-figures'
 
 /**
  * The data plugin's CONSOLE-ONLY server declarations, named under
  * `consoleServerDeclarations` in `plugins.config.json` and run at the
- * console's boot.
+ * console's boot. Everything here is the console's alone, so the tenant
+ * runtime does not register any of it.
  *
  * It serves the organization's datasets on the customer REST API,
  * `/v1/datasets/…`: the console's router owns the pipeline in front — the
@@ -36,12 +44,21 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * answers reads on every plan and refuses a create the plan does not carry
  * (`dataStore`) with its own sentence, as it always has. The resource brings
  * its description for the API's OpenAPI document, and the datasets band
- * joins `GET /v1/usage`. The API is the console's alone, so the tenant
- * runtime does not register them.
+ * joins `GET /v1/usage`.
  *
- * Light at boot: the handler is imported with its first request, the
- * description when the document is first built, and the usage reader with
- * the first usage call. Registering again replaces this plugin's own entries.
+ * And another plugin that works over the workspace's datasets — an AI job
+ * naming a dataset in an automation, a planner listing what a site already
+ * has, an insight summarizing a dataset's fields — runs on the console's
+ * server, and reads them here rather than from the datasets collection:
+ * through the `dataset` record index, and through the dataset figure readers
+ * an insight asks.
+ *
+ * Light at boot: the API handler is imported with its first request, the
+ * description when the document is first built, the usage reader with the
+ * first usage call and the index's reader with its first read; the figure
+ * readers reach Firestore only when one is asked. Registering again replaces
+ * this plugin's own entries, so a second call (a hot reload, a spec) is
+ * harmless.
  */
 export function registerDataConsoleServerDeclarations(): void {
   registerApiV1Resource(
@@ -58,4 +75,13 @@ export function registerDataConsoleServerDeclarations(): void {
     async (ctx) => (await import('./server/api-v1/usage')).datasetUsageFigures(ctx),
     { pluginId: BUNDLE_ID },
   )
+  registerPluginRecordIndex('dataset', lazyDatasetIndex, { pluginId: BUNDLE_ID })
+  registerDatasetFigureReaders(() => firebaseAdmin.app().firestore())
+}
+
+const loadDatasetIndex = async () => (await import('./server/dataset-record-index')).datasetRecordIndex
+
+const lazyDatasetIndex: PluginRecordIndex = {
+  list: async (request) => (await loadDatasetIndex()).list(request),
+  get: async (request) => (await loadDatasetIndex()).get(request),
 }

@@ -28,8 +28,14 @@ import {
   WORKFLOWS_ORG_CONSOLE_SECTIONS,
 } from './components/workflows-console-sections'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
-import { WORKFLOW_USAGE_ZONE } from './components/workflow-zones'
+import {
+  AUTOMATION_EDITOR_ZONE,
+  AUTOMATION_RUN_ZONE,
+  HOST_AUTOMATIONS_ZONE,
+  WORKFLOW_USAGE_ZONE,
+} from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerWorkflowsRecordLists } from './model/workflows-record-lists'
 import { registerWorkflowsRecordRoutes } from './model/workflows-record-routes'
 import { WORKFLOWS_SEARCH_SOURCES } from './model/workflows-search-sources'
 
@@ -54,6 +60,7 @@ const WorkflowsConsolePage = lazy(
  */
 export function registerWorkflowsConsole(): void {
   registerWorkflowsRecordRoutes()
+  registerWorkflowsRecordLists()
   registerPluginZone(
     {
       zone: WORKFLOW_USAGE_ZONE,
@@ -63,6 +70,41 @@ export function registerWorkflowsConsole(): void {
         'On the Automation page, after a reader asks where a workflow is used. A widget here lays out the scan the page already ran; it is handed the site, the answer and a way to close, and it writes nothing.',
     },
     // Named, because a spec calls this registrar without the loader.
+    { pluginId: BUNDLE_ID },
+  )
+  // The zones the Automation page draws in its own layouts (AGL-2919): one
+  // item in the Actions row, inside an open editor, on a failed run's row.
+  registerPluginZone(
+    {
+      zone: HOST_AUTOMATIONS_ZONE,
+      label: 'Automation page actions',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'On the Automation page, beside Add action and Recipes: another way to start an automation. `openAction` opens a listed action in the Actions editor; a widget here writes nothing through the page.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: AUTOMATION_EDITOR_ZONE,
+      label: 'An automation’s editor',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'Inside the editor of one saved automation, an action or a workflow. A widget here reads the automation as it is stored and changes nothing in the editor.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: AUTOMATION_RUN_ZONE,
+      label: 'A failed automation run',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'On each failed run in an automation’s run history. A widget here reads the run as it was recorded and changes nothing.',
+    },
     { pluginId: BUNDLE_ID },
   )
   Aglyn.registerConsoleExtension({

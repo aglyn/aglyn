@@ -39,6 +39,7 @@ import {
 } from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { StaffOrgEmailCard } from './components/staff-org-email-card.component'
+import { registerMarketingRecordLists } from './model/overlay-record-list'
 import { registerMarketingRecordRoutes } from './model/marketing-record-routes'
 
 /** Code-split: the Marketing console page only loads when opened. */
@@ -72,6 +73,11 @@ const EmailRecipientsCard = lazy(
 /** Loaded where a record page draws one of the attribution zones. */
 const RecordAttributionWidget = lazy(
   () => import('./components/record-attribution-widget'),
+)
+
+/** The site's section experiments, reported to the besigner's Interactions section. */
+const BesignerSectionExperiments = lazy(
+  () => import('./components/besigner-section-experiments'),
 )
 
 /**
@@ -157,6 +163,8 @@ export function registerMarketingConsole(): void {
     'On one message’s page. A widget here renders the stored design, or the plain-text body, through the renderer the send path uses.',
   )
   registerMarketingRecordRoutes()
+  // The site's overlays, for another plugin's picker to list (AGL-3080).
+  registerMarketingRecordLists()
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Marketing',
@@ -212,6 +220,14 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-inbox-record-attribution',
         title: 'Campaign attribution',
         Component: RecordAttributionWidget,
+      },
+      // The section experiments the besigner's Interactions section badges an
+      // element with and starts on a page's element; reported, never drawn.
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.besignerInteractions,
+        widgetId: 'marketing-besigner-section-experiments',
+        title: 'Section experiments',
+        Component: BesignerSectionExperiments,
       },
       // The staff organization page's sends and campaigns (AGL-3380), read
       // only: staff see what the organization sent without joining it.

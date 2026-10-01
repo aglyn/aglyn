@@ -292,7 +292,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
-import { DEFAULT_CAMPAIGN_TOPIC_ID } from '@aglyn/aglyn'
+import { DEFAULT_SUBSCRIPTION_TOPIC_ID } from '@aglyn/aglyn'
 import { createHmac } from 'crypto'
 import {
   campaignSendHandler,
@@ -471,7 +471,7 @@ describe('the links a campaign mints', () => {
     await send()
     // Every send belongs to SOME topic, or the preference page could offer the
     // catalog without saying which entry the message in front of them was.
-    expect(paramsOf(headerUrl()).get('tid')).toBe(DEFAULT_CAMPAIGN_TOPIC_ID)
+    expect(paramsOf(headerUrl()).get('tid')).toBe(DEFAULT_SUBSCRIPTION_TOPIC_ID)
   })
 })
 
@@ -520,7 +520,7 @@ describe('the campaign record', () => {
     const result = await send()
     expect(
       store.get(`orgs/org-1/campaigns/${result.campaignId}`),
-    ).toMatchObject({ topicId: DEFAULT_CAMPAIGN_TOPIC_ID })
+    ).toMatchObject({ topicId: DEFAULT_SUBSCRIPTION_TOPIC_ID })
   })
 
   it('carries the topic onto a SCHEDULED campaign', async () => {

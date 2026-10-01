@@ -25,7 +25,7 @@ import type { PluginUsageAxesDeclaration } from '@aglyn/aglyn/plugin-manager/plu
  * ONE cost axis for both counters: a run is the same handful of reads, two
  * writes and a moment of compute whichever builder produced it, so both are
  * priced at `perRun` on one line. TWO bands, because each builder sells its
- * own.
+ * own; the workflow band also warns the workspace as it fills.
  */
 export function workflowsUsageAxes(): PluginUsageAxesDeclaration {
   return {
@@ -44,6 +44,21 @@ export function workflowsUsageAxes(): PluginUsageAxesDeclaration {
         order: 100,
         fields: ['workflowRuns'],
         entitlement: 'workflowRunsPerMonth',
+        hostCounter: 'workflowRuns',
+        // The runtime stops workflows silently at the monthly cap, so the
+        // owner is warned approaching it and told on reaching it why their
+        // automations went quiet.
+        alert: {
+          label: 'monthly workflow runs',
+          noun: 'workflow runs',
+          outcome: 'stops',
+          reached:
+            'Workflows pause until next month and nothing is charged — ' +
+            'upgrade in Billing to keep them running.',
+          approach:
+            'Nothing changes and nothing is charged — at the included amount, ' +
+            'workflows pause until next month unless you upgrade in Billing.',
+        },
       },
       {
         id: 'actionRuns',

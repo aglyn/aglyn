@@ -99,6 +99,10 @@ import {
   restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  listOrgContainers,
+  type OrgContainerRecord,
+} from '@aglyn/tenant-data-admin/server/org-containers'
 // The leaf, for the reason the webhook imports the delivery log from its
 // leaf: a spec that stands a partial barrel in must still reach it.
 import {
@@ -136,8 +140,8 @@ const CAMPAIGN_DIRECTORY_CEILING = 200
 
 /**
  * The org's live campaigns by NAME, lower-cased, for the `campaigns`
- * column. A lead is an org record, so every live container of the org
- * (`orgs/{orgId}/emailCampaigns`) may be named, whichever sites it is
+ * column. A lead is an org record, so every live container of the org's
+ * `campaign` kind may be named, whichever sites it is
  * placed on; where two share a name, the one placed on the importing site
  * wins, because that is the one its picker shows. A name the org does not
  * have is not guessed at: the row is refused whole and named, because a
@@ -151,17 +155,11 @@ async function campaignDirectory(
 ): Promise<Map<string, string>> {
   const directory = new Map<string, string>()
   if (!orgId) return directory
-  const containers = await firestore
-    .collection('orgs')
-    .doc(orgId)
-    .collection('emailCampaigns')
-    .limit(CAMPAIGN_DIRECTORY_CEILING)
-    .get()
-  const live = containers.docs.filter((container) => !container.get('deletedAt'))
-  const placed = (container: FirebaseFirestore.QueryDocumentSnapshot) =>
-    visibleToHost(container.get('visibleTo') as string[] | undefined, hostId)
+  const containers = await listOrgContainers(firestore, 'campaign', orgId, CAMPAIGN_DIRECTORY_CEILING)
+  const live = containers.filter((container) => container.live)
+  const placed = (container: OrgContainerRecord) => visibleToHost(container.visibleTo, hostId)
   for (const container of [...live.filter(placed), ...live.filter((entry) => !placed(entry))]) {
-    const name = String(container.get('name') ?? '').trim().toLowerCase()
+    const name = container.name.toLowerCase()
     if (name && !directory.has(name)) directory.set(name, container.id)
   }
   return directory

@@ -36,7 +36,7 @@ import {
   OPERATOR_BACKFILL_CONSENT_KIND,
   readMarketingBasis,
 } from './marketing-consent'
-import { EMAIL_TOPIC_PRODUCT_UPDATES } from './email-topics'
+import { DECLARED_SUBSCRIPTION_TOPICS } from './subscription-topics'
 import {
   isPlatformMarketingConsentSourceKind,
   isPlatformMarketingConsoleSourceKind,
@@ -277,8 +277,10 @@ describe('the wording and its provenance', () => {
 
 describe('the email doors (AGL-3305)', () => {
   it('stands for the built-in Product updates list', () => {
-    expect(PLATFORM_MARKETING_TOPIC_ID).toBe(EMAIL_TOPIC_PRODUCT_UPDATES)
     expect(PLATFORM_MARKETING_TOPIC_ID).toBe('product-updates')
+    expect(DECLARED_SUBSCRIPTION_TOPICS.map((topic) => topic.id)).toContain(
+      PLATFORM_MARKETING_TOPIC_ID,
+    )
   })
 
   it('keeps the email doors out of what a console request may name', () => {

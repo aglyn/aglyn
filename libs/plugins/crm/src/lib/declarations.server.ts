@@ -34,7 +34,8 @@ import {
   type PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
-import { BUNDLE_ID } from './constants/bundle-common'
+import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
+import { BUNDLE_ID, CRM_RECORDS_METER_ID } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
 /**
@@ -208,5 +209,17 @@ export function registerCrmServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // The records band in the monthly usage sweep, a core cron that never
+  // loads a CRM door; declared in `usageAxes` so the sweep refuses to bill a
+  // month without it. Deferred like the rest: the counts load with the
+  // first sweep.
+  registerPluginUsageMeter({
+    pluginId: BUNDLE_ID,
+    id: CRM_RECORDS_METER_ID,
+    measure: async (context) => {
+      const { measureCrmRecords } = await import('./server/crm-records-meter')
+      return measureCrmRecords(context)
+    },
+  })
 }
 

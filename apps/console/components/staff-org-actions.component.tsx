@@ -538,8 +538,8 @@ const StaffOrgActions = ({
   // The AI pause (AGL-2927): the same lockdown route, feature scope, with
   // the org named — so the entitlement, the plan and the add-on stay
   // exactly as the customer bought them, and lifting the pause restores
-  // them untouched. Two requests, one per feature key; each writes its
-  // own audit row.
+  // them untouched. ONE request naming both feature keys: the route writes
+  // an audit row per key and sends the owners one email naming both.
   const [aiPauser, setAiPauser] = useState<{
     id: string
     paused: boolean
@@ -550,31 +550,29 @@ const StaffOrgActions = ({
     if (!aiPauser) return
     try {
       const pausing = !aiPauser.paused
-      for (const feature of AI_PAUSE_FEATURES) {
-        const response = await authorizedFetch(user, '/api/admin/lockdown', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scope: 'feature',
-            targetId: feature,
-            orgId: aiPauser.id,
-            action: pausing ? 'lock' : 'unlock',
-            ...(pausing
-              ? {
-                  reason: aiPauser.reason,
-                  ...(aiPauser.message.trim()
-                    ? { message: aiPauser.message.trim() }
-                    : {}),
-                }
-              : {}),
-          }),
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) {
-          throw new Error(
-            payload?.error ?? `Lockdown failed (${response.status})`,
-          )
-        }
+      const response = await authorizedFetch(user, '/api/admin/lockdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'feature',
+          targetIds: AI_PAUSE_FEATURES,
+          orgId: aiPauser.id,
+          action: pausing ? 'lock' : 'unlock',
+          ...(pausing
+            ? {
+                reason: aiPauser.reason,
+                ...(aiPauser.message.trim()
+                  ? { message: aiPauser.message.trim() }
+                  : {}),
+              }
+            : {}),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ?? `Lockdown failed (${response.status})`,
+        )
       }
       enqueueSnackbar(
         pausing

@@ -394,16 +394,24 @@ A plugin can be used without the designer UI, which is what the map asks.
 
 **A plugin domain on the generic floor: `@aglyn/shared-ui-email-campaigns`** (a
 finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the
-campaign domain model — `model/campaign-container.ts`,
-`campaign-conversions.ts`, `campaign-report.ts`, `campaign-revenue.ts`,
-`email-record.ts`, `components/campaign-picker.component.tsx` — and
-`campaign-container.ts` opens by naming the Firestore path a send is stored
-at. Five plugins read it, plus both apps. The send-time rule has left it
-(AGL-3080): it is the marketing plugin's, and the AI plugin asks for a list's
-send time through `plugin-record-facts` (`listSendTime`) instead of reading
-the sends. The guard cannot see it: `plugin` →
-`shared` is a legal edge on the map, so there is no allowlist row and this
-document is the only place the finding can live.
+campaign domain model — `model/campaign-container.ts`, `campaign-report.ts`,
+`email-record.ts` — and `campaign-container.ts` opens by naming the Firestore
+path a send is stored at. Four plugins read it, and no app does. Three things
+have left it (AGL-3080). The send-time rule is the marketing plugin's, and the
+AI plugin asks for a list's send time through `plugin-record-facts`
+(`listSendTime`) instead of reading the sends. What a campaign caused and
+earned (`campaign-conversions.ts`, `campaign-revenue.ts`) is the marketing
+plugin's model too: no other plugin read either. The campaign picker is gone:
+a campaign is a container kind the marketing plugin declares
+(`plugins.config.json` → `containers`, compiled into core
+`plugin-manager/plugin-containers`), and every surface that files a record
+under one uses the core's generic `ContainerPicker` and
+`useSiteContainerOptions` / `useOrgContainerOptions`
+(`@aglyn/tenant-feature-instance`) with the membership helpers of
+`app-utils/container-membership`, naming the kind and never the plugin. The
+guard cannot see the rest: `plugin` → `shared` is a legal edge on the map, so
+there is no allowlist row and this document is the only place the finding can
+live.
 
 It was not a mistake. It is what this section used to prescribe — a shared model
 rather than a sideways import — and five plugins sharing one model is strictly
@@ -411,12 +419,10 @@ better than the edges above. What changed is the rule, not the file: `shared` is
 generic only, plugin domains included, so the prescription that put it there is
 gone and what that prescription produced is now a finding.
 
-Fix: a campaign becomes a plugin-declared resource kind. `report-figures.tsx`
-and the numbers behind it resolve through `registerPluginFigureReader`
-(**present**); `campaign-picker.component.tsx` becomes a widget through the
-console widget registry (**present**); `email-record.ts`'s field names become
-part of the declared resource rather than a shared type. The resource-kind
-declaration itself is **owed** (AGL-3124) — the same contract row 15 needs.
+Fix: a campaign is a plugin-declared container kind (**present**, above).
+`report-figures.tsx` and the numbers behind it resolve through
+`registerPluginFigureReader` (**present**); `email-record.ts`'s field names
+become part of the declared kind rather than a shared type.
 
 Whatever replaces it keeps the split the package has now: `src/index.ts` exports
 only the model, with `components/report-figures` reached by its own `./*`
@@ -520,22 +526,62 @@ what they were.
 Nothing inside this repo can see whether a lib is installable: an import
 resolves through a tsconfig alias or the root `node_modules`, and the apps
 consume a lib's source, never what `nx build` emits. So the map is proved from
-outside (AGL-3201):
+outside (AGL-3201), by the examples under `examples/consumers/`:
 
 ```sh
-npm run proof:consumer -- logic-only      # minutes; builds, installs from the registry, bundles
+npm run proof:consumer -- logic-only besigner-ui                 # packs this tree's libs
+npm run proof:consumer -- logic-only --registry                  # this tree's version, from npm
+npm run proof:consumer -- besigner-ui --registry=1.0.0-beta.219  # any published version
 ```
 
-A story names what a consumer asks for, the peers they are told to bring, and
-the peers they must be able to do without. It builds the closure of `@aglyn/*`
-packages read off each `package.json`, packs them as they would be published,
-installs the tarballs into an empty project outside the workspace, bundles an
-entry that imports them, and runs it.
+Each story is an example app a developer can copy, with its own
+`package.json`, README, `npm run build` and `npm run check`. The proof copies
+it to an empty directory outside the workspace, points its `@aglyn/*`
+dependencies at the version under test, installs with a plain `npm install`,
+runs the example's own `build` and `check`, and opens the build in Chrome to
+click through it. What a story adds is what the example cannot say about
+itself: the packages its install must not bring, and the clicks. An example
+whose `@aglyn/*` range does not admit the version under test is refused, so a
+copy never installs something nobody proved.
 
-| story | asks for | brings | must not need | holds |
-| -- | -- | -- | -- | -- |
-| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — eleven packages in the closure, none of them a UI library |
-| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | yes — 22 packages in the closure, and no console, tenant runtime or plugin among them. It holds WITH two peers an embeddable editor should not need, `next` and `firebase`; see below. |
+| story | example | asks for | brings | must not need | holds |
+| -- | -- | -- | -- | -- | -- |
+| `logic-only` | [`examples/consumers/logic-only`](../examples/consumers/logic-only) | `@aglyn/aglyn`, `@aglyn/besigner` | `react`, `react-dom` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — twelve packages in the closure, none of them a UI library |
+| `besigner-ui` | [`examples/consumers/besigner-ui`](../examples/consumers/besigner-ui) | `@aglyn/besigner-ui`, `@aglyn/besigner`, `@aglyn/aglyn`, `@aglyn/aglyn-node-renderer`, `@aglyn/shared-ui-theme` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | yes — 23 packages in the closure, and no console, tenant runtime or plugin among them. It holds WITH two peers an embeddable editor should not need, `next` and `firebase`; see below. |
+
+**Packed or from the registry, and where each runs.** Packed is the default:
+it builds every lib in the closure from this tree and `npm pack`s it, which is
+the tarball `publish:packages` uploads. `consumer-proof.yml` runs it on the
+promotion PR, the last point at which a broken package can be stopped — a
+published version is final. `--registry` installs the exact version from npm,
+siblings and all; `publish-packages.yml` runs it after every publish, waiting
+out npm's read lag first. It sees what packing cannot, a package the release
+failed to publish or a sibling pin the registry cannot satisfy, and it can
+only report. Neither is a required check (RELEASING.md, "Four settings are
+deliberate").
+
+The first runs of the examples found four defects that no test or guard
+inside the repo could see:
+
+- `@aglyn/shared-data-enums` named `firebase` as a REQUIRED peer, so a plain
+  install of the logic packages brought the whole Firebase SDK. Only its
+  `firebase-auth` module uses it, and the core imports the package by subpath
+  and never loads that module; the peer is optional now.
+- Every lib that named `next` pinned it EXACTLY, at `16.3.3`. Once npm's
+  `next` moved to 16.3.8, `npm install @aglyn/besigner-ui next` could not
+  resolve: npm searched for eighteen minutes and failed. A peer is a
+  caret range now, and `check:lib-boundaries` refuses an exact pin and a range
+  that does not admit the version the workspace runs. `@mui/base` was pinned
+  the same way, and a caret on it admits a `5.0.0-dev` build that peers on
+  React 18; it was a peer of `@aglyn/shared-ui-jsx` for one helper that
+  `@mui/utils` also exports, so the peer is gone instead.
+- `@aglyn/shared-ui-jsx-forms` took two default exports from CommonJS files of
+  `@data-driven-forms/common` by deep path. Read under Node's rules, as a
+  `"type": "module"` package is, that default is the whole `exports` object,
+  so the editor's inspector threw the moment an element was selected. Only a
+  browser showed it.
+- `@aglyn/shared-util-tools` shipped a direct `eval`, which every consumer's
+  bundler warned about on every build. Nothing called the mode that used it.
 
 What a build must do for this to hold, all of it invisible from inside: the
 swc output is ESM with `"type": "module"`, so `.swcrc` sets `resolveFully` and
@@ -687,6 +733,16 @@ and re-reads rather than moving on, and fails loudly if the version never
 appears. Reading the two as one is how the first run of this left `latest`
 behind on two packages and reported success.
 
+How long it waits is the run's budget, not each package's. The biggest
+packages reach the package document six minutes or more after their publish,
+and the CDN keeps that document for five minutes on top. A 75-second wait per
+package left `beta` behind on two or three packages in each of beta.217,
+beta.218 and beta.219, and each run still read green because the step is
+`continue-on-error`. So it moves everything visible on the first pass, looks
+again every 30 seconds at what is still missing, for up to 15 minutes, and
+asks whether a version exists from that version's own document, which the CDN
+does not cache.
+
 ⛔ **This is the one thing `NPM_TOKEN` still does.** An OIDC identity may not
 set a dist-tag, so the publish step runs tokenless and this one carries the
 secret. In `publish-packages.yml` it is `continue-on-error`: the default
@@ -716,7 +772,5 @@ published again under the same number.
 
 A follow-up project, not this document's commit:
 
-- An `examples/` consumer that builds the designer UI from the published
-  packages, which is the proof the map is real.
 - The licensing decision — which pieces are open source and under which
   license — is an owner decision tracked separately.

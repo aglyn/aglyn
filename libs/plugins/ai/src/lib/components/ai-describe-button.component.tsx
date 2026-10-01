@@ -19,7 +19,6 @@
 
 import type {
   ConsoleHostComponentsZoneProps,
-  ConsoleHostFormsZoneProps,
   ConsoleHostLayoutsZoneProps,
   ConsoleHostScreensZoneProps,
   ConsoleHostTemplatesZoneProps,
@@ -111,8 +110,11 @@ export function AiDescribeLayoutButton(props: ConsoleHostLayoutsZoneProps) {
   return <AiDescribeButton {...props} kind="layout" />
 }
 
-/** A form from a brief, on the Forms page (`hostForms`). */
-export function AiDescribeFormButton(props: ConsoleHostFormsZoneProps) {
+/**
+ * A form from a brief, on the Forms page (`hostForms`, which the forms plugin
+ * hosts on the `hostScreens` contract).
+ */
+export function AiDescribeFormButton(props: ConsoleHostScreensZoneProps) {
   return <AiDescribeButton {...props} kind="form" />
 }
 

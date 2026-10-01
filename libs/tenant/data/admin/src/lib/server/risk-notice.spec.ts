@@ -299,6 +299,32 @@ describe('notifyRiskEvent', () => {
     expect(text).toContain('the payment for order 1042 on the site "harborview" ($56.00)')
   })
 
+  it('never folds a card-testing warning: its site and what to check always arrive (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    for (let n = 1; n <= RISK_NOTICE_BURST.owners + 3; n += 1) await notifyRiskEvent(held(400 + n), h.deps)
+    const before = h.sent.length
+    const result = await notifyRiskEvent(
+      {
+        kind: 'card-testing',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        reviewId: 'c'.repeat(40),
+        reference: 'PV-1',
+        item: { label: 'checkout on the site "harborview"', path: '/host-1/products/orders' },
+      },
+      h.deps,
+    )
+    expect(result.owners.digested).toBe(false)
+    // The owner and the site's manager, each with the whole notice.
+    expect(h.sent.slice(before).map((email) => email['to'])).toEqual([
+      'avery@example.com',
+      'manager-1@example.com',
+    ])
+    const email = h.sent[h.sent.length - 1]
+    expect(String(email['subject'])).toBe('Unusual checkout activity on the site "harborview"')
+    expect(String(email['text'])).toContain('Review your recent orders before you fulfill them.')
+  })
+
   it('never folds a lock: every lock notice goes out on its own', async () => {
     const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
     for (let n = 1; n <= RISK_NOTICE_BURST.owners + 3; n += 1) await notifyRiskEvent(held(200 + n), h.deps)
@@ -442,6 +468,24 @@ describe('notifyRiskEvent', () => {
     )
   })
 
+  it('fills a new publisher’s payout schedule into the notice it is sent (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    await notifyRiskEvent(
+      {
+        kind: 'publisher-payouts-held',
+        orgId: 'org-1',
+        item: { label: 'your marketplace payouts', path: '/org/marketplace/payouts' },
+        payout: { delayDays: 14, untilWorkspaceAgeDays: 30 },
+      },
+      h.deps,
+    )
+    expect(String(h.sent[0]['text'])).toContain(
+      'payouts for Harbor View\'s marketplace sales moved to an extended schedule: each payout reaches your bank ' +
+        '14 days after the sale, until your workspace is 30 days old.',
+    )
+    expect(String(h.inApp[0].payload['body'])).toContain('Nothing is withheld or charged.')
+  })
+
   it('reports an unticked "Email the owners" as a skip, and still writes the in-app notice', async () => {
     const h = harness()
     const result = await notifyRiskEvent(
@@ -477,6 +521,55 @@ describe('closeRiskNotice', () => {
     expect(h.inApp[h.inApp.length - 1].payload['title']).toBe('Your held email was released')
     // Once per decision.
     expect((await closeRiskNotice({ reviewId: input.reviewId, decision: 'released' }, h.deps))?.duplicate).toBe(true)
+  })
+
+  it('tells the people the opening told, the site’s managers included, that a review closed (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    const reviewId = 'd'.repeat(40)
+    h.firestore.docs.set(`abuseReports/${reviewId}`, {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      reference: 'PV-2',
+      status: 'dismissed',
+    })
+    await notifyRiskEvent(
+      {
+        kind: 'card-testing',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        reviewId,
+        reference: 'PV-2',
+        item: { label: 'checkout on the site "harborview"', path: '/host-1/products/orders' },
+      },
+      h.deps,
+    )
+    const opened = h.sent.map((email) => email['to'])
+    expect(opened).toEqual(['avery@example.com', 'manager-1@example.com'])
+
+    const closed = await closeRiskNotice({ reviewId, decision: 'released' }, h.deps)
+    expect(closed?.owners).toMatchObject({ recipients: 2, emailed: 2 })
+    const closing = h.sent.slice(opened.length)
+    expect(closing.map((email) => email['to'])).toEqual(opened)
+    expect(String(closing[1]['subject'])).toBe('Our review is complete')
+    expect(h.inApp[h.inApp.length - 1].uids).toEqual(['owner-1', 'manager-1'])
+  })
+
+  it('keeps a review the site’s managers were never told about between the owners (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    const reviewId = 'e'.repeat(40)
+    // A subscription payment's review, on a row that happens to name a site.
+    h.firestore.docs.set(`abuseReports/${reviewId}`, {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      reference: 'SF-1',
+      status: 'dismissed',
+    })
+    await notifyRiskEvent(
+      { kind: 'billing-payment-flagged', orgId: 'org-1', hostId: 'host-1', reviewId, reference: 'SF-1' },
+      h.deps,
+    )
+    await closeRiskNotice({ reviewId, decision: 'released' }, h.deps)
+    expect(h.sent.map((email) => email['to'])).toEqual(['avery@example.com', 'avery@example.com'])
   })
 })
 

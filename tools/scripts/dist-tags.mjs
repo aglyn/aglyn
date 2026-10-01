@@ -200,22 +200,94 @@ export function probeWriteAccess(name, tags, run = runNpm) {
 }
 
 /**
- * Blocks the thread for `ms`. The run is synchronous throughout and the wait
- * is between two registry reads, so there is nothing else for it to be doing.
+ * How long the whole run gives the registry to show a version it has just
+ * published, and how often it looks again meanwhile.
+ *
+ * ⛔ IT USED TO BE 75 SECONDS PER PACKAGE, and the biggest packages never
+ * made it. A version reaches the package document only once npm has
+ * processed the publish, and the document is then served from a CDN with
+ * `max-age=300` on top. For `@aglyn/aglyn` at beta.219 the publish landed at
+ * 13:38:48 and the document changed at 13:45:03, while the step gave up on it
+ * at 13:44:26. It, `@aglyn/shared-data-mdi` and `@aglyn/tenant-data-admin`
+ * kept an older `beta`, beta.217 and beta.218 lost three and two packages the
+ * same way, and the step is `continue-on-error`, so every run read green.
+ *
+ * So the budget belongs to the run, not to a package: everything visible is
+ * moved on the first pass, and only what is still missing is looked at again.
  */
-export function waitMs(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+export const LAG_DEADLINE_MS = 15 * 60_000
+export const LAG_RECHECK_MS = 30_000
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** The registry the reads go to — the one npm is configured with, as in CI. */
+function registryUrl() {
+  return String(process.env.npm_config_registry || 'https://registry.npmjs.org/').replace(/\/+$/, '')
 }
 
-/** How long to give the registry's read path to catch up with a publish. */
-export const LAG_ATTEMPTS = 6
-export const LAG_WAIT_MS = 15_000
+/**
+ * Does the registry have `name@version`, asked of that version's OWN
+ * document rather than the package document?
+ *
+ * The package document is what `npm view` reads, and its CDN keeps a copy for
+ * five minutes. The version document is not cached at the edge, so it answers
+ * as soon as npm has the version, which is also when a dist-tag can point at
+ * it. `true` / `false` are the registry's answers; `null` is no answer.
+ */
+export async function versionExists(name, version, { fetchImpl = fetch, registry = registryUrl() } = {}) {
+  const url = `${registry}/${name.replace('/', '%2f')}/${encodeURIComponent(version)}`
+  try {
+    const response = await fetchImpl(url, { headers: { accept: 'application/json' } })
+    if (response.status === 404) return false
+    if (!response.ok) return null
+    const body = await response.json()
+    return body?.version === version
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The verdict for one package now: its tags from the package document, and,
+ * when that document does not list the version yet, the version's own
+ * document as the word on whether it exists.
+ */
+export async function currentVerdict(name, version, expected, { read = readTags, exists = versionExists } = {}) {
+  const answer = read(name)
+  const verdict = verdictFor(answer, version, expected)
+  if (verdict.state !== 'missing' || !(await exists(name, version))) return verdict
+  return verdictFor({ ...answer, versions: [...answer.versions, version] }, version, expected)
+}
+
+/**
+ * Settles every package, handing each verdict to `settled` the moment it is
+ * final. A package still `missing` is looked at again every `recheckMs` until
+ * `deadlineMs` has passed since the start; then `missing` is its verdict. One
+ * slow package never holds up the rest.
+ */
+export async function settleAll(names, verdictOf, settled, { deadlineMs = LAG_DEADLINE_MS, recheckMs = LAG_RECHECK_MS, now = Date.now, wait = sleep, log = () => {} } = {}) {
+  const deadline = now() + deadlineMs
+  let pending = [...names]
+  while (pending.length) {
+    const late = []
+    for (const name of pending) {
+      const verdict = await verdictOf(name)
+      if (verdict.state === 'missing' && now() < deadline) late.push(name)
+      else await settled(name, verdict)
+    }
+    if (!late.length) return
+    const left = Math.max(0, Math.round((deadline - now()) / 1000))
+    log(`  wait  ${late.length} package(s) not on the registry yet: ${late.join(', ')} (looking again in ${recheckMs / 1000}s, ${left}s left)`)
+    await wait(recheckMs)
+    pending = late
+  }
+}
 
 function runNpm(args) {
   return execFileSync('npm', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 }
 
-function main(argv) {
+async function main(argv) {
   const set = argv.includes('--set')
   const probe = argv.includes('--probe')
   const at = argv.indexOf('--version')
@@ -260,62 +332,54 @@ function main(argv) {
   const behind = []
   let moved = 0
   let failed = 0
-  for (const name of names) {
-    let verdict = verdictFor(readTags(name), version, expects.get(name) !== false)
-    /*
-     * The registry's read path lags a publish by minutes, and this runs
-     * minutes after one. A version that is genuinely there but not yet
-     * visible must not be read as "nothing to do" — that is precisely how
-     * the first run of this left `latest` behind on two packages and
-     * reported success.
-     */
-    for (let attempt = 1; verdict.state === 'missing' && attempt < LAG_ATTEMPTS; attempt += 1) {
-      console.log(`  wait  ${name} — ${verdict.why} (${attempt}/${LAG_ATTEMPTS - 1})`)
-      waitMs(LAG_WAIT_MS)
-      verdict = verdictFor(readTags(name), version, true)
-    }
-    if (verdict.state === 'ok') {
-      console.log(`  ok    ${name}`)
-      continue
-    }
-    if (verdict.state === 'skip') {
-      console.log(`  skip  ${name} — ${verdict.why}`)
-      continue
-    }
-    if (verdict.state === 'missing') {
-      failed += 1
-      console.error(`  MISSING ${name} — ${verdict.why}, after waiting`)
-      continue
-    }
-    if (verdict.state === 'error') {
-      failed += 1
-      console.error(`  ERROR ${name} — ${verdict.why}`)
-      continue
-    }
-    behind.push(name)
-    if (!set) {
-      console.log(`  BEHIND ${name} — ${verdict.why}`)
-      continue
-    }
-    console.log(`  move  ${name} — ${verdict.why}`)
-    for (const tag of verdict.tags) {
-      try {
-        execFileSync('npm', ['dist-tag', 'add', `${name}@${version}`, tag], {
-          cwd: ROOT,
-          /*
-           * Keeps the terminal. Run by a person, npm challenges this with the
-           * account's second factor and cannot ask for it with no stdin; run
-           * in CI, `NODE_AUTH_TOKEN` answers and nothing is asked.
-           */
-          stdio: 'inherit',
-        })
-        moved += 1
-      } catch (error) {
-        failed += 1
-        console.error(`    FAILED ${name} ${tag} — ${error.message}`)
+  await settleAll(
+    names,
+    (name) => currentVerdict(name, version, expects.get(name) !== false),
+    (name, verdict) => {
+      if (verdict.state === 'ok') {
+        console.log(`  ok    ${name}`)
+        return
       }
-    }
-  }
+      if (verdict.state === 'skip') {
+        console.log(`  skip  ${name} — ${verdict.why}`)
+        return
+      }
+      if (verdict.state === 'missing') {
+        failed += 1
+        console.error(`  MISSING ${name} — ${verdict.why}, after waiting`)
+        return
+      }
+      if (verdict.state === 'error') {
+        failed += 1
+        console.error(`  ERROR ${name} — ${verdict.why}`)
+        return
+      }
+      behind.push(name)
+      if (!set) {
+        console.log(`  BEHIND ${name} — ${verdict.why}`)
+        return
+      }
+      console.log(`  move  ${name} — ${verdict.why}`)
+      for (const tag of verdict.tags) {
+        try {
+          execFileSync('npm', ['dist-tag', 'add', `${name}@${version}`, tag], {
+            cwd: ROOT,
+            /*
+             * Keeps the terminal. Run by a person, npm challenges this with the
+             * account's second factor and cannot ask for it with no stdin; run
+             * in CI, `NODE_AUTH_TOKEN` answers and nothing is asked.
+             */
+            stdio: 'inherit',
+          })
+          moved += 1
+        } catch (error) {
+          failed += 1
+          console.error(`    FAILED ${name} ${tag} — ${error.message}`)
+        }
+      }
+    },
+    { log: (line) => console.log(line) },
+  )
 
   if (failed) {
     console.error(
@@ -332,7 +396,8 @@ function main(argv) {
     console.log('')
     console.log(`${behind.length} package(s) are behind. The owner moves them:`)
     console.log('')
-    console.log('  npm run dist-tags -- --set')
+    // Names the version, which is not the checkout's once main has moved on.
+    console.log(`  npm run dist-tags -- --set --version ${version}`)
     console.log('')
     console.log('It changes what an `npm install` of these packages hands out, so it runs')
     console.log("either in CI with NODE_AUTH_TOKEN or against the owner's own login.")
@@ -343,10 +408,11 @@ function main(argv) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  try {
-    process.exit(main(process.argv.slice(2)))
-  } catch (error) {
-    console.error(`dist-tags: FAILED — ${error.message}`)
-    process.exit(1)
-  }
+  main(process.argv.slice(2)).then(
+    (code) => process.exit(code),
+    (error) => {
+      console.error(`dist-tags: FAILED — ${error.message}`)
+      process.exit(1)
+    },
+  )
 }

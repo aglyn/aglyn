@@ -60,10 +60,10 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
-  useHostCampaigns,
+  useSiteContainerOptions,
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
-import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import ContainerPicker from '@aglyn/tenant-feature-instance/components/container-picker'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -255,9 +255,9 @@ export function FormDetailCard(props: FormDetailCardProps) {
    * merchant raw storage. Bounded at the ceiling the campaigns table itself
    * draws, so it can offer nothing that list does not.
    */
-  const siteCampaigns = useHostCampaigns(hostId, { enabled: Boolean(form) })
+  const siteCampaigns = useSiteContainerOptions('campaign', hostId, { enabled: Boolean(form) })
   const storedCampaigns = useMemo(
-    () => Aglyn.readCampaignIds(form as Record<string, unknown>),
+    () => Aglyn.readContainerIds(form as Record<string, unknown>, 'campaign'),
     [form],
   )
   const effectiveCampaigns = campaignIds ?? storedCampaigns
@@ -500,7 +500,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
     lead != null ||
     consentField != null ||
     (campaignIds != null &&
-      !Aglyn.campaignMembershipUnchanged(storedCampaigns, campaignIds))
+      !Aglyn.containerMembershipUnchanged(storedCampaigns, campaignIds))
   // Named before it is used on every row, so a role denial reads as a reason
   // rather than as a control that does nothing.
   const publishBlock = hostRoleLoaded
@@ -574,7 +574,8 @@ export function FormDetailCard(props: FormDetailCardProps) {
                   followed, on its own evidence, and it goes on saying what it
                   says whatever is picked here.
                 */}
-                <CampaignPicker
+                <ContainerPicker
+                  kind="campaign"
                   options={siteCampaigns.options}
                   value={effectiveCampaigns}
                   onChange={setCampaignIds}

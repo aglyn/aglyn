@@ -102,7 +102,6 @@ const NOT_CARRIED: Readonly<Record<string, string>> = {
   orgs: 'The organization document and its org-wide collections, which one group or another shares already.',
   emailSuppressions:
     'The platform list: a bounce or complaint on it holds every site of every workspace, grouped or not.',
-  emailTopics: 'The org’s topic catalog, which every site reads whole.',
   lists: 'Org-wide lists, which every site of the org shares whatever the declaration.',
   listAssignments: 'The inbox’s assignment of a list, read for the one site whose inbox asked.',
   formSubmissions: 'A site’s own submissions, read for that site alone.',

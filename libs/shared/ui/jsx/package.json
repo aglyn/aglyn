@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-jsx",
-  "version": "1.0.0-beta.219",
+  "version": "1.0.0-beta.220",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,10 +25,10 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-mdi": "1.0.0-beta.219",
-    "@aglyn/shared-ui-theme": "1.0.0-beta.219",
-    "@aglyn/shared-util-tools": "1.0.0-beta.219",
-    "@aglyn/shared-util-vendor": "1.0.0-beta.219",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.220",
+    "@aglyn/shared-ui-theme": "1.0.0-beta.220",
+    "@aglyn/shared-util-tools": "1.0.0-beta.220",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.220",
     "@mdi/js": "^7.4.47",
     "@swc/helpers": "0.5.23",
     "change-case": "^5.4.4",
@@ -46,13 +46,12 @@
     "warning": "^4.0.3"
   },
   "peerDependencies": {
-    "@mui/base": "5.0.0-beta.70",
     "@mui/material": "^9.3.1",
     "@mui/styles": "^6.4.8",
     "@mui/system": "^9.2.0",
     "@mui/utils": "^9.2.0",
     "@mui/x-data-grid": "^9.12.0",
-    "next": "16.3.3",
+    "next": "^16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

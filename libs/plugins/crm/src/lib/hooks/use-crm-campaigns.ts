@@ -17,9 +17,9 @@
 'use client'
 
 import {
-  useHostCampaigns,
-  useOrgCampaigns,
-  type HostCampaigns,
+  useSiteContainerOptions,
+  useOrgContainerOptions,
+  type ContainerOptions,
 } from '@aglyn/tenant-feature-instance'
 
 /**
@@ -41,13 +41,13 @@ export function useCrmCampaigns(
     orgId: string | null | undefined
   },
   options?: { enabled?: boolean },
-): HostCampaigns {
+): ContainerOptions {
   const enabled = options?.enabled ?? false
   const hostId = scope.hostId || null
-  const site = useHostCampaigns(hostId ?? undefined, {
+  const site = useSiteContainerOptions('campaign', hostId ?? undefined, {
     enabled: enabled && Boolean(hostId),
   })
-  const org = useOrgCampaigns(scope.orgId, {
+  const org = useOrgContainerOptions('campaign', scope.orgId, {
     enabled: enabled && !hostId,
   })
   return hostId ? site : org

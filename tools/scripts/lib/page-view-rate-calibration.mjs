@@ -19,9 +19,11 @@
  * Ties `perPageView` to the page weight it claims to be priced for.
  *
  * `perPageView` is a COST PER PAGE VIEW, and the customer is billed it times
- * `METERED_MARKUP`. The published term is literally "at cost + 30%", so a
- * `perPageView` that no longer matches what a page weighs does not make us
- * expensive or cheap — it makes the published claim false, in whichever
+ * `METERED_MARKUP` — together with `PAGE_VIEW_CDN_REQUEST_COST_USD`, the
+ * per-request CDN charge, which is not proportional to weight and so is not
+ * calibrated here (AGL-1879). The published term is literally "at cost + 30%",
+ * so a `perPageView` that no longer matches what a page weighs does not make
+ * us expensive or cheap — it makes the published claim false, in whichever
  * direction the page moved.
  *
  * Before this gate nothing connected the two. `check-tenant-page-weight.mjs`
@@ -162,9 +164,10 @@ export function rateForWeightKb(weightKb) {
  *
  * The comparison runs in THIS direction, in kilobytes, rather than forwards in
  * dollars, because the checked-in rate is not a round number of dollars per
- * view and cannot be. It is pinned so the PUBLISHED figure is round: $0.21 per
+ * view and cannot be. It is pinned so its marked-up figure is round: $0.21 per
  * 1,000 views is $0.00016153846 per view once `METERED_MARKUP` is divided out,
- * and no rounding of dollars-per-view reproduces that from a weight.
+ * and no rounding of dollars-per-view reproduces that from a weight. (The
+ * published $0.36 adds the CDN request term, which this module does not read.)
  *
  * Kilobytes have no such problem. The record already writes both weights to a
  * tenth of a KB, so rounding the recovered weight to the same grid compares

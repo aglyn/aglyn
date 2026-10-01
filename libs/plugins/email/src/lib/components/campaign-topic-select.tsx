@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { activeEmailTopics, DEFAULT_CAMPAIGN_TOPIC_ID } from '@aglyn/aglyn'
+import { activeSubscriptionTopics, DEFAULT_SUBSCRIPTION_TOPIC_ID } from '@aglyn/aglyn'
 import { MenuItem, TextField } from '@mui/material'
 import { useEffect } from 'react'
 import { useOrgEmailTopics } from './use-org-email-topics'
@@ -55,7 +55,7 @@ export interface CampaignTopicSelectProps {
 export function CampaignTopicSelect(props: CampaignTopicSelectProps) {
   const { hostId, value, onChange, disabled } = props
   const { topics } = useOrgEmailTopics(hostId)
-  const options = activeEmailTopics(topics)
+  const options = activeSubscriptionTopics(topics)
 
   /*
    * SETTLE ON A REAL OPTION, rather than submitting an empty topic.
@@ -74,7 +74,7 @@ export function CampaignTopicSelect(props: CampaignTopicSelectProps) {
     if (!options.length) return
     if (options.some((topic) => topic.id === value)) return
     const fallback =
-      options.find((topic) => topic.id === DEFAULT_CAMPAIGN_TOPIC_ID) ??
+      options.find((topic) => topic.id === DEFAULT_SUBSCRIPTION_TOPIC_ID) ??
       options[0]
     onChange(fallback.id)
   }, [options, value, onChange])

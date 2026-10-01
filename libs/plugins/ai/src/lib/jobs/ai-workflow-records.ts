@@ -17,14 +17,13 @@
 
 import type { HostAction } from '@aglyn/aglyn/app-utils/actions'
 import { actionRunResult } from '@aglyn/aglyn/app-utils/activity-presenter'
-import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { isFormArchived } from '@aglyn/aglyn/app-utils/forms'
 import {
   pluginRecordIndex,
   type PluginIndexedRecord,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
-import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
-import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { listOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import type {
   AiAutomationForm,
   AiAutomationNamedRecord,
@@ -41,10 +40,11 @@ import type { AiWorkflowTargetType } from '../model/ai-workflow-job'
  * more than the editor would offer.
  *
  * The site's workflows, webhooks and saved actions are the workflows plugin's
- * records, so they are read through the indexes that plugin publishes
- * (`workflow`, `webhook`, `action` — AGL-3080), never from its collections:
- * where no plugin keeps a kind, there are none to name. The rest are read
- * through the Admin SDK as projections of the fields named here.
+ * records, and the org's datasets the data plugin's, so they are read through
+ * the indexes those plugins publish (`workflow`, `webhook`, `action`,
+ * `dataset` — AGL-3080), never from their collections: where no plugin keeps a
+ * kind, there are none to name. The rest are read through the Admin SDK as
+ * projections of the fields named here.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -79,18 +79,30 @@ async function named(
 
 const live = (data: Data) => data['deletedAt'] == null
 
+/** The org's live campaigns placed on the site, named, in the editor's window. */
+async function placedCampaigns(
+  firestore: Firestore,
+  orgId: string,
+  hostId: string,
+): Promise<AiAutomationNamedRecord[]> {
+  const containers = await listOrgContainers(firestore, 'campaign', orgId, AI_WORKFLOW_RECORDS_WINDOW)
+  return containers
+    .filter((container) => container.live && container.name && visibleToHost(container.visibleTo, hostId))
+    .map((container) => ({ id: container.id, name: container.name }))
+}
+
 /**
  * The live records of a kind another plugin keeps, through its index, in the
  * editor's window; none where no plugin keeps the kind here.
  */
 async function indexed(
   kind: string,
-  hostId: string,
+  scope: { orgId?: string; hostId: string },
   keep: (record: PluginIndexedRecord) => boolean = () => true,
 ): Promise<AiAutomationNamedRecord[]> {
   const owner = pluginRecordIndex(kind)
   if (!owner) return []
-  const { records } = await owner.index.list({ hostId, limit: AI_WORKFLOW_RECORDS_WINDOW })
+  const { records } = await owner.index.list({ ...scope, limit: AI_WORKFLOW_RECORDS_WINDOW })
   return records.filter(keep).map(({ id, name }) => ({ id, name }))
 }
 
@@ -131,33 +143,19 @@ export async function readAiAutomationRecords(
   const none = Promise.resolve([] as AiAutomationNamedRecord[])
   const [forms, datasets, lists, campaigns, workflows, webhooks, stages] = await Promise.all([
     !wanted('forms') ? Promise.resolve([] as AiAutomationForm[]) : readForms(host),
-    !wanted('datasets')
-      ? none
-      : named(
-          scopedToHost(org.collection('datasets'), input.hostId),
-          ['displayName', 'name', 'deletedAt'],
-          live,
-          (data, id) => datasetDisplayName(data) || id,
-        ),
+    // The org's datasets shared with this site, as the data plugin indexes them.
+    !wanted('datasets') ? none : indexed('dataset', { orgId: input.orgId, hostId: input.hostId }),
     !wanted('lists') ? none : named(org.collection('lists'), ['name', 'deletedAt'], live, (data) => text(data['name'])),
     // The org's campaigns placed on this site: the set the automation's
-    // `assignCampaign` step accepts when it runs here.
-    !wanted('campaigns')
-      ? none
-      : named(
-          org.collection('emailCampaigns'),
-          ['name', 'deletedAt', 'visibleTo'],
-          (data) =>
-            live(data) &&
-            campaignPlacedOnHost({ visibleTo: data['visibleTo'] as string[] | undefined }, input.hostId),
-          (data) => text(data['name']),
-        ),
-    !wanted('workflows') ? none : indexed('workflow', input.hostId),
+    // `assignCampaign` step accepts when it runs here. Read as the `campaign`
+    // container kind, where its declaration says the containers are stored.
+    !wanted('campaigns') ? none : placedCampaigns(firestore, input.orgId, input.hostId),
+    !wanted('workflows') ? none : indexed('workflow', { hostId: input.hostId }),
     // Only a webhook that posts OUT is a step's target; an inbound one is an
     // endpoint that runs a workflow.
     !wanted('webhooks')
       ? none
-      : indexed('webhook', input.hostId, (record) => record.facts['direction'] === 'outbound'),
+      : indexed('webhook', { hostId: input.hostId }, (record) => record.facts['direction'] === 'outbound'),
     input.crm && wanted('stages') ? readStages(input.orgId, input.hostId) : none,
   ])
   return { forms, datasets, lists, campaigns, workflows, webhooks, stages }

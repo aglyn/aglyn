@@ -246,7 +246,7 @@ async function captureOnContact(
         : { marketingConsent: request.marketingConsent }),
       ...disclosureOf(request),
       ...(request.tags?.length ? { tags: request.tags } : {}),
-      ...(request.campaignIds?.length ? { campaignIds: request.campaignIds } : {}),
+      ...campaignsFiledUnder(request),
       ...(request.purchaseCents === undefined
         ? {}
         : { purchaseCents: request.purchaseCents }),
@@ -325,6 +325,19 @@ function entryPointOf(
     ...(formId ? { formId } : {}),
     ...(path ? { path } : {}),
   }
+}
+
+/**
+ * The campaigns the capture surface is filed under, as the contact writer
+ * records them. A capture names what its surface is filed under by container
+ * kind; the CRM keeps the `campaign` kind on the person's site facet, and a
+ * kind it does not keep is the capture's to name and the CRM's to ignore.
+ */
+function campaignsFiledUnder(
+  request: PluginContactCaptureRequest,
+): Pick<UpsertHostContactOptions, 'campaignIds'> {
+  const ids = request.containers?.['campaign'] ?? []
+  return ids.length ? { campaignIds: ids } : {}
 }
 
 /**

@@ -41,7 +41,7 @@
  * true.
  */
 
-import { resolveAssistOverageCapUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { resolveAssistOverageCapUsd } from '../usage/assist-credits'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /** The billing fields of an org, as every resolver in this folder takes it. */

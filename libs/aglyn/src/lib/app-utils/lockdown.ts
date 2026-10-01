@@ -134,6 +134,7 @@ const CORE_LOCKDOWN_FEATURES: readonly PluginLockdownFeatureDeclaration[] = [
   {
     key: 'signups',
     label: 'New signups',
+    customerName: 'new signups',
     staffBypass: false,
     notice: {
       title: 'New signups are paused',
@@ -143,6 +144,7 @@ const CORE_LOCKDOWN_FEATURES: readonly PluginLockdownFeatureDeclaration[] = [
   {
     key: 'uploads',
     label: 'Media uploads',
+    customerName: 'media uploads',
     staffBypass: true,
     notice: {
       title: 'Uploads are paused',
@@ -152,6 +154,9 @@ const CORE_LOCKDOWN_FEATURES: readonly PluginLockdownFeatureDeclaration[] = [
   {
     key: 'checkout',
     label: 'Checkout (new subscriptions)',
+    // Both doors it closes start a purchase: a plan or add-on, and a paid
+    // marketplace install.
+    customerName: 'new purchases',
     staffBypass: false,
     notice: {
       title: 'Checkout is temporarily unavailable',
@@ -165,6 +170,7 @@ const CORE_LOCKDOWN_FEATURES: readonly PluginLockdownFeatureDeclaration[] = [
   {
     key: 'marketplace-installs',
     label: 'Marketplace installs',
+    customerName: 'marketplace installs',
     staffBypass: true,
     notice: {
       title: 'Marketplace installs are paused',
@@ -214,6 +220,24 @@ export function isLockdownFeatureKey(
 /** Staff-surface label; the key stays the wire/API identity. */
 export function lockdownFeatureLabel(key: LockdownFeatureKey): string {
   return lockdownFeatureDeclaration(key)?.label ?? key
+}
+
+/**
+ * What a customer's mail calls a lever (`media uploads`), never the staff
+ * label. A key nothing declares, or a declaration without a name, reads as
+ * "a feature" rather than leak a key or a staff label.
+ */
+export function lockdownFeatureCustomerName(key: LockdownFeatureKey): string {
+  return lockdownFeatureDeclaration(key)?.customerName?.trim() || 'a feature'
+}
+
+/**
+ * Several levers named together in a customer's mail: `AI assist and AI
+ * generation`. One pause of several levers is one notice.
+ */
+export function lockdownFeaturesCustomerText(keys: readonly LockdownFeatureKey[]): string {
+  const names = [...new Set(keys.map(lockdownFeatureCustomerName))]
+  return new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' }).format(names)
 }
 
 /**

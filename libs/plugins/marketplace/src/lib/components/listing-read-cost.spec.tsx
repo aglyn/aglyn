@@ -203,6 +203,10 @@ jest.mock('../hooks/use-artifact-update', () => ({
 }))
 
 import { MarketplaceListingContent } from './listing-content.component'
+import { standInDatasetList } from '../testing/stand-in-dataset-list'
+
+// The datasets these pages read are the data plugin's (AGL-3080).
+standInDatasetList()
 
 beforeEach(() => {
   mockListens.length = 0

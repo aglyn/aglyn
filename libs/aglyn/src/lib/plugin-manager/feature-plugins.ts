@@ -925,6 +925,20 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   besignerInspector: 'besignerInspector',
   /**
+   * The besigner's Interactions section, on every editor that offers one
+   * (AGL-3080): the section experiments a plugin runs on a page's elements.
+   * Props: {@link ConsoleBesignerInteractionsZoneProps}.
+   *
+   * The section is the designer's, and so are an element's own interactions:
+   * they live on its node and ride the document's save. A section experiment
+   * is not a node's: it is a record of whichever plugin runs experiments,
+   * stored where that plugin keeps them. So a widget here draws nothing. It
+   * reads its own records and REPORTS them, and the section badges an element
+   * and offers to start one from what was reported. With no widget the
+   * section offers none, which is a workspace with no plugin that runs them.
+   */
+  besignerInteractions: 'besignerInteractions',
+  /**
    * Inside a SEARCH LISTING editor (AGL-2910), under its fields. Props:
    * {@link ConsoleSeoFieldsZoneProps} — what the listing describes, the
    * fields the editor edits and what they hold, and `proposeValues`, which
@@ -983,17 +997,6 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostLayouts: 'hostLayouts',
   /**
-   * The Forms page of a site, beside its Create Form action (AGL-3043):
-   * another way to start a form. Props: {@link ConsoleHostFormsZoneProps}, on
-   * the `hostScreens` contract.
-   *
-   * The Forms page is the forms plugin's own surface, so the plugin HOSTS
-   * this zone: it draws the renderer `useConsoleWidgetSlot` hands down, as
-   * the product editor draws `seoFields`, and every gate a console page's
-   * slot applies applies here too.
-   */
-  hostForms: 'hostForms',
-  /**
    * A site's Components page, beside its Templates and Create Component
    * actions (AGL-3051): another way to start a reusable component. Props:
    * {@link ConsoleHostComponentsZoneProps}, on the `hostScreens` contract.
@@ -1013,33 +1016,6 @@ export const CONSOLE_WIDGET_SLOTS = {
    * widget's declared permission.
    */
   orgSites: 'orgSites',
-  /**
-   * The Automation page's Actions, beside Add action and Recipes (AGL-2919):
-   * another way to start an automation. Props:
-   * {@link ConsoleHostAutomationsZoneProps}.
-   *
-   * The Automation page is the workflows plugin's own surface, so the plugin
-   * HOSTS this zone through the renderer `useConsoleWidgetSlot` hands down, as
-   * the product editor hosts `seoFields`, and every gate a console page's slot
-   * applies applies here too. A widget here writes nothing through the page:
-   * the Actions list shows what it makes once it exists, and `openAction`
-   * opens a listed action in the Actions editor.
-   */
-  hostAutomations: 'hostAutomations',
-  /**
-   * The editor of one SAVED automation — an action or a workflow — on the
-   * Automation page (AGL-2919). Props: {@link ConsoleAutomationEditorZoneProps}.
-   * Hosted by the workflows plugin, as `hostAutomations` is. A widget here
-   * reads the automation as it is stored and changes nothing in the editor.
-   */
-  automationEditor: 'automationEditor',
-  /**
-   * One FAILED run in an automation's run history (AGL-2919), drawn once per
-   * failed row. Props: {@link ConsoleAutomationRunZoneProps}. Hosted by the
-   * workflows plugin. A widget here reads the run as it was recorded and
-   * changes nothing.
-   */
-  automationRun: 'automationRun',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -1053,57 +1029,17 @@ export interface ConsoleHostScreensZoneProps {
 }
 
 /**
- * What the `hostTemplates`, `hostLayouts` and `hostForms` zones (AGL-3043) and
- * the `hostComponents` zone (AGL-3051) hand each widget: the site and its org,
- * as `hostScreens` hands them.
+ * What the `hostTemplates` and `hostLayouts` zones (AGL-3043) and the
+ * `hostComponents` zone (AGL-3051) hand each widget: the site and its org, as
+ * `hostScreens` hands them. A plugin that hosts a resource page of its own
+ * hands the same contract from a zone it declares (the forms plugin's
+ * `hostForms`).
  */
 export type ConsoleHostTemplatesZoneProps = ConsoleHostScreensZoneProps
 /** See {@link ConsoleHostTemplatesZoneProps}. */
 export type ConsoleHostLayoutsZoneProps = ConsoleHostScreensZoneProps
 /** See {@link ConsoleHostTemplatesZoneProps}. */
-export type ConsoleHostFormsZoneProps = ConsoleHostScreensZoneProps
-/** See {@link ConsoleHostTemplatesZoneProps}. */
 export type ConsoleHostComponentsZoneProps = ConsoleHostScreensZoneProps
-
-/** What the `hostAutomations` zone hands each widget (AGL-2919). */
-export interface ConsoleHostAutomationsZoneProps {
-  hostId: string
-  /** The org the page names; `undefined` while it resolves. */
-  orgId: string | undefined
-  /**
-   * Opens the Actions editor on a listed action. `false` when the id names no
-   * action the list has read yet, which is how a widget whose draft was just
-   * written tells a list that has not caught up from one that opened it.
-   */
-  openAction: (actionId: string) => boolean
-}
-
-/** One automation on the Automation page: an action, or a workflow (AGL-2919). */
-export interface ConsoleAutomationTarget {
-  type: 'action' | 'workflow'
-  id: string
-  name: string
-}
-
-/** What the `automationEditor` zone hands each widget (AGL-2919). */
-export interface ConsoleAutomationEditorZoneProps {
-  hostId: string
-  /** The org the page names; `undefined` while it resolves. */
-  orgId: string | undefined
-  /** The automation the editor has open, as it is stored. */
-  target: ConsoleAutomationTarget
-}
-
-/** What the `automationRun` zone hands each widget (AGL-2919). */
-export interface ConsoleAutomationRunZoneProps {
-  hostId: string
-  /** The org the page names; `undefined` while it resolves. */
-  orgId: string | undefined
-  /** The automation the run belongs to. */
-  target: ConsoleAutomationTarget
-  /** The run's entry in the site's activity log. */
-  runId: string
-}
 
 /** What the `orgSites` zone hands each widget (AGL-2911). */
 export interface ConsoleOrgSitesZoneProps {
@@ -1275,6 +1211,42 @@ export interface ConsoleSiteMemberZoneProps {
    * site.
    */
   member: Readonly<Record<string, unknown>> & { $id: string }
+}
+
+/** One section experiment, as the besigner's Interactions section lists it (AGL-3080). */
+export interface ConsoleBesignerSectionExperiment {
+  id: string
+  name?: string
+  /** The element the experiment varies. */
+  nodeId: string
+  status?: string
+}
+
+/** What one plugin reports to the besigner's Interactions section (AGL-3080). */
+export interface ConsoleBesignerSectionExperiments {
+  experiments: ConsoleBesignerSectionExperiment[]
+  /**
+   * Starts a draft experiment on an element. Reported only where the editor's
+   * document is a page (`screenId` is set): a layout or a component is no
+   * page for an experiment to run on.
+   */
+  create?: (options: { nodeId: string }) => void
+}
+
+/** What the `besignerInteractions` zone hands each widget (AGL-3080). */
+export interface ConsoleBesignerInteractionsZoneProps {
+  /** The site whose editor this is. */
+  hostId: string
+  /** The page under edit, or `null` on a layout or a component. */
+  screenId: string | null
+  /**
+   * Hands the section what this plugin runs, keyed by a name the widget
+   * chooses and keeps; `null` withdraws it. Call it from an effect.
+   */
+  reportSectionExperiments: (
+    reporterId: string,
+    report: ConsoleBesignerSectionExperiments | null,
+  ) => void
 }
 
 /** What the `templateInstallStatus` zone hands each widget (AGL-3080). */

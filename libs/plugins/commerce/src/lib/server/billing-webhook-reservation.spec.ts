@@ -577,6 +577,45 @@ describe('a stay that carried the merchant’s lodging tax (AGL-1969)', () => {
     )
   })
 
+  /*
+   * "Paid today" is what the guest's card was charged (AGL-3442). The tax
+   * stays out of `paidCents`, which is the stay's figure, and is named in the
+   * confirmation instead, so the guest is never told less than they paid.
+   */
+  it('tells the guest what was charged today, the lodging tax included', async () => {
+    const admin = jest.requireMock('@aglyn/tenant-data-admin')
+    const render = jest.spyOn(admin, 'renderHostEmailWithTokens')
+    try {
+      await deliver(TAXED_SESSION)
+      expect(sentEmails).toHaveLength(1)
+      expect(sentEmails[0].text).toContain(
+        'Paid today: $222.60, including $12.60 lodging tax',
+      )
+      // A site-designed confirmation gets the same figure through its token.
+      expect(render.mock.calls[0][2]).toBe('reservation-confirmed')
+      expect(render.mock.calls[0][3]).toMatchObject({
+        'reservation.paid': '$222.60, including $12.60 lodging tax',
+      })
+      // The balance is the stay's alone: the tax was charged with the deposit
+      // and none is computed on what is collected at the property.
+      expect(sentEmails[0].text).toContain(
+        'Still to pay: $630.00, at the property. It has not been charged.',
+      )
+    } finally {
+      render.mockRestore()
+    }
+  })
+
+  it('tells the merchant the same charge', async () => {
+    docs.set('hosts/host-1/resources/cabin-1', { name: 'Lakeside Cabin' })
+    await deliver(TAXED_SESSION)
+    expect(notifications[0].body).toBe(
+      'Paid@Example.com reserved Lakeside Cabin on {site}: check-in Fri, 24 Apr 2026, ' +
+        '7 nights. $222.60 was paid, including $12.60 lodging tax; ' +
+        '$630.00 is still to collect at the property.',
+    )
+  })
+
   it('writes no `taxCents` at all on an untaxed stay', async () => {
     // ABSENT is not zero (the AGL-1758 shape): a defaulted zero written
     // through `merge` is how a real figure gets destroyed, and a back-book

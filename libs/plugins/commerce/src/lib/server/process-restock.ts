@@ -234,7 +234,7 @@ export async function scanRestockAlerts(
       marketing: {
         hostId: hostRef.id,
         siteBase: siteBaseByHost.get(hostRef.id) ?? '',
-        topicId: Aglyn.EMAIL_TOPIC_PRODUCT_UPDATES,
+        topicId: CommerceModel.PRODUCT_UPDATES_TOPIC_ID,
         consentHostIds: consentGroup.hostIds,
         consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
       },

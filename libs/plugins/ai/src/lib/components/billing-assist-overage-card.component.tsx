@@ -38,7 +38,7 @@ import {
   ASSIST_OVERAGE_CAP_CONTROL_LABEL,
   ASSIST_OVERAGE_CAP_MAX_USD,
   ASSIST_OVERAGE_CAP_MIN_USD,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+} from '../usage/assist-credits'
 
 /** The `get` payload of `/api/billing/assist-overage`. */
 interface AssistOverageState {

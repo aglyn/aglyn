@@ -21,7 +21,7 @@ import type { JsonLinealOrder } from '@aglyn/aglyn/app-utils/lineal-order'
  * The element palette as a model sees it (AGL-2905).
  *
  * `ai-palette.generated.ts` is produced from the registered plugin bundles by
- * `tools/scripts/generate-ai-palette.mts` and holds the data; this module
+ * `libs/plugins/ai/scripts/generate-ai-palette.mts` and holds the data; this module
  * holds the shapes that data is typed against and the small readers over it,
  * so a regeneration never rewrites a type.
  */

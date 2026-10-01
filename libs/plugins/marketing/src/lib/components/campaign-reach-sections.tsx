@@ -45,17 +45,21 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
-  campaignRevenueAcrossSends,
   campaignSequencesReport,
-  CAMPAIGN_CONVERSION_KINDS,
-  CAMPAIGN_CONVERSION_KIND_COPY,
-  EMAIL_ATTRIBUTION_WINDOW_DAYS,
-  type CampaignConversionKind,
   type CampaignLinkRollup,
-  type CampaignRevenueAcrossSends,
-  type CampaignRevenueRollup,
   type CampaignSequencesRollup,
 } from '@aglyn/shared-ui-email-campaigns/model'
+import { EMAIL_ATTRIBUTION_WINDOW_DAYS } from '@aglyn/shared-util-email'
+import {
+  CAMPAIGN_CONVERSION_KINDS,
+  CAMPAIGN_CONVERSION_KIND_COPY,
+  type CampaignConversionKind,
+} from '../model/campaign-conversions'
+import {
+  campaignRevenueAcrossSends,
+  type CampaignRevenueAcrossSends,
+  type CampaignRevenueRollup,
+} from '../model/campaign-revenue'
 import {
   campaignSendReportDoc,
   campaignSequenceReportDoc,

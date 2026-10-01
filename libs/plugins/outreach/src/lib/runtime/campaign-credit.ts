@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 import type { OutreachEnrollment } from '../model/outreach.types'
 import { outreachOrgCollection, readStoredOutreachEnrollment } from '../storage/outreach-records'
 import type { OutreachRuntimeDeps } from './runtime-deps'
@@ -49,7 +49,7 @@ import type { OutreachRuntimeDeps } from './runtime-deps'
 export function outreachEnrollmentCampaignIds(
   enrollment: Pick<OutreachEnrollment, 'campaignIds'>,
 ): string[] {
-  return normalizeCampaignIds(enrollment.campaignIds)
+  return normalizeContainerIds(enrollment.campaignIds)
 }
 
 /** Whether the email about to be recorded is the enrollment's first. */

@@ -57,6 +57,7 @@ import {
   AI_SITE_INVENTORY_MAX_PER_KIND,
   AiInventoryScopeError,
 } from '../model/ai-site-inventory'
+import { removeStandInDatasetIndex, standInDatasetIndex } from '../testing/stand-in-dataset-index'
 import { readSiteInventory } from './site-inventory'
 
 let docs = new Map<string, Record<string, unknown>>()
@@ -117,11 +118,19 @@ const ORG = 'org-1'
 const HOST = 'host-1'
 const firestore = makeFirestore() as unknown as FirebaseFirestore.Firestore
 
+/** The org's datasets, read only through the index the data plugin publishes (AGL-3080). */
+const DATASETS = `orgs/${ORG}/datasets`
+/** The reads this reader makes of the site's own collections. */
+const ownReads = () => reads.filter((read) => read.path !== DATASETS)
+
 beforeEach(() => {
   docs = new Map()
   reads.length = 0
   mockResolveOrgIdForHost.mockReset().mockResolvedValue(ORG)
+  standInDatasetIndex(firestore)
 })
+
+afterEach(() => removeStandInDatasetIndex())
 
 describe('readSiteInventory — scope', () => {
   it('refuses a site the host index places in another workspace, or nowhere, before reading anything', async () => {
@@ -155,7 +164,7 @@ describe('readSiteInventory — the cap', () => {
     expect(inventory.components.map((row) => row.id)).toEqual(['cmp-0', 'cmp-1', 'cmp-2'])
     expect(inventory.screens).toHaveLength(3)
     expect(inventory.truncated).toEqual(['components'])
-    expect(reads.map((read) => read.path).sort()).toEqual(
+    expect(ownReads().map((read) => read.path).sort()).toEqual(
       [
         `hosts/${HOST}/collections`,
         `hosts/${HOST}/components`,
@@ -163,17 +172,16 @@ describe('readSiteInventory — the cap', () => {
         `hosts/${HOST}/layouts`,
         `hosts/${HOST}/screens`,
         `hosts/${HOST}/templates`,
-        `orgs/${ORG}/datasets`,
       ].sort(),
     )
-    expect(reads.every((read) => read.limit === 4 && read.select.length > 0)).toBe(true)
+    expect(ownReads().every((read) => read.limit === 4 && read.select.length > 0)).toBe(true)
     expect(reads.flatMap((read) => read.select)).not.toContain('nodes')
     expect(JSON.stringify(inventory)).not.toContain('NODE_MAP_MARKER')
   })
 
   it('never reads past the platform cap, whatever it is asked for', async () => {
     await readSiteInventory(ORG, HOST, { firestore, maxPerKind: 500 })
-    expect(new Set(reads.map((read) => read.limit))).toEqual(
+    expect(new Set(ownReads().map((read) => read.limit))).toEqual(
       new Set([AI_SITE_INVENTORY_MAX_PER_KIND + 1]),
     )
   })
@@ -226,12 +234,12 @@ describe('readSiteInventory — what is listed', () => {
     docs.set(`orgs/${ORG}/datasets/ds-team`, {
       displayName: 'Team',
       fields: ['name', 'role'],
-      visibleTo: [HOST],
+      visibleTo: [`host:${HOST}`],
     })
     docs.set(`orgs/${ORG}/datasets/ds-other`, {
       displayName: 'Elsewhere',
       fields: ['x'],
-      visibleTo: ['host-2'],
+      visibleTo: ['host:host-2'],
     })
     docs.set(`hosts/${HOST}/collections/col-blog`, { name: 'Blog', slug: 'blog', kind: 'content' })
     docs.set(`hosts/${HOST}/collections/col-shop`, { name: 'Shop', slug: 'shop', kind: 'catalog' })

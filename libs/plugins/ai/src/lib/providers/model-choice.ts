@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistCreditsFromUsd } from '../usage/assist-credits'
 import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
   AI_MODEL_CATALOG,

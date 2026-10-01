@@ -51,6 +51,7 @@ import {
   POS_REGISTERS_ADDON_MAX,
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP,
+  PAGE_VIEW_CDN_REQUEST_COST_USD,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 import {
   onboardingSignupHref,
@@ -636,6 +637,11 @@ const usage = {
  * resolves no `@aglyn/*` path alias and so cannot import anything under
  * `apps/console`; the drift guard is what makes the indirection safe rather
  * than a second source of truth.
+ *
+ * The page-view row's cost is a billed view's cost, `perPageView` plus
+ * `PAGE_VIEW_CDN_REQUEST_COST_USD` — the same sum `METERED_OVERAGE_COST_USD`
+ * prices the invoice on — because the "Our cost" column is the claim the
+ * "+30%" beside it is made against.
  */
 
 /**
@@ -659,9 +665,10 @@ const rate = (v: number): string => {
  * Carried as a multiplier rather than folded into `costUsd` so that BOTH
  * columns are computed from the unrounded rate. Rounding the cost to six
  * decimals and then applying the markup to the rounded figure loses the
- * published price when the cost is not a clean decimal: `perPageView` is
- * pinned so that cost × 1.3 is $0.21 per 1,000 views, and $0.161538 × 1.3
- * rounds to $0.209999, which is the right number rendered as the wrong one.
+ * published price when the cost is not a clean decimal: the page-view weight
+ * cost is pinned so that cost × 1.3 is exactly $0.21 per 1,000 views, and
+ * $0.161538 × 1.3 rounds to $0.209999, which is the right number rendered as
+ * the wrong one.
  */
 const METERED_ROWS: Array<{
   label: string
@@ -677,7 +684,7 @@ const METERED_ROWS: Array<{
   },
   {
     label: 'Page views (bandwidth + reads)',
-    costUsd: ORG_COGS_UNIT_RATES_USD.perPageView,
+    costUsd: ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
     quotedPer: 1000,
     unit: '/ 1k views',
   },
@@ -1300,7 +1307,18 @@ const frameMetered = frame.sections
 const FRAME_STALE_METERED: Record<
   string,
   { ourCost: string; youPay: string; why: string }
-> = {}
+> = {
+  'Page views (bandwidth + reads)': {
+    ourCost: '$0.161538 / 1k views',
+    youPay: '$0.21 / 1k views',
+    why:
+      'a billed page view now carries the CDN per-request charge past the ' +
+      "hosting plan's allowance (`PAGE_VIEW_CDN_REQUEST_COST_USD`, AGL-1879), " +
+      'so the published figure is $0.276923 / $0.36 per 1k views. The four ' +
+      'Figma frames still draw the weight-only cost. Redraw them, re-extract, ' +
+      'and this entry comes out.',
+  },
+}
 
 for (const [label, [ourCost, youPay]] of injected('--declare-stale-metered', 3)) {
   FRAME_STALE_METERED[label] = { ourCost, youPay, why: INJECTED_WHY }

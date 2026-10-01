@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { unstable_composeClasses as composeClasses } from '@mui/base'
+import { unstable_composeClasses as composeClasses } from '@mui/utils'
 import {
   capitalize,
   generateUtilityClass,

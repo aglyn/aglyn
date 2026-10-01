@@ -16,9 +16,9 @@
  */
 
 import {
-  contactCampaignFieldPath,
-  readCampaignIds,
-} from '@aglyn/aglyn/app-utils/campaign-membership'
+  contactContainerFieldPath,
+  readContainerIds,
+} from '@aglyn/aglyn/app-utils/container-membership'
 import type {
   PluginLeadConversionReport,
   PluginLeadConversionRequest,
@@ -59,8 +59,9 @@ export async function carryLeadCampaignsToContact(
 ): Promise<PluginLeadConversionReport> {
   try {
     const lead = await readLeadForHost(request.hostId, request.leadId)
-    const campaignIds = readCampaignIds(
+    const campaignIds = readContainerIds(
       lead ? (lead.data() as Record<string, unknown>) : null,
+      'campaign',
     )
     if (!campaignIds.length) return { campaigns: 0 }
     const group = await consentGroupForSite(request.hostId)
@@ -70,7 +71,7 @@ export async function carryLeadCampaignsToContact(
       .collection('contacts')
       .doc(request.contactId)
       .update({
-        [contactCampaignFieldPath(group.groupId)]: FieldValue.arrayUnion(
+        [contactContainerFieldPath(group.groupId, 'campaign')]: FieldValue.arrayUnion(
           ...campaignIds,
         ),
         updatedAt: FieldValue.serverTimestamp(),
