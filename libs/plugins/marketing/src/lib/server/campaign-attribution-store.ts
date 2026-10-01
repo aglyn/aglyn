@@ -20,21 +20,24 @@
  *
  * ## Why this is a leaf module and not part of the join
  *
- * The erasure runs from `email-delivery-log.ts`, in the same function that
- * drops a person's campaign touches — which is the point, because an
- * attribution is a conclusion drawn from those touches and a conclusion that
- * outlives its evidence is an erasure that did not happen. But the join
- * itself READS that module (`readEmailCampaignTouch` is one half of the
- * last-touch comparison), so putting the erasure beside the join would make
- * the two modules import each other. Under jest that cycle resolves to
- * `undefined` at import time rather than failing loudly, which is how an
- * erasure comes to silently do nothing while its test passes.
+ * The erasure runs from the plugin's conversion creditor
+ * (`conversion-creditor.ts`), which the platform's address erasure asks
+ * beside the delivery log — the same request that drops the person's
+ * campaign touches (`email-campaign-touch.ts`), which is the point, because
+ * an attribution is a conclusion drawn from those touches and a conclusion
+ * that outlives its evidence is an erasure that did not happen. The join
+ * READS the touch module too (`readEmailCampaignTouch` is one half of the
+ * last-touch comparison), and a module that both defined the collection and
+ * read the touches would be a second place the creditor's two halves meet.
+ * Under jest a cycle between such modules resolves to `undefined` at import
+ * time rather than failing loudly, which is how an erasure comes to silently
+ * do nothing while its test passes.
  *
  * So the collection name and the sweep live here, importing nothing but
  * Firestore, and both sides import this.
  */
 
-import firebaseAdmin from './firebase-admin'
+import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -51,9 +54,9 @@ const ERASURE_BATCH = 400
  *
  * An attribution is a claim about a person: "this human came from that
  * campaign and then did this". It is the same personal fact as the click
- * stamp it was derived from, and the erasure path already deletes those —
- * `eraseEmailDeliveriesForAddresses` drops `campaignTouches` alongside the
- * engagement stamps and says why. A summary that outlived its source would
+ * stamp it was derived from, and the same erasure deletes those —
+ * `eraseEmailCampaignTouches` drops `campaignTouches` from the person's
+ * delivery document, beside the engagement stamps the platform drops. A summary that outlived its source would
  * leave an erasure that removed the evidence and kept the conclusion.
  *
  * ## Why a collection-group query

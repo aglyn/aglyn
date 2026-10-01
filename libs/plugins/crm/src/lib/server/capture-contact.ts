@@ -41,7 +41,10 @@ import {
   readLeadForHost,
   type UpsertHostContactOptions,
 } from '@aglyn/tenant-data-admin'
-import type { ResolvedCampaignTouch } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
+import {
+  CONVERSION_TOUCH_DETAIL,
+  type PluginConversionTouch,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { convertOpenLeadOntoContact } from './convert-open-lead'
 
 /**
@@ -192,8 +195,8 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
       ...(request.marketingConsent ? { marketingConsent: true } : {}),
       ...disclosureOf(request),
     },
-    ...(campaignTouchOf(request.detail).campaignTouch
-      ? { touch: campaignTouchOf(request.detail).campaignTouch }
+    ...(conversionTouchOf(request.detail).conversionTouch
+      ? { touch: conversionTouchOf(request.detail).conversionTouch }
       : {}),
   })
   if (!outcome.stored) {
@@ -245,7 +248,7 @@ async function captureOnContact(
           : {}),
         ...entryPointOf(request.detail),
       },
-      ...campaignTouchOf(request.detail),
+      ...conversionTouchOf(request.detail),
       ...(request.marketingConsent === undefined
         ? {}
         : { marketingConsent: request.marketingConsent }),
@@ -350,23 +353,25 @@ function campaignsFiledUnder(
  *
  * ⚠️ A different fact from `campaignIds` and the two must never be folded
  * together — `upsert-contact.ts` says so at the field itself. A touch is the
- * ad or the link the visitor arrived by, already resolved through the
- * allowlist by the silo; `campaignIds` is which campaigns the merchant filed
- * the capture SURFACE under, which is true of everybody who fills that form
- * in. Folding them would credit a campaign for a visitor who typed the
- * address.
+ * ad or the link the visitor arrived by, already resolved by the plugin that
+ * credits outcomes (`plugin-conversion-credit`) at the silo's door;
+ * `campaignIds` is which campaigns the merchant filed the capture SURFACE
+ * under, which is true of everybody who fills that form in. Folding them
+ * would credit a campaign for a visitor who typed the address.
  *
- * Passed through as the silo resolved it, unread: the touch's shape belongs
- * to whatever resolves it, and re-validating it here would be a second copy
- * of a rule that has already run. Only its presence is decided here, because
- * `null` and absent mean the same thing to the writer and a caller should
- * not have to know which one it sends.
+ * Passed through as the silo handed it, unread: the touch's shape belongs
+ * to the creditor that resolved it, and the creditor checks it again when
+ * the contact or the lead is credited. Only its presence is decided here,
+ * because `null` and absent mean the same thing to the writer and a caller
+ * should not have to know which one it sends.
  */
-function campaignTouchOf(
+function conversionTouchOf(
   detail: Readonly<Record<string, unknown>> | undefined,
-): Pick<UpsertHostContactOptions, 'campaignTouch'> {
-  const touch = detail?.['campaignTouch']
-  return touch ? { campaignTouch: touch as ResolvedCampaignTouch } : {}
+): Pick<UpsertHostContactOptions, 'conversionTouch'> {
+  const touch = detail?.[CONVERSION_TOUCH_DETAIL]
+  return touch && typeof touch === 'object'
+    ? { conversionTouch: touch as PluginConversionTouch }
+    : {}
 }
 
 /**

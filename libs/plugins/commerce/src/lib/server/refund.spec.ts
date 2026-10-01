@@ -320,17 +320,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
  * The campaign revenue reversal IS mocked, and the distinction from
  * `updateExisting` above is what it is being asked to prove. Whether a
  * reversal lands correctly on the rollup is settled against a real double in
- * `email-revenue-attribution.spec.ts`; what this file is the only place to
+ * the crediting plugin's own spec (it is asked through the platform's
+ * `plugin-conversion-credit` contract); what this file is the only place to
  * prove is that a refund REACHES it, with the amount this attempt moved
  * rather than the order total. Left unmocked it would reach the real
  * firebase-admin, which this suite has no app for.
  */
 const reverseAttributedRevenue = jest.fn(async () => true)
 jest.mock(
-  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  '@aglyn/aglyn/plugin-manager/plugin-conversion-credit',
   () => ({
     __esModule: true,
-    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+    reverseOrderConversion: (...args: unknown[]) =>
       (reverseAttributedRevenue as any)(...args),
   }),
 )

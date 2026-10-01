@@ -24,10 +24,10 @@
  */
 
 const resolveOrgIdForHost = jest.fn()
-jest.mock('./organizations', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   resolveOrgIdForHost: (...args: unknown[]) => resolveOrgIdForHost(...args),
 }))
-jest.mock('./firebase-admin', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
   __esModule: true,
   default: { app: () => ({ firestore: () => null }) },
 }))

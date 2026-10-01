@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { creditConversionOutcome } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { pluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
@@ -82,11 +83,10 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
     stampRecordEmailState: async (stamp) => {
       await (await platform()).stampRecordEmailState(stamp)
     },
+    // Through the plugin that credits outcomes (`plugin-conversion-credit`),
+    // which never throws and answers nothing where no plugin credits them.
     creditCampaign: async ({ hostId, orgId, campaignIds, outcome, atMs }) => {
-      await (await platform()).creditCampaignSequenceOutcome(
-        { hostId, orgId, campaignIds, outcome, atMs },
-        firebaseAdmin.app().firestore(),
-      )
+      await creditConversionOutcome({ hostId, orgId, containerIds: campaignIds, outcome, atMs })
     },
     // The record system's writer (AGL-3274), resolved per call the way the
     // runtime resolves it: the CRM registers at boot, and a request that

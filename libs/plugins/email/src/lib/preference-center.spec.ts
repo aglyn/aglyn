@@ -293,9 +293,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   resolveOrgIdForHost: async () => orgIdForHost,
-  // The REAL send lookup over this file's store (the org's `campaigns`,
-  // then the site's for a send the migration has not reached).
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/campaign-conversion-attribution'),
   EMAIL_FREQUENCY_SUBCOLLECTION: 'emailFrequency',
   setMarketingCadence: async (
     hostId: string,
@@ -339,8 +336,12 @@ import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
 import { DECLARED_SUBSCRIPTION_TOPICS } from '@aglyn/aglyn'
 import { createHash, createHmac } from 'crypto'
 import { registerEmailApi, rejoinStreamForAccount } from './server'
+import { standInSendTally } from './testing/stand-in-send-tally'
 
 registerEmailApi()
+// The sender's tally over this file's store (the org's `campaigns`, then the
+// site's for a send the migration has not reached), by the plugin that sent it.
+standInSendTally({ firestore: () => fakeFirestore, orgIdForHost: async () => orgIdForHost })
 
 // ---------------------------------------------------------------------------
 // Fixtures

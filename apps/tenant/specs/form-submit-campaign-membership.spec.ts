@@ -93,6 +93,15 @@ const mockCollectionHandle = (path: string): any => ({
   },
 })
 
+// The crediting plugin, asked through the platform's contract: it answers
+// the case's touch, and credits nothing here.
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-conversion-credit', () => ({
+  __esModule: true,
+  ...jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-conversion-credit'),
+  resolveConversionTouch: async () => mockResolved,
+  creditConversion: async () => false,
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   /*
@@ -102,8 +111,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * case here starts with a lead already on file.
    */
   readLeadForHost: async () => null,
-  resolveCampaignTouch: async () => mockResolved,
-  attributeCampaignConversion: async () => null,
   // The CRM's capture writer asks whether the workspace already holds the
   // address as a contact before it files a lead (AGL-3232). Nobody, here.
   findContactByEmail: async () => null,
@@ -323,7 +330,7 @@ describe('the campaign a form is IN, and the campaign a visitor came FROM', () =
     await submit({ formId: 'f1', campaignTouch: 'utm_campaign=sept-launch' })
 
     expect(mockContactUpserts[0].campaignIds).toEqual([SPRING])
-    expect(mockContactUpserts[0].campaignTouch).toBe(TOUCH)
+    expect(mockContactUpserts[0].conversionTouch).toBe(TOUCH)
   })
 
   it('files a person a campaign never touched', async () => {
@@ -333,7 +340,7 @@ describe('the campaign a form is IN, and the campaign a visitor came FROM', () =
     await submit({ formId: 'f1' })
 
     expect(mockContactUpserts[0].campaignIds).toEqual([SPRING])
-    expect(mockContactUpserts[0]).not.toHaveProperty('campaignTouch')
+    expect(mockContactUpserts[0]).not.toHaveProperty('conversionTouch')
   })
 
   /**

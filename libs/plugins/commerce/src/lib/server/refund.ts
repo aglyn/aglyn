@@ -28,7 +28,7 @@ import { flagOrderRestock } from './restock-flag'
 // `updateExisting`: the specs in this library mock `@aglyn/tenant-data-admin`
 // wholesale, and a permissive stub would turn a reversal that never happened
 // green.
-import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
+import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -696,7 +696,7 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
      * it — nothing here may fail a refund that has already left the
      * merchant's account.
      */
-    await reverseEmailAttributedRevenue({
+    await reverseOrderConversion({
       hostId,
       orderId,
       amountCents: refundCents,

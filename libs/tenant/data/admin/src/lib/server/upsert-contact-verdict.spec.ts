@@ -31,11 +31,6 @@
 
 import { upsertHostContact } from './upsert-contact'
 
-jest.mock('./email-revenue-attribution', () => ({
-  __esModule: true,
-  attributeOrderToEmail: async () => null,
-}))
-
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     increment: (operand: number) => ({ __inc: operand }),

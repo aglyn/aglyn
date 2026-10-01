@@ -27,13 +27,15 @@ import {
   readPersonEngagement,
   readPersonEngagementByKeys,
   recordEmailDeliveryEvent,
-  recordEmailCampaignTouch,
   recordEmailDeliverySnapshot,
   recordPersonEngagement,
-  readEmailCampaignTouch,
-  EMAIL_TOUCH_FIELD,
 } from './email-delivery-log'
 import { emailSuppressionKey } from './email-suppression'
+import {
+  registerPluginConversionCreditor,
+  type PluginConversionCreditor,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
 /*==========================================
  * A LOCAL DOUBLE, not `test-firestore`.
@@ -194,44 +196,8 @@ function fakeDeliveryFirestore() {
     return api
   }
 
-  /**
-   * Collection-group reads, which the erasure needs and no other case here
-   * does. The conversion attributions an erasure has to reach live under
-   * `hosts/{hostId}/campaignAttributions`, per SITE, while an erasure request
-   * names only an ADDRESS — so a double that could only walk one host's
-   * collection would let the sweep pass while reaching nothing. It swallows
-   * its own errors, so a missing `collectionGroup` here reads as an erasure
-   * that removed zero records rather than as a broken double.
-   */
-  const groupQuery = (
-    name: string,
-    field?: string,
-    value?: unknown,
-    cap = Infinity,
-  ): any => ({
-    where: (nextField: string, _op: string, nextValue: unknown) =>
-      groupQuery(name, nextField, nextValue, cap),
-    limit: (n: number) => groupQuery(name, field, value, n),
-    get: async () => {
-      const matched = [...store.entries()]
-        .filter(([path]) => path.split('/').slice(-2)[0] === name)
-        .filter(([, data]) => !field || data[field] === value)
-        .slice(0, cap)
-      return {
-        empty: matched.length === 0,
-        size: matched.length,
-        docs: matched.map(([path, data]) => ({
-          id: path.split('/').pop(),
-          ref: docRef(path),
-          data: () => data,
-        })),
-      }
-    },
-  })
-
   return {
     collection: (name: string) => collectionRef(name),
-    collectionGroup: (name: string) => groupQuery(name),
     runTransaction: async (body: (transaction: any) => Promise<void>) =>
       body({
         get: async (ref: any) => ref.get(),
@@ -258,15 +224,6 @@ function fakeDeliveryFirestore() {
         data: () => store.get(ref.path),
         get: (field: string) => store.get(ref.path)?.[field],
       })),
-    /** Spec helper: seed and read one conversion attribution record. */
-    seedAttribution: (hostId: string, id: string, personKey: string) =>
-      store.set(`hosts/${hostId}/campaignAttributions/${id}`, {
-        kind: 'form',
-        refId: id,
-        personKey,
-      }),
-    attribution: (hostId: string, id: string) =>
-      store.get(`hosts/${hostId}/campaignAttributions/${id}`),
     /** Spec helper: the raw document, by address and message id. */
     read: (email: string, messageId: string) =>
       store.get(
@@ -1169,75 +1126,72 @@ describe('erasure removes the summary, not only the messages it came from', () =
     ).toMatchObject({ lastEngagedAtMs: null })
   })
 
-  it('clears the campaign touches revenue attribution is taken over', async () => {
-    const firestore = fakeDeliveryFirestore()
-    await recordEmailCampaignTouch(
-      {
-        email: 'person@example.com',
-        hostId: 'host1',
-        campaignId: 'spring',
-        atMs: 5_000,
+  /*
+   * What was CONCLUDED from the person's clicks — the touch a plugin keeps on
+   * this document and every credit drawn from it, on every site — is the
+   * conversion creditor's to erase (`plugin-conversion-credit`), and the
+   * erasure asks it by the same key the document is filed under. What the
+   * creditor then removes is its own spec's claim.
+   */
+  function standInCreditor(erased: string[]): PluginConversionCreditor {
+    return {
+      resolveTouch: async () => null,
+      creditConversion: async () => false,
+      creditOrder: async () => false,
+      reverseOrder: async () => false,
+      recordClick: async () => false,
+      creditOutcome: async () => 0,
+      erasePerson: async (key) => {
+        erased.push(key)
+        return 1
       },
-      firestore,
-    )
-    expect(firestore.readPerson('person@example.com')).toHaveProperty(
-      EMAIL_TOUCH_FIELD,
-    )
+    }
+  }
+
+  afterEach(() => resetPluginServicesForTests())
+
+  it('asks the conversion creditor to forget the person, by the key the log files them under', async () => {
+    const erased: string[] = []
+    registerPluginConversionCreditor(standInCreditor(erased), { pluginId: 'credits' })
 
     await eraseEmailDeliveriesForAddresses(
-      [{ address: 'person@example.com' }],
-      firestore,
+      [{ address: 'person@example.com' }, { address: 'second@example.com' }],
+      fakeDeliveryFirestore(),
     )
 
-    // The strongest personal fact on the document — it names the person AND
-    // what they were reading — so it goes with the stamps beside it. Nothing
-    // may go on attributing their future orders to mail they asked us to
-    // forget.
-    expect(firestore.readPerson('person@example.com')).not.toHaveProperty(
-      EMAIL_TOUCH_FIELD,
-    )
-    expect(
-      await readEmailCampaignTouch('person@example.com', 'host1', firestore),
-    ).toBeNull()
-  })
-
-  it('clears the CONVERSIONS those touches were credited with, on every site', async () => {
-    const firestore = fakeDeliveryFirestore()
-    const key = emailSuppressionKey('person@example.com') as string
-    firestore.seedAttribution('host1', 'form:s1', key)
-    firestore.seedAttribution('host2', 'lead:l1', key)
-    firestore.seedAttribution('host2', 'form:s2', 'somebody-else')
-
-    await eraseEmailDeliveriesForAddresses(
-      [{ address: 'person@example.com' }],
-      firestore,
-    )
-
-    // "This person came from that campaign and then filled in this form" is a
-    // strictly stronger statement than the click it was derived from, so
-    // deleting the click above and keeping this would be an erasure that
-    // removed the evidence and kept the conclusion.
-    expect(firestore.attribution('host1', 'form:s1')).toBeUndefined()
     // Per ADDRESS, not per host: the request names an address and knows
     // nothing about which sites it ever visited.
-    expect(firestore.attribution('host2', 'lead:l1')).toBeUndefined()
-    // And nobody else's.
-    expect(firestore.attribution('host2', 'form:s2')).toBeDefined()
+    expect(erased).toEqual([
+      emailSuppressionKey('person@example.com'),
+      emailSuppressionKey('second@example.com'),
+    ])
   })
 
-  it('leaves a contested address’s conversions exactly where they are', async () => {
-    const firestore = fakeDeliveryFirestore()
-    const key = emailSuppressionKey('person@example.com') as string
-    firestore.seedAttribution('host1', 'form:s1', key)
+  it('never asks about a contested address', async () => {
+    const erased: string[] = []
+    registerPluginConversionCreditor(standInCreditor(erased), { pluginId: 'credits' })
 
     await eraseEmailDeliveriesForAddresses(
       [{ address: 'person@example.com', shared: true }],
-      firestore,
+      fakeDeliveryFirestore(),
     )
 
     // A contested address is not erased at all, and the sweep must not run
     // past the `continue` that decided so — there is no undo below that line.
-    expect(firestore.attribution('host1', 'form:s1')).toBeDefined()
+    expect(erased).toEqual([])
+  })
+
+  it('completes with no creditor in the process', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordPersonEngagement([outcome({ at: 5_000 })], firestore)
+
+    const result = await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com' }],
+      firestore,
+    )
+
+    expect(result.addresses).toEqual(['person@example.com'])
+    expect(firestore.readPerson('person@example.com')).not.toHaveProperty('lastEngagedAtMs')
   })
 
   it('leaves a contested address’s engagement exactly where it was', async () => {

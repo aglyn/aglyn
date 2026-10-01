@@ -114,8 +114,7 @@
       "rules": [
         "domain-name",
         "plugin-collection:forms",
-        "domain-declares:forms",
-        "domain-declares:marketing"
+        "domain-declares:forms"
       ],
       "lane": "forms"
     },
@@ -526,23 +525,6 @@
       "why": "`'marketing'` here is a SEND PURPOSE, the legal category opposite `'transactional'` that decides which identity and which consent rules apply to a message. Any sender has it, whether or not the Marketing plugin exists."
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/campaign-attribution-store.ts",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/campaign-conversion-attribution.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketing",
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/contact-company-link.ts",
       "rules": [
         "domain-name"
@@ -615,7 +597,8 @@
       "rules": [
         "domain-declares:marketing"
       ],
-      "lane": "marketing"
+      "lane": "stays",
+      "why": "The platform's per-recipient delivery log, which every sender's mail lands in whichever plugin sent it. The member it trips on is a delivery record's `campaignId`: the bulk-send tag the mail rail stamps on every bulk message (`send-email.ts`) and the delivery feed hands back, persisted under that name on every message document, shown raw to staff (the argued stay on `staff-user-email-history-card.component.tsx`) and filtered on by the send-engagement reader's collection-group index (`hostId`, `campaignId`, …). Renaming it is a data migration of every message the log holds, and of that index, for a word. The Marketing plugin's own half — the per-site click touch its attribution reads — is the plugin's (`email-campaign-touch.ts`), and the erasure asks for it through the conversion-credit contract."
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/email-metering.ts",
@@ -624,13 +607,6 @@
       ],
       "lane": "stays",
       "why": "The platform's email meters, which every sender increments whatever plugin it is: the cost meter counts all mail, and the enforceable meter counts the mail rail's refusable `campaign` send priority (`send-rate.ts`), the only tier a plan's `emailSendsPerMonth` may refuse — so a password reset is never blocked by a quota. `campaign` here is the rail's priority tier, and the counter it trips on is persisted as `campaignEmailSends` under every org and site and read by billing; renaming it is a data migration of every workspace's meter for a word."
-    },
-    {
-      "path": "libs/tenant/data/admin/src/lib/server/email-revenue-attribution.ts",
-      "rules": [
-        "domain-declares:marketing"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/erase-person.ts",

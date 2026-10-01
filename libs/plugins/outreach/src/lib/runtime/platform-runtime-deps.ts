@@ -21,10 +21,10 @@ import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import {
-  attributeCampaignConversion,
-  creditCampaignSequenceOutcome,
-} from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
-import { recordEmailCampaignTouch } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+  creditConversion,
+  creditConversionOutcome,
+  recordConversionClick,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
 import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/topic-subscriptions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
@@ -50,32 +50,37 @@ import { outreachUnsubscribeUrl } from './unsubscribe-link'
 import { createOutreachUnsubscribeRoute } from './unsubscribe-route'
 
 /**
- * The platform's campaign attribution, for what a sequence produced
- * (AGL-3254): the same join every form, booking and campaign email is
- * credited through, so a sequence's numbers and a campaign send's are two
- * readings of one rule. Each writer already never throws.
+ * What a sequence produced (AGL-3254), handed to whichever plugin credits
+ * outcomes (`plugin-conversion-credit`): the same contract every form,
+ * booking and campaign email is credited through, so a sequence's numbers
+ * and a campaign send's are two readings of one rule. A workspace whose
+ * plugins credit nothing credits nothing here either; the seam never throws.
+ *
+ * The campaign a sequence is filed under is what its mail is credited to,
+ * and the sequence and the enrollment ride with it as the mail's own facts.
  */
-export function platformOutreachCampaignCredit(
-  firestore: () => FirebaseFirestore.Firestore,
-): OutreachCampaignCredit {
+export function platformOutreachCampaignCredit(): OutreachCampaignCredit {
   return {
     async credit({ hostId, orgId, campaignIds, outcome, atMs }) {
-      await creditCampaignSequenceOutcome({ hostId, orgId, campaignIds, outcome, atMs }, firestore())
+      await creditConversionOutcome({ hostId, orgId, containerIds: campaignIds, outcome, atMs })
     },
     async attributeRecord({ hostId, kind, refId, campaignId, sequenceId, enrollmentId, atMs }) {
-      await attributeCampaignConversion(
-        {
-          hostId,
-          kind,
-          refId,
-          touch: { channel: 'sequence', campaignId, sequenceId, enrollmentId, touchedAtMs: atMs },
-          convertedAtMs: atMs,
-        },
-        firestore(),
-      )
+      await creditConversion({
+        hostId,
+        kind,
+        refId,
+        click: { hostId, creditTo: campaignId, atMs, via: { sequenceId, enrollmentId } },
+        convertedAtMs: atMs,
+      })
     },
     async recordTouch({ hostId, email, campaignId, sequenceId, enrollmentId, atMs }) {
-      await recordEmailCampaignTouch({ email, hostId, campaignId, atMs, sequenceId, enrollmentId }, firestore())
+      await recordConversionClick({
+        email,
+        hostId,
+        creditTo: campaignId,
+        atMs,
+        via: { sequenceId, enrollmentId },
+      })
     },
   }
 }
@@ -91,7 +96,7 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     firestore,
     now: Date.now,
     random: Math.random,
-    campaignCredit: platformOutreachCampaignCredit(firestore),
+    campaignCredit: platformOutreachCampaignCredit(),
     openMailbox: (mailboxId) => openOutreachMailboxClient(firestore(), { mailboxId }),
     // The domain's MX (AGL-3326) and, for a domain with none, its address
     // record — through the platform's pinned resolver (AGL-3328), which

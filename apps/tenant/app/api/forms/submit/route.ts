@@ -18,16 +18,20 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
-  attributeCampaignConversion,
   consumeRateLimit,
   firebaseAdmin,
   getOrgForHost,
   notifyHostManagers,
-  resolveCampaignTouch,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+// By path: the server-only contract a door credits its outcome through.
+import {
+  CONVERSION_TOUCH_DETAIL,
+  creditConversion,
+  resolveConversionTouch,
+} from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 // The leaf: the Inbox list's search keys, the same function its backfill
 // restates and its query's normalizers read (AGL-3321).
 import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
@@ -694,23 +698,24 @@ export async function POST(request: Request): Promise<Response> {
     /** Whether that lead is one more person on this form's lead count. */
     let leadCounted = false
     /*
-     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
+     * WHERE THE VISITOR ARRIVED FROM, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
      *
      * One visitor action lands in three collections here — the submission,
      * the contact and (when the form declares itself a lead surface) the
-     * lead — and all three are the same person arriving from the same
-     * campaign. Resolving here and handing the result down is what keeps the
-     * email-channel lookup at ONE keyed document read per submission instead
-     * of three, and it is also what guarantees the three records cannot
-     * disagree about which campaign to credit.
+     * lead — and all three are the same person arriving from the same place.
+     * Resolving here and handing the result down is what keeps the lookup at
+     * one per submission instead of three, and it is also what guarantees the
+     * three records cannot disagree about what to credit.
      *
-     * `campaignTouch` is a string the visitor's browser supplied, so it is
-     * re-parsed through the same allowlist a URL goes through and
-     * window-checked before it can name anything. A submission carrying none
-     * — direct traffic, or a visitor whose consent posture never let a touch
-     * be remembered — resolves to null and writes no attribution at all.
+     * The answer is the crediting plugin's (`plugin-conversion-credit.ts`),
+     * asked with what the visitor's browser sent under `campaignTouch` —
+     * untrusted, so the creditor re-parses and window-checks it before it
+     * can name anything. A submission carrying none — direct traffic, or a
+     * visitor whose consent posture never let a touch be remembered — and a
+     * workspace whose plugins credit nothing both resolve to null and write
+     * no credit at all.
      */
-    const campaignTouch = await resolveCampaignTouch({
+    const arrival = await resolveConversionTouch({
       hostId,
       wire: payload['campaignTouch'],
       email: contactEmail,
@@ -720,11 +725,11 @@ export async function POST(request: Request): Promise<Response> {
     // an anonymous enquiry from a campaign link is a conversion that campaign
     // caused, and refusing to count it because no email field was filled in
     // would under-report exactly the forms that ask for the least.
-    void attributeCampaignConversion({
+    void creditConversion({
       hostId,
       kind: 'form',
       refId: submissionRef.id,
-      touch: campaignTouch,
+      touch: arrival,
       convertedAtMs: submittedAtMs,
     })
     if (contactEmail) {
@@ -802,7 +807,7 @@ export async function POST(request: Request): Promise<Response> {
           // Where the visitor ARRIVED from, already resolved above — never
           // the same fact as `campaignIds`, which is where the merchant filed
           // the form.
-          ...(campaignTouch ? { campaignTouch } : {}),
+          ...(arrival ? { [CONVERSION_TOUCH_DETAIL]: arrival } : {}),
         },
       })
       leadStored = captured?.ok === true && captured.record === 'lead'

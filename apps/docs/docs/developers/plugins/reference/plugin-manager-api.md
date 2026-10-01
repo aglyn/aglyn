@@ -1205,6 +1205,51 @@ visitor arrived from. The owner files the person under the kinds it keeps and
 ignores the rest. Filing is not consent: `marketingConsent` is the only input
 that records one.
 
+## Conversion credit — `plugin-conversion-credit` (`/server`)
+
+A door that produces an outcome somebody may be credited with — a form
+submission, a booking, a member sign-up, an order, what a plugin's own mail
+led to — asks whichever plugin credits outcomes, instead of importing its
+join. One plugin registers the creditor (a slot); every door calls the
+functions below, and each answers its empty value when nobody credits.
+
+```ts
+// the crediting plugin, from its server declarations
+registerPluginConversionCreditor(creditor)
+
+// a door: where the visitor arrived from, once per request…
+const touch = await resolveConversionTouch({ hostId, wire: body.campaignTouch, email, atMs })
+// …credited to what the door produced, and handed to the person capture
+void creditConversion({ hostId, kind: 'booking', refId: bookingId, touch, convertedAtMs: atMs })
+await recordCapturedContact({ …, detail: { [CONVERSION_TOUCH_DETAIL]: touch } })
+```
+
+| API | Semantics |
+| --- | --- |
+| `resolveConversionTouch({ hostId, wire?, email?, atMs? })` | The arrival to credit, or `null` (direct traffic, or nobody credits). Opaque: a door hands it back unread. |
+| `creditConversion({ hostId, kind, refId, touch?, click?, convertedAtMs? })` | Credits one identify moment, in the door's word (`form`, `lead`, `contact`, `booking`). `click` credits a link the door's own mail carried, in place of a touch. |
+| `creditOrderConversion` / `reverseOrderConversion` | An order's money, and a refund's or a lost dispute's reversal of it, keyed by the order. |
+| `recordConversionClick({ email, hostId, creditTo, atMs, via? })` | A person followed a link in mail a plugin sent them; `via` is the sender's own facts (its sequence, its enrollment). |
+| `creditConversionOutcome({ hostId, orgId?, containerIds, outcome, atMs? })` | What a plugin's own record produced, counted under the containers it is filed in (`plugin-containers`). |
+| `eraseConversionCredits(key)` | Everything the creditor holds about a person, by `personKey`, on every site — called by the platform's address erasure beside the delivery log. |
+
+Nothing here throws: every door has already done the thing being credited.
+The first call that finds no creditor runs the app's boot step once and asks
+again, as a person capture does. A door that hands its touch to the person
+capture puts it under `CONVERSION_TOUCH_DETAIL` in `detail`, and the plugin
+that keeps people passes it on to the contact or the lead it files.
+
+## Send tallies — `plugin-send-tallies` (`/server`)
+
+A bulk send's own figures, moved by a door that is not its sender: the plugin
+that serves a site's unsubscribe page learns that a recipient left from a
+message a send carried, and tells the sender, which counts it.
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginSendTally({ unsubscribed })` | A sender's tally (a set: several plugins may send in bulk). `unsubscribed({ hostId, sendId })` answers whether the send was this plugin's and was counted. |
+| `tallySendUnsubscribe({ hostId, sendId })` | Asks each tally until one counts it. Never throws; the door counts only an unsubscribe it just created. |
+
 ## Record timeline — `plugin-record-timeline` (`/server`)
 
 A plugin that sends mail or books meetings files what happened on the
