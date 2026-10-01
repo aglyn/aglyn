@@ -20,7 +20,12 @@
 import { registerFormRecordTarget } from '@aglyn/aglyn/plugin-manager/submission-record-target'
 import { registerRepeatRowReader } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import { registerPluginSiteBundleSection } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
-import { BUNDLE_ID, DATASET_REPEAT_SOURCE_ID } from './constants/bundle-common'
+import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
+import {
+  BUNDLE_ID,
+  DATASET_REPEAT_SOURCE_ID,
+  DATASET_STORAGE_METER_ID,
+} from './constants/bundle-common'
 
 /**
  * The data plugin's server declarations: the light registrations core reads
@@ -43,6 +48,10 @@ import { BUNDLE_ID, DATASET_REPEAT_SOURCE_ID } from './constants/bundle-common'
  * (`siteBundleSections`), so a boot that skipped this fails the export rather
  * than shipping a backup without them; the answers load when a backup is made
  * or restored.
+ *
+ * And the monthly usage sweep, a core cron, measures what the datasets store
+ * through this plugin's meter — declared in `usageAxes`, so the sweep refuses
+ * to bill a month without it. Its reads load with the first sweep.
  */
 export function registerDataServerDeclarations(): void {
   registerRepeatRowReader(
@@ -77,4 +86,10 @@ export function registerDataServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  registerPluginUsageMeter({
+    pluginId: BUNDLE_ID,
+    id: DATASET_STORAGE_METER_ID,
+    measure: async (context) =>
+      (await import('./server/dataset-storage-meter')).measureDatasetStorage(context),
+  })
 }

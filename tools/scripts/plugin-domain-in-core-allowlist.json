@@ -36,12 +36,8 @@
     {
       "path": "apps/console/app/api/billing/report-usage/route.ts",
       "rules": [
-        "plugin-collection:crm",
-        "plugin-collection:data",
         "plugin-collection:forms",
-        "domain-declares:crm",
-        "domain-declares:forms",
-        "domain-declares:workflows"
+        "domain-declares:forms"
       ],
       "lane": "ai"
     },
@@ -152,13 +148,6 @@
         "domain-declares:marketing"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/utils/org-counter-totals.ts",
-      "rules": [
-        "domain-declares:workflows"
-      ],
-      "lane": "workflows"
     },
     {
       "path": "apps/console/utils/usage-metering.ts",

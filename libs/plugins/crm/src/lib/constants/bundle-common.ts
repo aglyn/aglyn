@@ -13,3 +13,6 @@
  * (AGL-2614), so `contacts` now reads as an unknown id like any other.
  */
 export const BUNDLE_ID = 'crm'
+
+/** The records band's meter in the monthly usage sweep (`server/crm-records-meter.ts`). */
+export const CRM_RECORDS_METER_ID = 'records'

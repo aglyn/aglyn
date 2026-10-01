@@ -1095,6 +1095,8 @@ export const PLUGIN_SPEND_LINES_DECLARED: readonly ResolvedPluginSpendLine[] = [
  * a month while one of these is unregistered.
  */
 export const PLUGIN_USAGE_METERS_DECLARED: readonly ResolvedPluginUsageMeter[] = [
+  {"pluginId":"crm","id":"records"},
+  {"pluginId":"data","id":"dataset-storage"},
   {"pluginId":"ai","id":"assist"},
 ]
 

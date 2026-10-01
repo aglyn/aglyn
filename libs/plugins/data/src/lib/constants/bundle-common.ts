@@ -14,3 +14,6 @@ export const BUNDLE_ID = 'data'
  * alike, and the `repeatSource` this plugin declares in `plugins.config.json`.
  */
 export const DATASET_REPEAT_SOURCE_ID = 'dataset'
+
+/** The dataset storage meter in the monthly usage sweep (`server/dataset-storage-meter.ts`). */
+export const DATASET_STORAGE_METER_ID = 'dataset-storage'

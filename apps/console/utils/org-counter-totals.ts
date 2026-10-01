@@ -16,27 +16,28 @@
  */
 
 /**
- * The three per-host monthly counters the rollup never carried (AGL-1134),
- * summed across the org's hosts for `month`.
+ * The per-host monthly counters the rollup never carried (AGL-1134), summed
+ * across the org's hosts for `month`: the platform's own two — email sends
+ * and action runs — and every counter a plugin's usage band is measured by
+ * (`hostCounters`, from the bands' `hostCounter` declarations).
  *
  * AGL-1134 asked for email sends and workflow/action runs "not currently
  * metered per org". They ARE counted — `hosts/{hostId}/counters/{name}`, one
  * document per counter whose FIELDS are `YYYY-MM` keys holding an integer —
- * and they are enforced per org: `usage-alerts` sums exactly these three and
- * threshold-checks them against `emailSendsPerMonth`, `workflowRunsPerMonth`
- * and `actionRunsPerMonth`. But that sum is computed in memory and thrown
- * away. Nothing has ever persisted an org-level figure, so there is no
+ * and they are enforced per org: `usage-alerts` sums them and threshold-checks
+ * them against what the plan includes. But that sum is computed in memory and
+ * thrown away. Nothing has ever persisted an org-level figure, so there is no
  * history, nothing for the cost model to price, and no way to answer "how
  * much did this org actually use" after the fact.
  *
  * UNITS: plain COUNTS for the calendar month named by `month` — emails
- * handed to the sender, and workflow/action executions that actually ran.
+ * handed to the sender, executions that actually ran.
  * Not bytes, not currency, and not a running total: each month's field is
  * independent, so summing months is a legitimate year-to-date and reading
  * one is that month alone.
  *
  * `orgLibraryBytes` is the ONE exception and is named so it cannot be mistaken
- * for one of the three (AGL-1473). It is BYTES, CUMULATIVE, and read off the
+ * for a count (AGL-1473). It is BYTES, CUMULATIVE, and read off the
  * counter's `bytes` field rather than a `YYYY-MM` one — the same shape and the
  * same meaning as `hosts/{id}/counters/media.bytes`, which `hostUsage` already
  * reads. It lives here only because it rides the same `getAll`; see the ref
@@ -77,7 +78,7 @@
  * hosts' current `orgId`, so fixing it means dated ownership, not a change
  * to this function.
  *
- * One `getAll` rather than 3×N gets: this runs per org inside a chunked
+ * One `getAll` rather than a get per counter per host: this runs per org inside a chunked
  * sweep that has already 504'd once (AGL-1141), so a meter that costs an
  * extra round trip per host per counter is not worth its own data.
  */
@@ -86,19 +87,28 @@ export async function orgCounterTotals(
   hostRefs: FirebaseFirestore.DocumentReference[],
   month: string,
   orgRef?: FirebaseFirestore.DocumentReference,
+  /** Further per-host monthly counters to sum, each under its own name. */
+  hostCounters: readonly string[] = [],
 ): Promise<{
   emailSends: number
-  workflowRuns: number
   actionRuns: number
   /** BYTES stored in the org library, cumulative — not a count, not monthly. */
   orgLibraryBytes: number
+  /** Each of `hostCounters`, summed for the month. */
+  counters: Record<string, number>
 }> {
-  const names = ['emailSends', 'workflowRuns', 'actionRuns'] as const
+  const extra = [...new Set(hostCounters)].filter(
+    (name) => name !== 'emailSends' && name !== 'actionRuns',
+  )
+  const names = ['emailSends', 'actionRuns', ...extra]
   const totals = {
     emailSends: 0,
-    workflowRuns: 0,
     actionRuns: 0,
     orgLibraryBytes: 0,
+    counters: Object.fromEntries(extra.map((name) => [name, 0])) as Record<
+      string,
+      number
+    >,
   }
   if (hostRefs.length === 0 && !orgRef) return totals
   const refs = hostRefs.flatMap((hostRef) =>
@@ -137,12 +147,15 @@ export async function orgCounterTotals(
       else totals.emailSends += raw
       return
     }
-    const name = names[index % names.length]
+    const name = names[index % names.length]!
     const value = Number(snapshot.get(month) ?? 0)
     // A counter that has never been written is absent, and a corrupt one
     // must not become a negative meter — same posture as the cost model,
     // where a negative would read as a credit.
-    if (Number.isFinite(value) && value > 0) totals[name] += value
+    if (!Number.isFinite(value) || value <= 0) return
+    if (name === 'emailSends') totals.emailSends += value
+    else if (name === 'actionRuns') totals.actionRuns += value
+    else totals.counters[name] = (totals.counters[name] ?? 0) + value
   })
   return totals
 }
