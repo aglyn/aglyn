@@ -218,9 +218,11 @@ describe('a reputation lookup', () => {
     const stored = store.get(`${WEB_RISK_CACHE_COLLECTION}/fine.example`) as Doc
     expect(Number(stored['expiresAtMs']) - Number(stored['checkedAtMs'])).toBe(WEB_RISK_CLEAN_TTL_MS)
     // Past the memory window the store answers — a listing the daily re-check
-    // wrote there reaches a warm process this way.
+    // wrote there reaches a warm process this way. An API answer is stamped
+    // with the clock when it arrives, a few ms after `now`, so the step past
+    // the window is a minute rather than a millisecond.
     getAllCalls = 0
-    await lookupHostReputation(['fine.example'], { nowMs: now + WEB_RISK_MEMORY_CLEAN_TTL_MS + 1 })
+    await lookupHostReputation(['fine.example'], { nowMs: now + WEB_RISK_MEMORY_CLEAN_TTL_MS + 60_000 })
     expect(getAllCalls).toBe(1)
     expect(asked).toHaveLength(1)
   })
@@ -273,6 +275,29 @@ describe('a reputation lookup', () => {
     const answer = await lookupHostReputation(['any.example'])
     expect(answer.unknown).toEqual(['any.example'])
     expect(asked).toEqual([])
+  })
+
+  it('never throws when the store cannot be reached: every host reads unknown', async () => {
+    const firebase = jest.requireMock('./firebase-admin') as { default: { app: () => unknown } }
+    const app = firebase.default.app
+    firebase.default.app = () => {
+      throw new Error('The default Firebase app does not exist.')
+    }
+    try {
+      const { client, asked } = fakeClient(clean)
+      resetWebRiskForTests(client)
+      const answer = await lookupHostReputation(['harvester.example', 'Bakery.Example'])
+      expect(answer).toEqual({
+        hits: [],
+        clean: [],
+        unknown: ['harvester.example', 'bakery.example'],
+        looked: 0,
+      })
+      expect(asked).toEqual([])
+      expect(console.warn).toHaveBeenCalled()
+    } finally {
+      firebase.default.app = app
+    }
   })
 
   it('reads every host unknown when the deployment has no credential at all', async () => {

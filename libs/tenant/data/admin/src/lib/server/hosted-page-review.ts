@@ -214,12 +214,19 @@ export function resetHostedPageReviewMemoForTests(): void {
 async function pageLinkReputation(
   linkHosts: readonly string[],
 ): Promise<{ hosts: string[]; signals: PhishingScreenSignal[] }> {
-  const hosts = foreignHostsForReputation(linkHosts, {
-    excludeDomains: platformReputationExclusions(),
-  })
-  if (!hosts.length) return { hosts, signals: [] }
-  const answer = await lookupHostReputation(hosts)
-  return { hosts, signals: webRiskSignals(answer.hits) }
+  // Runs before the review's fail-closed `try`, so it must not throw: an
+  // answer it cannot give is no listing, never a reason to hold.
+  try {
+    const hosts = foreignHostsForReputation(linkHosts, {
+      excludeDomains: platformReputationExclusions(),
+    })
+    if (!hosts.length) return { hosts, signals: [] }
+    const answer = await lookupHostReputation(hosts)
+    return { hosts, signals: webRiskSignals(answer.hits) }
+  } catch (error) {
+    console.warn('[page-review] link reputation could not be read — no listing assumed', error)
+    return { hosts: [], signals: [] }
+  }
 }
 
 /** Is this host one of the workspace's own? */

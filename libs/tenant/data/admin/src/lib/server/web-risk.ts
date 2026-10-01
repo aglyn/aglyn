@@ -305,10 +305,35 @@ export interface HostReputationLookupResult extends LinkReputationAnswer {
  * clean without asking. Never throws, and never waits longer than the
  * deadline: a call still running then finishes in the background and fills
  * the caches for the next asker.
+ *
+ * "Never throws" covers the store as well as the API: a missing app, a
+ * settings read that fails before it is a promise, or a cache reference
+ * that cannot be built all read every host as unknown. The page review
+ * calls this before its own fail-closed `try`, so a throw here would take
+ * down every page with a link off the site.
  */
 export async function lookupHostReputation(
   hosts: readonly string[],
   options: HostReputationLookupOptions = {},
+): Promise<HostReputationLookupResult> {
+  try {
+    return await lookupHostReputationOrThrow(hosts, options)
+  } catch (error) {
+    warn(options.nowMs ?? Date.now(), 'a lookup failed before it could answer', error)
+    const unknown = [
+      ...new Set(
+        hosts
+          .map((raw) => normalizeReputationHost(raw))
+          .filter((host): host is string => Boolean(host)),
+      ),
+    ]
+    return { hits: [], clean: [], unknown, looked: 0 }
+  }
+}
+
+async function lookupHostReputationOrThrow(
+  hosts: readonly string[],
+  options: HostReputationLookupOptions,
 ): Promise<HostReputationLookupResult> {
   const nowMs = options.nowMs ?? Date.now()
   const result: HostReputationLookupResult = { hits: [], clean: [], unknown: [], looked: 0 }

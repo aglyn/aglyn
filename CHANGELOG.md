@@ -22,6 +22,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **abuse:** a Web Risk lookup that cannot reach the store reads unknown, not notFound ([AGL-3451](https://linear.app/aglyn/issue/AGL-3451))
 - **tenant:** the leaving notice draws in CSS system colors, not a palette ([AGL-3452](https://linear.app/aglyn/issue/AGL-3452))
 
 ### Changed
