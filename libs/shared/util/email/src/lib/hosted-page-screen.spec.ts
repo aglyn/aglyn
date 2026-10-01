@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { isCredentialFieldName, screenHostedPage } from './hosted-page-screen'
+import { isCredentialFieldName, screenHostedPage, screenSiteRedirect } from './hosted-page-screen'
 import { signalsThatHold } from './outbound-phishing-screen'
 
 /**
@@ -149,12 +149,295 @@ describe('what holds on a page', () => {
       ),
       ...HOTEL,
     })
+    // Its one button also leaves the site beside "a document has been shared
+    // with you", which reads the same page without the brand (AGL-3447).
     expect(verdict.signals).toEqual([
       expect.objectContaining({ code: 'brand-action-page', brand: 'docusign' }),
+      {
+        code: 'offsite-action-page',
+        action: 'Open',
+        lure: 'document has been shared with you',
+        host: 'files-share.example.top',
+      },
     ])
     // Soft: a young workspace's page holds, an established one's does not.
-    expect(signalsThatHold(verdict.signals, { ageDays: 2 })).toHaveLength(1)
+    expect(signalsThatHold(verdict.signals, { ageDays: 2 })).toHaveLength(2)
     expect(signalsThatHold(verdict.signals, { ageDays: 60 })).toHaveLength(0)
+  })
+})
+
+/**
+ * The 2026-10-01 page (AGL-3447), as `composeScreenNodes` handed it over: a
+ * 41-minute-old free workspace's "Share File" header with a SharePoint-style
+ * icon, a "Secure Document Access Portal" heading, Proofpoint's name in the
+ * body, and one button off the site to where the credentials were taken.
+ * The brand, the lure and the action sit in three different elements, so the
+ * one-element rule read none of it.
+ */
+const SHARE_FILE_PAGE = page(
+  { componentId: 'muiStack', props: { direction: 'row' } },
+  {
+    componentId: 'icon',
+    props: { path: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
+  },
+  text('Share File'),
+  { componentId: 'muiTypography', props: { variant: 'h3', children: 'Secure Document Access Portal' } },
+  text(
+    'Proofpoint Encryption for your sensitive documents. Access, share and collaborate with confidence',
+  ),
+  {
+    componentId: 'muiButton',
+    props: {
+      children: 'Continue to Document',
+      href: 'https://temps-juenes.com/',
+      variant: 'contained',
+    },
+  },
+)
+
+/** The workspace that published it: a name, a subdomain, nothing else. */
+const PHISHER = { ownNames: ['Docs Center', 'docs-center-4471'], ownDomains: ['docs-center-4471.aglyn.app'] }
+
+describe('the document-share page (AGL-3447)', () => {
+  it('HOLDS for a workspace in its first fortnight, naming the brand, the lure and where the button goes', () => {
+    const verdict = screenHostedPage({ nodes: SHARE_FILE_PAGE, ...PHISHER })
+    expect(verdict.signals).toEqual(
+      expect.arrayContaining([
+        {
+          code: 'brand-lure-page',
+          brand: 'proofpoint',
+          lure: 'Secure Document',
+          host: 'temps-juenes.com',
+        },
+        {
+          code: 'offsite-action-page',
+          action: 'Continue to Document',
+          lure: 'Secure Document',
+          host: 'temps-juenes.com',
+        },
+      ]),
+    )
+    // The one-element rule still does not fire: nothing here is one element.
+    expect(verdict.signals.map((signal) => signal.code)).not.toContain('brand-action-page')
+    // Held at 41 minutes old, and at 13 days.
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 }).length).toBeGreaterThan(0)
+    expect(signalsThatHold(verdict.signals, { ageDays: 13 }).length).toBeGreaterThan(0)
+    // Soft, so it never takes down an established workspace's page.
+    expect(signalsThatHold(verdict.signals, { ageDays: 14 })).toEqual([])
+  })
+
+  it('holds it before the workspace is known too — the first pass the review runs without reads', () => {
+    expect(
+      signalsThatHold(screenHostedPage({ nodes: SHARE_FILE_PAGE }).signals, { ageDays: 0 }).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('holds the same page with every brand taken out: the button leaving beside the lure is the shape', () => {
+    const brandless = page(
+      text('Secure Document Access Portal'),
+      text('Your sensitive documents, encrypted. Access, share and collaborate with confidence'),
+      button('Continue to Document', 'https://temps-juenes.com/'),
+    )
+    const verdict = screenHostedPage({ nodes: brandless, ...PHISHER })
+    expect(verdict.signals).toEqual([
+      {
+        code: 'offsite-action-page',
+        action: 'Continue to Document',
+        lure: 'Secure Document',
+        host: 'temps-juenes.com',
+      },
+    ])
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 })).toHaveLength(1)
+  })
+
+  it('reads a brand page-wide: Microsoft in the body, the account lure in a heading, a sign-in button off the site', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('Microsoft 365'),
+        text('Your password will expire today.'),
+        button('Keep my password', 'https://m365-keep.example.top/'),
+        button('Help', '/help'),
+      ),
+      ...PHISHER,
+    })
+    expect(verdict.signals).toEqual([
+      {
+        code: 'brand-lure-page',
+        brand: 'microsoft',
+        lure: 'password will expire',
+        host: 'm365-keep.example.top',
+      },
+      // "Keep my password" is itself an account lure (AGL-3453), so the
+      // button that leaves is the page's call to action, brand or not.
+      {
+        code: 'offsite-action-page',
+        action: 'Keep my password',
+        lure: 'password will expire',
+        host: 'm365-keep.example.top',
+      },
+    ])
+  })
+
+  it('reads a custom HTML block that splits the brand and the lure letter by letter (AGL-3453)', () => {
+    const split = (words: string) =>
+      [...words].map((letter) => (letter === ' ' ? ' ' : `${letter}<span class=x>`)).join('')
+    const verdict = screenHostedPage({
+      nodes: page({
+        componentId: 'custom-html',
+        props: {
+          html:
+            `<h2>${split('Google Workspace')}</h2><p>${split('Your password expires today.')}</p>` +
+            `<a href="https://relay.example.top/k">${split('Keep your password')}</a>`,
+        },
+      }),
+      ...PHISHER,
+    })
+    // One element, so the one-element rule reads it — once its tags are out.
+    expect(verdict.signals).toContainEqual({
+      code: 'brand-action-page',
+      brand: 'google',
+      action: 'password expire',
+    })
+  })
+
+  it('reads the action on a button that leaves when the page carries no lure wording of its own', () => {
+    const verdict = screenHostedPage({
+      nodes: page(text('Dropbox'), text('Q3 board pack (PDF, 2.1 MB)'), button('View the file', 'https://dl-files.example.top/q3')),
+      ...PHISHER,
+    })
+    expect(verdict.signals).toEqual([
+      { code: 'brand-lure-page', brand: 'dropbox', lure: 'View the file', host: 'dl-files.example.top' },
+    ])
+  })
+})
+
+describe('what the page-wide rules leave alone (AGL-3447)', () => {
+  /** A law firm's client portal page: its document portal lives on its own domain. */
+  const LAW_FIRM = {
+    ownNames: ['Hale & Whitcomb LLP', 'halewhitcomb'],
+    ownDomains: ['halewhitcomb.aglyn.app', 'halewhitcomb.com'],
+  }
+  const CLIENT_PORTAL = page(
+    { componentId: 'muiTypography', props: { variant: 'h2', children: 'Client document portal' } },
+    text(
+      'Clients can access secure documents, sign engagement letters and share files with your attorney. ' +
+        'Your documents are encrypted in transit and at rest. Sign in to your account with the email we have on file.',
+    ),
+    text('We use Microsoft 365 and Adobe Acrobat Sign for engagement letters.'),
+    button('Open the client portal', 'https://portal.halewhitcomb.com/login'),
+    button('Contact us', '/contact'),
+  )
+
+  it('a law firm’s client document portal on its own domain, whatever the workspace’s age', () => {
+    // Its own domain is not "elsewhere", so nothing is found to hold — an
+    // established firm's page, and a new firm's too.
+    const verdict = screenHostedPage({ nodes: CLIENT_PORTAL, ...LAW_FIRM })
+    expect(verdict.signals).toEqual([])
+    expect(signalsThatHold(verdict.signals, { ageDays: 900 })).toEqual([])
+    expect(signalsThatHold(verdict.signals, { ageDays: 1 })).toEqual([])
+  })
+
+  it('an established firm whose portal is a vendor’s: soft signals only, so nothing holds', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('Client document portal'),
+        text('Access secure documents and share files with your attorney.'),
+        button('Open the client portal', 'https://halewhitcomb.portal-vendor.example/login'),
+      ),
+      ...LAW_FIRM,
+    })
+    expect(verdict.signals.map((signal) => signal.code)).toEqual(['offsite-action-page'])
+    expect(signalsThatHold(verdict.signals, { ageDays: 900 })).toEqual([])
+  })
+
+  it('a hotel with Booking.com in one place, guest reviews in another, and directions off the site', () => {
+    expect(
+      codes(
+        page(
+          text('Find us on Booking.com.'),
+          text('Our guest reviews speak for themselves.'),
+          button('Directions', 'https://maps.example.com/harbor'),
+          button('Members sign in', '/members/signin'),
+        ),
+        HOTEL,
+      ),
+    ).toEqual([])
+  })
+
+  it('a shop whose one button leaves for its store, with no lure on the page', () => {
+    expect(
+      codes(
+        page(text('Hand-thrown mugs, made in Taos.'), button('Shop the collection', 'https://shop.example.net/mugs')),
+        HOTEL,
+      ),
+    ).toEqual([])
+  })
+
+  it('a page that LINKS Google Docs or Dropbox on their own domains', () => {
+    expect(
+      codes(
+        page(
+          text('Fill in the Google Docs sign-up sheet, or open the shared file on Dropbox.'),
+          button('Open the sign-up sheet', 'https://docs.google.com/forms/d/abc'),
+          button('Open the file', 'https://www.dropbox.com/s/xyz/menu.pdf'),
+        ),
+        HOTEL,
+      ),
+    ).toEqual([])
+  })
+})
+
+describe('a site redirect (AGL-3447)', () => {
+  it('reads a path that is a document-share lure, sent off the site', () => {
+    const verdict = screenSiteRedirect({
+      source: '/secure-document-access',
+      destination: 'https://temps-juenes.com/',
+      ...PHISHER,
+    })
+    expect(verdict.signals).toEqual([
+      {
+        code: 'offsite-redirect',
+        source: '/secure-document-access',
+        lure: 'secure document',
+        host: 'temps-juenes.com',
+      },
+    ])
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 })).toHaveLength(1)
+    expect(signalsThatHold(verdict.signals, { ageDays: 400 })).toEqual([])
+  })
+
+  it('names the brand a lure path wears', () => {
+    expect(
+      screenSiteRedirect({ source: '/paypal/verify-your-account', destination: 'https://evil.example.top/x' }).signals,
+    ).toContainEqual(
+      expect.objectContaining({ code: 'brand-lure-link', brand: 'paypal', host: 'evil.example.top' }),
+    )
+  })
+
+  it('holds a lookalike destination for every workspace', () => {
+    const verdict = screenSiteRedirect({ source: '/login', destination: 'https://sharepoint-files.example.top/' })
+    expect(verdict.signals).toEqual([
+      { code: 'lookalike-link', brand: 'microsoft', host: 'sharepoint-files.example.top' },
+    ])
+    expect(signalsThatHold(verdict.signals, { ageDays: 900 })).toHaveLength(1)
+  })
+
+  it.each([
+    ['/old-menu', 'https://shop.example.net/menu'],
+    ['/client-portal', 'https://portal.halewhitcomb.com/'],
+    ['/secure-document-access', 'https://portal.halewhitcomb.com/'],
+    ['/reviews', 'https://www.google.com/maps/place/x'],
+    ['/sign', 'https://app.docusign.com/x'],
+    ['/pricing', '/plans'],
+  ])('leaves %s → %s alone', (source, destination) => {
+    expect(
+      screenSiteRedirect({
+        source,
+        destination,
+        ownNames: ['Hale & Whitcomb LLP'],
+        ownDomains: ['halewhitcomb.aglyn.app', 'halewhitcomb.com'],
+      }).signals,
+    ).toEqual([])
   })
 })
 

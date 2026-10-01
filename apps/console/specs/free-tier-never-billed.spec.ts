@@ -244,10 +244,11 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
       freeOrg(),
     )
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
-    // $0.00016153846 × 1M — real COGS, and the figure the 2026-09-09 re-peg
-    // moved. What free costs the platform is the reason the cap exists; what
-    // it bills is zero either way, which is the line below.
-    expect(estimate.costUsd).toBeCloseTo(161.54, 2)
+    // $0.00035471473 × 1M — real COGS, its transfer at the CDN's dearest
+    // region, and the figure the 2026-09-09 re-peg and the 2026-10-01
+    // re-price moved. What free costs the platform is the reason the cap
+    // exists; what it bills is zero either way, which is the line below.
+    expect(estimate.costUsd).toBeCloseTo(354.71, 2)
     expect(estimate.billedCents).toBe(0)
   })
 
@@ -259,10 +260,21 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     expect(contained.ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
     expect(contained.exceeded).toBe(true)
     expect(bandwidthCeilingDegradesRender(freeOrg())).toBe(true)
-    // POSITIVE CONTROL: the paid plan is not contained at the same count —
-    // its overage bills, which is the whole difference.
-    expect(checkBandwidthAbuseCeiling(paidOrg(), 150_000).exceeded).toBe(false)
+    // POSITIVE CONTROL: at the count that contains a free site — the floor
+    // itself — a paid plan whose band sits above the floor is not contained,
+    // because its ceiling is three times that band, and its overage bills,
+    // which is the whole difference. Pro, because Starter's 20 GB is under
+    // the floor and shares Free's ceiling — where it is still not DEGRADED.
+    const proOrg = { plan: 'pro', subscription: { status: 'active' } } as any
+    expect(
+      checkBandwidthAbuseCeiling(freeOrg(), BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(true)
+    expect(
+      checkBandwidthAbuseCeiling(proOrg, BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
+    ).toBe(false)
+    expect(checkBandwidthAbuseCeiling(paidOrg(), 0).ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
     expect(bandwidthCeilingDegradesRender(paidOrg())).toBe(false)
+    expect(bandwidthCeilingDegradesRender(proOrg)).toBe(false)
     // …and free UNDER the ceiling is untouched: a hobby site with real
     // traffic must not meet a wall dressed up as an abuse control.
     expect(checkBandwidthAbuseCeiling(freeOrg(), 99_999).exceeded).toBe(false)

@@ -44,6 +44,7 @@ import {
   type AiEmailProductBinding,
 } from './ai-email-bindings'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiJobPlanCreationsRefusal } from './ai-job-plan-creations'
 import { aiJobStepBudget, type AiJobStepBudget } from './ai-job-budget'
 import { aiJobDraftId } from './ai-job-draft-ids'
 import { aiSiteSubdomain } from './ai-job-drafts'
@@ -539,12 +540,19 @@ export function aiEmailDesignOutput(
   }
 }
 
-/** An email job is admitted for a site of its org with email on and room for a design. */
-export const aiEmailJobAdmission: AiJobAdmission = (context) =>
-  aiPluginDraftAdmissionRefusal(context, {
+/**
+ * An email job is admitted for a site of its org with email on and room for a
+ * design, and confirmed only for a plan that creates nothing but the design:
+ * an email places nothing another job builds (AGL-3143 §15).
+ */
+export const aiEmailJobAdmission: AiJobAdmission = async (context) => {
+  const refusal = await aiPluginDraftAdmissionRefusal(context, {
     kind: 'email',
     drafts: [{ resource: AI_EMAIL_DESIGN_RESOURCE, label: 'Email' }],
   })
+  if (refusal || !context.hostId) return refusal
+  return aiJobPlanCreationsRefusal('email', context, context.hostId)
+}
 
 export interface AiJobEmailStepDeps {
   /** The inventory reader; specs hand in a fake. */

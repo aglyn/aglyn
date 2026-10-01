@@ -10057,7 +10057,7 @@ describe('the CRM lists’ query shapes (AGL-3321)', () => {
       ['contacts by verdict', query(contacts(EDITOR), scope, where('emailStatus', '==', 'none'), orderBy('updatedAt', 'desc'))],
       ['contacts with nothing scheduled', query(contacts(EDITOR), scope, where('nextTaskAtMs', '==', null), orderBy('updatedAt', 'desc'))],
       ['contacts changed since a day', query(contacts(EDITOR), scope, where('updatedAt', '>=', new Date(0)), orderBy('updatedAt', 'desc'))],
-      ['open leads', query(leads(EDITOR), scope, where('status', 'in', ['new', 'working']), orderBy('lastSeenAtMs', 'desc'))],
+      ['open leads', query(leads(EDITOR), scope, where('status', 'in', ['new', 'nurturing', 'working']), orderBy('lastSeenAtMs', 'desc'))],
       ['leads with no lead source', query(leads(EDITOR), scope, where('leadSourceKey', '==', null), orderBy('lastSeenAtMs', 'desc'))],
       ['companies by owner', query(companies(EDITOR), scope, where('ownerUid', 'in', ['uid-owner']), orderBy('updatedAt', 'desc'))],
       ['companies by a name prefix', query(companies(EDITOR), scope, where('nameLower', '>=', 'ac'), where('nameLower', '<=', 'ac\uf8ff'), orderBy('nameLower', 'asc'))],
@@ -10066,7 +10066,7 @@ describe('the CRM lists’ query shapes (AGL-3321)', () => {
       // A collaborator's search: the start of the name, address or title,
       // beside the scope clause.
       ['contacts by a name prefix', query(contacts(EDITOR), scope, where('nameLower', '>=', 'acm'), where('nameLower', '<=', 'acm\uf8ff'), orderBy('nameLower', 'asc'))],
-      ['open leads by an address prefix', query(leads(EDITOR), scope, where('status', 'in', ['new', 'working']), where('email', '>=', 'min'), where('email', '<=', 'min\uf8ff'), orderBy('email', 'asc'))],
+      ['open leads by an address prefix', query(leads(EDITOR), scope, where('status', 'in', ['new', 'nurturing', 'working']), where('email', '>=', 'min'), where('email', '<=', 'min\uf8ff'), orderBy('email', 'asc'))],
       ['deals by a title prefix', query(deals(EDITOR), scope, where('pipelineId', '==', 'sales'), where('titleLower', '>=', 'acme'), where('titleLower', '<=', 'acme\uf8ff'), orderBy('titleLower', 'asc'))],
       // A solo range, beside the scope clause alone.
       ['contacts created since', query(contacts(EDITOR), scope, where('createdAt', '>=', new Date(0)), orderBy('createdAt', 'desc'))],

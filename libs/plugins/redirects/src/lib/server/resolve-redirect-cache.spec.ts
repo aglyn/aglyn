@@ -105,7 +105,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     orgReads += 1
     return { orgId: 'org-1', org: orgPlan }
   },
+  reviewSiteRedirect: (request: unknown) => mockReviewSiteRedirect(request),
 }))
+
+// The phishing screen's review of an off-site rule (AGL-3447). Its own
+// rules are tested where it lives (`hosted-page-review.spec.ts`); here, only
+// that the serve path asks it, and obeys.
+let reviewOutcome: 'serve' | 'held' | 'rejected' = 'serve'
+const mockReviewSiteRedirect = jest.fn(async (_request: unknown) =>
+  reviewOutcome === 'serve'
+    ? { outcome: 'serve' as const }
+    : { outcome: reviewOutcome, reviewId: 'r', reference: 'HS-R' },
+)
 
 const cacheCalls: Array<{
   key: readonly string[]
@@ -201,5 +212,59 @@ describe('resolveRedirect caches its rule query (AGL-1440)', () => {
   it('CONTROL — an unmatched path redirects nowhere and writes nothing', async () => {
     expect(await resolveRedirect(HOST, 'not-a-rule')).toBeNull()
     expect(writes).toEqual([])
+  })
+})
+
+describe('resolveRedirect screens a rule that leaves the site (AGL-3447)', () => {
+  const SITE = { $id: 'host-1', subdomain: 'docs-center', name: 'Docs Center' }
+
+  beforeEach(() => {
+    reviewOutcome = 'serve'
+    mockReviewSiteRedirect.mockClear()
+    ruleDocs.length = 0
+    ruleDocs.push({
+      id: 'r2',
+      data: {
+        enabled: true,
+        source: '/secure-document-access',
+        destination: 'https://temps-juenes.com/',
+        statusCode: 302,
+        externalDestinationApprovedBy: 'uid-1',
+      },
+    })
+  })
+
+  it('asks the review with the rule, the destination and what it already read', async () => {
+    expect(await resolveRedirect(SITE, 'secure-document-access')).toEqual({
+      destination: 'https://temps-juenes.com/',
+      statusCode: 302,
+    })
+    expect(mockReviewSiteRedirect).toHaveBeenCalledWith({
+      hostId: 'host-1',
+      ruleId: 'r2',
+      source: '/secure-document-access',
+      destination: 'https://temps-juenes.com/',
+      host: SITE,
+      org: orgPlan,
+      orgId: 'org-1',
+    })
+  })
+
+  it.each(['held', 'rejected'] as const)('a %s rule does not fire, and is not counted', async (outcome) => {
+    reviewOutcome = outcome
+    expect(await resolveRedirect(SITE, 'secure-document-access')).toBeNull()
+    expect(writes).toEqual([])
+  })
+
+  it('reads the host itself when the hook handed over only its id', async () => {
+    await resolveRedirect(HOST, 'secure-document-access')
+    expect(mockReviewSiteRedirect).toHaveBeenCalledWith(expect.objectContaining({ host: undefined }))
+  })
+
+  it('never asks about a rule that stays on the site', async () => {
+    ruleDocs.length = 0
+    ruleDocs.push({ id: 'r1', data: { enabled: true, source: '/old', destination: '/new', statusCode: 301 } })
+    expect(await resolveRedirect(SITE, 'old')).not.toBeNull()
+    expect(mockReviewSiteRedirect).not.toHaveBeenCalled()
   })
 })

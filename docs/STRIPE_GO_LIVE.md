@@ -312,16 +312,27 @@ subscription product, Stripe records them and charges no one.
    **A billed page view gained a second cost term on 2026-10-01 (AGL-1879):
    published $0.21 → $0.36 per 1,000.** `perPageView` prices a view's weight;
    Vercel also bills CDN requests once the team's 10M included requests are
-   spent ($2.00 per million in the cheapest region), and a cold load of the
-   published page makes 57 of them, so the request allowance runs out at
-   about 175,000 views a month platform-wide — long before the transfer
-   allowance does. `PAGE_VIEW_CDN_REQUEST_COST_USD` in `plan-entitlements.ts`
-   ($0.00011538462, 57.7 requests at $2.00/M) is added to `perPageView` for
-   views billed past a band (`METERED_OVERAGE_COST_USD`), and the sum is
-   marked up 1.3. Neither rate table carries it: the weight term stays
-   identical in both, and the COGS model still sizes the bands on weight. No
-   Stripe object changes — the meter value is cents and both metered prices
-   are $0.01/unit.
+   spent, and a cold load of the published page makes 57 of them, so the
+   request allowance runs out at about 175,000 views a month platform-wide —
+   long before the transfer allowance does. `PAGE_VIEW_CDN_REQUEST_COST_USD`
+   in `plan-entitlements.ts` is added to `perPageView` for views billed past a
+   band (`METERED_OVERAGE_COST_USD`), and the sum is marked up 1.3. Neither
+   rate table carries it: the weight term stays identical in both, and the
+   platform COGS model (`orgMonthlyCogsUsd`) prices views on weight alone.
+
+   **The same day every Vercel-billed input moved to Vercel's DEAREST region
+   (AGL-3444): published page views $0.36 → $0.70 and form submissions
+   $0.065 → $0.07 per 1,000.** The CDN bills transfer ($0.15–$0.35/GB) and
+   requests ($2.00–$3.20/M) in the region that serves a visitor, and
+   functions bill active CPU ($0.128–$0.221/hr) and memory by region, so
+   "at cost + 30%" is held at the dearest end: `perPageView` $0.00035471473
+   (the 2026-09-09 peg plus $0.20/GB more transfer on the 1012.8 KB basis),
+   `PAGE_VIEW_CDN_REQUEST_COST_USD` $0.00018374681 (57.42 requests at $3.20/M,
+   pinned so ($0.354715 + $0.183747) × 1.3 is exactly $0.70),
+   `perFormSubmission` $0.000053846154 (the invocation at the dearest region,
+   ×1.3 rounded up to $0.07). The included bands are sized on the same costs.
+   No Stripe object changes — the meter value is cents and both metered
+   prices are $0.01/unit, and no Stripe object carries a band.
 
    **Re-validate this table once a real paid month exists**, i.e. once the
    Vercel team is off Hobby and GCP usage clears the free tier. Until then

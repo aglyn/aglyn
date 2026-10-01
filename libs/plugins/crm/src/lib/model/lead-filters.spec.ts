@@ -40,11 +40,16 @@ import {
  * every lead carries.
  */
 describe('leadQueryClause', () => {
-  it('asks Open as the two open statuses, and a status as itself', () => {
+  it('asks Open as the three open statuses, and a status as itself', () => {
+    expect(leadQueryClause({ field: 'status', op: 'equals', value: 'nurturing' })).toEqual({
+      field: 'status',
+      op: 'equals',
+      value: 'nurturing',
+    })
     expect(leadQueryClause({ field: 'status', op: 'equals', value: 'open' })).toEqual({
       field: 'status',
       op: 'isAnyOf',
-      value: 'new,working',
+      value: 'new,nurturing,working',
     })
     expect(leadQueryClause({ field: 'status', op: 'equals', value: 'qualified' })).toEqual({
       field: 'status',
@@ -54,7 +59,7 @@ describe('leadQueryClause', () => {
     expect(leadQueryClause({ field: 'status', op: 'isAnyOf', value: 'open,new' })).toEqual({
       field: 'status',
       op: 'isAnyOf',
-      value: 'new,working',
+      value: 'new,nurturing,working',
     })
     expect(leadQueryClause({ field: 'status', op: 'equals', value: 'lost' })).toEqual({
       refused: 'lost is not a lead status',

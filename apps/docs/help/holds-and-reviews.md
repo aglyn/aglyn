@@ -83,6 +83,9 @@ The latest version of a page was held before visitors saw it.
 - **Templates.** A collection's entry or list template is named with the route it serves,
   such as `/videos/:slug`. While a template with no earlier version is held, its pages show
   the site's built-in design for that collection instead.
+- **Redirects.** A redirect that sends visitors to another website can be held the same
+  way, and is named by the path it answers. While it is held it does not redirect: visitors
+  see whatever your site has at that address. Check where it points in **Redirects**.
 
 ### Where you see it {#where-held-pages-show}
 

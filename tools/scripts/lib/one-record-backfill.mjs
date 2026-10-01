@@ -104,12 +104,12 @@ export function facetsOf(contact) {
 /** `crmLeadStatus`, restated: an absent or unknown status is `new`. */
 export function leadStatus(lead) {
   const status = lead?.status
-  return ['new', 'working', 'qualified', 'unqualified'].includes(status) ? status : 'new'
+  return ['new', 'nurturing', 'working', 'qualified', 'unqualified'].includes(status) ? status : 'new'
 }
 
 /** An open lead: neither converted nor closed. */
 export function leadIsOpen(lead) {
-  return Boolean(lead) && !lead.convertedContactId && ['new', 'working'].includes(leadStatus(lead))
+  return Boolean(lead) && !lead.convertedContactId && ['new', 'nurturing', 'working'].includes(leadStatus(lead))
 }
 
 /**

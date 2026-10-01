@@ -9,7 +9,8 @@ description: Offer your site in multiple languages with locale variants, hreflan
 Reach a wider audience by publishing your site in more than one language.
 
 :::info Plan availability
-**Paid**. Multilingual is available on paid tiers.
+**Business** and above. Multilingual is on Business, Scale, Advanced, Agency and
+Enterprise.
 :::
 
 ![The Languages card in Setup → Basic details](/img/multilingual/setup-languages.png)

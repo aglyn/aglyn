@@ -23,6 +23,8 @@
  * these helpers so they can't disagree.
  */
 
+import { screenSiteRedirect } from '@aglyn/shared-util-email/hosted-page-screen'
+import { signalsThatHold } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import {
   compileLinearPattern,
   explainLinearPattern,
@@ -112,12 +114,23 @@ export function compileRedirectRegex(source: string): LinearPattern | null {
   return compileLinearPattern(anchorSource(pattern))
 }
 
-/** Validation for a v2 rule; returns a problem string or null when ok. */
-export function validateRedirectRule(rule: {
-  kind?: string
-  source: string
-  destination: string
-}): string | null {
+/**
+ * Validation for a v2 rule; returns a problem string or null when ok.
+ *
+ * `workspace` names the site's own hosts, so a destination on one of them
+ * is never read as somebody else's.
+ */
+export function validateRedirectRule(
+  rule: {
+    kind?: string
+    source: string
+    destination: string
+  },
+  workspace?: {
+    ownNames?: readonly (string | null | undefined)[]
+    ownDomains?: readonly (string | null | undefined)[]
+  },
+): string | null {
   const kind = rule.kind ?? 'exact'
   if (!(REDIRECT_KINDS as readonly string[]).includes(kind)) {
     return 'Unknown match mode'
@@ -140,10 +153,34 @@ export function validateRedirectRule(rule: {
   } else if (!normalizeRedirectSource(rule.source)) {
     return 'Enter a site path like /old-page'
   }
-  if (!normalizeRedirectDestination(rule.destination)) {
+  const destination = normalizeRedirectDestination(rule.destination)
+  if (!destination) {
     return 'Destinations are internal paths or https:// URLs'
   }
+  if (isLookalikeRedirectDestination(destination, workspace)) {
+    return "That destination's address looks like another company's website, so it can't be used"
+  }
   return null
+}
+
+/**
+ * Does this destination wear a brand it is not (AGL-3447)? The phishing
+ * screen's STRONG tier, the one that holds for every workspace whatever its
+ * age: `https://sharepoint-files.example.top/`, `https://paypa1.com/`. Read
+ * the same at save, where the console refuses it, and on the serve path,
+ * where `reviewSiteRedirect` holds it. The softer rules need the workspace's
+ * age, which only the serve path reads.
+ */
+export function isLookalikeRedirectDestination(
+  destination: string,
+  workspace?: {
+    ownNames?: readonly (string | null | undefined)[]
+    ownDomains?: readonly (string | null | undefined)[]
+  },
+): boolean {
+  if (!isExternalRedirectDestination(destination)) return false
+  const { signals } = screenSiteRedirect({ source: '', destination, ...workspace })
+  return signalsThatHold(signals, { ageDays: null }).length > 0
 }
 
 /**

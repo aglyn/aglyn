@@ -8,8 +8,8 @@ description: Sell physical, digital, and service products with a full catalog, o
 
 Aglyn commerce sells from **your own Stripe account**: buyers pay you
 directly, and Aglyn collects a per-sale platform fee set by your plan (see
-[Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md) — higher plans reduce
-fees to 0%).
+[Platform fees](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees) — the fee
+falls as you upgrade, to 0% on physical goods from Pro and on everything from Advanced).
 
 ```mermaid
 sequenceDiagram
@@ -25,8 +25,10 @@ sequenceDiagram
 ```
 
 :::info Plan availability
-**Paid**. Starter sells up to 100 products (2% physical / 5% digital fee);
-Pro and Business raise limits and remove fees.
+**Paid**. Starter sells up to 100 products (2% physical / 5% digital fee).
+Higher plans raise the product limit and lower the fee: physical goods carry no
+platform fee from Pro up, while digital and service products carry 3% on Pro, 2% on
+Business, 1% on Scale and 0% from Advanced up.
 :::
 
 ![The products hub](/img/commerce/products-page.png)

@@ -111,8 +111,7 @@ add-ons.
 **Aglyn AI** is the generative add-on: with it on, the assistant builds for you —
 pages, components, emails, campaigns, products and more — rather than only answering
 questions about them. It is bought once for the workspace, on any paid plan, and
-applies to every member who has the permission to generate. On Starter it also
-unlocks the guided AI assist that Pro and up already include. What each door does is
+applies to every member who has the permission to generate. What each door does is
 under [Aglyn AI](../../ai/overview.md).
 
 - **Everything it builds is a draft.** The add-on cannot publish a page, change a live
@@ -133,7 +132,7 @@ under [Aglyn AI](../../ai/overview.md).
 - **Starter widens a band it already has.** Starter includes its own monthly AI
   credits, and credits past them are sold at the same rate as Pro — so the stop switch
   and the ceiling are on its billing page with or without the add-on. Adding Aglyn AI
-  increases the band and opens generative building and the guided assist.
+  increases the band and opens generative building.
 - **Free workspaces** do not buy it. They generate against the
   [monthly taste](overview.md#free-ai-credits) instead, which stops at its band and
   never bills.

@@ -166,6 +166,7 @@ import {
   type EmailRampVerdict,
 } from '@aglyn/shared-util-email'
 import { campaignBatchPlan } from './campaign-batch-plan'
+import { stampRecordEmailReach } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 /*
  * The List-Unsubscribe setting sequences share (AGL-3307), from its LEAF
  * module: the specs that reach this file spread the real barrel under their
@@ -2869,6 +2870,10 @@ export async function performCampaignSend(
    */
   if (options.recordCampaign !== false) {
     await recordCampaignReach(sends.doc(campaignId), reached)
+    // The record system hears who it reached, so a lead nobody had touched
+    // moves to Nurturing (AGL-3446). A test send reached nobody's lead, so it
+    // is left out with the reach record. Never throws.
+    await stampRecordEmailReach({ orgId, hostId, emails: reached })
     /*
      * And who it decided NOT to mail, under a field of its own.
      *

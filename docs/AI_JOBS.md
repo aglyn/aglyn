@@ -520,7 +520,11 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 - **The job.** A kind that builds only some plans narrows that
   (`AI_JOB_PLAN_SCOPES` in the plan step): a page job builds the layout, forms and
   components its plan creates (`AI_PAGE_CREATE_KINDS`, AGL-3031) and a site scaffold
-  its layout, form and palette change, and each refuses a plan of the wrong shape.
+  its layout, form and palette change, and each refuses a plan of the wrong shape. A
+  template, layout, component, form or email job builds its own record and what that
+  record can place (`AI_JOB_CREATE_KINDS`, AGL-3143 §15): a template, a layout and a
+  component build the forms and components their plan creates, and a form or an email
+  design, which place neither, build nothing else.
 - **The request.** The lines ride the plan's USER turn (`aiJobPlanPrompt`), never a
   system block: they are per workspace and per site, and the doctrine's cached prefix
   stays one entry for the platform. The doctrine states the rule once — rule 7,
@@ -636,7 +640,13 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   which every kind's request caches: written there it cost 40 tokens of the shared prefix
   — 2,980 to 3,020 — which is one credit of the Free page's 300-credit wall and takes the
   room it keeps for a re-asked section from 45 to 44. A page job does not pay for a
-  sentence about templates. The count is read as generously as the tree allows — the widest
+  sentence about templates. The line lists only the tokens a reader sees
+  (`aiTemplateShownTokens`, AGL-3143 §16): offered the whole catalog, a live plan
+  (job `2xD9Y7NayF`, 2026-10-01) promised `{{entry.slug}}`, `{{collection.slug}}` and
+  `{{entry.publishedAt}}`, and its build kept the promise the only way a slug can be
+  kept, printing "entry slug: {{entry.slug}} — published {{entry.publishedAt}}" on
+  every article. A slug or that timestamp a plan still names is no promise
+  (`aiPlannedTemplateTokens` skips it) and never reaches the build as a field. The count is read as generously as the tree allows — the widest
   fan-out, or the largest group of one shape — and speaks only when the section is
   SHORT, so every reading that finds more items makes it quieter; a section whose items
   a collection fills at render is not counted at all, which is what rule 8 asked for.
@@ -651,6 +661,18 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   group of four repeated things anywhere in a page whose plan promised a section of four
   — is what can still be settled. A screen holds no app bar and no footer, which are its
   layout's, so what is counted is the page's own content.
+- **A short source is built from, not copied (AGL-3143 §14).** Each copy branch first
+  asks its own review of the SOURCE — the page step did already; the layout, template,
+  component and form steps now do too. A source read and found short of the plan can
+  only be copied into a certain refusal, and Try again would copy the same thing:
+  measured on 2026-09-22 (job `Pq3pgvMH0D`), "copy the interior layout and add a
+  sidebar" could only end in review. So no copy is minted and the record is built: a
+  layout or a template is shown the source's tree as its start (`aiCopySourceLines`,
+  at most `AI_COPY_SOURCE_MAX_CHARS`), so the firm's header and footer carry over; a
+  form is told every field the source collects; a component is built from the plan.
+  The build is then held to the plan by the step's own checks, with their one re-ask. A
+  source this step cannot read still copies, and the review after the copy answers for
+  it.
 - **Refused before a Confirm.** A plan that passes is asked the kind's admission with
   the plan, as the resume door asks it. A refusal fails the job with the door's
   sentence before any member is shown a Confirm: its plan is not kept, and it holds
@@ -932,8 +954,13 @@ confirmed `job.plan` and builds exactly one draft.
   ride `extend`: a layout places every component the confirmed plan reuses
   and never draws navigation the site keeps as a component (rules 7 and 1); a
   template binds only the tokens its page fills, binds its h1 to the
-  subject's title, and places no block that fills itself only on another
-  subject's page (rule 8).
+  subject's title, places no block that fills itself only on another
+  subject's page, and prints no link or picture token, slug or timestamp in
+  its copy (`printed-token`, rule 8, AGL-3143 §16). Copy is a prop the palette
+  gives the `text` role, read as words where it holds more than one token or
+  is an element's `children`; a block handed one token whole (Entry Meta's
+  `avatarImage`, a Video's `uploadDate`) and a markdown link's target are not
+  printed.
 - **What a template is for.** `inputs.subject` is `entry` (with
   `inputs.collectionId`, a content collection), `product` or `author`
   (`src/lib/model/ai-template-subjects.ts`). The tokens are the besigner
@@ -1231,6 +1258,20 @@ nothing itself.
   `aiSiteBuiltRefs` with `aiSiteUnitJob` resolve `new:<name>` to what was built. A
   creation unit is told the plan's reuse less what the plan's screens place
   themselves, so a layout is never refused for leaving out a card a page places.
+- **And with a template, layout or component job (AGL-3143 §15).** Each of those
+  steps built only the first creation of its own kind, so a plan that also created a
+  card left it unbuilt and still reported `Done` — measured live on 2026-10-01, job
+  `2xD9Y7NayF`, whose confirmed plan read "Creates the component
+  related-article-card" and made none. The registered runner is now the kind's step
+  wrapped by `aiBuildingPlanCreations` (`jobs/ai-job-plan-creations.ts`): the plan's
+  other creations are built first, a form before a component, one a pass, through
+  these same pieces; then the kind's own step runs on the plan with the built records
+  added to its reuse (`aiJobWithBuiltCreations`), so the template's and the layout's
+  reuse check (rule 7) holds the record to placing the card its plan created. A unit
+  is told none of the components the plan reuses: those are the job's own record's to
+  place. The confirm door refuses a creation the kind does not build, one no step here
+  builds, and one the workspace may no longer make (`aiJobPlanCreationsRefusal`), and
+  the estimate counts the job's own record and each creation it builds.
 - **The estimate is the guard rail.** `aiPlanCreditEstimate` counts the plan's
   passes — one a section, one more a page, one a creation — at the machine's
   nominal credits per step, and the plan proposal shows it beside the button

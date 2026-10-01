@@ -32,10 +32,13 @@
  * leads with and the cheaper of the two a customer can choose — NET of
  * Stripe's processing fee, with every band at 100% and every cost the
  * platform can name counted: the metered axes `orgMonthlyCogsUsd` prices,
- * the assist band, and the two CRM terms the 2026-09-05 decision introduced
+ * the assist band, the two CRM terms the 2026-09-05 decision introduced
  * (a seat a month for every collaborator the tier admits, and the whole day
- * spent at the one-to-one email cap thirty times over). The 2026-09-07
- * pricing decision fixed all four of those choices.
+ * spent at the one-to-one email cap thirty times over), and the CDN requests
+ * every included page view makes once the platform is past its hosting
+ * plan's request allowance, at the dearest region's price. The 2026-09-07
+ * pricing decision fixed the first four of those choices and AGL-3444 the
+ * fifth.
  *
  * ## What the guard that stood here could not see
  *
@@ -60,6 +63,25 @@
  * runs at `perRun`, took the last of the room the same day — and the
  * `MUTATION` cases below prove the shipped bands are what changed the
  * verdict.
+ *
+ * ## At the CDN's dearest region (AGL-3444)
+ *
+ * The CDN bills in the region that serves a visitor: transfer at $0.15 to
+ * $0.35 a GB, and requests past the hosting plan's 10,000,000 a month at
+ * $2.00 to $3.20 a million. A band cannot choose where its visitors are, and
+ * the rule here is stated at any utilization, so an included gigabyte is
+ * priced where the CDN is dearest: $0.36724 of weight (`perPageView`, its
+ * transfer at $0.35) and $0.19024 of requests (`PAGE_VIEW_CDN_REQUEST_COST_
+ * USD`, 57.42 a view at $3.20) — $0.55748 all in, against the $0.16724 the
+ * bands were sized on until 2026-10-01. The Vercel compute inside a form
+ * submission and a run is priced at the dearest region too. Every paid band
+ * is cut to what the annual price carries at those figures: Starter 50 → 20
+ * GB, Pro 125 → 35, Business 185 → 55, Scale 290 → 90, Advanced 345 → 105,
+ * Agency 1,540 → 485. Each is the largest multiple of 5 GB that holds; the
+ * ladder sits between 0.1% and 10.2% at the annual price, and
+ * `MUTATION: at the bands sold until 2026-10-01` holds what the old bands —
+ * and the first re-size of the same day, which priced the transfer at the
+ * cheapest region — read across the range.
  *
  * ## A floor AND a pin
  *
@@ -174,6 +196,49 @@ const VIEWS_PER_GB = (1024 * 1024 * 1024) / ESTIMATED_PAGE_TRANSFER_BYTES
 const COST_PER_GB_USD = VIEWS_PER_GB * ORG_COGS_UNIT_RATES_USD.perPageView
 
 /**
+ * The CDN's prices, at each end of its regional range: transfer per GB and
+ * requests per million past the hosting plan's monthly allowance. The model
+ * prices both at the DEAREST end — `perPageView` carries the transfer at
+ * $0.35 and `PAGE_VIEW_CDN_REQUEST_COST_USD` the requests at $3.20 — because
+ * the CDN bills in the region that serves a visitor and the rule is stated
+ * at any utilization. The cheapest end is what the instruments below read the
+ * same bands at, so the room the dearest-region sizing leaves is a figure.
+ */
+const CDN_PRICE_RANGE_USD = {
+  transferPerGb: { cheapest: 0.15, dearest: 0.35 },
+  requestsPerMillion: { cheapest: 2.0, dearest: 3.2 },
+} as const
+
+/**
+ * What the CDN requests behind ONE included page view cost — the shipped
+ * constant, at the dearest region. NOT in `ORG_COGS_UNIT_RATES_USD`, for the
+ * reason the CRM seat rate below is not: the platform model has no request
+ * meter for it to multiply, and the constant is not a rate that table may
+ * hold (see `PAGE_VIEW_CDN_REQUEST_COST_USD`).
+ */
+const REQUEST_COST_PER_VIEW_USD = PAGE_VIEW_CDN_REQUEST_COST_USD
+
+/** The same requests, per GB of included bandwidth. */
+const REQUEST_COST_PER_GB_USD = VIEWS_PER_GB * REQUEST_COST_PER_VIEW_USD
+
+/**
+ * The same gigabyte at the CHEAPEST region: its weight with the transfer at
+ * $0.15 a GB instead of $0.35 — a GB of included bandwidth IS a GB of
+ * transfer, so the difference is exactly the price gap — and its requests at
+ * $2.00 a million instead of $3.20.
+ */
+const CHEAPEST_WEIGHT_PER_GB_USD =
+  COST_PER_GB_USD -
+  (CDN_PRICE_RANGE_USD.transferPerGb.dearest - CDN_PRICE_RANGE_USD.transferPerGb.cheapest)
+const CHEAPEST_REQUEST_COST_PER_GB_USD =
+  REQUEST_COST_PER_GB_USD *
+  (CDN_PRICE_RANGE_USD.requestsPerMillion.cheapest /
+    CDN_PRICE_RANGE_USD.requestsPerMillion.dearest)
+
+/** What one GB of included bandwidth costs all in: its weight and its requests. */
+const ALL_IN_COST_PER_GB_USD = COST_PER_GB_USD + REQUEST_COST_PER_GB_USD
+
+/**
  * What one org member costs to serve for a month of CRM use — about 60,000
  * reads and 10,000 writes at nam5 list prices, ≈$0.054, carried as $0.06.
  * NOT in `ORG_COGS_UNIT_RATES_USD`, deliberately: the rollup has no
@@ -255,9 +320,25 @@ function crmDecisionTerms(plan: OrgPlan): Record<string, number> {
   }
 }
 
+/**
+ * The CDN requests the tier's included bandwidth makes past the hosting
+ * plan's allowance, at the dearest region (AGL-3444).
+ *
+ * Outside the platform model for the reason the CRM terms are: the rollup
+ * records page views, and `orgMonthlyCogsUsd` prices them at their weight —
+ * there is no request meter for it to multiply. The band is the SAME
+ * `bandwidthGb` the `bandwidth` term reads, so the two move together and
+ * `marginAtCostPerGb` replaces them together.
+ */
+function cdnRequestTerms(plan: OrgPlan): Record<string, number> {
+  return {
+    cdnRequests: PLAN_ENTITLEMENTS[plan].bandwidthGb * REQUEST_COST_PER_GB_USD,
+  }
+}
+
 /** Every cost a tier's bands imply, per month, at full utilization. */
 function tierCostTerms(plan: OrgPlan): Record<string, number> {
-  return { ...bandCostTerms(plan), ...crmDecisionTerms(plan) }
+  return { ...bandCostTerms(plan), ...crmDecisionTerms(plan), ...cdnRequestTerms(plan) }
 }
 
 /** The measured total, before the per-site floor. */
@@ -325,27 +406,31 @@ function marginAtBandwidth(plan: OrgPlan, bandwidthGb: number, interval: Interva
 }
 
 /**
- * The margin the tier would carry if a gigabyte of included bandwidth cost
- * `costPerGbUsd` — the instrument for every hypothetical about the PAIR.
+ * The margin the tier would carry if a gigabyte of included bandwidth WEIGHED
+ * `costPerGbUsd` and its requests cost `requestsPerGbUsd` — the instrument for
+ * every hypothetical about the PAIR, and about the CDN's regional range.
  *
  * A page weight enters this model through exactly one number, and it is not
  * `perPageView`: it is the cost of a gigabyte, which the rate and
  * `ESTIMATED_PAGE_TRANSFER_BYTES` produce together. Mutating the rate alone
  * would model a state where the two constants disagree, which is a bug rather
  * than a page — so the hypotheticals below move the quotient, and the one
- * case that deliberately models the disagreement says so in its name.
+ * case that deliberately models the disagreement says so in its name. The
+ * request term rides on the same band, so both are replaced together.
  */
 function marginAtCostPerGb(
   plan: OrgPlan,
   costPerGbUsd: number,
   interval: Interval,
   bandwidthGb = PLAN_ENTITLEMENTS[plan].bandwidthGb,
+  requestsPerGbUsd = REQUEST_COST_PER_GB_USD,
 ): number {
   const terms = tierCostTerms(plan)
   const cost =
     Object.values(terms).reduce((a, b) => a + b, 0) -
-    terms.bandwidth +
-    bandwidthGb * costPerGbUsd
+    terms.bandwidth -
+    terms.cdnRequests +
+    bandwidthGb * (costPerGbUsd + requestsPerGbUsd)
   const price = listPriceUsd(plan, interval)
   return (netPriceUsd(plan, interval) - Math.max(cost, INFRA_COGS_PER_SITE_USD * PLAN_ENTITLEMENTS[plan].hostLimit)) / price
 }
@@ -401,38 +486,42 @@ describe('the model is reading real bands, real rates and the real fee', () => {
     expect(new Set(costs).size).toBe(costs.length)
   })
 
-  it('names bandwidth as the dominant BOUNDED term on five of six tiers', () => {
+  it('names bandwidth — weight and requests together — as the dominant BOUNDED term on every tier', () => {
     // Stated as a fact rather than left implicit: page views are the largest
-    // finite line almost everywhere, which is why the bands that had to come
+    // finite line on every tier, which is why the bands that had to come
     // down were the bandwidth ones and nothing else could have carried it.
     //
-    // Advanced is the exception and is named rather than excused. Its campaign
-    // email band is $58.50 a month against $57.70 of bandwidth — 1.4% apart —
-    // and the two changed places when the pairing was restored and the
-    // bandwidth term fell 41%. Pinned as the whole map so a tier changing its
-    // dominant axis has to come here and say so.
+    // A gigabyte is two terms here — what it weighs and the CDN requests it
+    // makes — and one band, so they are read as one line. Pinned as the
+    // whole map so a tier changing its dominant axis has to come here and
+    // say so.
+    const withTrafficAsOneLine = (plan: OrgPlan): Record<string, number> => {
+      const { bandwidth, cdnRequests, ...rest } = tierCostTerms(plan)
+      return { ...rest, traffic: bandwidth + cdnRequests }
+    }
     expect(
       Object.fromEntries(
         PAID.map((plan) => [
           plan,
-          Object.entries(tierCostTerms(plan))
+          Object.entries(withTrafficAsOneLine(plan))
             .filter(([, cost]) => Number.isFinite(cost))
             .sort((a, b) => b[1] - a[1])[0][0],
         ]),
       ),
     ).toEqual({
-      starter: 'bandwidth',
-      pro: 'bandwidth',
-      business: 'bandwidth',
-      scale: 'bandwidth',
-      advanced: 'emailSends',
-      agency: 'bandwidth',
+      starter: 'traffic',
+      pro: 'traffic',
+      business: 'traffic',
+      scale: 'traffic',
+      advanced: 'traffic',
+      agency: 'traffic',
     })
-    // …and on Advanced the two are close enough that it is still bandwidth
-    // that decides the tier: a 10% move on the band moves more than a 10%
-    // move on any other single axis except email.
-    const advanced = tierCostTerms('advanced')
-    expect(advanced.bandwidth / advanced.emailSends).toBeGreaterThan(0.95)
+    // Advanced is the closest call: its campaign email band is $58.50 a
+    // month against $58.54 of traffic, so a 10% move on the band still moves
+    // at least as much as a 10% move on any other single axis.
+    const advanced = withTrafficAsOneLine('advanced')
+    expect(advanced.traffic / advanced.emailSends).toBeGreaterThan(1)
+    expect(advanced.traffic / advanced.emailSends).toBeLessThan(1.1)
   })
 
   /**
@@ -447,24 +536,65 @@ describe('the model is reading real bands, real rates and the real fee', () => {
   it('prices a gigabyte from two constants that describe the SAME page', () => {
     // The two halves, each recovered as a page weight in KB. A tenth of a KB
     // is the grid `check:page-view-rate` compares them on, and this is the
-    // same comparison inside the model that spends the result.
-    const impliedByRate =
-      (ORG_COGS_UNIT_RATES_USD.perPageView * 627) / 0.0001
+    // same comparison inside the model that spends the result: the rate over
+    // the calibration's per-KB cost ($0.0001 for 627 KB) with its transfer
+    // share at the dearest region ($0.20 a GB more than the $0.15 it was
+    // measured at).
+    const usdPerKb =
+      0.0001 / 627 +
+      (CDN_PRICE_RANGE_USD.transferPerGb.dearest -
+        CDN_PRICE_RANGE_USD.transferPerGb.cheapest) /
+        (1024 * 1024)
+    const impliedByRate = ORG_COGS_UNIT_RATES_USD.perPageView / usdPerKb
     expect(Math.round((ESTIMATED_PAGE_TRANSFER_BYTES / 1024) * 10) / 10).toBe(
       1012.8,
     )
     expect(Math.round(impliedByRate * 10) / 10).toBe(1012.8)
-    // …and the quotient they make, which is what a band is actually sized
-    // against. The 2026-09-07 resize was argued at $0.17476; the paired
-    // constants price it slightly under that, which is why the bands sized
-    // then still hold and none of them moved.
-    expect(COST_PER_GB_USD).toBeCloseTo(0.16724, 5)
-    expect(COST_PER_GB_USD).toBeLessThan(0.17476)
+    // …and the quotient they make, which is a gigabyte's WEIGHT at the
+    // dearest region: $0.20 over the $0.16724 the cheapest priced, because a
+    // gigabyte of included bandwidth is a gigabyte of transfer.
+    expect(COST_PER_GB_USD).toBeCloseTo(0.36724, 5)
+    expect(COST_PER_GB_USD - CHEAPEST_WEIGHT_PER_GB_USD).toBeCloseTo(0.2, 12)
+    expect(CHEAPEST_WEIGHT_PER_GB_USD).toBeCloseTo(0.16724, 5)
     // The metered table is the same rate, so the meter a customer is billed
     // on and the model that sizes their band cannot part.
     expect(METERED_UNIT_RATES_USD.perPageView).toBe(
       ORG_COGS_UNIT_RATES_USD.perPageView,
     )
+  })
+
+  /**
+   * THE REQUEST TERM, READ AS ONE NUMBER (AGL-3444).
+   *
+   * Past the hosting plan's request allowance the same gigabyte also costs
+   * the CDN requests its 1,035 views make: 57.42 a view — the measured 57,
+   * pinned up so the billed view lands on a whole cent — at the dearest
+   * region's $3.20 per million. All in, the gigabyte the bands are argued on
+   * costs $0.55748.
+   */
+  it('prices a gigabyte\'s requests at the dearest region, from the billed view\'s own term', () => {
+    // The billed view's term IS the dearest region's: one constant prices the
+    // overage and sizes the bands.
+    expect(PAGE_VIEW_CDN_REQUEST_COST_USD).toBe(0.00018374681)
+    expect(PAGE_VIEW_CDN_REQUEST_COST_USD / 3.2e-6).toBeCloseTo(57.42, 2)
+    expect(PAGE_VIEW_CDN_REQUEST_COST_USD).toBeGreaterThan(57 * 3.2e-6)
+    expect(REQUEST_COST_PER_VIEW_USD).toBe(PAGE_VIEW_CDN_REQUEST_COST_USD)
+    expect(REQUEST_COST_PER_GB_USD).toBeCloseTo(0.19024, 5)
+    // The cheapest region is the same requests at $2.00.
+    expect(CHEAPEST_REQUEST_COST_PER_GB_USD).toBeCloseTo(0.1189, 4)
+    // All in, a gigabyte of included bandwidth costs 3.3× what the weight-only
+    // cheapest-region figure said — which is why the bands came down by more
+    // than half.
+    expect(ALL_IN_COST_PER_GB_USD).toBeCloseTo(0.55748, 5)
+    expect(ALL_IN_COST_PER_GB_USD / CHEAPEST_WEIGHT_PER_GB_USD).toBeCloseTo(3.333, 3)
+    // …and the model carries exactly that on every tier, on the same band
+    // the weight term reads.
+    for (const plan of PAID) {
+      const terms = tierCostTerms(plan)
+      expect(`${plan}: ${(terms.bandwidth + terms.cdnRequests).toFixed(8)}`).toBe(
+        `${plan}: ${(PLAN_ENTITLEMENTS[plan].bandwidthGb * ALL_IN_COST_PER_GB_USD).toFixed(8)}`,
+      )
+    }
   })
 
   it('reads the price NET of Stripe, through the production helper', () => {
@@ -584,7 +714,7 @@ describe('every cost the platform prices has a term here', () => {
     // The ninth axis (2026-09-07). Both run counters were recorded on every
     // rollup and sold on every paid tier, and neither had a rate — so
     // Agency's 3,000,000 runs a month were $36 the model could not see.
-    expect(ORG_COGS_UNIT_RATES_USD.perRun).toBe(0.000012)
+    expect(ORG_COGS_UNIT_RATES_USD.perRun).toBe(0.000013)
     for (const plan of PAID) {
       const entitlements = PLAN_ENTITLEMENTS[plan]
       expect(`${plan}: ${bandCostTerms(plan).runs}`).toBe(
@@ -612,7 +742,7 @@ describe('every cost the platform prices has a term here', () => {
     expect(moved).toEqual(['runs'])
     expect(after.runs - before.runs).toBeCloseTo(1024 * ORG_COGS_UNIT_RATES_USD.perRun, 12)
     // Agency's figure, as a number: the one that read as nothing.
-    expect(bandCostTerms('agency').runs).toBeCloseTo(36, 6)
+    expect(bandCostTerms('agency').runs).toBeCloseTo(39, 6)
   })
 
   it('has one band term per axis on every paid tier, and no orphan term', () => {
@@ -627,21 +757,42 @@ describe('every cost the platform prices has a term here', () => {
     }
   })
 
-  it('carries the two CRM decision terms OUTSIDE the platform model, and no third', () => {
-    // The seat and one-to-one email terms are real cost with no meter behind
-    // them — the platform model cannot price what the rollup does not record
-    // — so they live beside the bridged terms rather than inside it. Named
-    // here, both directions, so a fourth un-bridged term cannot arrive the
-    // way the first three omissions did: silently.
+  it('carries the two CRM decision terms and the CDN request term OUTSIDE the platform model, and no fourth', () => {
+    // The seat, one-to-one email and CDN request terms are real cost with no
+    // meter behind them — the platform model cannot price what the rollup
+    // does not record — so they live beside the bridged terms rather than
+    // inside it. Named here, both directions, so a fourth un-bridged term
+    // cannot arrive the way the first three omissions did: silently.
     expect(Object.keys(crmDecisionTerms('advanced')).sort()).toEqual([
       'crmEmail',
       'crmSeats',
     ])
+    expect(Object.keys(cdnRequestTerms('advanced'))).toEqual(['cdnRequests'])
     for (const plan of PAID) {
       expect(Object.keys(tierCostTerms(plan)).sort()).toEqual(
-        [...Object.keys(bandCostTerms(plan)), 'crmSeats', 'crmEmail'].sort(),
+        [...Object.keys(bandCostTerms(plan)), 'crmSeats', 'crmEmail', 'cdnRequests'].sort(),
       )
       expect(termsWithNoAxis(crmDecisionTerms(plan))).toEqual(['crmEmail', 'crmSeats'])
+      expect(termsWithNoAxis(cdnRequestTerms(plan))).toEqual(['cdnRequests'])
+    }
+    // The request term reads the BANDWIDTH band, and moves with the weight
+    // term and nothing else — one band, two costs.
+    {
+      const entitlements = PLAN_ENTITLEMENTS.advanced as unknown as Record<string, number>
+      const original = entitlements.bandwidthGb
+      const before = tierCostTerms('advanced')
+      let after: Record<string, number>
+      try {
+        entitlements.bandwidthGb = original + 7
+        after = tierCostTerms('advanced')
+      } finally {
+        entitlements.bandwidthGb = original
+      }
+      const moved = Object.keys(after)
+        .filter((key) => after[key] !== before[key])
+        .sort()
+      expect(moved).toEqual(['bandwidth', 'cdnRequests'])
+      expect(after.cdnRequests - before.cdnRequests).toBeCloseTo(7 * REQUEST_COST_PER_GB_USD, 10)
     }
     // Each reads its OWN band and moves nothing else — proved by perturbation
     // on Advanced, where both bands are non-zero.
@@ -815,7 +966,8 @@ describe('what full utilization costs against each price, and where it stops cle
    * customer can choose and the one the page leads with. It held for none of
    * the five upper tiers before the 2026-09-07 band resize; it held for all
    * six after it; it held for none of them while the page-view constants were
-   * unpaired; and it holds for all six again now that they are.
+   * unpaired, nor at the CDN's dearest region at the bands sold until
+   * 2026-10-01; and it holds for all six at the bands sized for that.
    *
    * The offender set is asserted EMPTY and every margin is pinned as a number
    * below, which is stricter than a floor: a band widened, a price cut or a
@@ -847,12 +999,12 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      starter: '$15.51 net of Stripe, vs $11.09 cost',
-      pro: '$37.84 net of Stripe, vs $36.76 cost',
-      business: '$96.1 net of Stripe, vs $94.44 cost',
-      scale: '$173.78 net of Stripe, vs $170.15 cost',
-      advanced: '$290.3 net of Stripe, vs $283.70 cost',
-      agency: '$1018.55 net of Stripe, vs $991.56 cost',
+      starter: '$15.51 net of Stripe, vs $13.88 cost',
+      pro: '$37.84 net of Stripe, vs $35.38 cost',
+      business: '$96.1 net of Stripe, vs $94.57 cost',
+      scale: '$173.78 net of Stripe, vs $173.52 cost',
+      advanced: '$290.3 net of Stripe, vs $289.13 cost',
+      agency: '$1018.55 net of Stripe, vs $1016.99 cost',
     })
   })
 
@@ -890,12 +1042,12 @@ describe('what full utilization costs against each price, and where it stops cle
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'year'))]),
       ),
     ).toEqual({
-      starter: [84.4, 79.6, 62.3, 27.6],
-      pro: [81.6, 73.5, 49.9, 2.8],
-      business: [76.9, 73.2, 49.4, 1.7],
-      scale: [80.3, 73.3, 49.6, 2],
-      advanced: [80.4, 73.4, 49.6, 2.2],
-      agency: [78, 73.5, 49.8, 2.6],
+      starter: [84.4, 75.3, 53.6, 10.2],
+      pro: [81.6, 74.3, 51.7, 6.3],
+      business: [76.9, 73.2, 49.3, 1.5],
+      scale: [80.3, 72.8, 48.6, 0.1],
+      advanced: [80.4, 72.9, 48.7, 0.4],
+      agency: [78, 72.9, 48.6, 0.1],
     })
     // The 3% column does not move when a unit rate does, and that is not a
     // rounding coincidence. At 3% of every band the per-site FLOOR governs
@@ -915,12 +1067,12 @@ describe('what full utilization costs against each price, and where it stops cle
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'month'))]),
       ),
     ).toEqual({
-      starter: [87.9, 84.8, 73.7, 51.6],
-      pro: [85.9, 80.2, 63.8, 30.9],
-      business: [82.5, 79.9, 62.9, 28.9],
-      scale: [84.9, 79.9, 62.8, 28.6],
-      advanced: [84.5, 79.2, 61.5, 25.9],
-      agency: [81.7, 78, 58.9, 20.7],
+      starter: [87.9, 82, 68.2, 40.4],
+      pro: [85.9, 80.8, 65, 33.4],
+      business: [82.5, 79.9, 62.9, 28.8],
+      scale: [84.9, 79.6, 62.1, 27.3],
+      advanced: [84.5, 78.9, 60.8, 24.6],
+      agency: [81.7, 77.5, 57.9, 18.8],
     })
   })
 
@@ -972,14 +1124,13 @@ describe('what full utilization costs against each price, and where it stops cle
   it('clears 70% on every tier at the realistic 25% band, on both intervals', () => {
     expect(tiersUnderFloor(PAID, 0.25, 0.7, 'year')).toEqual([])
     expect(tiersUnderFloor(PAID, 0.25, 0.7, 'month')).toEqual([])
-    // CONTROL: a floor half a point above where the ladder actually sits finds
-    // every rung but Starter, so the green above is a measurement rather than
-    // a detector stuck on "nothing".
-    expect(tiersUnderFloor(PAID, 0.25, 0.74, 'year').sort()).toEqual([
+    // CONTROL: a floor inside the half point the ladder occupies splits it,
+    // so the green above is a measurement rather than a detector stuck on
+    // "nothing".
+    expect(tiersUnderFloor(PAID, 0.25, 0.72, 'year')).toEqual([])
+    expect(tiersUnderFloor(PAID, 0.25, 0.73, 'year').sort()).toEqual([
       'advanced',
       'agency',
-      'business',
-      'pro',
       'scale',
     ])
   })
@@ -987,31 +1138,40 @@ describe('what full utilization costs against each price, and where it stops cle
   /**
    * THE BAND THE LADDER ACTUALLY OCCUPIES.
    *
-   * The five upper rungs sit between 1.7% and 2.8% at the annual price — cut
-   * to what the price carries and no further, because every gigabyte cut is
-   * capacity the customer no longer has. Starter is the outlier at 32.3%: its
-   * band never moved on 2026-09-07 because it was never under water, so it
-   * keeps the room the others spent.
-   *
-   * Restoring the pairing widened the upper rungs from the 0.25–1.5% the
-   * 2026-09-07 decision left them at, because a gigabyte now costs $0.16724
-   * where that decision sized the bands at $0.17476. The headroom is thin by
-   * construction and the exact figures above are what hold it.
+   * Every rung sits between 0.1% and 10.2% at the annual price — each band
+   * is the largest multiple of 5 GB that the price carries once every
+   * included gigabyte is priced at the CDN's dearest region, and no smaller,
+   * because every gigabyte cut is capacity the customer no longer has. The
+   * two small rungs keep more room only because 5 GB is a coarse step on a
+   * small band. The headroom is thin by construction and the exact figures
+   * above are what hold it; the next 5 GB on any rung takes it under.
    */
-  it('runs from 1.7% to 32.3% at 100% annual, and is wider monthly', () => {
+  it('runs from 0.1% to 10.2% at 100% annual, and is wider monthly', () => {
     // The annual ladder, as an ordered floor sweep rather than six literals:
-    // every tier clears zero, none clears 3% but Starter, and Business is the
-    // thinnest rung.
+    // every tier clears zero, Scale and Agency are the thinnest rungs and
+    // Starter the widest.
     expect(tiersUnderFloor(PAID, 1, 0, 'year')).toEqual([])
-    expect(tiersUnderFloor(PAID, 1, 0.015, 'year')).toEqual([])
-    expect(tiersUnderFloor(PAID, 1, 0.018, 'year')).toEqual(['business'])
-    expect(tiersUnderFloor(PAID, 1, 0.03, 'year').sort()).toEqual(
+    expect(tiersUnderFloor(PAID, 1, 0.001, 'year')).toEqual([])
+    expect(tiersUnderFloor(PAID, 1, 0.002, 'year').sort()).toEqual(['agency', 'scale'])
+    expect(tiersUnderFloor(PAID, 1, 0.004, 'year').sort()).toEqual(['advanced', 'agency', 'scale'])
+    expect(tiersUnderFloor(PAID, 1, 0.02, 'year').sort()).toEqual(
+      ['advanced', 'agency', 'business', 'scale'].sort(),
+    )
+    expect(tiersUnderFloor(PAID, 1, 0.07, 'year').sort()).toEqual(
       ['advanced', 'agency', 'business', 'pro', 'scale'].sort(),
     )
-    // …and the monthly ladder clears by twenty points more, with Agency the
+    expect(tiersUnderFloor(PAID, 1, 0.11, 'year').sort()).toEqual([...PAID].sort())
+    // …and the next 5 GB on any rung is under water, which is what makes each
+    // band the largest that holds rather than merely one that does.
+    for (const plan of PAID) {
+      expect(
+        `${plan}: ${marginAtBandwidth(plan, PLAN_ENTITLEMENTS[plan].bandwidthGb + 5, 'year') < 0}`,
+      ).toBe(`${plan}: true`)
+    }
+    // The monthly ladder clears by eighteen points or more, with Agency the
     // thinnest rung there because its bands are the largest.
-    expect(tiersUnderFloor(PAID, 1, 0.2, 'month')).toEqual([])
-    expect(tiersUnderFloor(PAID, 1, 0.21, 'month')).toEqual(['agency'])
+    expect(tiersUnderFloor(PAID, 1, 0.18, 'month')).toEqual([])
+    expect(tiersUnderFloor(PAID, 1, 0.2, 'month')).toEqual(['agency'])
   })
 
   it('CONTROL: the floor is not so low that nothing could fail it', () => {
@@ -1027,24 +1187,34 @@ describe('what full utilization costs against each price, and where it stops cle
    * came from the numbers and not from the arithmetic being broken in the
    * permissive direction.
    *
-   * Every figure is pinned. These are the numbers the decision was made on,
-   * and a mutation that "goes negative" by a different amount than it did
-   * then is a model that changed under the decision.
+   * Every figure is pinned. These are the numbers the decision was made on —
+   * in the model as it stood then, which priced a gigabyte at its weight
+   * alone — and a mutation that "goes negative" by a different amount than
+   * it did then is a model that changed under the decision.
    */
   it('MUTATION: at the bands sold until 2026-09-07, every tier from Pro up was under water at the annual price', () => {
     const before = { pro: 225, business: 400, scale: 700, advanced: 1000, agency: 3000 } as const
+    /**
+     * The model the 2026-09-07 decision was made in: weight at the cheapest
+     * region, no requests.
+     */
+    const weightOnly = (plan: OrgPlan, gb: number, interval: Interval) =>
+      marginAtCostPerGb(plan, CHEAPEST_WEIGHT_PER_GB_USD, interval, gb, 0)
     const was = Object.fromEntries(
       Object.entries(before).map(([plan, gb]) => [
         plan,
-        Number((marginAtBandwidth(plan as OrgPlan, gb, 'year') * 100).toFixed(1)),
+        Number((weightOnly(plan as OrgPlan, gb, 'year') * 100).toFixed(1)),
       ]),
     )
+    // (Recorded as -40.1 / -34.6 / -36.3 / -34.4 / -20.7 on the day; the
+    // dearest-region re-price of the submission and run rates moved the other
+    // terms since, which is the drift this pin exists to show.)
     expect(was).toEqual({
-      pro: -40.1,
-      business: -34.6,
-      scale: -36.3,
-      advanced: -34.4,
-      agency: -20.7,
+      pro: -40.2,
+      business: -35.1,
+      scale: -37.2,
+      advanced: -36,
+      agency: -21.9,
     })
     // …and at the MONTHLY price the same five bands leave between -1.5% and
     // +3.1%, which is a ladder with nothing in it rather than one that pays
@@ -1055,10 +1225,29 @@ describe('what full utilization costs against each price, and where it stops cle
       Object.fromEntries(
         Object.entries(before).map(([plan, gb]) => [
           plan,
-          Number((marginAtBandwidth(plan as OrgPlan, gb, 'month') * 100).toFixed(1)),
+          Number((weightOnly(plan as OrgPlan, gb, 'month') * 100).toFixed(1)),
         ]),
       ),
-    ).toEqual({ pro: 1.1, business: 3.1, scale: 1.1, advanced: -1.5, agency: 1.9 })
+    ).toEqual({ pro: 1, business: 2.8, scale: 0.4, advanced: -2.7, agency: 1 })
+    // At the CDN's dearest region those bands are not close: every one of
+    // them is more than 89 points under water on BOTH intervals.
+    expect(
+      Object.fromEntries(
+        Object.entries(before).map(([plan, gb]) => [
+          plan,
+          [
+            Number((marginAtBandwidth(plan as OrgPlan, gb, 'month') * 100).toFixed(1)),
+            Number((marginAtBandwidth(plan as OrgPlan, gb, 'year') * 100).toFixed(1)),
+          ],
+        ]),
+      ),
+    ).toEqual({
+      pro: [-155.8, -265.3],
+      business: [-109.5, -192.7],
+      scale: [-109.3, -189.8],
+      advanced: [-100.5, -166.5],
+      agency: [-89.1, -133.5],
+    })
     // BOTH WAYS, on the one axis that moved: the shipped band is strictly
     // better than the restored one on BOTH intervals, on every tier, and
     // clears zero where the restored one does not.
@@ -1073,10 +1262,124 @@ describe('what full utilization costs against each price, and where it stops cle
       }
       expect(PLAN_ENTITLEMENTS[plan].bandwidthGb).toBeLessThan(before[plan])
     }
-    // Starter is the CONTROL: its band did not move, so its margin reads the
-    // same through the instrument as through the model.
-    expect(marginAtBandwidth('starter', 50, 'year')).toBeCloseTo(tierMargin('starter', 1, 'year'), 12)
-    expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(50)
+    // CONTROL: at the shipped band the instrument reads exactly what the
+    // model does, on every tier — so the figures above are the bands moving
+    // and nothing else.
+    for (const plan of PAID) {
+      expect(marginAtBandwidth(plan, PLAN_ENTITLEMENTS[plan].bandwidthGb, 'year')).toBeCloseTo(
+        tierMargin(plan, 1, 'year'),
+        12,
+      )
+    }
+  })
+
+  /**
+   * MUTATION: THE BANDS SOLD UNTIL 2026-10-01, ACROSS THE CDN'S PRICE RANGE
+   * (AGL-3444).
+   *
+   * Sized on weight alone at the cheapest region, they held while the
+   * platform was inside the hosting plan's 10,000,000 included requests a
+   * month, and nowhere past them: at the cheapest region's prices every tier
+   * is under water at the annual price, and at the dearest region's every
+   * tier is under water at the MONTHLY price too.
+   *
+   * The first re-size of 2026-10-01 (`41a851aca9`) priced the requests at the
+   * dearest region and the transfer at the cheapest. It never reached
+   * production; with the transfer at the dearest region too, every one of
+   * those bands is under water at the annual price, which is what the second
+   * cut answers.
+   *
+   * Pinned at each price, so the cut the shipped bands made is read against
+   * the state it answered rather than asserted.
+   */
+  it('MUTATION: at the bands sold until 2026-10-01, and at the first re-size, every tier is under water at the dearest region', () => {
+    const sold = {
+      starter: 50,
+      pro: 125,
+      business: 185,
+      scale: 290,
+      advanced: 345,
+      agency: 1540,
+    } as const
+    const firstResize = {
+      starter: 35,
+      pro: 60,
+      business: 90,
+      scale: 145,
+      advanced: 175,
+      agency: 790,
+    } as const
+    const ladderAt = (
+      bands: Record<string, number>,
+      weightPerGbUsd: number,
+      requestsPerGbUsd: number,
+    ) =>
+      Object.fromEntries(
+        Object.entries(bands).map(([plan, gb]) => [
+          plan,
+          [
+            Number(
+              (marginAtCostPerGb(plan as OrgPlan, weightPerGbUsd, 'month', gb, requestsPerGbUsd) * 100).toFixed(1),
+            ),
+            Number(
+              (marginAtCostPerGb(plan as OrgPlan, weightPerGbUsd, 'year', gb, requestsPerGbUsd) * 100).toFixed(1),
+            ),
+          ],
+        ]),
+      )
+    // Inside the allowance, at the cheapest region's transfer, the old ladder
+    // held.
+    expect(ladderAt(sold, CHEAPEST_WEIGHT_PER_GB_USD, 0)).toEqual({
+      starter: [51.6, 27.6],
+      pro: [30.9, 2.7],
+      business: [28.6, 1.3],
+      scale: [28, 1.1],
+      advanced: [24.8, 0.7],
+      agency: [19.8, 1.4],
+    })
+    // Past it at the cheapest region, under water annually on every tier.
+    expect(
+      ladderAt(sold, CHEAPEST_WEIGHT_PER_GB_USD, CHEAPEST_REQUEST_COST_PER_GB_USD),
+    ).toEqual({
+      starter: [27.8, -9.5],
+      pro: [4.4, -35.4],
+      business: [12.8, -21],
+      scale: [14.1, -18.2],
+      advanced: [14.5, -13],
+      agency: [5.7, -16.1],
+    })
+    // …and at the dearest, which is the price the rule is held at.
+    expect(ladderAt(sold, COST_PER_GB_USD, REQUEST_COST_PER_GB_USD)).toEqual({
+      starter: [-26.5, -94.3],
+      pro: [-56.2, -122.4],
+      business: [-23.3, -71.7],
+      scale: [-17.5, -62.1],
+      advanced: [-9, -44.4],
+      agency: [-26.5, -55.9],
+    })
+    // The first re-size, at the dearest region on both terms.
+    expect(ladderAt(firstResize, COST_PER_GB_USD, REQUEST_COST_PER_GB_USD)).toEqual(
+      {
+      starter: [7, -42.1],
+      pro: [8.5, -29.4],
+      business: [14.8, -18.2],
+      scale: [15, -17],
+      advanced: [14.8, -12.7],
+      agency: [5.7, -16.1],
+    },
+    )
+    // BOTH WAYS: every shipped band is smaller than both it replaced and
+    // clears zero on both intervals where they did not.
+    for (const plan of PAID) {
+      expect(PLAN_ENTITLEMENTS[plan].bandwidthGb).toBeLessThan(firstResize[plan])
+      expect(firstResize[plan]).toBeLessThan(sold[plan])
+      expect(marginAtBandwidth(plan, firstResize[plan], 'year')).toBeLessThan(0)
+      for (const interval of ['month', 'year'] as const) {
+        expect(`${plan} ${interval}: ${tierMargin(plan, 1, interval) >= 0}`).toBe(
+          `${plan} ${interval}: true`,
+        )
+      }
+    }
   })
 
   it('MUTATION: restoring ONE band on ONE tier is enough to break it', () => {
@@ -1101,18 +1404,22 @@ describe('what full utilization costs against each price, and where it stops cle
    * The state the platform was in for part of 2026-09-09, modeled as a cost
    * per gigabyte because that is the only place the disagreement shows up:
    * `perPageView` priced a 1012.8 KB page while the conversion still divided
-   * a gigabyte by 600 KB, so the page's weight was counted twice and a
-   * gigabyte billed $0.28231 of modeled cost instead of $0.16724.
+   * a gigabyte by 600 KB, so the page's weight was counted twice — a
+   * gigabyte billed $0.28231 of modeled cost instead of $0.16724 then, and
+   * the same shape at today's rate is $0.61991 instead of $0.36724.
    *
-   * Pinned as exact figures for two reasons. It is the shape of the defect,
-   * so it is recognizable if anything re-enters it; and it is the whole
-   * argument that no band needed re-cutting — the tiers were never actually
-   * under water, the model was.
+   * Pinned as exact figures, at the shipped bands and today's rate with the
+   * request term counted, because it is the shape of the defect: a model that doubles a
+   * page's weight reads a ladder under water that is not, and the figures
+   * make the state recognizable if anything re-enters it.
    */
   it('MUTATION: the unpaired constants put every paid tier under water annually', () => {
-    const UNPAIRED_COST_PER_GB = (1024 * 1024 * 1024 / (600 * 1024)) * 0.00016153846
-    expect(UNPAIRED_COST_PER_GB).toBeCloseTo(0.28231, 5)
+    const UNPAIRED_COST_PER_GB =
+      (1024 * 1024 * 1024 / (600 * 1024)) * ORG_COGS_UNIT_RATES_USD.perPageView
+    expect(UNPAIRED_COST_PER_GB).toBeCloseTo(0.61991, 5)
     expect(UNPAIRED_COST_PER_GB / COST_PER_GB_USD).toBeCloseTo(1.688, 3)
+    // The figure it billed on the day, at the rate then in force.
+    expect((1024 * 1024 * 1024 / (600 * 1024)) * 0.00016153846).toBeCloseTo(0.28231, 5)
     expect(
       Object.fromEntries(
         PAID.map((plan) => [
@@ -1124,12 +1431,12 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      starter: [28.5, -8.3],
-      pro: [5.3, -34.1],
-      business: [13.6, -19.8],
-      scale: [15.2, -16.6],
-      advanced: [16, -11.1],
-      agency: [7.1, -14.3],
+      starter: [20.2, -21.4],
+      pro: [17.6, -16.4],
+      business: [18.9, -12.5],
+      scale: [18.2, -12.6],
+      advanced: [17.9, -8.5],
+      agency: [9.4, -11.5],
     })
     // BOTH WAYS: with the pairing restored the same instrument reads the
     // shipped ladder, so the mutation is the constants and not the arithmetic.
@@ -1142,48 +1449,60 @@ describe('what full utilization costs against each price, and where it stops cle
   })
 
   /**
-   * PAST THE CDN'S REQUEST ALLOWANCE, IF THE BANDS CARRIED IT (AGL-1879).
+   * ACROSS THE CDN'S PRICE RANGE, AT THE SHIPPED BANDS (AGL-3444).
    *
-   * Not a mutation of the constants, and not the shipped model either: the
-   * question this change surfaced and does not answer. A billed view now
-   * carries `PAGE_VIEW_CDN_REQUEST_COST_USD` as well as its weight, because
-   * the hosting plan's 10,000,000 included requests are about 175,000 views
-   * of the measured page a month, platform-wide. The INCLUDED bands are still
-   * sized on weight alone — the pair `check:page-view-rate` holds — so a
-   * gigabyte inside a band is modeled at $0.16724 where, once the platform is
-   * past that allowance, it costs about $0.28670.
-   *
-   * Pinned as the ladder at that cost, so the owner of band sizing reads the
-   * figure here rather than re-deriving it, and so a band or price change
-   * that answers it moves these numbers in the same commit.
+   * The shipped model prices an included gigabyte's transfer and requests at
+   * the dearest region, because the rule is stated at any utilization and a
+   * band cannot choose where its visitors are. Inside the hosting plan's
+   * request allowance, or at the cheapest region, the same band costs less,
+   * so every reading below is at least the shipped one — pinned so the room
+   * the dearest-region sizing leaves elsewhere is a figure here rather than a
+   * re-derivation.
    */
-  it('PAST THE REQUEST ALLOWANCE: the included bands are not priced for it', () => {
-    const WITH_REQUESTS_PER_GB =
-      VIEWS_PER_GB *
-      (ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD)
-    expect(WITH_REQUESTS_PER_GB).toBeCloseTo(0.2867, 4)
-    expect(
+  it('ACROSS THE PRICE RANGE: the shipped bands clear zero at the dearest region and by more everywhere else', () => {
+    const ladderAt = (weightPerGbUsd: number, requestsPerGbUsd: number) =>
       Object.fromEntries(
         PAID.map((plan) => [
           plan,
           [
-            Number((marginAtCostPerGb(plan, WITH_REQUESTS_PER_GB, 'month') * 100).toFixed(1)),
-            Number((marginAtCostPerGb(plan, WITH_REQUESTS_PER_GB, 'year') * 100).toFixed(1)),
+            Number(
+              (marginAtCostPerGb(plan, weightPerGbUsd, 'month', undefined, requestsPerGbUsd) * 100).toFixed(1),
+            ),
+            Number(
+              (marginAtCostPerGb(plan, weightPerGbUsd, 'year', undefined, requestsPerGbUsd) * 100).toFixed(1),
+            ),
           ],
         ]),
-      ),
-    ).toEqual({
-      starter: [27.7, -9.7],
-      pro: [4.3, -35.5],
-      business: [13, -20.6],
-      scale: [14.7, -17.3],
-      advanced: [15.6, -11.6],
-      agency: [6.6, -15],
+      )
+    // The cheapest region, inside the request allowance: weight alone.
+    expect(ladderAt(CHEAPEST_WEIGHT_PER_GB_USD, 0)).toEqual({
+      starter: [71.6, 59],
+      pro: [57.8, 41.3],
+      business: [44.3, 23.2],
+      scale: [41.4, 19.8],
+      advanced: [34.8, 14.1],
+      agency: [33.4, 18.2],
     })
-    // The monthly price still clears zero on every tier at 100% of every
-    // band; the annual price does not on any. The shipped ladder, on weight
-    // alone, is the one the rest of this file pins.
-    expect(COST_PER_GB_USD).toBeCloseTo(0.16724, 5)
+    // The cheapest region, past the allowance.
+    expect(ladderAt(CHEAPEST_WEIGHT_PER_GB_USD, CHEAPEST_REQUEST_COST_PER_GB_USD)).toEqual(
+      {
+      starter: [62.1, 44.1],
+      pro: [50.3, 30.6],
+      business: [39.6, 16.6],
+      scale: [37.1, 13.8],
+      advanced: [31.7, 9.9],
+      agency: [28.9, 12.7],
+    },
+    )
+    // …and the dearest, past the allowance, which IS the shipped model.
+    expect(ladderAt(COST_PER_GB_USD, REQUEST_COST_PER_GB_USD)).toEqual(
+      Object.fromEntries(PAID.map((plan) => [plan, [pct(plan, 1, 'month'), pct(plan, 1, 'year')]])),
+    )
+    for (const plan of PAID) {
+      expect(
+        `${plan}: ${marginAtCostPerGb(plan, CHEAPEST_WEIGHT_PER_GB_USD, 'year', undefined, CHEAPEST_REQUEST_COST_PER_GB_USD) > tierMargin(plan, 1, 'year')}`,
+      ).toBe(`${plan}: true`)
+    }
   })
 
   /**
@@ -1193,7 +1512,7 @@ describe('what full utilization costs against each price, and where it stops cle
    * Pro's bands at once cannot read as this one, which moved bandwidth and
    * nothing else.
    */
-  it('spends 57% of Pro on bandwidth, and the rest on ten small terms', () => {
+  it('spends 55% of Pro on bandwidth — weight and requests — and the rest on ten small terms', () => {
     const terms = tierCostTerms('pro')
     expect(
       Object.fromEntries(
@@ -1204,27 +1523,29 @@ describe('what full utilization costs against each price, and where it stops cle
       ),
     ).toEqual({
       mediaStorage: 0.78,
-      formSubmissions: 0.15,
-      bandwidth: 20.9056,
+      formSubmissions: 0.1615,
+      bandwidth: 12.8536,
       datasetStorage: 0.9,
       apiRequests: 0,
       contacts: 2,
       emailSends: 4.5,
       assistCredits: 2.75,
-      runs: 0.12,
+      runs: 0.13,
       crmSeats: 0.6,
       crmEmail: 4.05,
+      cdnRequests: 6.6583,
     })
-    // The ten others total $15.85 against a $37.84 net annual price, and not
-    // one of them has moved through any of this — bandwidth alone went $21.85
-    // → $35.29 on the re-peg and back to $20.91 once the pairing was restored,
-    // which is 58%, then 69%, then 57% of the tier's cost. Nothing but this
-    // axis can decide the tier.
+    // The ten others total $15.87 against a $37.84 net annual price — the
+    // submission and run terms moved a cent and a half with the dearest-region
+    // re-price. The band is the axis that moves, and it costs twice: $12.85 of
+    // weight and $6.66 of requests, 55% of the tier's cost together. Nothing
+    // but this axis can decide the tier.
     const total = Object.values(terms).reduce((a, b) => a + b, 0)
-    expect(total - terms.bandwidth).toBeCloseTo(15.85, 2)
-    expect(terms.bandwidth / total).toBeGreaterThan(0.56)
-    expect(terms.bandwidth / total).toBeLessThan(0.58)
-    // The axis, read back through the rate that sets it, so the term cannot
+    const traffic = terms.bandwidth + terms.cdnRequests
+    expect(total - traffic).toBeCloseTo(15.87, 2)
+    expect(traffic / total).toBeGreaterThan(0.55)
+    expect(traffic / total).toBeLessThan(0.56)
+    // The axis, read back through the rates that set it, so neither term can
     // drift from the constant it is a product of.
     expect(terms.bandwidth).toBeCloseTo(
       PLAN_ENTITLEMENTS.pro.bandwidthGb *
@@ -1232,24 +1553,27 @@ describe('what full utilization costs against each price, and where it stops cle
         ORG_COGS_UNIT_RATES_USD.perPageView,
       10,
     )
+    expect(terms.cdnRequests).toBeCloseTo(
+      PLAN_ENTITLEMENTS.pro.bandwidthGb * VIEWS_PER_GB * PAGE_VIEW_CDN_REQUEST_COST_USD,
+      10,
+    )
   })
 
   it('MUTATION: Pro at its OLD 7,500-credit assist band is deeper under water', () => {
-    // The assist axis on its own, on the tier with the least room. $7.50 of
-    // provider spend on a tier whose annual price has $1.08 of room at 100% of
-    // every band.
+    // The assist axis on its own. $7.50 of provider spend on a tier whose
+    // annual price has $2.46 of room at 100% of every band.
     const terms = tierCostTerms('pro')
     const restored =
       Object.values(terms).reduce((a, b) => a + b, 0) -
       terms.assistCredits +
       7_500 * ASSIST_CREDIT_COST_USD
     expect(listPriceUsd('pro', 'year')).toBe(39)
-    expect((netPriceUsd('pro', 'year') - restored) / 39).toBeCloseTo(-0.094, 3)
+    expect((netPriceUsd('pro', 'year') - restored) / 39).toBeCloseTo(-0.059, 3)
     // BOTH DIRECTIONS, on the one tier and the one interval where the sign
     // turns: the extra 4,750 credits are $4.75 of provider spend against
-    // $1.08 of annual room, and Pro's shipped band leaves it positive.
+    // $2.46 of annual room, and Pro's shipped band leaves it positive.
     expect(tierMargin('pro', 1, 'year')).toBeGreaterThan(0)
-    // The monthly price absorbs the same restoration — $17.32 of room at 100%
+    // The monthly price absorbs the same restoration — $18.70 of room at 100%
     // — which is why the sign test is read at the annual price and not here.
     expect(
       (netPriceUsd('pro', 'month') - restored) / listPriceUsd('pro', 'month'),
@@ -1326,14 +1650,14 @@ describe('what full utilization costs against each price, and where it stops cle
 
   /**
    * STARTER IS THE WIDEST RUNG, and the arithmetic is here rather than
-   * asserted by absence. Its bands imply $11.09 against a $16 annual price —
-   * 27.6%, an order of magnitude more room than any rung above it — and
-   * bandwidth is 75% of that, $8.36.
+   * asserted by absence. Its bands imply $13.88 against a $16 annual price —
+   * 10.2%, the widest room on the ladder — and bandwidth is 80% of that:
+   * $7.34 of weight and $3.80 of CDN requests at the dearest region.
    *
-   * It is also THE CONTROL FOR THE BAND RESIZE, on bandwidth: Starter's
-   * bandwidth BAND has never moved: it was never under water, so the
-   * 2026-09-07 resize passed it by and it kept the room the five tiers above
-   * it spent.
+   * Its band is cut the way every other rung's is: 20 GB is the largest
+   * multiple of 5 GB the annual price carries at the dearest region, and the
+   * room it keeps is the rest of a 5 GB step. At 50 GB, the band it carried
+   * until 2026-10-01, the same price is 94% under water.
    *
    * ⚠ It is NO LONGER the zero-assist control. AGL-3203 gave Starter 750
    * credits, so the assist term is $0.75 here and the "term present and
@@ -1342,16 +1666,19 @@ describe('what full utilization costs against each price, and where it stops cle
    * reading zero drops cost by arithmetic rather than by entitlement — and
    * email is where it lives now.
    */
-  it('leaves Starter the widest rung, on bandwidth alone', () => {
+  it('leaves Starter the widest rung, and says what each of its bands costs', () => {
     expect(listPriceUsd('starter', 'month')).toBe(25)
     expect(listPriceUsd('starter', 'year')).toBe(16)
-    expect(tierCostUsd('starter', 1)).toBeCloseTo(11.09, 2)
-    // The metered axes alone are $9.56 — $8.36 of which is bandwidth — plus
-    // the 750 assist credits at 75¢ and the 500 runs it sells, 0.6¢; the CRM
-    // decision terms are the $1.53 on top.
-    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(9.56, 2)
-    expect(bandCostTerms('starter').bandwidth).toBeCloseTo(8.36, 2)
-    expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(50)
+    expect(tierCostUsd('starter', 1)).toBeCloseTo(13.88, 2)
+    // The metered axes alone are $8.54 — $7.34 of which is bandwidth's
+    // weight — plus the 750 assist credits at 75¢ and the 500 runs it sells,
+    // 0.65¢; the CDN requests are $3.80 and the CRM decision terms the $1.53
+    // on top.
+    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(8.54, 2)
+    expect(bandCostTerms('starter').bandwidth).toBeCloseTo(7.34, 2)
+    expect(cdnRequestTerms('starter').cdnRequests).toBeCloseTo(3.8, 2)
+    expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(20)
+    expect(marginAtBandwidth('starter', 50, 'year')).toBeCloseTo(-0.943, 3)
     // The assist term is REAL here since AGL-3203, and it is the whole of
     // what the decision cost this tier: 750 credits, 75¢, and the rung stays
     // the widest on the ladder with it counted.
@@ -1370,11 +1697,10 @@ describe('what full utilization costs against each price, and where it stops cle
     expect(Object.keys(tierCostTerms('starter'))).toContain('emailSends')
     expect(tierCostTerms('starter').emailSends).toBe(0)
     expect(PLAN_ENTITLEMENTS.starter.emailSendsPerMonth).toBe(0)
-    // Doubling the cost of a gigabyte is the move this ladder is thin against.
-    // It takes the ANNUAL ladder under water on every tier including Starter,
-    // and Pro under water monthly as well — which is the size of the headroom
-    // the 2026-09-07 bands actually left, stated as a stress test rather than
-    // as a margin.
+    // Doubling a gigabyte's weight is the move this ladder is thin against.
+    // It takes the ANNUAL ladder under water on every tier and leaves the
+    // monthly one clear — which is the size of the headroom the bands
+    // actually leave, stated as a stress test rather than as a margin.
     const atDoubleCost = (plan: OrgPlan, interval: Interval) =>
       marginAtCostPerGb(plan, COST_PER_GB_USD * 2, interval)
     expect(
@@ -1387,7 +1713,7 @@ describe('what full utilization costs against each price, and where it stops cle
       ),
     ).toEqual({
       starter: 'monthly clear, annual under',
-      pro: 'monthly under, annual under',
+      pro: 'monthly clear, annual under',
       business: 'monthly clear, annual under',
       scale: 'monthly clear, annual under',
       advanced: 'monthly clear, annual under',
@@ -1403,10 +1729,10 @@ describe('what full utilization costs against each price, and where it stops cle
    * THE ASSIST BANDS, pinned as numbers and bounded as a share.
    *
    * They were sized on 2026-08-30 to take between a quarter and a third of
-   * what the other metered terms left of the MONTHLY price. The 2026-09-07
-   * bandwidth resize widened that room on every tier without touching the
-   * bands, so the quarter floor no longer describes the ladder — Pro's band
-   * is now 11% of its room — and the numbers below are what holds the bands
+   * what the other metered terms left of the MONTHLY price. The bandwidth
+   * resizes widened that room on every tier without touching the bands, so
+   * the quarter floor no longer describes the ladder — Pro's band is 7% of
+   * its room — and the numbers below are what holds the bands
    * from being shrunk the next time a cost rate moves. The third stays as
    * the ceiling: an assist band that consumed more than a third of the room
    * would put the tier back where Pro was at 7,500 credits.
@@ -1457,20 +1783,25 @@ describe('what full utilization costs against each price, and where it stops cle
 
   it('Agency clears zero on both intervals, on the bandwidth axis', () => {
     const cost = tierCostUsd('agency', 1)
-    expect(cost).toBeCloseTo(991.56, 2)
+    expect(cost).toBeCloseTo(1016.99, 2)
     expect(listPriceUsd('agency', 'year')).toBe(1049)
     expect(netPriceUsd('agency', 'year')).toBe(1018.55)
-    // The 2026-09-07 resize left it $15.42 clear annually at a gigabyte costing
-    // $0.17476. The pairing prices a gigabyte at $0.16724, which is 4.3% less
-    // on a tier that buys 1,540 of them, so the headroom is $26.99.
-    expect(netPriceUsd('agency', 'year') - cost).toBeCloseTo(26.99, 2)
+    // 485 GB at $0.55748 a gigabyte all in is $270.38 of the cost — $178.11
+    // of weight and $92.27 of CDN requests — and leaves $1.56 clear
+    // annually: the next 5 GB, $2.79, would not fit.
+    expect(netPriceUsd('agency', 'year') - cost).toBeCloseTo(1.56, 2)
+    expect(5 * ALL_IN_COST_PER_GB_USD).toBeGreaterThan(netPriceUsd('agency', 'year') - cost)
     expect(netPriceUsd('agency', 'month') - cost).toBeGreaterThan(0)
-    // At the old $649 annual price ($630.15 net) the same cost is a $361
-    // loss per month — and that is with the 2026-09-07 bands; at 3,000 GB it
-    // is $606, and the real figure before the form band was bounded was
+    // At the old $649 annual price ($630.15 net) the same cost is a $387
+    // loss per month; at the 3,000 GB band it carried until 2026-09-07 it is
+    // $1,789, and the real figure before the form band was bounded was
     // unbounded.
-    expect(netOfProcessorFee(649, true) - cost).toBeLessThan(-350)
-    expect(netOfProcessorFee(649, true) - (cost - tierCostTerms('agency').bandwidth + 3000 * COST_PER_GB_USD)).toBeLessThan(-600)
+    const terms = tierCostTerms('agency')
+    expect(netOfProcessorFee(649, true) - cost).toBeLessThan(-380)
+    expect(
+      netOfProcessorFee(649, true) -
+        (cost - terms.bandwidth - terms.cdnRequests + 3000 * ALL_IN_COST_PER_GB_USD),
+    ).toBeLessThan(-1_780)
   })
 })
 
@@ -1722,10 +2053,16 @@ describe("Free's bandwidth band, and everything derived from it", () => {
    * Free is the ONE plan whose bandwidth cannot be metered — there is no
    * subscription to bill an overage onto — so its band is a pure give. It is
    * denominated in GIGABYTES, and it is the gigabytes that are the promise:
-   * at the paired constants 2 GB costs $0.33 a month per free org against no
-   * revenue and covers roughly 2,070 page views of a 1012.8 KB page. It
+   * at the paired constants 2 GB costs $0.73 a month per free org against no
+   * revenue — its transfer at the dearest region — and $1.11 once its views'
+   * CDN requests are counted; it covers roughly 2,070 page views of a
+   * 1012.8 KB page. It
    * covered ~3,500 views of a 600 KB one, which is the same 2 GB — the page
    * grew, and a heavier page is fewer views of the same allowance.
+   *
+   * The margin rule cannot size it, because there is no price for a margin
+   * to be a fraction of: no band above zero clears it, so the band is a
+   * capped give rather than a sized one, and the cap below is what bounds it.
    *
    * Nothing else about Free moves. It is asserted here rather than assumed,
    * because "we trimmed Free" and "we trimmed one band on Free" are different
@@ -1767,11 +2104,21 @@ describe("Free's bandwidth band, and everything derived from it", () => {
   it('costs what the give is worth, at the platform\'s own rate', () => {
     const monthlyCostUsd =
       PLAN_ENTITLEMENTS.free.bandwidthGb * VIEWS_PER_GB * ORG_COGS_UNIT_RATES_USD.perPageView
-    expect(monthlyCostUsd).toBeCloseTo(0.33, 2)
+    expect(monthlyCostUsd).toBeCloseTo(0.73, 2)
     // …and it is the GB band times the cost of a gigabyte, which is the only
     // honest way to price a give denominated in gigabytes.
     expect(monthlyCostUsd).toBeCloseTo(
       PLAN_ENTITLEMENTS.free.bandwidthGb * COST_PER_GB_USD,
+      10,
+    )
+    // Past the CDN's request allowance the same views also make their
+    // requests, which the model counts at the dearest region: $1.11 a month
+    // at most per Free workspace, and the cap stops it there.
+    expect(
+      PLAN_ENTITLEMENTS.free.bandwidthGb * ALL_IN_COST_PER_GB_USD,
+    ).toBeCloseTo(1.11, 2)
+    expect(tierCostTerms('free').cdnRequests).toBeCloseTo(
+      PLAN_ENTITLEMENTS.free.bandwidthGb * REQUEST_COST_PER_GB_USD,
       10,
     )
     // The band still buys a usable evaluation — 2,070 views of the page the
@@ -1831,8 +2178,9 @@ describe("Free's bandwidth band, and everything derived from it", () => {
    * was $2,374 a month on Agency at the measured page weight.
    *
    * The 2026-09-09 re-peg removed the loss on weight, and AGL-1879 removed it
-   * on requests — 1,000 views now bill $0.36 against about $0.28 once the
-   * CDN's request allowance is spent — and the ceiling stays at 3x anyway. It
+   * on requests — 1,000 views now bill $0.70 against at most $0.54, the
+   * dearest region's cost, once the CDN's request allowance is spent — and the
+   * ceiling stays at 3x anyway. It
    * was never a margin instrument: a scraper or a hotlinked asset bills the
    * account holder for traffic they did not ask for, and the cap is what
    * bounds that.
@@ -1844,7 +2192,7 @@ describe("Free's bandwidth band, and everything derived from it", () => {
     // floor — so the floor is what governs, which is the point of having one.
     expect(free.ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
     // A tier whose band clears the floor derives its ceiling from the band,
-    // and moving the band moves it. Agency: 1,540 GB of views x 3.
+    // and moving the band moves it. Agency: 485 GB of views x 3.
     const agency = checkBandwidthAbuseCeiling({ plan: 'agency' } as never, 0)
     expect(agency.ceiling).toBe(
       Math.round(
@@ -1853,19 +2201,18 @@ describe("Free's bandwidth band, and everything derived from it", () => {
           BANDWIDTH_ABUSE_CEILING_MULTIPLE,
       ),
     )
-    expect(agency.ceiling).toBe(4_783_196)
-    // The ceiling is 3x the BAND, and the band is gigabytes — so it is 4,620
-    // GB of containment whatever a page weighs. It fell from 8,074,035 views
-    // when the pairing was restored and contains exactly as much bandwidth as
-    // it did before, which is the property that matters for a cap.
+    expect(agency.ceiling).toBe(1_506_396)
+    // The ceiling is 3x the BAND, and the band is gigabytes — so it is 1,455
+    // GB of containment whatever a page weighs, which is the property that
+    // matters for a cap.
     expect(agency.ceiling * (ESTIMATED_PAGE_TRANSFER_BYTES / 1024 / 1024 / 1024)).toBeCloseTo(
       PLAN_ENTITLEMENTS.agency.bandwidthGb * BANDWIDTH_ABUSE_CEILING_MULTIPLE,
       2,
     )
     // MUTATION: at the 3,000 GB band and the 10x multiple the ceiling was
-    // 31.1M views — six and a half times what it is now. Nothing was
+    // 31.1M views — more than twenty times what it is now. Nothing was
     // hardcoded to hold the old figure.
-    expect(agency.ceiling).toBeLessThan(Math.round(3_000 * VIEWS_PER_GB * 10) / 6)
+    expect(agency.ceiling).toBeLessThan(Math.round(3_000 * VIEWS_PER_GB * 10) / 20)
     // The ceiling is never below the band the plan sold — containment must
     // not become a capacity cut.
     for (const plan of PAID) {
@@ -1892,20 +2239,30 @@ describe('the infra pass-through is priced by a different rule', () => {
       METERED_BILLED_RATES_USD.perPageView
     expect(margin).toBeCloseTo(0.2308, 4)
     expect(METERED_MARKUP).toBe(1.3)
-    // $0.36 per 1,000, the published figure, from a billed view's cost.
-    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.36)
+    // $0.70 per 1,000, the published figure, from a billed view's cost at the
+    // dearest region — and $0.07 per 1,000 form submissions the same way.
+    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.7)
+    expect(Math.round(METERED_BILLED_RATES_USD.perFormSubmission * 1000 * 100) / 100).toBe(
+      0.07,
+    )
+    // "At cost + 30%" holds against the cost a billed unit incurs where the
+    // CDN and functions are DEAREST, so it holds in every region.
+    for (const key of ['perPageView', 'perFormSubmission'] as const) {
+      expect(
+        `${key}: ${METERED_BILLED_RATES_USD[key] / METERED_OVERAGE_COST_USD[key] >= 1.3 - 1e-9}`,
+      ).toBe(`${key}: true`)
+    }
   })
 
   it('carries the three pass-through rates as published', () => {
     expect(METERED_UNIT_RATES_USD.storagePerGbMonth).toBe(0.026)
-    // Untouched by the 2026-09-07 band resize; re-pegged on 2026-09-09 by the
-    // page-weight decision, which is the one change on this axis that is a
-    // customer-facing price and not a capacity one.
-    expect(METERED_UNIT_RATES_USD.perPageView).toBe(0.00016153846)
-    expect(METERED_UNIT_RATES_USD.perFormSubmission).toBe(0.00005)
-    // …and still identical to the COGS table, which is the pairing both the
-    // 2026-08-09 correction and the 2026-09-09 re-peg had to change in two
-    // places at once.
+    // Re-pegged on 2026-09-09 by the page-weight decision, and re-priced on
+    // 2026-10-01 with the Vercel-billed share of each — transfer, and the
+    // submission's function invocation — at Vercel's dearest region.
+    expect(METERED_UNIT_RATES_USD.perPageView).toBe(0.00035471473)
+    expect(METERED_UNIT_RATES_USD.perFormSubmission).toBe(0.000053846154)
+    // …and still identical to the COGS table, which is the pairing every
+    // change on these three axes has had to make in two places at once.
     for (const key of ['storagePerGbMonth', 'perPageView', 'perFormSubmission'] as const) {
       expect(`${key}: ${METERED_UNIT_RATES_USD[key]}`).toBe(
         `${key}: ${ORG_COGS_UNIT_RATES_USD[key]}`,
@@ -1922,48 +2279,50 @@ describe('the infra pass-through is priced by a different rule', () => {
    * rather than a page (`MUTATION: the unpaired constants` is the case that
    * deliberately does model the bug).
    *
-   * The 2026-09-07 bands were cut against a gigabyte costing $0.17476 — a
-   * 600 KB page at $0.0001 a view — and the figures below are the ladder that
-   * decision signed off. Kept because it is the one case proving the ladder
-   * above responds to the cost of a gigabyte and not to a constant that
-   * happens to sit beside it, and because the distance between these numbers
-   * and the shipped ones is exactly what the paired constants bought: 4.3%
-   * off a gigabyte is 1 to 2 points of annual margin on every rung.
+   * The 2026-09-07 bands were cut against a gigabyte WEIGHING $0.17476 — a
+   * 600 KB page at $0.0001 a view, transfer at the cheapest region — where the
+   * paired constants price it at $0.16724. Kept because it is the one case
+   * proving the ladder above responds to a gigabyte's weight and not to a
+   * constant that happens to sit beside it, and because it measures how thin
+   * the shipped headroom is: that gigabyte with its transfer re-priced at the
+   * dearest region, $0.37476, is 2% more weight than the shipped $0.36724,
+   * and at the shipped bands with the requests counted it is enough to take
+   * Scale and Agency under at the annual price.
    */
-  it('MUTATION: at the gigabyte the 2026-09-07 resize was argued on, the ladder is thinner', () => {
+  it('MUTATION: at the gigabyte the 2026-09-07 resize was argued on, re-priced at the dearest region, the ladder is thinner', () => {
     const AT_600_KB_AND_ONE_HUNDREDTH_OF_A_CENT =
       ((1024 * 1024 * 1024) / (600 * 1024)) * 0.0001
     expect(AT_600_KB_AND_ONE_HUNDREDTH_OF_A_CENT).toBeCloseTo(0.17476, 5)
+    const atTheDearestRegion =
+      AT_600_KB_AND_ONE_HUNDREDTH_OF_A_CENT +
+      (CDN_PRICE_RANGE_USD.transferPerGb.dearest - CDN_PRICE_RANGE_USD.transferPerGb.cheapest)
     expect(
       Object.fromEntries(
         PAID.map((plan) => [
           plan,
           [
-            Number(
-              (
-                marginAtCostPerGb(plan, AT_600_KB_AND_ONE_HUNDREDTH_OF_A_CENT, 'month') * 100
-              ).toFixed(1),
-            ),
-            Number(
-              (
-                marginAtCostPerGb(plan, AT_600_KB_AND_ONE_HUNDREDTH_OF_A_CENT, 'year') * 100
-              ).toFixed(1),
-            ),
+            Number((marginAtCostPerGb(plan, atTheDearestRegion, 'month') * 100).toFixed(1)),
+            Number((marginAtCostPerGb(plan, atTheDearestRegion, 'year') * 100).toFixed(1)),
           ],
         ]),
       ),
     ).toEqual({
-      starter: [50.1, 25.3],
-      pro: [29.3, 0.4],
-      business: [27.9, 0.3],
-      scale: [27.8, 0.8],
-      advanced: [25.3, 1.3],
-      agency: [19.9, 1.5],
+      starter: [39.8, 9.3],
+      pro: [32.9, 5.6],
+      business: [28.6, 1.1],
+      scale: [27, -0.2],
+      advanced: [24.4, 0.1],
+      agency: [18.5, -0.2],
     })
-    // …and the live pair is cheaper per gigabyte than the one those bands were
-    // sized against, which is why none of them had to move again.
-    expect(COST_PER_GB_USD).toBeLessThan(AT_600_KB_AND_ONE_HUNDREDTH_OF_A_CENT)
-    expect(ORG_COGS_UNIT_RATES_USD.perPageView).toBe(0.00016153846)
+    // …and the live pair weighs a gigabyte at less than that, which is the
+    // room the shipped bands are sized into.
+    expect(COST_PER_GB_USD).toBeLessThan(atTheDearestRegion)
+    for (const plan of PAID) {
+      expect(marginAtCostPerGb(plan, atTheDearestRegion, 'year')).toBeLessThan(
+        tierMargin(plan, 1, 'year'),
+      )
+    }
+    expect(ORG_COGS_UNIT_RATES_USD.perPageView).toBe(0.00035471473)
   })
 
   it('a smaller band WIDENS what the pass-through bills, which is the point', () => {
@@ -2043,12 +2402,12 @@ describe('the Aglyn AI add-on band clears the same invariant with its revenue co
         ]),
       ),
     ).toEqual({
-      starter: [36.6, 51.8],
-      pro: [18.2, 35.7],
-      business: [14.9, 33.2],
-      scale: [14.8, 32.8],
-      advanced: [13.5, 30.2],
-      agency: [12.5, 25.7],
+      starter: [25.5, 43.6],
+      pro: [20.5, 37.5],
+      business: [14.8, 33.1],
+      scale: [13.4, 31.7],
+      advanced: [12.1, 29.1],
+      agency: [10.6, 24.1],
     })
   })
 

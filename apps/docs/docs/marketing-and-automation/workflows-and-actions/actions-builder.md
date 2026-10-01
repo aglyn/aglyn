@@ -336,7 +336,7 @@ whether there is a page in front of it:
 
 | Use the actions builder | Use a workflow |
 | --- | --- |
-| Something a visitor does — a click, a hover, exit intent, a scroll depth | Something that happened on the server — a submission, an order, a CRM event |
+| Something a visitor does — a click, a hover, exit intent, a scroll depth | Something that happened on the server — a submission, a booking, a CRM event |
 | Anything that changes the page: menus, drawers, class toggles, overlays, redirects | Server-side work only; the in-page effects are not offered |
 | Fastest to set up | Composes your functions and variables, and binds each result for the steps after it |
 

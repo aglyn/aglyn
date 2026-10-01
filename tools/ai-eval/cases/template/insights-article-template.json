@@ -149,6 +149,51 @@
         }
       },
       "fails": ["plan"]
+    },
+    {
+      "why": "The 2026-10-01 live build's shape (job 2xD9Y7NayF, AGL-3143 §16): the plan promised the entry's slug, its publish timestamp and the collection's slug, and the build printed them beside the permalink in one line of copy on every article (rule 8).",
+      "plan": {
+        "reuse": [
+          { "kind": "layout", "id": "lay-article", "purpose": "the article shell every insights entry renders in" },
+          { "kind": "collection", "id": "col-insights", "purpose": "the entry this page shows, and the others its related list reads" }
+        ],
+        "create": [
+          {
+            "kind": "template",
+            "name": "Insights article",
+            "why": "No template renders an insights entry's headline, byline, body and related reading.",
+            "duplicateOf": null,
+            "fields": [
+              "{{entry.title}}",
+              "{{entry.author}}",
+              "{{entry.publishedAt}}",
+              "{{entry.body}}",
+              "{{entry.coverImage}}",
+              "{{entry.url}}",
+              "{{entry.slug}}",
+              "{{collection.name}}",
+              "{{collection.slug}}"
+            ]
+          }
+        ],
+        "screens": []
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["article"] },
+            "article": { "componentId": "section", "props": { "element": "article", "ariaLabel": "Article" }, "nodes": ["headline", "byline", "cover", "body", "line", "related"] },
+            "headline": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "{{entry.title}}" } },
+            "byline": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "By {{entry.author}} · {{entry.date}}" } },
+            "cover": { "componentId": "image", "props": { "src": "{{entry.coverImage}}", "href": "{{entry.url}}", "alt": "Cover image for {{entry.title}}" } },
+            "body": { "componentId": "collectionEntryBody", "props": { "markdown": "{{entry.body}}" } },
+            "line": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "From {{collection.name}} ({{collection.slug}}) — entry slug: {{entry.slug}} — published {{entry.publishedAt}} — permalink {{entry.url}}" } },
+            "related": { "componentId": "collectionRelated", "props": { "heading": "Related reading", "layout": "list" } }
+          }
+        }
+      },
+      "fails": ["rules"]
     }
   ]
 }

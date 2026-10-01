@@ -1071,6 +1071,11 @@ jobs:
       # and which enrollments are owed nothing.
       - run: npm run test:enrollment-activity-backfill
 
+      # AGL-3446. The Nurturing backfill's decisions — which leads still in
+      # New a sequence email or a campaign email already reached, and the
+      # lead statuses it restates, held to the TypeScript that owns them.
+      - run: npm run test:lead-nurturing-backfill
+
       # AGL-3235. The one-record migration's decisions — which contact is a
       # duplicate of a lead and which a relationship, what a fold writes onto
       # the lead and never clears, what follows the person between records —

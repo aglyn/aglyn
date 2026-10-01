@@ -26,8 +26,10 @@ import {
 import type { AiJob, AiJobKind, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
 import {
   AI_TEMPLATE_SUBJECT_DEFINITIONS,
+  aiTemplateShownTokens,
   type AiTemplateSubject,
 } from '../model/ai-template-subjects'
+import { AI_JOB_CREATE_KINDS, AI_JOB_CREATE_NOUNS } from '../model/ai-job-creations'
 import { AI_PAGE_CREATE_KINDS, aiPagePlanShapeRefusal } from '../model/ai-page-job'
 import {
   aiPlanCapabilitiesForJob,
@@ -165,6 +167,11 @@ export function aiJobPlanPrompt(
  * of the Free page's 300-credit wall, taking the room it keeps for a re-asked
  * section from 45 credits to 44 and breaking `ai-job-free-page.spec.ts`. A
  * page job must not pay for a sentence about templates.
+ *
+ * The list is the tokens a reader sees, never the whole catalog (AGL-3143
+ * §16). Offered a slug and the publish timestamp, a live plan promised them,
+ * and its build kept the promise the only way a slug can be kept: it printed
+ * "entry slug: {{entry.slug}}" on every article.
  */
 export function aiPlanTemplateTokenLines(job: Pick<AiJob, 'kind' | 'inputs'>): string[] {
   if (job.kind !== 'template') return []
@@ -175,9 +182,9 @@ export function aiPlanTemplateTokenLines(job: Pick<AiJob, 'kind' | 'inputs'>): s
       : undefined
   if (!definition) return []
   return [
-    `The template's fields are the binding tokens its page shows, each one of: ${definition.tokens
-      .map((entry) => entry.token)
-      .join(', ')}. Promise only what the page fills.`,
+    `The template's fields are the binding tokens its page shows a reader, each one of: ${aiTemplateShownTokens(
+      definition,
+    ).join(', ')}. A link or picture token is shown by the link or picture holding it. Promise only what the page fills.`,
   ]
 }
 
@@ -190,12 +197,19 @@ export interface AiJobPlanScope extends AiPlanJobScope {
 /**
  * The kinds whose confirm door builds only some plans (AGL-3030). A page job
  * builds one screen and a scaffold four to eight; each builds only the
- * creations its list names. Every other planned kind builds its own one
- * output, and its plan is held to the workspace alone.
+ * creations its list names. A template, layout, component, form or email job
+ * builds its own record and what that record places (AGL-3143 §15,
+ * `AI_JOB_CREATE_KINDS`), and holds no plan to a shape.
  */
 export const AI_JOB_PLAN_SCOPES: Readonly<Partial<Record<AiJobKind, AiJobPlanScope>>> = {
   page: { noun: 'a page job', creates: AI_PAGE_CREATE_KINDS, shapeRefusal: aiPagePlanShapeRefusal },
   site: { noun: 'a site scaffold', creates: AI_SITE_CREATE_KINDS, shapeRefusal: aiSitePlanShapeRefusal },
+  ...Object.fromEntries(
+    Object.entries(AI_JOB_CREATE_KINDS).map(([kind, creates]) => [
+      kind,
+      { noun: AI_JOB_CREATE_NOUNS[kind as AiJobKind] as string, creates, shapeRefusal: () => null },
+    ]),
+  ),
 }
 
 /**

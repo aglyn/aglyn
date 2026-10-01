@@ -642,7 +642,7 @@ describe('a view saved with the old dropdowns', () => {
     expect(mockGrid.filterModel.items).toEqual([
       { id: 'list', field: 'leadSource', operator: 'is', value: 'Outbound · Apollo' },
     ])
-    expect(screen.getByText('Status is Open (new or working)')).toBeTruthy()
+    expect(screen.getByText('Status is Open (new, nurturing or working)')).toBeTruthy()
   })
 
   it('keeps "No lead source" as the isEmpty clause it stored', () => {
@@ -689,14 +689,14 @@ describe('the collection the section reads', () => {
     expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
   })
 
-  it('asks Open of the query as the two open statuses every lead stores', () => {
+  it('asks Open of the query as the three open statuses every lead stores', () => {
     mockFilters = []
     siteRows = [lead('l-fresh', 'fresh@example.com'), ...LEADS.slice(1)]
     renderSite()
     expect(lastListQueryPlan()?.filters).toContainEqual({
       path: 'status',
       op: 'in',
-      value: ['new', 'working'],
+      value: ['new', 'nurturing', 'working'],
     })
     expect(gridRows()).toEqual(['fresh@example.com', 'sam@example.com'])
   })

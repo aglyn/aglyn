@@ -287,6 +287,11 @@ It counts, per organization:
 - **Unworked leads** — leads on the sites you can reach that are still **New** after two
   days and have no owner, plus any lead whose owner is you. A lead with an owner is only
   on that owner's list.
+- **Leads in sequences or campaigns** — the same leads by the same rule, but
+  [Nurturing](./leads.md#lead-statuses) rather than New: a sequence or a campaign email is
+  already reaching them. The email counts them on one line ("12 leads are in sequences or
+  campaigns") and does not list them, and they are never a reason on their own to send
+  you a digest.
 
 The notification opens the Tasks section of the site the first task belongs to (or the
 Leads section when only leads are owed). The email lists each section — up to ten items

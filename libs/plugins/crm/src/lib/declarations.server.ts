@@ -170,6 +170,12 @@ export function registerCrmServerDeclarations(): void {
           await import('./server/record-email-state')
         return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).engaged!(request)
       },
+      // A delivered campaign's leads, moved to Nurturing (AGL-3446).
+      async reached(request) {
+        const { createCrmRecordEmailStateWriter, defaultCrmRecordEmailStateDeps } =
+          await import('./server/record-email-state')
+        return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).reached!(request)
+      },
     },
     { pluginId: BUNDLE_ID },
   )

@@ -43,6 +43,7 @@
  */
 
 import {
+  CRM_LEAD_OPEN_STATUSES,
   CRM_LEAD_STATUS_LABELS,
   type CrmLeadFields,
   type CrmLeadStatus,
@@ -124,7 +125,7 @@ const ACTION_TITLES: Record<PendingAction, string> = {
 }
 
 /** The statuses the bar can set — the open ones; closing goes through Unqualify. */
-const SETTABLE_STATUSES: readonly CrmLeadStatus[] = ['new', 'working']
+const SETTABLE_STATUSES: readonly CrmLeadStatus[] = CRM_LEAD_OPEN_STATUSES
 
 /** The label a report lists a lead under — its name, else its address. */
 const labelOf = (lead: LeadBulkRow): string =>

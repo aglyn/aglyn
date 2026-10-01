@@ -119,12 +119,12 @@
             "duplicateOf": null,
             "values": {
               "free": "2 GB",
-              "starter": "50 GB",
-              "pro": "125 GB",
-              "business": "185 GB",
-              "scale": "290 GB",
-              "advanced": "345 GB",
-              "agency": "1.54 TB",
+              "starter": "20 GB",
+              "pro": "35 GB",
+              "business": "55 GB",
+              "scale": "90 GB",
+              "advanced": "105 GB",
+              "agency": "485 GB",
               "enterprise": "Talk to us"
             }
           },
@@ -873,7 +873,7 @@
           "1% commerce fees",
           "300k API requests/mo",
           "25,000 products per site",
-          "290 GB bandwidth",
+          "90 GB bandwidth",
           "40,000 campaign emails/mo"
         ],
         "cta": "CHOOSE",
@@ -1140,14 +1140,14 @@
       {
         "label": "Page views (bandwidth + reads)",
         "unit": "/ 1k views",
-        "ourCost": "$0.276923 / 1k views",
-        "youPay": "$0.36 / 1k views"
+        "ourCost": "$0.538462 / 1k views",
+        "youPay": "$0.70 / 1k views"
       },
       {
         "label": "Form submissions",
         "unit": "/ 1k",
-        "ourCost": "$0.05 / 1k",
-        "youPay": "$0.065 / 1k"
+        "ourCost": "$0.053846 / 1k",
+        "youPay": "$0.07 / 1k"
       }
     ],
     "note": "Applies only to plans with `meteredInfraPassThrough`. Dataset storage over the included amount is a separate retail rate ($0.36 / GB-mo), not this pass-through."

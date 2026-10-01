@@ -209,14 +209,15 @@ export function aiPagePlanRefusal(plan: AiBuildPlan): string | null {
  * in a sentence a member reads when confirming it: what the workspace's plan
  * does not include, or what the site has no room left for. The plan step was
  * told what could be created, so this is the site changing between the plan
- * and its confirmation.
+ * and its confirmation. `noun` names what the job builds, for a template,
+ * layout, component, form or email job held the same way (AGL-3143 §15).
  */
-export function aiPageCreationRefusal(refused: readonly AiPlanUncreatable[]): string | null {
+export function aiPageCreationRefusal(refused: readonly AiPlanUncreatable[], noun = 'page'): string | null {
   if (!refused.length) return null
   const parts = refused.map(
     ({ kind, name, reason }) => `the ${AI_BUILD_PLAN_CREATION_NOUNS[kind].noun} “${name}”, because ${reason}`,
   )
   const listed =
     parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join('; ')}; and ${parts[parts.length - 1]}`
-  return `This page cannot be built as planned: it creates ${listed}. Describe the page again.`
+  return `This ${noun} cannot be built as planned: it creates ${listed}. Describe the ${noun} again.`
 }

@@ -56,13 +56,17 @@ type UsageConfig = { orgLibraryBilledFrom: string | null } | 'unknown'
 /**
  * A rate, at the precision it is actually charged at.
  *
- * `$0.0338/GB-month` and `$0.065 per 1,000` both round to `$0.00` at two
- * decimal places, so the currency default would print every metered rate on
- * the platform as free. Four decimals covers all three, and the trailing
- * zeros are stripped so `$0.3600` does not read as spurious precision.
+ * `$0.0338/GB-month` reads `$0.03` at two decimal places and a per-unit
+ * page view or submission reads `$0.00`, so the currency default would
+ * misstate every metered rate on the platform. Four decimals covers all
+ * three, and the trailing
+ * zeros PAST THE CENT are stripped so `$0.3600` does not read as spurious
+ * precision — but a rate is never shorter than the cent, so `$0.7000` reads
+ * `$0.70`, the figure `/pricing` states, and not `$0.7`.
  */
 function rateText(usd: number): string {
-  return `$${usd.toFixed(4).replace(/\.?0+$/, '')}`
+  const [whole, fraction = ''] = usd.toFixed(4).split('.')
+  return `$${whole}.${fraction.replace(/0+$/, '').padEnd(2, '0')}`
 }
 
 /** "a", "a and b", "a, b and c" — the house style has no serial comma. */

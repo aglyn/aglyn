@@ -63,11 +63,15 @@ function errorResponse(
 export const ApiErrors = {
   unauthorized: (init?: ApiResponseInit) =>
     errorResponse(401, 'unauthorized', 'Invalid or missing API key', init),
+  // The plan named is the cheapest one carrying `apiAccess`, and every plan
+  // above it carries it too. Written out rather than looked up so this module
+  // stays import-free; `api-http.spec.ts` reads the plan table and fails when
+  // the two disagree.
   planRequired: (init?: ApiResponseInit) =>
     errorResponse(
       403,
       'plan_required',
-      'API access requires the Business or Advanced plan',
+      'API access requires the Business plan or above',
       init,
     ),
   insufficientScope: (scope: string, headers?: Record<string, string>) =>

@@ -355,7 +355,7 @@ const SOCIAL_CRAWLER_BYPASS_RULE = Object.freeze({
  * does, so a caller rotating addresses inside one /64 is the function's to
  * bound, not this rule's.
  *
- * ## Log first, and never `challenge` or `deny` past the limit
+ * ## Logged first, enforcing since 2026-10-01; never `challenge` or `deny`
  *
  * `exceeded: 'log'` refuses nobody. It also records nobody: the bypass behind
  * it acts on every request, which drops the log (see the header). So the log
@@ -364,7 +364,9 @@ const SOCIAL_CRAWLER_BYPASS_RULE = Object.freeze({
  * 1,500 in the whole window. The enforcing value is `'rate_limit'`, a 429 a
  * client can back off from: a `PATCH rules.update` on the live rule that
  * changes only `rateLimit.action`, with this field changed to match in the
- * same change. `challenge` and `deny` are wrong for this path in either mode,
+ * same change. That switch was made on 2026-10-01, after a window in which no
+ * address but the burst test's reached 1,500 requests in a whole day on either
+ * project. `challenge` and `deny` are wrong for this path in either mode,
  * because the callers it serves without a browser can answer neither.
  */
 const MEDIA_CDN_RATE_LIMIT_RULE = Object.freeze({
@@ -379,7 +381,7 @@ const MEDIA_CDN_RATE_LIMIT_RULE = Object.freeze({
     limit: 1500,
     keys: Object.freeze(['ip']),
   }),
-  exceeded: 'log',
+  exceeded: 'rate_limit',
   precedes: 'Public asset delivery bypass',
 })
 

@@ -42,7 +42,7 @@ import {
 const GB = 1024 * 1024 * 1024
 
 /**
- * Starter: 1 site × 2048 MB storage, 50 GB bandwidth, 200 form submissions.
+ * Starter: 1 site × 2048 MB storage, 20 GB bandwidth, 200 form submissions.
  * Pro is the multi-site case (3 × 10240 MB, 3 × 1000 submissions), which is
  * what proves the org-wide expansion rather than assuming it.
  */
@@ -94,13 +94,13 @@ describe('meteredIncludedAllowance', () => {
   })
 
   it('sizes enterprise bands at the finite fallback, unmetered', () => {
-    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 3,080 GB of
+    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 970 GB of
     // views, 200 × 50,000 submissions — and `metered` false, so nothing past
     // them bills: an agreement sets the terms, and a per-org override the
     // figures.
     const included = meteredIncludedAllowance({ plan: 'enterprise' } as any)
     expect(included.storageGb).toBe(24_000)
-    expect(included.pageViews).toBe(pageViewsFromBandwidthGb(3_080))
+    expect(included.pageViews).toBe(pageViewsFromBandwidthGb(970))
     expect(included.meters.formSubmissions!).toBe(10_000_000)
     expect(included.metered).toBe(false)
     // A contracted UNLIMITED still subtracts to zero billable usage.
@@ -254,11 +254,12 @@ describe('estimateMonthlyUsageCost', () => {
   })
 
   /**
-   * A page view past the band bills its weight AND its CDN requests (AGL-1879)
-   * — $0.36 per 1,000 — while `costUsd`, the COGS figure the cost model
-   * shares, still prices every view on weight alone.
+   * A page view past the band bills its weight AND its CDN requests, both at
+   * the CDN's dearest region (AGL-1879, AGL-3444) — $0.70 per 1,000 — while
+   * `costUsd`, the COGS figure the cost model shares, prices every view on
+   * weight alone.
    */
-  it('bills page views past the band at $0.36 per 1,000', () => {
+  it('bills page views past the band at $0.70 per 1,000', () => {
     const included = meteredIncludedAllowance(starter)
     const estimate = estimateMonthlyUsageCost(
       [
@@ -274,13 +275,13 @@ describe('estimateMonthlyUsageCost', () => {
       Math.ceil(included.pageViews) - included.pageViews + 100_000,
       6,
     )
-    // Pinned as LITERALS: 100,000 views × $0.36 / 1,000 = $36.00, from a
-    // cost of 100,000 × $0.000276923 = $27.69.
+    // Pinned as LITERALS: 100,000 views × $0.70 / 1,000 = $70.00, from a
+    // cost of 100,000 × $0.000538462 = $53.85.
     const views = estimate.billablePageViews
-    expect(estimate.billableCostUsd).toBeCloseTo(views * 0.00027692308, 8)
-    expect(estimate.billedCents).toBe(Math.round(views * 0.00036 * 100))
-    expect(estimate.billedCents).toBe(3600)
-    expect(estimate.billableUsdByMeter.pageViews).toBeCloseTo(views * 0.00036, 6)
+    expect(estimate.billableCostUsd).toBeCloseTo(views * 0.00053846154, 8)
+    expect(estimate.billedCents).toBe(Math.round(views * 0.0007 * 100))
+    expect(estimate.billedCents).toBe(7000)
+    expect(estimate.billableUsdByMeter.pageViews).toBeCloseTo(views * 0.0007, 6)
     // COGS stays on weight: every view, at the shared unit rate.
     expect(estimate.costUsd).toBeCloseTo(
       estimate.pageViews * ORG_COGS_UNIT_RATES_USD.perPageView,
@@ -398,7 +399,7 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   })
 
   /**
-   * The published rate set: $0.0338/GB-mo, $0.36/1k page views, $0.065/1k form
+   * The published rate set: $0.0338/GB-mo, $0.70/1k page views, $0.07/1k form
    * submissions. Those are the CUSTOMER-facing figures, so they are asserted
    * post-markup — the form the published page states and the form a customer
    * can check. `published-pricing-table-parity.spec.ts` pins the same three
@@ -407,11 +408,13 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
    * half-applied rate correction can move what a customer is billed without a
    * red.
    *
-   * Two of the three are where the Sept-1 lock put them. The page-view rate
-   * was re-pegged on 2026-09-09 (AGL-2711) when the weight reduction the
-   * standing decision preferred landed and the page still measured far above
-   * the 627 KB the rate was calibrated for, and a billed view took on its CDN
-   * requests on 2026-10-01 (AGL-1879): $0.21 → $0.36.
+   * Storage is where the Sept-1 lock put it. The page-view rate was
+   * re-pegged on 2026-09-09 (AGL-2711) when the weight reduction the standing
+   * decision preferred landed and the page still measured far above the
+   * 627 KB the rate was calibrated for; a billed view took on its CDN requests
+   * on 2026-10-01 (AGL-1879), $0.21 → $0.36; and the same day every
+   * Vercel-billed input was priced at the dearest region (AGL-3444): page
+   * views $0.70, form submissions $0.065 → $0.07.
    */
   it('prices the published rate set after markup', () => {
     const per1k = (rate: number) =>
@@ -421,17 +424,17 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
         METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP * 10_000,
       ) / 10_000,
     ).toBe(0.0338)
-    expect(per1k(METERED_OVERAGE_COST_USD.perPageView)).toBe(0.36)
-    expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.065)
-    // The page-view price is the weight term plus the request term, and the
-    // weight term alone is the figure /pricing carried before.
+    expect(per1k(METERED_OVERAGE_COST_USD.perPageView)).toBe(0.7)
+    expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.07)
+    // The page-view price is the weight term plus the request term; the
+    // weight term alone, marked up, is a figure no surface publishes.
     expect(METERED_OVERAGE_COST_USD.perPageView).toBe(
       METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
     )
-    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.21)
+    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.4611)
     // And the billed table is that sum marked up, the figure the Billing
     // card prints.
-    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.36)
+    expect(Math.round(METERED_BILLED_RATES_USD.perPageView * 1000 * 100) / 100).toBe(0.7)
     // Storage and form submissions carry no second term.
     expect(METERED_OVERAGE_COST_USD.storagePerGbMonth).toBe(
       METERED_UNIT_RATES_USD.storagePerGbMonth,

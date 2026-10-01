@@ -24,7 +24,7 @@
  * host one, and the incident's sibling site published a page at the
  * document-share path `/reviewfile`.
  *
- * Three shapes, one per requirement:
+ * Five shapes:
  *
  * 1. **A lookalike link or embed** (`lookalike-link`, STRONG) — any `href`,
  *    `src`, form action or URL in the page's authored content whose host
@@ -42,26 +42,53 @@
  *    whose text names a brand that is not the workspace's AND asks the reader
  *    to sign in, verify, confirm or open a document, on a page that links
  *    somewhere that is neither the workspace's, nor a brand's own, nor a
- *    common social or maps link. The same element, not the same page: a
- *    hotel that says "find us on Booking.com" in one place and "sign in" in
- *    another is two ordinary sentences.
+ *    common social or maps link.
+ * 4. **A brand's lure, page-wide** (`brand-lure-page`, SOFT, AGL-3447) — the
+ *    same brand and link anywhere on the page, beside an account or
+ *    document-share LURE anywhere on it ("Secure Document Access Portal"), or
+ *    a call to action that leaves the site worded as an action ("Continue to
+ *    Document"). The 2026-10-01 phishing page put Proofpoint's name in its
+ *    body, the lure in its heading and the action on its button: three
+ *    elements, none of which shape 3 reads on its own. What it does not count page-wide is
+ *    a bare "sign in" that stays on the site — a hotel that says "find us on
+ *    Booking.com" in one place and has a member sign-in in another is two
+ *    ordinary sentences.
+ * 5. **A call to action that leaves, beside a lure** (`offsite-action-page`,
+ *    SOFT, AGL-3447) — the page's only call to action, or one worded as an
+ *    account or document action, sends visitors to a host that is not the
+ *    site's own, a listed brand's or a common link, on a page that carries an
+ *    account or document-share lure. No brand needed: a "Secure Document
+ *    Access Portal" whose one button leaves for the kit is the shape whatever
+ *    name it wears.
+ *
+ * Shapes 3-5 are soft, so they hold only for a workspace in its first
+ * fortnight (`signalsThatHold`); an established workspace's page is held by
+ * shapes 1 and 2 alone.
+ *
+ * The same reading applies to a site REDIRECT ({@link screenSiteRedirect}):
+ * a rule that sends a path off the site is a page whose one call to action
+ * fires on arrival, and its path is the only text it has.
  *
  * Pure: the caller hands over the composed node tree and the workspace's own
  * names and hosts, and decides what a hold does.
  *=========================================*/
 
 import {
+  ACCOUNT_LURE_PATTERNS,
+  DOCUMENT_SHARE_LURE_PATTERNS,
   isWorkspaceOwnBrand,
   linkHostsIn,
   isBrandsOwnDomain,
   lookalikeBrandForHost,
   PHISHING_LURE_PATTERNS,
   PHISHING_SCREEN_BRANDS,
+  type PhishingScreenBrand,
   type PhishingScreenSignal,
   registrableDomain,
   isAnyOfficialBrandDomain,
   isCommonLinkDomain,
   squashScreenText,
+  visibleTextOf,
 } from './outbound-phishing-screen'
 
 export interface HostedPageScreenInput {
@@ -131,8 +158,8 @@ const HTML_CREDENTIAL_INPUTS: ReadonlyArray<{ field: 'password' | 'card' | 'otp'
 
 /**
  * What an element asks its reader to DO with an account or a document —
- * counted only beside a brand in the SAME element. The email lure phrasing
- * counts too.
+ * counted beside a brand in the SAME element, or on a call to action that
+ * leaves the site. The email lure phrasing counts too.
  */
 const PAGE_ACTION_PATTERNS: readonly RegExp[] = [
   /\b(?:sign|log)[\s-]?in\b/i,
@@ -140,8 +167,36 @@ const PAGE_ACTION_PATTERNS: readonly RegExp[] = [
   /\bconfirm\s+(?:your|the)\b/i,
   /\bunlock\b/i,
   /\benter\s+your\b/i,
-  /\b(?:view|review|open|download)\s+(?:the\s+|your\s+)?(?:shared\s+)?(?:file|document|invoice|statement)s?\b/i,
+  /\b(?:view|review|open|download|access)\s+(?:the\s+|your\s+)?(?:shared\s+|secure\s+)?(?:file|document|invoice|statement)s?\b/i,
+  /\b(?:continue|proceed)\s+to\s+(?:the\s+|your\s+)?(?:document|file|account|sign[\s-]?in|log[\s-]?in)s?\b/i,
 ]
+
+/**
+ * The lures a page is read for as a WHOLE (AGL-3447): account and
+ * document-share wording. Not the marketplace, booking and parcel lures,
+ * which a hotel's "guest reviews" and a shop's delivery page carry every day
+ * and which still count in one element beside a brand.
+ */
+const PAGE_LURE_PATTERNS: readonly RegExp[] = [...ACCOUNT_LURE_PATTERNS, ...DOCUMENT_SHARE_LURE_PATTERNS]
+
+/**
+ * A component that renders a call to action — a button or a link, however a
+ * plugin names it (`muiButton`, `muiScreenLink`, `muiLinkBox`). It is one
+ * when it carries a target: an `href`, or a `screenId` on the site itself.
+ */
+const CALL_TO_ACTION_COMPONENT = /button|fab|cta|link/i
+
+/** The props a call to action's visible words live in; the first found wins. */
+const CALL_TO_ACTION_LABEL_KEYS = ['children', 'label', 'text', 'title', 'html']
+
+/** URLs in page text, so prose is read for a brand or a lure without them. */
+const PROSE_URL_PATTERN = /(?:https?:)?\/\/[^\s"'<>]+|\bwww\.[^\s"'<>]+/gi
+
+/** One call to action: what it says, and the host it leaves for (null: it stays). */
+interface CallToAction {
+  label: string
+  host: string | null
+}
 
 /** Every node in the tree, breadth-first in document order, bounded. */
 function walkNodes(root: unknown): WalkedNode[] {
@@ -311,23 +366,26 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
     }
   })
 
-  // 3. A brand's call to action, in one element, on a page that links away.
-  const foreign = linkHosts.find((host) => {
+  const isElsewhere = (host: string) => {
     if (isOwnHost(host)) return false
     const registrable = registrableDomain(host)
     return !isAnyOfficialBrandDomain(registrable) && !isCommonLinkDomain(registrable)
-  })
+  }
+  const foreign = linkHosts.find(isElsewhere)
+  const actions = [...PAGE_ACTION_PATTERNS, ...PHISHING_LURE_PATTERNS]
+  const named = new Set<string>()
+  const isOthersBrand = (brand: PhishingScreenBrand) =>
+    !named.has(brand.id) && !isWorkspaceOwnBrand(brand, ownNames, ownRegistrables)
+
+  // 3. A brand's call to action, in one element, on a page that links away.
   if (foreign) {
-    const actions = [...PAGE_ACTION_PATTERNS, ...PHISHING_LURE_PATTERNS]
-    const named = new Set<string>()
     for (const strings of nodeStrings) {
-      const text = strings.join(' ')
+      const text = proseOf(strings.join(' '))
       if (!text) continue
-      const action = actions.map((pattern) => text.match(pattern)?.[0]).find(Boolean)
+      const action = firstMatch(actions, text)
       if (!action) continue
       for (const brand of PHISHING_SCREEN_BRANDS) {
-        if (named.has(brand.id)) continue
-        if (brand.mention.test(text) && !isWorkspaceOwnBrand(brand, ownNames, ownRegistrables)) {
+        if (isOthersBrand(brand) && brand.mention.test(text)) {
           named.add(brand.id)
           signals.push({ code: 'brand-action-page', brand: brand.id, action: action.slice(0, 80) })
         }
@@ -335,5 +393,175 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
     }
   }
 
+  const prose = proseOf(pageText)
+  const pageLure = firstMatch(PAGE_LURE_PATTERNS, prose)
+  const ctas = callsToAction(nodes)
+  const leaving = ctas.filter((cta): cta is CallToAction & { host: string } =>
+    Boolean(cta.host && isElsewhere(cta.host)),
+  )
+  const wordedLeaving = leaving.find((cta) => firstMatch(actions, cta.label))
+
+  // 4. A brand's lure, read over the page as a whole, on a page that links away.
+  const brandLure = pageLure ?? (wordedLeaving ? firstMatch(actions, wordedLeaving.label) : undefined)
+  if (foreign && brandLure) {
+    const host = (wordedLeaving ?? leaving[0])?.host ?? foreign
+    for (const brand of PHISHING_SCREEN_BRANDS) {
+      if (isOthersBrand(brand) && brand.mention.test(prose)) {
+        named.add(brand.id)
+        signals.push({ code: 'brand-lure-page', brand: brand.id, lure: brandLure.slice(0, 120), host })
+      }
+    }
+  }
+
+  // 5. The page's call to action leaves the site, beside a lure. Its only
+  //    one, or the one worded as an account or document action.
+  const primary = wordedLeaving ?? (ctas.length === 1 ? leaving[0] : undefined)
+  if (primary && pageLure) {
+    signals.push({
+      code: 'offsite-action-page',
+      action: (primary.label || primary.host).slice(0, 80),
+      lure: pageLure.slice(0, 120),
+      host: primary.host,
+    })
+  }
+
   return { signals }
+}
+
+/**
+ * What a visitor reads in page text: its markup taken out the way the email
+ * screen takes it out ({@link visibleTextOf}), so a custom HTML block or a
+ * rich-text prop cannot split a brand or a lure letter by letter with tags
+ * (AGL-3453), and its bare URLs taken out too. Links are still read from
+ * the raw text, where an href lives.
+ */
+function proseOf(text: string): string {
+  return visibleTextOf(text).replace(PROSE_URL_PATTERN, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/** The first pattern's match in the text, or undefined. */
+function firstMatch(patterns: readonly RegExp[], text: string): string | undefined {
+  if (!text) return undefined
+  for (const pattern of patterns) {
+    const found = text.match(pattern)?.[0]
+    if (found) return found
+  }
+  return undefined
+}
+
+/** The words a call to action shows, from its label prop, markup taken out. */
+function callToActionLabel(props: Record<string, unknown>): string {
+  for (const key of CALL_TO_ACTION_LABEL_KEYS) {
+    const value = props[key]
+    if (typeof value === 'string' && value.trim()) {
+      return visibleTextOf(value).split('\n')[0]
+    }
+  }
+  return ''
+}
+
+/**
+ * Every call to action on the page: each button or link that carries a
+ * target. A `screenId` is a page of the site and takes precedence over an
+ * `href`, as the button renders it; a relative, `mailto:` or `tel:` href has
+ * no web host and stays too.
+ */
+function callsToAction(nodes: readonly WalkedNode[]): CallToAction[] {
+  const found: CallToAction[] = []
+  for (const node of nodes) {
+    if (!CALL_TO_ACTION_COMPONENT.test(node.componentId)) continue
+    const screenId = typeof node.props['screenId'] === 'string' ? node.props['screenId'].trim() : ''
+    const href = typeof node.props['href'] === 'string' ? node.props['href'].trim() : ''
+    if (!screenId && !href) continue
+    const absolute = href.startsWith('//') ? `https:${href}` : href
+    found.push({
+      label: callToActionLabel(node.props),
+      host: screenId ? null : (linkHostsIn(absolute)[0] ?? null),
+    })
+  }
+  return found
+}
+
+export interface SiteRedirectScreenInput {
+  /** The path the rule answers — `/secure-document` — or its pattern. */
+  source: string
+  /** Where it sends the visitor, after any `$n` substitution. */
+  destination: string
+  /** The workspace's own names, as `screenHostedPage` reads them. */
+  ownNames?: readonly (string | null | undefined)[]
+  /** The workspace's own hosts — a redirect to one never leaves. */
+  ownDomains?: readonly (string | null | undefined)[]
+}
+
+/**
+ * Screen one site redirect (AGL-3447): a rule that sends a path off the site
+ * is a call to action that fires on arrival, so it is read with the page's
+ * rules over the one text it has, its path.
+ *
+ * - `lookalike-link` (STRONG) — the destination wears a brand it is not.
+ * - `offsite-redirect` (SOFT) — the destination is not the site's own, a
+ *   listed brand's or a common link, and the path reads as an account or
+ *   document-share lure (`/secure-document-access`).
+ * - `brand-lure-link` (SOFT) — the same, and the path names a brand that is
+ *   not the workspace's (`/paypal-verify-your-account`), the email screen's
+ *   three-part lure.
+ *
+ * The caller applies the tiers with `signalsThatHold`, with the workspace's
+ * age, and decides what a hold does.
+ */
+export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageScreenVerdict {
+  const signals: PhishingScreenSignal[] = []
+  const destination = String(input.destination ?? '').trim()
+  const hosts = linkHostsIn(destination.startsWith('//') ? `https:${destination}` : destination)
+  if (!hosts.length) return { signals }
+  const ownNames = squashScreenText((input.ownNames ?? []).filter(Boolean).join(' '))
+  const ownHosts = (input.ownDomains ?? [])
+    .map((domain) => String(domain ?? '').trim().toLowerCase().replace(/\.+$/, ''))
+    .filter((domain) => domain.includes('.'))
+  const ownRegistrables = new Set(ownHosts.map(registrableDomain))
+
+  for (const host of hosts) {
+    const brand = lookalikeBrandForHost(host)
+    if (brand && !isBrandsOwnDomain(brand, ownRegistrables)) {
+      signals.push({ code: 'lookalike-link', brand: brand.id, host })
+    }
+  }
+
+  // The first host is where the browser goes; the rest is a userinfo disguise.
+  const host = hosts[0]
+  const registrable = registrableDomain(host)
+  const leaves =
+    !ownHosts.some((own) => host === own || host.endsWith(`.${own}`)) &&
+    !isAnyOfficialBrandDomain(registrable) &&
+    !isCommonLinkDomain(registrable)
+  if (!leaves) return { signals }
+
+  const source = String(input.source ?? '').trim()
+  const words = pathWords(source)
+  const lure = firstMatch(PAGE_LURE_PATTERNS, words)
+  if (lure) {
+    signals.push({ code: 'offsite-redirect', source: source.slice(0, 120), lure: lure.slice(0, 120), host })
+  }
+  const anyLure = lure ?? firstMatch(PHISHING_LURE_PATTERNS, words)
+  if (anyLure) {
+    const brand = PHISHING_SCREEN_BRANDS.find(
+      (candidate) =>
+        candidate.mention.test(words) && !isWorkspaceOwnBrand(candidate, ownNames, ownRegistrables),
+    )
+    if (brand) {
+      signals.push({ code: 'brand-lure-link', brand: brand.id, lure: anyLure.slice(0, 120), host })
+    }
+  }
+  return { signals }
+}
+
+/** A path read as words: `/secure-document_access` → `secure document access`. */
+function pathWords(path: string): string {
+  let decoded = path
+  try {
+    decoded = decodeURIComponent(path)
+  } catch {
+    // A malformed escape is read as typed.
+  }
+  return decoded.replace(/[^a-z0-9]+/gi, ' ').trim()
 }

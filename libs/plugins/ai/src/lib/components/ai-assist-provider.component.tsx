@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn'
 import { portableDefinitionToNested } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import { AiAssistActionsContext } from './ai-assist-actions-context'
+import { assistNotOnPlanText } from '../usage/assist-credits'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -171,10 +172,10 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         )
       }
       if (!checkEntitlement(org as never, 'aiAssist')) {
-        return void enqueueSnackbar(
-          'AI assist requires a Pro plan — see Billing to upgrade',
-          { variant: 'warning', persist: false },
-        )
+        return void enqueueSnackbar(assistNotOnPlanText(), {
+          variant: 'warning',
+          persist: false,
+        })
       }
       setInstruction('')
       setTargetProp('children')
@@ -292,10 +293,10 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
       })
     }
     if (!checkEntitlement(org as never, 'aiAssist')) {
-      return void enqueueSnackbar(
-        'AI assist requires a Pro plan — see Billing to upgrade',
-        { variant: 'warning', persist: false },
-      )
+      return void enqueueSnackbar(assistNotOnPlanText(), {
+        variant: 'warning',
+        persist: false,
+      })
     }
     setSectionPrompt('')
     setSectionOpen(true)

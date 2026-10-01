@@ -1221,15 +1221,15 @@ test('a media rate limit switched to CHALLENGE past the limit fails, naming who 
   const config = healthyTenantConfig()
   ruleNamed(config, MEDIA_LIMIT_NAME).action.mitigate.rateLimit.action = 'challenge'
   const findings = tenantFindings(config)
-  assert.match(findings, /answers "challenge" past the limit, declared "log"/)
+  assert.match(findings, /answers "challenge" past the limit, declared "rate_limit"/)
   assert.match(findings, /unanswerable for the crawlers and mail image proxies/)
 })
 
-test('enforcing live while the table still says log fails, so the two change together', () => {
+test('logging live while the table says it enforces fails, so the two change together', () => {
   const config = healthyTenantConfig()
-  ruleNamed(config, MEDIA_LIMIT_NAME).action.mitigate.rateLimit.action = 'rate_limit'
+  ruleNamed(config, MEDIA_LIMIT_NAME).action.mitigate.rateLimit.action = 'log'
   const findings = tenantFindings(config)
-  assert.match(findings, /answers "rate_limit" past the limit, declared "log"/)
+  assert.match(findings, /answers "log" past the limit, declared "rate_limit"/)
   assert.doesNotMatch(findings, /unanswerable/)
 })
 

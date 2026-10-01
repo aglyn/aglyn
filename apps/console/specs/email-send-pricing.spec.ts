@@ -475,9 +475,9 @@ describe('the billed rate and the cost rate are different numbers', () => {
     }
     expect(METERED_MARKUP).toBe(1.3)
     expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0338, 6)
-    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.36, 6)
+    expect(METERED_BILLED_RATES_USD.perPageView * 1000).toBeCloseTo(0.7, 6)
     expect(METERED_BILLED_RATES_USD.perFormSubmission * 1000).toBeCloseTo(
-      0.065,
+      0.07,
       6,
     )
   })

@@ -47,6 +47,7 @@ import {
   crmDigestWindow,
   type CrmMemberDigest,
   digestTimeZone,
+  isNurturingLead,
   isUnworkedLead,
   utcDayKey,
 } from '../model/crm-digest'
@@ -232,6 +233,7 @@ interface MemberReport {
   overdue?: number
   today?: number
   leads?: number
+  nurturing?: number
   notified?: boolean
   emailed?: boolean
   emailReason?: string
@@ -325,6 +327,8 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   const hostById = new Map(hosts.docs.map((doc) => [doc.id, doc]))
   const leadCutoff = nowMs - CRM_DIGEST_LEAD_AGE_MS
   const leads: CrmDigestLead[] = []
+  // Read from the same window, and counted, not listed (AGL-3446).
+  const nurturing: CrmDigestLead[] = []
   for (const host of hosts.docs) {
     /*
      * Still per site, but over the ORG collection narrowed to what that site
@@ -344,8 +348,14 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
       .get()
     for (const doc of page.docs) {
       const data = doc.data() as Record<string, unknown>
-      if (!isUnworkedLead(data as Parameters<typeof isUnworkedLead>[0], nowMs)) continue
-      leads.push({
+      const fields = data as Parameters<typeof isUnworkedLead>[0]
+      const into = isUnworkedLead(fields, nowMs)
+        ? leads
+        : isNurturingLead(fields, nowMs)
+          ? nurturing
+          : null
+      if (!into) continue
+      into.push({
         id: doc.id,
         hostId: host.id,
         email: String(data['email'] ?? ''),
@@ -371,6 +381,7 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   const digests = buildMemberDigests({
     tasks,
     leads,
+    nurturing,
     window,
     members: members.map((member) => ({
       uid: member.$id,

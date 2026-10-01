@@ -807,6 +807,17 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       'A commit sha from this repository, a status context naming the failing gate jobs, and a link to the Actions run. No personal data and no customer data exist on that path to send.',
   },
+  // `registry.npmjs.org` arrived with AGL-3201, when the dist-tag tool began
+  // asking the registry for a version's own document rather than waiting out
+  // the package document's edge cache. It is release tooling reading the
+  // registry this repository's packages are published to.
+  'registry.npmjs.org': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "The release tool `npm run dist-tags` asks the public npm registry whether a version of this repository's own `@aglyn/*` packages exists yet, reading that version's document because the package document is cached at the edge for five minutes. It runs only in the publish workflow or an operator's terminal. It is never imported by the console or tenant runtime, so no request-serving code path reaches it.",
+    dataReceived:
+      'An unauthenticated GET naming one package and one version from this repository. No personal data and no customer data exist on that path to send.',
+  },
   'github.com': {
     disposition: 'no-request',
     reason:
