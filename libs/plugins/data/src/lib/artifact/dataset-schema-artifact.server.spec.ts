@@ -43,9 +43,12 @@
  * relink choice are what this code computed rather than what a stub returned.
  */
 
+/** Ids handed out in order when a case stages them, else the one id. */
+const mockUids: string[] = []
+
 jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/server'),
-  createResourceUid: () => 'ds-installed',
+  createResourceUid: () => mockUids.shift() ?? 'ds-installed',
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -71,7 +74,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         get: (field: string) => read(row(), field),
       }),
       create: async (data: Record<string, any>) => {
+        // Firestore's own refusal when the document already exists.
+        if (row()) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 })
         state.creates.push({ orgId, id, data })
+        ;(state.datasets[orgId] ??= []).push({ $id: id, ...data })
       },
       set: async (data: Record<string, any>, options: unknown) => {
         state.sets.push({ orgId, id, data, options })
@@ -88,6 +94,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     return ref
   }
   const datasetsOf = (orgId: string) => ({
+    /**
+     * A marker the transaction double recognises rather than a number, so a
+     * commit that counted OUTSIDE the transaction and handed the answer in
+     * cannot pass for one that counted inside it.
+     */
+    count: () => ({ __count: () => (state.datasets[orgId] ?? []).length }),
     get: async () => {
       const rows = state.datasets[orgId] ?? []
       return {
@@ -101,7 +113,34 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     doc: (id: string) => datasetDoc(orgId, id),
   })
+  /**
+   * A transaction that SERIALIZES its bodies and defers their writes, which is
+   * what the fix leans on: one global lock stands in for the pessimistic lock
+   * an aggregate read takes, so the second body's count sees the first body's
+   * create. The lock advances when a body rejects too.
+   */
+  let lock: Promise<unknown> = Promise.resolve()
+  const runTransaction = async (body: (tx: any) => Promise<unknown>) => {
+    const attempt = lock.then(async () => {
+      const buffered: Array<() => Promise<unknown>> = []
+      const result = await body({
+        get: async (target: any) => {
+          if (buffered.length) throw new Error('Firestore transactions cannot read after a write')
+          if (typeof target?.__count !== 'function') throw new Error('only an aggregate is read here')
+          return { data: () => ({ count: target.__count() }) }
+        },
+        create: (ref: any, data: Record<string, any>) => {
+          buffered.push(() => ref.create(data))
+        },
+      })
+      for (const write of buffered) await write()
+      return result
+    })
+    lock = attempt.catch(() => undefined)
+    return attempt
+  }
   const firestore = {
+    runTransaction,
     collection: (name: string) => {
       if (name !== 'orgs') throw new Error(`unexpected collection ${name}`)
       return {
@@ -180,6 +219,7 @@ async function install(published: unknown = PUBLISHED) {
 }
 
 beforeEach(() => {
+  mockUids.length = 0
   state.datasets = {}
   state.recordCounts = {}
   state.creates.length = 0
@@ -317,6 +357,72 @@ describe('install: a reference relinks only to a dataset every site can see', ()
     const prepared = await install()
 
     expect((prepared.content as any).fields.speaker.reference.datasetId).toBe('ds-speakers')
+  })
+})
+
+describe('install: the dataset cap holds under concurrency (AGL-3454)', () => {
+  /**
+   * The installer records provenance between `prepare` and `commit`, so N
+   * installs in flight each prepare against the same pre-count. Only the
+   * count `commit` takes inside its transaction can hold the cap.
+   *
+   * FORCED RED: committing with a plain `create` (the code before AGL-3454)
+   * lands all five installs in the capped case below.
+   */
+  const installConcurrently = async (org: Record<string, unknown>, count: number) => {
+    mockUids.push(...Array.from({ length: count }, (_, index) => `ds-new-${index}`))
+    const prepared = await Promise.all(
+      Array.from({ length: count }, () =>
+        prepareDatasetSchemaInstall({ orgId: 'org-1', org, listing: LISTING, published: PUBLISHED }),
+      ),
+    )
+    return Promise.all(
+      prepared.map((one) => {
+        if (one.ok === false) throw new Error(one.error)
+        return one.commit(STAMP)
+      }),
+    )
+  }
+
+  it('lands exactly as many as the cap has room for, and refuses the rest', async () => {
+    const org = { plan: 'starter' }
+    const { checkDatasetQuota } = jest.requireActual('@aglyn/aglyn/server') as {
+      checkDatasetQuota: (org: unknown, count: number) => { limit: number }
+    }
+    const limit = checkDatasetQuota(org, 0).limit
+    expect(limit).toBeGreaterThanOrEqual(2)
+    // Two places left.
+    state.datasets['org-1'] = Array.from({ length: limit - 2 }, (_, index) => ({
+      $id: `ds-${index}`,
+      displayName: `Set ${index}`,
+      visibleTo: ['org'],
+    }))
+
+    const outcomes = await installConcurrently(org, 5)
+
+    expect(outcomes.filter((one) => one.ok)).toHaveLength(2)
+    expect(outcomes.filter((one) => !one.ok)).toEqual(
+      Array.from({ length: 3 }, () => ({
+        ok: false,
+        status: 403,
+        error: `Dataset limit reached (${limit}) — see Billing to upgrade.`,
+      })),
+    )
+    expect(state.creates).toHaveLength(2)
+    expect(state.datasets['org-1']).toHaveLength(limit)
+  })
+
+  it('lands every one where the plan has room for all of them', async () => {
+    const outcomes = await installConcurrently({ plan: 'pro' }, 5)
+
+    expect(outcomes.every((one) => one.ok)).toBe(true)
+    expect(state.creates.map((one) => one.id)).toEqual([
+      'ds-new-0',
+      'ds-new-1',
+      'ds-new-2',
+      'ds-new-3',
+      'ds-new-4',
+    ])
   })
 })
 

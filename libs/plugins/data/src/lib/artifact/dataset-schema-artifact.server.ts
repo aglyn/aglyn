@@ -62,6 +62,9 @@ const refuse = (status: number, error: string): ArtifactRefusal => ({
 const datasetsOf = (orgId: string) =>
   firebaseAdmin.app().firestore().collection('orgs').doc(orgId).collection('datasets')
 
+const overDatasetQuota = (limit: number): ArtifactRefusal =>
+  refuse(403, `Dataset limit reached (${limit}) — see Billing to upgrade.`)
+
 /**
  * PUBLISHING: an org dataset's SCHEMA, reduced to what travels.
  *
@@ -170,11 +173,13 @@ export async function prepareDatasetSchemaInstall(
   // (AGL-1046). Scoping decides who can see a dataset, never who pays for
   // it: the org owns all of them. Counting per scope would also make a
   // collaborator's remaining quota disagree with the admin's.
+  //
+  // This is the early answer, so a workspace already at its cap is refused
+  // before the installer records any provenance. The one that holds is in
+  // `commit`, below.
   const datasets = await datasetsRef.get()
   const quota = checkDatasetQuota(org, datasets.size)
-  if (!quota.allowed) {
-    return refuse(403, `Dataset limit reached (${quota.limit}) — see Billing to upgrade.`)
-  }
+  if (!quota.allowed) return overDatasetQuota(quota.limit)
 
   /**
    * Who the new dataset is shared with. Decided before relinking, because
@@ -224,26 +229,51 @@ export async function prepareDatasetSchemaInstall(
     // datasets, so a base holding the publisher's ids would report every
     // relinked field as a user edit the moment anything is diffed.
     content: schema,
+    /**
+     * THE ENFORCEMENT POINT (AGL-3454, the AGL-2371 treatment): the count,
+     * the decision and the create in ONE transaction.
+     *
+     * The count above is taken before the installer awaits the provenance
+     * write, and every await is a yield: N installs in flight each read the
+     * same pre-count, each find room, and each land, and nothing re-counts
+     * afterwards. `tx.get` on the aggregate takes a pessimistic lock on the
+     * documents the query matched, so the loser of a race retries, re-reads
+     * the higher count and is refused, having written nothing.
+     *
+     * The org document is read outside, as the console's create path reads
+     * it: the plan and the purchased add-ons are not client-writable, so
+     * locking it would buy contention rather than correctness.
+     */
     commit: async (stamp) => {
-      await datasetsRef.doc(datasetId).create({
-        displayName: String(listing.displayName ?? 'Dataset').slice(0, 120),
-        ...(listing.description ? { description: listing.description } : {}),
-        // `fields` is the v1 flat list the older editor still reads; keep it
-        // in step with the model so both readers agree (AGL-102).
-        fields: schema.order,
-        model: schema,
-        source: stamp.source,
-        installedFrom: stamp.installedFrom,
-        // The scope decided above. Stamping it is not optional: a dataset
-        // with no `visibleTo` matches no scoped read and would render on no
-        // site at all.
-        //
-        // Through the AGL-1478 gate since AGL-1484, so "every other dataset
-        // creator" is a fact about the type rather than about four object
-        // literals that happen to agree today.
-        ...newResourceScopeFields(visibleTo),
-        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+      const refused = await firebaseAdmin
+        .app()
+        .firestore()
+        .runTransaction<ArtifactRefusal | null>(async (tx) => {
+          const live = (await tx.get(datasetsRef.count())).data().count
+          const authoritative = checkDatasetQuota(org, live)
+          if (!authoritative.allowed) return overDatasetQuota(authoritative.limit)
+          tx.create(datasetsRef.doc(datasetId), {
+            displayName: String(listing.displayName ?? 'Dataset').slice(0, 120),
+            ...(listing.description ? { description: listing.description } : {}),
+            // `fields` is the v1 flat list the older editor still reads; keep it
+            // in step with the model so both readers agree (AGL-102).
+            fields: schema.order,
+            model: schema,
+            source: stamp.source,
+            installedFrom: stamp.installedFrom,
+            // The scope decided above. Stamping it is not optional: a dataset
+            // with no `visibleTo` matches no scoped read and would render on no
+            // site at all.
+            //
+            // Through the AGL-1478 gate since AGL-1484, so "every other dataset
+            // creator" is a fact about the type rather than about four object
+            // literals that happen to agree today.
+            ...newResourceScopeFields(visibleTo),
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          })
+          return null
+        })
+      if (refused) return refused
       return {
         ok: true,
         report: { datasetId, fields: schema.order.length, degradedFieldIds },
