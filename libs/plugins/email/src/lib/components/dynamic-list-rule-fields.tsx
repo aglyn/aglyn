@@ -82,17 +82,29 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   useHostCampaigns,
   useOrgMemberOptions,
 } from '@aglyn/tenant-feature-instance'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import { useContentStable } from '@aglyn/shared-ui-jsx/hooks/use-content-stable'
 import {
   type OrgCompanyOption,
   useOrgCompanyOptions,
 } from '../hooks/use-org-company-options'
-import { useOrgContactFields } from '../hooks/use-org-contact-fields'
+import {
+  type OrgContactFieldOption,
+  useOrgContactFields,
+} from '../hooks/use-org-contact-fields'
 import { useOrgContactSegments } from '../hooks/use-org-contact-segments'
 import { useOrgCrmViews } from '../hooks/use-org-crm-views'
 import { useOrgLists } from '../hooks/use-org-lists'
@@ -781,6 +793,264 @@ const RuleCompaniesField = memo(function RuleCompaniesField(props: {
   )
 })
 
+/** What a control's change hands over: the value, as text or as a list. */
+type FieldChange = { target: { value: string } }
+
+/** The draft's keys a control writes exactly as typed or picked. */
+type TypedRuleKey =
+  | 'segmentId'
+  | 'viewId'
+  | 'tags'
+  | 'formNames'
+  | 'createdAfter'
+  | 'createdBefore'
+  | 'ordersCountAtLeast'
+  | 'ltvAtLeast'
+  | 'lastPurchaseWithinDays'
+  | 'noPurchaseForDays'
+  | 'openedWithinDays'
+  | 'clickedWithinDays'
+  | 'notOpenedForDays'
+  | 'notClickedForDays'
+  | 'engagedWithinDays'
+
+/** A text field that redraws only when what it shows changes (AGL-3423). */
+const MemoTextField = memo(TextField) as typeof TextField
+const MemoCampaignPicker = memo(CampaignPicker)
+
+/**
+ * One `{ minWidth }` object per width, so a memoized field's `sx` is the same
+ * object on every render.
+ */
+const MIN_WIDTHS = new Map<number, { minWidth: number }>()
+const atLeast = (minWidth: number) => {
+  let sx = MIN_WIDTHS.get(minWidth)
+  if (!sx) {
+    sx = { minWidth }
+    MIN_WIDTHS.set(minWidth, sx)
+  }
+  return sx
+}
+const WRAP = { flexWrap: 'wrap' } as const
+const WRAP_TOP = { flexWrap: 'wrap', alignItems: 'flex-start' } as const
+const SUMMARY_BOX = {
+  border: 1,
+  borderColor: 'divider',
+  borderRadius: 1,
+  p: 1.5,
+} as const
+const CAMPAIGN_BOX = { minWidth: 240, flexGrow: 1, maxWidth: 360 } as const
+const CAPTION_BLOCK = { display: 'block', mt: 0.5 } as const
+const MULTIPLE = { select: { multiple: true } }
+const SHRUNK_LABEL = { inputLabel: { shrink: true } }
+const STAGES_SELECT = {
+  select: {
+    multiple: true,
+    renderValue: (selected: unknown) =>
+      (selected as ContactLifecycleStage[])
+        .map((stage) => CONTACT_LIFECYCLE_STAGE_LABELS[stage] ?? stage)
+        .join(', '),
+  },
+}
+
+/*
+ * The fixed menus, built once. A select's options are its children, and a
+ * child list built during render is a new prop on every render.
+ */
+const SOURCE_MENU = Object.entries(SOURCE_LABELS).map(([value, label]) => (
+  <MenuItem key={value} value={value}>
+    {label}
+  </MenuItem>
+))
+const MATCH_MENU = [
+  <MenuItem key="all" value="all">
+    {'All of the filters below'}
+  </MenuItem>,
+  <MenuItem key="any" value="any">
+    {'Any one of the filters below'}
+  </MenuItem>,
+  <MenuItem key="none" value="none">
+    {'Nobody matching all of them'}
+  </MenuItem>,
+]
+const CAPTURE_MENU = Object.entries(CONTACT_SOURCE_LABELS).map(
+  ([value, label]) => (
+    <MenuItem key={value} value={value}>
+      {label}
+    </MenuItem>
+  ),
+)
+const STAGE_MENU = CONTACT_LIFECYCLE_STAGES.map((stage) => (
+  <MenuItem key={stage} value={stage}>
+    {CONTACT_LIFECYCLE_STAGE_LABELS[stage]}
+  </MenuItem>
+))
+const OP_MENU = DYNAMIC_LIST_CUSTOM_OPS.map((op) => (
+  <MenuItem key={op} value={op}>
+    {CUSTOM_OP_LABELS[op]}
+  </MenuItem>
+))
+const CHECKED_MENU = [
+  <MenuItem key="true" value="true">
+    {'Checked'}
+  </MenuItem>,
+  <MenuItem key="false" value="false">
+    {'Not checked'}
+  </MenuItem>,
+]
+
+/** A multi-select hands back a string when only one option is chosen. */
+const asArray = <T extends string,>(value: unknown): T[] =>
+  typeof value === 'string' ? [value as T] : ((value as T[]) ?? [])
+
+/** Saved segments, views and audiences as menu items: a name, else the id. */
+const menuOf = (rows: ReadonlyArray<{ $id: string; name?: string }>) =>
+  rows.map((row) => (
+    <MenuItem key={row.$id} value={row.$id}>
+      {row.name ?? row.$id}
+    </MenuItem>
+  ))
+/** The first choice of a saved segment or view: none. No stored id is empty. */
+const NONE_ITEM = (
+  <MenuItem key="" value="">
+    {'None'}
+  </MenuItem>
+)
+
+/**
+ * One field condition: the field, how it compares, and the value — typed by
+ * the field's definition, so a number field hands the matcher a number and a
+ * choice field offers its own options, and a presence test asks for no value
+ * at all.
+ *
+ * Memoized, with handlers that write through the row's index, so a keystroke
+ * in one condition's value redraws that value and nothing else (AGL-3423).
+ */
+const CustomClauseRow = memo(function CustomClauseRow(props: {
+  index: number
+  clause: DynamicListCustomClause
+  /** The definition the clause's key names, when the org still has one. */
+  definition: OrgContactFieldOption | undefined
+  fieldMenu: ReactNode
+  onUpdate(index: number, patch: Partial<DynamicListCustomClause>): void
+  onRemove(index: number): void
+}) {
+  const { index, clause, definition, fieldMenu, onUpdate, onRemove } = props
+  const valueText = String(clause.value ?? '')
+  const setKey = useCallback(
+    (event: FieldChange) =>
+      onUpdate(index, { key: event.target.value, value: '' }),
+    [index, onUpdate],
+  )
+  const setOp = useCallback(
+    (event: FieldChange) =>
+      onUpdate(index, { op: event.target.value as DynamicListCustomOp }),
+    [index, onUpdate],
+  )
+  const setValue = useCallback(
+    (event: FieldChange) => onUpdate(index, { value: event.target.value }),
+    [index, onUpdate],
+  )
+  const setChecked = useCallback(
+    (event: FieldChange) =>
+      onUpdate(index, { value: event.target.value === 'true' }),
+    [index, onUpdate],
+  )
+  const setNumber = useCallback(
+    (event: FieldChange) => {
+      // A number field stores a NUMBER, so the matcher compares 10 with 9
+      // and not "10" with "9"; half-typed text stays text until it parses,
+      // rather than becoming NaN.
+      const text = event.target.value
+      const parsed = Number(text)
+      onUpdate(index, {
+        value: text.trim() !== '' && Number.isFinite(parsed) ? parsed : text,
+      })
+    },
+    [index, onUpdate],
+  )
+  const remove = useCallback(() => onRemove(index), [index, onRemove])
+  return (
+    <Stack direction="row" spacing={1} useFlexGap sx={WRAP_TOP}>
+      <MemoTextField
+        select
+        size="small"
+        label="Field"
+        value={clause.key}
+        onChange={setKey}
+        sx={atLeast(180)}
+      >
+        {fieldMenu}
+      </MemoTextField>
+      <MemoTextField
+        select
+        size="small"
+        label="Condition"
+        value={clause.op}
+        onChange={setOp}
+        sx={atLeast(160)}
+      >
+        {OP_MENU}
+      </MemoTextField>
+      {PRESENCE_OPS.has(clause.op) ? null : definition?.type === 'select' ? (
+        <MemoTextField
+          select
+          size="small"
+          label="Value"
+          value={valueText}
+          onChange={setValue}
+          sx={atLeast(180)}
+        >
+          {(definition.options ?? []).map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </MemoTextField>
+      ) : definition?.type === 'checkbox' ? (
+        <MemoTextField
+          select
+          size="small"
+          label="Value"
+          value={
+            clause.value === true
+              ? 'true'
+              : clause.value === false
+                ? 'false'
+                : ''
+          }
+          onChange={setChecked}
+          sx={atLeast(140)}
+        >
+          {CHECKED_MENU}
+        </MemoTextField>
+      ) : definition?.type === 'number' ? (
+        <MemoTextField
+          type="number"
+          size="small"
+          label="Value"
+          value={valueText}
+          onChange={setNumber}
+          sx={atLeast(140)}
+        />
+      ) : (
+        <MemoTextField
+          type={definition?.type === 'date' ? 'date' : 'text'}
+          size="small"
+          label="Value"
+          value={valueText}
+          onChange={setValue}
+          slotProps={definition?.type === 'date' ? SHRUNK_LABEL : undefined}
+          sx={atLeast(180)}
+        />
+      )}
+      <Button size="small" onClick={remove}>
+        {'Remove'}
+      </Button>
+    </Stack>
+  )
+})
+
 export interface DynamicListRuleFieldsProps {
   /** `['orgs', orgId]` — the resolved org scope the caller already holds. */
   scope: readonly [string, string]
@@ -808,7 +1078,28 @@ export interface DynamicListRuleFieldsProps {
   listId?: string
 }
 
-export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
+/**
+ * The rule's controls.
+ *
+ * ## A keystroke redraws the field it lands in (AGL-3423)
+ *
+ * Every control writes the same draft, and the draft is the parent's state,
+ * so each keystroke renders this component again. Drawn inline, that redrew
+ * every control on the form — 27 inputs and some thousand components for one
+ * letter — and a keystroke that costs that much lets typed input queue, which
+ * is what turns a chip field's per-commit update into React #185. So every
+ * control is memoized and handed only props that keep their identity while
+ * what it shows is unchanged: handlers that write through the latest draft,
+ * menus built once or from their own data, and `sx` objects that are
+ * constants. The sentences above the controls are the one part that is meant
+ * to change with every keystroke.
+ *
+ * The component is memoized as a whole as well, so a keystroke in the page's
+ * own fields — the list's name — does not draw the rule at all.
+ */
+export const DynamicListRuleFields = memo(function DynamicListRuleFields(
+  props: DynamicListRuleFieldsProps,
+) {
   const { scope, hostId, draft, onChange, listId } = props
   const segmentDocs = useOrgContactSegments(scope)
   const viewDocs = useOrgCrmViews(scope)
@@ -878,6 +1169,13 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
     [listDocs, listId],
   )
 
+  const memberNames = useMemo(
+    () =>
+      Object.fromEntries(
+        team.options.map((option) => [option.uid, option.label]),
+      ),
+    [team.options],
+  )
   /** Ids the pickers can show, so a clause names an audience rather than a uid. */
   const names = useMemo(
     () => ({
@@ -891,9 +1189,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       campaigns: Object.fromEntries(
         siteCampaigns.options.map((option) => [option.value, option.label]),
       ),
-      members: Object.fromEntries(
-        team.options.map((option) => [option.uid, option.label]),
-      ),
+      members: memberNames,
       companies: companies.names,
       fields: Object.fromEntries(
         fieldDefinitions.fields.map((field) => [field.key, field.label]),
@@ -904,7 +1200,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       segments,
       crmViews,
       siteCampaigns.options,
-      team.options,
+      memberNames,
       companies.names,
       fieldDefinitions.fields,
     ],
@@ -928,38 +1224,125 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       ...team.options,
     ]
   }, [team.options, draft.ownerUids])
-  const fieldOptions = useMemo(() => {
-    const known = new Set(fieldDefinitions.fields.map((field) => field.key))
-    return [
-      ...draft.custom
-        .filter((clause) => !known.has(clause.key))
-        .map((clause) => ({ key: clause.key, label: clause.key }))
-        .filter(
-          (entry, index, all) =>
-            all.findIndex((other) => other.key === entry.key) === index,
-        ),
-      ...fieldDefinitions.fields.map(({ key, label }) => ({ key, label })),
-    ]
-  }, [fieldDefinitions.fields, draft.custom])
-  /** The definition a clause's key names, when the org still has one. */
-  const definitionFor = (key: string) =>
-    fieldDefinitions.fields.find((field) => field.key === key)
-
-  const set = <K extends keyof DynamicListRuleDraft>(
-    key: K,
-    value: DynamicListRuleDraft[K],
-  ) => onChange({ ...draft, [key]: value })
   /*
-   * `set('companyIds', …)` for the memoized company chips: the same write from
-   * the last rendered draft, from a callback that keeps its identity.
+   * Held by content: the options are read from the clauses' KEYS, and a value
+   * typed into a clause is a new clause list with the same keys — which would
+   * otherwise redraw every row's field picker on each keystroke (AGL-3423).
+   */
+  const fieldOptions = useContentStable(
+    useMemo(() => {
+      const known = new Set(fieldDefinitions.fields.map((field) => field.key))
+      return [
+        ...draft.custom
+          .filter((clause) => !known.has(clause.key))
+          .map((clause) => ({ key: clause.key, label: clause.key }))
+          .filter(
+            (entry, index, all) =>
+              all.findIndex((other) => other.key === entry.key) === index,
+          ),
+        ...fieldDefinitions.fields.map(({ key, label }) => ({ key, label })),
+      ]
+    }, [fieldDefinitions.fields, draft.custom]),
+  )
+
+  /* The menus that come from data, rebuilt only when their data changes. */
+  const segmentMenu = useMemo(
+    () => [NONE_ITEM, ...menuOf(segments)],
+    [segments],
+  )
+  const viewMenu = useMemo(
+    () => [NONE_ITEM, ...menuOf(crmViews)],
+    [crmViews],
+  )
+  const listMenu = useMemo(() => menuOf(lists), [lists])
+  const ownerMenu = useMemo(
+    () =>
+      ownerOptions.map((option) => (
+        <MenuItem key={option.uid} value={option.uid}>
+          {option.label}
+        </MenuItem>
+      )),
+    [ownerOptions],
+  )
+  const ownerSelect = useMemo(
+    () => ({
+      select: {
+        multiple: true,
+        renderValue: (selected: unknown) =>
+          (selected as string[])
+            .map((uid) => named(uid, memberNames))
+            .join(', '),
+      },
+    }),
+    [memberNames],
+  )
+  const fieldMenu = useMemo(
+    () =>
+      fieldOptions.map((option) => (
+        <MenuItem key={option.key} value={option.key}>
+          {option.label}
+        </MenuItem>
+      )),
+    [fieldOptions],
+  )
+
+  /*
+   * Every control writes `{ ...draft, [key]: value }` from the last rendered
+   * draft, through handlers that keep their identity from render to render —
+   * a handler rebuilt per render is a changed prop, and a changed prop redraws
+   * the field it is on.
    */
   const latest = useRef({ draft, onChange })
   latest.current = { draft, onChange }
-  const setCompanyIds = useCallback(
-    (companyIds: string[]) =>
-      latest.current.onChange({ ...latest.current.draft, companyIds }),
+  const set = useCallback(
+    <K extends keyof DynamicListRuleDraft>(
+      key: K,
+      value: DynamicListRuleDraft[K],
+    ) => latest.current.onChange({ ...latest.current.draft, [key]: value }),
     [],
   )
+  const on = useMemo(() => {
+    const typed =
+      (key: TypedRuleKey) =>
+      (event: FieldChange): void =>
+        set(key, event.target.value)
+    return {
+      sources: (event: FieldChange) =>
+        set('sources', asArray<DynamicListSource>(event.target.value)),
+      match: (event: FieldChange) =>
+        set('match', event.target.value as DynamicListRuleMatch),
+      createdAfter: typed('createdAfter'),
+      createdBefore: typed('createdBefore'),
+      formNames: typed('formNames'),
+      campaignIds: (next: string[]) => set('campaignIds', next),
+      segmentId: typed('segmentId'),
+      viewId: typed('viewId'),
+      tags: typed('tags'),
+      captureSources: (event: FieldChange) =>
+        set('captureSources', asArray<ContactSource>(event.target.value)),
+      ownerUids: (event: FieldChange) =>
+        set('ownerUids', asArray<string>(event.target.value)),
+      lifecycleStages: (event: FieldChange) =>
+        set(
+          'lifecycleStages',
+          asArray<ContactLifecycleStage>(event.target.value),
+        ),
+      companyIds: (companyIds: string[]) => set('companyIds', companyIds),
+      engagedWithinDays: typed('engagedWithinDays'),
+      ordersCountAtLeast: typed('ordersCountAtLeast'),
+      ltvAtLeast: typed('ltvAtLeast'),
+      lastPurchaseWithinDays: typed('lastPurchaseWithinDays'),
+      noPurchaseForDays: typed('noPurchaseForDays'),
+      openedWithinDays: typed('openedWithinDays'),
+      clickedWithinDays: typed('clickedWithinDays'),
+      notOpenedForDays: typed('notOpenedForDays'),
+      notClickedForDays: typed('notClickedForDays'),
+      inListIds: (event: FieldChange) =>
+        set('inListIds', asArray<string>(event.target.value)),
+      notInListIds: (event: FieldChange) =>
+        set('notInListIds', asArray<string>(event.target.value)),
+    }
+  }, [set])
   const companyIds = draft.companyIds
   const companyNames = companies.names
   const chosenCompanies = useMemo(
@@ -976,30 +1359,38 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
    * replaced it; changing the operator to a presence test removes it, so the
    * stored clause carries no value the sentence does not read.
    */
-  const addClause = () => {
+  const addClause = useCallback(() => {
     const first = fieldOptions[0]
     if (!first) return
-    set('custom', [...draft.custom, { key: first.key, op: 'eq', value: '' }])
-  }
-  const updateClause = (index: number, patch: Partial<DynamicListCustomClause>) =>
-    set(
-      'custom',
-      draft.custom.map((clause, at) => {
-        if (at !== index) return clause
-        const next = { ...clause, ...patch }
-        if (PRESENCE_OPS.has(next.op)) delete next.value
-        return next
-      }),
-    )
-  const removeClause = (index: number) =>
-    set(
-      'custom',
-      draft.custom.filter((_, at) => at !== index),
-    )
-
-  /** A multi-select hands back a string when only one option is chosen. */
-  const asArray = <T extends string,>(value: unknown): T[] =>
-    typeof value === 'string' ? [value as T] : ((value as T[]) ?? [])
+    set('custom', [
+      ...latest.current.draft.custom,
+      { key: first.key, op: 'eq', value: '' },
+    ])
+  }, [fieldOptions, set])
+  const updateClause = useCallback(
+    (index: number, patch: Partial<DynamicListCustomClause>) =>
+      set(
+        'custom',
+        latest.current.draft.custom.map((clause, at) => {
+          if (at !== index) return clause
+          const next = { ...clause, ...patch }
+          if (PRESENCE_OPS.has(next.op)) delete next.value
+          return next
+        }),
+      ),
+    [set],
+  )
+  const removeClause = useCallback(
+    (index: number) =>
+      set(
+        'custom',
+        latest.current.draft.custom.filter((_, at) => at !== index),
+      ),
+    [set],
+  )
+  /** The definition a clause's key names, when the org still has one. */
+  const definitionFor = (key: string) =>
+    fieldDefinitions.fields.find((field) => field.key === key)
 
   const contactsOnly = draft.sources.includes('contacts')
 
@@ -1012,14 +1403,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
         question is "who is this", and the answer should not be below the fold
         of the form that produced it.
        */}
-      <Box
-        sx={{
-          border: 1,
-          borderColor: 'divider',
-          borderRadius: 1,
-          p: 1.5,
-        }}
-      >
+      <Box sx={SUMMARY_BOX}>
         <Typography variant="overline" color="text.secondary">
           {'This audience'}
         </Typography>
@@ -1029,71 +1413,61 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           </Typography>
         ))}
       </Box>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <TextField
+      <Stack direction="row" spacing={1} useFlexGap sx={WRAP}>
+        <MemoTextField
           select
           size="small"
           label="People from"
           value={draft.sources}
-          onChange={(event) =>
-            set('sources', asArray<DynamicListSource>(event.target.value))
-          }
-          slotProps={{ select: { multiple: true } }}
-          sx={{ minWidth: 220 }}
+          onChange={on.sources}
+          slotProps={MULTIPLE}
+          sx={atLeast(220)}
         >
-          {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-            <MenuItem key={value} value={value}>
-              {label}
-            </MenuItem>
-          ))}
-        </TextField>
+          {SOURCE_MENU}
+        </MemoTextField>
         {/*
           The combinator, beside the source picker rather than buried below
           the filters it governs. It changes what every control under it
           means, and a reader who found it after filling the form in would
           have been answering a different question the whole time.
          */}
-        <TextField
+        <MemoTextField
           select
           size="small"
           label="Match"
           value={draft.match}
-          onChange={(event) =>
-            set('match', event.target.value as DynamicListRuleMatch)
-          }
+          onChange={on.match}
           helperText="A saved segment always applies"
-          sx={{ minWidth: 210 }}
+          sx={atLeast(210)}
         >
-          <MenuItem value="all">{'All of the filters below'}</MenuItem>
-          <MenuItem value="any">{'Any one of the filters below'}</MenuItem>
-          <MenuItem value="none">{'Nobody matching all of them'}</MenuItem>
-        </TextField>
-        <TextField
+          {MATCH_MENU}
+        </MemoTextField>
+        <MemoTextField
           type="date"
           size="small"
           label="Created after"
           value={draft.createdAfter}
-          onChange={(event) => set('createdAfter', event.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 170 }}
+          onChange={on.createdAfter}
+          slotProps={SHRUNK_LABEL}
+          sx={atLeast(170)}
         />
-        <TextField
+        <MemoTextField
           type="date"
           size="small"
           label="Created before"
           value={draft.createdBefore}
-          onChange={(event) => set('createdBefore', event.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ minWidth: 170 }}
+          onChange={on.createdBefore}
+          slotProps={SHRUNK_LABEL}
+          sx={atLeast(170)}
         />
-        <TextField
+        <MemoTextField
           size="small"
           label="Submitted form"
           placeholder="Contact us"
           helperText="Form submissions only"
           value={draft.formNames}
-          onChange={(event) => set('formNames', event.target.value)}
-          sx={{ minWidth: 180 }}
+          onChange={on.formNames}
+          sx={atLeast(180)}
         />
         {/*
           The campaign filter sits with the cross-silo controls rather than
@@ -1107,11 +1481,11 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           names they filed them with; a second select over the same ids is how
           one stored field comes to be presented two ways.
          */}
-        <Box sx={{ minWidth: 240, flexGrow: 1, maxWidth: 360 }}>
-          <CampaignPicker
+        <Box sx={CAMPAIGN_BOX}>
+          <MemoCampaignPicker
             options={siteCampaigns.options}
             value={draft.campaignIds}
-            onChange={(next) => set('campaignIds', next)}
+            onChange={on.campaignIds}
             label="In campaign"
             helperText="Contacts and form submissions filed under any campaign picked. Being in a campaign is not consent to be emailed."
             empty={siteCampaigns.ready && !siteCampaigns.options.length}
@@ -1138,71 +1512,55 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
             'other sources are matched without them.'}
         </Typography>
       )}
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <TextField
+      <Stack direction="row" spacing={1} useFlexGap sx={WRAP}>
+        <MemoTextField
           select
           size="small"
           label="Saved segment"
           value={draft.segmentId}
-          onChange={(event) => set('segmentId', event.target.value)}
+          onChange={on.segmentId}
           helperText="Reuses that segment's tags and sources"
-          sx={{ minWidth: 200 }}
+          sx={atLeast(200)}
         >
-          <MenuItem value="">{'None'}</MenuItem>
-          {segments.map((segment) => (
-            <MenuItem key={segment.$id} value={segment.$id}>
-              {segment.name ?? segment.$id}
-            </MenuItem>
-          ))}
-        </TextField>
+          {segmentMenu}
+        </MemoTextField>
         {/*
           A saved Contacts view as an audience (AGL-2617), beside the
           segment: its filters — owner, stage, company, tags, sources,
           dates, purchases and custom fields — always apply, the way a
           segment's do. Only views the sweep can honor are offered.
          */}
-        <TextField
+        <MemoTextField
           select
           size="small"
           label="Saved view"
           value={draft.viewId}
-          onChange={(event) => set('viewId', event.target.value)}
+          onChange={on.viewId}
           helperText="Reuses that Contacts view's filters"
-          sx={{ minWidth: 200 }}
+          sx={atLeast(200)}
         >
-          <MenuItem value="">{'None'}</MenuItem>
-          {crmViews.map((view) => (
-            <MenuItem key={view.$id} value={view.$id}>
-              {view.name}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
+          {viewMenu}
+        </MemoTextField>
+        <MemoTextField
           size="small"
           label="Tagged"
           placeholder="vip, wholesale"
           value={draft.tags}
-          onChange={(event) => set('tags', event.target.value)}
-          sx={{ minWidth: 180 }}
+          onChange={on.tags}
+          sx={atLeast(180)}
         />
-        <TextField
+        <MemoTextField
           select
           size="small"
           label="Captured by"
           value={draft.captureSources}
-          onChange={(event) =>
-            set('captureSources', asArray<ContactSource>(event.target.value))
-          }
-          slotProps={{ select: { multiple: true } }}
+          onChange={on.captureSources}
+          slotProps={MULTIPLE}
           helperText="How the contact reached you"
-          sx={{ minWidth: 200 }}
+          sx={atLeast(200)}
         >
-          {Object.entries(CONTACT_SOURCE_LABELS).map(([value, label]) => (
-            <MenuItem key={value} value={value}>
-              {label}
-            </MenuItem>
-          ))}
-        </TextField>
+          {CAPTURE_MENU}
+        </MemoTextField>
       </Stack>
       {/*
         THE CRM DIMENSIONS (AGL-2603), under Contacts because that is the only
@@ -1213,61 +1571,32 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
         satisfied by a contact nobody owns, and the helper text says so where
         a reader would otherwise assume the blank was included.
        */}
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <TextField
+      <Stack direction="row" spacing={1} useFlexGap sx={WRAP}>
+        <MemoTextField
           select
           size="small"
           label="Owned by"
           value={draft.ownerUids}
-          onChange={(event) => set('ownerUids', asArray<string>(event.target.value))}
-          slotProps={{
-            select: {
-              multiple: true,
-              renderValue: (selected) =>
-                (selected as string[])
-                  .map((uid) => named(uid, names.members))
-                  .join(', '),
-            },
-          }}
+          onChange={on.ownerUids}
+          slotProps={ownerSelect}
           error={Boolean(team.error)}
           helperText={team.error ?? 'Any of these team members. Unowned contacts are left out.'}
-          sx={{ minWidth: 220 }}
+          sx={atLeast(220)}
         >
-          {ownerOptions.map((option) => (
-            <MenuItem key={option.uid} value={option.uid}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
+          {ownerMenu}
+        </MemoTextField>
+        <MemoTextField
           select
           size="small"
           label="Lifecycle stage"
           value={draft.lifecycleStages}
-          onChange={(event) =>
-            set(
-              'lifecycleStages',
-              asArray<ContactLifecycleStage>(event.target.value),
-            )
-          }
-          slotProps={{
-            select: {
-              multiple: true,
-              renderValue: (selected) =>
-                (selected as ContactLifecycleStage[])
-                  .map((stage) => CONTACT_LIFECYCLE_STAGE_LABELS[stage] ?? stage)
-                  .join(', '),
-            },
-          }}
+          onChange={on.lifecycleStages}
+          slotProps={STAGES_SELECT}
           helperText="Any of these stages"
-          sx={{ minWidth: 200 }}
+          sx={atLeast(200)}
         >
-          {CONTACT_LIFECYCLE_STAGES.map((stage) => (
-            <MenuItem key={stage} value={stage}>
-              {CONTACT_LIFECYCLE_STAGE_LABELS[stage]}
-            </MenuItem>
-          ))}
-        </TextField>
+          {STAGE_MENU}
+        </MemoTextField>
         {/*
           A SEARCH, not a list: the org's companies are the collection that
           outgrows any dropdown, so nothing is read until something is typed
@@ -1281,7 +1610,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           search={companySearch}
           searching={companies.searching}
           onSearch={setCompanySearch}
-          onChange={setCompanyIds}
+          onChange={on.companyIds}
         />
         {/*
           THE RE-ENGAGEMENT WINDOW (AGL-2616), beside the other facet reads
@@ -1292,148 +1621,33 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           stamped is left out, the lean every CRM dimension takes, and the
           helper says so.
          */}
-        <TextField
+        <MemoTextField
           type="number"
           size="small"
           label="Engaged with a campaign within (days)"
           helperText="Opened or clicked one of your campaigns. Never engaged is left out."
           value={draft.engagedWithinDays}
-          onChange={(event) => set('engagedWithinDays', event.target.value)}
-          sx={{ minWidth: 280 }}
+          onChange={on.engagedWithinDays}
+          sx={atLeast(280)}
         />
       </Stack>
       {/*
         One row per condition, and every row must hold — a second condition
         NARROWS, which is what a second box means everywhere else on this
         form; the OR is the "any one of the filters" mode above, where each
-        row becomes a branch of its own. The value control is typed by the
-        field's definition, so a number field hands the matcher a number and
-        a choice field offers its own options, and a presence test asks for
-        no value at all.
+        row becomes a branch of its own.
        */}
-      {draft.custom.map((clause, index) => {
-        const definition = definitionFor(clause.key)
-        const valueText = String(clause.value ?? '')
-        return (
-          <Stack
-            key={index}
-            direction="row"
-            spacing={1}
-            useFlexGap
-            sx={{ flexWrap: 'wrap', alignItems: 'flex-start' }}
-          >
-            <TextField
-              select
-              size="small"
-              label="Field"
-              value={clause.key}
-              onChange={(event) =>
-                updateClause(index, { key: event.target.value, value: '' })
-              }
-              sx={{ minWidth: 180 }}
-            >
-              {fieldOptions.map((option) => (
-                <MenuItem key={option.key} value={option.key}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              size="small"
-              label="Condition"
-              value={clause.op}
-              onChange={(event) =>
-                updateClause(index, {
-                  op: event.target.value as DynamicListCustomOp,
-                })
-              }
-              sx={{ minWidth: 160 }}
-            >
-              {DYNAMIC_LIST_CUSTOM_OPS.map((op) => (
-                <MenuItem key={op} value={op}>
-                  {CUSTOM_OP_LABELS[op]}
-                </MenuItem>
-              ))}
-            </TextField>
-            {PRESENCE_OPS.has(clause.op) ? null : definition?.type === 'select' ? (
-              <TextField
-                select
-                size="small"
-                label="Value"
-                value={valueText}
-                onChange={(event) =>
-                  updateClause(index, { value: event.target.value })
-                }
-                sx={{ minWidth: 180 }}
-              >
-                {(definition.options ?? []).map((option) => (
-                  <MenuItem key={option} value={option}>
-                    {option}
-                  </MenuItem>
-                ))}
-              </TextField>
-            ) : definition?.type === 'checkbox' ? (
-              <TextField
-                select
-                size="small"
-                label="Value"
-                value={
-                  clause.value === true
-                    ? 'true'
-                    : clause.value === false
-                      ? 'false'
-                      : ''
-                }
-                onChange={(event) =>
-                  updateClause(index, { value: event.target.value === 'true' })
-                }
-                sx={{ minWidth: 140 }}
-              >
-                <MenuItem value="true">{'Checked'}</MenuItem>
-                <MenuItem value="false">{'Not checked'}</MenuItem>
-              </TextField>
-            ) : definition?.type === 'number' ? (
-              <TextField
-                type="number"
-                size="small"
-                label="Value"
-                value={valueText}
-                onChange={(event) => {
-                  // A number field stores a NUMBER, so the matcher compares
-                  // 10 with 9 and not "10" with "9"; half-typed text stays
-                  // text until it parses, rather than becoming NaN.
-                  const text = event.target.value
-                  const parsed = Number(text)
-                  updateClause(index, {
-                    value: text.trim() !== '' && Number.isFinite(parsed) ? parsed : text,
-                  })
-                }}
-                sx={{ minWidth: 140 }}
-              />
-            ) : (
-              <TextField
-                type={definition?.type === 'date' ? 'date' : 'text'}
-                size="small"
-                label="Value"
-                value={valueText}
-                onChange={(event) =>
-                  updateClause(index, { value: event.target.value })
-                }
-                slotProps={
-                  definition?.type === 'date'
-                    ? { inputLabel: { shrink: true } }
-                    : undefined
-                }
-                sx={{ minWidth: 180 }}
-              />
-            )}
-            <Button size="small" onClick={() => removeClause(index)}>
-              {'Remove'}
-            </Button>
-          </Stack>
-        )
-      })}
+      {draft.custom.map((clause, index) => (
+        <CustomClauseRow
+          key={index}
+          index={index}
+          clause={clause}
+          definition={definitionFor(clause.key)}
+          fieldMenu={fieldMenu}
+          onUpdate={updateClause}
+          onRemove={removeClause}
+        />
+      ))}
       <Box>
         <Button
           size="small"
@@ -1447,7 +1661,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ display: 'block', mt: 0.5 }}
+            sx={CAPTION_BLOCK}
           >
             {'This workspace has no custom contact fields yet. Define them ' +
               'under CRM → Fields to filter on them here.'}
@@ -1458,42 +1672,40 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       <Typography variant="overline" color="text.secondary">
         {'Purchase history'}
       </Typography>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <TextField
+      <Stack direction="row" spacing={1} useFlexGap sx={WRAP}>
+        <MemoTextField
           type="number"
           size="small"
           label="Orders at least"
           value={draft.ordersCountAtLeast}
-          onChange={(event) => set('ordersCountAtLeast', event.target.value)}
-          sx={{ minWidth: 160 }}
+          onChange={on.ordersCountAtLeast}
+          sx={atLeast(160)}
         />
-        <TextField
+        <MemoTextField
           type="number"
           size="small"
           label="Spent at least"
           helperText="Lifetime, in your store's currency"
           value={draft.ltvAtLeast}
-          onChange={(event) => set('ltvAtLeast', event.target.value)}
-          sx={{ minWidth: 190 }}
+          onChange={on.ltvAtLeast}
+          sx={atLeast(190)}
         />
-        <TextField
+        <MemoTextField
           type="number"
           size="small"
           label="Bought within (days)"
           value={draft.lastPurchaseWithinDays}
-          onChange={(event) =>
-            set('lastPurchaseWithinDays', event.target.value)
-          }
-          sx={{ minWidth: 190 }}
+          onChange={on.lastPurchaseWithinDays}
+          sx={atLeast(190)}
         />
-        <TextField
+        <MemoTextField
           type="number"
           size="small"
           label="Nothing bought for (days)"
           helperText="Lapsed customers — never bought is not lapsed"
           value={draft.noPurchaseForDays}
-          onChange={(event) => set('noPurchaseForDays', event.target.value)}
-          sx={{ minWidth: 220 }}
+          onChange={on.noPurchaseForDays}
+          sx={atLeast(220)}
         />
       </Stack>
 
@@ -1514,40 +1726,40 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           'person. Clicks are the stronger signal: mail apps that preload ' +
           'images record an open the reader never made.'}
       </Typography>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <TextField
+      <Stack direction="row" spacing={1} useFlexGap sx={WRAP}>
+        <MemoTextField
           type="number"
           size="small"
           label="Opened within (days)"
           value={draft.openedWithinDays}
-          onChange={(event) => set('openedWithinDays', event.target.value)}
-          sx={{ minWidth: 190 }}
+          onChange={on.openedWithinDays}
+          sx={atLeast(190)}
         />
-        <TextField
+        <MemoTextField
           type="number"
           size="small"
           label="Clicked within (days)"
           value={draft.clickedWithinDays}
-          onChange={(event) => set('clickedWithinDays', event.target.value)}
-          sx={{ minWidth: 190 }}
+          onChange={on.clickedWithinDays}
+          sx={atLeast(190)}
         />
-        <TextField
+        <MemoTextField
           type="number"
           size="small"
           label="Nothing opened for (days)"
           helperText="Never opened counts"
           value={draft.notOpenedForDays}
-          onChange={(event) => set('notOpenedForDays', event.target.value)}
-          sx={{ minWidth: 210 }}
+          onChange={on.notOpenedForDays}
+          sx={atLeast(210)}
         />
-        <TextField
+        <MemoTextField
           type="number"
           size="small"
           label="Nothing clicked for (days)"
           helperText="Never clicked counts"
           value={draft.notClickedForDays}
-          onChange={(event) => set('notClickedForDays', event.target.value)}
-          sx={{ minWidth: 210 }}
+          onChange={on.notClickedForDays}
+          sx={atLeast(210)}
         />
       </Stack>
 
@@ -1555,45 +1767,35 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
       <Typography variant="overline" color="text.secondary">
         {'Other audiences'}
       </Typography>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <TextField
+      <Stack direction="row" spacing={1} useFlexGap sx={WRAP}>
+        <MemoTextField
           select
           size="small"
           label="Already on"
           value={draft.inListIds}
-          onChange={(event) => set('inListIds', asArray<string>(event.target.value))}
-          slotProps={{ select: { multiple: true } }}
+          onChange={on.inListIds}
+          slotProps={MULTIPLE}
           helperText="Members of every audience picked"
-          sx={{ minWidth: 220 }}
+          sx={atLeast(220)}
         >
-          {lists.map((row) => (
-            <MenuItem key={row.$id} value={row.$id}>
-              {row.name ?? row.$id}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
+          {listMenu}
+        </MemoTextField>
+        <MemoTextField
           select
           size="small"
           label="Not on"
           value={draft.notInListIds}
-          onChange={(event) =>
-            set('notInListIds', asArray<string>(event.target.value))
-          }
-          slotProps={{ select: { multiple: true } }}
+          onChange={on.notInListIds}
+          slotProps={MULTIPLE}
           helperText="Excludes members of any audience picked"
-          sx={{ minWidth: 220 }}
+          sx={atLeast(220)}
         >
-          {lists.map((row) => (
-            <MenuItem key={row.$id} value={row.$id}>
-              {row.name ?? row.$id}
-            </MenuItem>
-          ))}
-        </TextField>
+          {listMenu}
+        </MemoTextField>
       </Stack>
     </Stack>
   )
-}
+})
 DynamicListRuleFields.displayName = 'DynamicListRuleFields'
 
 /**
