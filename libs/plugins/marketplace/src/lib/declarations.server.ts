@@ -22,6 +22,7 @@ import {
   listPluginOrgErasers,
   registerPluginOrgEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import { registerPluginRevocationReader } from '@aglyn/aglyn/plugin-manager/plugin-revocations'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { RATING_FIELD } from './model/rating-field'
 
@@ -29,8 +30,8 @@ import { RATING_FIELD } from './model/rating-field'
  * The marketplace plugin's server declarations: the light registrations core
  * reads at boot, before any surface loads.
  *
- * The `rating` field type's validator (AGL-434), and the marketplace's share
- * of a workspace erasure.
+ * The `rating` field type's validator (AGL-434), the marketplace's share of
+ * a workspace erasure, and its kill switch as another plugin reads it.
  *
  * The validator: A dataset field of this type
  * can be written by a path that never loads the marketplace — a visitor's
@@ -57,4 +58,18 @@ export function registerMarketplaceServerDeclarations(): void {
       { pluginId: BUNDLE_ID },
     )
   }
+  /*
+   * The kill switch (`plugin-revocations`, AGL-3080): the send path asks it
+   * before mailing a design installed from a listing, in whichever process
+   * sends. The Admin SDK arrives with the first read.
+   */
+  registerPluginRevocationReader(
+    {
+      async revocation(listingId) {
+        const { marketplaceRevocationReader } = await import('./server/revocation-reader')
+        return marketplaceRevocationReader.revocation(listingId)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }

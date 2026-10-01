@@ -891,7 +891,10 @@ stored — name, domain, address and the rest), and its `messageTemplate`
 records (facts: `{ kind, subject, body }`, the body in the CRM's merge-field
 grammar). Forms publishes a site's `formSubmission`
 records — the door's rows — and their documents (`ref`), which the Inbox marks
-answered and keeps its replies and list assignments under.
+answered and keeps its replies and list assignments under. Marketing publishes
+the organization's `emailSend` records (a campaign's sends, named, with the site
+each is sent as and its subject), which a person's timeline names its campaign
+mail by.
 
 ## Intake gates — `plugin-intake-gates` (`/server`)
 
@@ -985,7 +988,8 @@ const bottles = pluginRecordsFromRows('bottle', data)
 | `registerPluginRecordListSource(kind, source, { pluginId? })` | A kind another plugin lists throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
 | `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, consentGroupId?, viewerUid?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. `consentGroupId` is the group the named site presents as, for a kind whose records say different things to different groups. `viewerUid` is the signed-in member, for a kind some of whose records are one member's own. |
 | `source.record(id, data, request?)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed, not this reader's). `request` is the one the query was built from, when the reader hands it back: a rule the query cannot state — a site's view of an org-wide row, a member's private record — is applied here. |
-| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows, idField?, request?)` | The reader's half: the query to listen to, and the rows read back through the owner — hand the request back so the owner applies what the query could not state. Both answer nothing where no plugin keeps the kind here. |
+| `source.byIds?(firestore, { orgId?, hostId?, memberScope?, ids })` | Optional: the query for NAMED records of the scope, for a reader that already holds ids — an attribution naming the submission it credits. At most `PLUGIN_RECORD_LIST_IDS_MAX` (30, Firestore's `in` bound). A source without it reads none by name. |
+| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordListByIdsQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows, idField?, request?)` | The reader's half: the query to listen to (or read once by name), and the rows read back through the owner — hand the request back so the owner applies what the query could not state. Each answers nothing where no plugin keeps the kind here. |
 | `source.walk?(firestore, { orgId?, hostId? })` / `pluginRecordListWalk(kind, firestore, scope)` | Optional: the base a reader WALKS the kind from with the console's paged list query, which adds its own filters, order and pages over the stored fields the owner documents — for a reader that pages a whole list rather than picking from a window. Where the rules admit a read only narrowed by a field, the owner says which and the reader adds it. |
 | `source.doc?(firestore, { orgId?, hostId?, id })` / `pluginRecordListDoc(kind, firestore, request)` | Optional: one record's document, for a reader that opens it whole or changes what the owner documents a reader may change; the security rules hold the rest. |
 
@@ -996,7 +1000,7 @@ workspace's `dataset` records (a site's narrowed by its scope tokens, a scoped
 member's by theirs), each with the listing an installed one came from, which
 is how the marketplace knows what a workspace has installed; Workflows lists a
 site's `workflow`, `webhook` and `action` records, Marketing lists a site's
-`overlay` records (its announcement bars and popups), and Commerce FINDS a
+`overlay` records (its announcement bars and popups), Commerce FINDS a
 site's active `product` records by the first word typed, each with its price
 and priced variants. The CRM lists the saved views of its Contacts and Leads
 lists a member may list (`savedView`, with whether each can be taken whole as
@@ -1004,7 +1008,39 @@ an audience), its email templates (`messageTemplate`), a search of a site's
 `contact` records named as the site's group knows them, and a site's `lead`
 records with whether each is still open. Forms lists a site's `formSubmission` records — the
 newest for a glance, a site's or every site's for the Inbox to walk, and one
-submission's document for it to open, mark and delete.
+submission's document for it to open, mark and delete, and by name
+(`byIds`) for a campaign's conversion report grouping the ones it was credited
+with by the page each was sent from.
+
+## Record counts — `plugin-record-counts` (console)
+
+How many of a plugin's records one site produced, counted in the console for
+another plugin's figure — a campaign's conversions out of every submission,
+booking, lead or contact the site holds — without that plugin counting the
+owner's collection itself.
+
+```ts
+// the owner, from its console registrar
+registerPluginRecordCountSource('bottle', {
+  query: (firestore, { hostId }) => (hostId ? collection(firestore, 'hosts', hostId, 'bottles') : null),
+})
+
+// any other plugin: its own aggregation over the owner's query
+const source = pluginRecordCountSource('bottle')
+const total = source?.query(firestore, { hostId, orgId })
+if (total) setCount((await getCountFromServer(total)).data().count)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordCountSource(kind, source, { pluginId? })` | One source per kind; another plugin claiming it throws naming both. |
+| `source.query(firestore, { hostId, orgId? })` | The query whose count is how many records of the kind the site PRODUCED, provable by the signed-in member's read — the owner decides what that means (a site's own submissions, the leads it captured) — or `null`. |
+| `source.crossesSites` | The count is the organization's, shared by every site in it (contacts), and the reader must say its total crosses sites. |
+| `pluginRecordCountSource(kind)` | The source, or `null` where no plugin counts the kind here — a reader withholds its figure rather than counting the collection itself. |
+
+Forms counts a site's `formSubmission` records, Bookings its `booking`
+records, and the CRM the `lead` records a site captured and the
+organization's `contact` records.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
@@ -1347,6 +1383,19 @@ The first call that finds no creditor runs the app's boot step once and asks
 again, as a person capture does. A door that hands its touch to the person
 capture puts it under `CONVERSION_TOUCH_DETAIL` in `detail`, and the plugin
 that keeps people passes it on to the contact or the lead it files.
+
+## The kill switch — `plugin-revocations` (`/server`)
+
+An artifact installed from a distribution channel carries the listing it came
+from on its install stamp. When the platform pulls the listing or a version,
+the revocation is what every reader consults; the plugin that runs the
+channel keeps it, and another reader asks through this slot — the send path
+before it mails a design that was installed rather than written.
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRevocationReader({ revocation(listingId) })` | The plugin that keeps revocations (a slot). Answers the `PluginRevocation`, or `null` for a listing never revoked. |
+| `readListingRevocation(listingId)` | The listing's revocation, or `null` — none, or nothing in this process keeps revocations (after running the app's boot step once). A reader that fails THROWS through, so the asker refuses rather than guesses. |
 
 ## Send tallies — `plugin-send-tallies` (`/server`)
 

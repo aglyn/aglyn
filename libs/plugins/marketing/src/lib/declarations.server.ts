@@ -23,6 +23,7 @@ import {
   type PluginConversionCreditor,
 } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { registerPluginSendTally } from '@aglyn/aglyn/plugin-manager/plugin-send-tallies'
+import { registerPluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginSiteBeacon } from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { MARKETING_OPERATOR_ALERTS } from './constants/operator-alerts'
@@ -39,7 +40,9 @@ import { MARKETING_OPERATOR_ALERTS } from './constants/operator-alerts'
  * mail — asks it which campaign to credit, in any process, before any of
  * this plugin's surfaces has loaded. The joins load with the first credit.
  * Beside it, the tally the site's unsubscribe page tells when a recipient
- * leaves from a campaign send's mail (`plugin-send-tallies`).
+ * leaves from a campaign send's mail (`plugin-send-tallies`), and the
+ * `emailSend` record index another plugin names a send by — a person's
+ * timeline listing the campaign mail they were sent (`plugin-record-index`).
  */
 export function registerMarketingServerDeclarations(): void {
   registerOperatorAlerts(MARKETING_OPERATOR_ALERTS, { pluginId: BUNDLE_ID })
@@ -64,6 +67,14 @@ export function registerMarketingServerDeclarations(): void {
         const { countCampaignSendUnsubscribe } = await import('./server/send-tally')
         return countCampaignSendUnsubscribe(request)
       },
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginRecordIndex(
+    'emailSend',
+    {
+      list: async (request) => (await import('./server/email-send-record-index')).emailSendRecordIndex.list(request),
+      get: async (request) => (await import('./server/email-send-record-index')).emailSendRecordIndex.get(request),
     },
     { pluginId: BUNDLE_ID },
   )

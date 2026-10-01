@@ -105,6 +105,18 @@ export interface PluginRecordListScope {
   hostId?: string | null
 }
 
+/**
+ * The most records one by-name read asks for: Firestore's `in` takes thirty
+ * values, so a reader with more asks in chunks.
+ */
+export const PLUGIN_RECORD_LIST_IDS_MAX = 30
+
+/** Named records of a scope, for a reader that already holds their ids. */
+export type PluginRecordListByIdsRequest = Omit<PluginRecordListRequest, 'limit' | 'search'> & {
+  /** At most {@link PLUGIN_RECORD_LIST_IDS_MAX}; the owner reads no more. */
+  ids: readonly string[]
+}
+
 export interface PluginRecordListSource {
   /**
    * The query the signed-in member's read of the scope is proved by, at most
@@ -112,6 +124,13 @@ export interface PluginRecordListSource {
    * kind asked at the organization, a search with nothing to match).
    */
   query(firestore: Firestore, request: PluginRecordListRequest): Query<DocumentData> | null
+  /**
+   * The query for NAMED records of the scope — a reader that holds ids from
+   * somewhere else, an attribution naming the submission it credits — or
+   * `null` where none can be read. Optional: a source without it answers no
+   * by-name read, and the reader treats every id as one it could not find.
+   */
+  byIds?(firestore: Firestore, request: PluginRecordListByIdsRequest): Query<DocumentData> | null
   /**
    * One stored document as the owner shares it, or `null` to leave it out
    * (deleted, unnamed, or not the reader's to list). `request` is the one the
@@ -219,6 +238,22 @@ export function pluginRecordListDoc(
   request: PluginRecordListScope & { id: string },
 ): DocumentReference<DocumentData> | null {
   return pluginRecordListSource(kind)?.source.doc?.(firestore, request) ?? null
+}
+
+/**
+ * The query for named records of `kind` — at most
+ * {@link PLUGIN_RECORD_LIST_IDS_MAX} ids, the rest left for the next chunk —
+ * or `null` when no plugin keeps the kind here, its source reads none by
+ * name, or there is no id to ask for.
+ */
+export function pluginRecordListByIdsQuery(
+  kind: string,
+  firestore: Firestore,
+  request: PluginRecordListByIdsRequest,
+): Query<DocumentData> | null {
+  const ids = request.ids.filter(Boolean).slice(0, PLUGIN_RECORD_LIST_IDS_MAX)
+  if (!ids.length) return null
+  return pluginRecordListSource(kind)?.source.byIds?.(firestore, { ...request, ids }) ?? null
 }
 
 /**

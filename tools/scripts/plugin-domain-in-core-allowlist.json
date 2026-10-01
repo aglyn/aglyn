@@ -337,13 +337,6 @@
       "why": "The designer's generic form controls; nothing of the forms plugin's model."
     },
     {
-      "path": "libs/plugins/crm/src/lib/server/contact-email-history.ts",
-      "rules": [
-        "plugin-collection:marketing"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/inbox/src/lib/components/contacts-card.component.tsx",
       "rules": [
         "plugin-collection:crm"
@@ -354,22 +347,6 @@
       "path": "libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx",
       "rules": [
         "plugin-collection:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/components/campaign-conversions-card.tsx",
-      "rules": [
-        "plugin-collection:bookings",
-        "plugin-collection:forms",
-        "console-path:crm"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/server/campaign-send.ts",
-      "rules": [
-        "plugin-collection:marketplace"
       ],
       "lane": "coupling"
     },
