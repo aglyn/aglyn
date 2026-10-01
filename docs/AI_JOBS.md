@@ -372,7 +372,7 @@ live answer.
   *Responsive* (AGL-3020): a readable answer of every kind a site renders — a
   page, template, layout, component, section or form; an email's column is fixed
   by its medium — is held to its recorded device audit.
-  `tools/scripts/record-ai-page-axe.mts` renders the tree the harness checks
+  `libs/plugins/ai/scripts/record-ai-page-axe.mts` renders the tree the harness checks
   (`aiEvalAnswerTree`) at every device of the besigner's switcher, as it renders
   the golden pages, and writes `tools/ai-eval/widths.generated.json`, and
   `tools/ai-eval/recordings/widths.generated.json` beside a live run's
@@ -1054,7 +1054,7 @@ draft.
   never the drawing: on a published page, which never loads the icon catalog, an
   icon a model names draws the empty Icon. So the component palette, and no
   other, offers the Icon (`COMPONENT_EXTRA_IDS` in
-  `tools/scripts/generate-ai-palette.mts`), and a component binds it to an Icon
+  `libs/plugins/ai/scripts/generate-ai-palette.mts`), and a component binds it to an Icon
   property whose default is empty, for the owner to pick where a page places the
   component; a default that names an icon is refused (`prop-default`). The
   palette validator drops, with a repair, any icon a model writes itself: a value
@@ -2239,7 +2239,7 @@ the element budget its request asks for.
   Recordings are never committed; the first live one, which stopped at its plan, is
   kept by hand as `src/lib/jobs/fixtures/ai-free-page-recording.ts` for the specs to
   hold that check and the plan rules to.
-- **Every device width, and an axe audit.** `tools/scripts/record-ai-page-axe.mts`
+- **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section
   check, grafts a stand-in definition for each inventory component from its declared
@@ -2265,7 +2265,7 @@ the element budget its request asks for.
   page to zero serious or critical axe violations at every width, and it fails when
   a fingerprint no longer matches the goldens or a recorded width is not the one the
   switcher previews its device at — re-record with
-  `node tools/scripts/record-ai-page-axe.mts`. Today no golden page runs past a
+  `node libs/plugins/ai/scripts/record-ai-page-axe.mts`. Today no golden page runs past a
   screen, every golden row is one column at XS and two to four at MD, LG and XL, and
   no page has an axe violation of any impact. A recording, not a run: the spec
   starts no browser, and no network or hosted audit service is involved anywhere.

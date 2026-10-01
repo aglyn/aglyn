@@ -590,9 +590,9 @@ overage needs an invoice it can pay, and before the cutover there is none.
 3. **Test mode — the drill.**
 
    ```bash
-   node tools/scripts/ai-overage-test-clock-drill.mjs
+   node libs/plugins/ai/scripts/ai-overage-test-clock-drill.mjs
    STRIPE_SECRET_KEY=sk_test_… STRIPE_PRODUCT_AI_OVERAGE=prod_… \
-     node tools/scripts/ai-overage-test-clock-drill.mjs --run
+     node libs/plugins/ai/scripts/ai-overage-test-clock-drill.mjs --run
    ```
 
    Without `--run` it prints the plan and calls nothing. It refuses an

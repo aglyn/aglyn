@@ -40,8 +40,8 @@
  * for a live key: a drill's whole method is creating charges and failing
  * them, and doing that on the live account would bill real cardholders.
  *
- *   node tools/scripts/ai-overage-test-clock-drill.mjs            # the plan
- *   STRIPE_SECRET_KEY=sk_test_… node tools/scripts/…drill.mjs --run
+ *   node libs/plugins/ai/scripts/ai-overage-test-clock-drill.mjs  # the plan
+ *   STRIPE_SECRET_KEY=sk_test_… node libs/plugins/ai/scripts/…drill.mjs --run
  *
  * The test clock is advanced by this script, and every object it creates is
  * attached to it, so the whole rehearsal can be deleted with the clock.

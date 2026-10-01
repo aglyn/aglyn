@@ -49,7 +49,7 @@ import {
  * file in CI; nothing here reaches a provider.
  *
  * A document a site renders is scored against its recorded device audit
- * (AGL-3020): `tools/scripts/record-ai-page-axe.mts` renders every readable
+ * (AGL-3020): `libs/plugins/ai/scripts/record-ai-page-axe.mts` renders every readable
  * answer of such a kind at the besigner switcher's widths and writes what the
  * browser measured beside the cases, and beside the recordings of a live run.
  */
@@ -234,7 +234,7 @@ describe('the device audit of the answers a site renders (AGL-3020)', () => {
           .filter((answer) => aiEvalAnswerTree(evalCase, answer) !== null && !audits(evalCase, answer))
           .map(() => evalCase.id),
       )
-    // Re-record with: node tools/scripts/record-ai-page-axe.mts
+    // Re-record with: node libs/plugins/ai/scripts/record-ai-page-axe.mts
     expect(unrecorded).toEqual([])
   })
 
