@@ -1,0 +1,99 @@
+name: Consumer proof
+
+# Proves the published packages work for someone outside this repo
+# (AGL-3201). `tools/scripts/consumer-proof.mjs` copies each example under
+# `examples/consumers/` into a blank project outside the checkout, installs
+# the `@aglyn/*` packages it names with a plain `npm install`, runs the
+# example's own `npm run build` and `npm run check`, and opens the built app
+# in Chrome. The examples are the proof, so an example cannot rot unseen.
+#
+# ---------------------------------------------------------------------------
+# WHICH PROOF, WHERE
+# ---------------------------------------------------------------------------
+# On the PROMOTION PR (`release/v…` → `production`) it PACKS the libs from the
+# PR's own tree: the same `nx build` and the same tarball `publish-packages`
+# is about to upload. That is the only point a broken package can still be
+# stopped — a published version can never be replaced — and the registry
+# does not have this version yet, so packing is the only thing to prove.
+#
+# AFTER THE PUBLISH, `publish-packages.yml` calls this with `source:
+# registry`: it installs the exact version just published, from npm, the way
+# a user gets it. That sees what packing cannot — a package the release
+# failed to publish, a sibling pin the registry cannot satisfy — and it can
+# only report, because by then the version is out. It waits out npm's read
+# lag before it decides anything is missing.
+#
+# By hand, either one runs against any branch: `source: registry` with a
+# `version` re-checks something already published.
+#
+# ---------------------------------------------------------------------------
+# NOT A REQUIRED CHECK, ON PURPOSE
+# ---------------------------------------------------------------------------
+# It needs npm and a browser and takes minutes, and a required check that
+# sometimes never reports leaves the promotion pending forever (RELEASING.md,
+# "Four settings are deliberate"). It reports on the PR; read it there.
+
+on:
+  pull_request:
+    branches:
+      - production
+  workflow_call:
+    inputs:
+      source:
+        description: '`pack` builds and packs this tree; `registry` installs from npm.'
+        type: string
+        default: registry
+      version:
+        description: 'The version to install from npm. Empty = the version this tree carries.'
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      source:
+        description: '`pack` builds and packs this branch; `registry` installs a published version from npm.'
+        type: choice
+        options:
+          - pack
+          - registry
+        default: pack
+      version:
+        description: 'With `registry`: the version to install. Empty = the version this branch carries.'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    name: Consumer proof (${{ inputs.source || 'pack' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Grouped per PR so a new push supersedes the run nobody will read. Under
+    # `workflow_call` the context is the caller's push, which has no PR
+    # number, so each publish run gets its own group and is never cancelled.
+    concurrency:
+      group: consumer-proof-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+
+      # Packing builds the libs, which needs the workspace. The registry proof
+      # installs only what a user installs, so it skips the repo's install.
+      - if: ${{ (inputs.source || 'pack') == 'pack' }}
+        run: npm ci
+
+      - name: Prove every consumer story
+        env:
+          SOURCE: ${{ inputs.source || 'pack' }}
+          VERSION: ${{ inputs.version }}
+          NX_DAEMON: 'false'
+        run: |
+          args=(logic-only besigner-ui)
+          if [ "$SOURCE" = "registry" ]; then args+=("--registry=$VERSION"); fi
+          node tools/scripts/consumer-proof.mjs "${args[@]}"
