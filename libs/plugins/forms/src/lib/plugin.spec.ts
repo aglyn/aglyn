@@ -37,6 +37,7 @@
  */
 
 import {
+  CONSOLE_WIDGET_SLOTS,
   FIRST_PARTY_PLUGINS,
   FORMS_PLUGIN_ID,
   PUBLISHED_SITE_IMPACT,
@@ -44,9 +45,10 @@ import {
   resolveHostEnabledPlugins,
   subtractDisabledPlugins,
 } from '@aglyn/aglyn'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { formBlockPresets, formPresets } from './components/form'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { FORMS_BUNDLE } from './plugin'
+import { FORMS_BUNDLE, registerFormsConsole } from './plugin'
 
 /** Persisted in screen documents; never rename without a data migration. */
 const PERSISTED_COMPONENT_IDS = ['form', 'formField']
@@ -190,5 +192,18 @@ describe('forms is in the catalog, on for every workspace and switchable per sit
     expect(
       subtractDisabledPlugins([BUNDLE_ID, 'commerce'], [BUNDLE_ID]),
     ).toEqual(['commerce'])
+  })
+})
+
+describe('the zone its Forms page hosts (AGL-3043, AGL-3080)', () => {
+  it('declares `hostForms` under the id widgets register for, owned here and laid out bare', () => {
+    registerFormsConsole()
+    const zone = pluginZone('hostForms')
+    // One button in the page's row of actions, beside Create Form: the row
+    // spaces it, so a wrapper would add a gap it already has.
+    expect(`${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe(`${BUNDLE_ID} bare console`)
+    // The shell's catalog no longer names it: the plugin that draws the page
+    // says what the zone is.
+    expect(Object.values(CONSOLE_WIDGET_SLOTS)).not.toContain('hostForms')
   })
 })

@@ -52,11 +52,10 @@
     {
       "path": "apps/console/components/plugin-widget-slot.component.tsx",
       "rules": [
-        "domain-declares:commerce",
-        "domain-declares:forms",
-        "domain-declares:workflows"
+        "domain-declares:commerce"
       ],
-      "lane": "ai"
+      "lane": "stays",
+      "why": "The member it trips on is `commerceGlance`'s layout entry. That zone is a tile the console's own site dashboard and Analytics page draw (`hosts/[host]/page.tsx`, `hosts/[host]/analytics/page.tsx`), beside `hostDashboard` in the same grid, so the layout is the page's to state. Its id is a documented zone of the guaranteed `CONSOLE_WIDGET_SLOTS` catalog that any plugin may fill; renaming it would orphan every widget registered for it."
     },
     {
       "path": "apps/console/components/quota-warnings-banner.component.tsx",
@@ -368,11 +367,10 @@
     {
       "path": "libs/aglyn/src/lib/plugin-manager/feature-plugins.ts",
       "rules": [
-        "domain-declares:commerce",
-        "domain-declares:forms",
-        "domain-declares:workflows"
+        "domain-declares:commerce"
       ],
-      "lane": "ai"
+      "lane": "stays",
+      "why": "The member it trips on is `commerceGlance`, an id in the guaranteed `CONSOLE_WIDGET_SLOTS` catalog. The zone is a tile on the console's own site dashboard and Analytics page, which core pages mount beside `hostDashboard`; the commerce plugin fills it, as any plugin may. A zone a console page draws is the console's to name, and renaming a documented zone id would orphan every widget registered for it."
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/plugin-contact-capture.ts",

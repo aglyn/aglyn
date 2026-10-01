@@ -88,6 +88,7 @@ import {
   FORM_STATUS_OPTIONS,
   formListRequest,
 } from './form-list-query'
+import { HOST_FORMS_ZONE } from './form-zones'
 
 /**
  * The filterable columns the table shows. The rest of the declaration —
@@ -672,12 +673,13 @@ export function HostFormsCard(props: HostFormsCardProps) {
           <Stack direction="row" spacing={1}>
             {/*
               Other ways to start a form, from plugins (AGL-3043): the
-              `hostForms` zone, drawn through the shell's own gated slot. A
-              plugin page cannot mount that slot itself, so the shell hands it
-              down, and a widget here passes the gates a console page's would.
+              `hostForms` zone this plugin declares, drawn through the shell's
+              own gated slot. A plugin page cannot mount that slot itself, so
+              the shell hands it down, and a widget here passes the gates a
+              console page's would.
             */}
             {CreateZone ? (
-              <CreateZone slot="hostForms" hostId={hostId} orgId={org?.$id} />
+              <CreateZone slot={HOST_FORMS_ZONE.id} hostId={hostId} orgId={org?.$id} />
             ) : null}
             <Button
               size="small"
