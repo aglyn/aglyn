@@ -38,7 +38,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "timezone",
         "description": "Timezone the time is shown in",
-        "sample": "UTC"
+        "sample": "America/Chicago"
+      },
+      {
+        "name": "booking.payment",
+        "description": "What a paid booking charged, as a sentence; empty for a free booking",
+        "sample": "You paid $95.00."
       },
       {
         "name": "booking.ref",
@@ -54,7 +59,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Hi {{name}}, your booking for \"{{service.name}}\" is confirmed for {{when}} ({{timezone}}).",
+        "text": "Hi {{name}}, your booking with {{host.businessName}} is confirmed: \"{{service.name}}\" on {{when}} ({{timezone}}).",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{booking.payment}}",
         "variant": "body"
       },
       {
@@ -87,13 +97,18 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "when",
         "description": "Formatted date and time of the booking",
-        "sample": "Tomorrow at 9:00 AM"
+        "sample": "Tuesday, June 2, 2026 at 9:00 AM"
+      },
+      {
+        "name": "timezone",
+        "description": "Timezone the time is shown in",
+        "sample": "America/Chicago"
       }
     ],
     "defaultBody": [
       {
         "block": "text",
-        "text": "Hi {{name}}, this is a reminder that \"{{service.name}}\" is coming up on {{when}}.",
+        "text": "Hi {{name}}, this is a reminder of your booking with {{host.businessName}}: \"{{service.name}}\" on {{when}} ({{timezone}}).",
         "variant": "body"
       }
     ],

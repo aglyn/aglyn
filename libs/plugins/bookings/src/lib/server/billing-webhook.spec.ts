@@ -139,7 +139,34 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   meterHostEmail: async (hostId: string) => {
     meteredHosts.push(hostId)
   },
-  renderHostEmailWithTokens: async () => null,
+  /*
+   * The site's built-in copy, rendered for real (AGL-3432). Stubbed to `null`
+   * this asserted the dead fallback text, and the guest's actual email — the
+   * catalog's default body with the merge values this handler passes — was
+   * never read by anything, which is how a time in UTC followed by "()"
+   * shipped. The site is named as `host.businessName` resolves it.
+   */
+  renderHostEmailWithTokens: async (
+    _firestore: unknown,
+    _hostId: string,
+    key: string,
+    merge: Record<string, string>,
+  ) => {
+    const email = jest.requireActual('@aglyn/shared-util-email')
+    const entry = email.getTenantEmail(key)
+    const values = { 'host.businessName': 'Harbor Spa', ...merge }
+    const rendered = email.renderEmailHtml({
+      nodes: email.buildDefaultEmailNodeMap(entry),
+      rootId: email.EMAIL_NODE_ROOT_ID,
+      merge: values,
+      sanitize: (html: string) => html,
+    })
+    return {
+      subject: email.substituteMergeTokens(entry.defaultSubject, values),
+      html: rendered.html,
+      text: rendered.text,
+    }
+  },
   upsertHostContact: async (options: any) => {
     contactUpserts.push(options)
   },
@@ -183,6 +210,15 @@ const fetchMock = jest.fn(async (url: any) => {
  * assertion that lands on it cannot have got there by reaching for the nearest
  * figure.
  */
+/**
+ * No `timezone`: the shape the booking route wrote before AGL-3432, and the
+ * shape of any hold still pending when it shipped. The fixture used to carry
+ * `timezone: 'America/Chicago'`, which the writer never stored, so this spec
+ * passed while every real paid confirmation printed the time in UTC and "()".
+ * The zone comes from the service below, as it does for such a booking.
+ *
+ * 1_777_000_000_000 is 2026-04-24T03:06:40Z: 10:06 PM on the 23rd in Chicago.
+ */
 const BOOKING = {
   serviceId: 'service-1',
   serviceName: 'Deep tissue massage',
@@ -192,6 +228,12 @@ const BOOKING = {
   endsAtMs: 1_777_003_600_000,
   status: 'pendingPayment',
   expiresAtMs: 1_776_999_000_000,
+}
+
+const SERVICE = {
+  name: 'Deep tissue massage',
+  durationMinutes: 60,
+  priceUsd: 95,
   timezone: 'America/Chicago',
 }
 
@@ -227,6 +269,8 @@ beforeEach(() => {
   fetchMock.mockClear()
 
   docs.set('hosts/host-1/bookings/booking-1', { ...BOOKING })
+  docs.set('hosts/host-1/services/service-1', { ...SERVICE })
+  docs.set('hosts/host-1', { displayName: 'Harbor Spa' })
 })
 
 // ---------------------------------------------------------------------------
@@ -367,6 +411,60 @@ describe('paid booking (AGL-1755)', () => {
   it('never calls Stripe', async () => {
     await deliver(BOOKING_SESSION)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * THE TIME A PAYING GUEST IS TOLD (AGL-3432).
+ *
+ * The confirmation formatted the start with no zone — the server's, UTC — and
+ * filled `{{timezone}}` from a field the booking never stored, so a Chicago
+ * guest who had just paid read "Friday, April 24, 2026 at 3:06 AM ()" for a
+ * 10:06 PM appointment the night before. Each case asserts the email the guest
+ * actually gets: the built-in copy, rendered.
+ */
+describe('the paid confirmation tells the time in the booking’s zone (AGL-3432)', () => {
+  it('a booking that predates the stored zone reads in its service’s zone, named', async () => {
+    await deliver(BOOKING_SESSION)
+    const text = String(sentEmails[0].text)
+    expect(text).toContain(
+      'Hi Rhea Salt, your booking with Harbor Spa is confirmed: ' +
+        '"Deep tissue massage" on Thursday, April 23, 2026 at 10:06 PM ' +
+        '(America/Chicago).',
+    )
+    expect(text).toContain('You paid $95.00.')
+    expect(text).not.toContain('()')
+  })
+
+  it('the zone the booking stored wins over the service’s', async () => {
+    docs.set('hosts/host-1/bookings/booking-1', {
+      ...BOOKING,
+      timezone: 'Europe/Berlin',
+    })
+    await deliver(BOOKING_SESSION)
+    expect(String(sentEmails[0].text)).toContain(
+      'on Friday, April 24, 2026 at 5:06 AM (Europe/Berlin).',
+    )
+  })
+
+  it('a service with no zone reads in the site’s zone', async () => {
+    docs.set('hosts/host-1/services/service-1', { ...SERVICE, timezone: '' })
+    docs.set('hosts/host-1', {
+      displayName: 'Harbor Spa',
+      timeZone: 'America/New_York',
+    })
+    await deliver(BOOKING_SESSION)
+    expect(String(sentEmails[0].text)).toContain(
+      'on Thursday, April 23, 2026 at 11:06 PM (America/New_York).',
+    )
+  })
+
+  it('with no zone set anywhere it is UTC, and says so', async () => {
+    docs.set('hosts/host-1/services/service-1', { ...SERVICE, timezone: '' })
+    await deliver(BOOKING_SESSION)
+    const text = String(sentEmails[0].text)
+    expect(text).toContain('on Friday, April 24, 2026 at 3:06 AM (UTC).')
+    expect(text).not.toContain('()')
   })
 })
 

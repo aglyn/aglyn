@@ -22,3 +22,4 @@
  */
 export * from './bookings'
 export * from './booking-record'
+export * from './booking-time'
