@@ -28,7 +28,7 @@
  * both import it.
  *
  * Reads only. Announcing is the caller's, for the reason
- * `dataset-live-pages.ts` gives: the two runtimes drop caches differently.
+ * `live-page-drops.ts` gives: the two runtimes drop caches differently.
  */
 
 import {
@@ -41,7 +41,7 @@ import {
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/server'
 import type { Firestore } from 'firebase-admin/firestore'
-import type { DatasetLivePageTarget } from './dataset-live-pages'
+import type { LivePageTarget } from './live-page-drops'
 import {
   readUsageSources,
   screenIdsUsingCollectionDeep,
@@ -218,7 +218,7 @@ export async function collectionLivePageTarget(options: {
   hostId: string
   collectionId: string
   entrySlugs: readonly string[]
-}): Promise<DatasetLivePageTarget | null> {
+}): Promise<LivePageTarget | null> {
   const { firestore, hostId } = options
   const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
   if (!hostSnapshot.exists) return null

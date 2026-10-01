@@ -30,6 +30,8 @@ The plugin is console-only and declares one registrar, `registerDataConsole` (th
 
 It also keeps the `datasetSchema` installable artifact type (`artifactTypes` in `plugins.config.json`, registered from `registerDataConsoleServerDeclarations`): a dataset's schema published to a marketplace, installed as a new, empty dataset, and updated in place. The installer asks this plugin through `@aglyn/aglyn/plugin-manager/plugin-artifact-types` and never reads the datasets collection; the schema's model (`sanitizeDatasetSchema`, `resolveInstalledDatasetSchema`, `summarizeSchemaChange`) is `@aglyn/plugins-data/artifact/dataset-schema`.
 
+On the server, `registerDataServerDeclarations()` also registers the two automation steps that write a dataset record, `datasetAppend` and `updateDataset` (`server/dataset-steps.server.ts`). The Workflows engine runs them through the platform's server-step seam (`registerServerStepExecutor`), and `plugins.config.json` declares them under `serverSteps`. A record a step writes refreshes the live pages that repeat over its dataset (`server/dataset-live-pages.ts`).
+
 ### Entry points
 
 | import | contents |

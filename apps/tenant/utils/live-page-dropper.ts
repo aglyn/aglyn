@@ -47,7 +47,7 @@ import { tenantDataTag } from '@aglyn/tenant-data-admin/render-cache'
 import {
   registerLivePageDropper,
   type LivePageDropper,
-} from '@aglyn/tenant-data-admin/server/dataset-live-pages'
+} from '@aglyn/tenant-data-admin/server/live-page-drops'
 import { revalidatePath, revalidateTag } from 'next/cache'
 
 /**

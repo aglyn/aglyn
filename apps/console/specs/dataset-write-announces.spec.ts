@@ -73,7 +73,7 @@ describe('a dataset record write announces to the live pages', () => {
     // submit route files through the platform's contract and names no dataset.
     const route = source('libs/plugins/data/src/lib/form-target/dataset-form-record-target.server.ts')
     expect(route).toContain(
-      "import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'",
+      "import { announceDatasetRecordChange } from '../server/dataset-live-pages'",
     )
     const announceAt = route.indexOf('await announceDatasetRecordChange({')
     const swallowAt = route.indexOf("console.error('form dataset append failed', error)")
@@ -84,19 +84,22 @@ describe('a dataset record write announces to the live pages', () => {
   })
 
   it('the automation dataset steps announce — append, and both legs of update', () => {
-    const engine = source(
-      'libs/plugins/workflows/src/lib/engine/run-event-actions.ts',
-    )
-    expect(engine).toContain(
-      "import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'",
-    )
-    // One call per step branch that writes a row: `datasetAppend`, and
+    // The steps are the data plugin's, run for the engine through the
+    // platform's server-step seam (AGL-3080).
+    const steps = source('libs/plugins/data/src/lib/server/dataset-steps.server.ts')
+    expect(steps).toContain("import { announceDatasetRecordChange } from './dataset-live-pages'")
+    // One call per step that writes a row: `datasetAppend`, and
     // `updateDataset` covering its merge and its append leg together.
-    expect(engine.match(/await announceDatasetStepWrite\(env, datasetDoc\.id\)/g))
+    expect(steps.match(/await announceDatasetStepWrite\(request\.orgId, datasetDoc\.id\)/g))
       .toHaveLength(2)
+    expect(source('libs/plugins/data/src/lib/declarations.server.ts')).toContain(
+      'registerServerStepExecutor(\n    DATASET_STEP_TYPES,',
+    )
     // The AGL-3105 workflow executor and the older Actions runner share
-    // `runServerStep`, so both are covered by the same two calls.
+    // `runServerStep`, and it hands every plugin's step to the seam.
+    const engine = source('libs/plugins/workflows/src/lib/engine/run-event-actions.ts')
     expect(engine).toContain('async function runServerStep(')
+    expect(engine).toContain('await pluginServerStepExecutor(step.type)')
   })
 
   it('the browser leg announces its client-direct edits, deletes and updating imports', () => {

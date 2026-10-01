@@ -37,8 +37,9 @@ single plugin owns, and runs none of what an event triggers:
   direct use.
 
 Also from the root: contact capture and owner assignment for a host
-(`captureHostContact`, `assignOwnerForCapture`, `reassignContactOwner`), and
-dataset lookup (`findDatasetByName`, `resolveDatasetDoc`).
+(`captureHostContact`, `assignOwnerForCapture`, `reassignContactOwner`).
+Finding a dataset by its id or name is the data plugin's
+(`@aglyn/plugins-data/server/resolve-dataset`).
 
 By subpath, the screen-composition pipeline. This is the render read-path
 shared by the tenant app's server rendering and any plugin that needs to
