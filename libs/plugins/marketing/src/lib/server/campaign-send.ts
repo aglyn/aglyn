@@ -65,6 +65,7 @@ import {
   resolveHostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
+import { nurtureReachedLeads } from '@aglyn/tenant-data-admin/server/lead-nurturing'
 import { MARKETING_REPUTATION_BREAKER } from '../constants/operator-alerts'
 // The leaf, not the barrel: this plugin's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
@@ -2869,6 +2870,10 @@ export async function performCampaignSend(
    */
   if (options.recordCampaign !== false) {
     await recordCampaignReach(sends.doc(campaignId), reached)
+    // The leads it reached that nobody had touched are now being nurtured
+    // (AGL-3446). A test send reached nobody's lead, so it is left out with
+    // the reach record. Never throws.
+    await nurtureReachedLeads(firestore, { orgId, hostId, emails: reached })
     /*
      * And who it decided NOT to mail, under a field of its own.
      *

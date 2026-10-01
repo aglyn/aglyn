@@ -486,7 +486,11 @@ A **lead** is enrolled as it is, with no contact made: the emails read the
 lead's name, company and title wherever the steps say `{{contact.firstName}}`,
 `{{contact.company}}` or `{{contact.title}}` (and `{{lead.…}}` reads the same
 fields), the sends and replies land on the lead's page, a call step files its
-task on the lead, and a reply moves a lead from **New** to **Working**. When
+task on the lead, and the lead's [status](./leads.md#lead-statuses) follows
+the sequence: the first email actually sent to a **New** lead moves it to
+**Nurturing** — enrolling alone does not, nor does a step that never goes
+out — and a reply moves a **New** or **Nurturing** lead to **Working**. A lead
+already Working or closed keeps its status. When
 the lead [converts](./leads.md#converting-a-lead), its enrollment carries on
 as the contact's — same thread, same place in the steps — so a person is never
 enrolled twice by being two records. A lead that already converted, one whose

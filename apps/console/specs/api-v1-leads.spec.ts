@@ -550,7 +550,7 @@ describe('GET /v1/leads', () => {
     const bogus = await call('GET', `leads?siteId=${HOST}&status=hot`)
     expect(bogus.status).toBe(400)
     expect((await json(bogus)).error.fields).toEqual({
-      status: 'Must be one of: new, working, qualified, unqualified',
+      status: 'Must be one of: new, nurturing, working, qualified, unqualified',
     })
   })
 
@@ -580,11 +580,17 @@ describe('PATCH /v1/leads/{id}', () => {
     })
     const unknown = await patch('lead-a', { status: 'hot', email: 'x@y.z' })
     expect((await json(unknown)).error.fields).toEqual({
-      status: 'Must be one of: new, working, unqualified',
+      status: 'Must be one of: new, nurturing, working, unqualified',
       email: 'Not writable on a lead',
     })
     expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBeUndefined()
     expect((await patch('nope', { status: 'working' })).status).toBe(404)
+  })
+
+  it('sets the Nurturing stage, which sits between New and Working (AGL-3446)', async () => {
+    const moved = await json(await patch('lead-a', { status: 'nurturing' }))
+    expect(moved).toMatchObject({ status: 'nurturing' })
+    expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBe('nurturing')
   })
 
   it('writes the status and the notes, stamps updated, and clears a note with null', async () => {

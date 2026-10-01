@@ -464,7 +464,7 @@ describe('leadFunnel', () => {
       { status: 'unqualified', unqualifiedReason: 'Too small' },
     ])
     expect(funnel.total).toBe(6)
-    expect(funnel.byStatus).toEqual({ new: 2, working: 1, qualified: 2, unqualified: 1 })
+    expect(funnel.byStatus).toEqual({ new: 2, nurturing: 0, working: 1, qualified: 2, unqualified: 1 })
     expect(funnel.open).toBe(3)
     expect(funnel.qualifiedRate).toBeCloseTo(2 / 6)
     expect(funnel.unqualifiedRate).toBeCloseTo(1 / 6)

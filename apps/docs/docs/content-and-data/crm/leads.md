@@ -146,7 +146,7 @@ carries:
 | --- | --- |
 | **Lead** | The name the person gave, with their email beneath it — or the email alone. |
 | **Company**, **Title** | The lead's own company and job title, as text. |
-| **Status** | New, Working, Qualified or Unqualified. Change it in place from the row. |
+| **Status** | New, Nurturing, Working, Qualified or Unqualified — see [Lead statuses](#lead-statuses). Change it in place from the row. |
 | **Email** | The last verdict on the lead's address — see [Email state](#email-state) — or a dash when nothing is known. |
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
@@ -154,6 +154,30 @@ carries:
 | **Tags** | The lead's tags. |
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
+
+### Lead statuses {#lead-statuses}
+
+A lead moves through its statuses in the order a person works one:
+
+| Status | What it means |
+| --- | --- |
+| **New** | Nobody and nothing has touched the lead yet. A lead your site captured carries no status of its own and reads as New. |
+| **Nurturing** | Automated email is reaching the lead — a [sequence](./sequences.md) sent it a step, or a campaign email was delivered to it — and nobody has engaged yet. |
+| **Working** | A person is in a conversation with the lead: it replied to a sequence, or a teammate set it to Working. |
+| **Qualified** | The lead was [converted](#converting-a-lead) into a contact. |
+| **Unqualified** | The lead was closed without converting, with a reason. |
+
+New, Nurturing and Working are the **open** statuses — the leads that still
+need somebody. The moves into Nurturing and on to Working happen by
+themselves: the first sequence email or campaign email that is actually
+sent to a New lead moves it to Nurturing, and a reply to a sequence moves a
+New or Nurturing lead to Working. Neither ever moves a lead back: a lead
+already Working, Qualified or Unqualified keeps its status, and a converted
+lead is never touched. You can still set any open status by hand.
+
+The [Daily CRM digest](./tasks.md#the-daily-digest) lists only New leads as
+unworked, and counts the Nurturing ones on a line of their own ("12 leads
+are in sequences or campaigns"), because email is already reaching them.
 
 ### Filter and search the leads {#filter-the-leads}
 
@@ -163,7 +187,7 @@ and each part of the address, so the domain alone finds it — its company,
 its title or its tags.
 **Status**, **Email**, **Owner**, **Lead source** and **Campaign** are
 picked from a list in the panel, and from each column's menu. **Status**
-starts on **Open (new or working)**, every lead that still needs working;
+starts on **Open (new, nurturing or working)**, every lead that still needs working;
 pick one status instead, or remove the filter to see every lead. A lead
 nobody has touched yet has no status of its own and reads as **New**, so the
 leads your site collected before the CRM existed are already in the Open
@@ -203,7 +227,7 @@ it covers); the notice names both.
 
 ### Working a lead from the row
 
-- **Status** — click the status chip to change it to New or Working.
+- **Status** — click the status chip to change it to New, Nurturing or Working.
   Choosing **Unqualified…** asks for a reason first.
 - **Row menu** (⋮) — **Open lead**, **Convert…**, **Assign owner**, or
   **Unqualify**. **Convert…** opens the same dialog as the lead's page (see
@@ -260,7 +284,7 @@ over no rows.
 | **Address line 1** … **Country (two-letter code)** | The address, six columns as the contacts import takes them. A country typed as a name rather than a code is dropped and reported. |
 | **Tags** | Comma or `\|` separated, lower-cased. |
 | **Campaigns** | Comma or `\|` separated, by **name**, matched to the site's own campaigns without regard to case and added to the campaigns the lead is already in. A row naming a campaign the site does not have is skipped whole as *Names a campaign this site does not have*, rather than filed under half of them. A column headed `Campaign` alone is read as the **Lead source**, which is what another tool's export means by it. |
-| **Status** | `new`, `working` or `unqualified`, by id or by label. **Qualified** is not a status a file may set — a lead becomes qualified by [converting](#converting-a-lead), beside the contact that conversion created — so a cell naming it is dropped and reported, and the lead keeps the status it has. |
+| **Status** | `new`, `nurturing`, `working` or `unqualified`, by id or by label. **Qualified** is not a status a file may set — a lead becomes qualified by [converting](#converting-a-lead), beside the contact that conversion created — so a cell naming it is dropped and reported, and the lead keeps the status it has. |
 | **Owner** | The email address of a member of your organization. An address that matches nobody leaves the lead unassigned and is named at the end of the import. |
 | **Unqualified reason** | Kept only on a row whose **Status** is `unqualified`; on any other row it is dropped and reported, because the reason is what an unqualified lead was closed for. |
 | **Notes** | Free text. |

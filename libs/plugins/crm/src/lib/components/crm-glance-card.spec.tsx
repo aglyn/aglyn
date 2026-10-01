@@ -20,7 +20,7 @@
  * it is a SUBTRACTION of two server counts: every lead on the site, less
  * the ones whose status says they are closed. A lead nobody has touched
  * carries no status field, so no query can select the open ones directly —
- * a count of `status in [new, working]` would read 0 on a site whose every
+ * a count of `status in [new, nurturing, working]` would read 0 on a site whose every
  * lead is untouched, which is the site the figure exists for.
  */
 

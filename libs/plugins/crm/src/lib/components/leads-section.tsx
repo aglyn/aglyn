@@ -919,6 +919,9 @@ function InlineStatus(props: {
         sx={{ width: '100%' }}
       >
         <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
+        <MenuItem value="nurturing">
+          {Aglyn.CRM_LEAD_STATUS_LABELS.nurturing}
+        </MenuItem>
         <MenuItem value="working">
           {Aglyn.CRM_LEAD_STATUS_LABELS.working}
         </MenuItem>

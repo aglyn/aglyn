@@ -124,8 +124,9 @@ describe('lead statuses', () => {
     }
   })
 
-  it('recognizes only the four statuses', () => {
+  it('recognizes only the five statuses', () => {
     expect(isCrmLeadStatus('working')).toBe(true)
+    expect(isCrmLeadStatus('nurturing')).toBe(true)
     expect(isCrmLeadStatus('converted')).toBe(false)
     expect(isCrmLeadStatus(undefined)).toBe(false)
   })
@@ -142,8 +143,9 @@ describe('lead statuses', () => {
     expect(crmLeadStatus({ status: 'unqualified' })).toBe('unqualified')
   })
 
-  it('treats new and working as open, and the two closed states as not', () => {
-    expect(CRM_LEAD_OPEN_STATUSES).toEqual(['new', 'working'])
+  it('treats new, nurturing and working as open, and the two closed states as not', () => {
+    expect(CRM_LEAD_OPEN_STATUSES).toEqual(['new', 'nurturing', 'working'])
+    expect(isCrmLeadOpen({ status: 'nurturing' })).toBe(true)
     expect(isCrmLeadOpen({})).toBe(true)
     expect(isCrmLeadOpen({ status: 'working' })).toBe(true)
     expect(isCrmLeadOpen({ status: 'qualified' })).toBe(false)
