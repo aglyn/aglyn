@@ -30,15 +30,15 @@ import { productIndexedRecord } from './product-record'
  *
  * A search, not a listing: the first word typed is matched as a prefix of a
  * word in an ACTIVE product's name, ordered by name — a draft or archived
- * product is not offered for sale. With nothing typed, and at the
- * organization, where no catalog lives, the source answers none. Each record
- * is `productIndexedRecord`'s, the server index's shape, with its price and
- * its priced variants.
+ * product is not offered for sale. With nothing typed, at the organization,
+ * where no catalog lives, and for a listing, from which no product is
+ * installed, the source answers none. Each record is `productIndexedRecord`'s,
+ * the server index's shape, with its price and its priced variants.
  */
 export const productRecordListSource: PluginRecordListSource = {
   query(firestore, request) {
     const token = nameSearchToken(request.search)
-    if (!request.hostId || !token) return null
+    if (!request.hostId || !token || request.installedFrom) return null
     return query(
       collection(firestore, 'hosts', request.hostId, 'products'),
       where('status', '==', 'active'),

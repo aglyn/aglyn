@@ -641,27 +641,6 @@
       "lane": "coupling"
     },
     {
-      "path": "libs/plugins/marketplace/src/lib/components/listing-content.component.tsx",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/components/marketplace-browse.component.tsx",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/components/org-publish-panel.component.tsx",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "coupling"
-    },
-    {
       "path": "libs/plugins/marketplace/src/lib/server/install-dataset-schema.ts",
       "rules": [
         "plugin-collection:data"

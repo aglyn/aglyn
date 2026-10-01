@@ -39,24 +39,29 @@ import { datasetIndexedRecord } from './dataset-record'
  * Narrowed to a site (`hostId`), the query asks only for the datasets shared
  * with it, by the site's scope tokens: an automation runs on the site, so it
  * may only reach datasets the site can use, and the filter is the one the
- * security rules require of a member scoped to the site. With no site it lists
- * the organization's own, which only an organization-wide reader may hold.
+ * security rules require of a member scoped to the site. With no site, a
+ * member who is not organization-wide (`memberScope`) is asked for the ones
+ * shared with any site they reach — the rules refuse them an unfiltered
+ * list — and an organization-wide reader lists the organization's own.
+ * `installedFrom` keeps the ones installed from that listing, by the
+ * `source.listingId` every dataset install stamps.
+ *
  * Ordered by document id, which the automatic index serves beside the
- * `visibleTo` filter. Each record is `datasetIndexedRecord`'s, the server
- * index's shape.
+ * `visibleTo` filter, and the composite index on (`source.listingId`,
+ * `visibleTo`) beside both. Each record is `datasetIndexedRecord`'s, the
+ * server index's shape.
  */
 export const datasetRecordListSource: PluginRecordListSource = {
   query(firestore, request) {
     if (!request.orgId) return null
-    const datasets = collection(firestore, 'orgs', request.orgId, 'datasets')
-    return request.hostId
-      ? query(
-          datasets,
-          where('visibleTo', 'array-contains-any', scopeTokensForHost(request.hostId)),
-          orderBy(documentId()),
-          limit(request.limit),
-        )
-      : query(datasets, orderBy(documentId()), limit(request.limit))
+    const scope = request.hostId ? scopeTokensForHost(request.hostId) : (request.memberScope ?? null)
+    return query(
+      collection(firestore, 'orgs', request.orgId, 'datasets'),
+      ...(request.installedFrom ? [where('source.listingId', '==', request.installedFrom)] : []),
+      ...(scope ? [where('visibleTo', 'array-contains-any', [...scope])] : []),
+      orderBy(documentId()),
+      limit(request.limit),
+    )
   },
   record: datasetIndexedRecord,
 }

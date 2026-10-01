@@ -41,6 +41,10 @@ import {
   useFirestoreCollection,
   useFirestoreDoc,
 } from '@aglyn/tenant-feature-instance'
+import {
+  pluginRecordListQuery,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { publishPluginPath } from '../model/marketplace-paths'
 import PublishArtifactDialog from './publish-artifact-dialog.component'
 
@@ -191,11 +195,12 @@ export function OrgPublishPanel({
     { idField: '$id' },
   )
   // Datasets are ORG-scoped (AGL-237), so unlike every other source here they
-  // don't depend on the selected site.
+  // don't depend on the selected site. They are the data plugin's, listed
+  // through the source it publishes (AGL-3080).
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
       orgId
-        ? query(collection(firestore, 'orgs', orgId, 'datasets'), limit(100))
+        ? pluginRecordListQuery('dataset', firestore, { orgId, limit: 100 })
         : null,
     [firestore, orgId],
     { idField: '$id' },
@@ -237,8 +242,13 @@ export function OrgPublishPanel({
     () => (layoutDocs ?? []).filter((entry: any) => !entry.deletedAt),
     [layoutDocs],
   )
+  // Live ones only, named as the Data page names them, by their owner.
   const datasets = useMemo(
-    () => (datasetDocs ?? []).filter((entry: any) => !entry.deletedAt),
+    () =>
+      pluginRecordsFromRows('dataset', datasetDocs).map((dataset) => ({
+        $id: dataset.id,
+        displayName: dataset.name,
+      })),
     [datasetDocs],
   )
   // Only emails that actually have a saved design are publishable — the doc

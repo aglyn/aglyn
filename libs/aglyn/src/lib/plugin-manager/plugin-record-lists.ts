@@ -67,6 +67,20 @@ export interface PluginRecordListRequest {
   hostId?: string | null
   /** What a person typed, matched the owner's way; absent lists the scope. */
   search?: string | null
+  /**
+   * The signed-in member's own scope tokens, where they are not
+   * organization-wide and no site is named: an org-scoped kind narrows to
+   * what they may see, which is the filter the security rules require of
+   * them. Absent for an organization-wide reader; a named site's narrowing
+   * wins over it, and a site's own kind has no use for it.
+   */
+  memberScope?: readonly string[] | null
+  /**
+   * Only the records installed from this listing — the `listingId` of their
+   * install stamp (`app-utils/artifact-provenance.ts`), matched wherever the
+   * owner keeps it. A kind that is never installed answers none.
+   */
+  installedFrom?: string | null
   /** The most documents the query may answer — a reader asks one past its window to learn it was cut. */
   limit: number
 }

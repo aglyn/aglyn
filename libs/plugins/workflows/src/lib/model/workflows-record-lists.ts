@@ -32,15 +32,15 @@ import {
  * plugin's picker or check (AGL-3080) — a computed variable choosing the
  * workflow that fills it, a reference check confirming one still exists.
  *
- * All three are a site's: asked at the organization, a source answers none.
- * Ordered by document id, so the window is the same one every bounded list
- * reads. Each record is `automationIndexedRecord`'s, the server indexes'
- * shape.
+ * All three are a site's: asked at the organization, a source answers none,
+ * and none is ever installed from a listing. Ordered by document id, so the
+ * window is the same one every bounded list reads. Each record is
+ * `automationIndexedRecord`'s, the server indexes' shape.
  */
 function automationListSource(kind: AutomationRecordKind): PluginRecordListSource {
   return {
     query(firestore, request) {
-      return request.hostId
+      return request.hostId && !request.installedFrom
         ? query(
             collection(firestore, 'hosts', request.hostId, AUTOMATION_COLLECTIONS[kind]),
             orderBy(documentId()),

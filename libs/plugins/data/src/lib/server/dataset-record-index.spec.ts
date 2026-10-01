@@ -68,6 +68,7 @@ beforeEach(() => {
     'orgs/o1/datasets/orders': {
       displayName: 'Wholesale orders',
       visibleTo: ['host:h1'],
+      source: { type: 'marketplace', listingId: 'lst-1', version: 2 },
       model: {
         order: ['state', 'total'],
         fields: { state: { name: 'State', type: 'text' }, total: { name: 'Order total', type: 'float' } },
@@ -80,7 +81,7 @@ beforeEach(() => {
 })
 
 describe('the dataset index', () => {
-  it('lists the organization’s live datasets with their fields and scope, never a record', async () => {
+  it('lists the organization’s live datasets with their fields, scope and origin, never a record', async () => {
     const { records, truncated } = await datasetRecordIndex.list({ orgId: 'o1', limit: 10 })
     expect(truncated).toBe(false)
     expect(records).toEqual([
@@ -93,12 +94,13 @@ describe('the dataset index', () => {
             { id: 'total', name: 'Order total', type: 'float' },
           ],
           visibleTo: ['host:h1'],
+          installedFrom: { listingId: 'lst-1', version: 2 },
         },
       },
       {
         id: 'team',
         name: 'Team',
-        facts: { fields: [{ id: 'name', name: 'Name', type: 'text' }], visibleTo: ['org'] },
+        facts: { fields: [{ id: 'name', name: 'Name', type: 'text' }], visibleTo: ['org'], installedFrom: null },
       },
     ])
     expect(JSON.stringify(records)).not.toContain('TX')

@@ -70,6 +70,28 @@ describe('record list sources', () => {
     ).toEqual([{ id: 'b1', name: 'Rioja', facts: { label: 'cellar' } }])
   })
 
+  it('hands the owner the whole request, a member’s scope and an install’s listing included', () => {
+    const asked: unknown[] = []
+    registerPluginRecordListSource(
+      'bottle',
+      {
+        query: (_firestore, request) => {
+          asked.push(request)
+          return null
+        },
+        record: () => null,
+      },
+      { pluginId: 'cellar' },
+    )
+    pluginRecordListQuery('bottle', FIRESTORE, {
+      orgId: 'o1',
+      memberScope: ['host:h1'],
+      installedFrom: 'listing-1',
+      limit: 21,
+    })
+    expect(asked).toEqual([{ orgId: 'o1', memberScope: ['host:h1'], installedFrom: 'listing-1', limit: 21 }])
+  })
+
   it('answers no query and no records for a kind no plugin keeps here', () => {
     expect(pluginRecordListSource('bottle')).toBeNull()
     expect(pluginRecordListQuery('bottle', FIRESTORE, { hostId: 'h1', limit: 5 })).toBeNull()

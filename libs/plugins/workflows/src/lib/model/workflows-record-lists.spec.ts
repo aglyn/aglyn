@@ -63,6 +63,8 @@ describe('the workflows list sources', () => {
       path: 'hosts/h1/actions',
     })
     expect(pluginRecordListQuery('workflow', DB, { orgId: 'o1', hostId: null, limit: 5 })).toBeNull()
+    // Nothing of theirs is installed from a listing.
+    expect(pluginRecordListQuery('workflow', DB, { hostId: 'h1', installedFrom: 'lst-1', limit: 5 })).toBeNull()
   })
 
   it('reads rows as the server indexes do: live and named, a webhook never with its URL', () => {

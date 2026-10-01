@@ -59,9 +59,10 @@ describe('the product list source', () => {
     })
   })
 
-  it('finds nothing with nothing typed, or at the organization', () => {
+  it('finds nothing with nothing typed, at the organization, or for a listing', () => {
     expect(productRecordListSource.query(DB, { hostId: 'h1', search: '  ', limit: 8 })).toBeNull()
     expect(productRecordListSource.query(DB, { hostId: null, search: 'lamp', limit: 8 })).toBeNull()
+    expect(productRecordListSource.query(DB, { hostId: 'h1', search: 'lamp', installedFrom: 'lst-1', limit: 8 })).toBeNull()
   })
 
   it('reads a product with its price and priced variants', () => {

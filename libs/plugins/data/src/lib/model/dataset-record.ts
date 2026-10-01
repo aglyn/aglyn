@@ -28,9 +28,11 @@ import type { PluginIndexedRecord } from '@aglyn/aglyn/plugin-manager/plugin-rec
  * `null` for a deleted dataset. Otherwise its id, its name as the Data page
  * shows it, and `facts`:
  *   `fields` — its fields in the dataset page's order, each
- *   `{ id, name, type }`; and `visibleTo` — the scope tokens it is shared
+ *   `{ id, name, type }`; `visibleTo` — the scope tokens it is shared
  *   with, so a reader acting for a member can apply the platform's own
- *   visibility rule to them. Never a record of it.
+ *   visibility rule to them; and `installedFrom` — `{ listingId, version }`
+ *   for a dataset installed from a listing (`version` as the install
+ *   stamped it), `null` for one the workspace made. Never a record of it.
  */
 export function datasetIndexedRecord(
   id: string,
@@ -49,6 +51,18 @@ export function datasetIndexedRecord(
         type: String(model.fields[fieldId]?.type ?? 'text'),
       })),
       visibleTo: Array.isArray(data['visibleTo']) ? (data['visibleTo'] as string[]) : [],
+      installedFrom: installedFrom(data['source']),
     },
   }
+}
+
+/**
+ * Where an installed dataset came from. Read from its `source` stamp, which
+ * every dataset install has written — the ones from before install
+ * provenance (AGL-1015) included, which carry no `installedFrom`.
+ */
+function installedFrom(source: unknown): { listingId: string; version: unknown } | null {
+  const stamp = (source ?? {}) as Record<string, unknown>
+  const listingId = typeof stamp['listingId'] === 'string' ? stamp['listingId'] : ''
+  return listingId ? { listingId, version: stamp['version'] ?? null } : null
 }

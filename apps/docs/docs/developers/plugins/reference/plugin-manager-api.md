@@ -774,8 +774,9 @@ Import it by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-index`)
 Commerce publishes `product` and `productCategory`; Workflows publishes a site's
 `workflow`, `webhook` and `action` records (a webhook's facts never carry its URL
 or secret); Data publishes the workspace's `dataset` records, narrowed to a site
-to the ones shared with it, with their fields and scope tokens (never a record of
-one), from its console-only server declarations.
+to the ones shared with it, with their fields, their scope tokens and the
+listing an installed one came from (never a record of one), from its
+console-only server declarations.
 
 ## What depends on a thing — `plugin-dependents` (`/server`)
 
@@ -843,17 +844,19 @@ const bottles = pluginRecordsFromRows('bottle', data)
 | API | Semantics |
 | --- | --- |
 | `registerPluginRecordListSource(kind, source, { pluginId? })` | A kind another plugin lists throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
-| `source.query(firestore, { orgId?, hostId?, search?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. |
+| `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. |
 | `source.record(id, data)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed). |
 | `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows)` | The reader's half: the query to listen to, and the rows read back through the owner. Both answer nothing where no plugin keeps the kind here. |
 
 The reader runs the query with the console's own collection listener, so the
 read is bounded, retried and reported like every other list. Import it by its
 own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-lists`). Data lists the
-workspace's `dataset` records (a site's narrowed by its scope tokens),
-Workflows a site's `workflow`, `webhook` and `action` records, and Commerce
-FINDS a site's active `product` records by the first word typed, each with its
-price and priced variants.
+workspace's `dataset` records (a site's narrowed by its scope tokens, a scoped
+member's by theirs), each with the listing an installed one came from, which
+is how the marketplace knows what a workspace has installed; Workflows lists a
+site's `workflow`, `webhook` and `action` records, and Commerce FINDS a site's
+active `product` records by the first word typed, each with its price and
+priced variants.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
