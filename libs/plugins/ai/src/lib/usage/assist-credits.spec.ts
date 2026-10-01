@@ -40,6 +40,7 @@ import {
   assistFreeTasteRefusalText,
   assistHardCapRefusalText,
   assistMonthOverage,
+  assistNotOnPlanText,
   assistOverageCapReached,
   assistOverageCapRefusalText,
   assistOwnControlRefusalText,
@@ -58,8 +59,10 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   hasAiAddon,
   PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
   PLAN_PRICING,
   resolveEffectivePlan,
+  SELF_SERVE_PLANS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { AI_PLUGIN_ENTITLEMENTS } from '../declarations'
@@ -960,6 +963,30 @@ describe('the Free taste’s own refusals have their own sentences (AGL-2925)', 
  * with or without a ceiling — is `usage-budget.spec.ts`; this is the
  * ceiling's.
  */
+describe('the plan refusal names the plan that carries `aiAssist` (AGL-3448)', () => {
+  // Found by walking the ladder here rather than read from the helper's own
+  // lookup, so the sentence is checked against the table and not against the
+  // function that builds it.
+  const ladder = SELF_SERVE_PLANS
+  const first = ladder.findIndex((plan) => PLAN_ENTITLEMENTS[plan].features.aiAssist)
+
+  it('names the cheapest self-serve plan with the flag on', () => {
+    expect(first).toBeGreaterThanOrEqual(0)
+    expect(assistNotOnPlanText()).toBe(
+      `AI assist starts on the ${PLAN_LABELS[ladder[first]]} plan — see Billing to upgrade`,
+    )
+  })
+
+  it('the plan it names lets the reader in, and every plan below it would not', () => {
+    for (const plan of ladder.slice(0, first)) {
+      expect([plan, PLAN_ENTITLEMENTS[plan].features.aiAssist]).toEqual([plan, false])
+    }
+    for (const plan of ladder.slice(first)) {
+      expect([plan, PLAN_ENTITLEMENTS[plan].features.aiAssist]).toEqual([plan, true])
+    }
+  })
+})
+
 describe('the AI overage ceiling reads nothing of a usage budget (AGL-2898)', () => {
   const withoutCeiling = { usageBudget: { amountUsd: 50, thresholdPcts: [50, 90, 100] } }
   const withCeiling = { ...withoutCeiling, assistOverage: { capUsd: 5 } }

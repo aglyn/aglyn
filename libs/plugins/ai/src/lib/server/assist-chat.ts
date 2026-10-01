@@ -182,7 +182,7 @@ import {
  * in the author's editor, on confirm. Below the rung the request is answered
  * exactly as it would be without a canvas, and the outline is never parsed.
  *
- * Capability tiers: entitled orgs (`aiAssist`, Pro+) get docs-grounded
+ * Capability tiers: entitled orgs (`aiAssist`, Starter+) get docs-grounded
  * answers PLUS page-context awareness (level 2 — the current route/host is
  * injected so the assistant can walk the user through the view they are
  * on). Free orgs get level 1 only: docs-grounded answers and deep links;

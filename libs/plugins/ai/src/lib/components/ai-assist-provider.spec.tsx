@@ -48,6 +48,7 @@ import {
   lockdownRefusalText,
   parseLockdownRefusal,
   PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
   SELF_SERVE_PLANS,
   type LockdownState,
 } from '@aglyn/aglyn'
@@ -339,6 +340,27 @@ describe('AGL-2927 · the doors hold on a pending permission and close on a refu
     await waitFor(() => {
       expect(assistCalls.length).toBe(1)
     })
+  })
+})
+
+describe('AGL-3448 · a plan without `aiAssist` is told the plan that has it', () => {
+  /** The plan just below the cheapest one carrying the flag. */
+  const BELOW = SELF_SERVE_PLANS[SELF_SERVE_PLANS.indexOf(AI_PLAN!) - 1]
+
+  it('both doors name the cheapest plan the table gives the flag to', () => {
+    expect(BELOW).toBeDefined()
+    render(
+      <AiAssistProvider org={{ plan: BELOW }} orgReady aiPermissions={GRANTED}>
+        <Doors />
+      </AiAssistProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'open rewrite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'open section' }))
+    const expected = `AI assist starts on the ${PLAN_LABELS[AI_PLAN!]} plan — see Billing to upgrade`
+    expect(enqueueSnackbar.mock.calls.map((call) => call[0])).toEqual([expected, expected])
+    expect(screen.queryByLabelText('Instruction')).toBeNull()
+    expect(screen.queryByLabelText('Section')).toBeNull()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })
 

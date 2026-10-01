@@ -16,7 +16,7 @@ Everything here uses `curl`, which is already installed on macOS and Linux and s
 with Windows 10 and later. There's a JavaScript version of each step underneath.
 
 :::info What you need
-- An organization on a plan that **includes API access** (Business or Advanced).
+- An organization on a plan that **includes API access** — Business or any plan above it.
 - Permission to manage the organization — only **owners and admins** can create keys.
 - A terminal.
 :::

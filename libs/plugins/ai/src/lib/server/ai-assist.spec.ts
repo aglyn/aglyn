@@ -288,6 +288,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 const { aiAssistHandler } = require('./ai-assist') as typeof import('./ai-assist')
 const { ASSIST_SECTION_TOOL_NAME } =
   require('./ai-assist-prompts') as typeof import('./ai-assist-prompts')
+const { assistNotOnPlanText } =
+  require('../usage/assist-credits') as typeof import('../usage/assist-credits')
 
 // ── Harness ─────────────────────────────────────────────────────────────────
 
@@ -917,6 +919,9 @@ describe('the ladder refuses before it spends (AGL-2073)', () => {
     mockEntitled = false
     const result = await call(BODY, 'token-free')
     expect(result.status).toBe(403)
+    // The same sentence the console doors show, naming the plan the table
+    // first gives `aiAssist` to (AGL-3448).
+    expect(result.body).toEqual({ error: assistNotOnPlanText() })
     expect(mockFetch).not.toHaveBeenCalled()
     expect(mockDocs.size).toBe(0)
   })

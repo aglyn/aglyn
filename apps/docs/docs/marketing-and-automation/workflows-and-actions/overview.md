@@ -17,7 +17,7 @@ The two tabs are two ways into the same steps, kept apart by what they run on:
 
 | | What starts it | What it can do |
 | --- | --- | --- |
-| **Workflows** | a server event — a form submission, an order, a new member, a CRM event | function calls and every server-side step |
+| **Workflows** | a server event — a form submission, a booking, a new member, a CRM event | function calls and every server-side step |
 | **Actions** | the same server events, **and** what a visitor does on the page — a click, a hover, exit intent, a scroll depth | everything a workflow can do, plus the in-page effects |
 
 So an automation that touches the page is an **action**; one triggered by something that
@@ -28,7 +28,7 @@ Nothing you have already built moves or changes.
 
 ```mermaid
 flowchart LR
-  E["Site event<br/>(form submit, order, member)"] --> W["Workflow<br/>(ordered steps)"]
+  E["Site event<br/>(form submit, booking, member)"] --> W["Workflow<br/>(ordered steps)"]
   W --> S1["Call a function"]
   S1 --> S2["Write to a dataset"]
   S2 --> S3["Send an email"]
