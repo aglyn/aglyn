@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
 import {
@@ -34,8 +33,9 @@ import {
 
 /**
  * The platform's heavier server modules the Outreach routes reach
- * (AGL-2980): the permission resolver, the lockdown verdict, the activity
- * log and the saved-view sweep.
+ * (AGL-2980): the permission resolver, the lockdown verdict and the
+ * activity log. A saved view's people are the record system's to take
+ * (`plugin-person-records`).
  *
  * Imported here statically, and this module is loaded by
  * `register-routes.ts` the first time a request needs one of them: the
@@ -77,20 +77,4 @@ export async function holdsOrgCatalogPermission(uid: string, orgId: string, key:
   } catch {
     return false
   }
-}
-
-/**
- * The addresses a saved Contacts view selects among one site's contacts,
- * read by the dynamic-list sweep's own scan, and whether it reached the
- * whole view.
- */
-export async function crmViewEmails(input: {
-  hostId: string
-  viewId: string
-}): Promise<{ emails: string[]; complete: boolean }> {
-  const scan = await collectDynamicListCandidates({
-    hostId: input.hostId,
-    rule: { sources: ['contacts'], viewId: input.viewId },
-  })
-  return { emails: scan.candidates.map((candidate) => candidate.email), complete: scan.complete }
 }

@@ -74,11 +74,19 @@ export const crmPersonRecordsService: PluginPersonRecords = {
   },
   async fileUnder(request) {
     const { crmPersonRecords } = await import('./server/person-records')
-    return crmPersonRecords.fileUnder!(request)
+    return crmPersonRecords.fileUnder(request)
   },
   async recordRefund(request) {
     const { crmPersonRecords } = await import('./server/person-records')
-    return crmPersonRecords.recordRefund!(request)
+    return crmPersonRecords.recordRefund(request)
+  },
+  async peopleInView(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.peopleInView(request)
+  },
+  async wroteIn(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.wroteIn(request)
   },
 }
 
@@ -96,6 +104,26 @@ export const crmPipelineRecordIndex: PluginRecordIndex = {
     return pipelineRecordIndex.get(request)
   },
 }
+
+/** One of `server/crm-record-indexes.ts`'s indexes, its reads loaded with the first one. */
+function lazyCrmRecordIndex(kind: 'company' | 'messageTemplate'): PluginRecordIndex {
+  return {
+    async list(request) {
+      const { crmRecordIndexes } = await import('./server/crm-record-indexes')
+      return crmRecordIndexes()[kind].list(request)
+    },
+    async get(request) {
+      const { crmRecordIndexes } = await import('./server/crm-record-indexes')
+      return crmRecordIndexes()[kind].get(request)
+    },
+  }
+}
+
+/** The companies a person works for, as another plugin reads them (AGL-3080). */
+export const crmCompanyRecordIndex = lazyCrmRecordIndex('company')
+
+/** The email templates and snippets reps write, as another plugin reads them (AGL-3080). */
+export const crmMessageTemplateRecordIndex = lazyCrmRecordIndex('messageTemplate')
 
 /**
  * The CRM's writer on the record-timeline seam (AGL-2981), deferred: the
@@ -209,6 +237,12 @@ export function registerCrmServerDeclarations(): void {
           await import('./server/record-email-state')
         return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).reached!(request)
       },
+      // A lead that wrote back, moved to Working (AGL-3080).
+      async replied(request) {
+        const { createCrmRecordEmailStateWriter, defaultCrmRecordEmailStateDeps } =
+          await import('./server/record-email-state')
+        return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).replied!(request)
+      },
     },
     { pluginId: BUNDLE_ID },
   )
@@ -234,6 +268,10 @@ export function registerCrmServerDeclarations(): void {
   // them (AGL-3080): an automation the AI drafts names the stage a deal
   // moves to. Deferred like the rest: the reads load with the first one.
   registerPluginRecordIndex('pipeline', crmPipelineRecordIndex, { pluginId: BUNDLE_ID })
+  // The company a person works for, and the templates reps write, as a sales
+  // sequence reads them (AGL-3080). Deferred like the rest.
+  registerPluginRecordIndex('company', crmCompanyRecordIndex, { pluginId: BUNDLE_ID })
+  registerPluginRecordIndex('messageTemplate', crmMessageTemplateRecordIndex, { pluginId: BUNDLE_ID })
   registerPluginConsentGroupParticipant(
     {
       async preview(request) {

@@ -1,8 +1,8 @@
 /**
- * What a sequence does to a lead's own record (AGL-3234): a sent step moves
- * an untouched lead to Nurturing (AGL-3446), a reply moves a New or
- * Nurturing lead to Working and nothing else, and a conversion re-points
- * every enrollment made on the lead at the contact it became.
+ * What a sequence does when a lead converts (AGL-3234): every enrollment
+ * made on the lead is re-pointed at the contact it became. What a sent step
+ * or a reply does to the lead's own stage is the record system's — the
+ * CRM's `lead-nurturing.spec.ts` holds it.
  */
 
 const docs = new Map<string, Record<string, any>>()
@@ -58,75 +58,16 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => ({ __serverTimestamp: true }) },
 }))
 
-import {
-  followOutreachLeadToContact,
-  markOutreachLeadNurturing,
-  markOutreachLeadWorking,
-} from './lead-records'
+import { followOutreachLeadToContact } from './lead-records'
 
-const HOST = 'site-1'
 const ORG = 'org-1'
 const LEAD = 'lead-key'
-const leadPath = `orgs/${ORG}/leads/${LEAD}`
 const enrollment = (id: string, fields: Record<string, unknown>) =>
   docs.set(`orgs/${ORG}/outreachEnrollments/${id}`, fields)
 
 beforeEach(() => {
   docs.clear()
   updates.length = 0
-})
-
-describe('markOutreachLeadNurturing', () => {
-  it('moves a lead nobody touched to Nurturing, once', async () => {
-    docs.set(leadPath, { email: 'dana@example.com' })
-    await expect(markOutreachLeadNurturing(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(true)
-    expect(docs.get(leadPath)).toMatchObject({ status: 'nurturing' })
-    await expect(markOutreachLeadNurturing(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
-  })
-
-  it('never moves a worked, closed, converted or missing lead back', async () => {
-    for (const lead of [
-      { status: 'working' },
-      { status: 'unqualified', unqualifiedReason: 'Not a fit' },
-      { status: 'qualified', convertedContactId: 'c-1' },
-      { status: 'new', convertedContactId: 'c-1' },
-    ]) {
-      docs.set(leadPath, { email: 'dana@example.com', ...lead })
-      await expect(markOutreachLeadNurturing(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
-      expect(docs.get(leadPath)).toEqual({ email: 'dana@example.com', ...lead })
-    }
-    docs.delete(leadPath)
-    await expect(markOutreachLeadNurturing(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
-  })
-})
-
-describe('markOutreachLeadWorking', () => {
-  it('moves a Nurturing lead to Working when it replies', async () => {
-    docs.set(leadPath, { email: 'dana@example.com', status: 'nurturing' })
-    await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(true)
-    expect(docs.get(leadPath)).toMatchObject({ status: 'working' })
-  })
-
-  it('moves a lead nobody touched to Working, once', async () => {
-    docs.set(leadPath, { email: 'dana@example.com' })
-    await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(true)
-    expect(docs.get(leadPath)).toMatchObject({ status: 'working' })
-    await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
-  })
-
-  it('leaves a worked, closed, converted or missing lead alone', async () => {
-    for (const lead of [
-      { status: 'working' },
-      { status: 'unqualified', unqualifiedReason: 'Not a fit' },
-      { status: 'qualified', convertedContactId: 'c-1' },
-    ]) {
-      docs.set(leadPath, { email: 'dana@example.com', ...lead })
-      await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
-      expect(docs.get(leadPath)).toEqual({ email: 'dana@example.com', ...lead })
-    }
-    docs.delete(leadPath)
-    await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
-  })
 })
 
 describe('followOutreachLeadToContact', () => {

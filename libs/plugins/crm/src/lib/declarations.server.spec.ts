@@ -46,7 +46,9 @@ import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  crmCompanyRecordIndex,
   crmContactCaptureWriter,
+  crmMessageTemplateRecordIndex,
   crmPersonRecordsService,
   crmPipelineRecordIndex,
   registerCrmServerDeclarations,
@@ -109,6 +111,14 @@ describe('what the CRM declares at boot', () => {
     expect(pluginRecordIndex('pipeline')).toEqual({ pluginId: 'crm', index: crmPipelineRecordIndex })
     expect(deferredImports).toContain('./server/pipeline-record-index')
     expect(staticImports).not.toContain('./server/pipeline-record-index')
+  })
+
+  it('publishes the company and message-template indexes under this plugin, loaded with the first read (AGL-3080)', () => {
+    registerCrmServerDeclarations()
+    expect(pluginRecordIndex('company')).toEqual({ pluginId: 'crm', index: crmCompanyRecordIndex })
+    expect(pluginRecordIndex('messageTemplate')).toEqual({ pluginId: 'crm', index: crmMessageTemplateRecordIndex })
+    expect(deferredImports).toContain('./server/crm-record-indexes')
+    expect(staticImports).not.toContain('./server/crm-record-indexes')
   })
 
   it('answers for the workspace’s people under this plugin, its reads loaded with the first question (AGL-3080)', () => {

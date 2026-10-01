@@ -170,6 +170,51 @@ export interface PluginPersonRefundRequest {
  */
 export type PluginPersonRefundOutcome = 'recorded' | 'no-email' | 'no-person' | 'gone'
 
+/**
+ * The people a saved selection the owner keeps names — a saved view of one of
+ * its lists — taken for one site, as the people a sequence or a send works
+ * through.
+ */
+export interface PluginPersonViewRequest {
+  orgId: string
+  /** The site the people are taken for: only records it holds are answered. */
+  hostId: string
+  /** The view, by the id the owner's record list handed out (`plugin-record-lists`). */
+  viewId: string
+  /** The member asking: a view they may not list does not exist for them. */
+  viewerUid: string
+  /** The most people answered. */
+  limit: number
+}
+
+export type PluginPersonViewPeople =
+  | {
+      ok: true
+      people: PluginPersonRecordRef[]
+      /** How many the view selects, as far as the owner read it. */
+      total: number
+      /** The view selects more than `limit`, or more than the owner read. */
+      truncated: boolean
+    }
+  | {
+      ok: false
+      /**
+       * `not-found`: no such view, or not this member's to list.
+       * `not-people`: a view of something that is not people.
+       * `unsupported`: the view narrows by something the owner cannot apply
+       * outside its own list, so taking it would select more people than the
+       * view shows; `unsupported` names what, in the owner's words.
+       */
+      reason: 'not-found' | 'not-people' | 'unsupported'
+      unsupported?: string[]
+    }
+
+/** Records to ask about, by the refs the owner handed out. */
+export interface PluginPersonWroteInRequest {
+  orgId: string
+  records: readonly PluginPersonRecordRef[]
+}
+
 export interface PluginPersonRecords {
   /** The person an address belongs to, or `null`. A read; may throw, and the caller decides which way a failure falls. */
   find(request: PluginPersonFindRequest): Promise<PluginPersonRecord | null>
@@ -183,6 +228,14 @@ export interface PluginPersonRecords {
   fileUnder?(request: PluginPersonFileRequest): Promise<{ filed: boolean }>
   /** Records money handed back. Optional. Never throws: the money has already moved. */
   recordRefund?(request: PluginPersonRefundRequest): Promise<PluginPersonRefundOutcome>
+  /** The people a saved view selects for a site. Optional: an owner that keeps no views answers nothing. */
+  peopleInView?(request: PluginPersonViewRequest): Promise<PluginPersonViewPeople>
+  /**
+   * Whether each person has ever written to the workspace — an email they
+   * sent, on their record — in the order asked; `null` for one the owner
+   * could not answer. Optional.
+   */
+  wroteIn?(request: PluginPersonWroteInRequest): Promise<Array<boolean | null>>
 }
 
 export const PLUGIN_PERSON_RECORDS = definePluginServiceContract<PluginPersonRecords>(
@@ -271,6 +324,38 @@ export async function recordPluginPersonRefund(
     return await resolved.records.recordRefund(request)
   } catch (error) {
     console.error('[person-records] the record system could not record a refund', error)
+    return null
+  }
+}
+
+/**
+ * The people a saved view selects for a site, or `null` when no plugin keeps
+ * people here or the one that does keeps no views. A failed read throws.
+ */
+export async function pluginPeopleInView(
+  request: PluginPersonViewRequest,
+): Promise<PluginPersonViewPeople | null> {
+  const resolved = pluginPersonRecords()
+  if (!resolved?.records.peopleInView) return null
+  return await resolved.records.peopleInView(request)
+}
+
+/**
+ * Whether each person has ever written to the workspace, in the order asked
+ * — `null` for each the owner could not answer, and `null` whole when no
+ * plugin keeps people here or the one that does cannot say. Never throws: a
+ * caller reads an unknown as unknown.
+ */
+export async function pluginPeopleWroteIn(
+  request: PluginPersonWroteInRequest,
+): Promise<Array<boolean | null> | null> {
+  const resolved = pluginPersonRecords()
+  if (!resolved?.records.wroteIn) return null
+  if (!request.records.length) return []
+  try {
+    return await resolved.records.wroteIn(request)
+  } catch (error) {
+    console.error('[person-records] the record system could not say who wrote in', error)
     return null
   }
 }

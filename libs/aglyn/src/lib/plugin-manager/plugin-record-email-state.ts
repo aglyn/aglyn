@@ -117,6 +117,21 @@ export interface PluginRecordEmailReachRequest {
   emails: readonly string[]
 }
 
+/**
+ * The people who wrote back to mail the workspace sent them (AGL-3080), so
+ * the record system can say a person is engaged — a lead nobody had worked is
+ * being worked now. Only a real reply: an opt-out answered with "remove me"
+ * is a refusal, filed through the suppression lists, and is not handed here.
+ */
+export interface PluginRecordEmailReplyRequest {
+  /** The organization whose records the reply is about. */
+  orgId: string
+  /** The site the mail went out as; only records it holds are moved. */
+  hostId: string
+  /** The addresses that wrote back, as the mail addressed them. */
+  emails: readonly string[]
+}
+
 export interface PluginRecordEmailStateWriter {
   /** Never throws: a list is the control, the stamp is what a person reads. */
   stamp(request: PluginRecordEmailStateRequest): Promise<PluginRecordEmailStateReport>
@@ -133,6 +148,11 @@ export interface PluginRecordEmailStateWriter {
    * already gone.
    */
   reached?(request: PluginRecordEmailReachRequest): Promise<PluginRecordEmailStateReport>
+  /**
+   * Notes that these people replied. Optional: a record system with no stage
+   * for it answers nothing. Never throws: the reply has already arrived.
+   */
+  replied?(request: PluginRecordEmailReplyRequest): Promise<PluginRecordEmailStateReport>
 }
 
 export const PLUGIN_RECORD_EMAIL_STATE = definePluginServiceContract<PluginRecordEmailStateWriter>(
@@ -221,6 +241,26 @@ export async function stampRecordEmailReach(
     return await resolved.writer.reached(request)
   } catch (error) {
     console.error('[record-email-state] the record system could not note a delivered send', error)
+    return null
+  }
+}
+
+/**
+ * Hands the addresses that wrote back to whichever plugin keeps the records
+ * (AGL-3080). Answers `null` when no plugin keeps records, or the one that
+ * does keeps no such stage. Never throws: the reply is already filed, and its
+ * bookkeeping must not fail the sync that read it.
+ */
+export async function stampRecordEmailReply(
+  request: PluginRecordEmailReplyRequest,
+): Promise<PluginRecordEmailStateReport | null> {
+  if (!request.emails.length) return null
+  const resolved = pluginRecordEmailStateWriter()
+  if (!resolved?.writer.replied) return null
+  try {
+    return await resolved.writer.replied(request)
+  } catch (error) {
+    console.error('[record-email-state] the record system could not note a reply', error)
     return null
   }
 }

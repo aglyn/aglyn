@@ -862,7 +862,11 @@ Commerce publishes `product` and `productCategory`; Workflows publishes a site's
 or secret); Data publishes the workspace's `dataset` records, narrowed to a site
 to the ones shared with it, with their fields, their scope tokens and the
 listing an installed one came from (never a record of one), from its
-console-only server declarations.
+console-only server declarations. The CRM publishes its `pipeline` records
+with their stages, the `company` a person works for (facts: the company as
+stored — name, domain, address and the rest), and its `messageTemplate`
+records (facts: `{ kind, subject, body }`, the body in the CRM's merge-field
+grammar).
 
 ## What depends on a thing — `plugin-dependents` (`/server`)
 
@@ -930,9 +934,9 @@ const bottles = pluginRecordsFromRows('bottle', data)
 | API | Semantics |
 | --- | --- |
 | `registerPluginRecordListSource(kind, source, { pluginId? })` | A kind another plugin lists throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
-| `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. |
-| `source.record(id, data)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed). |
-| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows)` | The reader's half: the query to listen to, and the rows read back through the owner. Both answer nothing where no plugin keeps the kind here. |
+| `source.query(firestore, { orgId?, hostId?, search?, memberScope?, installedFrom?, consentGroupId?, viewerUid?, limit })` | The query the signed-in member's read of the scope is proved by — the owner applies the filter its security rules require — at most `limit` documents, or `null` for a scope the kind has none in. `search` is what a person typed, matched the owner's way. `memberScope` is the reading member's own scope tokens where they are not organization-wide, for an org-scoped kind to narrow by when no site is named. `installedFrom` keeps the records installed from that listing (their install stamp's `listingId`); a kind that is never installed answers none. `consentGroupId` is the group the named site presents as, for a kind whose records say different things to different groups. `viewerUid` is the signed-in member, for a kind some of whose records are one member's own. |
+| `source.record(id, data, request?)` | One stored document as the owner shares it, in the same shape its server index answers, or `null` to leave it out (deleted, unnamed, not this reader's). `request` is the one the query was built from, when the reader hands it back: a rule the query cannot state — a site's view of an org-wide row, a member's private record — is applied here. |
+| `pluginRecordListQuery(kind, firestore, request)` / `pluginRecordsFromRows(kind, rows, idField?, request?)` | The reader's half: the query to listen to, and the rows read back through the owner — hand the request back so the owner applies what the query could not state. Both answer nothing where no plugin keeps the kind here. |
 
 The reader runs the query with the console's own collection listener, so the
 read is bounded, retried and reported like every other list. Import it by its
@@ -943,7 +947,11 @@ is how the marketplace knows what a workspace has installed; Workflows lists a
 site's `workflow`, `webhook` and `action` records, Marketing lists a site's
 `overlay` records (its announcement bars and popups), and Commerce FINDS a
 site's active `product` records by the first word typed, each with its price
-and priced variants.
+and priced variants. The CRM lists the saved views of its Contacts and Leads
+lists a member may list (`savedView`, with whether each can be taken whole as
+an audience), its email templates (`messageTemplate`), a search of a site's
+`contact` records named as the site's group knows them, and a site's `lead`
+records with whether each is still open.
 
 ## The tenant's tax rule — `plugin-tax-profile` (`/server`)
 
@@ -1327,6 +1335,8 @@ await recordPluginPersonRefund({ hostId, email: order.email, amountCents, refId:
 | `readPluginPeople({ orgId, records })` | The records named by `{ kind, id }`, in the order asked, `null` for each that is gone. |
 | `filePluginPersonUnder({ hostId, orgId?, record, containerKind, ids })` | Files the person under containers (`plugin-containers`, above) as `hostId` holds them; `{ filed: false }` for a record the site cannot see or that is gone. Filing is not consent. |
 | `recordPluginPersonRefund({ hostId, email, amountCents, refId, closedTheSale, reason? })` | Money handed back to a person — a refund, or a dispute lost (`reason: 'chargeback'`). The owner records it beside what the person spent and never creates a person to hold it: `recorded`, `no-email`, `no-person` or `gone`. Never throws. |
+| `pluginPeopleInView({ orgId, hostId, viewId, viewerUid, limit })` | The people a saved view the owner keeps selects for a site, by the id its `savedView` list source handed out: `{ ok: true, people, total, truncated }`, or `{ ok: false, reason }` — `not-found` (gone, or not this member's to list), `not-people`, or `unsupported` (the view narrows by something only the owner's own list can apply, named in `unsupported`; taking it would select more people than it shows). |
+| `pluginPeopleWroteIn({ orgId, records })` | Whether each person has ever written to the workspace — an email they sent, on their record — in the order asked; `null` for one the owner could not answer, and `null` whole when it cannot say. Never throws. |
 | `pluginPersonRecords()` | The service with its owner, or `null`. |
 
 **Every reader answers `null` when no plugin keeps people.** That is a

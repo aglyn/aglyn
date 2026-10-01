@@ -35,7 +35,7 @@ import { findContactByEmail, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { recordContactEmailEngagement } from './contact-email-engagement'
-import { nurtureReachedLeads } from './lead-nurturing'
+import { nurtureReachedLeads, workRepliedLeads } from './lead-nurturing'
 
 /**
  * THE CRM'S WRITER ON THE CORE'S RECORD EMAIL-STATE SEAM (AGL-3245).
@@ -204,6 +204,10 @@ export function createCrmRecordEmailStateWriter(deps: CrmRecordEmailStateDeps): 
     // A delivered campaign moves the New leads it reached to Nurturing (AGL-3446).
     async reached(request) {
       return { records: await nurtureReachedLeads(deps.firestore(), request) }
+    },
+    // A reply moves a lead nobody had worked to Working (AGL-3080).
+    async replied(request) {
+      return { records: await workRepliedLeads(deps.firestore(), request) }
     },
   }
 }

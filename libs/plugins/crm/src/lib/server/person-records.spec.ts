@@ -71,14 +71,32 @@ function docRef(path: string): any {
   }
 }
 
+type Filter = { field: string; op: string; value: unknown }
+
+function matches(data: Record<string, any>, filter: Filter): boolean {
+  const field = data[filter.field]
+  if (filter.op === 'array-contains-any') {
+    return Array.isArray(field) && (filter.value as unknown[]).some((token) => field.includes(token))
+  }
+  return field === filter.value
+}
+
 function collectionRef(path: string): any {
-  const query = (filters: Array<{ field: string; value: unknown }>, limit?: number): any => ({
-    where: (field: string, _op: string, value: unknown) => query([...filters, { field, value }], limit),
-    limit: (count: number) => query(filters, count),
+  const query = (filters: Filter[], limit?: number, order?: { field: string; desc: boolean }): any => ({
+    where: (field: string, op: string, value: unknown) => query([...filters, { field, op, value }], limit, order),
+    orderBy: (field: string, direction?: string) => query(filters, limit, { field, desc: direction === 'desc' }),
+    limit: (count: number) => query(filters, count, order),
     get: async () => {
-      const matched = childPaths(path).filter((child) =>
-        filters.every((filter) => (docs.get(child) ?? {})[filter.field] === filter.value),
+      let matched = childPaths(path).filter((child) =>
+        filters.every((filter) => matches(docs.get(child) ?? {}, filter)),
       )
+      if (order) {
+        matched = [...matched].sort((a, b) => {
+          const left = Number(docs.get(a)?.[order.field] ?? 0)
+          const right = Number(docs.get(b)?.[order.field] ?? 0)
+          return order.desc ? right - left : left - right
+        })
+      }
       const found = (limit == null ? matched : matched.slice(0, limit)).map(snapshotOf)
       return { empty: !found.length, docs: found }
     },
@@ -89,7 +107,7 @@ function collectionRef(path: string): any {
       return parentPath ? docRef(parentPath) : null
     },
     doc: (id: string) => docRef(`${path}/${id}`),
-    where: (field: string, _op: string, value: unknown) => query([{ field, value }]),
+    where: (field: string, op: string, value: unknown) => query([{ field, op, value }]),
   }
 }
 
@@ -115,11 +133,16 @@ jest.mock('@aglyn/tenant-data-admin/server/crm-records', () => ({
 
 // The barrel is only reached for the default deps, which these cases replace.
 jest.mock('@aglyn/tenant-data-admin', () => ({}))
+jest.mock('@aglyn/tenant-data-admin/server/dynamic-list-materialize', () => ({}))
+
+/** What the dynamic-list sweep would read out of a Contacts view, per view. */
+let viewEmails: Record<string, { emails: string[]; complete: boolean }> = {}
 
 const deps: CrmPersonRecordsDeps = {
   firestore: () => firestore,
   orgIdForHost: async (hostId) => (hostId === 'orphan' ? null : 'org-1'),
   groupIdForHost: async (hostId) => (hostId === 'host-1' ? 'group-a' : hostId),
+  contactViewEmails: async ({ viewId }) => viewEmails[viewId] ?? { emails: [], complete: true },
 }
 const records = createCrmPersonRecords(deps)
 
@@ -128,6 +151,7 @@ const LEAD_KEY = personKey('lead@example.com') as string
 beforeEach(() => {
   docs.clear()
   restamped.length = 0
+  viewEmails = {}
   docs.set('orgs/org-1/contacts/c-1', {
     email: 'pat@example.com',
     name: 'Pat',
@@ -249,5 +273,103 @@ describe('filing a person under containers', () => {
       ).toEqual({ filed: false })
     }
     expect(docs.get('orgs/org-1/contacts/c-1')?.['facets.host-2.campaignIds']).toBeUndefined()
+  })
+})
+
+describe('the people a saved view selects', () => {
+  const ask = (viewId: string, overrides: Record<string, unknown> = {}) =>
+    records.peopleInView!({ orgId: 'org-1', hostId: 'host-1', viewId, viewerUid: 'rep', limit: 50, ...overrides })
+
+  const lead = (id: string, data: Record<string, unknown>) =>
+    docs.set(`orgs/org-1/leads/${id}`, { visibleTo: ['host:host-1'], lastSeenAtMs: 1, ...data })
+
+  it('does not exist for a member who may not list it', async () => {
+    docs.set('orgs/org-1/crmViews/private', { section: 'contacts', shared: false, ownerUid: 'other', filters: [] })
+    expect(await ask('private')).toEqual({ ok: false, reason: 'not-found' })
+    expect(await ask('gone')).toEqual({ ok: false, reason: 'not-found' })
+  })
+
+  it('refuses a view that is not of people', async () => {
+    docs.set('orgs/org-1/crmViews/deals', { section: 'deals', shared: true, filters: [] })
+    expect(await ask('deals')).toEqual({ ok: false, reason: 'not-people' })
+  })
+
+  it('takes the site’s open leads for a Leads view naming no status, newest first, held not shared', async () => {
+    docs.clear()
+    docs.set('orgs/org-1/crmViews/open', { section: 'leads', shared: true, filters: [] })
+    lead('l-new', { status: 'new', lastSeenAtMs: 3 })
+    lead('l-working', { status: 'working', lastSeenAtMs: 2 })
+    lead('l-lost', { status: 'unqualified', lastSeenAtMs: 4 })
+    lead('l-converted', { status: 'new', convertedContactId: 'c-9', lastSeenAtMs: 5 })
+    lead('l-sibling', { status: 'new', visibleTo: ['host:host-2'], lastSeenAtMs: 6 })
+    expect(await ask('open')).toEqual({
+      ok: true,
+      people: [
+        { kind: 'lead', id: 'l-new' },
+        { kind: 'lead', id: 'l-working' },
+      ],
+      total: 2,
+      truncated: false,
+    })
+  })
+
+  it('narrows a Leads view to the one status it names', async () => {
+    docs.set('orgs/org-1/crmViews/working', {
+      section: 'leads',
+      shared: false,
+      ownerUid: 'rep',
+      filters: [{ field: 'status', op: 'equals', value: 'working' }],
+    })
+    lead('l-new', { status: 'new' })
+    lead('l-working', { status: 'working' })
+    expect(await ask('working')).toMatchObject({ ok: true, people: [{ kind: 'lead', id: 'l-working' }] })
+  })
+
+  it('resolves a Contacts view’s addresses to the contacts the site may see, and says when it was cut', async () => {
+    docs.set('orgs/org-1/crmViews/warm', { section: 'contacts', shared: true, filters: [] })
+    viewEmails['warm'] = { emails: ['sam@example.com', 'pat@example.com', 'pat@example.com'], complete: false }
+    expect(await ask('warm')).toEqual({
+      ok: true,
+      people: [
+        { kind: 'contact', id: 'c-1' },
+        { kind: 'contact', id: 'c-2' },
+      ],
+      total: 2,
+      truncated: true,
+    })
+    expect(await ask('warm', { hostId: 'host-2' })).toMatchObject({
+      ok: true,
+      people: [{ kind: 'contact', id: 'c-2' }],
+    })
+  })
+
+  it('refuses whole a Contacts view filtering on what reading it cannot apply', async () => {
+    docs.set('orgs/org-1/crmViews/odd', {
+      section: 'contacts',
+      shared: true,
+      filters: [{ field: 'nextTaskAtMs', op: 'isEmpty', value: '', label: 'Next task' }],
+    })
+    const answer = await ask('odd')
+    expect(answer).toMatchObject({ ok: false, reason: 'unsupported' })
+    expect(answer.ok === false && answer.unsupported?.length).toBeTruthy()
+  })
+})
+
+describe('whether a person ever wrote in', () => {
+  it('answers from the inbound emails filed on the contact or the lead, unknown for a kind it does not keep', async () => {
+    docs.set('orgs/org-1/crmActivities/a-1', { contactId: 'c-1', direction: 'inbound' })
+    docs.set('orgs/org-1/crmActivities/a-2', { contactId: 'c-2', direction: 'outbound' })
+    docs.set('orgs/org-1/crmActivities/a-3', { leadId: LEAD_KEY, direction: 'inbound' })
+    expect(
+      await records.wroteIn!({
+        orgId: 'org-1',
+        records: [
+          { kind: 'contact', id: 'c-1' },
+          { kind: 'contact', id: 'c-2' },
+          { kind: 'lead', id: LEAD_KEY },
+          { kind: 'deal', id: 'd-1' },
+        ],
+      }),
+    ).toEqual([true, false, true, null])
   })
 })

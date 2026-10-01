@@ -21,14 +21,30 @@ import {
   normalizeContainerIds,
 } from '@aglyn/aglyn/app-utils/container-membership'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import {
+  CRM_COLLECTIONS,
+  crmLeadStatus,
+  crmViewIsListed,
+  isCrmLeadOpen,
+  normalizeCrmViewFilters,
+} from '@aglyn/aglyn/app-utils/crm'
+import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  scopeTokensForHost,
+  seenOnlyThroughGrant,
+  visibleToHost,
+} from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
   PluginPersonFileRequest,
   PluginPersonFindRequest,
   PluginPersonReadRequest,
   PluginPersonRecord,
+  PluginPersonRecordRef,
   PluginPersonRecords,
+  PluginPersonViewPeople,
+  PluginPersonViewRequest,
+  PluginPersonWroteInRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import {
   consentGroupForSite,
@@ -39,6 +55,7 @@ import {
 // wholesale, and the lookup and the restamp must reach the real logic.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
+import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
 import { FieldValue } from 'firebase-admin/firestore'
 import { recordPersonRefund } from './person-refund'
 
@@ -74,12 +91,24 @@ const STORED_IN: Readonly<Record<string, string>> = {
 /** `getAll` takes this many references per call. */
 const GET_ALL_CHUNK = 300
 
+/**
+ * The most leads a saved Leads view is taken from: the site's most recently
+ * seen, the Leads list's own window (AGL-3234).
+ */
+export const CRM_LEADS_VIEW_WINDOW = 200
+
 export interface CrmPersonRecordsDeps {
   firestore(): Firestore
   /** The organization a site belongs to, or `null` for one with none. */
   orgIdForHost(hostId: string): Promise<string | null>
   /** The consent group a site files its facet under. */
   groupIdForHost(hostId: string): Promise<string>
+  /**
+   * The addresses a saved Contacts view selects among one site's contacts,
+   * read the way the dynamic-list sweep reads one, and whether the read
+   * reached the whole view before its budget.
+   */
+  contactViewEmails(input: { hostId: string; viewId: string }): Promise<{ emails: string[]; complete: boolean }>
 }
 
 export function defaultCrmPersonRecordsDeps(): CrmPersonRecordsDeps {
@@ -87,6 +116,13 @@ export function defaultCrmPersonRecordsDeps(): CrmPersonRecordsDeps {
     firestore: () => firebaseAdmin.app().firestore(),
     orgIdForHost: async (hostId) => (await resolveOrgIdForHost(hostId)) ?? null,
     groupIdForHost: async (hostId) => (await consentGroupForSite(hostId)).groupId,
+    contactViewEmails: async ({ hostId, viewId }) => {
+      const scan = await collectDynamicListCandidates({
+        hostId,
+        rule: { sources: ['contacts'], viewId },
+      })
+      return { emails: scan.candidates.map((candidate) => candidate.email), complete: scan.complete }
+    },
   }
 }
 
@@ -208,13 +244,138 @@ export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPerson
     },
 
     recordRefund: (request) => recordPersonRefund(request),
+
+    /**
+     * The people a saved view selects for a site (AGL-3234). A colleague's
+     * private view is theirs: not listed for this member, so it does not
+     * exist for them here either.
+     *
+     * A Leads view takes the site's most recently seen leads —
+     * {@link CRM_LEADS_VIEW_WINDOW}, the Leads list's own window — narrowed by
+     * the view's status clause the way the list narrows it: open leads when
+     * the view names no status, one status when it does, everything for
+     * `all`. Held, not merely seen: a lead another site only SHARED with this
+     * one (AGL-3336) is not this site's to take.
+     *
+     * A Contacts view is read the way the dynamic-list sweep reads one, and
+     * each address it selects is resolved to the contact the site may see. A
+     * view filtering on something that reading cannot apply is refused whole:
+     * dropping the filter would select more people than the view shows.
+     */
+    async peopleInView(request: PluginPersonViewRequest): Promise<PluginPersonViewPeople> {
+      const firestore = deps.firestore()
+      const org = firestore.collection('orgs').doc(request.orgId)
+      const view = await org.collection(CRM_COLLECTIONS.views).doc(request.viewId).get()
+      const data = view.exists ? ((view.data() ?? {}) as Record<string, unknown>) : null
+      if (
+        !data ||
+        !crmViewIsListed(
+          { shared: data['shared'] === true, ownerUid: String(data['ownerUid'] ?? '') },
+          request.viewerUid,
+        )
+      ) {
+        return { ok: false, reason: 'not-found' }
+      }
+      const filters = normalizeCrmViewFilters(data['filters'])
+      if (data['section'] === 'leads') {
+        const statusClause = filters.find((clause) => clause.field === 'status' && clause.op === 'equals')
+        const wanted = String(statusClause?.value ?? 'open')
+        // Narrowed to what the site may see before it is ordered (AGL-3275):
+        // the collection is org-wide, and an agency's sequence must not be
+        // offered another client's people.
+        const window = await org
+          .collection(STORED_IN[CRM_PERSON_KINDS.lead])
+          .where('visibleTo', 'array-contains-any', scopeTokensForHost(request.hostId))
+          .orderBy('lastSeenAtMs', 'desc')
+          .limit(CRM_LEADS_VIEW_WINDOW + 1)
+          .get()
+        const matching = window.docs.slice(0, CRM_LEADS_VIEW_WINDOW).filter((doc) => {
+          const lead = (doc.data() ?? {}) as Record<string, unknown>
+          if (seenOnlyThroughGrant(lead, request.hostId)) return false
+          if (wanted === 'all') return true
+          if (wanted === 'open') return isCrmLeadOpen(lead as never) && !lead['convertedContactId']
+          return crmLeadStatus(lead as never) === wanted
+        })
+        return {
+          ok: true,
+          people: matching.slice(0, request.limit).map((doc) => ({ kind: CRM_PERSON_KINDS.lead, id: doc.id })),
+          total: matching.length,
+          truncated: matching.length > request.limit || window.docs.length > CRM_LEADS_VIEW_WINDOW,
+        }
+      }
+      if (data['section'] !== 'contacts') return { ok: false, reason: 'not-people' }
+      const { unsupported } = dynamicListDimensionsForCrmView(filters)
+      if (unsupported.length) {
+        return {
+          ok: false,
+          reason: 'unsupported',
+          unsupported: unsupported.map((clause) => clause.label || clause.field),
+        }
+      }
+      const { emails, complete } = await deps.contactViewEmails({
+        hostId: request.hostId,
+        viewId: request.viewId,
+      })
+      const ordered = [...new Set(emails)].sort()
+      const contacts = org.collection(STORED_IN[CRM_PERSON_KINDS.contact])
+      const found = await Promise.all(
+        ordered
+          .slice(0, request.limit)
+          .map((email) => findContactByEmail(contacts, email, { hostId: request.hostId })),
+      )
+      const ids = [...new Set(found.filter((snapshot) => snapshot).map((snapshot) => String(snapshot?.id)))]
+      return {
+        ok: true,
+        people: ids.map((id): PluginPersonRecordRef => ({ kind: CRM_PERSON_KINDS.contact, id })),
+        total: ordered.length,
+        truncated: ordered.length > request.limit || !complete,
+      }
+    },
+
+    /**
+     * Whether each person has ever written in: an inbound email on their
+     * timeline, filed on the contact, or on the lead while they were one
+     * (AGL-3234). One keyed query each; a failed one is unknown.
+     */
+    async wroteIn(request: PluginPersonWroteInRequest) {
+      const activities = deps
+        .firestore()
+        .collection('orgs')
+        .doc(request.orgId)
+        .collection(CRM_COLLECTIONS.activities)
+      return Promise.all(
+        request.records.map(async (record) => {
+          const field =
+            record.kind === CRM_PERSON_KINDS.contact
+              ? 'contactId'
+              : record.kind === CRM_PERSON_KINDS.lead
+                ? 'leadId'
+                : null
+          const id = String(record.id ?? '').trim()
+          if (!field || !id) return null
+          try {
+            const snapshot = await activities
+              .where(field, '==', id)
+              .where('direction', '==', 'inbound')
+              .limit(1)
+              .get()
+            return !snapshot.empty
+          } catch (error) {
+            console.error('[crm] inbound email lookup failed; reading as unknown', error)
+            return null
+          }
+        }),
+      )
+    },
   }
 }
 
 /** The service as the CRM registers it, its storage the admin app's. */
-export const crmPersonRecords: PluginPersonRecords = {
+export const crmPersonRecords: Required<PluginPersonRecords> = {
   find: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).find(request),
   read: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).read(request),
   fileUnder: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).fileUnder!(request),
   recordRefund: (request) => recordPersonRefund(request),
+  peopleInView: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).peopleInView!(request),
+  wroteIn: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).wroteIn!(request),
 }

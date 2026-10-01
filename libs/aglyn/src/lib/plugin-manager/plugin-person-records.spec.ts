@@ -19,6 +19,8 @@ import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   filePluginPersonUnder,
   findPluginPerson,
+  pluginPeopleInView,
+  pluginPeopleWroteIn,
   pluginPersonRecords,
   readPluginPeople,
   recordPluginPersonRefund,
@@ -179,5 +181,55 @@ describe('the people a workspace keeps (AGL-3080)', () => {
       }),
     ).toBeNull()
     expect(console.error).toHaveBeenCalled()
+  })
+})
+
+describe('views and what people wrote', () => {
+  const VIEW = { orgId: 'o', hostId: 'h', viewId: 'v-1', viewerUid: 'u-1', limit: 50 }
+
+  it('answers null for both while no plugin keeps people, or keeps neither', async () => {
+    expect(await pluginPeopleInView(VIEW)).toBeNull()
+    expect(await pluginPeopleWroteIn({ orgId: 'o', records: [{ kind: 'contact', id: 'c-1' }] })).toBeNull()
+    registerPluginPersonRecords(owner(), { pluginId: 'records' })
+    expect(await pluginPeopleInView(VIEW)).toBeNull()
+    expect(await pluginPeopleWroteIn({ orgId: 'o', records: [{ kind: 'contact', id: 'c-1' }] })).toBeNull()
+  })
+
+  it('hands the view and the records over, and answers what the owner answered', async () => {
+    const peopleInView = jest.fn(async () => ({
+      ok: true as const,
+      people: [{ kind: 'lead', id: 'l-1' }],
+      total: 1,
+      truncated: false,
+    }))
+    const wroteIn = jest.fn(async () => [true, null])
+    registerPluginPersonRecords({ ...owner(), peopleInView, wroteIn }, { pluginId: 'records' })
+    expect(await pluginPeopleInView(VIEW)).toEqual({
+      ok: true,
+      people: [{ kind: 'lead', id: 'l-1' }],
+      total: 1,
+      truncated: false,
+    })
+    expect(peopleInView).toHaveBeenCalledWith(VIEW)
+    const records = [
+      { kind: 'contact', id: 'c-1' },
+      { kind: 'lead', id: 'l-1' },
+    ]
+    expect(await pluginPeopleWroteIn({ orgId: 'o', records })).toEqual([true, null])
+    expect(await pluginPeopleWroteIn({ orgId: 'o', records: [] })).toEqual([])
+    expect(wroteIn).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads an owner that failed to say who wrote in as unknown, never as a throw', async () => {
+    registerPluginPersonRecords(
+      {
+        ...owner(),
+        async wroteIn() {
+          throw new Error('storage down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    expect(await pluginPeopleWroteIn({ orgId: 'o', records: [{ kind: 'contact', id: 'c-1' }] })).toBeNull()
   })
 })
