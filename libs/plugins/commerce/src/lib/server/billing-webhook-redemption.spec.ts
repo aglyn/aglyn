@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { commerceBillingWebhookHandler } from './billing-webhook'
 
 /**
@@ -159,7 +161,7 @@ const fakeFirestore = {
     }),
 }
 
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The REAL `updateExisting` — it is what distinguishes gRPC NOT_FOUND from
@@ -187,9 +189,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     }),
     meterHostEmail: async () => undefined,
     notifyHostManagers: async () => undefined,
-    upsertHostContact: async (options: any) => {
-      contactUpserts.push(options)
-    },
     renderHostEmailWithTokens: async () => null,
   }
 })
@@ -274,7 +273,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   updateFailures.clear()
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   autoIdCounter = 0
   fetchMock.mockClear()
   jest.spyOn(console, 'error').mockImplementation(() => undefined)

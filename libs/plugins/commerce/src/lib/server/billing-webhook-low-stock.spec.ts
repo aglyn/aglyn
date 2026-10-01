@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { commerceBillingWebhookHandler } from './billing-webhook'
 
 /**
@@ -123,7 +125,7 @@ const fakeFirestore = {
 }
 
 const notifications: any[] = []
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The real `updateExisting` (AGL-1767's pattern): the cart branch closes its
@@ -152,9 +154,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     meterHostEmail: async () => undefined,
     notifyHostManagers: async (hostId: string, notification: any) => {
       notifications.push({ hostId, ...notification })
-    },
-    upsertHostContact: async (options: any) => {
-      contactUpserts.push(options)
     },
     renderHostEmailWithTokens: async () => null,
   }
@@ -240,7 +239,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   notifications.length = 0
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   autoIdCounter = 0
   fetchMock.mockClear()
 

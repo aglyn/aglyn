@@ -22,7 +22,9 @@ import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-
 /**
  * A plugin that keeps people, standing in for the one that does (AGL-3080).
  *
- * Commerce reports the people it meets — a newsletter signup, a membership registration and an order — through the contact-capture
+ * Commerce reports the people it meets — a newsletter signup, a membership
+ * registration, an order, a paid draft, a stay, a renewal and a sale at the
+ * register — through the contact-capture
  * contract and imports no record system, so its specs stand a writer up the
  * way the loader would. One plugin may not import another, which is why this
  * is here rather than borrowed from the CRM.
@@ -35,8 +37,17 @@ import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-
  *
  * Returns the list the writer fills, in the order the doors reported them.
  */
-export function standInRecordSystem(): PluginContactCaptureRequest[] {
-  resetPluginServicesForTests()
+export function standInRecordSystem(
+  options: {
+    /**
+     * Start from no plugin services at all — the default. `false` keeps
+     * whatever a spec already stood in beside it, because the registry is
+     * one slot per service and a reset takes every slot.
+     */
+    reset?: boolean
+  } = {},
+): PluginContactCaptureRequest[] {
+  if (options.reset !== false) resetPluginServicesForTests()
   const captured: PluginContactCaptureRequest[] = []
   registerPluginContactCaptureWriter(
     {

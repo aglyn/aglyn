@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { commerceBillingWebhookHandler } from './billing-webhook'
 
 /**
@@ -121,7 +123,7 @@ const fakeFirestore = {
 }
 
 const notifications: any[] = []
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 
 /**
  * The OWNING org, as the renewal branch re-reads it per cycle (AGL-2071).
@@ -171,9 +173,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   meterHostEmail: async () => undefined,
   notifyHostManagers: async (hostId: string, notification: any) => {
     notifications.push({ hostId, ...notification })
-  },
-  upsertHostContact: async (options: any) => {
-    contactUpserts.push(options)
   },
   renderHostEmailWithTokens: async () => null,
 }))
@@ -420,7 +419,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   notifications.length = 0
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   autoIdCounter = 0
   // `mockReset`, not `mockClear`: a case that installed a 503 or a network
   // reject leaves that implementation behind, and the next case then fails for
@@ -879,7 +878,7 @@ describe('storefront subscription renewals (AGL-1743)', () => {
     await deliver(RENEWAL_INVOICE)
     expect(contactUpserts).toHaveLength(1)
     expect(contactUpserts[0].purchaseCents).toBe(9000)
-    expect(contactUpserts[0].email).toBe('boxer@example.com')
+    expect(contactUpserts[0].identity.email).toBe('boxer@example.com')
     expect(contactUpserts[0].interaction.refId).toBe('in_2')
   })
 

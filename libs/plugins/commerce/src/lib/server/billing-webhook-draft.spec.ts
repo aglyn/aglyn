@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { commerceBillingWebhookHandler } from './billing-webhook'
 
 /**
@@ -109,7 +111,7 @@ const fakeFirestore = {
 }
 
 const notifications: any[] = []
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
@@ -142,9 +144,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   meterHostEmail: async () => undefined,
   notifyHostManagers: async (hostId: string, notification: any) => {
     notifications.push({ hostId, ...notification })
-  },
-  upsertHostContact: async (options: any) => {
-    contactUpserts.push(options)
   },
   renderHostEmailWithTokens: async () => null,
 }))
@@ -231,7 +230,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   notifications.length = 0
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   autoIdCounter = 0
   fetchMock.mockClear()
 
@@ -274,8 +273,11 @@ describe('paid draft order (AGL-1748)', () => {
     expect(contactUpserts).toHaveLength(1)
     const upsert = contactUpserts[0]
     expect(upsert.hostId).toBe('host-1')
-    expect(upsert.source).toBe('order')
-    expect(upsert.name).toBe('Ida Voiced')
+    // A sale is a relationship at the customer floor (AGL-3232, AGL-2612).
+    expect(upsert.surface).toBe('relationship')
+    expect(upsert.lifecycleFloor).toBe('customer')
+    expect(upsert.interaction.source).toBe('order')
+    expect(upsert.identity.name).toBe('Ida Voiced')
     expect(upsert.interaction.refId).toBe('order-1')
     expect(upsert.interaction.summary).toBe('Paid #7 ($45.00)')
   })
@@ -301,7 +303,7 @@ describe('paid draft order (AGL-1748)', () => {
    */
   it('prefers the paying buyer over the drafted address', async () => {
     await deliver(DRAFT_SESSION)
-    expect(contactUpserts[0].email).toBe('Paid@Example.com')
+    expect(contactUpserts[0].identity.email).toBe('Paid@Example.com')
     expect(storedOrder().customerEmail).toBe('Paid@Example.com')
   })
 
@@ -309,7 +311,7 @@ describe('paid draft order (AGL-1748)', () => {
   it('falls back to the address the draft carried', async () => {
     await deliver({ ...DRAFT_SESSION, customer_details: null })
     expect(contactUpserts).toHaveLength(1)
-    expect(contactUpserts[0].email).toBe('drafted@example.com')
+    expect(contactUpserts[0].identity.email).toBe('drafted@example.com')
   })
 
   /** No email anywhere is not a contact — and must not throw. */

@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import type {
   PluginApiRequest,
   PluginApiResponse,
@@ -192,7 +194,7 @@ const fakeFirestore = {
 }
 
 /** Every `upsertHostContact` call the handler made, options verbatim (AGL-1748). */
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 /** Every manager notification the handler fired (AGL-1826). */
 const notifications: any[] = []
 
@@ -280,9 +282,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   notifyHostManagers: async (hostId: string, notification: any) => {
     notifications.push({ hostId, ...notification })
-  },
-  upsertHostContact: async (options: any) => {
-    contactUpserts.push(options)
   },
 }))
 
@@ -413,7 +412,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   docs.clear()
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   notifications.length = 0
   stripeCalls.length = 0
   stripeSessionsByKey.clear()
@@ -1278,8 +1277,11 @@ describe('POS sale lifetime value (AGL-1748)', () => {
     await sellBasket()
     const upsert = contactUpserts[0]
     expect(upsert.hostId).toBe('host-1')
-    expect(upsert.email).toBe('regular@example.com')
-    expect(upsert.source).toBe('order')
+    // A sale is a relationship at the customer floor (AGL-3232, AGL-2612).
+    expect(upsert.surface).toBe('relationship')
+    expect(upsert.lifecycleFloor).toBe('customer')
+    expect(upsert.identity.email).toBe('regular@example.com')
+    expect(upsert.interaction.source).toBe('order')
     expect(upsert.interaction.summary).toBe('In-store purchase ($11.69)')
     // The interaction points at the order document that was actually written,
     // which is what lets a rebuild-from-orders backfill match the two up.
@@ -1407,7 +1409,7 @@ describe('POS folio attribution (AGL-1757)', () => {
   it('falls back to the reservation guest when the cashier typed nothing', async () => {
     await chargeRoom()
     expect(contactUpserts).toHaveLength(1)
-    expect(contactUpserts[0].email).toBe('ada@example.com')
+    expect(contactUpserts[0].identity.email).toBe('ada@example.com')
   })
 
   /** Each stored field on its own (AGL-1711), not one shape-matched blob. */
@@ -1415,8 +1417,11 @@ describe('POS folio attribution (AGL-1757)', () => {
     await chargeRoom()
     const upsert = contactUpserts[0]
     expect(upsert.hostId).toBe('host-1')
-    expect(upsert.name).toBe('Ada Lovelace')
-    expect(upsert.source).toBe('order')
+    // A sale is a relationship at the customer floor (AGL-3232, AGL-2612).
+    expect(upsert.surface).toBe('relationship')
+    expect(upsert.lifecycleFloor).toBe('customer')
+    expect(upsert.identity.name).toBe('Ada Lovelace')
+    expect(upsert.interaction.source).toBe('order')
     expect(upsert.interaction.summary).toBe('Room charge ($55.21)')
     // The interaction points at the order that actually landed, which is what
     // lets an AGL-1753 backfill match the two up.
@@ -1465,15 +1470,15 @@ describe('POS folio attribution (AGL-1757)', () => {
   it('prefers a typed email over the reservation, and withholds the name', async () => {
     await chargeRoom({ customerEmail: 'Corrected@Example.com' })
     expect(contactUpserts).toHaveLength(1)
-    expect(contactUpserts[0].email).toBe('corrected@example.com')
-    expect(contactUpserts[0].name).toBeUndefined()
+    expect(contactUpserts[0].identity.email).toBe('corrected@example.com')
+    expect(contactUpserts[0].identity.name).toBeUndefined()
   })
 
   /** Typed the same address the reservation holds: the name still applies. */
   it('keeps the guest name when the typed email is the guest', async () => {
     await chargeRoom({ customerEmail: 'ADA@example.com' })
-    expect(contactUpserts[0].email).toBe('ada@example.com')
-    expect(contactUpserts[0].name).toBe('Ada Lovelace')
+    expect(contactUpserts[0].identity.email).toBe('ada@example.com')
+    expect(contactUpserts[0].identity.name).toBe('Ada Lovelace')
   })
 
   /**
@@ -1751,7 +1756,7 @@ describe('POS folio stub reservations (AGL-1760)', () => {
     it('still attributes the charge to the guest it read', async () => {
       await chargeRoom()
       expect(contactUpserts).toHaveLength(1)
-      expect(contactUpserts[0].email).toBe('ada@example.com')
+      expect(contactUpserts[0].identity.email).toBe('ada@example.com')
       expect(contactUpserts[0].purchaseCents).toBe(5521)
     })
   })

@@ -420,6 +420,31 @@ describe('a relationship', () => {
       { hostId: HOST, email: ' Dana@Example.com ', contactId: 'c-1', by: 'signup' },
     ])
   })
+
+  /*
+   * A paid booking or a stay reports `booking`, not `order`, and is still a
+   * purchase: the money is what closes the lead, whichever door took it.
+   */
+  it('closes the lead as a purchase when money changed hands at any door', async () => {
+    docs.set(leadPath(), { email: EMAIL, status: 'new' })
+    await captureContactForCrm(
+      request({
+        surface: 'relationship',
+        interaction: { source: 'booking', refId: 'b-1' },
+        detail: {},
+        lifecycleFloor: 'customer',
+        purchaseCents: 9500,
+      }),
+    )
+    expect(contactCaptures[0]).toMatchObject({
+      source: 'booking',
+      initialLifecycleStage: 'customer',
+      purchaseCents: 9500,
+    })
+    expect(conversions).toEqual([
+      { hostId: HOST, email: ' Dana@Example.com ', contactId: 'c-1', by: 'purchase' },
+    ])
+  })
 })
 
 describe('what every surface refuses', () => {

@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { bookingsBillingWebhookHandler } from './billing-webhook'
 import { standInTaxProfile } from '../testing/stand-in-tax-profile'
 
@@ -98,7 +100,7 @@ const fakeFirestore = {
     }),
 }
 
-const contactUpserts: any[] = []
+let contactUpserts: PluginContactCaptureRequest[] = []
 const sentEmails: any[] = []
 const meteredHosts: string[] = []
 
@@ -166,9 +168,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       html: rendered.html,
       text: rendered.text,
     }
-  },
-  upsertHostContact: async (options: any) => {
-    contactUpserts.push(options)
   },
   // The GA4 `purchase` this handler now sends (AGL-2481). Stubbed rather than
   // omitted: an absent export is a TypeError at the call site, which would
@@ -263,7 +262,7 @@ beforeAll(() => {
 beforeEach(() => {
   standInTaxProfile()
   docs.clear()
-  contactUpserts.length = 0
+  contactUpserts = standInRecordSystem({ reset: false })
   sentEmails.length = 0
   meteredHosts.length = 0
   fetchMock.mockClear()
@@ -298,8 +297,11 @@ describe('paid booking (AGL-1755)', () => {
     expect(contactUpserts).toHaveLength(1)
     const upsert = contactUpserts[0]
     expect(upsert.hostId).toBe('host-1')
-    expect(upsert.email).toBe('rhea@example.com')
-    expect(upsert.name).toBe('Rhea Salt')
+    // A sale is a relationship at the customer floor (AGL-3232, AGL-2612).
+    expect(upsert.surface).toBe('relationship')
+    expect(upsert.lifecycleFloor).toBe('customer')
+    expect(upsert.identity.email).toBe('rhea@example.com')
+    expect(upsert.identity.name).toBe('Rhea Salt')
     expect(upsert.interaction.refId).toBe('booking-1')
     expect(upsert.interaction.summary).toBe(
       'Paid for "Deep tissue massage" ($95.00)',
@@ -324,7 +326,7 @@ describe('paid booking (AGL-1755)', () => {
    */
   it('keeps the booking source', async () => {
     await deliver(BOOKING_SESSION)
-    expect(contactUpserts[0].source).toBe('booking')
+    expect(contactUpserts[0].interaction.source).toBe('booking')
   })
 
   /**
@@ -534,7 +536,7 @@ describe('the refund handles (AGL-2315)', () => {
       status: 'canceled',
       refundedCents: 9500,
     })
-    contactUpserts.length = 0
+    contactUpserts = standInRecordSystem({ reset: false })
     sentEmails.length = 0
     meteredHosts.length = 0
 
@@ -559,7 +561,7 @@ describe('the refund handles (AGL-2315)', () => {
       status: 'pendingPayment',
       refundedCents: 3000,
     })
-    contactUpserts.length = 0
+    contactUpserts = standInRecordSystem({ reset: false })
     sentEmails.length = 0
 
     await deliver(PAID_SESSION)
