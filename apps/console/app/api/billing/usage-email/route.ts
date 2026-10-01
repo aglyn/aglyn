@@ -28,6 +28,10 @@ import {
   readOrgPlanComp,
   resolveEffectivePlan,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  meteredBandField,
+  meteredPluginBands,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { selectCronChunk } from '../../../../utils/cron-chunk'
@@ -278,7 +282,6 @@ async function handler(request: Request): Promise<Response> {
 
       const storageGb = Number(rollup.get('storageGb') ?? 0)
       const pageViews = Number(rollup.get('pageViews') ?? 0)
-      const formSubmissions = Number(rollup.get('formSubmissions') ?? 0)
       const dataStorageMb = Number(rollup.get('dataStorageMb') ?? 0)
       const dataOverageUsd = Number(rollup.get('dataOverageUsd') ?? 0)
       // `billedCents` is the whole metered bill — infra overage at cost × 1.3
@@ -294,7 +297,13 @@ async function handler(request: Request): Promise<Response> {
         `Plan: ${PLAN_LABELS[plan] ?? plan}`,
         `Storage: ${storageGb.toFixed(2)} GB`,
         `Page views: ${pageViews.toLocaleString('en-US')}`,
-        `Form submissions: ${formSubmissions.toLocaleString('en-US')}`,
+        // Each metered band, by its label, as the rollup counted it.
+        ...meteredPluginBands().map(
+          (band) =>
+            `${band.label}: ${Number(
+              rollup.get(meteredBandField(band)) ?? 0,
+            ).toLocaleString('en-US')}`,
+        ),
         `Dataset storage: ${(dataStorageMb / 1024).toFixed(2)} GB` +
           (dataOverageUsd > 0
             ? ` (overage ${formatUsd(dataOverageUsd)})`

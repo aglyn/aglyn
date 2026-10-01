@@ -20,14 +20,17 @@ import { resolveOrgEntitlements, type AglynOrgBilling } from '@aglyn/aglyn'
 import {
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
+  hostMeterReadings,
   type HostUsageSnapshot,
   METERED_BILLED_RATES_USD,
   METERED_MARKUP,
+  meteredBands,
+  meteredBilledRateUsd,
 } from '../../utils/usage-metering'
 import { Stack, Typography } from '@mui/material'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { documentId } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
@@ -60,6 +63,13 @@ type UsageConfig = { orgLibraryBilledFrom: string | null } | 'unknown'
  */
 function rateText(usd: number): string {
   return `$${usd.toFixed(4).replace(/\.?0+$/, '')}`
+}
+
+/** "a", "a and b", "a, b and c" — the house style has no serial comma. */
+function listInProse(items: readonly string[]): string {
+  return items.length < 2
+    ? (items[0] ?? '')
+    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
 /**
@@ -118,12 +128,11 @@ export function BillingMeteredEstimateComponent(
     let active = true
     void Promise.all(
       (hosts ?? []).map(async (host: any): Promise<HostUsageSnapshot> => {
-        const [media, forms, analytics] = await Promise.all([
+        // Each metered band's per-site counter, beside the platform's two.
+        const counterNames = meteredBands().map((band) => band.hostCounter)
+        const [media, analytics, ...counters] = await Promise.all([
           getDoc(
             doc(firestore, 'hosts', host.$id, 'counters', 'media'),
-          ).catch(() => null),
-          getDoc(
-            doc(firestore, 'hosts', host.$id, 'counters', 'formSubmissions'),
           ).catch(() => null),
           getDocs(
             query(
@@ -132,10 +141,17 @@ export function BillingMeteredEstimateComponent(
               where(documentId(), '<=', `${month}-31`),
             ),
           ).catch(() => null),
+          ...counterNames.map((name) =>
+            getDoc(doc(firestore, 'hosts', host.$id, 'counters', name)).catch(
+              () => null,
+            ),
+          ),
         ])
         return {
           storageBytes: Number(media?.get('bytes') ?? 0),
-          formSubmissions: Number(forms?.get(month) ?? 0),
+          meters: hostMeterReadings((name) =>
+            counters[counterNames.indexOf(name)]?.get(month),
+          ),
           pageViews: (analytics?.docs ?? []).reduce(
             (sum, day) => sum + Number(day.get('total') ?? 0),
             0,
@@ -209,7 +225,6 @@ export function BillingMeteredEstimateComponent(
   const orgLibrary: HostUsageSnapshot = {
     storageBytes: orgLibraryBytes ?? 0,
     pageViews: 0,
-    formSubmissions: 0,
   }
   // TWO estimates, the rollup's exact split (AGL-1473): `estimate` is the
   // TRUTH — every byte the org stores — and drives the usage lines.
@@ -268,6 +283,12 @@ export function BillingMeteredEstimateComponent(
   // only the monthly one puts this caption back in the position of promising
   // annual customers a settlement that never arrives.
   const annual = (org as any)?.subscription?.interval === 'year'
+  /** Every meter in running prose: "storage, bandwidth and form submissions". */
+  const meteredNouns = listInProse([
+    'storage',
+    'bandwidth',
+    ...meteredBands().map((metered) => metered.metered.noun),
+  ])
 
   /**
    * One metered dimension: used of included, with any billable excess as its
@@ -367,30 +388,36 @@ export function BillingMeteredEstimateComponent(
             `${rateText(METERED_BILLED_RATES_USD.perPageView * 1000)} per 1,000`,
             billedEstimate.billableUsdByMeter.pageViews,
           )}
-          {usageRow(
-            'Form submissions',
-            estimate.formSubmissions.toLocaleString(),
-            band(included.formSubmissions),
-            billedEstimate.billableFormSubmissions,
-            Math.ceil(billedEstimate.billableFormSubmissions).toLocaleString(),
-            `${rateText(
-              METERED_BILLED_RATES_USD.perFormSubmission * 1000,
-            )} per 1,000`,
-            billedEstimate.billableUsdByMeter.formSubmissions,
-          )}
+          {meteredBands().map((metered) => (
+            <Fragment key={metered.id}>
+              {usageRow(
+                metered.label,
+                (estimate.meters[metered.id] ?? 0).toLocaleString(),
+                band(included.meters[metered.id] ?? 0),
+                billedEstimate.billableMeters[metered.id] ?? 0,
+                Math.ceil(
+                  billedEstimate.billableMeters[metered.id] ?? 0,
+                ).toLocaleString(),
+                `${rateText(
+                  meteredBilledRateUsd(metered) * metered.metered.quotedPer,
+                )} per ${metered.metered.quotedPer.toLocaleString()}`,
+                billedEstimate.billableUsdByMeter[metered.id] ?? 0,
+              )}
+            </Fragment>
+          ))}
         </>
       ) : null}
       <Typography variant="caption" color="text.secondary">
         {included.metered
-          ? `Only usage beyond your plan's included storage, bandwidth and ` +
-            `form submissions is metered, at our cost × ${METERED_MARKUP}. ` +
+          ? `Only usage beyond your plan's included ${meteredNouns} is ` +
+            `metered, at our cost × ${METERED_MARKUP}. ` +
             (annual
               ? 'Your subscription is annual, so usage accrues across the ' +
                 'year and settles on your renewal invoice.'
               : 'Metered charges settle on the same invoice as your ' +
                 'monthly subscription.')
-          : "Your plan's storage, bandwidth and form submissions are " +
-            'included caps, not meters — no usage charges.'}
+          : `Your plan's ${meteredNouns} are included caps, not meters — ` +
+            'no usage charges.'}
       </Typography>
     </Stack>
   )

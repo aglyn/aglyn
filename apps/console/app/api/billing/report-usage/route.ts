@@ -21,7 +21,12 @@ import {
   unregisteredPluginUsageMeters,
   type PluginUsageMeterContext,
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
-import { pluginUsageBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import {
+  countedPluginBands,
+  meteredBandField,
+  meteredBandVerdictFields,
+  type ResolvedPluginMeteredBand,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
@@ -40,7 +45,9 @@ import {
   billsEmailSendOverage,
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
+  hostMeterReadings,
   type HostUsageSnapshot,
+  meteredBands,
 } from '../../../../utils/usage-metering'
 import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import type { BillableScreenSource } from '../../hosts/resources/count-billable-screens'
@@ -434,9 +441,10 @@ async function hostUsage(
   hostRef: FirebaseFirestore.DocumentReference,
   month: string,
 ): Promise<HostUsageSnapshot> {
-  const [media, forms, analytics] = await Promise.all([
+  // Each metered band's per-site counter, beside the platform's two.
+  const counterNames = meteredBands().map((band) => band.hostCounter)
+  const [media, analytics, ...counters] = await Promise.all([
     hostRef.collection('counters').doc('media').get(),
-    hostRef.collection('counters').doc('formSubmissions').get(),
     hostRef
       .collection('analytics')
       .where(
@@ -450,10 +458,13 @@ async function hostUsage(
         `${month}-31`,
       )
       .get(),
+    ...counterNames.map((name) => hostRef.collection('counters').doc(name).get()),
   ])
   return {
     storageBytes: Number(media.get('bytes') ?? 0),
-    formSubmissions: Number(forms.get(month) ?? 0),
+    meters: hostMeterReadings((name) =>
+      counters[counterNames.indexOf(name)]?.get(month),
+    ),
     pageViews: analytics.docs.reduce(
       (sum, day) => sum + Number(day.get('total') ?? 0),
       0,
@@ -572,9 +583,10 @@ async function handler(request: Request): Promise<Response> {
   }
   const usageMeters = listPluginUsageMeters()
   const missingUsageMeters = unregisteredPluginUsageMeters()
-  // Each plugin usage band measured by a per-site counter: the sweep sums it
-  // with the platform's own counters and records it on the rollup.
-  const counterBands = pluginUsageBands().filter((band) => band.hostCounter)
+  // Each plugin usage band measured by a per-site counter and not metered:
+  // the sweep sums it with the platform's own counters and records it on the
+  // rollup. A metered band's counter is read with each host's usage instead.
+  const counterBands = countedPluginBands()
   const stripeKey = process.env.STRIPE_SECRET_KEY
   const meterEventName =
     process.env.STRIPE_METER_EVENT_NAME ?? 'aglyn_metered_usage'
@@ -685,7 +697,7 @@ async function handler(request: Request): Promise<Response> {
           hostRefs,
           month,
           orgRef,
-          counterBands.map((band) => band.hostCounter!),
+          counterBands.map((band) => band.hostCounter),
         ),
         // Platform fee on POS sales that never touched Stripe (AGL-2111).
         // Cash and folio tenders have no charge to net an
@@ -758,13 +770,13 @@ async function handler(request: Request): Promise<Response> {
       // It is a SNAPSHOT rather than an addition to some host's, because the
       // org library belongs to no site — the same reason `orgCounterTotals`
       // reads one ref for the whole org rather than one per host. Page views
-      // and form submissions are zero: a library serves no pages.
+      // and every metered band are zero: a library serves no pages and
+      // receives nothing.
       const orgLibrary: HostUsageSnapshot = {
         storageBytes: counterTotals.orgLibraryBytes,
         pageViews: 0,
-        formSubmissions: 0,
       }
-      // Only usage BEYOND the plan's included storage/bandwidth/form bands
+      // Only usage BEYOND the plan's included storage/bandwidth/metered bands
       // is billed (AGL-1280) — `billedCents` is the excess; `costUsd` stays
       // the gross figure the COGS model and staff views read.
       //
@@ -788,59 +800,77 @@ async function handler(request: Request): Promise<Response> {
         month,
         process.env.BILL_ORG_LIBRARY_STORAGE_FROM,
       )
-      // Form-submission overage is WITHHELD while `release_inbox` is off
-      // (AGL-1688). The same split AGL-1604 found on Contacts, on the flag
-      // next door: the flag gates the console Inbox page and its nav tab,
-      // while `/api/forms/submit` keeps writing `hosts/{id}/formSubmissions`
-      // and `GET /v1/sites/{id}/form-submissions` keeps serving them. So
-      // submissions accrue past the plan's band and bill at cost x 1.3, for a
-      // lead list the customer has no console way to read, mark read, or
-      // export. Nobody may be charged for what they cannot reach.
+      // A metered band's overage is WITHHELD while the release flag its
+      // declaration names is off for the workspace (`metered.withheldUntil`).
+      // The forms plugin's submissions wait behind `release_inbox` (AGL-1688):
+      // the flag gates the console Inbox page and its nav tab, while
+      // `/api/forms/submit` keeps counting submissions and
+      // `GET /v1/sites/{id}/form-submissions` keeps serving them. So they
+      // accrue past the plan's band and would bill at cost x 1.3, for a lead
+      // list the customer has no console way to read, mark read, or export.
+      // Nobody may be charged for what they cannot reach.
       //
-      // AGL-1688 recorded "no billing path" for Inbox, which is why it is
-      // stated here: `hostUsage` reads `counters/formSubmissions` into
-      // `HostUsageSnapshot.formSubmissions`, and `estimateMonthlyUsageCost`
-      // prices the excess over `hostLimit x formSubmissionsPerMonth` at
-      // `METERED_UNIT_RATES_USD.perFormSubmission`. It bills. That is what
-      // makes the Contacts remedy the analogous one rather than a stretch.
-      //
-      // Same construction as `contactsOverageBilled` below and for the same
-      // reasons: bucketed by `orgId` so an org inside a partial rollout CAN
-      // reach the page and so is billed; per-org overrides read off `orgData`,
-      // already in hand, so a staff grant reaches the invoice too (AGL-1635)
-      // at no extra read; and conditional on the flag rather than zeroed, so
-      // the day Inbox ships the same expression bills again on its own.
-      const formSubmissionsBilled = isReleaseFlagOnForOrg(
-        'release_inbox',
-        releaseFlagValues['release_inbox'],
-        orgId,
-        parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
-        releaseFlagPlan,
+      // Same construction as `contactsOverageBilled` and for the same
+      // reasons (`meterContext.releaseFlagOn`): bucketed by `orgId` so an org
+      // inside a partial rollout CAN reach the page and so is billed; per-org
+      // overrides read off `orgData`, already in hand, so a staff grant
+      // reaches the invoice too (AGL-1635) at no extra read; and conditional
+      // on the flag rather than zeroed, so the day the page ships the same
+      // expression bills again on its own.
+      const withheldBands = meteredBands().filter(
+        (band) =>
+          band.metered.withheldUntil &&
+          !meterContext.releaseFlagOn(band.metered.withheldUntil),
       )
       // WHAT REACHES THE INVOICE, not what is counted. The snapshots feeding
-      // `estimate` are untouched, so `costUsd`, the recorded `formSubmissions`
-      // total and every COGS reader stay truthful — under-reporting our own
-      // cost is the direction that silently loosens the discount guardrail.
-      const billedHosts = formSubmissionsBilled
-        ? usage
-        : usage.map((host) => ({ ...host, formSubmissions: 0 }))
-      const billedEstimateBeforeInbox = orgLibraryBilled
+      // `estimate` are untouched, so `costUsd`, each recorded band count and
+      // every COGS reader stay truthful — under-reporting our own cost is the
+      // direction that silently loosens the discount guardrail.
+      const billedEstimateBeforeWithholding = orgLibraryBilled
         ? estimate
         : estimateMonthlyUsageCost(usage, orgData)
-      const billedEstimate = formSubmissionsBilled
-        ? billedEstimateBeforeInbox
-        : estimateMonthlyUsageCost(
-            orgLibraryBilled ? [...billedHosts, orgLibrary] : billedHosts,
-            orgData,
-          )
-      // What was forgone, so a withheld month is distinguishable from a month
-      // with no form overage at all — the first question anyone re-reading a
-      // beta invoice will ask. Pre-markup, matching `billableCostUsd` beside
-      // which it is recorded.
-      const formSubmissionsWithheldUsd = formSubmissionsBilled
-        ? 0
-        : billedEstimateBeforeInbox.billableCostUsd -
-          billedEstimate.billableCostUsd
+      const estimateWithholding = (
+        bands: readonly ResolvedPluginMeteredBand[],
+      ) => {
+        const billedHosts = usage.map((host) => ({
+          ...host,
+          meters: Object.fromEntries(
+            Object.entries(host.meters ?? {}).map(([id, count]) => [
+              id,
+              bands.some((band) => band.id === id) ? 0 : count,
+            ]),
+          ),
+        }))
+        return estimateMonthlyUsageCost(
+          orgLibraryBilled ? [...billedHosts, orgLibrary] : billedHosts,
+          orgData,
+        )
+      }
+      const billedEstimate = withheldBands.length
+        ? estimateWithholding(withheldBands)
+        : billedEstimateBeforeWithholding
+      // Each withheld band's verdict, and what was forgone, so a withheld
+      // month is distinguishable from a month with no overage on that band at
+      // all — the first question anyone re-reading a beta invoice will ask.
+      // Pre-markup, matching `billableCostUsd` beside which it is recorded.
+      const meteredVerdicts = Object.fromEntries(
+        meteredBands()
+          .filter((band) => band.metered.withheldUntil)
+          .flatMap((band) => {
+            const fields = meteredBandVerdictFields(band)
+            const withheld = withheldBands.includes(band)
+            return [
+              [fields.billed, !withheld],
+              [
+                fields.withheldUsd,
+                withheld
+                  ? billedEstimateBeforeWithholding.billableCostUsd -
+                    estimateWithholding([band]).billableCostUsd
+                  : 0,
+              ],
+            ]
+          }),
+      )
       /*==========================================
        * STOCK METERS ARE READ AT THE END OF THE MONTH THEY BILL (AGL-2399).
        *
@@ -1110,18 +1140,23 @@ async function handler(request: Request): Promise<Response> {
           hostCount: hostRefs.length,
           storageGb: estimate.storageGb,
           pageViews: estimate.pageViews,
-          // COUNTED ALWAYS (AGL-1688), like `contactsCount` below: the
-          // submissions are real, the count is what the abuse ceiling and the
-          // plan quota are evaluated against, and it stays truthful whatever
-          // the flag says. Only the figure that reaches `billedCents` moves.
-          formSubmissions: estimate.formSubmissions,
-          // Whether THIS month charged for form-submission overage, and what
-          // was forgone if it did not. Same pair, same reason, as
+          // Each metered band's count, under the band's field. COUNTED ALWAYS
+          // (AGL-1688), like `contactsCount` below: the units are real, the
+          // count is what the abuse ceiling and the plan quota are evaluated
+          // against, and it stays truthful whatever a flag says. Only the
+          // figure that reaches `billedCents` moves.
+          ...Object.fromEntries(
+            meteredBands().map((band) => [
+              meteredBandField(band),
+              estimate.meters[band.id] ?? 0,
+            ]),
+          ),
+          // Whether THIS month charged for each withheld band's overage, and
+          // what was forgone if it did not. Same pair, same reason, as
           // `contactsOverageBilled` / `contactsOverageWithheldUsd`: without
           // the second field a withheld month is indistinguishable from a
           // month that simply stayed inside the band.
-          formSubmissionsBilled,
-          formSubmissionsOverageWithheldUsd: formSubmissionsWithheldUsd,
+          ...meteredVerdicts,
           costUsd: estimate.costUsd,
           // The excess only, at cost (AGL-1280) — `billedCents` is this
           // number marked up, plus the five plan-priced overages. Read off
@@ -1243,7 +1278,7 @@ async function handler(request: Request): Promise<Response> {
           ...Object.fromEntries(
             counterBands.map((band) => [
               band.fields[0]!,
-              counterTotals.counters[band.hostCounter!] ?? 0,
+              counterTotals.counters[band.hostCounter] ?? 0,
             ]),
           ),
           // AGL-1390: the org's worst host, and every host past its cap. An

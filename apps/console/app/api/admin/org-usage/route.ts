@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { pluginCostAxisProjection } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import {
+  countedPluginBands,
+  meteredBandField,
+  meteredBandVerdictFields,
+  meteredPluginBands,
+  pluginCostAxisProjection,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import {
   orgCogsInputFrom,
   orgMonthlyCogsUsd,
@@ -94,6 +100,13 @@ async function handler(request: Request): Promise<Response> {
       // model; it just quietly answers differently.
       dataStorageMb: Number(doc.get('dataStorageMb') ?? 0),
       apiRequests: Number(doc.get('apiRequests') ?? 0),
+      // Each metered band's count, which the table draws as a core column.
+      ...Object.fromEntries(
+        meteredPluginBands().map((band) => {
+          const field = meteredBandField(band)
+          return [field, Number(doc.get(field) ?? 0)]
+        }),
+      ),
       // Every field a plugin's cost axis reads or records, by the same
       // argument: form submissions, CRM records, provider spend, runs. A
       // priced field reads zero where the rollup lacks it, as the model reads
@@ -125,7 +138,13 @@ async function handler(request: Request): Promise<Response> {
         // Meters: counted, never charged.
         emailSends: Number(doc.get('emailSends') ?? 0),
         emailSendsOverage: Number(doc.get('emailSendsOverage') ?? 0),
-        workflowRuns: Number(doc.get('workflowRuns') ?? 0),
+        // Each plugin band counted by a per-site counter, under its band id.
+        counted: Object.fromEntries(
+          countedPluginBands().map((band) => [
+            band.id,
+            Number(doc.get(band.fields[0]!) ?? 0),
+          ]),
+        ),
         actionRuns: Number(doc.get('actionRuns') ?? 0),
         // Dollars the rollup computed but nothing could read back.
         billableCostUsd: Number(doc.get('billableCostUsd') ?? 0),
@@ -135,9 +154,19 @@ async function handler(request: Request): Promise<Response> {
         // a withheld month from an in-band one — which is the defect the
         // writer's own comment names. The flag is what disambiguates it, so
         // the two travel together or neither is worth serving.
-        formSubmissionsBilled: nullableFlag(doc.get('formSubmissionsBilled')),
-        formSubmissionsOverageWithheldUsd: Number(
-          doc.get('formSubmissionsOverageWithheldUsd') ?? 0,
+        meteredVerdicts: Object.fromEntries(
+          meteredPluginBands()
+            .filter((band) => band.metered.withheldUntil)
+            .map((band) => {
+              const fields = meteredBandVerdictFields(band)
+              return [
+                band.id,
+                {
+                  billed: nullableFlag(doc.get(fields.billed)),
+                  withheldUsd: Number(doc.get(fields.withheldUsd) ?? 0),
+                },
+              ]
+            }),
         ),
         contactsOverageBilled: nullableFlag(doc.get('contactsOverageBilled')),
         contactsOverageUsd: Number(doc.get('contactsOverageUsd') ?? 0),

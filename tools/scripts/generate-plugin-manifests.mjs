@@ -799,8 +799,11 @@ async function pluginPlanEntitlements() {
  * declared key to a rate that exists there. A spend line names its month
  * document, the variable holding the month it is first charged for, and — when
  * the stored dollars are not the customer's to see — the unit shown instead.
- * A meter names only its id: its code is registered at runtime, and the
- * declaration is what lets the sweep notice when it was not.
+ * A metered band names a rate KEY of the console's `METERED_UNIT_RATES_USD`
+ * (`usage-metering.spec.ts` holds it to one that exists), one field and the
+ * host counter it is measured by. A meter names only its id: its code is
+ * registered at runtime, and the declaration is what lets the sweep notice
+ * when it was not.
  */
 const CORE_COST_AXIS_ORDERS = { storage: 10, pageViews: 20, dataStorage: 40, apiRequests: 50, emailSends: 70 }
 const CORE_USAGE_BAND_ORDERS = { hosts: 10, storageGb: 20, pageViews: 30, dataStorageMb: 50, apiRequests: 60, emailSends: 80 }
@@ -873,7 +876,7 @@ async function pluginUsageAxes() {
       costAxes.push({ pluginId: plugin.id, ...axis })
     }
     for (const band of declaredBands) {
-      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert } = band ?? {}
+      const { id, label, order, fields, fallbackFields, entitlement, perHost, unitCostUsd, hostCounter, alert, metered } = band ?? {}
       const what = `${where} band "${id ?? ''}"`
       if (typeof id !== 'string' || !PLAIN_NAME.test(id)) throw new Error(`${where}: a band needs a plain "id"`)
       if (bandOwners.has(id)) throw new Error(`${what} is already measured by ${bandOwners.get(id)}`)
@@ -903,6 +906,26 @@ async function pluginUsageAxes() {
       }
       if (alert !== undefined && hostCounter === undefined) {
         throw new Error(`${what}: "alert" needs the "hostCounter" the band is measured by`)
+      }
+      if (metered !== undefined) {
+        const { rate, quotedPer, noun, withheldUntil } = metered ?? {}
+        if (typeof rate !== 'string' || !PLAIN_NAME.test(rate)) {
+          throw new Error(`${what}: "metered.rate" names a key of METERED_UNIT_RATES_USD, never a number`)
+        }
+        if (!Number.isInteger(quotedPer) || quotedPer < 1) throw new Error(`${what}: "metered.quotedPer" is the whole count a price is quoted per`)
+        if (typeof noun !== 'string' || !noun.trim()) throw new Error(`${what}: "metered.noun" is the band in running prose`)
+        if (withheldUntil !== undefined && (typeof withheldUntil !== 'string' || !/^release_[a-z0-9_]+$/.test(withheldUntil))) {
+          throw new Error(`${what}: "metered.withheldUntil" is the key of the release flag the overage waits behind`)
+        }
+        // One field and its counter: the invoice sums one figure per site, and
+        // the rollup records it, and its billed/withheld pair, by that name.
+        if (fields.length !== 1 || fallbackFields !== undefined) {
+          throw new Error(`${what}: a metered band records one field, with no fallback`)
+        }
+        if (hostCounter === undefined) throw new Error(`${what}: "metered" needs the "hostCounter" the band is measured by`)
+        if (unitCostUsd !== undefined) throw new Error(`${what}: a metered band counts units, so it has no "unitCostUsd"`)
+        // The estimate keys each meter's charge beside the platform's two.
+        if (['storage', 'pageViews'].includes(id)) throw new Error(`${what}: "${id}" is a platform meter's name`)
       }
       bands.push({ pluginId: plugin.id, ...band })
     }

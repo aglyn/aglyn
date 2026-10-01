@@ -18,44 +18,6 @@
       "why": "`'marketplace'` here is a FIELD NAME, not a plugin id: the component document's install stamp from before AGL-1015 (`{ listingId, profileId, version }`), which core's own provenance reader (`app-utils/artifact-provenance.ts`, `resolveProvenance`, argued stays) still reads as the listing an installed component came from, and which the component install still writes beside `installedFrom`. This list is the round trip of a live component document, so leaving the key out would restore every legacy installed component with its origin stripped; renaming it is a data migration of every installed component on every site."
     },
     {
-      "path": "apps/console/app/api/admin/org-usage/route.ts",
-      "rules": [
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "ai"
-    },
-    {
-      "path": "apps/console/app/api/admin/overview/route.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/console/app/api/billing/report-usage/route.ts",
-      "rules": [
-        "plugin-collection:forms",
-        "domain-declares:forms"
-      ],
-      "lane": "ai"
-    },
-    {
-      "path": "apps/console/app/api/billing/usage-email/route.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
-      "path": "apps/console/components/billing/billing-metered-estimate.component.tsx",
-      "rules": [
-        "plugin-collection:forms",
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/console/components/billing/billing-plan-cards.component.tsx",
       "rules": [
         "plugin-id"
@@ -104,14 +66,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/components/staff-org-usage-table.component.tsx",
-      "rules": [
-        "domain-declares:forms",
-        "domain-declares:workflows"
-      ],
-      "lane": "forms"
-    },
-    {
       "path": "apps/console/components/staff-user-email-history-card.component.tsx",
       "rules": [
         "domain-declares:marketing"
@@ -147,13 +101,6 @@
         "domain-declares:marketing"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/utils/usage-metering.ts",
-      "rules": [
-        "domain-declares:forms"
-      ],
-      "lane": "forms"
     },
     {
       "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/advertising-tags.tsx",

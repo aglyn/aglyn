@@ -36,7 +36,10 @@
  *    own axes, and `orgCogsInputFrom` forwards its fields.
  *  - a BAND names the rollup fields that measure it and the entitlement that
  *    says what the plan includes. The utilization table reads it beside
- *    core's own bands.
+ *    core's own bands. A METERED band is also billed past what the plan
+ *    includes, at cost × `METERED_MARKUP`, beside storage and bandwidth: the
+ *    invoice sweep, the Billing card's estimate, the monthly summary and the
+ *    staff usage rows read it from here.
  *  - a SPEND LINE names the month document holding what the plugin's usage
  *    came to at the rates it bills, the deployment variable naming the month
  *    it is first charged for, and the unit a customer sees it in. The usage
@@ -48,7 +51,8 @@
  * ## What core keeps
  *
  * The MONEY. Every unit rate stays in `ORG_COGS_UNIT_RATES_USD`, beside the
- * billed table it is reconciled against, and every included figure stays in
+ * billed table it is reconciled against (`METERED_UNIT_RATES_USD`, which a
+ * metered band names its rate in), and every included figure stays in
  * `PLAN_ENTITLEMENTS`. A declaration names fields and keys; it carries no
  * price. The one number a declaration may carry is a band's unit cost, where
  * the band is sold in a unit OF cost (a credit is a fixed quantity of
@@ -65,6 +69,7 @@
  * error rather than a zero.
  */
 
+import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import {
   PLUGIN_COST_AXES_DECLARED,
   PLUGIN_SPEND_LINES_DECLARED,
@@ -150,6 +155,36 @@ export interface PluginUsageBandDeclaration {
     reached: string
     approach: string
   }
+  /**
+   * The band is one of the INFRASTRUCTURE meters (AGL-1280): what the
+   * workspace uses past it is billed at our cost × `METERED_MARKUP`, beside
+   * storage and bandwidth, on the same invoice line and the same estimate.
+   * A metered band names one rollup field and the `hostCounter` it is
+   * measured by.
+   */
+  metered?: PluginMeteredBand
+}
+
+/** How a metered band is priced, quoted and withheld. */
+export interface PluginMeteredBand {
+  /**
+   * The `METERED_UNIT_RATES_USD` key holding our cost per unit — never a
+   * number: the rate table is the platform's, beside the markup it is
+   * published with.
+   */
+  rate: string
+  /** The count a published price is quoted per: `1000` reads "per 1,000". */
+  quotedPer: number
+  /** The band in running prose, plural and lowercase: "form submissions". */
+  noun: string
+  /**
+   * A release flag the overage waits behind: while it is off for the
+   * workspace, the units are counted and the charge is recorded as withheld
+   * rather than billed — nobody is charged for what they cannot reach
+   * (AGL-1604). The rollup records the verdict as `{field}Billed` and what
+   * was forgone, at cost, as `{field}OverageWithheldUsd`.
+   */
+  withheldUntil?: ReleaseFlagKey
 }
 
 /**
@@ -211,6 +246,60 @@ export function pluginCostAxes(): readonly ResolvedPluginCostAxis[] {
 
 export function pluginUsageBands(): readonly ResolvedPluginUsageBand[] {
   return PLUGIN_USAGE_BANDS_DECLARED
+}
+
+/** A declared band that is metered, with its one field and its counter. */
+export type ResolvedPluginMeteredBand = ResolvedPluginUsageBand & {
+  metered: PluginMeteredBand
+  hostCounter: string
+}
+
+/**
+ * Every band billed at cost past what the plan includes, in band order — the
+ * infrastructure meters a plugin adds beside storage and bandwidth.
+ */
+export function meteredPluginBands(): readonly ResolvedPluginMeteredBand[] {
+  return PLUGIN_USAGE_BANDS_DECLARED.filter(
+    (band): band is ResolvedPluginMeteredBand =>
+      Boolean(band.metered && band.hostCounter),
+  )
+}
+
+/** A declared band measured by a per-site counter and never billed past it. */
+export type ResolvedPluginCountedBand = ResolvedPluginUsageBand & {
+  hostCounter: string
+}
+
+/**
+ * Every band measured by a per-site counter and not metered, in band order:
+ * the usage sweep sums each across the workspace's sites and records it under
+ * the band's first field, and the staff usage rows show the count. A metered
+ * band's counter is read with the infrastructure meters instead.
+ */
+export function countedPluginBands(): readonly ResolvedPluginCountedBand[] {
+  return PLUGIN_USAGE_BANDS_DECLARED.filter(
+    (band): band is ResolvedPluginCountedBand =>
+      Boolean(band.hostCounter && !band.metered),
+  )
+}
+
+/** The rollup field a metered band records its count under. */
+export function meteredBandField(band: ResolvedPluginMeteredBand): string {
+  return band.fields[0]!
+}
+
+/**
+ * Where the rollup records a withheld band's verdict (`metered.withheldUntil`):
+ * whether the month billed the band's overage, and what was forgone, at cost,
+ * when it did not. Without the second a withheld month reads as a month that
+ * stayed inside the band.
+ */
+export function meteredBandVerdictFields(band: ResolvedPluginMeteredBand): {
+  billed: string
+  withheldUsd: string
+} {
+  const field = meteredBandField(band)
+  return { billed: `${field}Billed`, withheldUsd: `${field}OverageWithheldUsd` }
 }
 
 export function pluginSpendLines(): readonly ResolvedPluginSpendLine[] {

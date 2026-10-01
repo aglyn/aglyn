@@ -1016,7 +1016,14 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "formSubmissions"
     ],
     "entitlement": "formSubmissionsPerMonth",
-    "perHost": true
+    "perHost": true,
+    "hostCounter": "formSubmissions",
+    "metered": {
+      "rate": "perFormSubmission",
+      "quotedPer": 1000,
+      "noun": "form submissions",
+      "withheldUntil": "release_inbox"
+    }
   },
   {
     "pluginId": "crm",

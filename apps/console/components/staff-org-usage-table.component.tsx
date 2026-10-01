@@ -26,6 +26,11 @@ import {
 } from '@mui/material'
 import { Fragment } from 'react'
 import {
+  countedPluginBands,
+  meteredBandField,
+  meteredPluginBands,
+} from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import {
   PluginListColumnCells,
   PluginListColumnHeaders,
   type PluginListColumn,
@@ -33,14 +38,15 @@ import {
 
 /**
  * One monthly org usage rollup as `/api/admin/org-usage` serves it. The row
- * carries more fields than the core columns draw; a plugin column reads the
- * ones that are its own off the same row.
+ * carries more fields than the core columns draw: every field a plugin's cost
+ * axis reads, records or serves staff, under its rollup name — a metered
+ * band's count among them, which the table draws — and a plugin column reads
+ * the ones that are its own off the same row.
  */
 export interface StaffOrgUsageMonth {
   month: string
   storageGb: number
   pageViews: number
-  formSubmissions: number
   costUsd: number
   /**
    * What the rollup recorded and nothing priced (AGL-2321).
@@ -57,12 +63,21 @@ export interface StaffOrgUsageMonth {
   recorded?: {
     emailSends?: number
     emailSendsOverage?: number
-    workflowRuns?: number
+    /**
+     * Each plugin band counted by a per-site counter and never billed past it
+     * (`countedPluginBands`), by band id.
+     */
+    counted?: Readonly<Record<string, number>>
     actionRuns?: number
     billableCostUsd?: number
     apiOverageUsd?: number
-    formSubmissionsBilled?: boolean | null
-    formSubmissionsOverageWithheldUsd?: number
+    /**
+     * Each metered band that waits behind a release flag, by band id: whether
+     * the month billed its overage, and what was forgone, at cost, if not.
+     */
+    meteredVerdicts?: Readonly<
+      Record<string, { billed: boolean | null; withheldUsd: number }>
+    >
     contactsOverageBilled?: boolean | null
     contactsOverageUsd?: number
     contactsOverageWithheldUsd?: number
@@ -73,6 +88,7 @@ export interface StaffOrgUsageMonth {
     siteSizeTruncated?: boolean | null
   }
   deltas: { pageViews: number | null; costUsd: number | null } | null
+  readonly [field: string]: unknown
 }
 
 /**
@@ -133,8 +149,9 @@ export function recordedUsageLines(
           : ''),
     )
   }
-  if (recorded.workflowRuns != null) {
-    meters.push(`Workflow runs ${recorded.workflowRuns.toLocaleString()}`)
+  for (const band of countedPluginBands()) {
+    const count = recorded.counted?.[band.id]
+    if (count != null) meters.push(`${band.label} ${count.toLocaleString()}`)
   }
   if (recorded.actionRuns != null) {
     meters.push(`Action runs ${recorded.actionRuns.toLocaleString()}`)
@@ -150,11 +167,14 @@ export function recordedUsageLines(
     money.push(`API overage $${recorded.apiOverageUsd.toFixed(2)}`)
   }
   const gates = [
-    overageSentence(
-      'Form overage',
-      recorded.formSubmissionsBilled,
-      recorded.formSubmissionsOverageWithheldUsd,
-    ),
+    ...meteredPluginBands().map((band) => {
+      const verdict = recorded.meteredVerdicts?.[band.id]
+      return overageSentence(
+        `${band.label} overage`,
+        verdict?.billed,
+        verdict?.withheldUsd,
+      )
+    }),
     overageSentence(
       'Contacts overage',
       recorded.contactsOverageBilled,
@@ -179,25 +199,30 @@ export function recordedUsageLines(
     .map((group) => group.join(' · '))
 }
 
-/**
- * The core columns of every rollup row, in order — the spec pins them.
- * Columns a plugin contributes through the `staffOrgUsageColumn` zone sit
- * between Forms and Cost.
- */
-export const STAFF_ORG_USAGE_COLUMNS = [
+/** The metered bands, each a core column after storage (`meteredPluginBands`). */
+const METERED_COLUMNS = meteredPluginBands()
+
+/** The core headers drawn before the plugin columns. */
+const LEADING_COLUMNS = [
   'Month',
   'Page views',
   'Storage GB',
-  'Forms',
-  'Cost',
-] as const
-
-/** The core headers drawn before the plugin columns. */
-const LEADING_COLUMNS = STAFF_ORG_USAGE_COLUMNS.slice(0, -1)
+  ...METERED_COLUMNS.map((band) => band.label),
+]
 
 /** The core header drawn after them. */
-const TRAILING_COLUMN =
-  STAFF_ORG_USAGE_COLUMNS[STAFF_ORG_USAGE_COLUMNS.length - 1]
+const TRAILING_COLUMN = 'Cost'
+
+/**
+ * The core columns of every rollup row, in order — the spec pins them: the
+ * platform's own, one for each metered band, then Cost. Columns a plugin
+ * contributes through the `staffOrgUsageColumn` zone sit between the metered
+ * bands and Cost.
+ */
+export const STAFF_ORG_USAGE_COLUMNS: readonly string[] = [
+  ...LEADING_COLUMNS,
+  TRAILING_COLUMN,
+]
 
 const NO_PLUGIN_COLUMNS: readonly PluginListColumn[] = []
 
@@ -271,9 +296,11 @@ const StaffOrgUsageTable = ({
                 ) : null}
               </TableCell>
               <TableCell align="right">{row.storageGb.toFixed(2)}</TableCell>
-              <TableCell align="right">
-                {row.formSubmissions.toLocaleString()}
-              </TableCell>
+              {METERED_COLUMNS.map((band) => (
+                <TableCell key={band.id} align="right">
+                  {Number(row[meteredBandField(band)] ?? 0).toLocaleString()}
+                </TableCell>
+              ))}
               <PluginListColumnCells
                 columns={columns}
                 month={row}

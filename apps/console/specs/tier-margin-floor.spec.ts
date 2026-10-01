@@ -1976,13 +1976,13 @@ describe('the infra pass-through is priced by a different rule', () => {
       PLAN_ENTITLEMENTS.agency.bandwidthGb * VIEWS_PER_GB,
       3,
     )
-    expect(allowance.formSubmissions).toBe(
+    expect(allowance.meters['formSubmissions']).toBe(
       PLAN_ENTITLEMENTS.agency.hostLimit *
         PLAN_ENTITLEMENTS.agency.formSubmissionsPerMonth,
     )
     // Finite, where it used to be `Infinity` — an org-wide form band that no
     // amount of usage could exceed billed nothing, ever.
-    expect(Number.isFinite(allowance.formSubmissions)).toBe(true)
+    expect(Number.isFinite(allowance.meters['formSubmissions'])).toBe(true)
   })
 })
 

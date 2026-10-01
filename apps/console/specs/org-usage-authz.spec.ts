@@ -210,12 +210,17 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         recorded: {
           emailSends: 4321,
           emailSendsOverage: 321,
-          workflowRuns: 87,
+          // The workflows plugin's runs, counted by their host counter and
+          // served under the band's id.
+          counted: { workflowRuns: 87 },
           actionRuns: 219,
           billableCostUsd: 3.0625,
           apiOverageUsd: 6.5,
-          formSubmissionsBilled: false,
-          formSubmissionsOverageWithheldUsd: 4.25,
+          // The forms plugin's metered band waits behind a release flag, so
+          // its verdict pair is served under the band's id.
+          meteredVerdicts: {
+            formSubmissions: { billed: false, withheldUsd: 4.25 },
+          },
           contactsOverageBilled: true,
           contactsOverageUsd: 7.75,
           contactsOverageWithheldUsd: 0,
@@ -263,12 +268,11 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
     expect(payload.months[0].recorded).toEqual({
       emailSends: 0,
       emailSendsOverage: 0,
-      workflowRuns: 0,
+      counted: { workflowRuns: 0 },
       actionRuns: 0,
       billableCostUsd: 0,
       apiOverageUsd: 0,
-      formSubmissionsBilled: null,
-      formSubmissionsOverageWithheldUsd: 0,
+      meteredVerdicts: { formSubmissions: { billed: null, withheldUsd: 0 } },
       contactsOverageBilled: null,
       contactsOverageUsd: 0,
       contactsOverageWithheldUsd: 0,

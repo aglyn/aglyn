@@ -22,8 +22,12 @@ import {
 } from '../app-utils/plan-entitlements'
 import { UTILIZATION_BANDS } from '../app-utils/margin-utilization'
 import {
+  countedPluginBands,
   declaredMeterReading,
   liveMeterReading,
+  meteredBandField,
+  meteredBandVerdictFields,
+  meteredPluginBands,
   pluginCostAxes,
   pluginCostAxisFields,
   pluginCostAxisProjection,
@@ -97,6 +101,43 @@ describe('a plugin declares the meters it contributes to the cost model (AGL-308
     for (const field of Object.keys(rollup)) expect([field, input[field]]).toEqual([field, 1000])
     const { breakdown } = orgMonthlyCogsUsd(input, 0)
     for (const axis of pluginCostAxes()) expect([axis.id, breakdown[axis.id]! > 0]).toEqual([axis.id, true])
+  })
+})
+
+describe('a band billed as an infrastructure meter, and a band only counted', () => {
+  /*
+   * The invoice sweep, the Billing card, the monthly summary and the staff
+   * usage rows each read these lists and name no band themselves, so the
+   * split is pinned here by plugin.
+   */
+  it('bills the forms plugin’s submissions and counts the workflows plugin’s runs', () => {
+    expect(meteredPluginBands().map((band) => [band.pluginId, band.id])).toEqual([
+      ['forms', 'formSubmissions'],
+    ])
+    expect(countedPluginBands().map((band) => [band.pluginId, band.id, band.hostCounter])).toEqual([
+      ['workflows', 'workflowRuns', 'workflowRuns'],
+    ])
+  })
+
+  it('records a metered band’s count, and a withheld one’s verdict, under the names the rollup has always used', () => {
+    const [forms] = meteredPluginBands()
+    expect(meteredBandField(forms!)).toBe('formSubmissions')
+    expect(meteredBandVerdictFields(forms!)).toEqual({
+      billed: 'formSubmissionsBilled',
+      withheldUsd: 'formSubmissionsOverageWithheldUsd',
+    })
+  })
+
+  it('never lists a band as both, and lists every band with a counter as one or the other', () => {
+    const metered = meteredPluginBands().map((band) => band.id)
+    const counted = countedPluginBands().map((band) => band.id)
+    expect(metered.filter((id) => counted.includes(id))).toEqual([])
+    expect(
+      pluginUsageBands()
+        .filter((band) => band.hostCounter)
+        .map((band) => band.id)
+        .sort(),
+    ).toEqual([...metered, ...counted].sort())
   })
 })
 
