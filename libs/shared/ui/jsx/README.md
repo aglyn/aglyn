@@ -8,7 +8,7 @@ Aglyn's general-purpose React and Material UI component library: layout and card
 
     npm install @aglyn/shared-ui-jsx@beta
 
-Peer dependencies: `react`, `react-dom`, `next`, `@mui/material`, `@mui/system`, `@mui/utils`, `@mui/base`, `@mui/styles` and `@mui/x-data-grid`. `next` is needed by the link and router-event modules, and `@mui/x-data-grid` by the data table.
+Peer dependencies: `react`, `react-dom`, `next`, `@mui/material`, `@mui/system`, `@mui/utils`, `@mui/styles` and `@mui/x-data-grid`. `next` is needed by the link and router-event modules, and `@mui/x-data-grid` by the data table.
 
 ## What's in it
 

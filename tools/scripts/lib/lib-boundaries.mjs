@@ -210,6 +210,94 @@ export const INDEPENDENTLY_VERSIONED = Object.freeze(new Set(['cli']))
  */
 const PEER_FAMILY = /^(react-dom|react|next|firebase-admin|firebase|@mui\/[a-z-]+)(?:\/|$)/
 
+const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/
+
+function parseVersion(version) {
+  const match = VERSION.exec(String(version ?? '').trim())
+  if (!match) return null
+  return { core: match.slice(1, 4).map(Number), pre: match[4] ? match[4].split('.') : [] }
+}
+
+/**
+ * Semver precedence of two plain versions: negative when `a` sorts first.
+ * Only `X.Y.Z` and `X.Y.Z-pre.release` are read, which is every version this
+ * repo publishes or pins.
+ */
+export function compareVersions(a, b) {
+  const left = parseVersion(a)
+  const right = parseVersion(b)
+  for (let i = 0; i < 3; i += 1) if (left.core[i] !== right.core[i]) return left.core[i] - right.core[i]
+  // A release sorts after every prerelease of the same number.
+  if (!left.pre.length || !right.pre.length) return right.pre.length - left.pre.length
+  const numeric = (part) => /^\d+$/.test(part)
+  for (let i = 0; i < Math.max(left.pre.length, right.pre.length); i += 1) {
+    const x = left.pre[i]
+    const y = right.pre[i]
+    if (x === undefined || y === undefined) return x === undefined ? -1 : 1
+    if (x === y) continue
+    if (numeric(x) && numeric(y)) return Number(x) - Number(y)
+    if (numeric(x) !== numeric(y)) return numeric(x) ? -1 : 1
+    return x < y ? -1 : 1
+  }
+  return 0
+}
+
+/**
+ * Does the caret range `range` admit `version`, the way npm reads one?
+ *
+ * Anything that is not a caret over a plain version is answered `false`; the
+ * callers name only caret ranges, and say so when one is not.
+ */
+export function caretAdmits(range, version) {
+  const floorText = /^\^(\S+)$/.exec(String(range ?? '').trim())?.[1]
+  const floor = parseVersion(floorText)
+  const candidate = parseVersion(version)
+  if (!floor || !candidate) return false
+  if (compareVersions(version, floorText) < 0) return false
+  // npm lets a prerelease through a range only when the range itself names a
+  // prerelease of the very same major.minor.patch.
+  const sameCore = floor.core.every((part, i) => part === candidate.core[i])
+  if (candidate.pre.length && !(floor.pre.length && sameCore)) return false
+  const [major, minor, patch] = floor.core
+  const [cMajor, cMinor, cPatch] = candidate.core
+  if (major > 0) return cMajor === major
+  if (minor > 0) return cMajor === 0 && cMinor === minor
+  return cMajor === 0 && cMinor === 0 && cPatch === patch
+}
+
+/**
+ * What is wrong with a lib's peer ranges, as sentences (AGL-3201).
+ *
+ * A peer is the range the CONSUMER's copy of a framework must fall in, so it
+ * fails in their install, never in this repo, where the root's single copy
+ * satisfies everything. Two shapes break it:
+ *
+ * - An EXACT version. Every lib that named `next` pinned `16.3.3`, the day
+ *   npm's `next` became 16.3.8 a plain `npm install @aglyn/besigner-ui next`
+ *   could not resolve: npm searched for eighteen minutes and failed.
+ * - A range that does not admit the version the workspace runs, which is a
+ *   promise about a release nobody here has built against.
+ *
+ * Our own packages are skipped: they are pinned at the repo version as
+ * dependencies, and a peer between them is a different rule's business.
+ */
+export function peerRangeFindings(peerDependencies, { rootRanges = {}, workspacePackages = new Set() } = {}) {
+  const findings = []
+  for (const [name, range] of Object.entries(peerDependencies ?? {})) {
+    if (workspacePackages.has(name)) continue
+    if (VERSION.test(String(range).trim())) {
+      findings.push(`peerDependencies["${name}"] is pinned to "${range}", so a consumer on any other release of ${name} cannot install this package. Name a range: "^${range}"`)
+      continue
+    }
+    const running = String(rootRanges[name] ?? '').replace(/^[\^~=]/, '')
+    const readable = range.startsWith('^') && parseVersion(range.slice(1)) && parseVersion(running)
+    if (readable && !caretAdmits(range, running)) {
+      findings.push(`peerDependencies["${name}"] is "${range}", which does not admit ${running}, the version the workspace runs`)
+    }
+  }
+  return findings
+}
+
 const SOURCE_FILE = /\.(?:ts|tsx|mts|js|jsx|mjs)$/
 const SPEC_FILE = /\.(?:spec|test)\.[cm]?[jt]sx?$/
 const IMPORT_SOURCE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"]([^'"]+)['"]/g
@@ -638,6 +726,7 @@ export function packageFindings({ project, pkg, rootVersion, peers, hasServerEnt
   for (const family of peers) {
     if (!(family in declared)) findings.push(`peerDependencies lacks ${family}, which the shipped source imports`)
   }
+  findings.push(...peerRangeFindings(declared, { rootRanges, workspacePackages }))
   const bundled = pkg.dependencies ?? {}
   for (const family of Object.keys(bundled)) {
     if (PEER_FAMILY.test(family)) findings.push(`dependencies carries ${family}; it must be a peer`)

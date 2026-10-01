@@ -31,7 +31,9 @@ import {
   DEP_CONSTRAINTS,
   INDEPENDENTLY_VERSIONED,
   OVERRIDES_CALL,
+  caretAdmits,
   compareToAllowlist,
+  compareVersions,
   declarationsOwed,
   evaluateEdges,
   lintOverridesFor,
@@ -43,6 +45,7 @@ import {
   packageOfSpecifier,
   packagesImported,
   peerFamiliesImported,
+  peerRangeFindings,
   readPackageMap,
   typesPackageOf,
   versionedLibPackages,
@@ -471,5 +474,60 @@ describe('a subpath import has to resolve from the published package', () => {
 
   it('accepts a module file, and a subpath the exports map names', () => {
     assert.deepEqual(unresolvableSubpaths([imported('model/campaign-report'), imported('explicit')], target), [])
+  })
+})
+
+describe('a peer range is one a consumer can satisfy (AGL-3201)', () => {
+  it('orders versions the way npm does, prereleases before their release', () => {
+    assert.ok(compareVersions('1.0.0-beta.9', '1.0.0-beta.10') < 0)
+    assert.ok(compareVersions('1.0.0-beta.219', '1.0.0') < 0)
+    assert.ok(compareVersions('1.0.1', '1.0.0') > 0)
+    assert.equal(compareVersions('16.3.3', '16.3.3'), 0)
+  })
+
+  it('reads a caret the way npm does', () => {
+    assert.equal(caretAdmits('^16.3.3', '16.3.8'), true)
+    assert.equal(caretAdmits('^16.3.3', '17.0.0'), false)
+    assert.equal(caretAdmits('^16.3.3', '16.3.2'), false)
+    // A prerelease gets through only when the range names one of the same
+    // major.minor.patch.
+    assert.equal(caretAdmits('^1.0.0-beta.219', '1.0.0-beta.220'), true)
+    assert.equal(caretAdmits('^1.0.0-beta.219', '1.0.0'), true)
+    assert.equal(caretAdmits('^1.0.0-beta.219', '1.1.0-beta.1'), false)
+    assert.equal(caretAdmits('^9.4.0', '9.5.0-beta.1'), false)
+    assert.equal(caretAdmits('^0.2.1', '0.2.9'), true)
+    assert.equal(caretAdmits('^0.2.1', '0.3.0'), false)
+    assert.equal(caretAdmits('16.3.3', '16.3.3'), false, 'only a caret is read')
+  })
+
+  it('refuses an exact pin: the day the framework ships a patch, nobody can install the package', () => {
+    // Every lib naming `next` pinned 16.3.3; npm moved to 16.3.8 and a plain
+    // `npm install @aglyn/besigner-ui next` could no longer resolve.
+    const findings = peerRangeFindings({ next: '16.3.3', react: '^19.2.8' }, { rootRanges: { next: '16.3.7', react: '^19.3.0' } })
+    assert.equal(findings.length, 1, findings.join('\n'))
+    assert.match(findings[0], /pinned to "16\.3\.3".*"\^16\.3\.3"/)
+  })
+
+  it('refuses a range that does not admit what the workspace runs', () => {
+    const findings = peerRangeFindings({ '@mui/material': '^8.0.0' }, { rootRanges: { '@mui/material': '^9.4.0' } })
+    assert.equal(findings.length, 1, findings.join('\n'))
+    assert.match(findings[0], /does not admit 9\.4\.0/)
+  })
+
+  it('leaves our own packages and ranges it cannot read alone', () => {
+    const workspacePackages = new Set(['@aglyn/shared-ui-theme'])
+    assert.deepEqual(peerRangeFindings({ '@aglyn/shared-ui-theme': '*', react: '^19' }, { rootRanges: { react: '^19.3.0' }, workspacePackages }), [])
+  })
+
+  it('holds for every lib in the workspace', () => {
+    const rootManifest = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
+    const rootRanges = { ...rootManifest.devDependencies, ...rootManifest.dependencies }
+    const projects = readPackageMap(repoRoot).filter((project) => project.projectType === 'library')
+    const workspacePackages = new Set(projects.map((project) => project.alias).filter(Boolean))
+    const findings = projects.flatMap((project) => {
+      const manifest = JSON.parse(readFileSync(join(repoRoot, project.root, 'package.json'), 'utf8'))
+      return peerRangeFindings(manifest.peerDependencies, { rootRanges, workspacePackages }).map((line) => `${project.root}: ${line}`)
+    })
+    assert.deepEqual(findings, [])
   })
 })
