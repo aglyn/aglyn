@@ -23,7 +23,7 @@ import {
 } from '@aglyn/besigner'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { _isFnT } from '@aglyn/shared-util-tools'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import useBesignerAppContext from './use-besigner-app-context'
 
 export function useAglynBesignerFlag<K extends BesignerFlagKey>(
@@ -40,7 +40,11 @@ export function useAglynBesignerFlag<K extends BesignerFlagKey>(
   ) => void,
 ] {
   const app = useBesignerAppContext()
-  const setFlag = useAglynBesignerSetFlag().bind(null, flag)
+  const setAnyFlag = useAglynBesignerSetFlag()
+  // One setter per flag for the life of the app, not per render: a callback
+  // or memoized child that takes it must not change identity on every
+  // re-render of whatever reads the flag (AGL-3423).
+  const setFlag = useMemo(() => setAnyFlag.bind(null, flag), [setAnyFlag, flag])
   const value = useSubscribable<BesignerFlagValue<K>>(
     app?.interface?.flags,
     undefined,

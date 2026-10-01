@@ -29,7 +29,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { composeOutreachFooter } from '../engine/compose'
 import {
   outreachComplianceSettingsEqual,
@@ -102,6 +102,60 @@ function cardEqual(
 ): boolean {
   return outreachComplianceSettingsEqual({ ...b, ...pickCard(a, card) }, b)
 }
+
+const countryName = (option: OutreachCountryOption): string => option.name
+const sameCountry = (
+  option: OutreachCountryOption,
+  value: OutreachCountryOption,
+): boolean => option.code === value.code
+
+/**
+ * The allowed countries, as chips — MEMOIZED, and every prop it takes is
+ * stable while the countries are (AGL-3423).
+ *
+ * A multiple Autocomplete hands its input a new chip array as
+ * `startAdornment` on every render, and MUI's `InputBase` copies that into
+ * its `FormControl` from a passive effect: a state update left pending after
+ * every commit the field takes part in. React 19 counts each such commit as a
+ * nested update, and keystrokes delivered back to back commit one after
+ * another with nothing to clear the count, so the fifty-first throws
+ * "Maximum update depth exceeded" (#185) — the sequence editor's countries
+ * field did exactly that. The legal name and address share one form with
+ * this list, so each keystroke in them re-rendered it; kept out of those
+ * renders, it commits only when it changes.
+ */
+const ComplianceCountriesField = memo(function ComplianceCountriesField(props: {
+  options: readonly OutreachCountryOption[]
+  value: readonly OutreachCountryOption[]
+  issue?: string
+  onChange(next: OutreachCountryOption[]): void
+}) {
+  const { onChange } = props
+  return (
+    <Autocomplete<OutreachCountryOption, true>
+      multiple
+      options={props.options}
+      value={props.value as OutreachCountryOption[]}
+      getOptionLabel={countryName}
+      isOptionEqualToValue={sameCountry}
+      onChange={(_event, next) => onChange(next)}
+      renderValue={(value, getItemProps) =>
+        value.map((option, index) => {
+          const { key, ...item } = getItemProps({ index })
+          return <Chip key={key} size="small" label={option.name} {...item} />
+        })
+      }
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Countries"
+          error={Boolean(props.issue)}
+          helperText={props.issue}
+        />
+      )}
+    />
+  )
+})
 
 /**
  * Sequences → Compliance (AGL-2980): who every email says sent it, the
@@ -186,6 +240,34 @@ export function OutreachComplianceSection(
       return next
     })
 
+  // Stable, for the memoized countries field: an edit clears the card's
+  // issues and replaces the list in whatever form it lands on.
+  const setCountries = useCallback((next: OutreachCountryOption[]) => {
+    setServerIssues((previous) => {
+      const cleared = { ...previous }
+      for (const field of CARDS.countries.fields) {
+        delete cleared[field as OutreachComplianceField]
+      }
+      return cleared
+    })
+    setForm((previous) => ({
+      ...previous,
+      allowedCountries: next.map((option) => option.code),
+    }))
+  }, [])
+  const allowedCountries = form.allowedCountries
+  const selectedCountries = useMemo(
+    () =>
+      allowedCountries.map(
+        (code) =>
+          countries.find((option) => option.code === code) ?? {
+            code,
+            name: outreachCountryLabel(code),
+          },
+      ),
+    [allowedCountries, countries],
+  )
+
   const discard = (card: ComplianceCardKey) => {
     clearIssues(card)
     if (stored)
@@ -245,14 +327,6 @@ export function OutreachComplianceSection(
       />
     )
   }
-
-  const selectedCountries = form.allowedCountries.map(
-    (code) =>
-      countries.find((option) => option.code === code) ?? {
-        code,
-        name: outreachCountryLabel(code),
-      },
-  )
 
   const cardActions = (card: ComplianceCardKey) => {
     const dirty = cardDirty(card)
@@ -373,35 +447,11 @@ export function OutreachComplianceSection(
               'you does not have, so a cold email never goes outside the United States whatever this list ' +
               'says. Add another country only for people who came to you first.'}
           </Typography>
-          <Autocomplete<OutreachCountryOption, true>
-            multiple
+          <ComplianceCountriesField
             options={countries}
             value={selectedCountries}
-            getOptionLabel={(option) => option.name}
-            isOptionEqualToValue={(option, value) => option.code === value.code}
-            onChange={(_event, next) => {
-              clearIssues('countries')
-              setForm((previous) => ({
-                ...previous,
-                allowedCountries: next.map((option) => option.code),
-              }))
-            }}
-            renderValue={(value, getItemProps) =>
-              value.map((option, index) => {
-                const { key, ...item } = getItemProps({ index })
-                return (
-                  <Chip key={key} size="small" label={option.name} {...item} />
-                )
-              })
-            }
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Countries"
-                error={Boolean(fieldIssue('allowedCountries'))}
-                helperText={fieldIssue('allowedCountries')}
-              />
-            )}
+            issue={fieldIssue('allowedCountries')}
+            onChange={setCountries}
           />
         </Stack>
       </CardDisplay>
