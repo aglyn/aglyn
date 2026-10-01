@@ -34,7 +34,7 @@
  * never checked, which is a consent record minted by pressing a button. The
  * rules now deny client create and update on that collection, and this route
  * is the writer — through `enrollListMember`, which owns the document id, and
- * through the shared `list-assignment-policy`, which owns the basis.
+ * through the shared `enrollment-basis`, which owns the basis.
  *
  * ## The same policy the Inbox uses, not a second one
  *

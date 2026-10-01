@@ -426,13 +426,6 @@
       "why": "The operator's own-traffic stamp, not a tenant feature: the parameter the operator's property filters its own browsing out on, and the constant snippets that set it on the operator's property only (aglyn.com through the Google tag adapter, and a verbatim copy the docs site runs). A customer's property never receives it; a self-host's operator property replaces the target."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/list-assignment-policy.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
       "rules": [
         "domain-exports:marketing",

@@ -28,7 +28,7 @@
 import {
   assignmentBasis,
   assignmentReadout,
-} from './list-assignment-policy'
+} from './enrollment-basis'
 import type { MarketingConsentRecord } from './marketing-consent'
 
 const NOW = Date.UTC(2026, 7, 29)

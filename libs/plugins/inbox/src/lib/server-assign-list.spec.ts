@@ -64,7 +64,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
   // The enrollment rule itself, which moved to the framework when the Emails
   // console became its second caller. Real, because it IS what is under test.
-  ...jest.requireActual('@aglyn/aglyn/app-utils/list-assignment-policy'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/enrollment-basis'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/person-key'),

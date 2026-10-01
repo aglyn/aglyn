@@ -135,7 +135,7 @@ export * from './retained-refusals'
 // mail somebody, and this decides what basis putting them on a list may
 // record. Two enrollment surfaces import it — the Inbox assignment route and
 // the Emails console's audience card — and neither could import the other.
-export * from './list-assignment-policy'
+export * from './enrollment-basis'
 // Reading the FILE a merchant arrives with (`docs/specs/email-competitive-gaps.md`
 // G5/P4), directly after the policy it hands its addresses to: parsing and
 // mechanical screening only, so that an import asks the enrollment question

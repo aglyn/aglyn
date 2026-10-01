@@ -34,7 +34,7 @@
  * meters nothing. Folding either into the other would make a merchant's
  * ordinary act of answering a customer into an act with consequences they
  * did not choose. The enrollment rule itself is the framework's
- * `list-assignment-policy`, shared with the Emails console's audience card so
+ * `enrollment-basis`, shared with the Emails console's audience card so
  * that both surfaces refuse the same people for the same stated reasons.
  *
  * ## The boundary this feature sits on, stated because the UI must say it too

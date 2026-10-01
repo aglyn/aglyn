@@ -18,6 +18,10 @@
 /**
  * What basis lets somebody be put on a marketing list.
  *
+ * The enrollment-time half of `marketing-consent.ts`: consent to the MARKETING
+ * send purpose, which every surface that enrolls a person in an audience owes
+ * whichever plugin keeps the audience. It names no plugin's lists.
+ *
  * Pure policy, no Firestore and no network, so the rule that decides whether
  * somebody joins a marketing audience can be asserted without an enrollment
  * path.
