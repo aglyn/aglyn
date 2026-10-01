@@ -58,8 +58,8 @@
  * short "more are arriving" note in-app; when the hour closes,
  * {@link flushRiskNoticeDigests} (hourly cron, and the next notice after the
  * window) sends ONE summary. A workspace under attack gets a digest, not
- * five hundred emails. Locks, lifts and cancellations (`neverDigest`) always
- * go out on their own.
+ * five hundred emails. Locks, lifts, cancellations, disputes and card-testing
+ * warnings (`neverDigest`) always go out on their own.
  *
  * ## Never throws
  *

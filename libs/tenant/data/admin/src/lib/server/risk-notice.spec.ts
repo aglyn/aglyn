@@ -299,6 +299,32 @@ describe('notifyRiskEvent', () => {
     expect(text).toContain('the payment for order 1042 on the site "harborview" ($56.00)')
   })
 
+  it('never folds a card-testing warning: its site and what to check always arrive (AGL-3442)', async () => {
+    const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
+    for (let n = 1; n <= RISK_NOTICE_BURST.owners + 3; n += 1) await notifyRiskEvent(held(400 + n), h.deps)
+    const before = h.sent.length
+    const result = await notifyRiskEvent(
+      {
+        kind: 'card-testing',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        reviewId: 'c'.repeat(40),
+        reference: 'PV-1',
+        item: { label: 'checkout on the site "harborview"', path: '/host-1/products/orders' },
+      },
+      h.deps,
+    )
+    expect(result.owners.digested).toBe(false)
+    // The owner and the site's manager, each with the whole notice.
+    expect(h.sent.slice(before).map((email) => email['to'])).toEqual([
+      'avery@example.com',
+      'manager-1@example.com',
+    ])
+    const email = h.sent[h.sent.length - 1]
+    expect(String(email['subject'])).toBe('Unusual checkout activity on the site "harborview"')
+    expect(String(email['text'])).toContain('Review your recent orders before you fulfill them.')
+  })
+
   it('never folds a lock: every lock notice goes out on its own', async () => {
     const h = harness({ owners: [{ uid: 'owner-1', email: 'avery@example.com' }] })
     for (let n = 1; n <= RISK_NOTICE_BURST.owners + 3; n += 1) await notifyRiskEvent(held(200 + n), h.deps)

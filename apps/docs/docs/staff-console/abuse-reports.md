@@ -413,8 +413,9 @@ same seam; see [Lockdown](./lockdown.md#owner-notices).
   to know in "What you did".
 - **Bursts.** Past five notices in an hour for one workspace (ten staff alerts),
   the rest are folded into one summary sent when the hour closes, so a
-  workspace under attack gets a digest, not five hundred emails. Locks, lifts
-  and cancellations are never folded.
+  workspace under attack gets a digest, not five hundred emails. Locks, lifts,
+  cancellations, disputes and card-testing warnings are never folded: each one
+  carries a deadline, a site or a change a one-line summary would drop.
 - **Email.** Notices that stop someone's work are emailed as account mail from
   the platform's sender — they ignore notification settings and reach a locked
   workspace. Each kind is its own template on the **System emails** page

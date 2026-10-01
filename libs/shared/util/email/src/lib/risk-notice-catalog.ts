@@ -319,7 +319,8 @@ export interface RiskNoticeDefinition {
    * Whether the notice always goes out, even while the workspace is over its
    * burst allowance. Locks, lifts and cancellations are never folded into a
    * digest: each one changes what the owner can do. Nor is a dispute, whose
-   * evidence deadline a digest's one-line tally would drop.
+   * evidence deadline a digest's one-line tally would drop, or a card-testing
+   * warning, whose site and orders to check it would drop.
    */
   neverDigest: boolean
   /**
@@ -863,7 +864,9 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     severity: 'urgent',
     emailOwners: true,
     alertStaff: true,
-    neverDigest: false,
+    // Which site, and that its orders need checking before they ship, is the
+    // point of the notice; a digest would drop both.
+    neverDigest: true,
     reviewable: true,
     closesWith: { released: 'review-cleared', rejected: 'review-upheld' },
     includeSiteManagers: true,

@@ -322,4 +322,8 @@ describe('what a notice claims is what happens', () => {
   it('keeps a dispute out of the burst digest, which would drop its deadline', () => {
     expect(RISK_NOTICE_CATALOG['sale-dispute'].neverDigest).toBe(true)
   })
+
+  it('keeps a card-testing warning out of the burst digest, which would drop its site (AGL-3442)', () => {
+    expect(RISK_NOTICE_CATALOG['card-testing'].neverDigest).toBe(true)
+  })
 })
