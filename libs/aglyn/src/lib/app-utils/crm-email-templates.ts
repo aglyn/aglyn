@@ -60,8 +60,6 @@ import {
   readContactFacet,
 } from './contacts'
 import { CRM_EMAIL_BODY_MAX, CRM_EMAIL_SUBJECT_MAX, type CrmScoped } from './crm'
-// The campaign sender's own resolver for the short tags, by its leaf.
-import { resolveMergeTags } from '@aglyn/shared-util-email/email-merge'
 
 /** The most a template's name may hold. */
 export const CRM_EMAIL_TEMPLATE_NAME_MAX = 80
@@ -459,58 +457,6 @@ export function renderCrmMergeFields(
   context: CrmMergeContext | null | undefined,
 ): string {
   return resolveCrmMergeFields(text, context).text
-}
-
-/*==========================================
- * AN AUTOMATION'S EMAIL (AGL-3458).
- *==========================================*/
-
-/**
- * The person an automation's email is about, as the payload names them when
- * no record does: the `name` and `email` the event carried.
- */
-export interface AutomationMergePerson {
-  name?: string | null
-  email?: string | null
-}
-
-/**
- * An automation's `sendEmail` subject or body, with its merge tags filled
- * from the contact or the lead the run is about.
- *
- * Both spellings a merchant has been shown resolve, because a workflow email
- * is written by the same people who write the other two:
- *
- *  - the CRM's fields, `{{contact.firstName}}`, `{{lead.company}}`,
- *    `{{site.name}}` — {@link resolveCrmMergeFields}, the one-to-one email's
- *    resolver, run over the record the run resolved;
- *  - the campaign's short tags, `{{firstName|there}}`, `{{name}}`,
- *    `{{email}}` — `resolveMergeTags`, the campaign sender's own resolver, run
- *    over the same person: the contact's name as this site knows it, else
- *    the lead's, else the name the event carried.
- *
- * Both honour `|fallback`, and an unknown tag prints its fallback or nothing,
- * never its braces — a typo must not reach a customer as `{{frstName}}`.
- * Pure; the caller hands over what it read.
- */
-export function resolveAutomationEmailMerge(
-  text: string,
-  context: CrmMergeContext,
-  person: AutomationMergePerson | null = null,
-): CrmMergeResult {
-  const crm = resolveCrmMergeFields(text, context)
-  const name =
-    resolveCrmMergeField('contact.name', context) ||
-    resolveCrmMergeField('lead.name', context) ||
-    (typeof person?.name === 'string' ? person.name.trim() : '')
-  const email =
-    resolveCrmMergeField('contact.email', context) ||
-    resolveCrmMergeField('lead.email', context) ||
-    (normalizeContactEmail(person?.email) ?? '')
-  return {
-    text: resolveMergeTags(crm.text, { email, ...(name ? { name } : {}) }),
-    unresolved: crm.unresolved,
-  }
 }
 
 /** What the dialog says under a draft whose fields have nothing to fill. */

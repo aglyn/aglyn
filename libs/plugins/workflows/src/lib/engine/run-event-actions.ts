@@ -47,7 +47,6 @@ import {
   normalizeTriggerConditions,
   prepareDatasetRecordWrite,
   type PluginJobHostGate,
-  resolveAutomationEmailMerge,
   resolveOrgEntitlements,
   sendEmailIsTransactionalReply,
 } from '@aglyn/aglyn/server'
@@ -102,6 +101,7 @@ import { describeStepOutcome } from '../model/step-outcomes'
 import { type HostWebhook, WEBHOOK_URL_PATTERN } from '../model/webhooks'
 import { eventRunSuspension } from './site-suspension'
 import { triggeredDocsForEvent } from './triggered-docs'
+import { resolveStepEmailMerge } from './email-merge'
 import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
@@ -1050,10 +1050,10 @@ async function runServerStep(
         email: to,
         name: String(payload['name'] ?? payload['fullName'] ?? '').trim(),
       }
-      const emailSubject = resolveAutomationEmailMerge(authoredSubject, mergeContext, mergePerson)
+      const emailSubject = resolveStepEmailMerge(authoredSubject, mergeContext, mergePerson)
         .text.replace(/[\r\n]+/g, ' ')
         .slice(0, 200)
-      const emailText = resolveAutomationEmailMerge(authoredText, mergeContext, mergePerson).text.slice(
+      const emailText = resolveStepEmailMerge(authoredText, mergeContext, mergePerson).text.slice(
         0,
         5000,
       )

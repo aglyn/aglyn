@@ -645,7 +645,7 @@ async function runLeadStep(
 /**
  * The records an automation's email is about, for its merge tags (AGL-3458):
  * the contact the event names, else its lead, and the site's name — what
- * `resolveAutomationEmailMerge` reads, in the shape the one-to-one email's
+ * `resolveStepEmailMerge` reads, in the shape the one-to-one email's
  * resolver takes. A person nobody holds yet leaves both records out, and the
  * tags fall back to the name and address the event carried.
  *
