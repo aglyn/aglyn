@@ -76,7 +76,7 @@
  * `report-usage`, which takes `overageMonthlyUsd` and ignores `allowed`. This
  * table asserted them by naming them, which is the failure mode it should
  * least have had. They are enforced at real call sites now
- * (`apps/console/specs/dataset-storage-quota-enforced.spec.ts`,
+ * (`libs/plugins/data/src/lib/server/dataset-storage-quota-enforced.spec.ts`,
  * `apps/console/specs/api-v1-request-quota.spec.ts`), and both suites force
  * the branch through the route rather than checking a return value.
  *

@@ -139,7 +139,10 @@ jest.mock('firebase-admin/firestore', () => ({
   Timestamp: { now: () => '__now__' },
 }))
 
-import { POST } from '../app/api/orgs/datasets/route'
+import { datasetsHandler } from './datasets-route'
+
+/** The handler as the console's dispatcher calls it. */
+const POST = (request: Request) => datasetsHandler(request, { params: {} })
 
 const OWNER = { role: 'owner' }
 /** An editor granted one site, the agency's client collaborator. */

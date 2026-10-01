@@ -257,14 +257,14 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // and `checkEntitlement` all resolve through it, and stubbing any of them
   // would let this suite pass against a route enforcing nothing — which IS the
   // bug.
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   createResourceUid: () => `uid-${(mockUid += 1)}`,
   // The REAL referential-integrity index: both record writes on this route
   // derive `referencedIds` from their values, and an omitted helper is a
   // CLOSED WORLD — every create 500s and the cap this suite is about is never
   // reached.
   datasetIntegrityFields: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+    '@aglyn/aglyn/app-utils/dataset-models',
   ).datasetIntegrityFields,
   // Validation is not what this suite is about; the model below accepts the
   // one field every seeded row carries.
@@ -273,6 +273,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
   coerceDocumentValues: (_model: unknown, values: unknown) => values,
   validateDocument: () => ({}),
+  // The model below names no custom field type, so there is none to load.
+  ensureDeclaredCustomFieldTypes: async () => undefined,
   defaultScopeForNewResource: () => 'org',
   newResourceScopeFields: () => ({ resourceScope: ['org'] }),
   // The REAL visibility check: both record actions ask it before they count,
@@ -291,7 +293,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { POST } from '../app/api/orgs/datasets/route'
+import { datasetsHandler } from './datasets-route'
+
+/** The handler as the console's dispatcher calls it. */
+const POST = (request: Request) => datasetsHandler(request, { params: {} })
 
 const STARTER_RECORDS = PLAN_ENTITLEMENTS.starter.recordsPerDataset
 const STARTER_DATASETS = PLAN_ENTITLEMENTS.starter.datasetsPerOrg

@@ -834,6 +834,7 @@
       "package": "@aglyn/plugins-data",
       "register": {
         "console": "registerDataConsole",
+        "consoleApi": "registerDataConsoleApi",
         "serverDeclarations": "registerDataServerDeclarations"
       },
       "repeatSource": {

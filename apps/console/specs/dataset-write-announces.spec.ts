@@ -38,9 +38,9 @@ const source = (relative: string) =>
 
 describe('a dataset record write announces to the live pages', () => {
   it('the console record create and import both announce, the import ONCE', () => {
-    const route = source('apps/console/app/api/orgs/datasets/route.ts')
+    const route = source('libs/plugins/data/src/lib/server/datasets-route.ts')
     expect(route).toContain(
-      "import { announceDatasetChange } from '../../../../utils/server/announce-dataset-change'",
+      "import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'",
     )
     // Three: the create, the import's single post-loop call, and the leg the
     // browser's own client-direct edits reach. A fourth would mean the import
@@ -114,7 +114,7 @@ describe('a dataset record write announces to the live pages', () => {
     // The route's own leg, gated by the same membership and visibility the
     // create is — a drop grants nothing the rules withhold, but which
     // datasets exist is still not a stranger's to learn.
-    const route = source('apps/console/app/api/orgs/datasets/route.ts')
+    const route = source('libs/plugins/data/src/lib/server/datasets-route.ts')
     expect(route).toContain("action === 'announce-records'")
     const gateAt = route.indexOf('!memberCanSee(')
     const legAt = route.indexOf("if (action === 'announce-records') {")

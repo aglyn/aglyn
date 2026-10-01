@@ -22,6 +22,7 @@ import {
   effectiveDatasetModel,
   memberCanSee,
   pluginRequestFromWeb,
+  type PluginWebApiHandler,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -32,8 +33,8 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
-import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * Records read per round trip. Not a cap — the stream keeps paging until
@@ -84,7 +85,7 @@ const json = (body: unknown, status: number) => Response.json(body, { status })
  * places. The `release_data_store` flag gate is kept, because that is
  * whether the feature exists at all rather than whether it is paid for.
  */
-async function handler(request: Request): Promise<Response> {
+export const datasetsExportHandler: PluginWebApiHandler = async (request) => {
   const { method, query, headers: rawHeaders } =
     await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -257,13 +258,9 @@ async function handler(request: Request): Promise<Response> {
       },
     })
   } catch (error) {
-    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
-    // for anything else, so a real failure keeps the answer below.
-    const unauthenticated = invalidIdTokenResponse(error)
-    if (unauthenticated) return unauthenticated
+    // A refused credential is a 401, not a fault of ours (AGL-1993); anything
+    // else keeps the answer below.
+    if (isRefusedIdToken(error)) return json({ error: 'Unauthenticated' }, 401)
     return json({ error: 'Export failed' }, 500)
   }
 }
-
-export const dynamic = 'force-dynamic'
-export { handler as GET }

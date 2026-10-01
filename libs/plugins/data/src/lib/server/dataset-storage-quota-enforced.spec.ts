@@ -137,7 +137,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // would 500 rather than enforce. Required actual so this suite exercises the
   // shape logic it is about, not a stub of it.
   ...jest.requireActual(
-    '../../../libs/tenant/data/admin/src/lib/server/data-storage-gate',
+    '@aglyn/tenant-data-admin/server/data-storage-gate',
   ),
   firebaseAdmin: {
     app: () => ({
@@ -176,7 +176,10 @@ jest.mock('firebase-admin/firestore', () => ({
   Timestamp: { now: () => ({ toMillis: () => 0 }) },
 }))
 
-import { POST } from '../app/api/orgs/datasets/route'
+import { datasetsHandler } from './datasets-route'
+
+/** The handler as the console's dispatcher calls it. */
+const POST = (request: Request) => datasetsHandler(request, { params: {} })
 import { checkDataStorageQuota, dataStorageEnforcementShape } from '@aglyn/aglyn/server'
 
 const post = (body: Record<string, unknown>) =>

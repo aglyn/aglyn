@@ -19,6 +19,7 @@ import {
   defaultScopeForNewResource,
   newResourceScopeFields,
   pluginRequestFromWeb,
+  type PluginWebApiHandler,
 } from '@aglyn/aglyn/server'
 import {
   checkDatasetQuota,
@@ -28,6 +29,7 @@ import {
   createResourceUid,
   datasetIntegrityFields,
   effectiveDatasetModel,
+  ensureDeclaredCustomFieldTypes,
   memberCanSee,
   validateDocument,
 } from '@aglyn/aglyn/server'
@@ -42,10 +44,9 @@ import {
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { Timestamp } from 'firebase-admin/firestore'
-import { ensureCustomFieldTypes } from '../../../../utils/ensure-custom-field-types'
-import { announceDatasetChange } from '../../../../utils/server/announce-dataset-change'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
 
 /**
  * `dataStorageMbPerOrg` for this route, rendered as the console's 403.
@@ -105,7 +106,7 @@ const IMPORT_CHUNK = 400
  * at the included size", so the byte band was documentation. `recordsPerDataset`
  * counts ROWS and does not bound their size, so it was never the same limit.
  */
-async function handler(request: Request): Promise<Response> {
+export const datasetsHandler: PluginWebApiHandler = async (request) => {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST') {
@@ -395,7 +396,7 @@ async function handler(request: Request): Promise<Response> {
       const model = effectiveDatasetModel(datasetSnapshot.data() as any)
       // Before either validation below: a plugin's field validator only runs
       // once its plugin's server entry has registered it.
-      await ensureCustomFieldTypes(model)
+      await ensureDeclaredCustomFieldTypes(model)
       const recordsRef = datasetRef.collection('records')
       const recordCount = (await recordsRef.count().get()).data().count
       const overRecordQuota = (limit: number) =>
@@ -604,14 +605,12 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
-    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
-    // for anything else, so a real failure keeps the answer below.
-    const unauthenticated = invalidIdTokenResponse(error)
-    if (unauthenticated) return unauthenticated
+    // A refused credential is a 401, not a fault of ours (AGL-1993); anything
+    // else keeps the answer below.
+    if (isRefusedIdToken(error)) {
+      return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+    }
     console.error(error)
     return Response.json({ error: 'Dataset operation failed' }, { status: 500 })
   }
 }
-
-export const dynamic = 'force-dynamic'
-export { handler as POST }

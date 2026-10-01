@@ -99,24 +99,6 @@
       "lane": "forms"
     },
     {
-      "path": "apps/console/app/api/orgs/datasets/export/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/app/api/orgs/datasets/route.ts",
-      "rules": [
-        "domain-name",
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "apps/console/components/billing/billing-metered-estimate.component.tsx",
       "rules": [
         "plugin-collection:forms",

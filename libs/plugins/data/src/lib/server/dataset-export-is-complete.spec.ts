@@ -169,7 +169,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-const route = require('../app/api/orgs/datasets/export/route')
+const { datasetsExportHandler } = require('./datasets-export-route')
+/** The export as the console's dispatcher calls it. */
+const route = {
+  GET: (request: Request) => datasetsExportHandler(request, { params: {} }),
+}
 
 const FIELDS = {
   order: ['title', 'note'],

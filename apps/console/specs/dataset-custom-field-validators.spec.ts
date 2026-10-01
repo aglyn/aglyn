@@ -81,16 +81,20 @@ const PLAIN: DatasetModel = {
   fields: { title: { name: 'Title', type: 'text' } },
 }
 
-/** The console paths that validate a record before writing it. */
+/**
+ * The console-served paths that validate a record before writing it, from
+ * the repo root: the `/v1` resources, and the data plugin's console API and
+ * its section of a site restore.
+ */
 const RECORD_WRITERS = [
-  'app/api/orgs/datasets/route.ts',
-  'utils/api-v1-resources.ts',
-  '../../libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts',
+  'libs/plugins/data/src/lib/server/datasets-route.ts',
+  'apps/console/utils/api-v1-resources.ts',
+  'libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts',
 ]
 
 describe('every console record write loads custom field types first', () => {
   it.each(RECORD_WRITERS)('%s', (file) => {
-    const source = readFileSync(join(__dirname, '..', file), 'utf8')
+    const source = readFileSync(join(__dirname, '../../..', file), 'utf8')
     const validations = [...source.matchAll(/validateDocument\(/g)].map(
       (match) => match.index ?? 0,
     )
@@ -99,7 +103,9 @@ describe('every console record write loads custom field types first', () => {
     for (const at of validations) {
       const modelAt = source.lastIndexOf('effectiveDatasetModel(', at)
       expect(modelAt).toBeGreaterThan(-1)
-      expect(source.slice(modelAt, at)).toContain('ensureCustomFieldTypes(')
+      // The console's loader, or the platform's own repair step a plugin's
+      // route runs: either registers the types before the check.
+      expect(source.slice(modelAt, at)).toMatch(/ensure(?:Declared)?CustomFieldTypes\(/)
     }
   })
 })

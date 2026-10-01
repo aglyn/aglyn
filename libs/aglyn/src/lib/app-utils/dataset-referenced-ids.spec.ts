@@ -161,7 +161,8 @@ describe('the field is OMITTED when a record references nothing', () => {
 describe('every record write path carries the index', () => {
   const CARD =
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx'
-  const CONSOLE_ROUTE = 'apps/console/app/api/orgs/datasets/route.ts'
+  // The quota-enforcing route: the data plugin's console API (AGL-3080).
+  const CONSOLE_ROUTE = 'libs/plugins/data/src/lib/server/datasets-route.ts'
   const REST_API = 'apps/console/utils/api-v1-resources.ts'
   // The form-submit leg: the data plugin's form record target (AGL-3080).
   const FORM_SUBMIT =
