@@ -16,19 +16,17 @@
  */
 
 /**
- * Dataset query layer (AGL-181): filter/sort/limit over typed documents,
- * shared by the console editor and the tenant renderer's repeatable
- * expansion. Deliberately evaluated IN MEMORY over the already-bounded
- * reads (editor page / `REPEAT_MAX_RECORDS`) — the Firestore reality
- * check from the issue: this sidesteps inequality-filter and composite-
- * index constraints entirely, at the documented cost that documents
- * beyond the fetch bound are never considered. The bound is explicit,
- * never silently unbounded.
+ * A repeat's query (AGL-181): the filter, sort and limit an element's
+ * `repeatFilter` / `repeatSort` / `repeatLimit` apply to the rows it repeats
+ * over, whatever source supplied them — the canvas preview and the published
+ * page's expansion run the same one. Deliberately evaluated IN MEMORY over
+ * the already-bounded reads (`REPEAT_MAX_RECORDS`): this sidesteps
+ * inequality-filter and composite-index constraints entirely, at the
+ * documented cost that rows beyond the fetch bound are never considered. The
+ * bound is explicit, never silently unbounded.
  */
 
-import type { DatasetModel } from './dataset-models'
-
-export type DatasetQueryOp =
+export type RepeatQueryOp =
   | '=='
   | '!='
   | '>'
@@ -37,7 +35,7 @@ export type DatasetQueryOp =
   | '<='
   | 'contains'
 
-export const DATASET_QUERY_OPS: DatasetQueryOp[] = [
+export const REPEAT_QUERY_OPS: RepeatQueryOp[] = [
   '==',
   '!=',
   '>',
@@ -47,15 +45,15 @@ export const DATASET_QUERY_OPS: DatasetQueryOp[] = [
   'contains',
 ]
 
-export interface DatasetQueryWhere {
+export interface RepeatQueryWhere {
   fieldId: string
-  op: DatasetQueryOp
+  op: RepeatQueryOp
   /** Literal, compared with type-aware coercion against stored values. */
   value: string
 }
 
-export interface DatasetQuery {
-  where?: DatasetQueryWhere[]
+export interface RepeatQuery {
+  where?: RepeatQueryWhere[]
   orderBy?: { fieldId: string; direction?: 'asc' | 'desc' }
   limit?: number
 }
@@ -65,22 +63,22 @@ export interface DatasetQuery {
  * `tier == plus`, `tags contains red`). Null for unparseable input so
  * callers fail open (no filter) rather than filtering wrongly.
  */
-export function parseDatasetFilter(input: string): DatasetQueryWhere | null {
+export function parseRepeatFilter(input: string): RepeatQueryWhere | null {
   const match = String(input ?? '')
     .trim()
     .match(/^([A-Za-z][A-Za-z0-9_]*)\s*(==|!=|>=|<=|>|<|contains)\s+(.+)$/)
   if (!match) return null
   return {
     fieldId: match[1],
-    op: match[2] as DatasetQueryOp,
+    op: match[2] as RepeatQueryOp,
     value: match[3].trim(),
   }
 }
 
 /** Parses `field` or `field desc` into an orderBy config. */
-export function parseDatasetSort(
+export function parseRepeatSort(
   input: string,
-): DatasetQuery['orderBy'] | null {
+): RepeatQuery['orderBy'] | null {
   const match = String(input ?? '')
     .trim()
     .match(/^([A-Za-z][A-Za-z0-9_]*)(?:\s+(asc|desc))?$/i)
@@ -101,7 +99,7 @@ const comparable = (value: unknown): number | string | null => {
   return null
 }
 
-function matches(stored: unknown, where: DatasetQueryWhere): boolean {
+function matches(stored: unknown, where: RepeatQueryWhere): boolean {
   const { op, value } = where
   if (op === 'contains') {
     if (Array.isArray(stored)) {
@@ -139,14 +137,13 @@ function matches(stored: unknown, where: DatasetQueryWhere): boolean {
 }
 
 /**
- * Applies where/orderBy/limit to in-memory rows. Where-clauses on fields
- * absent from the model still run (stored-value comparison) so v1
- * datasets work; timestamps compare numerically (epoch millis storage).
+ * Applies where/orderBy/limit to in-memory rows. A clause compares the
+ * stored value whatever field it names, so rows with no declared field
+ * model filter too; timestamps compare numerically (epoch millis storage).
  */
-export function applyDatasetQuery<Row extends Record<string, unknown>>(
-  model: DatasetModel | undefined,
+export function applyRepeatQuery<Row extends Record<string, unknown>>(
   rows: Row[],
-  query: DatasetQuery,
+  query: RepeatQuery,
 ): Row[] {
   let result = rows
   for (const where of query.where ?? []) {

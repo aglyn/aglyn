@@ -307,7 +307,7 @@ export * from './dataset-models'
 export * from './csv'
 export * from './csv-upload'
 export * from './artifact-provenance'
-export * from './dataset-query'
+export * from './repeat-query'
 export * from './plugin-manifest'
 // After `plugin-manifest`, whose revocation predicates it asks the kill
 // question with, and after `media-ref`, whose grammar decides what counts as a

@@ -16,10 +16,10 @@
  */
 
 import {
-  applyDatasetQuery,
-  parseDatasetFilter,
-  parseDatasetSort,
-} from './dataset-query'
+  applyRepeatQuery,
+  parseRepeatFilter,
+  parseRepeatSort,
+} from './repeat-query'
 
 const rows = [
   { $id: 'a', title: 'Alpha', price: 10, tags: ['red'], live: true },
@@ -27,48 +27,48 @@ const rows = [
   { $id: 'c', title: 'Gamma', price: 5, tags: ['red', 'blue'], live: true },
 ]
 
-describe('parseDatasetFilter / parseDatasetSort', () => {
+describe('parseRepeatFilter / parseRepeatSort', () => {
   it('parses the field-op-value shorthand', () => {
-    expect(parseDatasetFilter('price <= 20')).toEqual({
+    expect(parseRepeatFilter('price <= 20')).toEqual({
       fieldId: 'price',
       op: '<=',
       value: '20',
     })
-    expect(parseDatasetFilter('tags contains red')).toEqual({
+    expect(parseRepeatFilter('tags contains red')).toEqual({
       fieldId: 'tags',
       op: 'contains',
       value: 'red',
     })
-    expect(parseDatasetFilter('nonsense')).toBeNull()
+    expect(parseRepeatFilter('nonsense')).toBeNull()
   })
 
   it('parses sort with optional direction', () => {
-    expect(parseDatasetSort('price desc')).toEqual({
+    expect(parseRepeatSort('price desc')).toEqual({
       fieldId: 'price',
       direction: 'desc',
     })
-    expect(parseDatasetSort('title')).toEqual({
+    expect(parseRepeatSort('title')).toEqual({
       fieldId: 'title',
       direction: 'asc',
     })
-    expect(parseDatasetSort('9bad')).toBeNull()
+    expect(parseRepeatSort('9bad')).toBeNull()
   })
 })
 
-describe('applyDatasetQuery', () => {
+describe('applyRepeatQuery', () => {
   it('filters with typed comparisons', () => {
     expect(
-      applyDatasetQuery(undefined, rows, {
+      applyRepeatQuery(rows, {
         where: [{ fieldId: 'price', op: '<=', value: '20' }],
       }).map((row) => row.$id),
     ).toEqual(['a', 'c'])
     expect(
-      applyDatasetQuery(undefined, rows, {
+      applyRepeatQuery(rows, {
         where: [{ fieldId: 'live', op: '==', value: 'true' }],
       }).map((row) => row.$id),
     ).toEqual(['a', 'c'])
     expect(
-      applyDatasetQuery(undefined, rows, {
+      applyRepeatQuery(rows, {
         where: [{ fieldId: 'tags', op: 'contains', value: 'blue' }],
       }).map((row) => row.$id),
     ).toEqual(['b', 'c'])
@@ -76,13 +76,13 @@ describe('applyDatasetQuery', () => {
 
   it('sorts and limits', () => {
     expect(
-      applyDatasetQuery(undefined, rows, {
+      applyRepeatQuery(rows, {
         orderBy: { fieldId: 'price', direction: 'desc' },
         limit: 2,
       }).map((row) => row.$id),
     ).toEqual(['b', 'a'])
     expect(
-      applyDatasetQuery(undefined, rows, {
+      applyRepeatQuery(rows, {
         orderBy: { fieldId: 'title', direction: 'asc' },
       }).map((row) => row.$id),
     ).toEqual(['a', 'b', 'c'])
@@ -90,7 +90,7 @@ describe('applyDatasetQuery', () => {
 
   it('composes where + orderBy + limit', () => {
     expect(
-      applyDatasetQuery(undefined, rows, {
+      applyRepeatQuery(rows, {
         where: [{ fieldId: 'tags', op: 'contains', value: 'red' }],
         orderBy: { fieldId: 'price', direction: 'asc' },
         limit: 1,
